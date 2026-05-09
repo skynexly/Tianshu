@@ -1,0 +1,5 @@
+.backup/
+android/
+local.properties
+*.apk
+node_modules/
