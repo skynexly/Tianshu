@@ -778,9 +778,10 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
 
     // 3c. 知识条目索引（每轮发，告诉AI存在哪些条目）— 文游模式
     if (isGameMode) {
-      try {
-        const wvForIndex = isSingleConv ? singleWv : await Worldview.getCurrent();
-        if (wvForIndex) {
+    try {
+    const wvForIndex = isSingleConv ? singleWv : await Worldview.getCurrent();
+    const sendKnowledgeIdx = isSingleConv ? !!singleSettings.enableKnowledge : true;
+    if (wvForIndex && sendKnowledgeIdx) {
           const idx = _buildKnowledgeIndex(wvForIndex.knowledges || []);
           if (idx) systemParts.push(idx);
         }
@@ -972,9 +973,10 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         // 单人模式按开关控制
         const sendFestival = isSingleConv ? !!singleSettings.enableFestival : true;
 const sendCustom = isSingleConv ? !!singleSettings.enableCustom : true;
+const sendKnowledge = isSingleConv ? !!singleSettings.enableKnowledge : true;
 const festivalText = sendFestival ? _buildFestivalPrompt(currentWv.festivals || [], messages) : '';
 const customText = sendCustom ? _buildCustomPrompt(currentWv.customs || []) : '';
-const knowledgeText = _buildKnowledgePrompt(currentWv.knowledges || [], messages);
+const knowledgeText = sendKnowledge ? _buildKnowledgePrompt(currentWv.knowledges || [], messages) : '';
 const timeSensitive = [festivalText, customText, knowledgeText].filter(Boolean).join('\n\n');
 if (timeSensitive) {
 // 插到最后一条用户消息前面
@@ -3214,9 +3216,10 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
 
     // 3c. 知识条目索引
     if (isGameMode) {
-      try {
-        const wvForIndex = isSingleConv ? singleWv : await Worldview.getCurrent();
-        if (wvForIndex) {
+    try {
+    const wvForIndex = isSingleConv ? singleWv : await Worldview.getCurrent();
+    const sendKnowledgeIdx2 = isSingleConv ? !!singleSettings.enableKnowledge : true;
+    if (wvForIndex && sendKnowledgeIdx2) {
           const idx = _buildKnowledgeIndex(wvForIndex.knowledges || []);
           if (idx) systemParts.push(idx);
         }
@@ -3383,9 +3386,10 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         if (currentWv) {
           const sendFestival = isSingleConv ? !!singleSettings.enableFestival : true;
 const sendCustom = isSingleConv ? !!singleSettings.enableCustom : true;
+const sendKnowledge = isSingleConv ? !!singleSettings.enableKnowledge : true;
 const festivalText = sendFestival ? _buildFestivalPrompt(currentWv.festivals || [], messages) : '';
 const customText = sendCustom ? _buildCustomPrompt(currentWv.customs || []) : '';
-const knowledgeText = _buildKnowledgePrompt(currentWv.knowledges || [], messages);
+const knowledgeText = sendKnowledge ? _buildKnowledgePrompt(currentWv.knowledges || [], messages) : '';
 const timeSensitive = [festivalText, customText, knowledgeText].filter(Boolean).join('\n\n');
 if (timeSensitive) {
 const insertIdx = apiMessages.length - 1;

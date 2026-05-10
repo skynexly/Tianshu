@@ -1415,4 +1415,65 @@ background: transparent !important;
   border-color: color-mix(in srgb, var(--accent) 36%, rgba(255, 255, 255, 0.18)) !important;
   color: rgba(255, 255, 255, 0.96) !important;
 }
+
+/* 有壁纸时：卡片、底栏、顶栏、状态栏统一透明度（由 --phone-card-opacity-pct 控制，例如 "75%"） */
+.phone-shell {
+  --phone-card-opacity: 75;
+  --phone-card-opacity-pct: 75%;
+}
+
+.wv-tag-pill {
+  background: var(--bg-tertiary-solid, var(--bg-tertiary)) !important;
+}
+.phone-moment-card,
+.phone-moment-comment-card,
+.phone-memo-preview-card,
+.phone-map-result-card,
+.phone-map-track-card,
+.wv-post-card,
+.wv-comment-item,
+.phone-body div[style*="background:var(--bg-tertiary)"]:not(.wv-tag-pill),
+.phone-body div[style*="background: var(--bg-tertiary)"]:not(.wv-tag-pill),
+.phone-body div[style*="background:var(--bg-secondary)"]:not(.wv-tag-pill),
+.phone-body div[style*="background: var(--bg-secondary)"]:not(.wv-tag-pill) {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 22%, var(--bg-tertiary-solid, var(--bg-tertiary))),
+    var(--bg-secondary-solid, var(--bg-secondary))) !important;
+}
+.phone-shell.has-wallpaper .phone-tabbar {
+  background: color-mix(in srgb, var(--bg-secondary-solid, var(--bg-secondary)) var(--phone-card-opacity-pct), transparent) !important;
+}
+.phone-shell.has-wallpaper .phone-header {
+  background: color-mix(in srgb, var(--bg-solid, var(--bg)) var(--phone-card-opacity-pct), transparent);
+}
+.phone-shell.has-wallpaper .phone-statusbar {
+  background: color-mix(in srgb, var(--bg-solid, var(--bg)) var(--phone-card-opacity-pct), transparent);
+}
+/* 所有卡片类：壁纸下统一走透明度变量（使用 solid 变量绕过主题自带透明度）
+   用两层背景：上层 accent 斜向渐变（固定淡色）+ 下层底色走 slider 透明度 */
+.phone-shell.has-wallpaper .phone-moment-card,
+.phone-shell.has-wallpaper .phone-moment-comment-card,
+.phone-shell.has-wallpaper .phone-moment-image-desc,
+.phone-shell.has-wallpaper .phone-memo-preview-card,
+.phone-shell.has-wallpaper .phone-map-result-card,
+.phone-shell.has-wallpaper .phone-map-track-card,
+.phone-shell.has-wallpaper .phone-generation-hint,
+.phone-shell.has-wallpaper .phone-generation-error,
+.phone-shell.has-wallpaper .phone-moment-skeleton-card,
+.phone-shell.has-wallpaper .wv-post-card,
+.phone-shell.has-wallpaper .wv-comment-item,
+.phone-shell.has-wallpaper .phone-body div[style*="background:var(--bg-tertiary)"]:not(.wv-tag-pill),
+.phone-shell.has-wallpaper .phone-body div[style*="background: var(--bg-tertiary)"]:not(.wv-tag-pill),
+.phone-shell.has-wallpaper .phone-body div[style*="background:var(--bg-secondary)"]:not(.wv-tag-pill),
+.phone-shell.has-wallpaper .phone-body div[style*="background: var(--bg-secondary)"]:not(.wv-tag-pill) {
+  background-image: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 22%, transparent),
+    transparent) !important;
+  background-color: color-mix(in srgb, var(--bg-tertiary-solid, var(--bg-tertiary)) var(--phone-card-opacity-pct), transparent) !important;
+}
+/* 开了遮罩时覆盖回深色（已有规则优先级更高，这里兜底） */
+.phone-shell.has-custom-wallpaper .phone-tabbar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 /* ===== 虚拟手机 END ===== */

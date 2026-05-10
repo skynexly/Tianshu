@@ -140,6 +140,8 @@ function flushActionLogForBackstage() {
  mapLastResults: [], // 上一次地图搜索结果，持久化
  mapLastQuery: '', // 上一次搜索关键词
  wallpaper: '', // 用户自定义手机壁纸 DataURL
+      wallpaperOverlay: false, // 壁纸遮罩（深色半透明层，适配深色壁纸）
+      wallpaperOpacity: 75, // 卡片/底栏/顶栏不透明度（0-100，仅有壁纸时生效）
  // 外卖
  takeoutCachedItems: [],   // 上一次刷新/搜索的商品列表
  takeoutLastQuery: '',     // 上一次搜索关键词
@@ -213,12 +215,25 @@ function _stopBatteryTicker() {
 }
 
 function _applyWallpaper(pd) {
- const shell = document.querySelector('#phone-modal .phone-shell');
- if (!shell) return;
- const wallpaper = pd?.wallpaper || '';
- shell.style.backgroundImage = wallpaper ? `linear-gradient(rgba(0,0,0,0.18), rgba(0,0,0,0.32)), url("${wallpaper}")` : '';
- shell.classList.toggle('has-custom-wallpaper', !!wallpaper);
-}
+    const shell = document.querySelector('#phone-modal .phone-shell');
+    if (!shell) return;
+    const wallpaper = pd?.wallpaper || '';
+    const useOverlay = !!pd?.wallpaperOverlay;
+    const opacity = typeof pd?.wallpaperOpacity === 'number' ? Math.max(0, Math.min(100, pd.wallpaperOpacity)) : 75;
+    if (wallpaper) {
+      shell.style.backgroundImage = useOverlay
+        ? `linear-gradient(rgba(0,0,0,0.18), rgba(0,0,0,0.32)), url("${wallpaper}")`
+        : `url("${wallpaper}")`;
+    } else {
+      shell.style.backgroundImage = '';
+    }
+    shell.style.setProperty('--phone-card-opacity', String(opacity));
+    shell.style.setProperty('--phone-card-opacity-pct', opacity + '%');
+    // 深色适配 class：有壁纸 + 开了遮罩才启用（控制卡片黑底白字等 CSS）
+    shell.classList.toggle('has-custom-wallpaper', !!wallpaper && useOverlay);
+    // 壁纸存在 class：只要有壁纸就加（让底栏半透明）
+    shell.classList.toggle('has-wallpaper', !!wallpaper);
+  }
 
 function _compressWallpaper(file, opts = {}) {
  return new Promise((resolve, reject) => {
@@ -741,6 +756,21 @@ function _renderSettings(pd) {
  <span>更换壁纸</span>
  </label>
  <button class="phone-settings-btn secondary" onclick="Phone._resetWallpaper()">恢复默认壁纸</button>
+ <label class="circle-check-label" style="margin-top:10px;padding:0">
+   <span class="circle-check-text" style="font-size:13px">壁纸遮罩<br><span style="font-size:11px;color:var(--text-secondary)">为深色壁纸添加半透明遮罩，让文字更清晰</span></span>
+   <span style="position:relative;display:inline-flex">
+     <input type="checkbox" id="phone-wallpaper-overlay" class="circle-check" ${pd?.wallpaperOverlay ? 'checked' : ''} onchange="Phone._toggleWallpaperOverlay(this.checked)">
+     <span class="circle-check-ui"></span>
+   </span>
+ </label>
+ <div style="margin-top:14px">
+   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+     <span style="font-size:13px;color:var(--text)">卡片不透明度</span>
+     <span id="phone-wallpaper-opacity-val" style="font-size:12px;color:var(--text-secondary)">${typeof pd?.wallpaperOpacity === 'number' ? pd.wallpaperOpacity : 75}%</span>
+   </div>
+   <input type="range" min="0" max="100" step="1" value="${typeof pd?.wallpaperOpacity === 'number' ? pd.wallpaperOpacity : 75}" oninput="Phone._onWallpaperOpacityChange(this.value)" onchange="Phone._saveWallpaperOpacity(this.value)" style="width:100%;accent-color:var(--accent)">
+   <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.4">调节卡片、顶栏、底栏的不透明度，让壁纸透出来（仅在有壁纸时生效）</div>
+ </div>
  </div>
  </div>
  `;
@@ -765,15 +795,42 @@ async function _onWallpaperPicked(e) {
  }
 }
 async function _resetWallpaper() {
- const pd = await _getPhoneData();
- if (!pd) return;
- pd.wallpaper = '';
- await _savePhoneData();
- _applyWallpaper(pd);
- _log('恢复了默认手机壁纸');
- UI.showToast('已恢复默认壁纸');
- _renderSettings(pd);
-}
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    pd.wallpaper = '';
+    await _savePhoneData();
+    _applyWallpaper(pd);
+    _log('恢复了默认手机壁纸');
+    UI.showToast('已恢复默认壁纸');
+    _renderSettings(pd);
+  }
+
+  async function _toggleWallpaperOverlay(checked) {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    pd.wallpaperOverlay = !!checked;
+    await _savePhoneData();
+    _applyWallpaper(pd);
+  }
+
+  function _onWallpaperOpacityChange(val) {
+    // 拖动实时预览：只更新 CSS 变量 + 显示数字，不写库
+    const opacity = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
+    const shell = document.querySelector('#phone-modal .phone-shell');
+    if (shell) {
+      shell.style.setProperty('--phone-card-opacity', String(opacity));
+      shell.style.setProperty('--phone-card-opacity-pct', opacity + '%');
+    }
+    const label = document.getElementById('phone-wallpaper-opacity-val');
+    if (label) label.textContent = opacity + '%';
+  }
+
+  async function _saveWallpaperOpacity(val) {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    pd.wallpaperOpacity = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
+    await _savePhoneData();
+  }
 
 async function _onMomentsCoverPicked(input) {
  const file = input?.files?.[0];
@@ -3561,7 +3618,7 @@ async function buildHeartsimServiceChatForBackstage() {
     buildHeartsimServiceChatForBackstage,
     flushActionLog, peekActionLog, pushLog, reloadActionLog,
     flushActionLogForBackstage,
-    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _onMomentsCoverPicked, _clearMomentsCover,
+    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _onMomentsCoverPicked, _clearMomentsCover,
     // 内部方法需要暴露给 onclick
     _addMemo, _editMemo, _saveMemo, _deleteMemo, _shareMemo, _collectMemo,
     _forumRefresh, _forumSearch, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,

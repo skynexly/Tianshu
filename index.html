@@ -1326,6 +1326,7 @@
                 <div id="sm-worldview-dropdown" class="custom-dropdown hidden" style="max-height:240px;overflow-y:auto"></div>
                 <input type="hidden" id="sm-worldview-select" value="">
               </div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.4">选择一个世界观后，对话将使用该世界观的设定。选"无"则为自由模式。</div>
             </div>
 
       <!-- 角色选择器 -->
@@ -1341,23 +1342,23 @@
 
 <!-- 注入开关（仅在挂世界观时启用） -->
             <div style="display:flex;flex-direction:column;gap:14px;padding:12px;background:var(--bg-tertiary);border-radius:8px">
-              <div style="font-size:12px;color:var(--text-secondary);margin-bottom:-2px">世界观注入选项（角色资料每轮必发）</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-bottom:-2px;line-height:1.4">世界观注入选项<br><span style="font-size:11px;opacity:0.7">勾选后，对应设定会在每轮对话时自动发送给AI（不勾选则不注入，节省额度）</span></div>
               <label class="circle-check-label">
-                <span class="circle-check-text" style="font-size:13px">启用详细设定<span style="font-size:11px;color:var(--text-secondary);margin-left:4px">命中地区流动发详细</span></span>
+                <span class="circle-check-text" style="font-size:13px">启用详细设定<br><span style="font-size:11px;color:var(--text-secondary)">不启用则不再在进入对应地区时补充详细设定，只发送简单概述</span></span>
                 <span style="position:relative;display:inline-flex">
                   <input type="checkbox" id="sm-enable-detail" class="circle-check">
                   <span class="circle-check-ui"></span>
                 </span>
               </label>
               <label class="circle-check-label">
-                <span class="circle-check-text" style="font-size:13px">启用角色设定<span style="font-size:11px;color:var(--text-secondary);margin-left:4px">速查角色 + 流动详细</span></span>
+                <span class="circle-check-text" style="font-size:13px">启用角色设定<br><span style="font-size:11px;color:var(--text-secondary)">不启用将过滤所有除了选中角色之外的世界观角色</span></span>
                 <span style="position:relative;display:inline-flex">
                   <input type="checkbox" id="sm-enable-npc" class="circle-check">
                   <span class="circle-check-ui"></span>
                 </span>
               </label>
               <label class="circle-check-label">
-                <span class="circle-check-text" style="font-size:13px">启用开场设定<span style="font-size:11px;color:var(--text-secondary);margin-left:4px">前 N 轮注入</span></span>
+                <span class="circle-check-text" style="font-size:13px">启用开场设定<br><span style="font-size:11px;color:var(--text-secondary)">不启用将过滤世界观原本的开场引导</span></span>
                 <span style="position:relative;display:inline-flex">
                   <input type="checkbox" id="sm-enable-startplot" class="circle-check">
                   <span class="circle-check-ui"></span>
@@ -1374,6 +1375,13 @@
                 <span class="circle-check-text" style="font-size:13px">启用自定义设定</span>
                 <span style="position:relative;display:inline-flex">
                   <input type="checkbox" id="sm-enable-custom" class="circle-check">
+                  <span class="circle-check-ui"></span>
+                </span>
+              </label>
+              <label class="circle-check-label">
+                <span class="circle-check-text" style="font-size:13px">启用知识设定</span>
+                <span style="position:relative;display:inline-flex">
+                  <input type="checkbox" id="sm-enable-knowledge" class="circle-check">
                   <span class="circle-check-ui"></span>
                 </span>
               </label>

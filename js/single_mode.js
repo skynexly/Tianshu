@@ -39,7 +39,8 @@ const SingleMode = (() => {
       enableNpc: false,
       enableStartPlot: false,
       enableFestival: false,
-      enableCustom: false
+      enableCustom: false,
+      enableKnowledge: false
     };
     if (!convId && preset) {
       initial = {
@@ -52,7 +53,8 @@ const SingleMode = (() => {
         enableNpc: !!preset.enableNpc,
         enableStartPlot: !!preset.enableStartPlot,
         enableFestival: !!preset.enableFestival,
-        enableCustom: !!preset.enableCustom
+        enableCustom: !!preset.enableCustom,
+        enableKnowledge: !!preset.enableKnowledge
       };
     }
     if (convId) {
@@ -67,7 +69,8 @@ const SingleMode = (() => {
           enableNpc: !!conv.singleEnableNpc,
           enableStartPlot: !!conv.singleEnableStartPlot,
           enableFestival: !!conv.singleEnableFestival,
-          enableCustom: !!conv.singleEnableCustom
+          enableCustom: !!conv.singleEnableCustom,
+          enableKnowledge: !!conv.singleEnableKnowledge
         };
       }
     }
@@ -89,6 +92,7 @@ const SingleMode = (() => {
     document.getElementById('sm-enable-startplot').checked = initial.enableStartPlot;
     document.getElementById('sm-enable-festival').checked = initial.enableFestival;
     document.getElementById('sm-enable-custom').checked = initial.enableCustom;
+    document.getElementById('sm-enable-knowledge').checked = initial.enableKnowledge;
 
     // 标题
     document.getElementById('sm-modal-title').textContent = convId ? '单人对话设置' : '新建单人对话';
@@ -181,7 +185,7 @@ const SingleMode = (() => {
   function _updateWorldviewOptionsState() {
     const wvId = document.getElementById('sm-worldview-select').value;
     const hasWv = !!wvId;
-    ['sm-enable-detail','sm-enable-npc','sm-enable-startplot','sm-enable-festival','sm-enable-custom'].forEach(id => {
+    ['sm-enable-detail','sm-enable-npc','sm-enable-startplot','sm-enable-festival','sm-enable-custom','sm-enable-knowledge'].forEach(id => {
       const cb = document.getElementById(id);
       if (cb) {
         cb.disabled = !hasWv;
@@ -248,6 +252,11 @@ const SingleMode = (() => {
       const npcs = [];
       allWvs.forEach(wv => {
         if (wv.id === '__default_wv__') return;
+        // 全图 NPC
+        (wv.globalNpcs || []).forEach(n => {
+          npcs.push({ ...n, _wvId: wv.id, _wvName: wv.name || '未命名世界观', _faction: '全图常驻', _region: '全图', _avatar: avatarMap[n.id] || n.avatar || '' });
+        });
+        // 地区/势力 NPC
         (wv.regions || []).forEach(r => {
           (r.factions || []).forEach(f => {
             (f.npcs || []).forEach(n => {
@@ -309,6 +318,7 @@ const SingleMode = (() => {
     const enableStartPlot = document.getElementById('sm-enable-startplot').checked;
     const enableFestival = document.getElementById('sm-enable-festival').checked;
     const enableCustom = document.getElementById('sm-enable-custom').checked;
+    const enableKnowledge = document.getElementById('sm-enable-knowledge').checked;
 
     // 取角色名作为默认对话名
     let charName = '';
@@ -345,6 +355,7 @@ const SingleMode = (() => {
         conv.singleEnableStartPlot = enableStartPlot;
         conv.singleEnableFestival = enableFestival;
         conv.singleEnableCustom = enableCustom;
+      conv.singleEnableKnowledge = enableKnowledge;
         // 同步对话归属世界观（裸跑→默认世界观）
         const newWv = wvId || '__default_wv__';
         const oldWv = conv.worldviewId;
@@ -383,7 +394,8 @@ const SingleMode = (() => {
       singleEnableNpc: enableNpc,
       singleEnableStartPlot: enableStartPlot,
       singleEnableFestival: enableFestival,
-      singleEnableCustom: enableCustom
+      singleEnableCustom: enableCustom,
+      singleEnableKnowledge: enableKnowledge
     };
     Conversations.getList().push(conv);
     await Conversations.saveList();
@@ -404,7 +416,8 @@ const SingleMode = (() => {
       enableNpc: !!conv.singleEnableNpc,
       enableStartPlot: !!conv.singleEnableStartPlot,
       enableFestival: !!conv.singleEnableFestival,
-      enableCustom: !!conv.singleEnableCustom
+      enableCustom: !!conv.singleEnableCustom,
+      enableKnowledge: !!conv.singleEnableKnowledge
     };
   }
 

@@ -205,6 +205,10 @@ const Theme = (() => {
     s.setProperty('--bg-glass',     cfg.glassEnabled ? toRgba(cfg.bgSecondary, Math.min(cfg.bgSecondaryOpacity ?? 1, 0.7)) : toRgba(cfg.bgSecondary, cfg.bgSecondaryOpacity ?? 1));
     s.setProperty('--bg-glass-inner', cfg.glassEnabled ? toRgba(cfg.bgSecondary, Math.min(cfg.bgSecondaryOpacity ?? 1, 0.35)) : toRgba(cfg.bgSecondary, cfg.bgSecondaryOpacity ?? 1));
     s.setProperty('--bg-tertiary',  toRgba(cfg.bgTertiary,  cfg.bgTertiaryOpacity  ?? 1));
+    // solid 版本：忽略主题不透明度，纯色——小手机壁纸下的卡片自己控透明度时用
+    s.setProperty('--bg-solid',           cfg.bg);
+    s.setProperty('--bg-secondary-solid', cfg.bgSecondary);
+    s.setProperty('--bg-tertiary-solid',  cfg.bgTertiary);
 
     // 毛玻璃 body class
     document.body.classList.toggle('glass-on', !!cfg.glassEnabled);
