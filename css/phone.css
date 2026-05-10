@@ -1325,52 +1325,9 @@ background: transparent !important;
  color: #fff !important;
  border-top-color: rgba(255, 255, 255, 0.78) !important;
 }
-/* 自定义壁纸模式：论坛详情阅读层，避免壁纸干扰长文阅读 */
-.phone-shell.has-custom-wallpaper .phone-forum-detail-scroll {
- background: linear-gradient(180deg, rgba(8, 10, 16, 0.58), rgba(8, 10, 16, 0.70)) !important;
- color: rgba(255, 255, 255, 0.94) !important;
- text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-.phone-shell.has-custom-wallpaper .phone-forum-detail-scroll .md-content,
-.phone-shell.has-custom-wallpaper .phone-forum-detail-scroll .md-content * {
- color: rgba(255, 255, 255, 0.94) !important;
-}
-/* 自定义壁纸模式：论坛详情顶栏同步阅读层，避免标题区发亮断层 */
-.phone-shell.has-custom-wallpaper.phone-forum-detail-mode .phone-statusbar,
-.phone-shell.has-custom-wallpaper.phone-forum-detail-mode .phone-header,
-.phone-shell.has-custom-wallpaper:has(.phone-forum-detail-page) .phone-statusbar,
-.phone-shell.has-custom-wallpaper:has(.phone-forum-detail-page) .phone-header {
- background: rgba(8, 10, 16, 0.58) !important;
- color: rgba(255, 255, 255, 0.96) !important;
- text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
-}
-.phone-shell.has-custom-wallpaper.phone-forum-detail-mode .phone-statusbar,
-.phone-shell.has-custom-wallpaper:has(.phone-forum-detail-page) .phone-statusbar {
- padding-bottom: 6px;
-}
-.phone-shell.has-custom-wallpaper.phone-forum-detail-mode .phone-header,
-.phone-shell.has-custom-wallpaper:has(.phone-forum-detail-page) .phone-header {
- border-bottom: 1px solid rgba(255, 255, 255, 0.12);
- box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
-}
-.phone-shell.has-custom-wallpaper.phone-forum-detail-mode .phone-nav-btn,
-.phone-shell.has-custom-wallpaper:has(.phone-forum-detail-page) .phone-nav-btn {
- background: rgba(255, 255, 255, 0.14) !important;
- border-color: rgba(255, 255, 255, 0.24) !important;
- color: rgba(255, 255, 255, 0.96) !important;
-}
-
-.phone-shell.has-custom-wallpaper .phone-forum-detail-actions {
- background: rgba(18, 20, 28, 0.54) !important;
- border-color: rgba(255, 255, 255, 0.24) !important;
- color: rgba(255, 255, 255, 0.94) !important;
- box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
- backdrop-filter: blur(18px) saturate(1.18);
- -webkit-backdrop-filter: blur(18px) saturate(1.18);
-}
-.phone-shell.has-custom-wallpaper .phone-forum-detail-actions .wv-action-btn {
- color: rgba(255, 255, 255, 0.88) !important;
-}
+/* 论坛详情阅读层 / 详情顶栏 / 详情底栏单独适配 已废弃：
+   现在用统一的 has-wallpaper 卡片透明度 slider + 壁纸遮罩控制，
+   不再单独给论坛详情套一层黑色遮罩，避免黢黑 + 顶栏残留染黑。 */
 
 .phone-shell.has-custom-wallpaper .phone-icon-btn,
 .phone-shell.has-custom-wallpaper .phone-text-icon-btn {
