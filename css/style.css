@@ -175,6 +175,57 @@ button, input, select, textarea, option, label {
   flex-direction: column;
   height: 100%;
   min-width: 0;
+  position: relative;
+}
+/* 聊天背景图：铺满 main（顶栏+滚动区+底栏底下都有），让顶栏底栏的半透明背景可以透出
+   只在聊天面板激活时显示，避免污染世界观/记忆等其他面板 */
+#main::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: none;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  z-index: 0;
+}
+body:has(#panel-chat.active) #main::before {
+  background-image: var(--chat-bg-image, none);
+}
+#main > * {
+  position: relative;
+  z-index: 1;
+}
+/* 聊天面板：顶栏/底栏在所有模式下都浮起，让滚动区文字可以滚到它们后面，
+   配合 --bg-secondary 的 alpha 透明度，文字也能透过顶栏底栏。
+   毛玻璃模式额外加 backdrop-filter（见下方 .glass-on 块） */
+body:has(#panel-chat.active) #chat-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+}
+body:has(#panel-chat.active) #panel-chat .chat-input-area {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+}
+body:has(#panel-chat.active) #panel-chat {
+  padding-top: 0;
+  padding-bottom: 0;
+  position: relative;
+  overflow: visible;
+}
+body:has(#panel-chat.active) #panel-chat .chat-messages {
+  padding-top: calc(var(--sb-topbar-h, 56px) + 12px);
+  padding-bottom: calc(var(--sb-input-h, 56px) + 12px);
 }
 
 /* 顶栏 */
@@ -311,27 +362,9 @@ button, input, select, textarea, option, label {
   /* 让伪元素背景层有定位上下文 */
   position: relative;
 }
-/* 聊天背景图：放到伪元素上，避免华为/MIUI 浏览器长按时把背景图识别为图片弹出菜单 */
+/* 聊天背景图已迁移至 #main::before，这里不再绘制（保留旧 selector 防止外部依赖）*/
 .chat-messages::before {
-  content: '';
-  position: sticky;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  /* 不占布局空间，让消息正常铺排 */
-  margin-bottom: -100%;
-  flex-shrink: 0;
-  background-image: var(--chat-bg-image, none);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  pointer-events: none;
-  /* 不可被选中、不可被长按为图片 */
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
-  z-index: 0;
+  content: none;
 }
 .chat-messages > * {
   position: relative;
@@ -2847,23 +2880,14 @@ body.glass-on:not(.lite-mode) .settings-card-item {
   -webkit-backdrop-filter: blur(10px) saturate(1.08);
 }
 
-/* 毛玻璃开启时：顶栏和底栏浮起，聊天内容从下方透出 */
+/* 毛玻璃开启时：浮起逻辑已统一到全局聊天浮起规则；这里只补一个 main 的 position（兼容旧写法） */
 body.glass-on #main {
   position: relative;
 }
 body.glass-on .topbar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 10;
+  background: transparent !important;
 }
 body.glass-on .chat-input-area {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 10;
   background: transparent !important;
 }
 body.glass-on .chat-input-area::before {
@@ -2881,9 +2905,6 @@ body.glass-on #panel-chat {
   padding-bottom: 0;
   position: relative;
   overflow: visible;
-}
-body.glass-on .chat-messages {
-  padding-top: 56px;
 }
 
 /* 侧栏和顶栏：用 ::before 伪元素承载模糊，避免子级弹窗被合成层封锁 */
@@ -3048,7 +3069,8 @@ body.glass-on #worldview-edit-more-menu {
   align-items: stretch;
   padding: 0;
   gap: 0;
-  background: var(--status-bg, var(--bg-secondary));
+  /* 顶栏背景统一用 --bg-secondary（主题里的"次级背景"控件控制），
+     不再被 --status-bg 污染——状态栏专属颜色只作用于其展开卡片 */
 }
 /* 毛玻璃模式下：让全局 .topbar::before 接管模糊层（不要在这里覆盖 background） */
 body.glass-on .topbar-with-status {
@@ -3202,6 +3224,32 @@ padding-bottom: calc(var(--sb-input-h, 0px) + 16px);
   box-shadow: 0 4px 20px rgba(0,0,0,0.35);
   animation: sbSlideDown .25s cubic-bezier(0.2, 0.8, 0.2, 1);
   font-family: "Courier New", "JetBrains Mono", ui-monospace, Consolas, monospace;
+  position: relative;
+}
+.sb-card-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0;
+  z-index: 2;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.sb-card-close:hover,
+.sb-card-close:active {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
 }
 body.glass-on .sb-status-card {
   backdrop-filter: blur(10px);

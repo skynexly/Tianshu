@@ -237,6 +237,15 @@ const Chat = (() => {
         HeartSimIntro.cancel();
       }
     } catch(_) {}
+    // 切换对话级背景图（对话有自己的背景就用它，否则回退到主题级）
+    try {
+      const _convForBg = (conversationId === null)
+        ? null
+        : Conversations.getList().find(c => c.id === (conversationId || Conversations.getCurrent()));
+      if (typeof Theme !== 'undefined' && Theme.setConvBgOverride) {
+        Theme.setConvBgOverride(_convForBg?.convBgImage || '');
+      }
+    } catch(_) {}
     const container = document.getElementById('chat-messages');
 
     // 淡出动画
@@ -3434,7 +3443,8 @@ apiMessages.splice(insertIdx, 0, { role: 'system', content: timeSensitive });
       voiceScope: {
         all: !!voice.scopeAll,
         quotes: Array.isArray(voice.quotes) ? voice.quotes : []
-      }
+      },
+      bgImage: conv?.convBgImage || ''
     };
   }
 
@@ -3450,6 +3460,57 @@ apiMessages.splice(insertIdx, 0, { role: 'system', content: timeSensitive });
       cb.disabled = all;
       cb.closest('.cs-voice-quote-opt').style.opacity = all ? '0.4' : '1';
     });
+  }
+
+  // 对话级背景图：上传 + 清除
+  let _pendingConvBg = null; // 弹窗内的暂存值，保存时才落到 conv 上
+  function _onConvBgPicked(input) {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const raw = e.target.result;
+      const img = new Image();
+      img.onload = () => {
+        // 压缩到 max 1200px 宽/高，JPEG 0.7（与主题级背景图保持一致）
+        const MAX = 1200;
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (w > MAX || h > MAX) {
+          const ratio = Math.min(MAX / w, MAX / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        if (dataUrl.length > 2_000_000) {
+          UI.showToast('图片过大，请选择更小的图片', 2500);
+          return;
+        }
+        _pendingConvBg = dataUrl;
+        const preview = document.getElementById('cs-bg-preview');
+        if (preview) {
+          preview.src = dataUrl;
+          preview.style.display = 'block';
+        }
+        const clearBtn = document.getElementById('cs-bg-clear');
+        if (clearBtn) clearBtn.style.display = 'inline-flex';
+      };
+      img.src = raw;
+    };
+    reader.readAsDataURL(file);
+  }
+  function _onConvBgClear() {
+    _pendingConvBg = '';
+    const preview = document.getElementById('cs-bg-preview');
+    if (preview) {
+      preview.src = '';
+      preview.style.display = 'none';
+    }
+    const clearBtn = document.getElementById('cs-bg-clear');
+    if (clearBtn) clearBtn.style.display = 'none';
   }
 
   function openConvSettingsModal() {
@@ -3477,6 +3538,15 @@ apiMessages.splice(insertIdx, 0, { role: 'system', content: timeSensitive });
       });
       _onVoiceScopeAllChange();
     }
+    // 对话级背景图
+    _pendingConvBg = null; // null = 沿用 conv 原值，'' = 清除，dataUrl = 新选
+    const preview = document.getElementById('cs-bg-preview');
+    const clearBtn = document.getElementById('cs-bg-clear');
+    if (preview) {
+      preview.src = s.bgImage || '';
+      preview.style.display = s.bgImage ? 'block' : 'none';
+    }
+    if (clearBtn) clearBtn.style.display = s.bgImage ? 'inline-flex' : 'none';
     document.getElementById('conv-settings-modal').classList.remove('hidden');
   }
 
@@ -3502,6 +3572,16 @@ apiMessages.splice(insertIdx, 0, { role: 'system', content: timeSensitive });
         quotes
       };
     }
+    // 对话级背景图：_pendingConvBg !== null 时才覆盖（null = 没动）
+    if (_pendingConvBg !== null) {
+      conv.convBgImage = _pendingConvBg || '';
+    }
+    // 应用到当前页面
+    try {
+      if (typeof Theme !== 'undefined' && Theme.setConvBgOverride) {
+        Theme.setConvBgOverride(conv.convBgImage || '');
+      }
+    } catch(_) {}
     await Conversations.saveList();
     closeConvSettingsModal();
     // 更新后台悬浮按钮
@@ -3554,6 +3634,7 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     _toggleThink,
     openConvSettingsModal, saveConvSettings, closeConvSettingsModal,
     _onVoiceEnabledChange, _onVoiceScopeAllChange,
+    _onConvBgPicked, _onConvBgClear,
     playVoiceForMessage, stopVoice,
     buildAIMessageHTML, appendMessage
   };

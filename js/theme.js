@@ -237,7 +237,7 @@ const Theme = (() => {
       chatArea.style.backgroundSize = '';
       chatArea.style.backgroundPosition = '';
     }
-    s.setProperty('--chat-bg-image', cfg.chatBgImage ? `url("${cfg.chatBgImage}")` : 'none');
+    s.setProperty('--chat-bg-image', _resolveChatBgImage(cfg.chatBgImage));
 
     // 字体
     if (cfg.fontMode === 'custom') {
@@ -255,6 +255,18 @@ const Theme = (() => {
     } else {
       s.removeProperty('--font-family');
     }
+  }
+
+  // 对话级背景图覆盖（优先级高于主题级 chatBgImage；空字符串/undefined 表示走主题级）
+  let _convBgOverride = null;
+  function _resolveChatBgImage(themeBg) {
+    const url = (_convBgOverride !== null && _convBgOverride !== undefined) ? _convBgOverride : themeBg;
+    return url ? `url("${url}")` : 'none';
+  }
+  function setConvBgOverride(url) {
+    _convBgOverride = (url == null || url === '') ? null : url;
+    const cfg = load();
+    document.documentElement.style.setProperty('--chat-bg-image', _resolveChatBgImage(cfg.chatBgImage));
   }
 
   let _themeSwitchTimer = null;
@@ -311,16 +323,7 @@ try { applyLiteMode(isLiteMode()); } catch(_) {}
       userBubbleBorder:      get('th-user-border')   || old.userBubbleBorder,
       userBubbleBorderOpacity: getF('th-user-border-op'),
       userBubbleText:        get('th-user-text')      || old.userBubbleText || null,
-      chatBgImage:           (() => {
-                               // 优先从 CSS 变量读（新逻辑），兼容旧值则从元素 style 读
-                               const v = getComputedStyle(document.documentElement).getPropertyValue('--chat-bg-image').trim();
-                               let m = v.match(/url\(\s*"?([^")]*)"?\s*\)/);
-                               if (m) return m[1];
-                               const chatArea = document.getElementById('chat-messages');
-                               const bg = chatArea?.style.backgroundImage || '';
-                               m = bg.match(/url\("?([^"]*)"?\)/);
-                               return m ? m[1] : '';
-                             })(),
+      chatBgImage:           old.chatBgImage || '',
       statusBarBg:           get('th-status-bg')     || old.statusBarBg   || '',
       statusBarBgOpacity:    getF('th-status-bg-op'),
       statusBarCard:         get('th-status-card')   || old.statusBarCard || '',
@@ -966,8 +969,9 @@ toggleLite, isLiteMode, applyLiteMode,
     setFontMode, handleFontUpload,
     syncGlassPadding: () => _syncGlassPadding(load().glassEnabled),
     saveAsCustom, applyCustomPreset, activateCustomPreset, deleteCustomPreset, renderCustomList,
-saveCustomPresetNow,
-exportCustomThemes, importCustomThemes, closeExportModal, toggleExportSelectAll, syncExportToggleState, confirmExportSelectedThemes,
+    saveCustomPresetNow,
+    exportCustomThemes, importCustomThemes, closeExportModal, toggleExportSelectAll, syncExportToggleState, confirmExportSelectedThemes,
+    setConvBgOverride,
 getPresetNames: () => Object.keys(PRESETS),
   };
 })();

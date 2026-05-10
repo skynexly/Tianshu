@@ -150,10 +150,13 @@ function flushActionLogForBackstage() {
  shopLastQuery: '',
  shopSearchHistory: [],
  shopOrders: [],           // [{id, name, price, shop, desc, target, etaText, time}]
- // 心动模拟 APP — 用户对心动目标的私下好感度（仅本地娱乐数据，不影响游戏数值）
- hsAppFavor: { fsy: 0, yx: 0, lmy: 0, qe: 0 },
- // 心动模拟 APP — 上次注入到后台频道时的快照（用于计算"本轮变化"）
- hsAppFavorSnapshot: { fsy: 0, yx: 0, lmy: 0, qe: 0 },
+  // 心动模拟 APP — 用户对心动目标的私下好感度（仅本地娱乐数据，不影响游戏数值）
+  hsAppFavor: { fsy: 0, yx: 0, lmy: 0, qe: 0 },
+  // 心动模拟 APP — 上次注入到后台频道时的快照（用于计算"本轮变化"）
+  hsAppFavorSnapshot: { fsy: 0, yx: 0, lmy: 0, qe: 0 },
+  // 心动模拟 APP — 用户自定义心动目标列表（null = 用内置默认值；数组 = 用户已编辑过）
+  // 元素：{ id, name, alias, age, role, relation, avatar }（avatar 为 dataURL）
+  hsAppTargets: null,
  // 心动模拟 APP — 客服对话记录 [{role:'user'|'assistant', text, time}]
 heartsimServiceMessages: [],
     // 心动模拟 APP — 客服对话同步进度（后台频道每次取走时记录，下次只用 ★ 标新增）
@@ -2815,30 +2818,44 @@ ${fullCtx}`;
 }
 
 // ===== 心动模拟 APP =====
-// 心动目标固定档案 + 用户私下好感度（仅本地娱乐数据，不影响游戏数值，不暴露给 AI）
+// 心动目标内置档案 + 用户私下好感度（仅本地娱乐数据，不影响游戏数值，不暴露给 AI）
 // 顺序按用户指定：方赊云 → 易寻 → 路冥夜 → 奎恩
-const HEARTSIM_TARGETS = [
-  { id: 'fsy', npcId: 'npc_fsy', name: '方赊云', alias: '流云', age: 31, role: '大学教授',         relation: '你的老师' },
-  { id: 'yx',  npcId: 'npc_yx',  name: '易寻',   alias: '寻',   age: 20, role: '心逸医学院学生', relation: '你的邻居' },
-  { id: 'lmy', npcId: 'npc_lmy', name: '路冥夜', alias: 'L',    age: 26, role: '黑客',           relation: '你的网友' },
-  { id: 'qe',  npcId: 'npc_qe',  name: '奎恩',   alias: 'Quinn', age: 25, role: '便利店店员',     relation: '你的熟人' },
+// 这是「内置默认列表」——首次打开时拷贝到 phoneData.hsAppTargets，后续可被用户增删改
+const HEARTSIM_TARGETS_DEFAULT = [
+  { id: 'fsy', name: '方赊云', alias: '流云', age: 31, role: '大学教授',         relation: '你的老师' },
+  { id: 'yx',  name: '易寻',   alias: '寻',   age: 20, role: '心逸医学院学生', relation: '你的邻居' },
+  { id: 'lmy', name: '路冥夜', alias: 'L',    age: 26, role: '黑客',           relation: '你的网友' },
+  { id: 'qe',  name: '奎恩',   alias: 'Quinn', age: 25, role: '便利店店员',     relation: '你的熟人' },
 ];
+// 内置档案的 npcId 映射（用于一次性迁移旧的 npcAvatars 头像）
+const HEARTSIM_LEGACY_NPC_ID = { fsy: 'npc_fsy', yx: 'npc_yx', lmy: 'npc_lmy', qe: 'npc_qe' };
 
 let _hsAppTab = 'profiles'; // 'profiles' | 'service'
+let _hsEditingTargetId = null; // null = 新增；非空 = 编辑该 id
+
+// 取当前用户的心动目标列表。null/未初始化时返回内置默认副本。
+async function _ensureHsAppTargets(pd) {
+  if (Array.isArray(pd.hsAppTargets)) return pd.hsAppTargets;
+  // 首次打开：克隆内置 + 迁移旧的 npcAvatars 头像
+  const targets = HEARTSIM_TARGETS_DEFAULT.map(t => ({ ...t, avatar: '' }));
+  try {
+    for (const t of targets) {
+      const npcId = HEARTSIM_LEGACY_NPC_ID[t.id];
+      if (!npcId) continue;
+      const r = await DB.get('npcAvatars', npcId);
+      if (r?.avatar) t.avatar = r.avatar;
+    }
+  } catch(_) {}
+  pd.hsAppTargets = targets;
+  return targets;
+}
 
 async function _renderHeartSimApp(pd) {
   document.getElementById('phone-title').textContent = '心动模拟';
   const body = document.getElementById('phone-body');
   if (!body) return;
 
-  // 拉头像（心动目标）
-  const avatarMap = {};
-  try {
-    for (const t of HEARTSIM_TARGETS) {
-      const r = await DB.get('npcAvatars', t.npcId);
-      avatarMap[t.id] = r?.avatar || '';
-    }
-  } catch(_) {}
+  const targets = await _ensureHsAppTargets(pd);
 
   // 客服头像（来自世界观 iconImage）
   let serviceAvatar = '';
@@ -2849,17 +2866,18 @@ async function _renderHeartSimApp(pd) {
     serviceAvatar = wv?.iconImage || '';
   } catch(_) {}
 
-  const profilesHtml = _renderHsProfilesPanel(pd, avatarMap);
+  const profilesHtml = _renderHsProfilesPanel(pd, targets);
   const serviceHtml = await _renderHsServicePanel(pd, serviceAvatar);
 
   body.innerHTML = `
-    <div style="display:flex;flex-direction:column;height:100%">
+    <div style="display:flex;flex-direction:column;height:100%;position:relative">
       <div id="phone-hs-profiles-panel" style="flex:1;overflow-y:auto;display:${_hsAppTab === 'profiles' ? 'flex' : 'none'};flex-direction:column">${profilesHtml}</div>
       <div id="phone-hs-service-panel" style="flex:1;overflow:hidden;display:${_hsAppTab === 'service' ? 'flex' : 'none'};flex-direction:column">${serviceHtml}</div>
       <div class="phone-tabbar">
         <div class="phone-tab ${_hsAppTab === 'profiles' ? 'active' : ''}" onclick="Phone._switchHsAppTab('profiles')">心动目标</div>
         <div class="phone-tab ${_hsAppTab === 'service' ? 'active' : ''}" onclick="Phone._switchHsAppTab('service')">心动模拟客服</div>
       </div>
+      <div id="phone-hs-edit-overlay" class="hidden" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px"></div>
     </div>
   `;
 
@@ -2870,25 +2888,33 @@ async function _renderHeartSimApp(pd) {
   }
 }
 
-function _renderHsProfilesPanel(pd, avatarMap) {
+function _renderHsProfilesPanel(pd, targets) {
   const fav = pd.hsAppFavor || {};
-  const cards = HEARTSIM_TARGETS.map(t => {
+  const cards = targets.map(t => {
     const v = Math.max(0, Math.min(100, Number(fav[t.id]) || 0));
-    const avatar = avatarMap[t.id];
+    const avatar = t.avatar || '';
     const avatarHTML = avatar
       ? `<img src="${Utils.escapeHtml(avatar)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`
-      : `<div style="font-size:24px;font-weight:600;color:var(--text-secondary)">${Utils.escapeHtml(t.name[0] || '?')}</div>`;
+      : `<div style="font-size:24px;font-weight:600;color:var(--text-secondary)">${Utils.escapeHtml(t.name?.[0] || '?')}</div>`;
     return `
-      <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;gap:12px;align-items:center">
+      <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;position:relative">
+        <div style="position:absolute;top:8px;right:8px;display:flex;gap:4px">
+          <button onclick="Phone._hsEditTarget('${t.id}')" title="编辑" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--text-secondary);border-radius:6px;cursor:pointer;padding:0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button onclick="Phone._hsDeleteTarget('${t.id}')" title="删除" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--text-secondary);border-radius:6px;cursor:pointer;padding:0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;padding-right:60px">
           <div style="width:64px;height:64px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center">${avatarHTML}</div>
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
             <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
-              <span style="font-size:16px;font-weight:600;color:var(--text);letter-spacing:0.02em">${Utils.escapeHtml(t.name)}</span>
-              <span style="font-size:12px;color:var(--text-secondary);opacity:0.7">@${Utils.escapeHtml(t.alias)}</span>
+              <span style="font-size:16px;font-weight:600;color:var(--text);letter-spacing:0.02em">${Utils.escapeHtml(t.name || '')}</span>
+              ${t.alias ? `<span style="font-size:12px;color:var(--text-secondary);opacity:0.7">@${Utils.escapeHtml(t.alias)}</span>` : ''}
             </div>
-            <div style="font-size:12px;color:var(--text-secondary)">${t.age} · ${Utils.escapeHtml(t.role)}</div>
-            <div style="font-size:12px;color:var(--text-secondary);opacity:0.85">${Utils.escapeHtml(t.relation)}</div>
+            <div style="font-size:12px;color:var(--text-secondary)">${t.age ? Utils.escapeHtml(String(t.age)) + ' · ' : ''}${Utils.escapeHtml(t.role || '')}</div>
+            ${t.relation ? `<div style="font-size:12px;color:var(--text-secondary);opacity:0.85">${Utils.escapeHtml(t.relation)}</div>` : ''}
           </div>
         </div>
         <div style="height:1px;background:var(--border);margin:2px 0"></div>
@@ -2907,14 +2933,182 @@ function _renderHsProfilesPanel(pd, avatarMap) {
     `;
   }).join('');
 
+  const addBtn = `
+    <button onclick="Phone._hsAddTarget()" style="background:transparent;border:1.5px dashed var(--border);border-radius:12px;padding:18px;color:var(--text-secondary);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      添加心动目标
+    </button>
+  `;
+
+  const emptyHint = targets.length === 0
+    ? `<div style="text-align:center;color:var(--text-secondary);font-size:13px;padding:24px 12px;line-height:1.7">还没有心动目标。<br>点击下方按钮添加你想要心动的人。</div>`
+    : '';
+
   return `
     <div style="display:flex;flex-direction:column;gap:12px;padding:12px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;box-sizing:border-box">
+      ${emptyHint}
       <div style="display:flex;flex-direction:column;gap:12px">${cards}</div>
+      ${addBtn}
       <div style="font-size:11px;color:var(--text-secondary);opacity:0.6;text-align:center;line-height:1.6;padding:8px 4px 12px">
         ※ 此数据仅供您把玩，无任何实际意义。<br>——心动模拟客服
       </div>
     </div>
   `;
+}
+
+// ===== 心动目标 编辑表单 =====
+let _hsEditPendingAvatar = null; // 编辑表单内暂存的头像 dataURL
+
+function _hsRenderEditOverlay(target) {
+  const overlay = document.getElementById('phone-hs-edit-overlay');
+  if (!overlay) return;
+  const isNew = !target;
+  const t = target || { name: '', alias: '', age: '', role: '', relation: '', avatar: '' };
+  _hsEditPendingAvatar = null;
+  const avatarSrc = t.avatar || '';
+  overlay.innerHTML = `
+    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:14px;width:100%;max-width:340px;max-height:90%;display:flex;flex-direction:column;overflow:hidden" onclick="event.stopPropagation()">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:15px;font-weight:600;color:var(--text)">${isNew ? '添加心动目标' : '编辑心动目标'}</span>
+        <button onclick="Phone._hsCloseEdit()" style="background:transparent;border:none;color:var(--text-secondary);font-size:20px;line-height:1;cursor:pointer;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+      <div style="padding:14px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+          <div id="hs-edit-avatar-preview" style="width:80px;height:80px;border-radius:50%;overflow:hidden;background:var(--bg-tertiary);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="document.getElementById('hs-edit-avatar-input').click()">
+            ${avatarSrc
+              ? `<img src="${Utils.escapeHtml(avatarSrc)}" alt="" style="width:100%;height:100%;object-fit:cover">`
+              : `<span style="font-size:11px;color:var(--text-secondary)">点击上传</span>`}
+          </div>
+          <input type="file" id="hs-edit-avatar-input" accept="image/*" style="display:none" onchange="Phone._hsEditAvatarPicked(this)">
+          <div style="font-size:11px;color:var(--text-secondary)">点击头像上传</div>
+        </div>
+        ${_hsEditField('hs-ed-name',     '名字',         t.name,     'TA 叫什么')}
+        ${_hsEditField('hs-ed-alias',    '昵称 / @',     t.alias,    '可留空')}
+        ${_hsEditField('hs-ed-age',      '年龄',         t.age,      '可填可不填', 'number')}
+        ${_hsEditField('hs-ed-role',     '身份 / 职业',  t.role,     '比如：大学教授')}
+        ${_hsEditField('hs-ed-relation', '与你的关系',   t.relation, '比如：你的老师')}
+      </div>
+      <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px">
+        <button onclick="Phone._hsCloseEdit()" style="flex:1;padding:10px 0;background:transparent;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;font-size:14px;cursor:pointer">取消</button>
+        <button onclick="Phone._hsSaveEdit()" style="flex:1;padding:10px 0;background:var(--accent);border:none;color:#fff;border-radius:8px;font-size:14px;cursor:pointer;font-weight:500">保存</button>
+      </div>
+    </div>
+  `;
+  overlay.classList.remove('hidden');
+}
+function _hsEditField(id, label, value, placeholder, type) {
+  const safeVal = Utils.escapeHtml(value == null ? '' : String(value));
+  const safePh  = Utils.escapeHtml(placeholder || '');
+  return `
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <div style="font-size:12px;color:var(--text-secondary)">${Utils.escapeHtml(label)}</div>
+      <input id="${id}" type="${type || 'text'}" value="${safeVal}" placeholder="${safePh}"
+        style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:13px">
+    </div>
+  `;
+}
+
+async function _hsAddTarget() {
+  _hsEditingTargetId = null;
+  _hsRenderEditOverlay(null);
+}
+async function _hsEditTarget(id) {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  const targets = await _ensureHsAppTargets(pd);
+  const t = targets.find(x => x.id === id);
+  if (!t) return;
+  _hsEditingTargetId = id;
+  _hsRenderEditOverlay(t);
+}
+function _hsCloseEdit() {
+  const overlay = document.getElementById('phone-hs-edit-overlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.innerHTML = '';
+  }
+  _hsEditingTargetId = null;
+  _hsEditPendingAvatar = null;
+}
+function _hsEditAvatarPicked(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const raw = e.target.result;
+    const img = new Image();
+    img.onload = () => {
+      // 压缩到 200×200，JPEG 0.85（头像够用）
+      const SIZE = 200;
+      const canvas = document.createElement('canvas');
+      canvas.width = SIZE; canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      // 居中裁剪
+      const minSide = Math.min(img.naturalWidth, img.naturalHeight);
+      const sx = (img.naturalWidth - minSide) / 2;
+      const sy = (img.naturalHeight - minSide) / 2;
+      ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, SIZE, SIZE);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      _hsEditPendingAvatar = dataUrl;
+      const preview = document.getElementById('hs-edit-avatar-preview');
+      if (preview) {
+        preview.innerHTML = `<img src="${Utils.escapeHtml(dataUrl)}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+      }
+    };
+    img.src = raw;
+  };
+  reader.readAsDataURL(file);
+}
+async function _hsSaveEdit() {
+  const name = document.getElementById('hs-ed-name')?.value.trim() || '';
+  if (!name) {
+    UI.showToast('请填写名字', 1800);
+    return;
+  }
+  const alias    = document.getElementById('hs-ed-alias')?.value.trim() || '';
+  const ageRaw   = document.getElementById('hs-ed-age')?.value.trim() || '';
+  const role     = document.getElementById('hs-ed-role')?.value.trim() || '';
+  const relation = document.getElementById('hs-ed-relation')?.value.trim() || '';
+  const age      = ageRaw === '' ? '' : (Number(ageRaw) || ageRaw);
+
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  const targets = await _ensureHsAppTargets(pd);
+
+  if (_hsEditingTargetId) {
+    // 编辑
+    const t = targets.find(x => x.id === _hsEditingTargetId);
+    if (t) {
+      t.name = name; t.alias = alias; t.age = age; t.role = role; t.relation = relation;
+      if (_hsEditPendingAvatar !== null) t.avatar = _hsEditPendingAvatar;
+    }
+  } else {
+    // 新增
+    const id = 'hs_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    targets.push({
+      id, name, alias, age, role, relation,
+      avatar: _hsEditPendingAvatar || ''
+    });
+    if (!pd.hsAppFavor) pd.hsAppFavor = {};
+    pd.hsAppFavor[id] = 0;
+  }
+  await _savePhoneData();
+  _hsCloseEdit();
+  if (_isAppStillActive('heartsim_app')) await _renderHeartSimApp(pd);
+}
+async function _hsDeleteTarget(id) {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  const targets = await _ensureHsAppTargets(pd);
+  const t = targets.find(x => x.id === id);
+  if (!t) return;
+  if (!await UI.showConfirm('删除心动目标', `确定删除「${t.name}」？此操作不可撤销。`)) return;
+  pd.hsAppTargets = targets.filter(x => x.id !== id);
+  if (pd.hsAppFavor) delete pd.hsAppFavor[id];
+  if (pd.hsAppFavorSnapshot) delete pd.hsAppFavorSnapshot[id];
+  await _savePhoneData();
+  if (_isAppStillActive('heartsim_app')) await _renderHeartSimApp(pd);
 }
 
 async function _renderHsServicePanel(pd, serviceAvatar) {
@@ -3235,20 +3429,23 @@ async function buildHeartsimAppFavorForBackstage() {
 
   const pd = await _getPhoneData();
   if (!pd) return '';
-  const cur = pd.hsAppFavor || { fsy: 0, yx: 0, lmy: 0, qe: 0 };
-  const snap = pd.hsAppFavorSnapshot || { fsy: 0, yx: 0, lmy: 0, qe: 0 };
+  const cur = pd.hsAppFavor || {};
+  const snap = pd.hsAppFavorSnapshot || {};
+  const targets = await _ensureHsAppTargets(pd);
+  if (!targets.length) return '';
 
   const lines = [];
   lines.push('【心动模拟 APP · 玩家私下好感度（仅后台可见）】');
   lines.push('该数据为玩家在「心动模拟」APP 内手动调整的私下好感度，仅用于玩家自娱自乐，不影响实际游戏数值。');
   lines.push('提示：此数据仅后台可见，主线 AI 不可见，心动模拟 APP 内数据为最高机密，无法被任何 NPC 窥探（包括黑化查手机时）。');
   lines.push('');
-  for (const t of HEARTSIM_TARGETS) {
+  for (const t of targets) {
     const v = Math.max(0, Math.min(100, Number(cur[t.id]) || 0));
     const prev = Math.max(0, Math.min(100, Number(snap[t.id]) || 0));
     const diff = v - prev;
     const diffText = diff === 0 ? '本轮无变化' : (diff > 0 ? `本轮 +${diff}` : `本轮 ${diff}`);
-    lines.push(`- ${t.name}（@${t.alias}）：当前 ${v}/100｜${diffText}`);
+    const aliasPart = t.alias ? `（@${t.alias}）` : '';
+    lines.push(`- ${t.name}${aliasPart}：当前 ${v}/100｜${diffText}`);
   }
 
   // 写回 snapshot
@@ -3321,6 +3518,12 @@ async function buildHeartsimServiceChatForBackstage() {
     _hsAppFavorChange,
     _switchHsAppTab,
     _hsServiceSend,
+    _hsAddTarget,
+    _hsEditTarget,
+    _hsDeleteTarget,
+    _hsCloseEdit,
+    _hsSaveEdit,
+    _hsEditAvatarPicked,
     consumeHsHomeNotice,
     checkAndNotifyHomeReady,
     // 心动模拟 — 返航动画
