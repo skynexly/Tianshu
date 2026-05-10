@@ -432,7 +432,7 @@ if (phoneFab && name !== 'chat') {
     if (name === 'memory' || name === 'memory-edit') { Memory.onPanelShow(); if (typeof Memory.exitManageMode === 'function') Memory.exitManageMode(); }
     if (name === 'summary') { showPanel('chat'); openChatSummary(); return; }
     if (name === 'character') { Character.load(); if (typeof Character.exitManageMode === 'function') Character.exitManageMode(); }
-    if (name === 'gaiden') { Gaiden.renderList(); }
+    if (name === 'gaiden') { await Gaiden.ensureLoaded(); Gaiden.renderList(); }
     if (name === 'worldview') { await Worldview.load(); }
     if (name === 'settings') { Settings.load(); Prompts.render(); }
   }

@@ -63,8 +63,19 @@ const Gaiden = (() => {
   // ===== 初始化 =====
 
   async function init() {
-    const data = await DB.get('gameState', 'gaidenList');
-    gaidenList = data?.value || [];
+    return ensureLoaded();
+  }
+
+  // 确保数据已加载（用于面板打开等异步入口）
+  let _initPromise = null;
+  async function ensureLoaded() {
+    if (!_initPromise) {
+      _initPromise = (async () => {
+        const data = await DB.get('gameState', 'gaidenList');
+        gaidenList = data?.value || [];
+      })();
+    }
+    return _initPromise;
   }
 
   async function saveList() {
@@ -1191,7 +1202,7 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
   }
 
   return {
-    init, openGenerateModal, generate, rewrite, saveDraft, continueDraft, closeGenerateModal, abort,
+    init, ensureLoaded, openGenerateModal, generate, rewrite, saveDraft, continueDraft, closeGenerateModal, abort,
     minimizeModal, restoreModal,
     renderList, viewDetail, viewWvPost, viewPhoneItem, closeDetail, enterWorldline, remove, addToList,
     startEdit, cancelEdit, saveEdit,

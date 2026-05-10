@@ -97,6 +97,23 @@ const WorldVoice = (() => {
   isMinimized = false;
 }
 
+  // 抓当前游戏时间：优先状态栏 time，回退到最近一条 AI 消息中的"YYYY年M月D日..."
+  function _extractGameTime() {
+    try {
+      const sb = (typeof Conversations !== 'undefined') ? Conversations.getStatusBar() : null;
+      if (sb?.time) return sb.time;
+    } catch(_) {}
+    try {
+      const chatMessages = (typeof Chat !== 'undefined' && Chat.getMessages) ? Chat.getMessages() : [];
+      for (let i = chatMessages.length - 1; i >= 0; i--) {
+        if (chatMessages[i].role !== 'assistant') continue;
+        const tm = chatMessages[i].content.match(/\d{4}年\d{1,2}月\d{1,2}日[^\n]*/);
+        if (tm) return tm[0];
+      }
+    } catch(_) {}
+    return '';
+  }
+
   // 刷新帖子（含3次重试）
   async function refresh() {
     if (isGenerating) return;
@@ -123,12 +140,7 @@ const WorldVoice = (() => {
     const chatMessages = Chat.getMessages();
     const summaryText = await Summary.formatForPrompt(Conversations.getCurrent());
 
-    let gameTime = '';
-    for (let i = chatMessages.length - 1; i >= 0; i--) {
-      if (chatMessages[i].role !== 'assistant') continue;
-      const tm = chatMessages[i].content.match(/\d{4}年\d{1,2}月\d{1,2}日[^\n]*/);
-      if (tm) { gameTime = tm[0]; break; }
-    }
+    let gameTime = _extractGameTime();
 
     const recentMain = chatMessages.slice(-10).map(m =>
       `[${m.role === 'user' ? '玩家' : 'AI'}]: ${m.content}`
@@ -342,6 +354,7 @@ function _renderLoadingSkeleton() {
     isGenerating = true;
     _abortCtrl = new AbortController();
     const wvPrompt = Chat.getWorldviewPrompt() || '';
+    const gameTime = _extractGameTime();
 
     const systemPrompt = `你是一个论坛内容生成器。用户给你一条帖子的预览信息，请生成完整的帖子正文和评论区。
 
@@ -349,12 +362,13 @@ function _renderLoadingSkeleton() {
 1. 正文长度符合论坛帖子风格——几百字到上千字不等，不要一律写成千字小作文，要像真的论坛用户在写东西
 2. 评论区8-12条回复，风格多样（有赞同、反对、吐槽、跑题的），评论长度也要自然，有人一句话有人写一段
 3. 评论者的用户名和说话风格要符合世界观
-4. 返回纯JSON，不要包含任何其他文字
+4. 评论时间要符合"当前游戏时间"，分布在最近几小时到几天内（绝对不要凭空瞎编年份/年代）
+5. 返回纯JSON，不要包含任何其他文字
 
 JSON格式：
 {"content":"帖子完整正文","comments":[{"username":"用户名","avatar_color":"#颜色","content":"评论内容","time":"时间","likes":数字}]}`;
 
-    const userPrompt = `## 世界观\n${wvPrompt}\n\n## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n标签：${(post.tags || []).join('、')}\n\n请生成完整内容和评论区。`;
+    const userPrompt = `## 世界观\n${wvPrompt}\n\n${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n标签：${(post.tags || []).join('、')}\n\n请生成完整内容和评论区。`;
 
     const maxRetries = 3;
     let lastError = '';
@@ -618,17 +632,19 @@ JSON格式：
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) throw new Error('请先配置功能模型');
     const wvPrompt = Chat.getWorldviewPrompt() || '';
+    const gameTime = _extractGameTime();
     const systemPrompt = `你是一个论坛内容生成器。用户给你一条帖子的预览信息，请生成完整的帖子正文和评论区。
 
 要求：
 1. 正文长度符合论坛帖子风格——几百字到上千字不等，不要一律写成千字小作文，要像真的论坛用户在写东西
 2. 评论区8-12条回复，风格多样（有赞同、反对、吐槽、跑题的），评论长度也要自然，有人一句话有人写一段
 3. 评论者的用户名和说话风格要符合世界观
-4. 返回纯JSON，不要包含任何其他文字
+4. 评论时间要符合"当前游戏时间"，分布在最近几小时到几天内（绝对不要凭空瞎编年份/年代）
+5. 返回纯JSON，不要包含任何其他文字
 
 JSON格式：
 {"content":"帖子完整正文","comments":[{"username":"用户名","avatar_color":"#颜色","content":"评论内容","time":"时间","likes":数字}]}`;
-    const userPrompt = `## 世界观\n${wvPrompt}\n\n## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n标签：${(post.tags||[]).join('、')}\n\n请生成完整内容和评论区。`;
+    const userPrompt = `## 世界观\n${wvPrompt}\n\n${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n标签：${(post.tags||[]).join('、')}\n\n请生成完整内容和评论区。`;
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },

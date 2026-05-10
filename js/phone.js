@@ -820,8 +820,9 @@ async function _clearMomentsCover() {
           const realIdx = searchHistory.length - 1 - idx;
           return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;gap:8px;align-items:center">
             <span class="phone-search-history-item" style="flex:1;color:var(--text)">${_uiIcon('search', 13)} ${Utils.escapeHtml(s.query || '')}</span>
-            <span style="color:var(--text-secondary);font-size:10px;white-space:nowrap">${Utils.escapeHtml((s.time || '').substring(5, 16).replace('T', ' '))}</span>
+            <span style="color:var(--text-secondary);font-size:10px;white-space:nowrap">${Utils.escapeHtml(_fmtHistoryTime(s.time))}</span>
             <span onclick="Phone._shareForumSearch(${realIdx})" class="phone-share-mini" title="分享到主线">${_uiIcon('share', 13)}</span>
+            <span onclick="Phone._deleteForumSearch(${realIdx})" class="phone-share-mini" style="color:var(--error)" title="删除">${_uiIcon('trash', 13)}</span>
           </div>`;
         }).join('')
       : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">暂无搜索记录</p>';
@@ -878,6 +879,15 @@ async function _clearMomentsCover() {
     if (list.length === 0) return;
     const content = list.slice(-10).map(s => `- ${s.query || ''}`).join('\n');
     _shareToMain('forum', '论坛搜索记录', content);
+  }
+
+  async function _deleteForumSearch(index) {
+    const pd = await _getPhoneData();
+    const list = pd?.forumSearchHistory || [];
+    if (index < 0 || index >= list.length) return;
+    list.splice(index, 1);
+    await _savePhoneData();
+    _renderForum(pd);
   }
 
   function _renderForumPosts(posts) {
@@ -947,7 +957,7 @@ async function _clearMomentsCover() {
     try {
       const pd = await _getPhoneData();
       if (pd) {
-        pd.forumSearchHistory.push({ query, time: new Date().toISOString() });
+        pd.forumSearchHistory.push({ query, time: _getGameTime() || new Date().toISOString() });
         _log(`搜索了论坛：${query}`);
         if (pd.forumSearchHistory.length > 20) pd.forumSearchHistory = pd.forumSearchHistory.slice(-20);
         await _savePhoneData();
@@ -1191,11 +1201,15 @@ async function _likeForumPost(index) {
     const mapSearches = pd.mapSearchHistory || [];
 
     const historyHtml = history.length > 0
-? history.slice(-30).reverse().map(h => `
-<div class="phone-map-track-card">
+? history.slice(-30).reverse().map((h, idx) => {
+    const realIdx = history.length - 1 - idx;
+    return `
+<div class="phone-map-track-card" style="position:relative">
  <div class="phone-map-track-time">${Utils.escapeHtml(h.time || '')}</div>
  <div class="phone-map-track-location">${Utils.escapeHtml(h.location || '')}</div>
-</div>`).join('')
+ <span onclick="event.stopPropagation();Phone._deleteLocationHistory(${realIdx})" class="phone-share-mini" style="position:absolute;top:6px;right:8px;color:var(--error)" title="删除">${_uiIcon('trash', 13)}</span>
+</div>`;
+  }).join('')
 : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">暂无轨迹记录</p>';
 
     const searchHistHtml = mapSearches.length > 0
@@ -1203,8 +1217,9 @@ async function _likeForumPost(index) {
           const realIdx = mapSearches.length - 1 - idx;
           return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;gap:8px;align-items:center">
             <span class="phone-search-history-item" style="flex:1;color:var(--text)">${_uiIcon('search', 13)} ${Utils.escapeHtml(s.query || '')}</span>
-            <span style="color:var(--text-secondary);font-size:10px;white-space:nowrap">${Utils.escapeHtml((s.time || '').substring(5, 16).replace('T', ' '))}</span>
+            <span style="color:var(--text-secondary);font-size:10px;white-space:nowrap">${Utils.escapeHtml(_fmtHistoryTime(s.time))}</span>
             <span onclick="Phone._shareMapSearch(${realIdx})" class="phone-share-mini" title="分享到主线">${_uiIcon('share', 13)}</span>
+            <span onclick="Phone._deleteMapSearch(${realIdx})" class="phone-share-mini" style="color:var(--error)" title="删除">${_uiIcon('trash', 13)}</span>
           </div>`;
         }).join('')
       : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">暂无搜索记录</p>';
@@ -1221,15 +1236,15 @@ async function _likeForumPost(index) {
           </div>
           <div id="phone-map-results">${_renderMapResultsHtml(pd.mapLastResults || [])}</div>
         </div>
-        <div id="phone-map-history-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_mapTab === 'history' ? 'block' : 'none'}">
-          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">共 ${history.length} 条轨迹</div>
-          ${historyHtml}
-        </div>
-        <div id="phone-map-searchhist-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_mapTab === 'searchhist' ? 'block' : 'none'}">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <span style="font-size:11px;color:var(--text-secondary)">共 ${mapSearches.length} 条搜索记录</span>
-            ${mapSearches.length > 0 ? `<span onclick="Phone._shareAllMapSearches()" class="phone-share-text" title="全部分享到主线">${_uiIcon('share', 13)} 全部分享</span>` : ''}
+<div id="phone-map-history-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_mapTab === 'history' ? 'block' : 'none'}">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">共 ${history.length} 条轨迹</div>
+            ${historyHtml}
           </div>
+          <div id="phone-map-searchhist-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_mapTab === 'searchhist' ? 'block' : 'none'}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span style="font-size:11px;color:var(--text-secondary)">共 ${mapSearches.length} 条搜索记录</span>
+              ${mapSearches.length > 0 ? `<span onclick="Phone._shareAllMapSearches()" class="phone-share-text" title="全部分享到主线">${_uiIcon('share', 13)} 全部分享</span>` : ''}
+            </div>
           ${searchHistHtml}
         </div>
         <div class="phone-tabbar">
@@ -1276,6 +1291,24 @@ async function _likeForumPost(index) {
     if (list.length === 0) return;
     const content = list.slice(-10).map(s => `- ${s.query || ''}`).join('\n');
     _shareToMain('map', '地图搜索记录', content);
+  }
+
+  async function _deleteMapSearch(index) {
+    const pd = await _getPhoneData();
+    const list = pd?.mapSearchHistory || [];
+    if (index < 0 || index >= list.length) return;
+    list.splice(index, 1);
+    await _savePhoneData();
+    _renderMap(pd);
+  }
+
+  async function _deleteLocationHistory(index) {
+    const pd = await _getPhoneData();
+    const list = pd?.locationHistory || [];
+    if (index < 0 || index >= list.length) return;
+    list.splice(index, 1);
+    await _savePhoneData();
+    _renderMap(pd);
   }
 
   function _renderMapResultsHtml(results) {
@@ -1372,7 +1405,7 @@ ${wvPrompt}` },
           pd3.mapLastResults = results;
           pd3.mapLastQuery = query;
           if (!pd3.mapSearchHistory) pd3.mapSearchHistory = [];
-          pd3.mapSearchHistory.push({ query, time: new Date().toISOString() });
+          pd3.mapSearchHistory.push({ query, time: _getGameTime() || new Date().toISOString() });
           if (pd3.mapSearchHistory.length > 10) pd3.mapSearchHistory = pd3.mapSearchHistory.slice(-10);
           await _savePhoneData();
         }
@@ -2203,6 +2236,24 @@ await _savePhoneData();
 _renderMemo(pd);
 }
 
+  // 抓当前游戏时间（来自状态栏；统一供搜索记录等使用）
+  function _getGameTime() {
+    try {
+      const sb = (typeof Conversations !== 'undefined') ? Conversations.getStatusBar() : null;
+      if (sb?.time) return sb.time;
+    } catch(_) {}
+    return '';
+  }
+
+  // 搜索记录时间戳的友好显示：
+  // - ISO 格式（2026-05-10T12:03:33.xxx）→ 裁成 "05-10 12:03"
+  // - 游戏时间（2065年3月27日 星期五 19:06）→ 原样展示
+  function _fmtHistoryTime(t) {
+    if (!t) return '';
+    if (/^\d{4}-\d{2}-\d{2}T/.test(t)) return t.substring(5, 16).replace('T', ' ');
+    return t;
+  }
+
   // ===== 轨迹记录（由 statusBar 变化触发） =====
   async function recordLocation(location, time) {
     if (!location) return;
@@ -2404,12 +2455,13 @@ _renderMemo(pd);
     const itemsHtml = items.length > 0 ? _renderShopItemsHtml(items, kind)
       : `<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">${cfg.emptyHint}</p>`;
     const searchHistoryHtml = searches.length > 0
-      ? searches.map((s, i) => `
-          <div class="phone-map-track-card" onclick="Phone._shopRepeatSearch('${kind}', ${i})" style="cursor:pointer">
-            <div class="phone-map-track-location">${Utils.escapeHtml(s.query || '')}</div>
-            <div class="phone-map-track-time">${Utils.escapeHtml(s.time || '')}</div>
-          </div>`).join('')
-      : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">暂无搜索记录</p>';
+? searches.map((s, i) => `
+<div class="phone-map-track-card" onclick="Phone._shopRepeatSearch('${kind}', ${i})" style="cursor:pointer;position:relative">
+<div class="phone-map-track-location">${Utils.escapeHtml(s.query || '')}</div>
+<div class="phone-map-track-time">${Utils.escapeHtml(s.time || '')}</div>
+<span onclick="event.stopPropagation();Phone._deleteShopSearch('${kind}', ${i})" class="phone-share-mini" style="position:absolute;top:6px;right:8px;color:var(--error)" title="删除">${_uiIcon('trash', 13)}</span>
+</div>`).join('')
+: '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">暂无搜索记录</p>';
     const ordersHtml = orders.length > 0 ? _renderShopOrdersHtml(orders, kind)
       : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">暂无订单</p>';
 
@@ -2429,10 +2481,10 @@ _renderMemo(pd);
           </div>
           <div id="phone-shop-items">${itemsHtml}</div>
         </div>
-        <div id="phone-shop-search-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_shopTab === 'search' ? 'block' : 'none'}">
-          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">共 ${searches.length} 条搜索记录</div>
-          ${searchHistoryHtml}
-        </div>
+<div id="phone-shop-search-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_shopTab === 'search' ? 'block' : 'none'}">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">共 ${searches.length} 条搜索记录</div>
+            ${searchHistoryHtml}
+          </div>
         <div id="phone-shop-orders-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_shopTab === 'orders' ? 'block' : 'none'}">
           <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">共 ${orders.length} 个订单</div>
           ${ordersHtml}
@@ -2611,7 +2663,7 @@ ${fullCtx}`;
       pd[cfg.queryField] = query;
       // 写搜索历史
       pd[cfg.historyField] = pd[cfg.historyField] || [];
-      pd[cfg.historyField].unshift({ query, time: new Date().toLocaleString() });
+      pd[cfg.historyField].unshift({ query, time: _getGameTime() || new Date().toLocaleString() });
       pd[cfg.historyField] = pd[cfg.historyField].slice(0, 10);
       await _savePhoneData();
       _log(`在${cfg.title}APP搜索了「${query}」，得到 ${results.length} 条结果`);
@@ -2620,6 +2672,17 @@ ${fullCtx}`;
     } catch(e) {
       UI.showToast(`搜索失败：${e.message}`, 2500);
     }
+  }
+
+  // 单条删除搜索记录（外卖/网购通用）
+  async function _deleteShopSearch(kind, index) {
+    const cfg = SHOP_CFG[kind];
+    const pd = await _getPhoneData();
+    const list = pd?.[cfg.historyField] || [];
+    if (index < 0 || index >= list.length) return;
+    list.splice(index, 1);
+    await _savePhoneData();
+    _renderShopping(pd, kind);
   }
 
   // 从历史记录重新搜索
@@ -3502,14 +3565,14 @@ async function buildHeartsimServiceChatForBackstage() {
     // 内部方法需要暴露给 onclick
     _addMemo, _editMemo, _saveMemo, _deleteMemo, _shareMemo, _collectMemo,
     _forumRefresh, _forumSearch, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,
-    _switchForumTab, _shareForumSearch, _shareAllForumSearches,
+    _switchForumTab, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
     _postMoment, _onMomentImagePicked, _toggleImageDesc, _submitMoment, _shareMoment, _collectMyMoment, _deleteMyMoment, _shareNpcMoment, _refreshMomentComments, _refreshNpcMoments,
     _openMomentVisibleModal, _closeMomentVisibleModal, _filterMomentVisibleOptions, _toggleMomentVisibleOption, _setMomentVisibleAll,
     _switchMomentsTab, _collectNpcMoment, _likeNpcMoment, _commentNpcMoment,
     _mapSearch, _shareMapResult, _collectMapResult, _switchMapTab, _renderMapResultsHtml,
-    _shareMapSearch, _shareAllMapSearches,
+    _shareMapSearch, _shareAllMapSearches, _deleteMapSearch, _deleteLocationHistory,
     // 外卖/网购
-    _switchShopTab, _shopRefresh, _shopSearch, _shopRepeatSearch,
+    _switchShopTab, _shopRefresh, _shopSearch, _shopRepeatSearch, _deleteShopSearch,
     _shopOpenCustomModal, _shopCloseCustomModal, _shopConfirmCustom,
     _shopBuyForSelf, _shopBuyForTarget, _shopConfirmTarget, _shopCloseTargetModal,
     _shopShareItem,
