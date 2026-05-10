@@ -1123,9 +1123,9 @@ async function _clearMomentsCover() {
       </div>`;
       // 正文或骨架屏
       if (p._detailLoaded) {
-        html += `<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);background:var(--bg-tertiary);padding:10px;border-radius:6px;border:1px solid var(--border);margin-bottom:16px">${(window.Markdown ? Markdown.render(p.fullContent||'') : Utils.escapeHtml(p.fullContent||''))}</div>`;
+        html += `<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">${(window.Markdown ? Markdown.render(p.fullContent||'') : Utils.escapeHtml(p.fullContent||''))}</div>`;
         if (p.tags?.length) html += `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px">${p.tags.map(t=>`<span style="font-size:10px;background:var(--bg-tertiary);color:var(--accent);padding:2px 8px;border-radius:10px">${Utils.escapeHtml(t)}</span>`).join('')}</div>`;
-html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secondary);padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:12px">
+html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secondary);padding:8px 0;border-top:1px solid var(--border);margin-bottom:12px">
         <span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> ${formatNum(p.views)}</span>
         <span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> ${formatNum(p.likes)}</span>
         <span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> ${formatNum(p._comments?.length||0)}</span>
@@ -1134,7 +1134,7 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
         if (p._comments?.length) {
           html += `<div style="font-size:12px;font-weight:600;margin-bottom:8px">评论区</div>`;
           p._comments.forEach(c => {
-            html += `<div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+            html += `<div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px">
               <div style="width:24px;height:24px;border-radius:50%;background:${Utils.escapeHtml(c.avatar_color||'#666')};display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:bold;flex-shrink:0">${Utils.escapeHtml((c.username||'?')[0])}</div>
               <div style="flex:1">
                 <div style="display:flex;justify-content:space-between;margin-bottom:3px">
