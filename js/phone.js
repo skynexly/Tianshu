@@ -538,6 +538,19 @@ function _extractJsonArrayText(content) {
  </div>
  `;
     // 不做点击外部关闭（移动端键盘收起会误触）—— 用 ✕ 按钮关闭
+    // 阻止滑动手势穿透到底层（底层页面的侧栏/滚动会被误触发）
+    modal.addEventListener('touchmove', (e) => {
+      // 只允许 phone-shell 内部的可滚动容器滚动，其余位置禁止滑动冒泡
+      const target = e.target;
+      const shell = modal.querySelector('.phone-shell');
+      if (!shell || !shell.contains(target)) {
+        e.preventDefault();
+        return;
+      }
+      // 内部元素：允许它自己滚，但不让事件冒到底层
+      e.stopPropagation();
+    }, { passive: false });
+    modal.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
     document.body.appendChild(modal);
   }
 

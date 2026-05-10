@@ -1437,7 +1437,7 @@ background: transparent !important;
 .phone-body div[style*="background:var(--bg-secondary)"]:not(.wv-tag-pill),
 .phone-body div[style*="background: var(--bg-secondary)"]:not(.wv-tag-pill) {
   background: linear-gradient(135deg,
-    color-mix(in srgb, var(--accent) 22%, var(--bg-tertiary-solid, var(--bg-tertiary))),
+    color-mix(in srgb, var(--accent) 12%, var(--bg-tertiary-solid, var(--bg-tertiary))),
     var(--bg-secondary-solid, var(--bg-secondary))) !important;
 }
 .phone-shell.has-wallpaper .phone-tabbar {
@@ -1467,7 +1467,7 @@ background: transparent !important;
 .phone-shell.has-wallpaper .phone-body div[style*="background:var(--bg-secondary)"]:not(.wv-tag-pill),
 .phone-shell.has-wallpaper .phone-body div[style*="background: var(--bg-secondary)"]:not(.wv-tag-pill) {
   background-image: linear-gradient(135deg,
-    color-mix(in srgb, var(--accent) 22%, transparent),
+    color-mix(in srgb, var(--accent) 12%, transparent),
     transparent) !important;
   background-color: color-mix(in srgb, var(--bg-tertiary-solid, var(--bg-tertiary)) var(--phone-card-opacity-pct), transparent) !important;
 }
