@@ -258,6 +258,7 @@ ${dialogue}
     a.download = `archive_${new Date(arch.archivedAt).toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+    if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已导出归档记录', 1800);
   }
 
   // ===== UI =====
@@ -452,8 +453,26 @@ ${dialogue}
         <div class="card-actions">
 <button onclick="Summary._viewArchive('${a.id}')" style="display:flex;align-items:center;justify-content:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg> 查看</button>
 <button onclick="Summary._exportArchive('${a.id}','${Utils.escapeHtml(convName)}')" style="display:flex;align-items:center;justify-content:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg> 导出</button>
+<button onclick="Summary._deleteArchive('${a.id}','${conversationId}','${(containerId || 'archive-list').replace(/'/g, '')}')" style="display:flex;align-items:center;justify-content:center;gap:4px;color:var(--error)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg> 删除</button>
 </div>
       </div>`).join('');
+  }
+
+  async function _deleteArchive(archiveId, conversationId, containerId) {
+    const all = await DB.getAll('archives');
+    const arch = all.find(a => a.id === archiveId);
+    if (!arch) return;
+    const dateStr = new Date(arch.archivedAt).toLocaleString();
+    const ok = await UI.showConfirm(
+      '永久删除归档？',
+      `归档时间：${dateStr}\n包含 ${arch.messages.length} 条消息\n\n⚠ 删除后此归档的所有原始消息将永久丢失，无法恢复。\n（剧情总结本身不会受影响）\n\n建议先「导出」备份后再删除。`
+    );
+    if (!ok) return;
+    await DB.del('archives', archiveId);
+    GameLog.log('info', `[Archive] 删除归档 ${archiveId}`);
+    UI.showToast('已删除归档', 1800);
+    // 刷新列表
+    await renderArchiveList(conversationId, containerId);
   }
 
   // ===== 编辑功能 =====
@@ -766,7 +785,7 @@ ${dialogue}
   return {
     get, save, generate, archive, getArchives, exportArchive,
     showSummaryPanel, renderSummaryView, renderArchiveList, formatForPrompt,
-    showArchiveListModal, closeArchiveListModal,
+    showArchiveListModal, closeArchiveListModal, _deleteArchive,
     setConvId, saveEdit, closeEdit,
     _editField, _editTimeline, _editNPC, _addTimeline, _addNPC, _deleteTimeline, _deleteNPC,
     _toggleSection,

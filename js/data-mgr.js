@@ -19,38 +19,44 @@ const DataMgr = (() => {
   }
 
   async function exportAll() {
-    const gameState = await _safeGetAll('gameState');
-    const singleCards = await _safeGetAll('singleCards');
-    const npcAvatars = await _safeGetAll('npcAvatars');
-    const data = {
-      version: 3,
-      exportTime: new Date().toISOString(),
-      messages: await _safeGetAll('messages'),
-      memories: await _safeGetAll('memories'),
-      settings: await _safeGetAll('settings'),
-      characters: await _safeGetAll('characters'),
-      gameState,
-      // 显式冗余一份，方便人工检查/兼容旧导入器；真实来源仍是 gameState 内的 conversations 项
-      conversations: (gameState.find(x => x && x.key === 'conversations')?.value) || [],
-      worldviews: await _safeGetAll('worldviews'),
-      archives: await _safeGetAll('archives'),
-      summaries: await _safeGetAll('summaries'),
-      singleCards,
-      npcAvatars,
-      // 兼容别名：避免外部检查工具/旧脚本只认 snake_case 时误以为没打包
-      single_cards: singleCards,
-      npc_avatars: npcAvatars,
-      themeConfig: localStorage.getItem('themeConfig') || null,
-      themeCustomPresets: localStorage.getItem('themeCustomPresets') || null
-    };
+    try {
+      const gameState = await _safeGetAll('gameState');
+      const singleCards = await _safeGetAll('singleCards');
+      const npcAvatars = await _safeGetAll('npcAvatars');
+      const data = {
+        version: 3,
+        exportTime: new Date().toISOString(),
+        messages: await _safeGetAll('messages'),
+        memories: await _safeGetAll('memories'),
+        settings: await _safeGetAll('settings'),
+        characters: await _safeGetAll('characters'),
+        gameState,
+        // 显式冗余一份，方便人工检查/兼容旧导入器；真实来源仍是 gameState 内的 conversations 项
+        conversations: (gameState.find(x => x && x.key === 'conversations')?.value) || [],
+        worldviews: await _safeGetAll('worldviews'),
+        archives: await _safeGetAll('archives'),
+        summaries: await _safeGetAll('summaries'),
+        singleCards,
+        npcAvatars,
+        // 兼容别名：避免外部检查工具/旧脚本只认 snake_case 时误以为没打包
+        single_cards: singleCards,
+        npc_avatars: npcAvatars,
+        themeConfig: localStorage.getItem('themeConfig') || null,
+        themeCustomPresets: localStorage.getItem('themeCustomPresets') || null
+      };
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `textgame-save-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `textgame-save-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      UI.showToast('已导出总存档', 2000);
+    } catch (e) {
+      console.error('[DataMgr.exportAll]', e);
+      await UI.showAlert('导出失败', e.message || String(e));
+    }
   }
 
   function importAll() {
@@ -100,10 +106,10 @@ const DataMgr = (() => {
         if (data.themeConfig) localStorage.setItem('themeConfig', data.themeConfig);
         if (data.themeCustomPresets) localStorage.setItem('themeCustomPresets', data.themeCustomPresets);
 
-        alert('导入成功！');
+        await UI.showAlert('导入成功', '总存档已恢复，页面将自动刷新');
         location.reload();
       } catch (e) {
-        alert('导入失败: ' + e.message);
+        await UI.showAlert('导入失败', e.message || String(e));
       }
     };
     input.click();

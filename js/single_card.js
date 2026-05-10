@@ -256,6 +256,7 @@ const SingleCard = (() => {
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      UI.showToast(`已导出「${card.name || 'card'}」`, 1800);
     });
   }
 

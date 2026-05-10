@@ -196,7 +196,11 @@ button, input, select, textarea, option, label {
 body:has(#panel-chat.active) #main::before {
   background-image: var(--chat-bg-image, none);
 }
-#main > * {
+/* 让 #main 的常规布局子元素（顶栏/聊天面板等）位于背景图之上；
+   不要用 #main > * 通配选择器，会把 .modal 的 fixed 定位也覆盖成 relative */
+#chat-topbar,
+#main > .panel,
+#main > section.panel {
   position: relative;
   z-index: 1;
 }
@@ -1756,6 +1760,12 @@ input[type="range"] {
   color: var(--text);
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
   white-space: nowrap;
+  max-width: min(260px, calc(100vw - 24px));
+}
+/* 说明文字允许换行，不受 nowrap 约束 */
+#token-popup-note {
+  white-space: normal;
+  word-break: break-word;
 }
 
 

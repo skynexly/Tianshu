@@ -136,12 +136,13 @@
           <span id="token-progress-text" class="token-progress-text">0</span>
         </div>
         <!-- Token 浮窗 -->
-            <div id="token-popup" class="token-popup hidden">
-              <div class="token-popup-content">
-                <span id="token-popup-text">当前窗口：0</span>
-                <span id="token-popup-total" style="opacity:0.6;font-size:0.9em;margin-top:2px">总计：—</span>
-              </div>
-            </div>
+      <div id="token-popup" class="token-popup hidden">
+        <div class="token-popup-content">
+          <span id="token-popup-text">当前窗口：0</span>
+          <span id="token-popup-total" style="opacity:0.6;font-size:0.9em;margin-top:2px">总计：—</span>
+          <span id="token-popup-note" style="display:none;opacity:0.7;font-size:0.85em;margin-top:6px;line-height:1.5;color:var(--text-secondary)"></span>
+        </div>
+      </div>
         <!-- 菜单按钮 -->
         <button class="btn-icon" onclick="UI.toggleTopMenu()" style="font-size:20px;padding:0 8px">⋮</button>
         <!-- 下拉菜单 -->
@@ -1187,6 +1188,15 @@
             </span>
           </label>
           <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">让 AI 感知现实世界的时间流逝。用户消息会带时间戳前缀，AI 能知道距离上次回复过去了多久。文游剧情模式建议关闭</span>
+
+          <label class="circle-check-label">
+            <span class="circle-check-text">线上消息气泡</span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-online-chat" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">允许 AI 在剧情中插入「QQ/微信式」线上消息气泡，包含 NPC 名、头像、内容。心动模拟世界观自带启用无需手动开。开启后 AI 会消耗少量额外 token 学习这个格式</span>
 
           <label class="circle-check-label">
             <span class="circle-check-text">启用语音朗读</span>
