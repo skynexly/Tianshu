@@ -106,8 +106,8 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
     }
   } catch(e) { console.error('[SendButton]', e); }
 
-  // 新手引导（暂时停用：文案跟不上当前版本，等重写后再恢复）
-  // try { await Tutorial.init(); } catch(e) { console.error('[Tutorial.init]', e); }
+  // 新手引导
+  try { await Tutorial.init(); } catch(e) { console.error('[Tutorial.init]', e); }
 
   // 全局禁止文字选中（华为浏览器对 CSS user-select 不完全尊重，用 JS 兜底）
   // 白名单：仅 input / textarea / contenteditable 元素及其后代允许选中

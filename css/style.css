@@ -4197,6 +4197,15 @@ body[data-worldview="心动模拟"] .sb-npc-dot.active {
 }
 
 /* ===== 天枢城专属 ===== */
+/* Share Tech Mono：标题 + 乱码使用，赛博朋克终端风 */
+@font-face {
+  font-family: 'Share Tech Mono';
+  src: url('../fonts/ShareTechMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* 1. 开场打字效果 */
 .skynex-typing {
   white-space: pre-wrap;
@@ -4264,10 +4273,17 @@ body[data-worldview="心动模拟"] .sb-npc-dot.active {
   to { opacity: 0; }
 }
 .skynex-entry-inner {
-  text-align: center;
-  color: #e8e8e8;
-  font-family: "Courier New", "JetBrains Mono", monospace;
-  letter-spacing: 0.15em;
+text-align: center;
+color: #e8e8e8;
+font-family: "Share Tech Mono", "Courier New", "JetBrains Mono", monospace;
+letter-spacing: 0.15em;
+}
+.skynex-entry-sub {
+  font-size: 13px;
+  color: var(--text-secondary, #98a8b8);
+  letter-spacing: 0.18em;
+  line-height: 1.9;
+  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", "PingFang SC", "Microsoft YaHei", serif);
 }
 .skynex-entry-title {
   font-size: 32px;
@@ -4296,12 +4312,6 @@ body[data-worldview="心动模拟"] .sb-npc-dot.active {
 }
 .skynex-entry-divider.expanded {
   width: 60%;
-}
-.skynex-entry-sub {
-  font-size: 13px;
-  color: var(--text-secondary, #98a8b8);
-  letter-spacing: 0.18em;
-  line-height: 1.9;
 }
 .skynex-entry-date {
   transition: opacity 0.5s ease-out;

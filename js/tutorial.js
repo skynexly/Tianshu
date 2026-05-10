@@ -7,6 +7,7 @@ const Tutorial = (() => {
   let currentNode = null;
   let started = false;
   let firstRun = false;
+  let _skipAnim = false;
 
   const STORAGE_DONE_KEY = 'tutorial_completed_v1';
   const STORAGE_SEEN_KEY = 'tutorial_seen_v1';
@@ -181,9 +182,9 @@ const Tutorial = (() => {
   async function appendAIBubble(content, useTyping = false) {
     const box = chatBox();
     if (!box) return;
-    if (useTyping) {
+    if (useTyping && !_skipAnim) {
       const typingRef = await appendTypingBubble();
-      await wait(520);
+      await wait(900);
       if (typingRef?.wrap?.parentNode) typingRef.wrap.remove();
     }
     // AI头像 + 气泡，和正式聊天的assistant一样
@@ -210,9 +211,11 @@ const Tutorial = (() => {
   async function appendStructuredBubble(content) {
     const box = chatBox();
     if (!box) return;
-    const typingRef = await appendTypingBubble();
-    await wait(520);
-    if (typingRef?.wrap?.parentNode) typingRef.wrap.remove();
+    if (!_skipAnim) {
+      const typingRef = await appendTypingBubble();
+      await wait(900);
+      if (typingRef?.wrap?.parentNode) typingRef.wrap.remove();
+    }
     const avatarEl = document.createElement('img');
     avatarEl.src = TUTORIAL_AVATAR;
     avatarEl.className = 'msg-avatar';
@@ -258,15 +261,17 @@ const Tutorial = (() => {
       box.appendChild(div);
     }
     scrollBottom();
-    await wait(180);
+    await wait(400);
   }
 
   async function appendSystemCard(rawText) {
     const box = chatBox();
     if (!box || !rawText) return;
-    const typingRef = await appendTypingBubble();
-    await wait(520);
-    if (typingRef?.wrap?.parentNode) typingRef.wrap.remove();
+    if (!_skipAnim) {
+      const typingRef = await appendTypingBubble();
+      await wait(900);
+      if (typingRef?.wrap?.parentNode) typingRef.wrap.remove();
+    }
     const avatarEl = document.createElement('img');
     avatarEl.src = TUTORIAL_AVATAR;
     avatarEl.className = 'msg-avatar';
@@ -283,7 +288,68 @@ const Tutorial = (() => {
     div.style.maxWidth = '100%';
     box.appendChild(wrapper);
     scrollBottom();
-    await streamStructured(div, String(rawText));
+    // 直接构造 parsed 对象，绕过 parseAIOutput 的前置依赖（要求底部代码块前必须有 \n---\n）
+    // systemCard 支持两种写法：
+    //   1. 三反引号包裹：```\n新获得物品\n物品名：描述\n```
+    //   2. 纯文本：新获得物品\n物品名：描述
+    const parsed = _parseSystemCard(String(rawText));
+    await streamStructuredFromParsed(div, parsed);
+  }
+
+  function _parseSystemCard(rawText) {
+    const parsed = {
+      header: { region: '', location: '', time: '', weather: '' },
+      body: '',
+      items: [],
+      changes: [],
+      presentNPCs: [],
+      status: null,
+      thinking: '',
+      relation: null,
+      tasks: null,
+      phoneLock: null,
+      chat: null,
+      raw: rawText
+    };
+    // 剥离 ``` 包裹
+    let text = rawText.trim();
+    text = text.replace(/^```[a-zA-Z]*\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return parsed;
+    const firstLine = lines[0];
+    const isItem = /^新?获得?物品|^物品/.test(firstLine);
+    const isChange = /^角色变化|^变化/.test(firstLine);
+    const contentLines = lines.slice(1).filter(l =>
+      l && l !== '无' && !/^（.*）$/.test(l) && !/^\(.*\)$/.test(l)
+    );
+    if (isItem) {
+      contentLines.forEach(l => parsed.items.push(l));
+    } else if (isChange) {
+      const t = contentLines.join('\n').trim();
+      if (t) parsed.changes.push(t);
+    } else {
+      // 兜底：当物品处理
+      contentLines.forEach(l => parsed.items.push(l));
+    }
+    return parsed;
+  }
+
+  async function streamStructuredFromParsed(bubbleEl, parsed) {
+    const fadeInStyle = 'opacity:0;transition:opacity 0.28s ease';
+    if (parsed.items.length === 0 && parsed.changes.length === 0) return;
+    const fullHtml = Chat.buildAIMessageHTML(parsed, { id: 'tutorial-sys-stream' });
+    const temp = document.createElement('div');
+    temp.innerHTML = fullHtml;
+    const itemsDiv = temp.querySelector('.msg-items');
+    if (itemsDiv) {
+      itemsDiv.style.cssText = fadeInStyle;
+      bubbleEl.appendChild(itemsDiv);
+      scrollBottom();
+      await wait(80);
+      itemsDiv.style.opacity = '1';
+      await wait(300);
+    }
+    scrollBottom();
   }
 
   function buildContentHTML(content) {
@@ -303,12 +369,19 @@ const Tutorial = (() => {
   }
 
   function wait(ms) {
+    if (_skipAnim) return Promise.resolve();
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   async function streamText(bubbleEl, text) {
     const body = bubbleEl.querySelector('.msg-body');
     if (!body) { bubbleEl.innerHTML = buildContentHTML(text); return; }
+    // 跳过模式：直接渲染完整内容
+    if (_skipAnim) {
+      body.innerHTML = Markdown.render(text);
+      scrollBottom();
+      return;
+    }
     body.classList.add('streaming-cursor');
     const chars = Array.from(text);
     const len = chars.length;
@@ -333,7 +406,7 @@ const Tutorial = (() => {
     body.innerHTML = Markdown.render(text);
     scrollBottom();
     // 气泡之间加一点呼吸感
-    await wait(280);
+    await wait(500);
   }
 
   async function streamStructured(bubbleEl, rawText) {
@@ -438,11 +511,13 @@ const Tutorial = (() => {
       return;
     }
     currentNode = nodeId;
+    _skipAnim = false;
     renderOptions([]);
+    _showSkipBtn();
 
     const messages = Array.isArray(node.messages) ? node.messages : [];
     for (let i = 0; i < messages.length; i++) {
-      await appendAIBubble(messages[i], i === 0);
+      await appendAIBubble(messages[i], true);
     }
     if (node.systemCard) {
       await appendSystemCard(node.systemCard);
@@ -450,7 +525,50 @@ const Tutorial = (() => {
     if (node.finalPreview) {
       await appendStructuredBubble(getFinalPreviewText());
     }
+    _hideSkipBtn();
     renderOptions(node.options || []);
+  }
+
+  function _showSkipBtn() {
+    let btn = document.getElementById('tutorial-skip-btn');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'tutorial-skip-btn';
+      btn.textContent = '跳过动画 ▸▸';
+      btn.style.cssText = 'position:fixed;top:56px;right:12px;z-index:700;padding:6px 14px;font-size:12px;background:var(--bg-secondary,#2a2a2a);color:var(--text-secondary,#aaa);border:1px solid var(--border,#444);border-radius:16px;cursor:pointer;opacity:0.8;transition:opacity 0.2s';
+      btn.onclick = () => {
+        _skipAnim = true;
+        btn.style.opacity = '0.3';
+        btn.style.pointerEvents = 'none';
+      };
+      document.body.appendChild(btn);
+    }
+    btn.style.display = 'block';
+    btn.style.opacity = '0.8';
+    btn.style.pointerEvents = 'auto';
+  }
+
+  function _hideSkipBtn() {
+    const btn = document.getElementById('tutorial-skip-btn');
+    if (btn) btn.style.display = 'none';
+  }
+
+  function _addInputHighlight() {
+    const input = chatInput();
+    if (input) {
+      input.style.outline = '1.5px solid var(--accent, #e8a04a)';
+      input.style.outlineOffset = '-1px';
+      input.dataset.tutorialHighlight = '1';
+    }
+  }
+
+  function _removeInputHighlight() {
+    const input = chatInput();
+    if (input && input.dataset.tutorialHighlight) {
+      input.style.outline = '';
+      input.style.outlineOffset = '';
+      delete input.dataset.tutorialHighlight;
+    }
   }
 
   async function handleOption(opt) {
@@ -562,6 +680,7 @@ lines.push('角色-引导员-姿势：站在牌坊下，手中拿着登记册。
     await ensureDefaultWorldview();
     clearChat();
     setInputDisabled(true);
+    _addInputHighlight();
     renderOptions([]);
     await playNode('start');
   }
@@ -574,6 +693,9 @@ lines.push('角色-引导员-姿势：站在牌坊下，手中拿着登记册。
     markDone();
     active = false;
     currentNode = null;
+    _skipAnim = false;
+    _hideSkipBtn();
+    _removeInputHighlight();
     renderOptions([]);
     setInputDisabled(false);
     try { UI.showToast('新手引导已完成', 1800); } catch (_) {}
