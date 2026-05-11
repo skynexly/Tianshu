@@ -3287,6 +3287,27 @@ body.glass-on .sb-status-card {
   background: var(--accent);
   flex-shrink: 0;
 }
+.sb-env-edit-btn {
+  margin-left: auto;
+  margin-right: 36px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.sb-env-edit-btn:hover,
+.sb-env-edit-btn:active {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
+}
 
 .sb-scene {
   font-size: 13px;
@@ -3305,6 +3326,7 @@ body.glass-on .sb-status-card {
 .sb-scene:hover { background: rgba(255,255,255,0.05); }
 .sb-scene.sb-empty { color: var(--text-secondary); font-style: italic; text-indent: 0; }
 .sb-title-hs,
+.sb-title-single,
 .sb-scene-label {
   display: none;
 }
@@ -4194,6 +4216,356 @@ body[data-worldview="心动模拟"] .sb-npc-dot.active {
  width:13px;
  opacity: .95;
  background: var(--decoration);
+}
+
+/* ===== 单人卡+无世界观 皮（data-skin="single-default"） ===== */
+/* 复用心动模拟的 neumorphism 变量 */
+body[data-skin="single-default"] {
+  --hs-shadow-neu: 5px 6px 13px rgba(0,0,0,0.13), -3px -3px 9px rgba(255,255,255,0.42), inset 0 1px 0 rgba(255,255,255,0.22);
+  --hs-shadow-neu-hover: 6px 8px 16px rgba(0,0,0,0.15), -3px -3px 10px rgba(255,255,255,0.44), inset 0 1px 0 rgba(255,255,255,0.24);
+  --hs-shadow-neu-dialog: 7px 9px 22px rgba(0,0,0,0.20), -4px -4px 12px rgba(255,255,255,0.36), inset 0 1px 0 rgba(255,255,255,0.20);
+}
+/* 状态卡整体：复用心动模拟的衬线/间距风 */
+body[data-skin="single-default"] .sb-status-card {
+  gap: 16px;
+  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+}
+/* 标题：与心动模拟一致 */
+body[data-skin="single-default"] .sb-status-title {
+  align-items: baseline;
+  gap: 10px;
+  letter-spacing: 0;
+  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+body[data-skin="single-default"] .sb-status-title .sb-dot,
+body[data-skin="single-default"] .sb-title-default,
+body[data-skin="single-default"] .sb-title-hs {
+  display: none;
+}
+body[data-skin="single-default"] .sb-title-single {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+}
+}
+/* === 单人卡皮：场景 + 用户状态（直接克隆自心动模拟） === */
+body[data-skin="single-default"] .sb-scene-wrap {
+  padding: 12px 14px 13px;
+  border-radius: 16px;
+  background: var(--status-card, var(--bg-tertiary));
+  box-shadow: var(--hs-shadow-neu);
+  border: 1px solid rgba(255,255,255,0.16);
+}
+body[data-skin="single-default"] .sb-scene-label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: .06em;
+}
+body[data-skin="single-default"] .sb-scene {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-indent: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  letter-spacing: .02em;
+  color: var(--text);
+}
+body[data-skin="single-default"] .sb-scene:hover {
+  background: transparent;
+}
+.sb-player-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sb-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+.sb-field-row:hover { background: rgba(255,255,255,0.03); }
+.sb-field-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  opacity: .8;
+  padding-top: 1px;
+}
+.sb-field-val {
+ font-size:12.5px;
+ color: var(--text);
+ line-height:1.6;
+ flex:1;
+ word-break: break-all;
+ font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+ border-left:3px solid var(--accent);
+ border-radius:0;
+ padding-left:10px;
+ margin-left:2px;
+}
+body[data-skin="single-default"] .sb-player-card {
+ display: grid;
+ grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+ gap:10px;
+}
+body[data-skin="single-default"] .sb-player-card::before {
+ content: "Your Status";
+ grid-column:1 / -1;
+ display: block;
+ margin-bottom: -2px;
+ font-size:11px;
+ line-height:1;
+ font-weight:800;
+ color: var(--accent);
+ letter-spacing: .06em;
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-row {
+ min-width:0;
+ gap:8px;
+ padding: 12px 12px 13px;
+ border-radius:15px;
+ cursor: pointer;
+ position: relative;
+ overflow: hidden;
+ box-shadow: var(--hs-shadow-neu);
+ border:1px solid rgba(255,255,255,0.14);
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(1) {
+ background: var(--status-bg, var(--bg-secondary));
+ color: var(--accent);
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-row::after {
+ content: "";
+ position: absolute;
+ top:9px;
+ right:9px;
+ width:8px;
+ height:8px;
+ border-radius:50%;
+ background: var(--decoration);
+ box-shadow: 0 2px 5px rgba(0,0,0,0.22), 0 0 0 3px rgba(255,255,255,0.18);
+ opacity: .92;
+ pointer-events: none;
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(2) {
+ background: var(--status-card, var(--bg-tertiary));
+ color: var(--text);
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-row:hover {
+ transform: translateY(-1px);
+ box-shadow: var(--hs-shadow-neu-hover);
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-label {
+ font-size:11px;
+ line-height:1;
+ font-weight:800;
+ letter-spacing: .04em;
+ color: currentColor;
+ opacity: .86;
+ padding:0;
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(1) .sb-field-label::before {
+ content: "今日穿搭";
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(2) .sb-field-label::before {
+ content: "当前姿势";
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-label {
+ font-size:0;
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-label::before {
+ font-size:11px;
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-val {
+ margin:0;
+ padding:0;
+ border: none;
+ border-radius:0;
+ color: currentColor;
+ font-size:12.5px;
+ line-height:1.55;
+ letter-spacing: .01em;
+ word-break: break-word;
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(1) .sb-field-val {
+ color: var(--accent);
+}
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(2) .sb-field-val {
+ color: var(--text);
+}
+
+/* NPC 折叠区：Presence 标签 */
+body[data-skin="single-default"] .sb-npcs-accordion {
+  gap: 7px;
+}
+body[data-skin="single-default"] .sb-npcs-header {
+  padding: 0;
+  cursor: default;
+}
+body[data-skin="single-default"] .sb-npcs-header:hover {
+  background: transparent;
+}
+body[data-skin="single-default"] .sb-npcs-title {
+  font-size: 0;
+  opacity: 1;
+  letter-spacing: 0;
+}
+body[data-skin="single-default"] .sb-npcs-title::before {
+  content: "Presence";
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: .06em;
+}
+body[data-skin="single-default"] .sb-npcs-body {
+  max-height: none;
+  overflow: visible;
+}
+/* NPC 列表：纵向排列、不折叠、不横滑 */
+body[data-skin="single-default"] .sb-npcs-list {
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 2px 2px;
+  overflow: visible;
+}
+/* NPC 卡：拟态阴影 + 头像在右 + 名字在头像下 */
+body[data-skin="single-default"] .sb-npc-card {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: stretch;
+  padding: 13px 14px;
+  border: none;
+  border-radius: 16px;
+  background: var(--bg-tertiary);
+  box-shadow: var(--hs-shadow-neu);
+  opacity: 1;
+  min-width: 0;
+}
+/* 交替底色：偶数张用 secondary */
+body[data-skin="single-default"] .sb-npc-card:nth-child(even) {
+  background: var(--bg-secondary);
+}
+body[data-skin="single-default"] .sb-npc-card:hover {
+  filter: none;
+  box-shadow: var(--hs-shadow-neu-hover);
+}
+body[data-skin="single-default"] .sb-npc-card .sb-npc-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+}
+body[data-skin="single-default"] .sb-npc-card .sb-npc-val {
+  position: relative;
+  padding-left: 13px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  letter-spacing: .01em;
+  word-break: break-word;
+  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+}
+body[data-skin="single-default"] .sb-npc-card .sb-npc-val::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--decoration);
+  box-shadow: 0 1px 3px rgba(0,0,0,.16);
+}
+/* 右侧：头像 + 名字 */
+body[data-skin="single-default"] .sb-npc-card .sb-npc-side {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  width: 64px;
+}
+body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: var(--hs-shadow-neu);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar-initial {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0;
+  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+  opacity: .8;
+}
+body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar.has-img .sb-npc-avatar-initial {
+  display: none;
+}
+body[data-skin="single-default"] .sb-npc-card .sb-npc-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: .03em;
+  text-align: center;
+  margin: 0;
+  line-height: 1.2;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* "+ 添加 NPC" 占位：保持原 dashed 风，但走单人卡皮的色 */
+body[data-skin="single-default"] .sb-npc-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1.5px dashed var(--accent);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-family, sans-serif);
+  opacity: .8;
+}
+body[data-skin="single-default"] .sb-npc-empty:hover {
+  opacity: 1;
+  border-color: var(--decoration);
+}
+/* 单人卡皮下不显示横向滑动指示点 */
+body[data-skin="single-default"] .sb-npc-dots {
+  display: none;
 }
 
 /* ===== 天枢城专属 ===== */

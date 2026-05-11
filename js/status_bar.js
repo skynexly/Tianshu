@@ -70,15 +70,146 @@ let _editBuf = null; // 编辑缓冲 { mode: 'field'|'npc'|'all', ... }
  requestAnimationFrame(update);
  }
 
- function render(status) {
+  // 头像匹配缓存：{ nameLower: url }
+  const _npcAvatarCache = new Map();
+
+  async function _resolveNpcAvatar(name) {
+    if (!name) return '';
+    const key = String(name).trim().toLowerCase();
+    if (!key) return '';
+    if (_npcAvatarCache.has(key)) return _npcAvatarCache.get(key);
+
+    let url = '';
+    try {
+      // 1. 当前对话的单人卡 char
+      const curId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
+      const conv = curId ? (Conversations.getList().find(c => c.id === curId) || null) : null;
+      if (conv && conv.isSingle && conv.singleCharId) {
+        if (conv.singleCharType === 'card') {
+          const card = await SingleCard.get(conv.singleCharId);
+          if (card && card.name && card.name.trim().toLowerCase() === key && card.avatar) {
+            url = card.avatar;
+          }
+        } else if (conv.singleCharType === 'npc') {
+          // npc 类型在头像缓存里
+          url = await SingleCard.getNpcAvatar(conv.singleCharId).catch(()=>'');
+        }
+      }
+      // 2. 挂载角色
+      if (!url) {
+        const attached = (typeof AttachedChars !== 'undefined') ? AttachedChars.get() : [];
+        for (const a of attached) {
+          if (a.type === 'card') {
+            const card = await SingleCard.get(a.id);
+            if (card && card.name && card.name.trim().toLowerCase() === key && card.avatar) {
+              url = card.avatar; break;
+            }
+          } else if (a.type === 'npc') {
+            // 通过 npcAvatars 直接查；name 匹配需要先拿到 npc 名，这里跳过简化处理
+            const avatar = await SingleCard.getNpcAvatar(a.id).catch(()=>'');
+            if (avatar) {
+              // 名字匹配——查世界观 NPC
+              try {
+                const wv = await DB.get('worldviews', a.sourceWvId);
+                if (wv && Array.isArray(wv.regions)) {
+                  outer: for (const r of wv.regions) {
+                    for (const f of (r.factions || [])) {
+                      for (const n of (f.npcs || [])) {
+                        if (n.id === a.id && n.name && n.name.trim().toLowerCase() === key) {
+                          url = avatar; break outer;
+                        }
+                      }
+                    }
+                  }
+                }
+              } catch(_) {}
+              if (url) break;
+            }
+          }
+        }
+      }
+    } catch(_) {}
+
+    _npcAvatarCache.set(key, url || '');
+    return url || '';
+  }
+
+  function _clearNpcAvatarCache() {
+    _npcAvatarCache.clear();
+  }
+
+  async function _hydrateNpcAvatars(rootEl) {
+    if (!rootEl) return;
+    const nodes = rootEl.querySelectorAll('.sb-npc-avatar[data-npc-name]');
+    for (const node of nodes) {
+      const name = node.getAttribute('data-npc-name') || '';
+      try {
+        const url = await _resolveNpcAvatar(name);
+        if (url) {
+          node.innerHTML = `<img src="${_esc(url)}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+          node.classList.add('has-img');
+        }
+      } catch(_) {}
+    }
+  }
+
+  // 占位卡：从当前对话的单人卡读 name + avatar 填充
+  async function _hydrateSingleCharPlaceholder(rootEl) {
+    if (!rootEl) return;
+    try {
+      const curId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
+      const conv = curId ? (Conversations.getList().find(c => c.id === curId) || null) : null;
+      if (!conv || !conv.isSingle || !conv.singleCharId) return;
+      let name = '角色', avatar = '';
+      if (conv.singleCharType === 'card') {
+        const card = await SingleCard.get(conv.singleCharId);
+        if (card) { name = card.name || '角色'; avatar = card.avatar || ''; }
+      } else if (conv.singleCharType === 'npc') {
+        avatar = await SingleCard.getNpcAvatar(conv.singleCharId).catch(()=>'');
+        // 从世界观读 NPC 名
+        try {
+          const wv = await DB.get('worldviews', conv.singleCharSourceWvId || conv.singleWorldviewId);
+          if (wv && Array.isArray(wv.regions)) {
+            outer: for (const r of wv.regions) {
+              for (const f of (r.factions || [])) {
+                for (const n of (f.npcs || [])) {
+                  if (n.id === conv.singleCharId) { name = n.name || name; break outer; }
+                }
+              }
+            }
+          }
+        } catch(_) {}
+      }
+      const nameEl = rootEl.querySelector('[data-single-char-name="1"]');
+      const avaEl = rootEl.querySelector('[data-single-char-avatar="1"]');
+      if (nameEl) nameEl.textContent = name;
+      if (avaEl) {
+        if (avatar) {
+          avaEl.innerHTML = `<img src="${_esc(avatar)}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+          avaEl.classList.add('has-img');
+        } else {
+          avaEl.innerHTML = `<div class="sb-npc-avatar-initial">${_esc((name || '?').trim().charAt(0))}</div>`;
+        }
+      }
+    } catch(_) {}
+  }
+
+function render(status) {
     _currentStatus = status;
     const row = _el('topbar-row-status');
     if (!row) return;
+    const _isSingleSkin = document.body.getAttribute('data-skin') === 'single-default';
     if (!status) {
-      row.classList.add('hidden');
-      _el('sb-expanded-overlay')?.classList.add('hidden');
-      _expanded = false;
-      return;
+      if (_isSingleSkin) {
+        // 单人卡皮：即使没有 AI 状态也显示空壳，方便用户预览/手动编辑
+        status = { time: '', weather: '', region: '', location: '', scene: '', playerOutfit: '', playerPosture: '', npcs: [] };
+        _currentStatus = status;
+      } else {
+        row.classList.add('hidden');
+        _el('sb-expanded-overlay')?.classList.add('hidden');
+        _expanded = false;
+        return;
+      }
     }
     row.classList.remove('hidden');
 
@@ -114,18 +245,62 @@ let _editBuf = null; // 编辑缓冲 { mode: 'field'|'npc'|'all', ... }
     if (npcEl) {
       const npcs = status.npcs || [];
       if (npcsCount) npcsCount.textContent = `(${npcs.length})`;
-      
+
       if (!npcs.length) {
-        npcEl.innerHTML = '<div class="sb-npc-empty" onclick="event.stopPropagation();StatusBar.addNPC()">+ 添加 NPC</div>';
+        if (_isSingleSkin) {
+          // 单人卡皮：空 NPC 时显示一张占位卡（单人卡 char 预览）
+          npcEl.innerHTML = `
+ <div class="sb-npc-card sb-npc-placeholder" onclick="event.stopPropagation();StatusBar.addNPC()">
+   <div class="sb-npc-content">
+     <div class="sb-npc-val" style="opacity:.5;font-style:italic">等待 AI 描写服装…</div>
+     <div class="sb-npc-val" style="opacity:.5;font-style:italic">等待 AI 描写姿态…</div>
+   </div>
+   <div class="sb-npc-side">
+     <div class="sb-npc-avatar" data-single-char-avatar="1">
+       <div class="sb-npc-avatar-initial">?</div>
+     </div>
+     <div class="sb-npc-name" data-single-char-name="1">角色</div>
+   </div>
+ </div>
+ <div class="sb-npc-empty" onclick="event.stopPropagation();StatusBar.addNPC()">+ 添加 NPC</div>`;
+          _hydrateSingleCharPlaceholder(npcEl);
+        } else {
+          npcEl.innerHTML = '<div class="sb-npc-empty" onclick="event.stopPropagation();StatusBar.addNPC()">+ 添加 NPC</div>';
+        }
       } else {
-        npcEl.innerHTML = npcs.map((n, i) => `
+        npcEl.innerHTML = npcs.map((n, i) => {
+          if (_isSingleSkin) {
+            // 单人卡皮：右侧头像+名字，左侧只显示 outfit/posture 值（无小标题）
+            const _initial = _esc((n.name || '?').trim().charAt(0));
+            return `
+ <div class="sb-npc-card" onclick="event.stopPropagation();StatusBar.editNPC(${i})">
+   <div class="sb-npc-content">
+     ${n.outfit ? `<div class="sb-npc-val">${_esc(n.outfit)}</div>` : ''}
+     ${n.posture ? `<div class="sb-npc-val">${_esc(n.posture)}</div>` : ''}
+   </div>
+   <div class="sb-npc-side">
+     <div class="sb-npc-avatar" data-npc-name="${_esc(n.name)}">
+       <div class="sb-npc-avatar-initial">${_initial}</div>
+     </div>
+     <div class="sb-npc-name">${_esc(n.name)}</div>
+   </div>
+ </div>`;
+          } else {
+            return `
  <div class="sb-npc-card" onclick="event.stopPropagation();StatusBar.editNPC(${i})">
  <div class="sb-npc-name">${_esc(n.name)}</div>
  ${n.outfit ? `<div class="sb-npc-val"><span class="sb-field-label-inline">> OUTFIT_</span> ${_esc(n.outfit)}</div>` : ''}
  ${n.posture ? `<div class="sb-npc-val"><span class="sb-field-label-inline">> POSTURE_</span> ${_esc(n.posture)}</div>` : ''}
  </div>
- `).join('') + '<div class="sb-npc-empty" onclick="event.stopPropagation();StatusBar.addNPC()">+ 添加 NPC</div>';
- }
+ `;
+          }
+        }).join('') + '<div class="sb-npc-empty" onclick="event.stopPropagation();StatusBar.addNPC()">+ 添加 NPC</div>';
+
+        // 单人卡皮：异步填充头像
+        if (_isSingleSkin) {
+          _hydrateNpcAvatars(npcEl);
+        }
+      }
  _refreshNpcDots(npcs.length);
     }
 
@@ -281,11 +456,16 @@ let _editBuf = null; // 编辑缓冲 { mode: 'field'|'npc'|'all', ... }
     setTimeout(() => _el('sb-edit-npc-name')?.focus(), 100);
   }
 
-  async function saveEdit() {
+async function saveEdit() {
     if (!_editBuf || !_currentStatus) { closeEdit(); return; }
     if (_editBuf.mode === 'field') {
       const val = _el('sb-edit-input').value.trim();
       _currentStatus[_editBuf.field] = val;
+    } else if (_editBuf.mode === 'env') {
+      _currentStatus.region = _el('sb-edit-env-region').value.trim();
+      _currentStatus.location = _el('sb-edit-env-location').value.trim();
+      _currentStatus.time = _el('sb-edit-env-time').value.trim();
+      _currentStatus.weather = _el('sb-edit-env-weather').value.trim();
     } else if (_editBuf.mode === 'npc') {
       const name = _el('sb-edit-npc-name').value.trim();
       const outfit = _el('sb-edit-npc-outfit').value.trim();
@@ -314,6 +494,25 @@ let _editBuf = null; // 编辑缓冲 { mode: 'field'|'npc'|'all', ... }
   function closeEdit() {
     _editBuf = null;
     _el('sb-edit-modal')?.classList.add('hidden');
+  }
+
+  // 一次编辑时间/地点/天气（环境字段组）
+  function editEnv() {
+    if (!_currentStatus) return;
+    _editBuf = { mode: 'env' };
+    _el('sb-edit-title').textContent = '编辑 · 时间 / 地点 / 天气';
+    _el('sb-edit-fields').innerHTML = `
+      <label style="font-size:12px;color:var(--text-secondary);margin-top:4px">大地点</label>
+      <input id="sb-edit-env-region" type="text" placeholder="如：天枢城·东区" value="${_esc(_currentStatus.region || '')}" style="padding:8px;font-size:14px">
+      <label style="font-size:12px;color:var(--text-secondary);margin-top:4px">小地点</label>
+      <input id="sb-edit-env-location" type="text" placeholder="如：某街道·某建筑·某房间" value="${_esc(_currentStatus.location || '')}" style="padding:8px;font-size:14px">
+      <label style="font-size:12px;color:var(--text-secondary);margin-top:4px">时间</label>
+      <input id="sb-edit-env-time" type="text" placeholder="如：2065年3月27日 星期五 15:02" value="${_esc(_currentStatus.time || '')}" style="padding:8px;font-size:14px">
+      <label style="font-size:12px;color:var(--text-secondary);margin-top:4px">天气</label>
+      <input id="sb-edit-env-weather" type="text" placeholder="如：晴朗 22℃" value="${_esc(_currentStatus.weather || '')}" style="padding:8px;font-size:14px">
+    `;
+    _el('sb-edit-modal').classList.remove('hidden');
+    setTimeout(() => _el('sb-edit-env-time')?.focus(), 100);
   }
 
   // ======== 心动模拟 ========
@@ -1037,7 +1236,8 @@ reason: <一句话写明剧情原因，如"看到了搜索记录里的另一个�
   }
 
   return {
-    render, toggle, editField, editNPC, addNPC, deleteNPC, saveEdit, closeEdit, refreshFromConv, toggleNpcs,
+    render, toggle, editField, editEnv, editNPC, addNPC, deleteNPC, saveEdit, closeEdit, refreshFromConv, toggleNpcs,
+    _clearNpcAvatarCache,
     // 心动模拟
     hsApplyRelation, hsApplyTasks, hsApplyPhoneLock, hsSkipTask, hsRefreshTasksFromLatestAI, hsOpenSkipModal, hsCloseSkipModal, hsSelectSkipTask, hsConfirmSkipTask, hsAddTarget, hsRemoveTarget, hsEditBaseFavor, hsGetDarknessWarnings, hsFormatForPrompt, hsCheckClearCondition,
     isPhoneLocked, getPhoneLockInfo, hsForceUnlockPhone,

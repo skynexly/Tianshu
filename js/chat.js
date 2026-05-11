@@ -344,6 +344,26 @@ const Chat = (() => {
           if (s && s.region) TianshuRegion.silentInit(s.region);
         }
       } catch(_) {}
+      // 单人卡 + 无世界观：套心动模拟皮（视觉壳）
+      try {
+        const _conv = Conversations.getList().find(c => c.id === convId);
+        const _isSingle = !!(_conv && _conv.isSingle);
+        const _wvForSkin = (_conv?.singleWorldviewId || _conv?.worldviewId || '__default_wv__');
+        const _isDefaultWv = !_wvForSkin || _wvForSkin === '__default_wv__';
+        if (_isSingle && _isDefaultWv) {
+          document.body.setAttribute('data-skin', 'single-default');
+        } else {
+          document.body.removeAttribute('data-skin');
+        }
+        // 切对话时清头像匹配缓存
+        if (typeof StatusBar !== 'undefined' && StatusBar._clearNpcAvatarCache) {
+          StatusBar._clearNpcAvatarCache();
+        }
+        // 单人卡皮下：强制 render 一次（即使 status 为 null，render 内部会兜底成空壳显示占位）
+        if (_isSingle && _isDefaultWv && typeof StatusBar !== 'undefined' && StatusBar.refreshFromConv) {
+          StatusBar.refreshFromConv();
+        }
+      } catch(_) {}
     } catch(e) { _currentWvName = ''; }
     // 只渲染非隐藏的消息
     renderAll();
@@ -492,17 +512,14 @@ isStreaming = true;
       }
     } catch(_) {}
 
-    // 手机操作日志注入：独立 system 消息，插在最后一条 user 之前（v560+ 新方案）
-    // 旧方案是挂在 user 末尾，单人卡场景下 AI 容易把操作误认为是被扮演角色做的
-    let _phoneLogSystemContent = null;
+    // 手机操作日志快照：flush 出来存到本轮 userMsg 上（v566+ 方案B）
+    // 仅为"最新一条 user 消息"持久化手机操作快照，重写最新一条时还能恢复。
+    // 历史消息不会重复注入手机操作，AI 不会反复提。
+    let _pendingPhoneLog = null;
     try {
       if (typeof Phone !== 'undefined' && Phone.flushActionLog) {
         const phoneLog = Phone.flushActionLog();
-        if (phoneLog.length > 0) {
-          _phoneLogSystemContent = '【玩家手机操作记录｜OOC】\n以下是"{{user}}"本轮在自己手机里的操作，由系统旁白记录，不是角色对白，也不是任何一方的剧情发言：\n\n' +
-            phoneLog.map(a => `- {{user}} ${a}`).join('\n') +
-            '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。';
-        }
+        if (phoneLog.length > 0) _pendingPhoneLog = phoneLog;
       }
     } catch(_) {}
 
@@ -588,6 +605,7 @@ isStreaming = true;
       role: 'user',
       content: userContent,
       contentForAPI: userContentForAPI,
+      phoneLogSnapshot: _pendingPhoneLog || null, // 本轮手机操作快照（供最新一条消息的 AI 上下文/重写使用）
       conversationId: Conversations.getCurrent(),
       branchId: currentBranchId,
       parentId: messages.length > 0 ? messages[messages.length - 1].id : null,
@@ -996,15 +1014,23 @@ apiMessages.splice(insertIdx, 0, { role: 'system', content: timeSensitive });
     } catch(e) { console.warn('[Chat] 节日注入失败:', e); }
     } // isGameMode
 
-    // 手机操作日志：作为独立 system 消息插在最后一条 user 之前
-    if (_phoneLogSystemContent) {
-      const insertIdx = apiMessages.length - 1; // 最后一条是当前 user 消息
-      if (insertIdx >= 0) {
-        apiMessages.splice(insertIdx, 0, { role: 'system', content: _phoneLogSystemContent });
-      } else {
-        apiMessages.push({ role: 'system', content: _phoneLogSystemContent });
+    // 手机操作日志：只读"最后一条 user 消息"的 phoneLogSnapshot（方案B）
+    // 这样新发送和重写最新一条都能拿到同一份快照，AI 不会反复看到历史轮的手机操作
+    try {
+      const _lastUserMsg = [...messages].reverse().find(m => m.role === 'user' && !m.hidden);
+      const _snapshot = _lastUserMsg?.phoneLogSnapshot;
+      if (_snapshot && _snapshot.length > 0) {
+        const _phoneLogContent = '【玩家手机操作记录｜OOC】\n以下是"{{user}}"本轮在自己手机里的操作，由系统旁白记录，不是角色对白，也不是任何一方的剧情发言：\n\n' +
+          _snapshot.map(a => `- {{user}} ${a}`).join('\n') +
+          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。';
+        const insertIdx = apiMessages.length - 1; // 最后一条是当前 user 消息
+        if (insertIdx >= 0) {
+          apiMessages.splice(insertIdx, 0, { role: 'system', content: _phoneLogContent });
+        } else {
+          apiMessages.push({ role: 'system', content: _phoneLogContent });
+        }
       }
-    }
+    } catch(_) {}
 
     // 宏替换：{{user}} → 当前面具角色名；{{char}} → 单人卡角色名（如有）
     const _macroUser = char?.name || '玩家';
@@ -3450,6 +3476,21 @@ apiMessages.splice(insertIdx, 0, { role: 'system', content: timeSensitive });
         }
       } catch(e) { console.warn('[showContext] 节日注入失败:', e); }
     }
+
+    // 手机操作日志：读最后一条 user 的 phoneLogSnapshot（与发送主流程对齐）
+    try {
+      const _lastUserMsg = [...messages].reverse().find(m => m.role === 'user' && !m.hidden);
+      const _snapshot = _lastUserMsg?.phoneLogSnapshot;
+      if (_snapshot && _snapshot.length > 0) {
+        const _phoneLogContent = '【玩家手机操作记录｜OOC】\n以下是"{{user}}"本轮在自己手机里的操作，由系统旁白记录，不是角色对白，也不是任何一方的剧情发言：\n\n' +
+          _snapshot.map(a => `- {{user}} ${a}`).join('\n') +
+          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。';
+        const insertIdx = apiMessages.length - 1;
+        if (insertIdx >= 0) {
+          apiMessages.splice(insertIdx, 0, { role: 'system', content: _phoneLogContent });
+        }
+      }
+    } catch(_) {}
 
     // 宏替换：{{user}} → 当前面具角色名；{{char}} → 单人卡角色名（如有）
     {

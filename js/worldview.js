@@ -1921,6 +1921,81 @@ function _applyBoundTheme(themeName) {
   }
 }
 
+// ---------- 无世界观·默认主题选择弹窗 ----------
+async function openDefaultThemePicker() {
+  const modal = document.getElementById('default-theme-modal');
+  const list = document.getElementById('default-theme-list');
+  if (!modal || !list) return;
+
+  // 读出当前 __default_wv__ 的 themeName
+  let current = '';
+  try {
+    const wv = await DB.get('worldviews', '__default_wv__');
+    current = wv?.themeName || '';
+  } catch(_) {}
+
+  const _row = (label, value) => {
+    const active = current === value;
+    const check = active
+      ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0"><path d="M20 6 9 17l-5-5"/></svg>'
+      : '<span style="width:14px;flex-shrink:0"></span>';
+    const safe = Utils.escapeHtml(value);
+    return `<div onclick="Worldview.pickDefaultTheme('${safe}')" class="ctx-item" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text)${active ? ';background:var(--bg-tertiary)' : ''}">${check}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(label)}</span></div>`;
+  };
+
+  let html = _row('不绑定主题', '');
+  // 内置预设
+  try {
+    const builtinNames = Theme.getPresetNames();
+    if (builtinNames.length) {
+      html += '<div style="height:1px;background:var(--border);margin:4px 0"></div>';
+      builtinNames.forEach(n => { html += _row(n, `builtin:${n}`); });
+    }
+  } catch(_) {}
+  // 自定义
+  try {
+    const customMap = JSON.parse(localStorage.getItem('themeCustomPresets') || '{}');
+    const customNames = Object.keys(customMap);
+    if (customNames.length) {
+      html += '<div style="height:1px;background:var(--border);margin:4px 0"></div>';
+      customNames.forEach(n => { html += _row(n, `custom:${n}`); });
+    }
+  } catch(_) {}
+
+  list.innerHTML = html;
+  modal.classList.remove('hidden');
+}
+
+function closeDefaultThemePicker() {
+  const modal = document.getElementById('default-theme-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function pickDefaultTheme(value) {
+  try {
+    let wv = await DB.get('worldviews', '__default_wv__');
+    if (!wv) {
+      wv = { id: '__default_wv__', name: '无世界观', description: '未挂世界观的对话', icon: '∅', iconImage: '' };
+    }
+    wv.themeName = value || '';
+    await DB.put('worldviews', wv);
+
+    // 如果当前正处于无世界观下，立刻应用
+    const cur = (typeof getCurrentId === 'function') ? getCurrentId() : null;
+    if (!cur || cur === '__default_wv__') {
+      if (value) {
+        _applyBoundTheme(value);
+      }
+      // 不绑定时不主动切回什么——保留用户当前临时改的主题
+    }
+    UI.showToast(value ? '主题已绑定到无世界观' : '已取消绑定', 1800);
+  } catch(e) {
+    console.warn('[pickDefaultTheme]', e);
+    UI.showToast('保存失败', 1800);
+  }
+  closeDefaultThemePicker();
+}
+
 // 初始化时恢复当前世界观
   async function _restoreCurrentWorldview() {
     const data = await DB.get('gameState', 'currentWorldviewId');
@@ -2164,6 +2239,7 @@ addKnowledge, editKnowledge, saveKnowledgeFromModal, deleteKnowledgeFromModal, c
     toggleScopeDropdown,
     selectWorldview,
     toggleThemeDropdown, selectTheme,
+    openDefaultThemePicker, closeDefaultThemePicker, pickDefaultTheme,
     restoreCurrentWorldview: _restoreCurrentWorldview,
     exportCurrent, importSingle, restoreBuiltinWorldview: _restoreBuiltinWorldview, toggleEditMoreMenu: _toggleEditMoreMenu, closeEditMoreMenu: _closeEditMoreMenu, loadBuiltinWorldviews: _loadBuiltinWorldviews, migrateTianshuchengNpcNames: _migrateTianshuchengNpcNames,
     switchWorldTab(tab) {

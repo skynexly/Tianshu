@@ -69,6 +69,11 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
             新建文件夹
           </button>
+          <div id="new-menu-default-theme-sep" class="ctx-sep" style="display:none"></div>
+          <button id="new-menu-default-theme" onclick="Worldview.openDefaultThemePicker(); UI.toggleNewMenu()" class="ctx-item" style="display:none;align-items:center;gap:10px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+            绑定主题
+          </button>
         </div>
       </div>
       <!-- 角色筛选器（仅无世界观下显示） -->
@@ -185,7 +190,7 @@
         <div class="sb-expanded-scroll" onclick="event.stopPropagation()">
           <div class="sb-status-card">
             <button class="sb-card-close" onclick="event.stopPropagation();StatusBar.toggle()" title="关闭" aria-label="关闭">×</button>
-            <div class="sb-status-title"><span class="sb-dot"></span><span class="sb-title-default">STATUS CARD</span><span class="sb-title-hs"><span class="sb-title-hs-main">心动模拟</span><span class="sb-title-hs-sub">Status Bar</span></span></div>
+            <div class="sb-status-title"><span class="sb-dot"></span><span class="sb-title-default">STATUS CARD</span><span class="sb-title-hs"><span class="sb-title-hs-main">心动模拟</span><span class="sb-title-hs-sub">Status Bar</span></span><span class="sb-title-single">SINGLE CARD</span><button class="sb-env-edit-btn" onclick="event.stopPropagation();StatusBar.editEnv()" title="编辑时间/地点/天气" aria-label="编辑环境"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg></button></div>
             <!-- 场景描写 -->
             <div class="sb-scene-wrap">
               <div class="sb-scene-label">Current Scene</div>
@@ -2045,13 +2050,14 @@
             <label>世界观描述 <span style="font-size:11px;color:var(--text-secondary)">（不发送给AI，自己看的备注）</span><div style="position:relative;width:100%"><textarea id="wv-description" class="auto-resize-textarea" rows="3" placeholder="世界观描述" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-description','世界观描述')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
 <label>世界观设定 <span style="font-size:11px;color:var(--text-secondary)">（每轮发送给AI）</span><div style="position:relative;width:100%"><textarea id="wv-setting" class="auto-resize-textarea" rows="10" placeholder="世界观的核心设定，会作为系统提示词发送给AI..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-setting','世界观设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
 
-            <div style="padding-top:12px;margin-top:4px;border-top:1px dashed var(--border)">
-              <div style="font-size:13px;font-weight:bold;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px">💰 通用货币<span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（仅发给AI做价格参考，前端统一显示 ¥；留空则不注入）</span></div>
+            <div style="padding-top:12px;margin-top:4px">
+              <div style="font-size:13px;font-weight:bold;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg> 通用货币</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">仅发给AI做价格参考，前端统一显示 ¥；留空则不注入。</div>
               <label>货币名称<input type="text" id="wv-currency-name" placeholder="例如：人民币 / 灵石 / 主神积分"></label>
-              <label>货币说明 <span style="font-size:11px;color:var(--text-secondary)">（可选，帮助AI判断价格区间）</span><textarea id="wv-currency-desc" class="auto-resize-textarea" rows="2" placeholder="例如：本世界通用货币，购买力对标现实人民币 / 主神商城点数，一份普通道具约几百积分"></textarea></label>
+              <label>货币说明 <span style="font-size:11px;color:var(--text-secondary)">（可选，帮助AI判断价格区间）</span><div style="position:relative;width:100%"><textarea id="wv-currency-desc" class="auto-resize-textarea" rows="2" placeholder="例如：本世界通用货币，购买力对标现实人民币 / 主神商城点数，一份普通道具约几百积分" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-currency-desc','货币说明')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
             </div>
 
-            <div style="padding-top:16px;margin-top:16px;border-top:1px solid var(--border)">
+            <div style="padding-top:16px;margin-top:16px">
               <div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> 全图角色</div>
               <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">不受地区限制，本世界观下全程常驻，每轮注入 AI。适合小世界观 / 无势力结构的作品。</div>
               <div id="wv-global-npcs-container"></div>
@@ -2080,27 +2086,27 @@
             
             </div>
 
-            <div style="padding-top:16px;margin-top:16px;border-top:1px solid var(--border)">
+            <div style="padding-top:16px;margin-top:16px">
               <div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg> 手机配置</div>
               <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">仅小手机内使用，不发给主线 AI。留空则用默认。</div>
 
-              <div style="font-size:13px;font-weight:bold;color:var(--text);margin:6px 0 6px;display:flex;align-items:center;gap:6px">🛒 手机商城 <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（替换默认的"饿了咪/桃宝"）</span></div>
+              <div style="font-size:13px;font-weight:bold;color:var(--text);margin:6px 0 6px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> 手机商城 <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（替换默认的"饿了咪/桃宝"）</span></div>
               <div style="background:var(--bg-tertiary);padding:10px;border-radius:8px;margin-bottom:8px">
                 <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">短时效商城 <span style="color:var(--text-secondary);opacity:.7">（默认：饿了咪·外卖）</span></div>
                 <label style="margin-bottom:8px">商城名称<input type="text" id="wv-takeout-name" placeholder="例如：灵厨到家 / 补给空投"></label>
-                <label>商城描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这家卖什么）</span><textarea id="wv-takeout-desc" class="auto-resize-textarea" rows="2" placeholder="例如：修真界即时灵厨外送，卖餐食、茶水、灵丹小点，短时效到手"></textarea></label>
+                <label>商城描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这家卖什么）</span><div style="position:relative;width:100%"><textarea id="wv-takeout-desc" class="auto-resize-textarea" rows="2" placeholder="例如：修真界即时灵厨外送，卖餐食、茶水、灵丹小点，短时效到手" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-takeout-desc','短时效商城描述')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
               </div>
               <div style="background:var(--bg-tertiary);padding:10px;border-radius:8px;margin-bottom:14px">
                 <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">长时效商城 <span style="color:var(--text-secondary);opacity:.7">（默认：桃宝·网购）</span></div>
                 <label style="margin-bottom:8px">商城名称<input type="text" id="wv-shop-name" placeholder="例如：天机阁 / 主神商城"></label>
-                <label>商城描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这家卖什么）</span><textarea id="wv-shop-desc" class="auto-resize-textarea" rows="2" placeholder="例如：修真界网购平台，卖法宝、丹药、符箓、灵草等长时效物品"></textarea></label>
+                <label>商城描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这家卖什么）</span><div style="position:relative;width:100%"><textarea id="wv-shop-desc" class="auto-resize-textarea" rows="2" placeholder="例如：修真界网购平台，卖法宝、丹药、符箓、灵草等长时效物品" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-shop-desc','长时效商城描述')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
               </div>
 
-              <div style="font-size:13px;font-weight:bold;color:var(--text);margin:6px 0 6px;display:flex;align-items:center;gap:6px">📢 信息载体 <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（替换默认的"论坛"）</span></div>
+              <div style="font-size:13px;font-weight:bold;color:var(--text);margin:6px 0 6px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg> 信息载体 <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（替换默认的"论坛"）</span></div>
               <div style="background:var(--bg-tertiary);padding:10px;border-radius:8px">
                 <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">公共信息流 <span style="color:var(--text-secondary);opacity:.7">（默认：论坛）</span></div>
-                <label style="margin-bottom:8px">载体名称<input type="text" id="wv-forum-name" placeholder="例如：微博 / 知乎 / 小红书 / 贴吧 / 星网论坛 / 茶馆"></label>
-                <label>载体描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI内容画风、用户群、常见话题）</span><textarea id="wv-forum-desc" class="auto-resize-textarea" rows="2" placeholder="例如：修真界主流信息载体，用户多为各门各派弟子，常见内容有丹方讨论、剑修吐槽、奇闻异事、门派八卦"></textarea></label>
+                <label style="margin-bottom:8px">载体名称<input type="text" id="wv-forum-name" placeholder="例如：微博 / 小红书 / 茶馆"></label>
+                <label>载体描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI内容画风、用户群、常见话题）</span><div style="position:relative;width:100%"><textarea id="wv-forum-desc" class="auto-resize-textarea" rows="2" placeholder="例如：修真界主流信息载体，用户多为各派弟子，常见丹方/剑修吐槽/门派八卦" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-forum-desc','载体描述')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
               </div>
             </div>
           </form>
@@ -2631,7 +2637,16 @@
      <button id="simple-input-cancel" onclick="UI.closeSimpleInput()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">取消</button>
     <button id="simple-input-confirm" onclick="UI.confirmSimpleInput()" style="flex:1;background:var(--accent);color:#000;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">保存</button>
    </div>
- </div>
+  </div>
+</div>
+
+<!-- 无世界观·绑定主题选择弹窗 -->
+<div id="default-theme-modal" class="modal hidden" onclick="if(event.target===this) Worldview.closeDefaultThemePicker()">
+  <div class="modal-content" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:16px 12px;max-width:280px;width:80%">
+    <h3 style="margin:0 0 4px 0;color:var(--text);font-size:15px;padding:0 8px">绑定主题</h3>
+    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;padding:0 8px">为「无世界观」选择默认主题</div>
+    <div id="default-theme-list" style="max-height:50vh;overflow-y:auto"></div>
+  </div>
 </div>
 
 <!-- 日志弹窗 -->

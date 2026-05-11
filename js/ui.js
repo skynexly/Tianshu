@@ -50,6 +50,15 @@ const UI = (() => {
       menu.classList.remove('closing');
       menu.classList.add('hidden');
     } else {
+      // 仅在无世界观下显示「绑定主题」项
+      try {
+        const activeWv = (typeof Worldview !== 'undefined' && Worldview.getCurrentId) ? Worldview.getCurrentId() : null;
+        const showDefaultTheme = !activeWv || activeWv === '__default_wv__';
+        const themeBtn = document.getElementById('new-menu-default-theme');
+        const themeSep = document.getElementById('new-menu-default-theme-sep');
+        if (themeBtn) themeBtn.style.display = showDefaultTheme ? 'flex' : 'none';
+        if (themeSep) themeSep.style.display = showDefaultTheme ? 'block' : 'none';
+      } catch(_) {}
       menu.classList.remove('closing', 'hidden');
     }
   }
