@@ -526,7 +526,7 @@
  line-height: 1.3;
 }
 .phone-shell.has-custom-wallpaper .phone-map-result-card {
- background: rgba(18, 20, 28, 0.54) !important;
+ background: rgba(18, 20, 28, 0.30) !important;
  border-color: rgba(255, 255, 255, 0.24) !important;
 color: rgba(255, 255, 255, 0.94) !important;
 box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
@@ -553,7 +553,7 @@ box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.
  background: rgba(255,255,255,0.12) !important;
 }
 .phone-shell.has-custom-wallpaper .phone-map-search-input-wrap {
- background: rgba(18, 20, 28, 0.62) !important;
+ background: rgba(18, 20, 28, 0.38) !important;
 border-color: rgba(255, 255, 255, 0.22) !important;
 color: rgba(255, 255, 255, 0.72) !important;
 }
@@ -958,7 +958,7 @@ background: transparent !important;
 .phone-shell.has-custom-wallpaper .phone-moment-card,
 .phone-shell.has-custom-wallpaper .phone-moment-image-desc,
 .phone-shell.has-custom-wallpaper .phone-moment-comment-card {
- background: rgba(18, 20, 28, 0.62) !important;
+ background: rgba(18, 20, 28, 0.38) !important;
  border-color: rgba(255, 255, 255, 0.22) !important;
  color: rgba(255, 255, 255, 0.94) !important;
  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
@@ -1275,7 +1275,7 @@ background: transparent !important;
 .phone-shell.has-custom-wallpaper .phone-generation-hint,
 .phone-shell.has-custom-wallpaper .phone-generation-error,
 .phone-shell.has-custom-wallpaper .phone-moment-skeleton-card {
- background: rgba(18, 20, 28, 0.62) !important;
+ background: rgba(18, 20, 28, 0.38) !important;
  border-color: rgba(255, 255, 255, 0.22) !important;
  color: rgba(255,255,255,.92) !important;
  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
@@ -1301,7 +1301,7 @@ background: transparent !important;
 .phone-shell.has-custom-wallpaper .phone-body input,
 .phone-shell.has-custom-wallpaper .phone-body textarea,
 .phone-shell.has-custom-wallpaper .phone-tabbar {
- background: rgba(18, 20, 28, 0.62) !important;
+ background: rgba(18, 20, 28, 0.38) !important;
  border-color: rgba(255, 255, 255, 0.22) !important;
  color: rgba(255, 255, 255, 0.94) !important;
  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
@@ -1325,13 +1325,34 @@ background: transparent !important;
  color: #fff !important;
  border-top-color: rgba(255, 255, 255, 0.78) !important;
 }
-/* 论坛详情阅读层 / 详情顶栏 / 详情底栏单独适配 已废弃：
-   现在用统一的 has-wallpaper 卡片透明度 slider + 壁纸遮罩控制，
-   不再单独给论坛详情套一层黑色遮罩，避免黢黑 + 顶栏残留染黑。 */
-
-.phone-shell.has-custom-wallpaper .phone-icon-btn,
+/* 论坛详情 / 备忘录编辑：不走整页黑底适配，改回统一透明度层，避免黢黑 */
+.phone-shell.has-custom-wallpaper .phone-forum-detail-scroll,
+.phone-shell.has-custom-wallpaper .phone-forum-detail-actions,
+.phone-shell.has-custom-wallpaper .phone-memo-edit-page {
+  background: color-mix(in srgb, var(--bg-solid, var(--bg)) var(--phone-card-opacity-pct), transparent) !important;
+  box-shadow: none !important;
+}
+.phone-shell.has-custom-wallpaper .phone-forum-detail-actions .wv-action-btn,
+.phone-shell.has-custom-wallpaper .phone-memo-edit-page .phone-memo-action-btn:not(.danger) {
+  color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.38) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-memo-edit-page .phone-memo-action-btn:not(.danger) svg {
+  color: currentColor !important;
+}
+.phone-shell.has-custom-wallpaper .phone-memo-edit-page input,
+.phone-shell.has-custom-wallpaper .phone-memo-edit-page textarea {
+  background: color-mix(in srgb, var(--bg-tertiary-solid, var(--bg-tertiary)) var(--phone-card-opacity-pct), transparent) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: rgba(255, 255, 255, 0.94) !important;
+  box-shadow: none !important;
+}
+.phone-shell.has-custom-wallpaper .phone-forum-detail-actions,
+.phone-shell.has-custom-wallpaper .phone-memo-edit-page .phone-memo-edit-actions {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
 .phone-shell.has-custom-wallpaper .phone-text-icon-btn {
- background: rgba(18, 20, 28, 0.38) !important;
+ background: rgba(18, 20, 28, 0.22) !important;
  border-color: rgba(255, 255, 255, 0.25) !important;
  color: rgba(255, 255, 255, 0.92) !important;
  backdrop-filter: blur(14px) saturate(1.15);
@@ -1363,12 +1384,12 @@ background: transparent !important;
 }
 /* 自定义壁纸下：气泡换成深色半透明纯色块，不开 backdrop-filter，避免大量 blur 层叠加 */
 .phone-shell.has-custom-wallpaper .hs-bubble-ai {
-  background: rgba(18, 20, 28, 0.62) !important;
+  background: rgba(18, 20, 28, 0.38) !important;
   border-color: rgba(255, 255, 255, 0.16) !important;
   color: rgba(255, 255, 255, 0.94) !important;
 }
 .phone-shell.has-custom-wallpaper .hs-bubble-user {
-  background: color-mix(in srgb, var(--accent) 28%, rgba(18, 20, 28, 0.62)) !important;
+  background: color-mix(in srgb, var(--accent) 28%, rgba(18, 20, 28, 0.38)) !important;
   border-color: color-mix(in srgb, var(--accent) 36%, rgba(255, 255, 255, 0.18)) !important;
   color: rgba(255, 255, 255, 0.96) !important;
 }

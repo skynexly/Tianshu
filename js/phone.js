@@ -673,7 +673,8 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
     }
     // 防 ghost click：返回按钮 touchend 后浏览器会再派发一次 click，
     // 此时新 DOM 已经在按钮下方位置，会误触新渲染元素的 onclick。
-    _shieldGhostClick();
+      try { document.querySelector('#phone-modal .phone-shell')?.classList.toggle('phone-forum-detail-mode', !!document.querySelector('#phone-body .phone-forum-detail-page')); } catch(_) {}
+      _shieldGhostClick();
   }
 
   // 短暂禁用 phone-body 的点击，吃掉触摸返回后的鬼 click
@@ -2249,7 +2250,7 @@ memos.map((m, i) => `
     const body = document.getElementById('phone-body');
     document.getElementById('phone-title').textContent = '编辑备忘录';
     body.innerHTML = `
-      <div style="padding:12px;display:flex;flex-direction:column;gap:8px;height:100%">
+      <div class="phone-memo-edit-page" style="padding:12px;display:flex;flex-direction:column;gap:8px;height:100%">
         <input id="phone-memo-title" value="${Utils.escapeHtml(m.title || '')}" placeholder="标题" style="border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px">
         <input id="phone-memo-time" value="${Utils.escapeHtml(m.time || '')}" placeholder="时间" style="border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--bg-tertiary);color:var(--text);font-size:12px">
         <textarea id="phone-memo-content" placeholder="写点什么…" style="flex:1;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px;resize:none;min-height:120px">${Utils.escapeHtml(m.content || '')}</textarea>
