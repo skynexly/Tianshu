@@ -395,8 +395,8 @@ const container = document.getElementById('backstage-messages');
       if (typeof Phone !== 'undefined' && Phone.flushActionLogForBackstage) {
         const log = Phone.flushActionLogForBackstage();
         if (log && log.length > 0) {
-          const logText = '【手机操作日志（仅后台可见）】\n以下是玩家自上次后台同步以来，在手机上进行的全部操作。后台可以基于此观察玩家行为轨迹。\n' +
-            log.map(a => `- ${a}`).join('\n');
+          const logText = '【玩家手机操作日志（仅后台可见）｜OOC】\n以下是玩家"{{user}}"自上次后台同步以来，在自己手机上进行的全部操作。后台可以基于此观察玩家行为轨迹（操作主体永远是玩家本人，不是任何剧情角色）：\n' +
+            log.map(a => `- {{user}} ${a}`).join('\n');
           systemParts.push(logText);
         }
       }

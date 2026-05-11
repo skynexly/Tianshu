@@ -146,12 +146,12 @@ function flushActionLogForBackstage() {
  takeoutCachedItems: [],   // 上一次刷新/搜索的商品列表
  takeoutLastQuery: '',     // 上一次搜索关键词
  takeoutSearchHistory: [], // [{query, time}] 最多10条
- takeoutOrders: [],        // 订单 [{id, name, price, shop, desc, target, etaText, time}]
+ takeoutOrders: [],        // 订单 [{id, name, price, shop, desc, target, time}]
  // 网购
  shopCachedItems: [],
  shopLastQuery: '',
  shopSearchHistory: [],
- shopOrders: [],           // [{id, name, price, shop, desc, target, etaText, time}]
+ shopOrders: [],           // [{id, name, price, shop, desc, target, time}]
   // 心动模拟 APP — 用户对心动目标的私下好感度（仅本地娱乐数据，不影响游戏数值）
   hsAppFavor: { fsy: 0, yx: 0, lmy: 0, qe: 0 },
   // 心动模拟 APP — 上次注入到后台频道时的快照（用于计算"本轮变化"）
@@ -263,7 +263,7 @@ function _compressWallpaper(file, opts = {}) {
 }
 
 // ===== 外壳渲染 =====
-  function open() {
+  async function open() {
     if (!_isAnyWorldview()) { UI.showToast('请先选择一个世界观', 1500); return; }
     // 心动模拟：被 char 锁定时不允许打开
     try {
@@ -278,6 +278,8 @@ function _compressWallpaper(file, opts = {}) {
     if (!modal) _createModal();
     modal = document.getElementById('phone-modal');
     _currentApp = null;
+    // 加载世界观对商城 App 的自定义（影响首页图标名字和商城 prompt）
+    try { await _loadShopMeta(); } catch(_) {}
     _renderHomeScreen();
     modal.classList.remove('hidden');
     _isOpen = true;
@@ -339,6 +341,12 @@ function _isAppStillActive(appId) {
     // 1. 世界观基础设定
     const wvPrompt = Chat.getWorldviewPrompt() || '';
     if (wvPrompt) parts.push('【世界观设定】\n' + wvPrompt);
+
+    // 1.5 当前游戏时间（统一给论坛 / 好友圈 / 地图等 AI 生成内容使用）
+    try {
+      const sb = Conversations.getStatusBar();
+      if (sb?.time) parts.push('【当前游戏时间】\n' + _formatPhoneTime(sb.time));
+    } catch(_) {}
 
     // 2. 世界观详细数据（NPC、节日、自定义设定）
     try {
@@ -613,13 +621,13 @@ function _renderHomeIcon(a) {
       // 心动模拟：独占一行放在系统应用栏上方
       const heartsimApp = isHeartSim ? { id: 'heartsim_app', icon: 'heartsim', name: '心动模拟' } : null;
       const systemApps = [
-        { id: 'takeout', icon: 'takeout', name: '饿了咪' },
-        { id: 'shop', icon: 'shop', name: '桃宝' },
+        { id: 'takeout', icon: 'takeout', name: (_shopMeta?.takeout?.name || '饿了咪') },
+        { id: 'shop', icon: 'shop', name: (_shopMeta?.shop?.name || '桃宝') },
         { id: 'settings', icon: 'gear', name: '设置' },
         { id: 'minimize', icon: 'phone-down', name: '收起手机' },
       ];
       const apps = [
-        { id: 'forum', icon: 'forum', name: '论坛' },
+        { id: 'forum', icon: 'forum', name: _getForumName() },
  { id: 'map', icon: 'map', name: '地图' },
  { id: 'moments', icon: 'camera', name: '好友圈' },
  { id: 'memo', icon: 'memo', name: '备忘录' },
@@ -880,7 +888,7 @@ async function _clearMomentsCover() {
 
   function _renderForum(pd) {
     const body = document.getElementById('phone-body');
-    document.getElementById('phone-title').textContent = '论坛';
+    document.getElementById('phone-title').textContent = _getForumName();
 
     // 统一以 phoneData 缓存为准（WorldVoice 仅作为生成器）
     const posts = pd.cachedForumPosts || [];
@@ -940,7 +948,7 @@ async function _clearMomentsCover() {
       const _pd = await _getPhoneData();
       const s = _pd?.forumSearchHistory?.[index];
       if (!s) return;
-      _shareToMain('forum', '论坛搜索', `搜索关键词：${s.query || ''}\n时间：${s.time || ''}`);
+      _shareToMain('forum', `${_getForumName()}搜索`, `搜索关键词：${s.query || ''}\n时间：${s.time || ''}`);
     })();
   }
 
@@ -949,7 +957,7 @@ async function _clearMomentsCover() {
     const list = pd?.forumSearchHistory || [];
     if (list.length === 0) return;
     const content = list.slice(-10).map(s => `- ${s.query || ''}`).join('\n');
-    _shareToMain('forum', '论坛搜索记录', content);
+    _shareToMain('forum', `${_getForumName()}搜索记录`, content);
   }
 
   async function _deleteForumSearch(index) {
@@ -967,7 +975,7 @@ async function _clearMomentsCover() {
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
           <div style="width:24px;height:24px;border-radius:50%;background:${Utils.escapeHtml(p.avatar_color || '#888')};display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:bold;flex-shrink:0">${Utils.escapeHtml((p.username || '?')[0])}</div>
           <span style="font-size:11px;font-weight:600">${Utils.escapeHtml(p.username || '匿名')}</span>
-          <span style="font-size:10px;color:var(--text-secondary);margin-left:auto">${Utils.escapeHtml(p.time || '')}</span>
+          <span style="font-size:10px;color:var(--text-secondary);margin-left:auto">${Utils.escapeHtml(_formatPhoneTime(p.time || ''))}</span>
         </div>
         <div style="font-size:13px;font-weight:600;margin-bottom:4px">${Utils.escapeHtml(p.title || '')}</div>
         <div style="font-size:11px;color:var(--text-secondary);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(p.summary || '')}</div>
@@ -1000,7 +1008,7 @@ async function _clearMomentsCover() {
     // 调用 WorldVoice 的 refresh，完成后重新渲染
     await WorldVoice.refresh();
     const posts = WorldVoice.getPosts() || [];
-    _log(`刷新了论坛推荐；返回摘要：${_summarizeListForLog(posts, p => `《${_clipLogText(p.title || '无标题', 24)}》${p.summary ? '：' + _clipLogText(p.summary, 36) : ''}`)}`);
+    _log(`刷新了${_getForumName()}推荐；返回摘要：${_summarizeListForLog(posts, p => `《${_clipLogText(p.title || '无标题', 24)}》${p.summary ? '：' + _clipLogText(p.summary, 36) : ''}`)}`);
 
     // 持久化帖子缓存（并以缓存为唯一数据源）
     try {
@@ -1012,7 +1020,8 @@ async function _clearMomentsCover() {
     } catch(_) {}
 
     if (!_isAppStillActive('forum')) {
-      UI.showToast(posts.length > 0 ? '论坛已刷新，可回论坛查看' : '论坛刷新失败，请重试', 1600);
+      const fn = _getForumName();
+      UI.showToast(posts.length > 0 ? `${fn}已刷新，可回${fn}查看` : `${fn}刷新失败，请重试`, 1600);
       return;
     }
     const cont = document.getElementById('phone-forum-posts');
@@ -1029,7 +1038,7 @@ async function _clearMomentsCover() {
       const pd = await _getPhoneData();
       if (pd) {
         pd.forumSearchHistory.push({ query, time: _getGameTime() || new Date().toISOString() });
-        _log(`搜索了论坛：${query}`);
+        _log(`搜索了${_getForumName()}：${query}`);
         if (pd.forumSearchHistory.length > 20) pd.forumSearchHistory = pd.forumSearchHistory.slice(-20);
         await _savePhoneData();
       }
@@ -1058,11 +1067,24 @@ async function _clearMomentsCover() {
       const wvPrompt = await _buildFullContext();
 
       const results = await _phoneJsonArrayWithRetry({
-        label: '论坛搜索', url, key, model,
+        label: `${_getForumName()}搜索`, url, key, model,
         temperature: 0.9,
-        max_tokens: 4096,
+        max_tokens: 5000,
         messages: [
-          { role: 'system', content: `你是一个论坛搜索引擎。用户搜索了"${query}"，请根据资料生成6-8条与搜索内容相关的论坛帖子/内容，帖子内容可能有：关键词相同但实际不沾边的、虚假信息、半真半假的消息、科普、吃瓜、求助、吐槽等。发帖人以虚构的普通论坛用户为主，用户名要符合世界观风格。NPC偶尔会出现（0-2条即可），不要每条都是NPC发的。返回纯JSON数组。\nJSON格式：[{"id":"s1","username":"用户名","avatar_color":"#颜色","time":"时间","title":"标题","summary":"摘要","tags":["标签"],"views":数字,"likes":数字,"comments":数字}]\n\n${wvPrompt}` },
+          { role: 'system', content: `你是一个"${_getForumName()}"搜索引擎。${_getForumDesc() ? `载体说明：${_getForumDesc()}。\n\n` : ''}用户搜索了"${query}"，请根据资料生成 6~8 条与搜索内容相关的帖子/动态。
+
+要求：
+1. 内容可以有：关键词相同但实际不沾边的、虚假信息、半真半假的消息、科普、吃瓜、求助、吐槽等
+2. 发帖人以虚构的普通用户为主，用户名要符合世界观和${_getForumName()}的画风。NPC 偶尔出现（0-2 条即可），不要每条都是 NPC 发的
+3. 帖子风格贴合${_getForumName()}的画风，长短皆可，摘要长度不要千篇一律
+4. tags 风格也要贴合${_getForumName()}（论坛/贴吧偏普通词、微博偏"#话题#"、小红书偏"#标签"），无需统一形式
+5. 时间分布：80% 在当前游戏时间附近 7 天内（最近热议），可以有 20% 是置顶/热门/挖坟的更早老帖，time 可以更靠前；time 永远不要超过当前游戏时间
+6. 所有 time 都必须使用"YYYY.MM.DD 星期X HH:mm"格式，必须和当前游戏时间同一套写法
+7. 返回纯JSON数组，不要包含任何其他文字
+
+JSON格式：[{"id":"s1","username":"用户名","avatar_color":"#颜色","time":"YYYY.MM.DD 星期X HH:mm","title":"标题","summary":"摘要","tags":["标签"],"views":数字,"likes":数字,"comments":数字}]
+
+${wvPrompt}` },
           { role: 'user', content: `搜索：${query}` }
         ]
       });
@@ -1075,9 +1097,9 @@ async function _clearMomentsCover() {
           await _savePhoneData();
         }
       } catch(_) {}
-      _log(`搜索了论坛：${query}；返回摘要：${_summarizeListForLog(results, p => `《${_clipLogText(p.title || '无标题', 24)}》${p.summary ? '：' + _clipLogText(p.summary, 36) : ''}`)}`);
+      _log(`搜索了${_getForumName()}：${query}；返回摘要：${_summarizeListForLog(results, p => `《${_clipLogText(p.title || '无标题', 24)}》${p.summary ? '：' + _clipLogText(p.summary, 36) : ''}`)}`);
       if (!_isAppStillActive('forum')) {
-        UI.showToast('论坛搜索完成，可回论坛查看', 1600);
+        UI.showToast(`${_getForumName()}搜索完成，可回${_getForumName()}查看`, 1600);
         return;
       }
       const cont = document.getElementById('phone-forum-posts');
@@ -1087,7 +1109,7 @@ async function _clearMomentsCover() {
         const cont = document.getElementById('phone-forum-posts');
         if (cont) cont.innerHTML = `<p style="text-align:center;color:var(--text-secondary);font-size:12px">搜索失败：${e.message}</p>`;
       } else {
-        UI.showToast('论坛搜索失败：' + e.message, 2500);
+        UI.showToast(`${_getForumName()}搜索失败：` + e.message, 2500);
       }
     }
   }
@@ -1102,7 +1124,7 @@ async function _clearMomentsCover() {
     }
     const post = posts[index];
     if (!post) { UI.showToast('帖子不存在', 1000); return; }
-    _log(`查看了帖子：${post.title || '无标题'}`);
+    _log(`在${_getForumName()}查看了帖子：${post.title || '无标题'}`);
 
     // 记录详情浏览历史（标题+摘要+正文）
     try {
@@ -1133,7 +1155,7 @@ async function _clearMomentsCover() {
       // 发帖人
       html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <div style="width:28px;height:28px;border-radius:50%;background:${Utils.escapeHtml(p.avatar_color||'#888')};display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:bold;flex-shrink:0">${Utils.escapeHtml((p.username||'?')[0])}</div>
-        <div><div style="font-size:13px;font-weight:600;color:var(--text)">${Utils.escapeHtml(p.username||'匿名')}</div><div style="font-size:10px;color:var(--text-secondary)">${Utils.escapeHtml(p.time||'')}</div></div>
+        <div><div style="font-size:13px;font-weight:600;color:var(--text)">${Utils.escapeHtml(p.username||'匿名')}</div><div style="font-size:10px;color:var(--text-secondary)">${Utils.escapeHtml(_formatPhoneTime(p.time||''))}</div></div>
       </div>`;
       // 正文或骨架屏
       if (p._detailLoaded) {
@@ -1153,7 +1175,7 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
               <div style="flex:1">
                 <div style="display:flex;justify-content:space-between;margin-bottom:3px">
                   <span style="font-size:12px;font-weight:600">${Utils.escapeHtml(c.username||'匿名')}</span>
-                  <span style="font-size:10px;color:var(--text-secondary)">${Utils.escapeHtml(c.time||'')}</span>
+                  <span style="font-size:10px;color:var(--text-secondary)">${Utils.escapeHtml(_formatPhoneTime(c.time||''))}</span>
                 </div>
                 <div class="md-content" style="font-size:12px;line-height:1.6">${window.Markdown ? Markdown.render(c.content||'') : Utils.escapeHtml(c.content||'')}</div>
               </div>
@@ -1260,7 +1282,7 @@ async function _likeForumPost(index) {
     if (p._comments?.length) {
       content += '\n\n评论区：\n' + p._comments.map(c => `${c.username || '匿名'}：${c.content || ''}`).join('\n');
     }
-    _shareToMain('forum', p.title || '论坛帖子', content);
+    _shareToMain('forum', p.title || `${_getForumName()}帖子`, content);
   }
 
   let _mapTab = 'search'; // 'search' | 'history' | 'searchhist'
@@ -1540,7 +1562,7 @@ ${wvPrompt}` },
           <div class="phone-moment-main mine-full">
             <div class="phone-moment-head">
               <div class="phone-moment-name">${Utils.escapeHtml(maskName)}</div>
-              <div class="phone-moment-time">${Utils.escapeHtml(m.time || '')}</div>
+              <div class="phone-moment-time">${Utils.escapeHtml(_formatPhoneTime(m.time || ''))}</div>
             </div>
             <div class="phone-moment-text">${Utils.escapeHtml(m.text || '')}</div>
             ${m.image ? `<div class="phone-moment-image-wrap"><img src="${m.image}" class="phone-moment-image"></div>` : ''}
@@ -1566,7 +1588,7 @@ ${wvPrompt}` },
             <div class="phone-moment-main">
               <div class="phone-moment-head">
                 <div class="phone-moment-name">${Utils.escapeHtml(m.npc || '')}</div>
-                <div class="phone-moment-time">${Utils.escapeHtml(m.time || '未知时间')}</div>
+                <div class="phone-moment-time">${Utils.escapeHtml(_formatPhoneTime(m.time || '未知时间'))}</div>
               </div>
               <div class="phone-moment-text">${Utils.escapeHtml(m.text || '')}</div>
             </div>
@@ -1773,7 +1795,7 @@ ${wvPrompt}` },
     const p = posts[index];
     if (!p) { UI.showToast('帖子不存在', 1000); return; }
     const content = p.fullContent || p.summary || '';
-    await _addPhoneCollection('forum', p.title || '论坛帖子', content, {
+    await _addPhoneCollection('forum', p.title || `${_getForumName()}帖子`, content, {
       username: p.username,
       avatar_color: p.avatar_color,
       time: p.time,
@@ -1920,7 +1942,7 @@ ${wvPrompt}` },
 
     // 抓主线时间
     let gameTime = '';
-    try { const sb = Conversations.getStatusBar(); gameTime = sb?.time || ''; } catch(_) {}
+    try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
 
     const body = document.getElementById('phone-body');
     document.getElementById('phone-title').textContent = '发动态';
@@ -1945,7 +1967,7 @@ ${wvPrompt}` },
   // ===== 通用分享到主线 =====
   async function _shareToMain(type, title, content) {
     // type: 'forum' | 'map' | 'moments' | 'memo' | 'shop'
-    const typeLabel = type === 'forum' ? '论坛内容'
+    const typeLabel = type === 'forum' ? `${_getForumName()}内容`
       : type === 'map' ? '地点信息'
       : type === 'moments' ? '好友圈动态'
       : type === 'memo' ? '备忘录'
@@ -2158,7 +2180,7 @@ ${wvPrompt}` },
 
       const systemPrompt = `根据以下世界观、NPC资料和剧情，生成4条NPC的社交媒体动态。从NPC列表中随机挑选（不重复），内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。每条带1-3条路人或者与该NPC有关的其他NPC的评论，若NPC相互不认识或没有交集，可以仅路人评论。${nameConstraint}
 
-时间要求：每条动态必须带发布时间 time，格式为“YYYY.MM.DD 星期X HH:mm”。发布时间必须在当前/截止剧情最新时间之前，且不早于该时间前7天；禁止生成未来时间。如果无法确定具体剧情日期，也要使用世界观/状态栏中能推断出的最新时间附近的过去7天内时间。
+时间要求：每条动态必须带发布时间 time，格式为“YYYY.MM.DD 星期X HH:mm”。发布时间必须在当前/截止剧情最新时间之前，且不早于该时间前7天；禁止生成未来时间。若能从上下文中的【当前游戏时间】读取到时间，就以它为基准生成；如果无法确定具体剧情日期，也要使用世界观/状态栏中能推断出的最新时间附近的过去7天内时间。
 
 返回纯JSON数组，不要任何额外文字：
 [{"npc":"NPC名","time":"YYYY.MM.DD 星期X HH:mm","text":"动态内容","comments":[{"name":"评论者","text":"评论"}]}]
@@ -2307,11 +2329,31 @@ await _savePhoneData();
 _renderMemo(pd);
 }
 
+  function _formatPhoneTime(t) {
+    const s = String(t || '').trim();
+    if (!s) return '';
+    const m = s.match(/(\d{4})年(\d{1,2})月(\d{1,2})日\s*(星期[一二三四五六日天])?\s*(\d{1,2}:\d{2})?/);
+    if (m) {
+      const mm = String(m[2]).padStart(2, '0');
+      const dd = String(m[3]).padStart(2, '0');
+      return `${m[1]}.${mm}.${dd}${m[4] ? ' ' + m[4] : ''}${m[5] ? ' ' + m[5] : ''}`.trim();
+    }
+    return s;
+  }
+
   // 抓当前游戏时间（来自状态栏；统一供搜索记录等使用）
   function _getGameTime() {
     try {
       const sb = (typeof Conversations !== 'undefined') ? Conversations.getStatusBar() : null;
-      if (sb?.time) return sb.time;
+      if (sb?.time) return _formatPhoneTime(sb.time);
+    } catch(_) {}
+    try {
+      const msgs = (typeof Chat !== 'undefined' && Chat.getMessages) ? Chat.getMessages() : [];
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].role !== 'assistant') continue;
+        const m = String(msgs[i].content || '').match(/\d{4}年\d{1,2}月\d{1,2}日[^\n]*/);
+        if (m) return _formatPhoneTime(m[0]);
+      }
     } catch(_) {}
     return '';
   }
@@ -2344,10 +2386,10 @@ _renderMemo(pd);
     if (!pd) return '';
     const parts = [];
 
-    // 1. 论坛搜索记录（上限10条）
+    // 1. 信息载体搜索记录（上限10条）
     const fSearches = (pd.forumSearchHistory || []).slice(-10);
     if (fSearches.length > 0) {
-      parts.push('【论坛搜索记录】\n' + fSearches.map(s => `- ${s.query || ''}`).join('\n'));
+      parts.push(`【${_getForumName()}搜索记录】\n` + fSearches.map(s => `- ${s.query || ''}`).join('\n'));
     }
 
     // 2. 最近2条帖子详情浏览（标题+摘要+正文）
@@ -2422,7 +2464,7 @@ _renderMemo(pd);
             return s;
           }).join('\n'));
         }
-        parts.push('【饿了咪APP（外卖）】\n' + subParts.join('\n\n'));
+        parts.push(`【${_getShopCfg('takeout').title}APP（外卖）】\n` + subParts.join('\n\n'));
       }
 
       // 7b. 桃宝（网购）
@@ -2444,7 +2486,7 @@ _renderMemo(pd);
             return s;
           }).join('\n'));
         }
-        parts.push('【桃宝APP（网购）】\n' + subParts.join('\n\n'));
+        parts.push(`【${_getShopCfg('shop').title}APP（网购）】\n` + subParts.join('\n\n'));
       }
     }
 
@@ -2464,59 +2506,109 @@ _renderMemo(pd);
 
   // ===== 外卖 / 网购 共用模块 =====
   // 两者数据结构完全一致，仅提示词/时效/文案不同。通过 kind ('takeout'|'shop') 切换。
-  const SHOP_CFG = {
+  // SHOP_CFG 为默认配置；世界观可以通过 phoneApps.{takeout,shop}.{name,desc} 覆盖 title/logPrefix/systemRole/extraFields。
+  const DEFAULT_SHOP_CFG = {
     takeout: {
  title: '饿了咪',
- searchPlaceholder: '搜索美食（如：麻辣烫、奶茶…）',
- customHint: '自己写一单（比如店里没有但你就想吃的）',
+ searchPlaceholder: '搜索商品（如：麻辣烫、奶茶…）',
+ customHint: '自己写一单（比如店里没有但你就想要的）',
  emptyHint: '点击刷新按钮看推荐',
  logPrefix: '饿了咪',
- customBtnText: '自定义外卖',
-      // 时效（分钟）
-      etaMinMinutes: 15,
-      etaMaxMinutes: 45,
-      etaUnit: '分钟',
-      etaKind: 'minutes',
-      // 数据字段
+ customBtnText: '自定义商品',
+       // 数据字段
       cachedField: 'takeoutCachedItems',
       queryField: 'takeoutLastQuery',
       historyField: 'takeoutSearchHistory',
       ordersField: 'takeoutOrders',
       // AI prompt 用
-      systemRole: '"饿了咪"外卖平台推荐引擎（"饿了么"的萌化山寨版，剧情中可直接称作饿了咪）',
-      itemNoun: '外卖商品',
-      extraFields: '请生成符合当前世界观背景的外卖商品（一般是餐食/饮品/小吃等日常短时效商品）',
-      priceHint: '价格合理（约 ¥10~80）',
+       systemRole: '"饿了咪"外卖平台推荐引擎（"饿了么"的萌化山寨版，剧情中可直接称作饿了咪）',
+       itemNoun: '商品',
+       extraFields: '请生成符合当前世界观背景的外卖商品（一般是餐食/饮品/小吃等日常短时效商品）',
+      priceHint: '价格合理（约 10~80）',
+      currency: '¥',
     },
     shop: {
  title: '桃宝',
  searchPlaceholder: '搜索商品（如：衣服、手办…）',
- customHint: '自己写一单商品',
+ customHint: '自己写一单（比如店里没有但你就想要的）',
  emptyHint: '点击刷新按钮看推荐',
  logPrefix: '桃宝',
  customBtnText: '自定义商品',
-      // 时效（天）
-      etaMinMinutes: 2,
-      etaMaxMinutes: 5,
-      etaUnit: '天',
-      etaKind: 'days',
-      cachedField: 'shopCachedItems',
+       cachedField: 'shopCachedItems',
       queryField: 'shopLastQuery',
       historyField: 'shopSearchHistory',
       ordersField: 'shopOrders',
       systemRole: '"桃宝"网购平台推荐引擎（"淘宝"的萌化山寨版，剧情中可直接称作桃宝）',
       itemNoun: '商品',
       extraFields: '请生成符合当前世界观背景的网购商品（可以是服饰/日用/数码/周边/礼品等长时效物品）',
-      priceHint: '价格合理（约 ¥10~9999，注意日用便宜、数码贵一些）',
+      priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）',
+      currency: '¥',
     }
   };
+  // 兼容旧引用
+  const SHOP_CFG = DEFAULT_SHOP_CFG;
+
+  // 当前世界观对商城/信息载体的覆写（名字/描述）；open() 时异步加载
+  let _shopMeta = {
+    takeout: { name: '', desc: '' },
+    shop: { name: '', desc: '' },
+    forum: { name: '', desc: '' }
+  };
+
+  async function _loadShopMeta() {
+    try {
+      const wv = (typeof Worldview !== 'undefined' && Worldview.getCurrent) ? await Worldview.getCurrent() : null;
+      const pa = wv?.phoneApps || {};
+      _shopMeta = {
+        takeout: {
+          name: ((pa.takeout?.name) || '').trim(),
+          desc: ((pa.takeout?.desc) || '').trim()
+        },
+        shop: {
+          name: ((pa.shop?.name) || '').trim(),
+          desc: ((pa.shop?.desc) || '').trim()
+        },
+        forum: {
+          name: ((pa.forum?.name) || '').trim(),
+          desc: ((pa.forum?.desc) || '').trim()
+        }
+      };
+    } catch(_) {
+      _shopMeta = { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' } };
+    }
+  }
+
+  // 信息载体（默认"论坛"，留空回落）
+  function _getForumName() { return _shopMeta?.forum?.name || '论坛'; }
+  function _getForumDesc() { return _shopMeta?.forum?.desc || ''; }
+
+  function _getShopCfg(kind) {
+    const def = DEFAULT_SHOP_CFG[kind];
+    const meta = _shopMeta[kind] || {};
+    if (!meta.name && !meta.desc) return def;
+    const merged = { ...def };
+    if (meta.name) {
+      merged.title = meta.name;
+      merged.logPrefix = meta.name;
+      if (kind === 'takeout') {
+        merged.systemRole = `"${meta.name}"外卖/餐饮/短时效美食推荐平台`;
+      } else {
+        merged.systemRole = `"${meta.name}"网购/长时效商品推荐平台`;
+      }
+      // UI 文案不动；默认 searchPlaceholder/customHint/customBtnText 两边已统一
+    }
+    if (meta.desc) {
+      merged.extraFields = meta.desc;
+    }
+    return merged;
+  }
 
   let _shopTab = 'items'; // 'items' | 'search' | 'orders'
   let _shopCurrentKind = 'takeout';
 
   function _renderShopping(pd, kind) {
     _shopCurrentKind = kind;
-    const cfg = SHOP_CFG[kind];
+    const cfg = _getShopCfg(kind);
     const body = document.getElementById('phone-body');
     document.getElementById('phone-title').textContent = cfg.title;
     const items = pd[cfg.cachedField] || [];
@@ -2625,7 +2717,7 @@ _renderMemo(pd);
               <button type="button" onclick="Phone._shopDeleteOrder('${kind}','${o.id}')" class="phone-map-action-btn danger">${_uiIcon('trash', 12)} 删除</button>
             </div>
           </div>
-          <div style="font-size:10px;color:var(--text-secondary);margin-top:6px">下单于 ${Utils.escapeHtml(o.time || '')} · ${Utils.escapeHtml(o.etaText || '')}</div>
+          <div style="font-size:10px;color:var(--text-secondary);margin-top:6px">下单于 ${Utils.escapeHtml(o.time || '')}</div>
         </div>`;
     }).join('');
   }
@@ -2636,17 +2728,11 @@ _renderMemo(pd);
     if (pd) _renderShopping(pd, _shopCurrentKind);
   }
 
-  // 随机时效文案
-  function _shopRandomEtaText(kind) {
-    const cfg = SHOP_CFG[kind];
-    const min = cfg.etaMinMinutes, max = cfg.etaMaxMinutes;
-    const n = Math.floor(Math.random() * (max - min + 1)) + min;
-    return `预计 ${n} ${cfg.etaUnit}送达`;
-  }
+  
 
   // 刷新推荐
   async function _shopRefresh(kind) {
-    const cfg = SHOP_CFG[kind];
+    const cfg = _getShopCfg(kind);
     const pd = await _getPhoneData();
     if (!pd) return;
 
@@ -2664,17 +2750,25 @@ _renderMemo(pd);
       if (container) container.innerHTML = _renderShopLoadingHtml();
     }
     const fullCtx = await _buildFullContext();
-    const systemPrompt = `你是${cfg.systemRole}。根据当前世界观和用户处境，生成 6~10 个${cfg.itemNoun}推荐。${cfg.extraFields}。${cfg.priceHint}。
+    const systemPrompt = `你是${cfg.systemRole}。根据当前世界观设定、用户处境（所在地区/身份/消费水平）生成 6~10 个${cfg.itemNoun}推荐。${cfg.extraFields}。${cfg.priceHint}。
+
+严格要求（这是一个客观的商品推荐页面，不是剧情内容）：
+1. 商品名、店铺名、商品描述都必须是中立客观的商品信息，只描述商品本身的外观、材质、功能、卖点。
+2. 禁止商品名/店铺/描述中出现任何角色姓名（包括 NPC 和用户角色）。
+3. 禁止在描述中提及剧情事件、角色关系、用户处境的具体内容（例如“刚刚xx给你点了”“xx送的”“最近你心情不好”这类剧情化文案）。
+4. 可以使用世界观的通用地名、通用流行语、通用职业/阶层词汇，让商品贴合世界观氛围（例如科幻世界观下的“合成蛋白”“星际咖啡”这类通用品类名）。
+5. desc 只写商品本身（例如“手工慢烤的芝士面包，表皮酥脆”），不写购买建议或推荐理由。
+6. price 必须是纯数字字符串，不带任何货币符号或单位；货币样式由前端统一处理。
 
 返回纯JSON数组，不要任何额外文字：
-[{"name":"商品名","shop":"店铺名","desc":"简短描述（1~2句）","price":"价格数字，不带¥"}]
+[{"name":"商品名","shop":"店铺名","desc":"商品描述（写商品外观、材质、口味、效果、用途等本身相关信息）","price":"纯数字"}]
 
 ${fullCtx}`;
 
     try {
       const results = await _phoneJsonArrayWithRetry({
         label: `${cfg.title}刷新`, url, key, model,
-        temperature: 0.85, max_tokens: 2500, maxRetries: 3,
+        temperature: 0.85, max_tokens: 5000, maxRetries: 3,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `请生成 6~10 条${cfg.itemNoun}推荐。` }
@@ -2692,7 +2786,7 @@ ${fullCtx}`;
 
   // 搜索
   async function _shopSearch(kind) {
-    const cfg = SHOP_CFG[kind];
+    const cfg = _getShopCfg(kind);
     const input = document.getElementById('phone-shop-search');
     const query = (input?.value || '').trim();
     if (!query) { UI.showToast('请输入搜索关键词', 1200); return; }
@@ -2714,17 +2808,25 @@ ${fullCtx}`;
       if (container) container.innerHTML = _renderShopLoadingHtml();
     }
     const fullCtx = await _buildFullContext();
-    const systemPrompt = `你是${cfg.systemRole}。根据用户搜索关键词，生成 6~10 个相关${cfg.itemNoun}。${cfg.extraFields}。${cfg.priceHint}。
+    const systemPrompt = `你是${cfg.systemRole}。根据用户搜索关键词和当前世界观设定、用户处境（所在地区/身份/消费水平）生成 6~10 个相关${cfg.itemNoun}。${cfg.extraFields}。${cfg.priceHint}。
+
+严格要求（这是一个客观的商品搜索页面，不是剧情内容）：
+1. 商品名、店铺名、商品描述都必须是中立客观的商品信息，只描述商品本身的外观、材质、功能、卖点。
+2. 禁止商品名/店铺/描述中出现任何角色姓名（包括 NPC 和用户角色）。
+3. 禁止在描述中提及剧情事件、角色关系、用户处境的具体内容（例如“刚刚xx给你点了”“xx送的”“最近你心情不好”这类剧情化文案）。
+4. 可以使用世界观的通用地名、通用流行语、通用职业/阶层词汇，让商品贴合世界观氛围（例如科幻世界观下的“合成蛋白”“星际咖啡”这类通用品类名）。
+5. desc 只写商品本身（例如“手工慢烤的芝士面包，表皮酥脆”），不写购买建议或推荐理由。
+6. price 必须是纯数字字符串，不带任何货币符号或单位；货币样式由前端统一处理。
 
 返回纯JSON数组，不要任何额外文字：
-[{"name":"商品名","shop":"店铺名","desc":"简短描述（1~2句）","price":"价格数字，不带¥"}]
+[{"name":"商品名","shop":"店铺名","desc":"商品描述（写商品外观、材质、口味、效果、用途等本身相关信息）","price":"纯数字"}]
 
 ${fullCtx}`;
 
     try {
       const results = await _phoneJsonArrayWithRetry({
         label: `${cfg.title}搜索`, url, key, model,
-        temperature: 0.8, max_tokens: 2500, maxRetries: 3,
+        temperature: 0.8, max_tokens: 5000, maxRetries: 3,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `搜索关键词：${query}\n请生成 6~10 条相关${cfg.itemNoun}。` }
@@ -2747,7 +2849,7 @@ ${fullCtx}`;
 
   // 单条删除搜索记录（外卖/网购通用）
   async function _deleteShopSearch(kind, index) {
-    const cfg = SHOP_CFG[kind];
+    const cfg = _getShopCfg(kind);
     const pd = await _getPhoneData();
     const list = pd?.[cfg.historyField] || [];
     if (index < 0 || index >= list.length) return;
@@ -2758,7 +2860,7 @@ ${fullCtx}`;
 
   // 从历史记录重新搜索
   async function _shopRepeatSearch(kind, idx) {
-    const cfg = SHOP_CFG[kind];
+    const cfg = _getShopCfg(kind);
     const pd = await _getPhoneData();
     const s = pd?.[cfg.historyField]?.[idx];
     if (!s) return;
@@ -2773,7 +2875,7 @@ ${fullCtx}`;
 
   // 打开自定义商品弹窗
   function _shopOpenCustomModal(kind) {
-    const cfg = SHOP_CFG[kind];
+    const cfg = _getShopCfg(kind);
     let modal = document.getElementById('phone-shop-custom-modal');
     if (!modal) {
       modal = document.createElement('div');
@@ -2806,7 +2908,7 @@ ${fullCtx}`;
   }
 
   async function _shopConfirmCustom(kind) {
-    const cfg = SHOP_CFG[kind];
+    const cfg = _getShopCfg(kind);
     const name = document.getElementById('phone-shop-cust-name')?.value.trim() || '';
     const shop = document.getElementById('phone-shop-cust-shop')?.value.trim() || '';
     const price = document.getElementById('phone-shop-cust-price')?.value.trim() || '';
@@ -2828,9 +2930,9 @@ ${fullCtx}`;
   // 分享商品到主线（让 char 看到这条商品链接，自行决定要不要给 user 买）
   async function _shopShareItem(kind, idx) {
     const pd = await _getPhoneData();
-    const it = pd?.[SHOP_CFG[kind].cachedField]?.[idx];
+    const it = pd?.[_getShopCfg(kind).cachedField]?.[idx];
     if (!it) return;
-    const platform = SHOP_CFG[kind].title;  // '饿了咪' / '桃宝'
+    const platform = _getShopCfg(kind).title;  // '饿了咪' / '桃宝'
     const title = `${platform}：${it.name || '商品'}`;
     const lines = [];
     lines.push(`平台：${platform}`);
@@ -2846,7 +2948,7 @@ ${fullCtx}`;
   // 给自己买
   async function _shopBuyForSelf(kind, idx) {
     const pd = await _getPhoneData();
-    const it = pd?.[SHOP_CFG[kind].cachedField]?.[idx];
+    const it = pd?.[_getShopCfg(kind).cachedField]?.[idx];
     if (!it) return;
     const priceStr = it.price ? `¥${it.price}` : '';
     const ok = await UI.showConfirm(
@@ -2894,7 +2996,7 @@ ${fullCtx}`;
   async function _shopConfirmTarget(kind, idx, target) {
     _shopCloseTargetModal();
     const pd = await _getPhoneData();
-    const it = pd?.[SHOP_CFG[kind].cachedField]?.[idx];
+    const it = pd?.[_getShopCfg(kind).cachedField]?.[idx];
     if (!it) return;
     const priceStr = it.price ? `¥${it.price}` : '';
     const ok = await UI.showConfirm(
@@ -2907,13 +3009,12 @@ ${fullCtx}`;
 
   // 创建订单（通用）
   async function _shopCreateOrder(kind, idx, target) {
-    const cfg = SHOP_CFG[kind];
+    const cfg = _getShopCfg(kind);
     const pd = await _getPhoneData();
     if (!pd) return;
     const it = pd[cfg.cachedField]?.[idx];
     if (!it) return;
 
-    const etaText = _shopRandomEtaText(kind);
     const order = {
       id: 'order_' + Utils.uuid().slice(0, 8),
       name: it.name || '',
@@ -2921,7 +3022,6 @@ ${fullCtx}`;
       price: it.price || '',
       desc: it.desc || '',
       target: target || '自己',
-      etaText,
       time: new Date().toLocaleString(),
     };
     pd[cfg.ordersField] = pd[cfg.ordersField] || [];
@@ -2933,15 +3033,15 @@ ${fullCtx}`;
     const priceStr = it.price ? `¥${it.price}` : '';
     const descStr = it.desc ? `（${_clipLogText(it.desc, 30)}）` : '';
     const forWho = target === '自己' ? '给自己' : `送给${target}`;
-    _log(`在${cfg.title}APP下单了：${it.name}${priceStr ? '，' + priceStr : ''}${descStr}，${forWho}，${etaText}`);
+    _log(`在${cfg.title}APP下单了：${it.name}${priceStr ? '，' + priceStr : ''}${descStr}，${forWho}（配送时间由你在剧情中自然安排）`);
 
     if (_isAppStillActive(kind)) _renderShopping(pd, kind);
-    UI.showToast(`下单成功，${etaText}`, 1500);
+    UI.showToast(`下单成功`, 1500);
   }
 
   // 删除订单
   async function _shopDeleteOrder(kind, orderId) {
-    const cfg = SHOP_CFG[kind];
+    const cfg = _getShopCfg(kind);
     if (!await UI.showConfirm('删除订单', '确定删除这条订单记录？')) return;
     const pd = await _getPhoneData();
     if (!pd) return;

@@ -427,7 +427,17 @@ const SingleMode = (() => {
     if (settings.charType === 'card') {
       const c = await SingleCard.get(settings.charId);
       if (!c) return '';
-      let text = `【AI 扮演角色】\n你将扮演以下角色与用户进行一对一对话。请始终以这个角色的视角说话和行动，不要扮演用户。\n\n姓名：${c.name}`;
+      let text = `【AI 扮演角色】
+在本对话中，你扮演"{{char}}"，用户扮演"{{user}}"。
+请严格扮演"{{char}}"，确保你的回答始终符合设定。
+你应该：
+1. 将这些设定自然地融入到对话中，不要直接重复或提及这些设定内容。
+2. 描写"{{char}}"时使用第三人称（"他/她/Ta" 或名字）；称呼"{{user}}"时使用第二人称"你"或玩家姓名，让玩家保有代入感。
+3. 如果世界观中存在其他角色，允许Ta们作为路人/NPC登场推动剧情。
+4. 如果{{user}}和{{char}}不在同一场景，请保持跟随{{user}}的视角，而非一味描写{{char}}。如有必要可以双线进行，但优先回应{{user}}对环境的互动，再考虑提及{{char}}的状态。
+5. 当你看到带【】框起来 + OOC 标记的系统注入信息（例如【玩家手机操作记录｜OOC】），请理解这些是"系统旁白"，主体是"{{user}}"（玩家本人），不是你扮演的{{char}}。
+
+姓名：${c.name}`;
       if (c.aliases) text += `\n别称/代号：${c.aliases}`;
       if (c.detail) text += `\n\n${c.detail}`;
       return text;
@@ -453,7 +463,17 @@ const SingleMode = (() => {
       try { GameLog.log('warn', `[Single] 在世界观 ${wv.name} 里找不到 NPC ${settings.charId}`); } catch(e) {}
       return '';
     }
-    let text = `【AI 扮演角色】\n你将扮演以下角色与用户进行一对一对话。请始终以这个角色的视角说话和行动，不要扮演用户。\n\n姓名：${found.name}`;
+    let text = `【AI 扮演角色】
+在本对话中，你扮演"{{char}}"，用户扮演"{{user}}"。
+请严格扮演"{{char}}"，确保你的回答始终符合设定。
+你应该：
+1. 将这些设定自然地融入到对话中，不要直接重复或提及这些设定内容。
+2. 描写"{{char}}"时使用第三人称（"他/她/Ta" 或名字）；称呼"{{user}}"时使用第二人称"你"或玩家姓名，让玩家保有代入感。
+3. 如果世界观中存在其他角色，允许Ta们作为路人/NPC登场推动剧情。
+4. 如果{{user}}和{{char}}不在同一场景，请保持跟随{{user}}的视角，而非一味描写{{char}}。如有必要可以双线进行，但优先回应{{user}}对环境的互动，再考虑提及{{char}}的状态。
+5. 当你看到带【】框起来 + OOC 标记的系统注入信息（例如【玩家手机操作记录｜OOC】），请理解这些是"系统旁白"，主体是"{{user}}"（玩家本人），不是你扮演的{{char}}。
+
+姓名：${found.name}`;
     if (found.aliases) text += `\n别称：${found.aliases}`;
     if (foundRegion) text += `\n所在地区：${foundRegion}`;
     if (foundFaction) text += `\n所属势力：${foundFaction}`;

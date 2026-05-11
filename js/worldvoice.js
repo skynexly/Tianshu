@@ -1,5 +1,6 @@
 /**
- * 风闻 — 论坛/微博/茶馆等信息载体系统
+ * WorldVoice — 手机论坛/信息载体的内容生成后端
+ * （旧的浮动风闻 UI 已扣除，本模块只对外暴露数据接口：refresh / loadDetailSilent / getPosts / isRefreshing / abortRefresh / getDetail）
  */
 const WorldVoice = (() => {
   let posts = []; // 当前帖子列表
@@ -20,10 +21,15 @@ const WorldVoice = (() => {
     try { await DB.put('gameState', { key: 'wv_posts', value: posts }); } catch(e) {}
   }
 
-  // 获取信息载体名称
+  // 获取信息载体名称 + 描述（来自世界观 phoneApps.forum，留空回落"论坛"）
   async function _getMediaType() {
     const wv = await Worldview.getCurrent();
-    return wv?.mediaType || '论坛';
+    const nm = wv?.phoneApps?.forum?.name?.trim();
+    return nm || '论坛';
+  }
+  async function _getMediaDesc() {
+    const wv = await Worldview.getCurrent();
+    return wv?.phoneApps?.forum?.desc?.trim() || '';
   }
 
   // 更新加号菜单里的按钮名
@@ -97,18 +103,31 @@ const WorldVoice = (() => {
   isMinimized = false;
 }
 
-  // 抓当前游戏时间：优先状态栏 time，回退到最近一条 AI 消息中的"YYYY年M月D日..."
+  // 把任意时间字符串归一化为 "YYYY.MM.DD 星期X HH:mm"（论坛/好友圈统一格式）
+  function _formatGameTime(t) {
+    const str = String(t || '').trim();
+    if (!str) return '';
+    const m = str.match(/(\d{4})年(\d{1,2})月(\d{1,2})日\s*(星期[一二三四五六日天])?\s*(\d{1,2}:\d{2})?/);
+    if (m) {
+      const mm = String(m[2]).padStart(2, '0');
+      const dd = String(m[3]).padStart(2, '0');
+      return `${m[1]}.${mm}.${dd}${m[4] ? ' ' + m[4] : ''}${m[5] ? ' ' + m[5] : ''}`.trim();
+    }
+    return str;
+  }
+
+  // 抓当前游戏时间：优先状态栏 time，回退到最近一条 AI 消息中的 YYYY年M月D日...
   function _extractGameTime() {
     try {
       const sb = (typeof Conversations !== 'undefined') ? Conversations.getStatusBar() : null;
-      if (sb?.time) return sb.time;
+      if (sb?.time) return _formatGameTime(sb.time);
     } catch(_) {}
     try {
       const chatMessages = (typeof Chat !== 'undefined' && Chat.getMessages) ? Chat.getMessages() : [];
       for (let i = chatMessages.length - 1; i >= 0; i--) {
         if (chatMessages[i].role !== 'assistant') continue;
-        const tm = chatMessages[i].content.match(/\d{4}年\d{1,2}月\d{1,2}日[^\n]*/);
-        if (tm) return tm[0];
+        const tm = String(chatMessages[i].content || '').match(/\d{4}年\d{1,2}月\d{1,2}日[^\n]*/);
+        if (tm) return _formatGameTime(tm[0]);
       }
     } catch(_) {}
     return '';
@@ -135,7 +154,8 @@ const WorldVoice = (() => {
 
     _abortCtrl = new AbortController();
 
-    const mediaType = '论坛';
+    const mediaType = await _getMediaType();
+    const mediaDesc = await _getMediaDesc();
     const wvPrompt = Chat.getWorldviewPrompt() || '';
     const chatMessages = Chat.getMessages();
     const summaryText = await Summary.formatForPrompt(Conversations.getCurrent());
@@ -146,25 +166,32 @@ const WorldVoice = (() => {
       `[${m.role === 'user' ? '玩家' : 'AI'}]: ${m.content}`
     ).join('\n');
 
-    const systemPrompt = `你是一个论坛内容生成器。根据提供的世界观和当前剧情，生成论坛上的帖子。
+    const mediaBrief = mediaDesc ? `\n\n载体说明：${mediaDesc}` : '';
+    const systemPrompt = `你是一个"${mediaType}"内容生成器。根据提供的世界观和当前剧情，生成${mediaType}上的帖子/动态。${mediaBrief}
 
 要求：
-1. 生成6-8条帖子预览
+1. 生成6-8条帖子/动态预览
 2. 80%的内容与世界观有关但与主线剧情无直接关系（日常生态、社会话题、生活琐事）
 3. 20%的内容与主线正在发生的剧情有关联（但是从路人/旁观者视角，不会知道具体细节）
-4. 每条内容的用户名要符合世界观风格
-5. 帖子风格可长可短，有正经讨论也有水帖灌水，摘要长度不要千篇一律
-6. 返回纯JSON数组，不要包含任何其他文字
+4. 每条内容的用户名要符合世界观和${mediaType}的风格
+5. 帖子风格贴合${mediaType}的画风，长短皆可，有正经讨论也有水帖灌水，摘要长度不要千篇一律
+6. tags 风格也要贴合${mediaType}（论坛/贴吧偏普通词、微博偏"#话题#"、小红书偏"#标签"），无需统一形式
+7. 时间分布：80% 在当前游戏时间附近 7 天内（日常推荐流），可以有 20% 是置顶/热门/挖坟的更早老帖，time 可以更靠前；但评论时间永远不要超过当前游戏时间
+8. 返回纯JSON数组，不要包含任何其他文字
 
 JSON格式（严格遵循）：
-[{"id":"p1","username":"用户名","avatar_color":"#颜色","time":"时间描述","title":"标题","summary":"摘要","tags":["标签1","标签2"],"views":数字,"likes":数字,"comments":数字}]`;
+[{"id":"p1","username":"用户名","avatar_color":"#颜色","time":"YYYY.MM.DD 星期X HH:mm","title":"标题","summary":"摘要","tags":["标签1","标签2"],"views":数字,"likes":数字,"comments":数字}]
+
+所有 time 都必须使用"YYYY.MM.DD 星期X HH:mm"格式，必须和当前游戏时间同一套写法，不要自己发明别的时间样式。
+
+${wvPrompt}`;
 
     let userPrompt = '';
-    if (wvPrompt) userPrompt += `## 世界观\n${wvPrompt}\n\n`;
     if (summaryText) userPrompt += `## 剧情总结\n${summaryText}\n\n`;
     if (gameTime) userPrompt += `## 当前游戏时间\n${gameTime}\n\n`;
     if (recentMain) userPrompt += `## 最近剧情\n${recentMain}\n\n`;
     userPrompt += `请生成${mediaType}内容。`;
+
 
     const maxRetries = 3;
     let lastError = '';
@@ -356,19 +383,27 @@ function _renderLoadingSkeleton() {
     const wvPrompt = Chat.getWorldviewPrompt() || '';
     const gameTime = _extractGameTime();
 
-    const systemPrompt = `你是一个论坛内容生成器。用户给你一条帖子的预览信息，请生成完整的帖子正文和评论区。
+    const _mt = await _getMediaType();
+    const _md = await _getMediaDesc();
+    const _mb = _md ? `
+
+载体说明：${_md}` : '';
+    const systemPrompt = `你是一个"${_mt}"内容生成器。用户给你一条帖子/动态的预览信息，请生成完整的正文和评论/回复区。${_mb}
 
 要求：
-1. 正文长度符合论坛帖子风格——几百字到上千字不等，不要一律写成千字小作文，要像真的论坛用户在写东西
-2. 评论区8-12条回复，风格多样（有赞同、反对、吐槽、跑题的），评论长度也要自然，有人一句话有人写一段
-3. 评论者的用户名和说话风格要符合世界观
-4. 评论时间要符合"当前游戏时间"，分布在最近几小时到几天内（绝对不要凭空瞎编年份/年代）
-5. 返回纯JSON，不要包含任何其他文字
+1. 正文长度贴合${_mt}的画风——该短的短、该长的长，不要一律写成千字小作文，像真的${_mt}用户在写
+2. 评论/回复区8-12条，风格多样（有赞同、反对、吐槽、跑题的），长度自然，有人一句话有人写一段
+3. 评论者的用户名和说话风格要符合世界观和${_mt}的氛围
+4. 评论时间必须晚于帖子的发帖时间、且不超过"当前游戏时间"；如果是挖坟老帖，评论可以横跨较长时间（早期评论紧贴发帖时间，近期评论紧贴当前游戏时间）
+5. 所有 time 都必须使用"YYYY.MM.DD 星期X HH:mm"格式，不要写成别的时间样式
+6. 返回纯JSON，不要包含任何其他文字
 
 JSON格式：
-{"content":"帖子完整正文","comments":[{"username":"用户名","avatar_color":"#颜色","content":"评论内容","time":"时间","likes":数字}]}`;
+{"content":"帖子/动态完整正文","comments":[{"username":"用户名","avatar_color":"#颜色","content":"评论内容","time":"YYYY.MM.DD 星期X HH:mm","likes":数字}]}
 
-    const userPrompt = `## 世界观\n${wvPrompt}\n\n${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n标签：${(post.tags || []).join('、')}\n\n请生成完整内容和评论区。`;
+${wvPrompt}`;
+
+    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n请生成完整内容和评论区。`;
 
     const maxRetries = 3;
     let lastError = '';
@@ -609,10 +644,8 @@ JSON格式：
   }
 
   return {
-    open, close, minimize, restore,
-    refresh, viewDetail, backToList,
-    shareToMain, collectPost, likePost,
-    updateLabel,
+    // 数据生成接口（手机论坛 App 使用）
+    refresh,
     // 手机论坛接口
   getPosts: () => posts,
   getDetail: () => currentDetail,
@@ -631,18 +664,26 @@ JSON格式：
     if (!url || !key || !model) throw new Error('请先配置功能模型');
     const wvPrompt = Chat.getWorldviewPrompt() || '';
     const gameTime = _extractGameTime();
-    const systemPrompt = `你是一个论坛内容生成器。用户给你一条帖子的预览信息，请生成完整的帖子正文和评论区。
+    const _mt = await _getMediaType();
+    const _md = await _getMediaDesc();
+    const _mb = _md ? `
+
+载体说明：${_md}` : '';
+    const systemPrompt = `你是一个"${_mt}"内容生成器。用户给你一条帖子/动态的预览信息，请生成完整的正文和评论/回复区。${_mb}
 
 要求：
-1. 正文长度符合论坛帖子风格——几百字到上千字不等，不要一律写成千字小作文，要像真的论坛用户在写东西
-2. 评论区8-12条回复，风格多样（有赞同、反对、吐槽、跑题的），评论长度也要自然，有人一句话有人写一段
-3. 评论者的用户名和说话风格要符合世界观
-4. 评论时间要符合"当前游戏时间"，分布在最近几小时到几天内（绝对不要凭空瞎编年份/年代）
-5. 返回纯JSON，不要包含任何其他文字
+1. 正文长度贴合${_mt}的画风——该短的短、该长的长，不要一律写成千字小作文，像真的${_mt}用户在写
+2. 评论/回复区8-12条，风格多样（有赞同、反对、吐槽、跑题的），长度自然，有人一句话有人写一段
+3. 评论者的用户名和说话风格要符合世界观和${_mt}的氛围
+4. 评论时间必须晚于帖子的发帖时间、且不超过"当前游戏时间"；如果是挖坟老帖，评论可以横跨较长时间（早期评论紧贴发帖时间，近期评论紧贴当前游戏时间）
+5. 所有 time 都必须使用"YYYY.MM.DD 星期X HH:mm"格式，不要写成别的时间样式
+6. 返回纯JSON，不要包含任何其他文字
 
 JSON格式：
-{"content":"帖子完整正文","comments":[{"username":"用户名","avatar_color":"#颜色","content":"评论内容","time":"时间","likes":数字}]}`;
-    const userPrompt = `## 世界观\n${wvPrompt}\n\n${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n标签：${(post.tags||[]).join('、')}\n\n请生成完整内容和评论区。`;
+{"content":"帖子/动态完整正文","comments":[{"username":"用户名","avatar_color":"#颜色","content":"评论内容","time":"YYYY.MM.DD 星期X HH:mm","likes":数字}]}
+
+${wvPrompt}`;
+    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags||[]).join('、')}\n\n请生成完整内容和评论区。`;
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },

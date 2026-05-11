@@ -37,6 +37,12 @@ const Worldview = (() => {
       icon: '🌍',
       iconImage: '',        // base64图片（本地展示用，不发AI）
       setting: '',           // 世界观核心设定（每轮发送）
+      currency: { name: '', desc: '' }, // 通用货币：名称+说明，仅发AI，前端仍显示 ¥
+      phoneApps: {                       // 手机 App 自定义（留空用默认）
+        takeout: { name: '', desc: '' }, // 短时效商城（默认饿了咪）
+        shop:    { name: '', desc: '' }, // 长时效商城（默认桃宝）
+        forum:   { name: '', desc: '' }, // 信息载体（默认论坛）
+      },
       startTime: '',         // 开场时间
       startPlot: '',         // 开场剧情
       startPlotRounds: 5,    // 开场剧情保留轮数
@@ -48,6 +54,22 @@ customs: [],
 knowledges: []
 };
 }
+
+  // 构建下发给 Chat 的 worldview prompt：setting + 附加字段（货币等）
+  function _buildSettingWithExtras(w) {
+    if (!w) return '';
+    let s = w.setting || '';
+    const cur = w.currency || {};
+    if (cur.name && cur.name.trim()) {
+      const extra = [];
+      extra.push('【通用货币】');
+      extra.push(`货币名称：${cur.name.trim()}`);
+      if (cur.desc && cur.desc.trim()) extra.push(`货币说明：${cur.desc.trim()}`);
+      extra.push('（商品/服务价格生成时，price 字段只填纯数字，数值应符合此货币的合理范围与购买力；前端统一以 ¥ 符号展示占位，货币名称仅用于你内部生成合理价格时参考。）');
+      s = s ? `${s}\n\n${extra.join('\n')}` : extra.join('\n');
+    }
+    return s;
+  }
 function _defaultRegion() {
     return { id: 'reg_' + Utils.uuid().slice(0,8), name: '', summary: '', detail: '', factions: [] };
   }
@@ -345,6 +367,19 @@ return { id: 'know_' + Utils.uuid().slice(0,8), name: '', keys: '', content: '' 
       w.name = (document.getElementById('wv-name')?.value || '').trim() || w.name;
       w.description = document.getElementById('wv-description')?.value || '';
       w.setting = document.getElementById('wv-setting')?.value || '';
+      w.currency = w.currency || { name: '', desc: '' };
+      w.currency.name = document.getElementById('wv-currency-name')?.value || '';
+      w.currency.desc = document.getElementById('wv-currency-desc')?.value || '';
+      w.phoneApps = w.phoneApps || { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' } };
+      w.phoneApps.takeout = w.phoneApps.takeout || { name: '', desc: '' };
+      w.phoneApps.shop = w.phoneApps.shop || { name: '', desc: '' };
+      w.phoneApps.forum = w.phoneApps.forum || { name: '', desc: '' };
+      w.phoneApps.takeout.name = document.getElementById('wv-takeout-name')?.value || '';
+      w.phoneApps.takeout.desc = document.getElementById('wv-takeout-desc')?.value || '';
+      w.phoneApps.shop.name = document.getElementById('wv-shop-name')?.value || '';
+      w.phoneApps.shop.desc = document.getElementById('wv-shop-desc')?.value || '';
+      w.phoneApps.forum.name = document.getElementById('wv-forum-name')?.value || '';
+      w.phoneApps.forum.desc = document.getElementById('wv-forum-desc')?.value || '';
       w.startTime = document.getElementById('wv-start-time')?.value || '';
       w.startPlot = document.getElementById('wv-start-plot')?.value || '';
       w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds')?.value) || 5;
@@ -366,7 +401,7 @@ return { id: 'know_' + Utils.uuid().slice(0,8), name: '', keys: '', content: '' 
 
   function _attachWVAutoSave() {
     // 主编辑页
-    ['wv-name','wv-description','wv-setting','wv-start-time','wv-start-plot','wv-start-plot-rounds','wv-start-message'].forEach(id => {
+    ['wv-name','wv-description','wv-setting','wv-currency-name','wv-currency-desc','wv-takeout-name','wv-takeout-desc','wv-shop-name','wv-shop-desc','wv-forum-name','wv-forum-desc','wv-start-time','wv-start-plot','wv-start-plot-rounds','wv-start-message'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.removeEventListener('input', _wvAutoSave); el.addEventListener('input', _wvAutoSave); }
     });
@@ -413,12 +448,23 @@ return { id: 'know_' + Utils.uuid().slice(0,8), name: '', keys: '', content: '' 
     document.getElementById('wv-description').value = w.description || '';
     // icon字段保留默认值（不再有emoji输入框）
     document.getElementById('wv-setting').value = w.setting || '';
+    const _cur = w.currency || {};
+    const _curName = document.getElementById('wv-currency-name'); if (_curName) _curName.value = _cur.name || '';
+    const _curDesc = document.getElementById('wv-currency-desc'); if (_curDesc) _curDesc.value = _cur.desc || '';
+    const _pa = w.phoneApps || {};
+    const _paTk = _pa.takeout || {};
+    const _paSh = _pa.shop || {};
+    const _paFm = _pa.forum || {};
+    const _tkN = document.getElementById('wv-takeout-name'); if (_tkN) _tkN.value = _paTk.name || '';
+    const _tkD = document.getElementById('wv-takeout-desc'); if (_tkD) _tkD.value = _paTk.desc || '';
+    const _shN = document.getElementById('wv-shop-name'); if (_shN) _shN.value = _paSh.name || '';
+    const _shD = document.getElementById('wv-shop-desc'); if (_shD) _shD.value = _paSh.desc || '';
+    const _fmN = document.getElementById('wv-forum-name'); if (_fmN) _fmN.value = _paFm.name || '';
+    const _fmD = document.getElementById('wv-forum-desc'); if (_fmD) _fmD.value = _paFm.desc || '';
     document.getElementById('wv-start-time').value = w.startTime || '';
     document.getElementById('wv-start-plot').value = w.startPlot || '';
     document.getElementById('wv-start-plot-rounds').value = w.startPlotRounds ?? 5;
     document.getElementById('wv-start-message').value = w.startMessage || '';
-    document.getElementById('wv-media-type').value = '论坛'; // 暂时锁死，后续做模板系统再开放
-    
     // 图片预览
     const previewEl = document.getElementById('wv-icon-image-preview');
     if (w.iconImage) {
@@ -1091,7 +1137,7 @@ document.getElementById('wv-knowledge-modal').classList.add('hidden');
   async function _syncRuntime(w) {
     if (!w) return;
     if (w.id !== currentWorldviewId) return; // 不是当前激活世界观，跳过
-    try { Chat.setWorldview(w.setting || ''); } catch(e) { console.warn('[Worldview] sync prompt 失败', e); }
+    try { Chat.setWorldview(_buildSettingWithExtras(w)); } catch(e) { console.warn('[Worldview] sync prompt 失败', e); }
     try {
       const flatNpcs = [];
       const flatFacs = [];
@@ -1120,12 +1166,23 @@ document.getElementById('wv-knowledge-modal').classList.add('hidden');
     w.description = document.getElementById('wv-description').value.trim();
     w.icon = w.icon || '🌍'; // 保留原值
     w.setting = document.getElementById('wv-setting').value.trim();
+    w.currency = w.currency || { name: '', desc: '' };
+    w.currency.name = (document.getElementById('wv-currency-name')?.value || '').trim();
+    w.currency.desc = (document.getElementById('wv-currency-desc')?.value || '').trim();
+    w.phoneApps = w.phoneApps || { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' } };
+    w.phoneApps.takeout = w.phoneApps.takeout || { name: '', desc: '' };
+    w.phoneApps.shop = w.phoneApps.shop || { name: '', desc: '' };
+    w.phoneApps.forum = w.phoneApps.forum || { name: '', desc: '' };
+    w.phoneApps.takeout.name = (document.getElementById('wv-takeout-name')?.value || '').trim();
+    w.phoneApps.takeout.desc = (document.getElementById('wv-takeout-desc')?.value || '').trim();
+    w.phoneApps.shop.name = (document.getElementById('wv-shop-name')?.value || '').trim();
+    w.phoneApps.shop.desc = (document.getElementById('wv-shop-desc')?.value || '').trim();
+    w.phoneApps.forum.name = (document.getElementById('wv-forum-name')?.value || '').trim();
+    w.phoneApps.forum.desc = (document.getElementById('wv-forum-desc')?.value || '').trim();
     w.startTime = document.getElementById('wv-start-time').value.trim();
     w.startPlot = document.getElementById('wv-start-plot').value.trim();
     w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds').value) || 5;
     w.startMessage = document.getElementById('wv-start-message').value.trim();
-    w.mediaType = '论坛'; // 暂时锁死，后续做模板系统再开放
-    
     // 绑定主题
     const themeInput = document.getElementById('wv-theme-binding');
     w.themeName = themeInput ? themeInput.value : (w.themeName || '');
@@ -1164,10 +1221,6 @@ w.knowledges = knowledgesData.slice();
      // 同步到运行时（如果改的就是当前激活世界观，AI 立刻看到新设定）
      await _syncRuntime(w);
      await load();
-     // 更新风闻菜单标签
-     if (WorldVoice && WorldVoice.updateLabel) {
-       WorldVoice.updateLabel();
-     }
    }
   
   // ---------- 删除世界观时迁移对话 ----------
@@ -1340,7 +1393,7 @@ w.knowledges = knowledgesData.slice();
       }
       // 同步NPC和世界观prompt到游戏运行时
       if (w) {
-        Chat.setWorldview(w.setting || '');
+        Chat.setWorldview(_buildSettingWithExtras(w));
         try {
           const flatNpcs = [];
           const flatFacs = [];
@@ -1505,6 +1558,40 @@ w.knowledges = knowledgesData.slice();
       html += `<div style="margin-bottom:16px">
         <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px">世界观设定</div>
         <div class="md-content" style="font-size:13px;line-height:1.8;color:var(--text);background:var(--bg-tertiary);padding:12px;border-radius:8px;border:1px solid var(--border)">${Markdown.render(w.setting)}</div>
+      </div>`;
+    }
+    const _cur = w.currency || {};
+    if (_cur.name) {
+      html += `<div style="margin-bottom:16px">
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px">💰 通用货币</div>
+        <div style="font-size:14px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_cur.name)}</div>
+        ${_cur.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_cur.desc)}</div>` : ''}
+      </div>`;
+    }
+    const _pa = w.phoneApps || {};
+    const _paTk = _pa.takeout || {}; const _paSh = _pa.shop || {}; const _paFm = _pa.forum || {};
+    if (_paTk.name || _paSh.name) {
+      html += `<div style="margin-bottom:16px">
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:6px">🛒 手机商城</div>
+        ${_paTk.name ? `<div style="background:var(--bg-tertiary);padding:10px;border-radius:8px;margin-bottom:6px">
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">短时效</div>
+          <div style="font-size:14px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_paTk.name)}</div>
+          ${_paTk.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_paTk.desc)}</div>` : ''}
+        </div>` : ''}
+        ${_paSh.name ? `<div style="background:var(--bg-tertiary);padding:10px;border-radius:8px">
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">长时效</div>
+          <div style="font-size:14px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_paSh.name)}</div>
+          ${_paSh.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_paSh.desc)}</div>` : ''}
+        </div>` : ''}
+      </div>`;
+    }
+    if (_paFm.name) {
+      html += `<div style="margin-bottom:16px">
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:6px">📢 信息载体</div>
+        <div style="background:var(--bg-tertiary);padding:10px;border-radius:8px">
+          <div style="font-size:14px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_paFm.name)}</div>
+          ${_paFm.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_paFm.desc)}</div>` : ''}
+        </div>
       </div>`;
     }
     if (!w.setting && !w.description) {
@@ -1853,7 +1940,7 @@ function _applyBoundTheme(themeName) {
         if (w.themeName) {
           try { _applyBoundTheme(w.themeName); } catch(e) { console.warn('[Worldview.restore] 主题绑定失败', e); }
         }
-        const settingText = w.setting || '';
+        const settingText = _buildSettingWithExtras(w);
         // 先设世界观prompt，这是最重要的，不能被后面的NPC.init异常拖累
         Chat.setWorldview(settingText);
         console.log('[Worldview.restore] 已设worldviewPrompt, 长度:', settingText.length);
