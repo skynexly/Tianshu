@@ -126,22 +126,8 @@ const Chat = (() => {
 
   // 给 assistant 消息包一层头像 wrapper（如果还没包）
   function _wrapAssistantWithAvatar(msgEl, url) {
-    if (msgEl.dataset.hasAvatar === '1') return;
-    if (!msgEl.parentNode) return;
-    const wrapper = document.createElement('div');
-    wrapper.className = 'msg-with-avatar assistant-wrap';
-    wrapper.style.cssText = 'display:flex;flex-direction:column;gap:6px;align-items:flex-start;align-self:flex-start;max-width:95%;width:auto';
-    const avatarEl = document.createElement('img');
-    avatarEl.src = url;
-    avatarEl.dataset.aiAvatar = '1';
-    avatarEl.className = 'msg-avatar';
-    avatarEl.style.cssText = 'width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0';
-    msgEl.parentNode.insertBefore(wrapper, msgEl);
-    wrapper.appendChild(avatarEl);
-    wrapper.appendChild(msgEl);
-    msgEl.dataset.hasAvatar = '1';
-    msgEl.style.width = 'auto';
-    msgEl.style.maxWidth = '100%';
+    // 单人模式不再在 AI 大气泡外挂头像（顶栏已有头像，气泡内可能还有线上消息头像，三重头像太挤）
+    return;
   }
   let isStreaming = false;
   let totalTokenEstimate = 0;
@@ -230,7 +216,10 @@ const Chat = (() => {
 2. 没有线上消息的轮次完全不要输出 \`\`\`chat 块（不是输出空数组，是整个块都不要写）。
 3. text 用 NPC 实际发送的内容，简短自然，符合 IM 聊天习惯。
 4. time 是消息发出时间，格式必须为 "YYYY.MM.DD 星期X HH:mm"（与 status 中的时间同一套写法，论坛/好友圈也用这个格式）。可与 status 中的时间略有差异（消息可能发出前几分钟）。
-5. npc 必须使用角色真名，与正文/status 中的名字一致。`;
+5. npc 必须使用角色真名，与正文/status 中的名字一致。
+6. 当输出了 \`\`\`chat 块时，**消息的具体内容只写在 chat 块里，正文不要复述**。正文需要简短交代"发送/收到了消息"这个动作或场景本身（例如"她拿起手机，给他发了一条消息"/"手机震了一下，是来自{{NPC}}的消息"），但不要把消息原文也写进正文，避免一条消息出现两次。
+7. **chat 块里只放 NPC 发出的消息，不要包含{{user}}的消息**。用户的消息由用户自己输入，AI 既不要复述也不要替用户写入 chat 块。
+8. **chat 块只填本轮新产生的线上消息，不要把历史轮次已经出现过的消息再填一遍**。历史消息前端已经渲染过，重复输出会导致用户看到同一条消息出现多次。`;
 
 
   /**
@@ -1728,6 +1717,18 @@ showContextMenu(msgEl.dataset.id, e.clientX, e.clientY);
 
     const items = [];
 
+    // 判定：这条消息是否是当前对话的"最新一条"（非 hidden 消息）
+    // 用于决定"重写/删除"是否允许——只允许操作最新一条，避免状态栏污染
+    const _isLatest = (() => {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m && m.role !== 'system' && !m.hidden) {
+          return m.id === msgId;
+        }
+      }
+      return false;
+    })();
+
     if (msg.role === 'user') {
       // 用户气泡
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg> 编辑剧情', action: () => editMessage(msgId) });
@@ -1739,9 +1740,11 @@ showContextMenu(msgEl.dataset.id, e.clientX, e.clientY);
     } else {
       // AI气泡
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg> 编辑剧情', action: () => editMessage(msgId) });
-      items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> 重写剧情', action: () => openRewriteHint(msgId) });
-      items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M10.029 4.285A2 2 0 0 0 7 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/><path d="M3 4v16"/></svg> 继续剧情', action: () => continueGenerate(msgId) });
-      items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg> 回退一步', action: () => retractAI(msgId) });
+      if (_isLatest) {
+        items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> 重写剧情', action: () => openRewriteHint(msgId) });
+        items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M10.029 4.285A2 2 0 0 0 7 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/><path d="M3 4v16"/></svg> 继续剧情', action: () => continueGenerate(msgId) });
+        items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg> 回退一步', action: () => retractAI(msgId) });
+      }
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg> 从此分支', action: () => createBranch(msgId) });
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="m12 3.5 2.78 5.63 6.22.9-4.5 4.39 1.06 6.2L12 17.7l-5.56 2.92 1.06-6.2L3 10.03l6.22-.9L12 3.5z"/></svg> 收藏剧情', action: () => collectMessage(msgId) });
       // 语音朗读：仅在对话设置开启时显示
@@ -1758,7 +1761,9 @@ showContextMenu(msgEl.dataset.id, e.clientX, e.clientY);
       } catch (_) {}
       items.push({ sep: true });
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> 多选', action: () => enterMultiSelect(msgId) });
-      items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 删除', action: () => deleteMessage(msgId), danger: true });
+      if (_isLatest) {
+        items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 删除', action: () => deleteMessage(msgId), danger: true });
+      }
     }
 
     items.forEach(item => {
@@ -2052,6 +2057,13 @@ exitMultiSelect();
     const idx = messages.findIndex(m => m.id === msgId);
     if (idx < 0) return;
 
+    // 判定：被删的是不是"最新一条"（非 hidden）
+    let lastVisibleIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i] && !messages[i].hidden) { lastVisibleIdx = i; break; }
+    }
+    const isDeletingLatest = (idx === lastVisibleIdx);
+
     // 获取消息元素，添加删除动画
     const msgEl = document.querySelector(`.chat-msg[data-id="${msgId}"]`);
     if (msgEl) {
@@ -2062,6 +2074,11 @@ exitMultiSelect();
 
     await DB.del('messages', msgId);
     messages.splice(idx, 1);
+    roundCount = messages.filter(m => m.role === 'user').length;
+    // 删最新一条时回滚状态栏（中间删消息不回滚，状态对不上是用户的责任）
+    if (isDeletingLatest) {
+      await _restoreStatusFromMessages();
+    }
     renderAll();
     updateTokenCount();
   }
@@ -2273,23 +2290,7 @@ async function retractAI(msgId) {
       }
       div.innerHTML = cachedPlain;
     }
-    // AI 头像（仅单人对话有 _aiAvatarUrl）
-    if (_aiAvatarUrl) {
-      const avatarEl = document.createElement('img');
-      avatarEl.src = _aiAvatarUrl;
-      avatarEl.dataset.aiAvatar = '1';
-      avatarEl.className = 'msg-avatar';
-      avatarEl.style.cssText = 'width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0';
-      const wrapper = document.createElement('div');
-      wrapper.className = 'msg-with-avatar assistant-wrap';
-      wrapper.style.cssText = 'display:flex;flex-direction:column;gap:6px;align-items:flex-start;align-self:flex-start;max-width:95%;width:auto';
-      wrapper.appendChild(avatarEl);
-      wrapper.appendChild(div);
-      div.style.width = 'auto';
-      div.style.maxWidth = '100%';
-      div.dataset.hasAvatar = '1';
-      container.appendChild(wrapper);
-    }
+    // 单人模式 AI 头像已移除（顶栏已有 + 线上消息气泡内还有，三重头像太挤）
     } else if (msg.role === 'system') {
       div.innerHTML = `<div class="msg-body md-content">${Markdown.render(msg.content)}</div>`;
       div.style.borderColor = 'var(--accent-dim)';
@@ -2731,6 +2732,10 @@ renderAll();
     await DB.del('messages', msgId);
     messages.splice(idx, 1);
     roundCount = Math.floor(messages.filter(m => m.role === 'user').length);
+
+    // ⚠ 关键修复：把状态栏回滚到再上一条 AI 的快照
+    // 之前重写时没回滚，导致旧 AI 的好感/任务/积分 delta 残留在余额里
+    await _restoreStatusFromMessages();
 
     renderAll();
 
