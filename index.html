@@ -411,7 +411,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
                 新建角色
               </button>
-              <button type="button" onclick="SingleCard.importCard()" title="导入（支持 .json / 酒馆 .png）" style="white-space:nowrap;padding:6px 10px;font-size:12px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:4px">
+              <button type="button" onclick="SingleCard.importCard()" title="导入角色（支持 .json / .png）" style="white-space:nowrap;padding:6px 10px;font-size:12px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:4px">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 导入
               </button>
@@ -1176,7 +1176,7 @@
               <span class="circle-check-ui"></span>
             </span>
           </label>
-          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后不再发送内置回复格式提示词，AI回复仅做Markdown渲染。关闭格式可能导致无法命中详细设定与特殊设定中的内容</span>
+          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后不再发送内置回复格式提示词，AI回复仅做Markdown渲染。关闭格式可能导致无法命中详细设定与扩展设定中的内容</span>
           <label class="circle-check-label">
             <span class="circle-check-text">后台频道</span>
             <span style="position:relative;display:inline-flex">
@@ -1370,23 +1370,20 @@
                 </span>
               </label>
               <label class="circle-check-label">
-                <span class="circle-check-text" style="font-size:13px">启用节日设定</span>
+                <span class="circle-check-text" style="font-size:13px">启用扩展设定<br><span style="font-size:11px;color:var(--text-secondary)">节日 / 常驻条目 / 动态条目</span></span>
                 <span style="position:relative;display:inline-flex">
-                  <input type="checkbox" id="sm-enable-festival" class="circle-check">
+                  <input type="checkbox" id="sm-enable-extended" class="circle-check">
                   <span class="circle-check-ui"></span>
                 </span>
               </label>
+            </div>
+            <!-- 单人卡扩展设定开关（仅在选了单人卡时显示） -->
+            <div id="sm-card-ext-row" class="hidden" style="display:flex;flex-direction:column;gap:14px;padding:12px;background:var(--bg-tertiary);border-radius:8px">
+              <div style="font-size:12px;color:var(--text-secondary);margin-bottom:-2px;line-height:1.4">单人卡扩展设定<br><span style="font-size:11px;opacity:0.7">添加的单人卡有自己的节日/常驻/动态条目时启用</span></div>
               <label class="circle-check-label">
-                <span class="circle-check-text" style="font-size:13px">启用自定义设定</span>
+                <span class="circle-check-text" style="font-size:13px">启用单人卡扩展设定</span>
                 <span style="position:relative;display:inline-flex">
-                  <input type="checkbox" id="sm-enable-custom" class="circle-check">
-                  <span class="circle-check-ui"></span>
-                </span>
-              </label>
-              <label class="circle-check-label">
-                <span class="circle-check-text" style="font-size:13px">启用知识设定</span>
-                <span style="position:relative;display:inline-flex">
-                  <input type="checkbox" id="sm-enable-knowledge" class="circle-check">
+                  <input type="checkbox" id="sm-enable-card-extended" class="circle-check">
                   <span class="circle-check-ui"></span>
                 </span>
               </label>
@@ -1399,7 +1396,103 @@
   </div>
 </div>
 
-<!-- 角色编辑弹窗 -->
+<!-- 单人卡编辑面板（v594：全屏化） -->
+<section id="panel-single-card-edit" class="panel">
+  <div class="panel-content">
+    <div style="margin-bottom:16px">
+      <button class="btn-icon" onclick="SingleCard.closeEditPanel()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;margin-bottom:12px">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 id="sc-edit-title" style="margin:0;font-size:24px;color:var(--text)">编辑角色</h2>
+        <div style="display:flex;gap:8px;align-items:center;position:relative">
+          <button onclick="SingleCard.toggleEditMoreMenu(event)" style="width:36px;height:36px;padding:0;font-size:18px;line-height:1;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer" title="更多操作">⋯</button>
+          <div id="sc-edit-more-menu" class="hidden" style="position:absolute;right:74px;top:42px;min-width:148px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:30;padding:6px;display:flex;flex-direction:column;gap:2px">
+            <button onclick="SingleCard.closeEditMoreMenu();SingleCard.exportCurrent()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">导出角色</button>
+            <button id="sc-edit-delete-btn" onclick="SingleCard.closeEditMoreMenu();SingleCard.deleteCurrent()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--danger);font-size:13px;border-radius:7px;cursor:pointer">删除角色</button>
+          </div>
+          <button onclick="SingleCard.savePanelForm()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 编辑Tab切换 -->
+    <div class="memory-tabs" style="margin-bottom:16px">
+      <button class="wv-edit-tab-btn active" data-sctab="basic" onclick="SingleCard.switchEditTab('basic')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M16 4h2a2 2 0 0 1 2 2v2"/><path d="M21.34 15.664a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/><path d="M8 22H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg> 基础设定</button>
+      <button class="wv-edit-tab-btn" data-sctab="extended" onclick="SingleCard.switchEditTab('extended')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg> 扩展设定</button>
+    </div>
+
+    <!-- 基础设定 tab -->
+    <div id="sc-edit-tab-basic" class="sc-edit-tab-content settings-tab-content">
+      <!-- 头像 -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:16px">
+        <div id="sc-panel-avatar-preview" onclick="SingleCard.pickAvatarPanel()" style="cursor:pointer"></div>
+        <div style="font-size:11px;color:var(--text-secondary)">点击更换头像</div>
+      </div>
+      <!-- 姓名 -->
+      <div class="form-group">
+        <span class="form-label">姓名 *</span>
+        <input type="text" id="sc-panel-name" placeholder="角色姓名">
+      </div>
+      <!-- 代号/别称 -->
+      <div class="form-group">
+        <span class="form-label">代号/别称</span>
+        <input type="text" id="sc-panel-aliases" placeholder="可选，如：白月光、阿七">
+      </div>
+      <!-- 详细设定 -->
+      <div class="form-group">
+        <span class="form-label">详细设定</span>
+        <textarea id="sc-panel-detail" placeholder="外貌、性格、背景、关系、能力……" rows="8" style="min-height:160px;line-height:1.6;resize:vertical"></textarea>
+      </div>
+      <!-- 开场白 -->
+      <div class="form-group">
+        <span class="form-label">开场白 <span style="font-size:11px;opacity:0.7;font-weight:normal">（新建对话时角色的第一句话）</span></span>
+        <textarea id="sc-panel-firstmes" placeholder="可选。例如：你来啦？刚好缺个人陪我喝酒。" rows="3" style="line-height:1.6;resize:vertical"></textarea>
+      </div>
+      <!-- 对话样例 -->
+      <div class="form-group">
+        <span class="form-label">对话样例 <span style="font-size:11px;opacity:0.7;font-weight:normal">（教 AI 说话风格，会注入提示词）</span></span>
+        <textarea id="sc-panel-mesexample" placeholder="可选。可写若干轮示范对话。" rows="4" style="line-height:1.6;resize:vertical"></textarea>
+      </div>
+      <!-- 作者 -->
+      <div class="form-group">
+        <span class="form-label">作者</span>
+        <input type="text" id="sc-panel-creator" placeholder="可选">
+      </div>
+      <!-- 创作者备注 -->
+      <div class="form-group">
+        <span class="form-label">创作者备注</span>
+        <textarea id="sc-panel-creatornotes" placeholder="可选。仅展示，不参与提示词。" rows="2" style="line-height:1.6;resize:vertical"></textarea>
+      </div>
+    </div>
+
+    <!-- 扩展设定 tab -->
+    <div id="sc-edit-tab-extended" class="sc-edit-tab-content settings-tab-content hidden">
+      <!-- 总开关 -->
+      <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div>
+          <div style="font-size:14px;color:var(--text);margin-bottom:4px">启用扩展设定</div>
+          <div style="font-size:11px;color:var(--text-secondary);line-height:1.5">关闭后，本卡的节日/常驻/动态条目都不会注入。只影响本张单人卡，不影响世界观。</div>
+        </div>
+        <label style="position:relative;display:inline-flex;cursor:pointer;flex-shrink:0">
+          <input type="checkbox" id="sc-panel-ext-enabled" class="circle-check">
+          <span class="circle-check-ui"></span>
+        </label>
+      </div>
+      <!-- 编辑入口（跳到隐藏世界观的编辑面板）-->
+      <button type="button" onclick="SingleCard.openCardExtEdit()" style="width:100%;padding:14px 16px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:14px">
+        <span style="display:flex;align-items:center;gap:10px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+          编辑扩展设定（节日 / 常驻 / 动态）
+        </span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:8px;line-height:1.5">先点击右上角「保存」让角色有 ID 后，再编辑扩展设定。</div>
+    </div>
+  </div>
+</section>
+
+<!-- 角色编辑弹窗（v594 起作为兼容备用，新代码走 panel-single-card-edit）-->
 <div id="sc-edit-modal" class="modal hidden">
   <div class="modal-content" style="max-height:90vh;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0">
@@ -1573,14 +1666,16 @@
     <!-- 总结面板 -->
     <section id="panel-summary" class="panel">
       <div class="panel-content">
-        <div id="summary-content"></div>
-        <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
-          <h3 style="font-size:14px;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:6px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-          归档记录
-        </h3>
-          <div id="archive-list"></div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+          <button class="btn-icon" onclick="UI.showPanel('chat','back')" style="width:fit-content;padding:8px 12px;display:flex;align-items:center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <h2 style="margin:0;font-size:24px;color:var(--text);display:flex;align-items:center;gap:8px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+            剧情总结
+          </h2>
         </div>
+        <div id="summary-content"></div>
       </div>
     </section>
 
@@ -2026,7 +2121,7 @@
       <div class="memory-tabs" style="margin-bottom:16px">
         <button class="wv-edit-tab-btn active" data-tab="basic" onclick="Worldview.switchEditTab('basic')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M16 4h2a2 2 0 0 1 2 2v2"/><path d="M21.34 15.664a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/><path d="M8 22H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg> 基础设定</button>
 <button class="wv-edit-tab-btn" data-tab="detail" onclick="Worldview.switchEditTab('detail')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg> 详细设定</button>
-<button class="wv-edit-tab-btn" data-tab="special" onclick="Worldview.switchEditTab('special')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg> 特殊设定</button>
+<button class="wv-edit-tab-btn" data-tab="special" onclick="Worldview.switchEditTab('special')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg> 扩展设定</button>
       </div>
       
       <div style="overflow-y:auto;max-height:calc(100vh - 160px);padding-right:4px">
@@ -2058,10 +2153,10 @@
             </div>
 
             <div style="padding-top:16px;margin-top:16px">
-              <div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> 全图角色</div>
+              <div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> 常驻角色</div>
               <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">不受地区限制，本世界观下全程常驻，每轮注入 AI。适合小世界观 / 无势力结构的作品。</div>
               <div id="wv-global-npcs-container"></div>
-              <button type="button" onclick="Worldview.addGlobalNpc()" style="width:100%;padding:10px;margin-top:6px;background:var(--bg-tertiary);border:1px dashed var(--border);border-radius:8px;color:var(--text-secondary);font-size:13px;cursor:pointer;font-family:inherit">+ 添加全图角色</button>
+              <button type="button" onclick="Worldview.addGlobalNpc()" style="width:100%;padding:10px;margin-top:6px;background:var(--bg-tertiary);border:1px dashed var(--border);border-radius:8px;color:var(--text-secondary);font-size:13px;cursor:pointer;font-family:inherit">+ 添加常驻角色</button>
             </div>
             
             <div style="padding-top:16px;margin-top:16px">
@@ -2122,29 +2217,87 @@
           <button type="button" onclick="Worldview.addRegion()" style="width:100%;padding:12px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:14px;margin-top:4px">+ 添加地区</button>
         </div>
         
-        <!-- 特殊设定Tab -->
+        <!-- 扩展设定Tab -->
 <div id="wv-edit-tab-special" class="wv-edit-tab-content settings-tab-content hidden">
-<!-- 节日设定 -->
-<div style="margin-bottom:24px">
-<div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 2v4"/><path d="M17 14h-6"/><path d="M13 18H7"/><path d="M7 14h.01"/><path d="M17 18h.01"/></svg> 节日设定</div>
-<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">命中游戏内日期时自动发送对应节日信息。</div>
-<div id="wv-festivals-container"></div>
-<button type="button" onclick="Worldview.addFestival()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加节日</button>
-</div>
-<!-- 自定义设定 -->
-<div>
-<div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.364 13.634a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506l4.013-4.009a1 1 0 0 0-3.004-3.004z"/><path d="M14.487 7.858A1 1 0 0 1 14 7V2"/><path d="M20 19.645V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l2.516 2.516"/><path d="M8 18h1"/></svg> 自定义设定</div>
-<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">手动控制是否发送，开关打开时注入系统提示词。</div>
-<div id="wv-customs-container"></div>
-<button type="button" onclick="Worldview.addCustom()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加自定义设定</button>
-</div>
-<!-- 知识设定 -->
-<div style="margin-top:16px">
-<div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg> 知识设定</div>
-<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">最近 2 轮对话出现关键词时，自动注入对应内容。</div>
-<div id="wv-knowledges-container"></div>
-<button type="button" onclick="Worldview.addKnowledge()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加知识设定</button>
-</div>
+  <!-- 搜索框 + 添加菜单 -->
+  <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;position:relative">
+    <div style="position:relative;flex:1">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text-secondary);pointer-events:none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="wv-ext-search" placeholder="搜索名称 / 关键词 / 内容..." oninput="Worldview.filterExtended()" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 28px;font-size:13px;outline:none">
+      <button type="button" id="wv-ext-search-clear" onclick="Worldview.clearExtendedSearch()" class="hidden" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-secondary);cursor:pointer;padding:2px;line-height:0">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <button type="button" onclick="Worldview.toggleExtAddMenu(event)" title="添加条目" style="flex:0 0 auto;width:34px;height:34px;background:var(--accent);border:none;border-radius:6px;color:#111;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+    </button>
+    <button type="button" onclick="Worldview.toggleExtIoMenu(event)" title="导入导出" style="flex:0 0 auto;width:34px;height:34px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+    </button>
+    <!-- 添加菜单（右上角弹出） -->
+    <div id="wv-ext-add-menu" class="hidden" style="position:absolute;top:calc(100% + 4px);right:0;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px;z-index:100;min-width:140px;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
+      <div onclick="Worldview.addFromMenu('festival')" style="padding:8px 10px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 2v4"/></svg>
+        节日设定
+      </div>
+      <div onclick="Worldview.addFromMenu('constant')" style="padding:8px 10px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+        常驻条目
+      </div>
+      <div onclick="Worldview.addFromMenu('dynamic')" style="padding:8px 10px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+        动态条目
+      </div>
+    </div>
+    <!-- 导入导出菜单（右上角弹出） -->
+    <div id="wv-ext-io-menu" class="hidden" style="position:absolute;top:calc(100% + 4px);right:0;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px;z-index:100;min-width:140px;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
+      <div onclick="Worldview.exportExtended()" style="padding:8px 10px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        导出扩展设定
+      </div>
+      <div onclick="Worldview.importExtended()" style="padding:8px 10px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        导入扩展设定
+      </div>
+    </div>
+  </div>
+
+  <!-- 子 tab 栏 -->
+  <div class="memory-tabs" style="margin-bottom:12px;display:flex;gap:6px">
+    <button class="wv-ext-subtab-btn active" data-subtab="festival" onclick="Worldview.switchExtSubtab('festival')" style="flex:1;padding:8px 10px;font-size:12px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 2v4"/></svg>
+      节日 <span id="wv-ext-count-festival" style="font-size:11px;opacity:0.7"></span>
+    </button>
+    <button class="wv-ext-subtab-btn" data-subtab="constant" onclick="Worldview.switchExtSubtab('constant')" style="flex:1;padding:8px 10px;font-size:12px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+      常驻 <span id="wv-ext-count-constant" style="font-size:11px;opacity:0.7"></span>
+    </button>
+    <button class="wv-ext-subtab-btn" data-subtab="dynamic" onclick="Worldview.switchExtSubtab('dynamic')" style="flex:1;padding:8px 10px;font-size:12px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      动态 <span id="wv-ext-count-dynamic" style="font-size:11px;opacity:0.7"></span>
+    </button>
+  </div>
+
+  <!-- 节日设定 -->
+  <div class="wv-ext-subtab-content" data-subtab="festival">
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">命中游戏内日期时自动发送对应节日信息。</div>
+    <div id="wv-festivals-container"></div>
+    <button type="button" onclick="Worldview.addFestival()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加节日</button>
+  </div>
+
+  <!-- 常驻知识设定 -->
+  <div class="wv-ext-subtab-content hidden" data-subtab="constant">
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">每轮自动注入系统提示词，可单独开关。</div>
+    <div id="wv-customs-container"></div>
+    <button type="button" onclick="Worldview.addCustom()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加常驻条目</button>
+  </div>
+
+  <!-- 动态知识设定 -->
+  <div class="wv-ext-subtab-content hidden" data-subtab="dynamic">
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">最近 2 轮对话命中关键词时自动注入。</div>
+    <div id="wv-knowledges-container"></div>
+    <button type="button" onclick="Worldview.addKnowledge()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加动态条目</button>
+  </div>
 </div>
       </div>
     </div>
@@ -2295,7 +2448,7 @@
 <div id="wv-viewer-npcs"></div>
 </div>
         
-        <!-- 特殊设定 -->
+        <!-- 扩展设定 -->
         <div id="wv-viewer-tab-v-special" class="wv-viewer-tab-content settings-tab-content hidden">
           <div id="wv-viewer-special"></div>
         </div>
@@ -2983,6 +3136,7 @@ document.addEventListener('click', (e) => {
 </div>
 <div class="form-group"><span class="form-label">节日名称</span><input type="text" id="wv-fest-modal-name" placeholder="如：光之祭"></div>
 <div class="form-group"><span class="form-label">日期</span><input type="text" id="wv-fest-modal-date" placeholder="如：4月15日 或 2046年4月15日"></div>
+<div class="form-group" style="display:flex;align-items:center;gap:8px;flex-direction:row"><label for="wv-fest-modal-enabled" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="wv-fest-modal-enabled" style="position:absolute;opacity:0;pointer-events:none"><span id="wv-fest-modal-enabled-ui" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex:0 0 20px;transition:all 0.15s ease;background:transparent"></span><span class="form-label" style="margin:0">启用此节日</span></label></div>
 <div class="form-group" style="display:flex;align-items:center;gap:8px;flex-direction:row"><label for="wv-fest-modal-yearly" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="wv-fest-modal-yearly" style="position:absolute;opacity:0;pointer-events:none"><span id="wv-fest-modal-yearly-ui" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex:0 0 20px;transition:all 0.15s ease;background:transparent"></span><span class="form-label" style="margin:0">每年重复</span></label></div>
 <div class="form-group"><span class="form-label">节日内容</span><div style="position:relative;width:100%"><textarea id="wv-fest-modal-content" rows="6" placeholder="节日描述、风俗、影响..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-fest-modal-content','节日内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
 <div class="modal-actions" style="flex-shrink:0;margin-top:12px">
@@ -2997,14 +3151,33 @@ document.addEventListener('click', (e) => {
 <div id="wv-knowledge-modal" class="modal hidden">
 <div class="modal-content">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-<h3>编辑知识设定</h3>
+<h3 id="wv-know-modal-title">编辑动态条目</h3>
 <button class="btn-icon" onclick="Worldview.deleteKnowledgeFromModal()" style="width:32px;height:32px;padding:4px;color:var(--danger)">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
 </button>
 </div>
 <div class="form-group"><span class="form-label">条目名称</span><input type="text" id="wv-know-modal-name" placeholder="如：黑刃会"></div>
-<div class="form-group"><span class="form-label">触发关键词 <span style="font-size:11px;color:var(--text-secondary)">（多个用逗号或空格分隔）</span></span><input type="text" id="wv-know-modal-keys" placeholder="如：黑刃, 黑刃会, 黑色刀刃"></div>
-<div class="form-group"><span class="form-label">注入内容</span><div style="position:relative;width:100%"><textarea id="wv-know-modal-content" rows="7" placeholder="命中关键词时注入到提示词的内容..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-know-modal-content','注入内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
+<!-- 关键词触发开关 -->
+<div class="form-group" style="display:flex;align-items:center;gap:8px;flex-direction:row"><label for="wv-know-modal-trigger" style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1"><input type="checkbox" id="wv-know-modal-trigger" style="position:absolute;opacity:0;pointer-events:none" checked><span id="wv-know-modal-trigger-ui" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex:0 0 20px;transition:all 0.15s ease;background:transparent"></span><span class="form-label" style="margin:0">启用关键词触发<span style="font-size:11px;color:var(--text-secondary);margin-left:6px">（关 = 常驻注入）</span></span></label></div>
+<!-- 关键词输入（仅在关键词触发开启时显示） -->
+<div class="form-group" id="wv-know-modal-keys-row"><span class="form-label">触发关键词 <span style="font-size:11px;color:var(--text-secondary)">（多个用逗号或空格分隔）</span></span><input type="text" id="wv-know-modal-keys" placeholder="如：黑刃, 黑刃会, 黑色刀刃"></div>
+<!-- 注入位置 -->
+<div class="form-group"><span class="form-label">注入位置</span>
+  <div style="position:relative">
+    <input type="hidden" id="wv-know-modal-position" value="system_top">
+    <button type="button" class="custom-select-btn" onclick="Worldview.toggleKnowPositionDropdown()">
+      <span id="wv-know-modal-position-label" style="display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> 系统顶部</span>
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+    </button>
+    <div id="wv-know-modal-position-dropdown" class="custom-dropdown hidden">
+      <div class="custom-dropdown-item" onclick="Worldview.selectKnowPosition('system_top')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>系统顶部</div>
+      <div class="custom-dropdown-item" onclick="Worldview.selectKnowPosition('system_bottom')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle"><path d="M3 6h18M3 12h18M3 18h18"/></svg>系统底部</div>
+      <div class="custom-dropdown-item" onclick="Worldview.selectKnowPosition('depth')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>按聊天深度插入</div>
+    </div>
+  </div>
+</div>
+<div class="form-group" id="wv-know-modal-depth-row" style="display:none"><span class="form-label">深度 <span style="font-size:11px;color:var(--text-secondary)">（0=最新消息前）</span></span><input type="number" id="wv-know-modal-depth" value="0" min="0"></div>
+<div class="form-group"><span class="form-label">注入内容</span><div style="position:relative;width:100%"><textarea id="wv-know-modal-content" rows="7" placeholder="注入到提示词的内容..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-know-modal-content','注入内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
 <div class="modal-actions" style="flex-shrink:0;margin-top:12px">
 <button onclick="Worldview.closeKnowledgeModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
 <button onclick="Worldview.saveKnowledgeFromModal()" style="flex:1">保存</button>
@@ -3015,14 +3188,35 @@ document.addEventListener('click', (e) => {
 <div id="wv-custom-modal" class="modal hidden">
 <div class="modal-content">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-<h3>编辑自定义设定</h3>
+<h3 id="wv-cust-modal-title">编辑常驻条目</h3>
 <button class="btn-icon" onclick="Worldview.deleteCustomFromModal()" style="width:32px;height:32px;padding:4px;color:var(--danger)">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
 </button>
 </div>
-<div class="form-group"><span class="form-label">设定名称</span><input type="text" id="wv-cust-modal-name" placeholder="如：魔法体系"></div>
-<div class="form-group"><span class="form-label">设定内容</span><div style="position:relative;width:100%"><textarea id="wv-cust-modal-content" rows="7" placeholder="设定描述..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-cust-modal-content','设定内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
-<div class="form-group" style="display:flex;align-items:center;gap:8px;flex-direction:row"><label for="wv-cust-modal-enabled" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="wv-cust-modal-enabled" style="position:absolute;opacity:0;pointer-events:none"><span id="wv-cust-modal-enabled-ui" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex:0 0 20px;transition:all 0.15s ease;background:transparent"></span><span class="form-label" style="margin:0">启用设定</span></label></div>
+<div class="form-group"><span class="form-label">条目名称</span><input type="text" id="wv-cust-modal-name" placeholder="如：魔法体系"></div>
+<!-- 启用开关 -->
+<div class="form-group" style="display:flex;align-items:center;gap:8px;flex-direction:row"><label for="wv-cust-modal-enabled" style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1"><input type="checkbox" id="wv-cust-modal-enabled" style="position:absolute;opacity:0;pointer-events:none"><span id="wv-cust-modal-enabled-ui" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex:0 0 20px;transition:all 0.15s ease;background:transparent"></span><span class="form-label" style="margin:0">启用条目</span></label></div>
+<!-- 关键词触发开关 -->
+<div class="form-group" style="display:flex;align-items:center;gap:8px;flex-direction:row"><label for="wv-cust-modal-trigger" style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1"><input type="checkbox" id="wv-cust-modal-trigger" style="position:absolute;opacity:0;pointer-events:none"><span id="wv-cust-modal-trigger-ui" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex:0 0 20px;transition:all 0.15s ease;background:transparent"></span><span class="form-label" style="margin:0">启用关键词触发<span style="font-size:11px;color:var(--text-secondary);margin-left:6px">（开 = 转为动态）</span></span></label></div>
+<!-- 关键词输入（仅在关键词触发开启时显示） -->
+<div class="form-group" id="wv-cust-modal-keys-row" style="display:none"><span class="form-label">触发关键词 <span style="font-size:11px;color:var(--text-secondary)">（多个用逗号或空格分隔）</span></span><input type="text" id="wv-cust-modal-keys" placeholder="如：魔法, 法术, 咒语"></div>
+<!-- 注入位置 -->
+<div class="form-group"><span class="form-label">注入位置</span>
+  <div style="position:relative">
+    <input type="hidden" id="wv-cust-modal-position" value="system_top">
+    <button type="button" class="custom-select-btn" onclick="Worldview.toggleCustPositionDropdown()">
+      <span id="wv-cust-modal-position-label" style="display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> 系统顶部</span>
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+    </button>
+    <div id="wv-cust-modal-position-dropdown" class="custom-dropdown hidden">
+      <div class="custom-dropdown-item" onclick="Worldview.selectCustPosition('system_top')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>系统顶部</div>
+      <div class="custom-dropdown-item" onclick="Worldview.selectCustPosition('system_bottom')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle"><path d="M3 6h18M3 12h18M3 18h18"/></svg>系统底部</div>
+      <div class="custom-dropdown-item" onclick="Worldview.selectCustPosition('depth')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>按聊天深度插入</div>
+    </div>
+  </div>
+</div>
+<div class="form-group" id="wv-cust-modal-depth-row" style="display:none"><span class="form-label">深度 <span style="font-size:11px;color:var(--text-secondary)">（0=最新消息前）</span></span><input type="number" id="wv-cust-modal-depth" value="0" min="0"></div>
+<div class="form-group"><span class="form-label">条目内容</span><div style="position:relative;width:100%"><textarea id="wv-cust-modal-content" rows="7" placeholder="条目描述..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-cust-modal-content','条目内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
 <div class="modal-actions" style="flex-shrink:0;margin-top:12px">
 <button onclick="Worldview.closeCustomModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
 <button onclick="Worldview.saveCustomFromModal()" style="flex:1">保存</button>

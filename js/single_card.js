@@ -15,6 +15,12 @@ const SingleCard = (() => {
     if (!card.created) card.created = Date.now();
     card.updated = Date.now();
     await DB.put('singleCards', card);
+    // v596：自动确保对应的隐藏世界观存在（用于扩展设定）
+    try {
+      if (typeof Worldview !== 'undefined' && Worldview.ensureHiddenWvForCard) {
+        await Worldview.ensureHiddenWvForCard(card.id, card.name);
+      }
+    } catch(e) { console.warn('[SingleCard] 同步隐藏世界观失败', e); }
     // 清空所有引用这张卡的对话头像缓存
     try {
       const list = (typeof Conversations !== 'undefined') ? Conversations.getList() : [];
@@ -33,6 +39,12 @@ const SingleCard = (() => {
   }
   async function remove(id) {
     await DB.del('singleCards', id);
+    // v596：连带删除对应的隐藏世界观
+    try {
+      if (typeof Worldview !== 'undefined' && Worldview.deleteHiddenWvForCard) {
+        await Worldview.deleteHiddenWvForCard(id);
+      }
+    } catch(e) { console.warn('[SingleCard] 删除隐藏世界观失败', e); }
   }
 
   // 列表渲染
@@ -77,19 +89,20 @@ const SingleCard = (() => {
     }
   }
 
-  // 新建
+  // 新建（v594：走新 panel）
   function create() {
+    _scAutoSave.cancel();
     _editingId = null;
-    _openEditModal({ name: '', aliases: '', detail: '', avatar: '' });
+    _openEditPanel({ name: '', aliases: '', detail: '', avatar: '', extEnabled: true });
   }
 
-  // 编辑
+  // 编辑（v594：改走全屏 panel）
   async function edit(id) {
     _scAutoSave.cancel(); // 切卡时取消上一张的挂起自动保存
     const card = await get(id);
     if (!card) { UI.showToast('未找到此角色'); return; }
     _editingId = id;
-    _openEditModal(card);
+    _openEditPanel(card);
   }
 
   // 单人卡自动保存（仅编辑已有卡时触发，新建卡无 ID 不自动保存）
@@ -104,13 +117,29 @@ const SingleCard = (() => {
         const card = await get(targetId);
         if (!card) return;
         if (_editingId !== targetId) return; // 再检查一次：如果中间切卡了就放弃
-        card.name = (document.getElementById('sc-edit-name')?.value || '').trim() || card.name;
-        card.aliases = document.getElementById('sc-edit-aliases')?.value || '';
-        card.detail = document.getElementById('sc-edit-detail')?.value || '';
-        card.firstMes = document.getElementById('sc-edit-firstmes')?.value || '';
-        card.mesExample = document.getElementById('sc-edit-mesexample')?.value || '';
-        card.creator = document.getElementById('sc-edit-creator')?.value || '';
-        card.creatorNotes = document.getElementById('sc-edit-creatornotes')?.value || '';
+        // 优先读 panel 字段（v594），不存在再读旧 modal
+        const panelEl = document.getElementById('sc-panel-name');
+        if (panelEl && document.getElementById('panel-single-card-edit')?.classList.contains('active')) {
+          card.name = (panelEl.value || '').trim() || card.name;
+          card.aliases = document.getElementById('sc-panel-aliases')?.value || '';
+          card.detail = document.getElementById('sc-panel-detail')?.value || '';
+          card.firstMes = document.getElementById('sc-panel-firstmes')?.value || '';
+          card.mesExample = document.getElementById('sc-panel-mesexample')?.value || '';
+          card.creator = document.getElementById('sc-panel-creator')?.value || '';
+          card.creatorNotes = document.getElementById('sc-panel-creatornotes')?.value || '';
+          const extEl = document.getElementById('sc-panel-ext-enabled');
+          if (extEl) card.extEnabled = extEl.checked;
+          const avatarEl = document.querySelector('#sc-panel-avatar-preview img, #sc-panel-avatar-preview div');
+          if (avatarEl) card.avatar = avatarEl.dataset.value || '';
+        } else {
+          card.name = (document.getElementById('sc-edit-name')?.value || '').trim() || card.name;
+          card.aliases = document.getElementById('sc-edit-aliases')?.value || '';
+          card.detail = document.getElementById('sc-edit-detail')?.value || '';
+          card.firstMes = document.getElementById('sc-edit-firstmes')?.value || '';
+          card.mesExample = document.getElementById('sc-edit-mesexample')?.value || '';
+          card.creator = document.getElementById('sc-edit-creator')?.value || '';
+          card.creatorNotes = document.getElementById('sc-edit-creatornotes')?.value || '';
+        }
         if (_editingId !== targetId) return; // await save 前再检查
         await save(card);
       } catch(e) { console.warn('[SingleCard] 自动保存失败', e); }
@@ -124,14 +153,203 @@ const SingleCard = (() => {
   })();
 
   function _attachSCAutoSave() {
+    // 新 panel 自动保存绑定
+    const panel = document.getElementById('panel-single-card-edit');
+    if (panel) {
+      panel.querySelectorAll('input, textarea').forEach(el => {
+        el.removeEventListener('input', _scAutoSave);
+        el.addEventListener('input', _scAutoSave);
+      });
+      // 总开关切换也算改动
+      const ext = document.getElementById('sc-panel-ext-enabled');
+      if (ext) {
+        ext.removeEventListener('change', _scAutoSave);
+        ext.addEventListener('change', _scAutoSave);
+      }
+    }
+    // 旧 modal 自动保存绑定（兼容）
     const modal = document.getElementById('sc-edit-modal');
-    if (!modal) return;
-    modal.querySelectorAll('input, textarea').forEach(el => {
-      el.removeEventListener('input', _scAutoSave);
-      el.addEventListener('input', _scAutoSave);
-    });
+    if (modal) {
+      modal.querySelectorAll('input, textarea').forEach(el => {
+        el.removeEventListener('input', _scAutoSave);
+        el.addEventListener('input', _scAutoSave);
+      });
+    }
   }
 
+  // ===== v594 新 panel 入口 =====
+  function _openEditPanel(card) {
+    // 跳到 panel
+    UI.showPanel('single-card-edit');
+    // 标题
+    const titleEl = document.getElementById('sc-edit-title');
+    if (titleEl) titleEl.textContent = _editingId ? '编辑角色' : '新建角色';
+    // 删除按钮显隐（菜单里那个）
+    const delBtn = document.getElementById('sc-edit-delete-btn');
+    if (delBtn) delBtn.style.display = _editingId ? '' : 'none';
+    // 默认切到基础 tab
+    switchEditTab('basic');
+    // 填充字段
+    document.getElementById('sc-panel-name').value = card.name || '';
+    document.getElementById('sc-panel-aliases').value = card.aliases || '';
+    document.getElementById('sc-panel-detail').value = card.detail || '';
+    document.getElementById('sc-panel-firstmes').value = card.firstMes || '';
+    document.getElementById('sc-panel-mesexample').value = card.mesExample || '';
+    document.getElementById('sc-panel-creator').value = card.creator || '';
+    document.getElementById('sc-panel-creatornotes').value = card.creatorNotes || '';
+    // 头像
+    const avatarPreview = document.getElementById('sc-panel-avatar-preview');
+    if (card.avatar) {
+      avatarPreview.innerHTML = `<img src="${Utils.escapeHtml(card.avatar)}" data-value="${Utils.escapeHtml(card.avatar)}" style="width:80px;height:80px;border-radius:50%;object-fit:cover">`;
+    } else {
+      avatarPreview.innerHTML = `<div data-value="" style="width:80px;height:80px;border-radius:50%;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:32px">+</div>`;
+    }
+    // 扩展设定总开关（默认 true，旧卡没这字段视为开启）
+    const extEnabled = card.extEnabled !== false;
+    document.getElementById('sc-panel-ext-enabled').checked = extEnabled;
+    // 绑定自动保存
+    requestAnimationFrame(_attachSCAutoSave);
+    // 详情自适应高度
+    setTimeout(() => {
+      const ta = document.getElementById('sc-panel-detail');
+      if (ta) {
+        ta.style.height = 'auto';
+        ta.style.height = ta.scrollHeight + 'px';
+      }
+    }, 50);
+  }
+
+  function switchEditTab(name) {
+    document.querySelectorAll('.sc-edit-tab-content').forEach(el => el.classList.add('hidden'));
+    const target = document.getElementById('sc-edit-tab-' + name);
+    if (target) target.classList.remove('hidden');
+    document.querySelectorAll('.wv-edit-tab-btn[data-sctab]').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`.wv-edit-tab-btn[data-sctab="${name}"]`);
+    if (btn) btn.classList.add('active');
+  }
+
+  function toggleEditMoreMenu(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('sc-edit-more-menu');
+    if (!menu) return;
+    const willOpen = menu.classList.contains('hidden');
+    menu.classList.toggle('hidden');
+    if (willOpen) {
+      setTimeout(() => {
+        const onDocClick = (ev) => {
+          if (!menu.contains(ev.target)) {
+            menu.classList.add('hidden');
+            document.removeEventListener('click', onDocClick);
+          }
+        };
+        document.addEventListener('click', onDocClick);
+      }, 0);
+    }
+  }
+  function closeEditMoreMenu() {
+    const menu = document.getElementById('sc-edit-more-menu');
+    if (menu) menu.classList.add('hidden');
+  }
+
+  function closeEditPanel() {
+    _scAutoSave.cancel();
+    _editingId = null;
+    UI.showPanel('worldview', 'back');
+    if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
+      Worldview.switchWorldTab('char');
+    }
+  }
+
+  // v596：从扩展设定面板返回时，重新打开单人卡编辑面板（恢复状态）
+  async function restoreEditPanel() {
+    if (!_editingId) {
+      // 没有编辑中的卡，退回列表
+      UI.showPanel('worldview', 'back');
+      if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
+        Worldview.switchWorldTab('char');
+      }
+      return;
+    }
+    const card = await get(_editingId);
+    if (!card) {
+      UI.showPanel('worldview', 'back');
+      return;
+    }
+    _openEditPanel(card);
+  }
+
+  // v596：打开本卡扩展设定的编辑面板（进入对应的隐藏世界观）
+  async function openCardExtEdit() {
+    if (!_editingId) {
+      UI.showToast('请先保存角色，让它获得 ID 后再编辑扩展设定', 2500);
+      return;
+    }
+    // 先自动保存，防止跳转丢失基础 tab 的改动
+    try { _scAutoSave.cancel(); } catch(e) {}
+    try {
+      const card = await get(_editingId);
+      if (!card) { UI.showToast('未找到此角色'); return; }
+      const wv = await Worldview.ensureHiddenWvForCard(card.id, card.name);
+      if (!wv) { UI.showToast('初始化扩展设定失败'); return; }
+      // 跳到世界观编辑面板；标记返回路径
+      Worldview.openEdit(wv.id, { returnTo: 'single-card-edit' });
+    } catch(e) {
+      console.warn('[SingleCard] 打开扩展设定失败', e);
+      UI.showToast('打开失败：' + (e.message || e));
+    }
+  }
+
+  function pickAvatarPanel() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
+        const preview = document.getElementById('sc-panel-avatar-preview');
+        preview.innerHTML = `<img src="${dataUrl}" data-value="${dataUrl}" style="width:80px;height:80px;border-radius:50%;object-fit:cover">`;
+        // 触发自动保存
+        _scAutoSave();
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  }
+
+  // 从 panel 读字段并保存
+  async function savePanelForm() {
+    const name = document.getElementById('sc-panel-name').value.trim();
+    if (!name) { UI.showToast('请填写姓名'); return; }
+    const aliases = document.getElementById('sc-panel-aliases').value.trim();
+    const detail = document.getElementById('sc-panel-detail').value.trim();
+    const firstMes = (document.getElementById('sc-panel-firstmes')?.value || '').trim();
+    const mesExample = (document.getElementById('sc-panel-mesexample')?.value || '').trim();
+    const creator = (document.getElementById('sc-panel-creator')?.value || '').trim();
+    const creatorNotes = (document.getElementById('sc-panel-creatornotes')?.value || '').trim();
+    const avatarEl = document.querySelector('#sc-panel-avatar-preview img, #sc-panel-avatar-preview div');
+    const avatar = avatarEl ? (avatarEl.dataset.value || '') : '';
+    const extEnabled = document.getElementById('sc-panel-ext-enabled').checked;
+    const card = _editingId ? (await get(_editingId)) : {};
+    card.name = name;
+    card.aliases = aliases;
+    card.detail = detail;
+    card.avatar = avatar;
+    card.firstMes = firstMes;
+    card.mesExample = mesExample;
+    card.creator = creator;
+    card.creatorNotes = creatorNotes;
+    card.extEnabled = extEnabled;
+    if (_editingId) card.id = _editingId;
+    await save(card);
+    closeEditPanel();
+    await renderList();
+    UI.showToast('已保存');
+  }
+
+  // ===== 旧 modal 兼容入口（保留作回滚保险）=====
   function _openEditModal(card) {
     document.getElementById('sc-edit-name').value = card.name || '';
     document.getElementById('sc-edit-aliases').value = card.aliases || '';
@@ -197,7 +415,12 @@ const SingleCard = (() => {
     const ok = await UI.confirm('确定删除这个角色？相关对话不会被删除，但角色资料会丢失');
     if (!ok) return;
     await remove(_editingId);
-    closeEditModal();
+    // 兼容新旧入口
+    if (document.getElementById('panel-single-card-edit')?.classList.contains('active')) {
+      closeEditPanel();
+    } else {
+      closeEditModal();
+    }
     await renderList();
     UI.showToast('已删除');
   }
@@ -300,7 +523,7 @@ const SingleCard = (() => {
     input.click();
   }
 
-  // 解析 JSON 卡：兼容我们自家格式 + 酒馆 v1/v2
+  // 解析 JSON 卡：兼容自家格式 + 通用 v1/v2
   function _parseJsonCard(text) {
     let json;
     try { json = JSON.parse(text); } catch (e) { return null; }
@@ -308,13 +531,13 @@ const SingleCard = (() => {
     if (json.__format === 'tianshu_single_card_v1') {
       return json;
     }
-    return _normalizeTavernCard(json);
+    return _normalizeExternalCard(json);
   }
 
-  // 把酒馆卡的 JSON 对象映射到我们的格式
-  function _normalizeTavernCard(json) {
+  // 把外部 JSON 卡映射到本应用格式
+  function _normalizeExternalCard(json) {
     if (!json) return null;
-    // 酒馆 v2 把核心字段塞在 data 字段里
+    // v2 格式把核心字段塞在 data 字段里
     const v2 = (json.spec === 'chara_card_v2' && json.data) ? json.data : null;
     const src = v2 || json;
     const name = src.name || src.char_name || '未命名';
@@ -341,7 +564,7 @@ const SingleCard = (() => {
     };
   }
 
-  // 解析 PNG 卡（酒馆角色卡 PNG）
+  // 解析 PNG 卡（嵌入元数据的角色卡 PNG）
   async function _parsePngCard(file) {
     const buf = await file.arrayBuffer();
     const bytes = new Uint8Array(buf);
@@ -398,7 +621,7 @@ const SingleCard = (() => {
     }
     let json;
     try { json = JSON.parse(jsonStr); } catch (e) { throw new Error('卡片 JSON 解析失败'); }
-    const normalized = _normalizeTavernCard(json);
+    const normalized = _normalizeExternalCard(json);
     if (!normalized) throw new Error('卡片格式无法识别');
     // PNG 本体作为头像
     normalized.avatar = await _fileToDataUrl(file);
@@ -455,6 +678,7 @@ const SingleCard = (() => {
     const list = [];
     for (const wv of wvs) {
       if (wv.id === '__default_wv__') continue;
+      if (wv._hidden) continue;
       // 全图 NPC（不归属地区/势力）
       (wv.globalNpcs || []).forEach(n => {
         list.push({
@@ -589,6 +813,10 @@ const SingleCard = (() => {
     getAll, get, save, remove,
     renderList, create, edit, quickCreateConversation,
     closeEditModal, saveFromModal, deleteCurrent, pickAvatar,
+    // v594 新 panel 入口
+    closeEditPanel, savePanelForm, switchEditTab, toggleEditMoreMenu, closeEditMoreMenu, pickAvatarPanel,
+    // v596 扩展设定跳转
+    openCardExtEdit, restoreEditPanel,
     formatForPrompt,
     importCard, exportCurrent,
     switchCharSubtab, renderNpcAvatarList, getNpcAvatar, setNpcAvatar,

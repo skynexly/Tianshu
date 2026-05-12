@@ -100,7 +100,7 @@ async function _getMasksForCurrentWv() {
     // 分组：通用 + 各世界观（wvId 失效的归通用）
     const allWvs = (await DB.getAll('worldviews').catch(() => [])) || [];
     const wvById = {};
-    allWvs.forEach(w => { if (w && w.id) wvById[w.id] = w; });
+    allWvs.forEach(w => { if (w && w.id && !w._hidden) wvById[w.id] = w; });
 
     // groups: { 'general': [], 'wvId1': [], ... }
     const groups = { general: [] };

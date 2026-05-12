@@ -203,7 +203,7 @@ async function init() {
       await DB.put('worldviews', {
         id: '__default_wv__', name: '无世界观', description: '未挂世界观的对话',
         icon: '∅', iconImage: '',
-        regions: [], factions: [], npcs: [], festivals: [], customs: []
+        regions: [], factions: [], npcs: [], festivals: [], knowledges: []
       });
     } else if (existing.name === '默认世界观') {
       existing.name = '无世界观';

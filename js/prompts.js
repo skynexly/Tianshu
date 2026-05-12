@@ -468,9 +468,9 @@ const Prompts = (() => {
       UI.showToast('当前分组没有提示词', 1800);
       return;
     }
-    // 导出为"我们的原生格式 + 酒馆兼容字段"：prompts 数组每条同时带 injection_position/injection_depth/enabled
+    // 导出为"我们的原生格式 + 通用预设兼容字段"：prompts 数组每条同时带 injection_position/injection_depth/enabled
     const prompts = filtered.map(p => ({
-      // 酒馆兼容
+      // 通用预设兼容
       identifier: p.id,
       name: p.name,
       role: 'system',
@@ -482,7 +482,7 @@ const Prompts = (() => {
       _group: p.group || '',
       _position: p.position
     }));
-    // 也带一个 prompt_order 让酒馆能直接吃
+    // 也带一个 prompt_order 提供顺序信息
     const prompt_order = [{
       character_id: 100001,
       order: prompts.map(p => ({ identifier: p.identifier, enabled: p.enabled }))
@@ -508,7 +508,7 @@ const Prompts = (() => {
     UI.showToast(`已导出 ${prompts.length} 条提示词`, 2000);
   }
 
-  // ===== 导入酒馆预设 =====
+  // ===== 导入预设 =====
   async function importPreset(input) {
     const file = input.files?.[0];
     if (!file) return;
@@ -521,7 +521,7 @@ const Prompts = (() => {
       render();
     } catch(e) {
       console.error('[Prompts.importPreset]', e);
-      await UI.showAlert('导入失败', '文件不是合法的 JSON，或不符合酒馆预设/我们的导出格式。\n\n' + (e.message || ''));
+      await UI.showAlert('导入失败', '文件不是合法的 JSON，或格式不支持。\n\n' + (e.message || ''));
       input.value = '';
     }
   }
@@ -540,7 +540,7 @@ const Prompts = (() => {
     } else if (Array.isArray(data.prompts)) {
       promptsArr = data.prompts;
     }
-    // 酒馆 prompt_order：用第一个 character_id 的顺序（或者所有 enabled=true 的）
+    // prompt_order：用第一个 character_id 的顺序（或者所有 enabled=true 的）
     if (data.prompt_order && Array.isArray(data.prompt_order) && data.prompt_order.length > 0) {
       orderArr = data.prompt_order[0]?.order || null;
     }
@@ -558,7 +558,7 @@ const Prompts = (() => {
     for (const p of promptsArr) {
       const content = (p.content || '').trim();
       if (!content) { skipped++; continue; }
-      // 过滤酒馆纯系统占位（marker / system_prompt）
+      // 过滤纯系统占位（marker / system_prompt）
       if (p.marker || p.system_prompt === true) {
         // 系统占位条目内容多为空，已被上一个 if 滤掉。这里再保险跳过 chatHistory 类
         if (!content) { skipped++; continue; }

@@ -1585,6 +1585,12 @@ input[type="range"] {
   border-color: var(--accent-dim);
   color: var(--accent);
 }
+/* 扩展设定的子 tab（节日/常驻/动态） */
+.wv-ext-subtab-btn.active {
+  border-color: var(--accent-dim) !important;
+  color: var(--accent) !important;
+  background: var(--bg-secondary) !important;
+}
 /* 对话列表项 */
 .conv-item {
   display: flex;

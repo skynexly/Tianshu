@@ -383,9 +383,10 @@ function _isAppStillActive(appId) {
           parts.push('【节日设定】\n' + festStr);
         }
 
-        // 自定义设定（已开启的）
-        if (wv.customs && wv.customs.length > 0) {
-          const enabledCustoms = wv.customs.filter(c => c.enabled !== false);
+        // 自定义设定（已开启的常驻条目，v581：从合并后的 knowledges 筛 keywordTrigger=false）
+        const allKnowledges = wv.knowledges || wv.customs || [];
+        if (allKnowledges.length > 0) {
+          const enabledCustoms = allKnowledges.filter(c => !c.keywordTrigger && c.enabled !== false);
           if (enabledCustoms.length > 0) {
             const custStr = enabledCustoms.map(c => `${c.name || ''}：${c.content || ''}`).join('\n');
             parts.push('【自定义设定】\n' + custStr);
@@ -1835,7 +1836,7 @@ ${wvPrompt}` },
 
       if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
         const attached = await AttachedChars.resolveAll();
-        attached.forEach(c => add(c.name, c.type === 'npc' ? '挂载NPC' : '挂载角色'));
+        attached.forEach(c => add(c.name, c.type === 'npc' ? '常驻NPC' : '常驻角色'));
       }
 
       if (conv?.isSingle && conv.singleCharId) {

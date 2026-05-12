@@ -96,7 +96,7 @@ window.AttachedChars = (function() {
       const head = c.aliases ? `${c.name}（${c.aliases}）` : c.name;
       return `---\n${head}\n${c.detail}`;
     });
-    return '【挂载角色（常驻）】\n以下角色在本对话中常驻出现，不受地区限制。请根据场景需要自然引入，不必强行让所有角色都登场。\n\n' + parts.join('\n\n');
+    return '【常驻角色】\n以下角色在本对话中常驻出现，不受地区限制。请根据场景需要自然引入，不必强行让所有角色都登场。\n\n' + parts.join('\n\n');
   }
 
   // ===== UI：Modal =====
@@ -148,7 +148,7 @@ window.AttachedChars = (function() {
       <button onclick="AttachedChars._switchTab('${key}')"
         style="padding:10px 14px;background:none;border:none;border-bottom:2px solid ${_activeTab === key ? 'var(--accent)' : 'transparent'};color:${_activeTab === key ? 'var(--accent)' : 'var(--text-secondary)'};font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">${label}</button>
     `;
-    let html = mkTab('list', '已挂载') + mkTab('addCard', '添加角色');
+    let html = mkTab('list', '已添加') + mkTab('addCard', '添加角色');
 if (isSingle) html += mkTab('addNpc', '添加世界观角色');
     tabsEl.innerHTML = html;
   }
@@ -173,7 +173,7 @@ if (isSingle) html += mkTab('addNpc', '添加世界观角色');
   async function _renderListHtml() {
     const resolved = await resolveAll();
     if (resolved.length === 0) {
-      return `<div style="text-align:center;color:var(--text-secondary);font-size:13px;padding:40px 0">还没有挂载任何角色<br><span style="font-size:11px;opacity:.7">点击上方「添加角色」添加</span></div>`;
+      return `<div style="text-align:center;color:var(--text-secondary);font-size:13px;padding:40px 0">还没有添加任何角色<br><span style="font-size:11px;opacity:.7">点击上方「添加角色」添加</span></div>`;
     }
     return resolved.map(c => {
       const avatar = c.avatar
@@ -211,7 +211,7 @@ if (isSingle) html += mkTab('addNpc', '添加世界观角色');
           <div style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml((card.detail || '').slice(0, 50))}</div>
         </div>
         ${attached
-          ? `<span style="font-size:11px;color:var(--text-secondary);padding:6px 10px">已挂载</span>`
+          ? `<span style="font-size:11px;color:var(--text-secondary);padding:6px 10px">已添加</span>`
           : `<button onclick="AttachedChars._onAddCard('${card.id}')" style="padding:6px 10px;background:var(--accent);border:none;border-radius:6px;color:var(--bg);font-size:12px;cursor:pointer;font-family:inherit">添加</button>`}
       </div>`;
     }).join('');
@@ -220,7 +220,7 @@ if (isSingle) html += mkTab('addNpc', '添加世界观角色');
   async function _renderAddNpcHtml() {
     const conv = _getCurrentConv();
     if (!conv || !conv.isSingle) {
-      return `<div style="text-align:center;color:var(--text-secondary);font-size:13px;padding:40px 0">群像模式只能挂载角色</div>`;
+      return `<div style="text-align:center;color:var(--text-secondary);font-size:13px;padding:40px 0">群像模式只支持常驻角色</div>`;
     }
     const wvId = conv.singleWorldviewId;
     if (!wvId) {
@@ -261,7 +261,7 @@ if (isSingle) html += mkTab('addNpc', '添加世界观角色');
           <div style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(regionName)} · ${Utils.escapeHtml(factionName)}</div>
         </div>
         ${attached
-          ? `<span style="font-size:11px;color:var(--text-secondary);padding:6px 10px">已挂载</span>`
+          ? `<span style="font-size:11px;color:var(--text-secondary);padding:6px 10px">已添加</span>`
           : `<button onclick="AttachedChars._onAddNpc('${npc.id}','${wvId}')" style="padding:6px 10px;background:var(--accent);border:none;border-radius:6px;color:var(--bg);font-size:12px;cursor:pointer;font-family:inherit">添加</button>`}
       </div>`;
     }).join('');

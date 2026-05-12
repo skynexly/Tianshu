@@ -162,7 +162,7 @@ const Chat = (() => {
 \`\`\`
 当前相关角色
 （角色姓名，每行写一个，若无则写无）
-（此处需要列出在场角色和提到的角色；禁止写“NPC”作为姓名占位）
+（此处需要列出在场角色和提到的角色；不包含 {{user}}；禁止写“NPC”作为姓名占位）
 \`\`\`
 
 ---
@@ -979,28 +979,118 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       }
     }
 
-    // 节日/自定义设定注入（紧贴用户最新消息前，depth 0）— 非文游模式跳过
+    // 节日 + 扩展条目（按 position 分流）注入 — 非文游模式跳过
     if (isGameMode) {
       try {
       const currentWv = isSingleConv ? singleWv : await Worldview.getCurrent();
       if (currentWv) {
         // 单人模式按开关控制
         const sendFestival = isSingleConv ? !!singleSettings.enableFestival : true;
-const sendCustom = isSingleConv ? !!singleSettings.enableCustom : true;
-const sendKnowledge = isSingleConv ? !!singleSettings.enableKnowledge : true;
-const festivalText = sendFestival ? _buildFestivalPrompt(currentWv.festivals || [], messages) : '';
-const customText = sendCustom ? _buildCustomPrompt(currentWv.customs || []) : '';
-const knowledgeText = sendKnowledge ? _buildKnowledgePrompt(currentWv.knowledges || [], messages) : '';
-const timeSensitive = [festivalText, customText, knowledgeText].filter(Boolean).join('\n\n');
-if (timeSensitive) {
-// 插到最后一条用户消息前面
-const insertIdx = apiMessages.length - 1; // 用户最新消息是最后一条
-if (insertIdx > 0) {
-apiMessages.splice(insertIdx, 0, { role: 'system', content: timeSensitive });
-}
-}
+        const sendCustom = isSingleConv ? !!singleSettings.enableCustom : true;
+        const sendKnowledge = isSingleConv ? !!singleSettings.enableKnowledge : true;
+        // 节日：depth=3 注入（v588，弱化存在感，不再贴脸）
+        const festivalText = sendFestival ? _buildFestivalPrompt(currentWv.festivals || [], messages) : '';
+        if (festivalText) {
+          const FESTIVAL_DEPTH = 3;
+          // 找第一个非 system 消息的位置作为最早插入边界（避免插进 system 块里）
+          let firstNonSys = 0;
+          while (firstNonSys < apiMessages.length && apiMessages[firstNonSys].role === 'system') firstNonSys++;
+          const insertIdx = Math.max(firstNonSys, apiMessages.length - FESTIVAL_DEPTH);
+          if (insertIdx >= 0 && insertIdx <= apiMessages.length) {
+            apiMessages.splice(insertIdx, 0, { role: 'system', content: festivalText });
+          }
+        }
+        // 扩展条目：按 position 分流（v587）
+        // 启用条件：常驻=sendCustom，动态=sendKnowledge；如有任一开启，把对应条目纳入
+        const wantSrc = (currentWv.knowledges || []).filter(k => {
+          if (!k || k.enabled === false) return false;
+          if (k.keywordTrigger) return sendKnowledge;
+          return sendCustom;
+        });
+        if (wantSrc.length > 0) {
+          const extInj = _buildExtendedInjections(wantSrc, messages);
+          // system_top：放进 apiMessages 最前面（紧跟原有 system）
+          // 找到第一条非 system 的位置，插在它前面
+          if (extInj.systemTop.length > 0) {
+            let firstNonSystemIdx = apiMessages.findIndex(m => m.role !== 'system');
+            if (firstNonSystemIdx === -1) firstNonSystemIdx = apiMessages.length;
+            for (const c of extInj.systemTop.reverse()) {
+              apiMessages.splice(firstNonSystemIdx, 0, { role: 'system', content: c });
+            }
+          }
+          // system_bottom：放进对话历史之前、所有 system 之后
+          if (extInj.systemBottom.length > 0) {
+            let firstNonSystemIdx = apiMessages.findIndex(m => m.role !== 'system');
+            if (firstNonSystemIdx === -1) firstNonSystemIdx = apiMessages.length;
+            for (const c of extInj.systemBottom) {
+              apiMessages.splice(firstNonSystemIdx, 0, { role: 'system', content: c });
+              firstNonSystemIdx++;
+            }
+          }
+          // depth：按深度从对话末尾插入
+          for (const [depthStr, contents] of Object.entries(extInj.depths)) {
+            const depth = parseInt(depthStr) || 0;
+            const insertIdx = apiMessages.length - depth;
+            if (insertIdx > 0 && insertIdx <= apiMessages.length) {
+              for (const c of contents.reverse()) {
+                apiMessages.splice(insertIdx, 0, { role: 'system', content: c });
+              }
+            }
+          }
+        }
+        // v596：单人卡的隐藏世界观（扩展设定）注入
+        if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
+          try {
+            const _card = await SingleCard.get(singleSettings.charId);
+            if (_card && _card.extEnabled !== false && singleSettings.enableCardExtended !== false) {
+              const _hiddenWv = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
+              if (_hiddenWv) {
+                // 节日（depth=3）
+                const _festText = _buildFestivalPrompt(_hiddenWv.festivals || [], messages);
+                if (_festText) {
+                  const FESTIVAL_DEPTH = 3;
+                  let firstNonSys = 0;
+                  while (firstNonSys < apiMessages.length && apiMessages[firstNonSys].role === 'system') firstNonSys++;
+                  const insertIdx = Math.max(firstNonSys, apiMessages.length - FESTIVAL_DEPTH);
+                  if (insertIdx >= 0 && insertIdx <= apiMessages.length) {
+                    apiMessages.splice(insertIdx, 0, { role: 'system', content: _festText });
+                  }
+                }
+                // 扩展条目（卡级 + 对话级总开关都开才注入）
+                const _cardKnow = (_hiddenWv.knowledges || []).filter(k => k && k.enabled !== false);
+                if (_cardKnow.length > 0) {
+                  const _extInj = _buildExtendedInjections(_cardKnow, messages);
+                  if (_extInj.systemTop.length > 0) {
+                    let firstNonSysIdx = apiMessages.findIndex(m => m.role !== 'system');
+                    if (firstNonSysIdx === -1) firstNonSysIdx = apiMessages.length;
+                    for (const c of _extInj.systemTop.reverse()) {
+                      apiMessages.splice(firstNonSysIdx, 0, { role: 'system', content: c });
+                    }
+                  }
+                  if (_extInj.systemBottom.length > 0) {
+                    let firstNonSysIdx = apiMessages.findIndex(m => m.role !== 'system');
+                    if (firstNonSysIdx === -1) firstNonSysIdx = apiMessages.length;
+                    for (const c of _extInj.systemBottom) {
+                      apiMessages.splice(firstNonSysIdx, 0, { role: 'system', content: c });
+                      firstNonSysIdx++;
+                    }
+                  }
+                  for (const [depthStr, contents] of Object.entries(_extInj.depths)) {
+                    const depth = parseInt(depthStr) || 0;
+                    const insertIdx = apiMessages.length - depth;
+                    if (insertIdx > 0 && insertIdx <= apiMessages.length) {
+                      for (const c of contents.reverse()) {
+                        apiMessages.splice(insertIdx, 0, { role: 'system', content: c });
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch(e) { console.warn('[Chat] 单人卡扩展设定注入失败:', e); }
+        }
       }
-    } catch(e) { console.warn('[Chat] 节日注入失败:', e); }
+    } catch(e) { console.warn('[Chat] 扩展条目注入失败:', e); }
     } // isGameMode
 
     // 手机操作日志：只读"最后一条 user 消息"的 phoneLogSnapshot（方案B）
@@ -1359,9 +1449,11 @@ const updateLastExtracted = options.updateLastExtracted !== false;
     } else {
       if (lastExtractedMsgId) {
         const lastIdx = messages.findIndex(m => m.id === lastExtractedMsgId);
-        toExtract = lastIdx >= 0 ? messages.slice(lastIdx + 1) : messages.slice(-20);
+        // 增量：从上次提取的下一条到现在；找不到游标时回退取全部，避免漏前段
+        toExtract = lastIdx >= 0 ? messages.slice(lastIdx + 1) : messages.slice();
       } else {
-        toExtract = messages.slice(-20);
+        // v609：首次提取必须从对话开头开始，不能硬截 20 条，否则 18 轮提一次会丢前 16 条
+        toExtract = messages.slice();
       }
     }
 
@@ -3000,6 +3092,9 @@ menu.classList.add('hidden');
   // 构建节日提示（只注入时间命中的节日）
   function _buildFestivalPrompt(festivals, msgs) {
     if (!festivals || festivals.length === 0) return '';
+    // 过滤禁用的节日（v592）
+    festivals = festivals.filter(f => f && f.enabled !== false);
+    if (festivals.length === 0) return '';
     const gameDate = _extractGameDate(msgs || []);
     if (!gameDate) {
       // 没有游戏时间（比如第一轮），全部列出让AI自行判断
@@ -3029,32 +3124,38 @@ menu.classList.add('hidden');
     return `【世界观·节日提醒】\n当前游戏时间附近有以下节日正在发生或即将到来：\n${lines.join('\n')}\n\n融入方式（不要生硬提及，而是让节日成为世界的一部分）：\n- 环境：街道装饰、商铺活动、人流变化（节假日景点商场拥挤、学生社畜讨论假期安排）\n- NPC行为：NPC可能主动做节日相关的事（如花醒节送花、誓约之日去民政局排队）\n- 旁白补充：在NPC行为或场景中自然附带一句节日习俗说明\n- 社会氛围：电视/网络/路人对话中出现节日相关话题\n根据当前场景选择最合适的方式，不必每种都用。`;
   }
 
-  // 构建自定义设定提示（只发启用的）
+  // 构建自定义设定提示（只发启用的常驻条目）
+// v581：从合并后的 knowledges 数组里筛 keywordTrigger=false 且 enabled=true 的条目
+// v587：此函数仅用于 showContext 等简单场景；send() 路径走 _buildExtendedInjections 按位置分流
 function _buildCustomPrompt(customs) {
 if (!customs || customs.length === 0) return '';
-const enabled = customs.filter(c => c.enabled);
+const enabled = customs.filter(c => c && !c.keywordTrigger && c.enabled);
 if (enabled.length === 0) return '';
 const lines = enabled.map(c => `- ${c.name}：${c.content}`);
-return `【世界观·特殊设定（当前生效）】\n${lines.join('\n')}`;
+return `【世界观·扩展设定（当前生效）】\n${lines.join('\n')}`;
 }
 
 // 构建知识设定索引（每轮发标题列表，告诉AI有哪些条目存在）
+// v581：只统计动态条目（keywordTrigger=true）
 function _buildKnowledgeIndex(knowledges) {
 if (!knowledges || knowledges.length === 0) return '';
-const names = knowledges.map(k => k.name).filter(Boolean);
+const dynamic = knowledges.filter(k => k && k.keywordTrigger !== false && k.enabled !== false);
+const names = dynamic.map(k => k.name).filter(Boolean);
 if (names.length === 0) return '';
 return `【世界观·知识条目索引】\n本世界包含以下知识条目（详情会在你或玩家提及时自动补充）：\n${names.map(n => `· ${n}`).join('\n')}\n请在剧情自然的前提下灵活引用。`;
 }
 
 // 构建知识设定提示（最近2轮对话出现关键词时触发）
+// v581：只处理动态条目（keywordTrigger=true）
 function _buildKnowledgePrompt(knowledges, messages) {
 if (!knowledges || knowledges.length === 0) return '';
-// 取最近2轮对话（user+assistant 各算1条算半轮，简化处理：取最后4条非system）
+const dynamic = knowledges.filter(k => k && k.keywordTrigger !== false && k.enabled !== false);
+if (dynamic.length === 0) return '';
 const recent = (messages || []).filter(m => m.role !== 'system').slice(-4);
 if (recent.length === 0) return '';
 const scanText = recent.map(m => m.content || '').join('\n').toLowerCase();
 const matched = [];
-for (const k of knowledges) {
+for (const k of dynamic) {
 const keyStr = (k.keys || '').trim();
 if (!keyStr) continue;
 const keys = keyStr.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
@@ -3065,6 +3166,53 @@ matched.push(k);
 if (matched.length === 0) return '';
 const lines = matched.map(k => `- ${k.name || '条目'}：${k.content}`);
 return `【世界观·相关知识】\n（根据最近对话内容触发，请将以下信息纳入扮演时的认知）\n${lines.join('\n')}`;
+}
+
+// v587：按注入位置分流的扩展条目注入
+// 返回 { systemTop: [], systemBottom: [], depths: { '0': [...], '4': [...] } }
+// 规则：
+//   - 常驻条目（keywordTrigger=false 且 enabled）：无条件按 position 分流
+//   - 动态条目（keywordTrigger=true 且 enabled）：按关键词命中最近4条非system消息才注入，命中后按 position 分流
+// 节日单独保留旧逻辑（外部处理），这里不含。
+function _buildExtendedInjections(knowledges, messages) {
+  const out = { systemTop: [], systemBottom: [], depths: {} };
+  if (!knowledges || knowledges.length === 0) return out;
+  const enabled = knowledges.filter(k => k && k.enabled !== false);
+  if (enabled.length === 0) return out;
+
+  // 关键词命中（只扫动态条目一次，避免反复扫描）
+  let scanText = '';
+  const dynamicEnabled = enabled.filter(k => k.keywordTrigger);
+  if (dynamicEnabled.length > 0) {
+    const recent = (messages || []).filter(m => m.role !== 'system').slice(-4);
+    scanText = recent.map(m => m.content || '').join('\n').toLowerCase();
+  }
+
+  for (const k of enabled) {
+    let text;
+    if (k.keywordTrigger) {
+      // 动态：关键词命中才注入
+      const keyStr = (k.keys || '').trim();
+      if (!keyStr) continue;
+      const keys = keyStr.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
+      if (!keys.some(key => scanText.includes(key.toLowerCase()))) continue;
+      text = `【世界观·相关知识】\n${k.name || '条目'}：${k.content || ''}`;
+    } else {
+      // 常驻：直接注入
+      text = `【世界观·扩展设定】\n${k.name || '条目'}：${k.content || ''}`;
+    }
+    const pos = k.position || 'system_top';
+    if (pos === 'system_bottom') {
+      out.systemBottom.push(text);
+    } else if (pos === 'depth') {
+      const d = (typeof k.depth === 'number' ? k.depth : 0);
+      const dk = String(d);
+      (out.depths[dk] = out.depths[dk] || []).push(text);
+    } else {
+      out.systemTop.push(text);
+    }
+  }
+  return out;
 }
 
   function setWorldview(text) {
@@ -3460,26 +3608,108 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       }
     }
 
-    // 节日/自定义（depth 0 注入）
+    // 节日 + 扩展条目（按 position 分流）注入（v587）
     if (isGameMode) {
       try {
         const currentWv = isSingleConv ? singleWv : await Worldview.getCurrent();
         if (currentWv) {
           const sendFestival = isSingleConv ? !!singleSettings.enableFestival : true;
-const sendCustom = isSingleConv ? !!singleSettings.enableCustom : true;
-const sendKnowledge = isSingleConv ? !!singleSettings.enableKnowledge : true;
-const festivalText = sendFestival ? _buildFestivalPrompt(currentWv.festivals || [], messages) : '';
-const customText = sendCustom ? _buildCustomPrompt(currentWv.customs || []) : '';
-const knowledgeText = sendKnowledge ? _buildKnowledgePrompt(currentWv.knowledges || [], messages) : '';
-const timeSensitive = [festivalText, customText, knowledgeText].filter(Boolean).join('\n\n');
-if (timeSensitive) {
-const insertIdx = apiMessages.length - 1;
-if (insertIdx > 0) {
-apiMessages.splice(insertIdx, 0, { role: 'system', content: timeSensitive });
-}
-}
+          const sendCustom = isSingleConv ? !!singleSettings.enableCustom : true;
+          const sendKnowledge = isSingleConv ? !!singleSettings.enableKnowledge : true;
+          // 节日：depth=3 注入（v588）
+          const festivalText = sendFestival ? _buildFestivalPrompt(currentWv.festivals || [], messages) : '';
+          if (festivalText) {
+            const FESTIVAL_DEPTH = 3;
+            let firstNonSys = 0;
+            while (firstNonSys < apiMessages.length && apiMessages[firstNonSys].role === 'system') firstNonSys++;
+            const insertIdx = Math.max(firstNonSys, apiMessages.length - FESTIVAL_DEPTH);
+            if (insertIdx >= 0 && insertIdx <= apiMessages.length) {
+              apiMessages.splice(insertIdx, 0, { role: 'system', content: festivalText });
+            }
+          }
+          const wantSrc = (currentWv.knowledges || []).filter(k => {
+            if (!k || k.enabled === false) return false;
+            if (k.keywordTrigger) return sendKnowledge;
+            return sendCustom;
+          });
+          if (wantSrc.length > 0) {
+            const extInj = _buildExtendedInjections(wantSrc, messages);
+            if (extInj.systemTop.length > 0) {
+              let firstNonSystemIdx = apiMessages.findIndex(m => m.role !== 'system');
+              if (firstNonSystemIdx === -1) firstNonSystemIdx = apiMessages.length;
+              for (const c of extInj.systemTop.reverse()) {
+                apiMessages.splice(firstNonSystemIdx, 0, { role: 'system', content: c });
+              }
+            }
+            if (extInj.systemBottom.length > 0) {
+              let firstNonSystemIdx = apiMessages.findIndex(m => m.role !== 'system');
+              if (firstNonSystemIdx === -1) firstNonSystemIdx = apiMessages.length;
+              for (const c of extInj.systemBottom) {
+                apiMessages.splice(firstNonSystemIdx, 0, { role: 'system', content: c });
+                firstNonSystemIdx++;
+              }
+            }
+            for (const [depthStr, contents] of Object.entries(extInj.depths)) {
+              const depth = parseInt(depthStr) || 0;
+              const insertIdx = apiMessages.length - depth;
+              if (insertIdx > 0 && insertIdx <= apiMessages.length) {
+                for (const c of contents.reverse()) {
+                  apiMessages.splice(insertIdx, 0, { role: 'system', content: c });
+                }
+              }
+            }
+          }
         }
-      } catch(e) { console.warn('[showContext] 节日注入失败:', e); }
+        // v596：单人卡的隐藏世界观（扩展设定）注入
+        if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
+          try {
+            const _card = await SingleCard.get(singleSettings.charId);
+            if (_card && _card.extEnabled !== false && singleSettings.enableCardExtended !== false) {
+              const _hiddenWv = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
+              if (_hiddenWv) {
+                const _festText = _buildFestivalPrompt(_hiddenWv.festivals || [], messages);
+                if (_festText) {
+                  const FESTIVAL_DEPTH = 3;
+                  let firstNonSys = 0;
+                  while (firstNonSys < apiMessages.length && apiMessages[firstNonSys].role === 'system') firstNonSys++;
+                  const insertIdx = Math.max(firstNonSys, apiMessages.length - FESTIVAL_DEPTH);
+                  if (insertIdx >= 0 && insertIdx <= apiMessages.length) {
+                    apiMessages.splice(insertIdx, 0, { role: 'system', content: _festText });
+                  }
+                }
+                const _cardKnow = (_hiddenWv.knowledges || []).filter(k => k && k.enabled !== false);
+                if (_cardKnow.length > 0) {
+                  const _extInj = _buildExtendedInjections(_cardKnow, messages);
+                  if (_extInj.systemTop.length > 0) {
+                    let firstNonSysIdx = apiMessages.findIndex(m => m.role !== 'system');
+                    if (firstNonSysIdx === -1) firstNonSysIdx = apiMessages.length;
+                    for (const c of _extInj.systemTop.reverse()) {
+                      apiMessages.splice(firstNonSysIdx, 0, { role: 'system', content: c });
+                    }
+                  }
+                  if (_extInj.systemBottom.length > 0) {
+                    let firstNonSysIdx = apiMessages.findIndex(m => m.role !== 'system');
+                    if (firstNonSysIdx === -1) firstNonSysIdx = apiMessages.length;
+                    for (const c of _extInj.systemBottom) {
+                      apiMessages.splice(firstNonSysIdx, 0, { role: 'system', content: c });
+                      firstNonSysIdx++;
+                    }
+                  }
+                  for (const [depthStr2, contents2] of Object.entries(_extInj.depths)) {
+                    const depth2 = parseInt(depthStr2) || 0;
+                    const idx2 = apiMessages.length - depth2;
+                    if (idx2 > 0 && idx2 <= apiMessages.length) {
+                      for (const c of contents2.reverse()) {
+                        apiMessages.splice(idx2, 0, { role: 'system', content: c });
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch(e) { console.warn('[showContext] 单人卡扩展设定注入失败:', e); }
+        }
+      } catch(e) { console.warn('[showContext] 扩展条目注入失败:', e); }
     }
 
     // 手机操作日志：读最后一条 user 的 phoneLogSnapshot（与发送主流程对齐）

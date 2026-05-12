@@ -50,8 +50,7 @@ const Worldview = (() => {
       regions: [],
       globalNpcs: [],   // 全图 NPC（不归属任何地区/势力，每轮全量注入）
 festivals: [],
-customs: [],
-knowledges: []
+knowledges: []  // v581：customs 已合并到 knowledges，按 keywordTrigger 字段区分常驻/动态
 };
 }
 
@@ -80,16 +79,113 @@ function _defaultRegion() {
     return { id: 'npc_' + Utils.uuid().slice(0,8), name: '', aliases: '', summary: '', detail: '' };
   }
   function _defaultFestival() {
-    return { id: 'fest_' + Utils.uuid().slice(0,8), name: '', date: '', yearly: true, content: '' };
+    return { id: 'fest_' + Utils.uuid().slice(0,8), name: '', date: '', yearly: true, content: '', enabled: true };
   }
   function _defaultCustom() {
-return { id: 'cust_' + Utils.uuid().slice(0,8), name: '', content: '', enabled: false };
-}
-function _defaultKnowledge() {
-return { id: 'know_' + Utils.uuid().slice(0,8), name: '', keys: '', content: '' };
-}
+    // 常驻模式默认值（keywordTrigger=false）
+    return { id: 'know_' + Utils.uuid().slice(0,8), name: '', content: '', enabled: false, keywordTrigger: false, keys: '', position: 'system_top', depth: 0 };
+  }
+  function _defaultKnowledge() {
+    // 动态模式默认值（keywordTrigger=true）
+    return { id: 'know_' + Utils.uuid().slice(0,8), name: '', keys: '', content: '', enabled: true, keywordTrigger: true, position: 'system_top', depth: 0 };
+  }
 
-  // ---------- 列表页 ----------
+  /**
+   * 迁移旧数据 → 统一 knowledges schema
+   * 规则：
+   * - 旧 customs[] → 追加到 knowledges[]，keywordTrigger=false
+   * - 旧 knowledges[] 不带 keywordTrigger 字段 → 默认为 true（动态）
+   * - 所有条目补齐 enabled/position/depth 字段
+   * - 迁移后 wv.customs 删除
+   * 幂等：已迁移过的世界观（没有 customs 字段且 knowledges 全带 keywordTrigger）跳过
+   */
+  function _migrateToKnowledges(wv) {
+    if (!wv) return wv;
+    let knowledges = Array.isArray(wv.knowledges) ? wv.knowledges.slice() : [];
+    // 1. 补齐旧 knowledges 的字段
+    knowledges = knowledges.map(k => ({
+      id: k.id || ('know_' + Utils.uuid().slice(0,8)),
+      name: k.name || '',
+      content: k.content || '',
+      enabled: (k.enabled === undefined || k.enabled === null) ? true : !!k.enabled,
+      keywordTrigger: (k.keywordTrigger === undefined || k.keywordTrigger === null) ? true : !!k.keywordTrigger,
+      keys: k.keys || '',
+      position: k.position || 'system_top',
+      depth: (typeof k.depth === 'number') ? k.depth : 0
+    }));
+    // 2. 合并旧 customs → knowledges（常驻）
+    if (Array.isArray(wv.customs) && wv.customs.length > 0) {
+      for (const c of wv.customs) {
+        knowledges.push({
+          id: c.id || ('know_' + Utils.uuid().slice(0,8)),
+          name: c.name || '',
+          content: c.content || '',
+          enabled: (c.enabled === undefined || c.enabled === null) ? false : !!c.enabled,
+          keywordTrigger: false,
+          keys: '',
+          position: 'system_top',
+          depth: 0
+        });
+      }
+    }
+    wv.knowledges = knowledges;
+    // 3. 删除 customs 字段（下次保存时就不会再出现）
+    if ('customs' in wv) delete wv.customs;
+    return wv;
+  }
+
+  // ---------- 隐藏世界观（v596：单人卡专属扩展设定容器）----------
+  // 单人卡使用 `__sc_<cardId>__` id，仅存 worldviews store，不进 worldviewList 索引
+  function _scHiddenId(cardId) {
+    return '__sc_' + cardId + '__';
+  }
+  // 创建/确保某张单人卡的隐藏世界观存在
+  async function ensureHiddenWvForCard(cardId, cardName) {
+    if (!cardId) return null;
+    const id = _scHiddenId(cardId);
+    let wv = await DB.get('worldviews', id);
+    if (!wv) {
+      wv = {
+        id: id,
+        _hidden: 'sc',
+        _scCardId: cardId,
+        name: '【单人卡扩展·' + (cardName || '') + '】',
+        description: '隐藏世界观，单人卡 ' + cardId + ' 专属',
+        knowledges: [],
+        festivals: []
+      };
+      await DB.put('worldviews', wv);
+    }
+    return wv;
+  }
+  // 删除某张单人卡的隐藏世界观
+  async function deleteHiddenWvForCard(cardId) {
+    if (!cardId) return;
+    const id = _scHiddenId(cardId);
+    try { await DB.del('worldviews', id); } catch(e) {}
+  }
+  // 判断某 wv 是否隐藏（单人卡专属）
+  function isHiddenWv(wv) {
+    return !!(wv && wv._hidden);
+  }
+  // v596：根据"是否隐藏世界观"调整编辑面板 UI
+  function _applyHiddenWvUI(isHidden) {
+    // 基础/详细 tab 按钮：隐藏时只显示扩展
+    const basicBtn = document.querySelector('.wv-edit-tab-btn[data-tab="basic"]');
+    const detailBtn = document.querySelector('.wv-edit-tab-btn[data-tab="detail"]');
+    if (basicBtn) basicBtn.style.display = isHidden ? 'none' : '';
+    if (detailBtn) detailBtn.style.display = isHidden ? 'none' : '';
+    // ⋯ 菜单：隐藏世界观时不允许删除整个世界观、不允许导出（整包）；只保留"扩展设定导入导出"
+    const exportBtn = document.querySelector('#worldview-edit-more-menu button[onclick*="exportCurrent"]');
+    const importBtn = document.querySelector('#worldview-edit-more-menu button[onclick*="importSingle"]');
+    const delBtn = document.querySelector('#worldview-edit-more-menu button[onclick*="deleteCurrentWorldview"]');
+    const restoreBtn = document.getElementById('worldview-restore-builtin-btn');
+    if (exportBtn) exportBtn.style.display = isHidden ? 'none' : '';
+    if (importBtn) importBtn.style.display = isHidden ? 'none' : '';
+    if (delBtn) delBtn.style.display = isHidden ? 'none' : '';
+    if (restoreBtn && isHidden) restoreBtn.classList.add('hidden');
+  }
+
   async function load() {
     const filter = document.getElementById('worldview-search')?.value || '';
     await renderWorldviewList(filter);
@@ -104,6 +200,7 @@ return { id: 'know_' + Utils.uuid().slice(0,8), name: '', keys: '', content: '' 
     let html = '';
     for (const w of list) {
       if (w.id === '__default_wv__') continue; // 无世界观不显示预览卡片
+      if (w._hidden) continue; // v596：隐藏世界观（单人卡专属）不出现在列表
       if (query && !w.name.toLowerCase().includes(query)) continue;
       const checked = selectedIds.has(w.id);
       const iconHTML = w.iconImage
@@ -287,11 +384,12 @@ return { id: 'know_' + Utils.uuid().slice(0,8), name: '', keys: '', content: '' 
       return;
     }
     const name = builtin.name || '此世界观';
-    const ok = await UI.showConfirm('恢复内置世界观', `将把「${name}」恢复为当前版本内置原版。\n\n这会覆盖你对该世界观基础设定、地区、角色、节日、特殊设定等内容的修改，但会保留原本的世界观 ID 与专属机制绑定。\n\n确定恢复吗？`);
+    const ok = await UI.showConfirm('恢复内置世界观', `将把「${name}」恢复为当前版本内置原版。\n\n这会覆盖你对该世界观基础设定、地区、角色、节日、扩展设定等内容的修改，但会保留原本的世界观 ID 与专属机制绑定。\n\n确定恢复吗？`);
     if (!ok) return;
 
     const restored = _cloneWorldviewData(builtin);
     restored.id = editingWorldviewId;
+    _migrateToKnowledges(restored); // v581：恢复内置时也顺手迁移 customs→knowledges
     await DB.put('worldviews', restored);
 
     const list = await getWorldviewList();
@@ -426,21 +524,47 @@ return { id: 'know_' + Utils.uuid().slice(0,8), name: '', keys: '', content: '' 
   }
 
   // ---------- 编辑面板 ----------
-  async function openEdit(id) {
+  // v596：标记从哪里进入编辑（用于返回时跳对地方）
+  let _editReturnTo = null;
+  
+  async function openEdit(id, opts) {
     const w = await DB.get('worldviews', id);
     if (!w) return;
     if (!await _confirmBuiltinWorldviewAccess('edit', w)) return;
     editingWorldviewId = id;
+    _editReturnTo = (opts && opts.returnTo) || null;
     closePreview(); // 关闭预览弹窗（如果有的话）
     UI.showPanel('worldview-edit');
     _loadEditForm(id);
+  }
+  // 给外部调用：编辑面板返回时的目标路径
+  function getEditReturnTo() {
+    return _editReturnTo;
+  }
+  function clearEditReturnTo() {
+    _editReturnTo = null;
   }
   
   async function _loadEditForm(id) {
     const w = await DB.get('worldviews', id);
     if (!w) return;
     
-    document.getElementById('worldview-edit-title').textContent = '编辑世界观';
+    // 数据迁移（v581）：customs[] + knowledges[] → 统一 knowledges[]
+    _migrateToKnowledges(w);
+
+    // v596：隐藏世界观（单人卡专属扩展设定容器）特殊处理
+    const isHidden = isHiddenWv(w);
+    document.getElementById('worldview-edit-title').textContent = isHidden ? '编辑扩展设定' : '编辑世界观';
+    _applyHiddenWvUI(isHidden);
+    if (isHidden) {
+      // 隐藏世界观只用扩展 tab
+      switchEditTab('special');
+      _renderFestivals(w.festivals || []);
+      _renderCustoms((w.knowledges || []).filter(k => !k.keywordTrigger));
+      _renderKnowledges((w.knowledges || []).filter(k => !!k.keywordTrigger));
+      return;
+    }
+
     _syncBuiltinRestoreButton(w);
     
     // 基础设定
@@ -479,11 +603,11 @@ return { id: 'know_' + Utils.uuid().slice(0,8), name: '', keys: '', content: '' 
     // 节日
     _renderFestivals(w.festivals || []);
     
-    // 自定义设定
-_renderCustoms(w.customs || []);
+    // 自定义设定（常驻条目：从 knowledges 中筛 keywordTrigger=false）
+_renderCustoms((w.knowledges || []).filter(k => !k.keywordTrigger));
 
-// 知识设定
-_renderKnowledges(w.knowledges || []);
+// 知识设定（动态条目：从 knowledges 中筛 keywordTrigger=true）
+_renderKnowledges((w.knowledges || []).filter(k => !!k.keywordTrigger));
     
     // 绑定主题下拉
 _populateThemeSelect(w.themeName || '');
@@ -516,6 +640,301 @@ _populateThemeSelect(w.themeName || '');
     document.querySelectorAll('.wv-edit-tab-content').forEach(c => c.classList.add('hidden'));
     const panel = document.getElementById(`wv-edit-tab-${tab}`);
     if (panel) panel.classList.remove('hidden');
+    // 切到扩展 tab 时刷新计数
+    if (tab === 'special') {
+      _updateExtCounts();
+      _applyExtSearch();
+    }
+  }
+
+  // ---------- 扩展设定子 tab（节日 / 常驻 / 动态） ----------
+  let _currentExtSubtab = 'festival';
+  function switchExtSubtab(subtab) {
+    _currentExtSubtab = subtab;
+    document.querySelectorAll('.wv-ext-subtab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.subtab === subtab);
+    });
+    document.querySelectorAll('.wv-ext-subtab-content').forEach(c => {
+      c.classList.toggle('hidden', c.dataset.subtab !== subtab);
+    });
+    // 切 tab 后保持搜索过滤
+    _applyExtSearch();
+  }
+
+  // 刷新三个子 tab 的计数
+  function _updateExtCounts() {
+    const fEl = document.getElementById('wv-ext-count-festival');
+    const cEl = document.getElementById('wv-ext-count-constant');
+    const dEl = document.getElementById('wv-ext-count-dynamic');
+    if (fEl) fEl.textContent = festivalsData.length ? `(${festivalsData.length})` : '';
+    if (cEl) cEl.textContent = customsData.length ? `(${customsData.length})` : '';
+    if (dEl) dEl.textContent = knowledgesData.length ? `(${knowledgesData.length})` : '';
+  }
+
+  // 跨 tab 搜索：名称 + 关键词 + 内容
+  function filterExtended() {
+    const input = document.getElementById('wv-ext-search');
+    const clearBtn = document.getElementById('wv-ext-search-clear');
+    if (clearBtn) clearBtn.classList.toggle('hidden', !input.value);
+    _applyExtSearch();
+  }
+  function clearExtendedSearch() {
+    const input = document.getElementById('wv-ext-search');
+    if (input) input.value = '';
+    const clearBtn = document.getElementById('wv-ext-search-clear');
+    if (clearBtn) clearBtn.classList.add('hidden');
+    _applyExtSearch();
+  }
+  // 切换添加菜单
+  function toggleExtAddMenu(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('wv-ext-add-menu');
+    if (!menu) return;
+    const willOpen = menu.classList.contains('hidden');
+    menu.classList.toggle('hidden');
+    if (willOpen) {
+      // 点空白处关闭
+      setTimeout(() => {
+        const onDocClick = (ev) => {
+          if (!menu.contains(ev.target)) {
+            menu.classList.add('hidden');
+            document.removeEventListener('click', onDocClick);
+          }
+        };
+        document.addEventListener('click', onDocClick);
+      }, 0);
+    }
+  }
+  // 从菜单添加：自动切到目标 tab + 调原有 add 函数
+  function addFromMenu(type) {
+    const menu = document.getElementById('wv-ext-add-menu');
+    if (menu) menu.classList.add('hidden');
+    if (type === 'festival') {
+      switchExtSubtab('festival');
+      addFestival();
+    } else if (type === 'constant') {
+      switchExtSubtab('constant');
+      addCustom();
+    } else if (type === 'dynamic') {
+      switchExtSubtab('dynamic');
+      addKnowledge();
+    }
+  }
+
+  // ---------- v589 扩展设定导入导出 ----------
+  function toggleExtIoMenu(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('wv-ext-io-menu');
+    if (!menu) return;
+    // 关掉另一个菜单
+    const addMenu = document.getElementById('wv-ext-add-menu');
+    if (addMenu) addMenu.classList.add('hidden');
+    const willOpen = menu.classList.contains('hidden');
+    menu.classList.toggle('hidden');
+    if (willOpen) {
+      setTimeout(() => {
+        const onDocClick = (ev) => {
+          if (!menu.contains(ev.target)) {
+            menu.classList.add('hidden');
+            document.removeEventListener('click', onDocClick);
+          }
+        };
+        document.addEventListener('click', onDocClick);
+      }, 0);
+    }
+  }
+
+  // 导出扩展设定（节日 + 扩展条目）为 JSON
+  async function exportExtended() {
+    const menu = document.getElementById('wv-ext-io-menu');
+    if (menu) menu.classList.add('hidden');
+    if (!editingWorldviewId) { UI.showToast('没有正在编辑的世界观'); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
+    const wvName = w?.name || '扩展设定';
+    // 注：导出当前内存中的数据（已编辑但未保存的也会一并导出）
+    const exportData = {
+      _format: 'tianshu-extended',
+      _version: 1,
+      _source: wvName,
+      _exportedAt: new Date().toISOString(),
+      festivals: JSON.parse(JSON.stringify(festivalsData || [])),
+      knowledges: JSON.parse(JSON.stringify(knowledgesData || []))
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = wvName + '-扩展设定.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    const total = (festivalsData?.length || 0) + (knowledgesData?.length || 0);
+    UI.showToast(`已导出 ${total} 条`);
+  }
+
+  // 导入扩展设定（单一入口，内部静默识别两种格式）
+  async function importExtended() {
+    const menu = document.getElementById('wv-ext-io-menu');
+    if (menu) menu.classList.add('hidden');
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        // 格式 sniff：优先原生格式，否则尝试 entries 格式
+        if (data._format === 'tianshu-extended') {
+          return _importNativeFormat(data);
+        }
+        if (data.entries && typeof data.entries === 'object') {
+          return _importEntriesFormat(data);
+        }
+        // 兜底：直接是数组（少数情况）
+        if (Array.isArray(data)) {
+          return _importEntriesFormat({ entries: data });
+        }
+        UI.showToast('文件格式不识别', 3000);
+      } catch(e) {
+        UI.showToast('导入失败：' + e.message, 3000);
+      }
+    };
+    input.click();
+  }
+
+  // 导入原生格式
+  async function _importNativeFormat(data) {
+    const fest = Array.isArray(data.festivals) ? data.festivals : [];
+    const know = Array.isArray(data.knowledges) ? data.knowledges : [];
+    if (fest.length === 0 && know.length === 0) {
+      UI.showToast('文件内没有扩展设定内容', 3000);
+      return;
+    }
+    const mode = await _askImportMode(fest.length, know.length);
+    if (!mode) return;
+    if (mode === 'replace') {
+      festivalsData = fest;
+      knowledgesData = know;
+    } else {
+      for (const f of fest) {
+        if (!f.id) f.id = 'fest_' + Utils.uuid().slice(0, 8);
+        else if (festivalsData.some(x => x.id === f.id)) f.id = 'fest_' + Utils.uuid().slice(0, 8);
+      }
+      for (const k of know) {
+        if (!k.id) k.id = 'know_' + Utils.uuid().slice(0, 8);
+        else if (knowledgesData.some(x => x.id === k.id)) k.id = 'know_' + Utils.uuid().slice(0, 8);
+      }
+      festivalsData = festivalsData.concat(fest);
+      knowledgesData = knowledgesData.concat(know);
+    }
+    _renderFestivals(festivalsData);
+    _renderKnowledges(knowledgesData);
+    _updateExtCounts();
+    UI.showToast(`已导入 ${fest.length + know.length} 条（记得保存）`, 3000);
+  }
+
+  // 导入 entries 格式（兼容外部格式，静默处理）
+  async function _importEntriesFormat(data) {
+    const entries = data.entries;
+    const arr = Array.isArray(entries) ? entries : Object.values(entries);
+    if (!arr.length) { UI.showToast('文件内没有可导入的条目', 2500); return; }
+
+    // position 数字映射
+    const POS_MAP = {
+      0: 'system_top',
+      1: 'system_bottom',
+      2: 'system_bottom',
+      3: 'system_bottom',
+      4: 'depth',
+      5: 'system_top',
+      6: 'system_bottom'
+    };
+
+    const imported = [];
+    let skipped = 0;
+    for (const e of arr) {
+      if (!e || typeof e !== 'object') { skipped++; continue; }
+      const content = e.content || '';
+      if (!content.trim()) { skipped++; continue; }
+      const keysArr = Array.isArray(e.key) ? e.key : (Array.isArray(e.keys) ? e.keys : []);
+      const isConstant = !!e.constant;
+      const isDisabled = !!e.disable;
+      const posNum = (typeof e.position === 'number') ? e.position : 1;
+      const position = POS_MAP[posNum] || 'system_top';
+      const depth = (typeof e.depth === 'number' && e.depth >= 0) ? e.depth : 0;
+      const name = e.comment || e.name || (keysArr[0] || '未命名条目');
+
+      imported.push({
+        id: 'know_' + Utils.uuid().slice(0, 8),
+        name: String(name).slice(0, 60),
+        content: String(content),
+        enabled: !isDisabled,
+        keywordTrigger: !isConstant,
+        keys: keysArr.join(', '),
+        position: position,
+        depth: depth
+      });
+    }
+
+    if (!imported.length) { UI.showToast('没有可导入的条目', 2500); return; }
+
+    const mode = await _askImportMode(0, imported.length);
+    if (!mode) return;
+    if (mode === 'replace') {
+      knowledgesData = imported;
+    } else {
+      knowledgesData = knowledgesData.concat(imported);
+    }
+    _renderKnowledges(knowledgesData);
+    _updateExtCounts();
+    const msg = `已导入 ${imported.length} 条` + (skipped ? `（跳过 ${skipped} 条空条目）` : '') + '（记得保存）';
+    UI.showToast(msg, 3000);
+  }
+
+  // 询问导入模式：替换 / 追加
+  async function _askImportMode(festCount, knowCount) {
+    const hasData = (festivalsData?.length || 0) + (knowledgesData?.length || 0) > 0;
+    if (!hasData) return 'append'; // 当前为空，直接追加 = 等于替换
+    const msg = `当前已有 ${festivalsData?.length || 0} 个节日 + ${knowledgesData?.length || 0} 个条目。\n` +
+                `即将导入 ${festCount} 个节日 + ${knowCount} 个条目。\n\n` +
+                `选择「确定」=追加到现有条目\n选择「取消」=取消导入`;
+    // 简化：用 confirm，true=追加，false=问是否替换
+    const append = await UI.showConfirm('追加导入', msg);
+    if (append) return 'append';
+    const replace = await UI.showConfirm('替换导入', '是否清空当前所有节日和扩展条目，用导入的内容替换？\n（此操作不可逆，但需点击保存后才会写入数据库）');
+    return replace ? 'replace' : null;
+  }
+  // ---------- 扩展设定导入导出 END ----------
+  function _applyExtSearch() {
+    const input = document.getElementById('wv-ext-search');
+    const q = (input?.value || '').trim().toLowerCase();
+    const containers = [
+      { box: document.getElementById('wv-festivals-container'), match: (el) => _matchFestivalCard(el, q) },
+      { box: document.getElementById('wv-customs-container'), match: (el) => _matchKnowledgeCard(el, q) },
+      { box: document.getElementById('wv-knowledges-container'), match: (el) => _matchKnowledgeCard(el, q) }
+    ];
+    for (const { box, match } of containers) {
+      if (!box) continue;
+      const cards = box.children;
+      for (const card of cards) {
+        if (!q) {
+          card.style.display = '';
+          continue;
+        }
+        card.style.display = match(card) ? '' : 'none';
+      }
+    }
+  }
+  // 卡片内文本搜索（节日：name + content）
+  function _matchFestivalCard(card, q) {
+    const txt = (card.textContent || '').toLowerCase();
+    return txt.includes(q);
+  }
+  // 卡片内文本搜索（常驻/动态：name + keys + content）
+  function _matchKnowledgeCard(card, q) {
+    const txt = (card.textContent || '').toLowerCase();
+    return txt.includes(q);
   }
   
   // ---------- 图片上传 ----------
@@ -824,7 +1243,7 @@ return;
       npc.summary = document.getElementById('wv-npc-summary').value.trim();
       npc.detail = document.getElementById('wv-npc-detail').value.trim();
       await _saveEditingWV(w);
-      if (!silent) UI.showToast('全图角色已保存');
+      if (!silent) UI.showToast('常驻角色已保存');
       _renderGlobalNpcs(w.globalNpcs);
       return;
     }
@@ -848,7 +1267,7 @@ return;
     // 全图 NPC 模式
     if (_editGlobalNpcIdx >= 0) {
       const npc = w.globalNpcs && w.globalNpcs[_editGlobalNpcIdx];
-      if (!await UI.showConfirm('删除全图角色', `确定删除"${npc?.name || '未命名'}"？`)) return;
+      if (!await UI.showConfirm('删除常驻角色', `确定删除"${npc?.name || '未命名'}"？`)) return;
       w.globalNpcs.splice(_editGlobalNpcIdx, 1);
       _editGlobalNpcIdx = -1;
       await _saveEditingWV(w);
@@ -892,7 +1311,7 @@ return;
     const container = document.getElementById('wv-global-npcs-container');
     if (!container) return;
     if (_globalNpcsCache.length === 0) {
-      container.innerHTML = `<div style="text-align:center;color:var(--text-secondary);font-size:12px;padding:14px 0;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">还没有全图角色</div>`;
+      container.innerHTML = `<div style="text-align:center;color:var(--text-secondary);font-size:12px;padding:14px 0;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">还没有常驻角色</div>`;
       return;
     }
     container.innerHTML = _globalNpcsCache.map((n, i) => `
@@ -960,14 +1379,28 @@ let knowledgesData = [];
     festivalsData = festivals || [];
     const container = document.getElementById('wv-festivals-container');
     if (!container) return;
-    container.innerHTML = festivalsData.map((f, i) => `
-      <div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editFestival(${i})">
+    container.innerHTML = festivalsData.map((f, i) => {
+      const enabled = f.enabled !== false;
+      return `
+      <div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px 12px 12px 44px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editFestival(${i})">
+        <button type="button" onclick="event.stopPropagation();Worldview.toggleFestivalEnabled(${i})" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;border:2px solid ${enabled ? 'var(--accent)' : 'var(--text-secondary)'};background:${enabled ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
+          ${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+        </button>
         <div style="position:absolute;top:8px;right:8px;font-size:11px;background:var(--accent);color:#000;padding:2px 6px;border-radius:4px">${f.yearly ? '每年' : '一次'}</div>
-        <div style="font-size:15px;font-weight:bold;color:var(--accent);margin-bottom:4px;padding-right:48px">${Utils.escapeHtml(f.name || '未命名节日')}</div>
+        <div style="font-size:15px;font-weight:bold;color:${enabled ? 'var(--accent)' : 'var(--text-secondary)'};margin-bottom:4px;padding-right:48px">${Utils.escapeHtml(f.name || '未命名节日')}</div>
         <div style="font-size:12px;color:var(--text-secondary)">${Utils.escapeHtml(f.date || '')}</div>
         ${f.content ? `<div style="font-size:12px;color:var(--text);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(f.content)}</div>` : ''}
       </div>
-    `).join('');
+    `;
+    }).join('');
+    _updateExtCounts();
+    _applyExtSearch();
+  }
+
+  function toggleFestivalEnabled(i) {
+    if (!festivalsData[i]) return;
+    festivalsData[i].enabled = festivalsData[i].enabled === false;
+    _renderFestivals(festivalsData);
   }
 
   let _editFestivalIdx = null;
@@ -984,6 +1417,14 @@ let knowledgesData = [];
     ui.style.borderColor = input.checked ? 'var(--accent)' : 'var(--text-secondary)';
     ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
   }
+  function _syncFestEnabledUI() {
+    const input = document.getElementById('wv-fest-modal-enabled');
+    const ui = document.getElementById('wv-fest-modal-enabled-ui');
+    if (!input || !ui) return;
+    ui.style.background = input.checked ? 'var(--accent)' : 'transparent';
+    ui.style.borderColor = input.checked ? 'var(--accent)' : 'var(--text-secondary)';
+    ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+  }
 
   function editFestival(i) {
     _editFestivalIdx = i;
@@ -993,6 +1434,9 @@ let knowledgesData = [];
     document.getElementById('wv-fest-modal-yearly').checked = !!f.yearly;
     document.getElementById('wv-fest-modal-yearly').onchange = _syncFestYearlyUI;
     _syncFestYearlyUI();
+    document.getElementById('wv-fest-modal-enabled').checked = f.enabled !== false;
+    document.getElementById('wv-fest-modal-enabled').onchange = _syncFestEnabledUI;
+    _syncFestEnabledUI();
     document.getElementById('wv-fest-modal-content').value = f.content || '';
     document.getElementById('wv-festival-modal').classList.remove('hidden');
   }
@@ -1003,6 +1447,7 @@ let knowledgesData = [];
       name: document.getElementById('wv-fest-modal-name').value.trim(),
       date: document.getElementById('wv-fest-modal-date').value.trim(),
       yearly: document.getElementById('wv-fest-modal-yearly').checked,
+      enabled: document.getElementById('wv-fest-modal-enabled').checked,
       content: document.getElementById('wv-fest-modal-content').value.trim()
     };
     _renderFestivals(festivalsData);
@@ -1024,13 +1469,42 @@ let knowledgesData = [];
     customsData = customs || [];
     const container = document.getElementById('wv-customs-container');
     if (!container) return;
-    container.innerHTML = customsData.map((c, i) => `
-      <div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editCustom(${i})">
-        <div style="position:absolute;top:8px;right:8px;font-size:11px;background:${c.enabled ? 'var(--accent)' : 'var(--bg-secondary)'};color:${c.enabled ? '#000' : 'var(--text-secondary)'};padding:2px 6px;border-radius:4px;border:1px solid var(--border)">${c.enabled ? '已启用' : '关闭'}</div>
-        <div style="font-size:15px;font-weight:bold;color:var(--accent);margin-bottom:4px;padding-right:56px">${Utils.escapeHtml(c.name || '未命名设定')}</div>
+    container.innerHTML = customsData.map((c, i) => {
+      const enabled = c.enabled !== false;
+      const posLabel = _positionLabel(c.position || 'system_top', c.depth);
+      return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px 12px 12px 44px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editCustom(${i})">
+        <button type="button" onclick="event.stopPropagation();Worldview.toggleCustomEnabled(${i})" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;border:2px solid ${enabled ? 'var(--accent)' : 'var(--text-secondary)'};background:${enabled ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
+          ${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+        </button>
+        <div style="font-size:14px;font-weight:bold;color:${enabled ? 'var(--accent)' : 'var(--text-secondary)'};margin-bottom:4px">${Utils.escapeHtml(c.name || '未命名条目')}</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;display:flex;align-items:center;gap:4px">${_positionIcon(c.position || 'system_top')}<span>${posLabel}</span></div>
         ${c.content ? `<div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.content)}</div>` : ''}
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
+    _updateExtCounts();
+    _applyExtSearch();
+  }
+  function toggleCustomEnabled(i) {
+    if (!customsData[i]) return;
+    customsData[i].enabled = !customsData[i].enabled;
+    _renderCustoms(customsData);
+  }
+  function _positionLabel(pos, depth) {
+    if (pos === 'system_bottom') return '系统底部';
+    if (pos === 'depth') return `深度 ${depth || 0}`;
+    return '系统顶部';
+  }
+  // 注入位置的 SVG 图标（与提示词模块一致）
+  function _positionIcon(pos) {
+    const sz = 'width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle"';
+    if (pos === 'system_bottom') {
+      return `<svg xmlns="http://www.w3.org/2000/svg" ${sz}><path d="M3 6h18M3 12h18M3 18h18"/></svg>`;
+    }
+    if (pos === 'depth') {
+      return `<svg xmlns="http://www.w3.org/2000/svg" ${sz}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+    }
+    // system_top（默认）
+    return `<svg xmlns="http://www.w3.org/2000/svg" ${sz}><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
   }
 let _editCustomIdx = null;
 function _syncCustomEnabledUI() {
@@ -1053,19 +1527,69 @@ ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="1
     document.getElementById('wv-cust-modal-name').value = c.name || '';
     document.getElementById('wv-cust-modal-content').value = c.content || '';
     document.getElementById('wv-cust-modal-enabled').checked = !!c.enabled;
-document.getElementById('wv-cust-modal-enabled').onchange = _syncCustomEnabledUI;
-_syncCustomEnabledUI();
-document.getElementById('wv-custom-modal').classList.remove('hidden');
+    document.getElementById('wv-cust-modal-trigger').checked = !!c.keywordTrigger;
+    document.getElementById('wv-cust-modal-keys').value = c.keys || '';
+    _selectCustPosition(c.position || 'system_top');
+    document.getElementById('wv-cust-modal-depth').value = (typeof c.depth === 'number') ? c.depth : 0;
+    document.getElementById('wv-cust-modal-enabled').onchange = _syncCustomEnabledUI;
+    document.getElementById('wv-cust-modal-trigger').onchange = _syncCustomTriggerUI;
+    _syncCustomEnabledUI();
+    _syncCustomTriggerUI();
+    document.getElementById('wv-custom-modal').classList.remove('hidden');
+  }
+  function _syncCustomTriggerUI() {
+    const input = document.getElementById('wv-cust-modal-trigger');
+    const ui = document.getElementById('wv-cust-modal-trigger-ui');
+    const keysRow = document.getElementById('wv-cust-modal-keys-row');
+    if (!input || !ui) return;
+    ui.style.background = input.checked ? 'var(--accent)' : 'transparent';
+    ui.style.borderColor = input.checked ? 'var(--accent)' : 'var(--text-secondary)';
+    ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+    if (keysRow) keysRow.style.display = input.checked ? '' : 'none';
+  }
+  function toggleCustPositionDropdown() {
+    const dd = document.getElementById('wv-cust-modal-position-dropdown');
+    if (dd) dd.classList.toggle('hidden');
+  }
+  function selectCustPosition(pos) {
+    _selectCustPosition(pos);
+    const dd = document.getElementById('wv-cust-modal-position-dropdown');
+    if (dd) dd.classList.add('hidden');
+  }
+  function _selectCustPosition(pos) {
+    document.getElementById('wv-cust-modal-position').value = pos;
+    const label = document.getElementById('wv-cust-modal-position-label');
+    const depthRow = document.getElementById('wv-cust-modal-depth-row');
+    const txt = pos === 'system_bottom' ? '系统底部' : pos === 'depth' ? '按聊天深度插入' : '系统顶部';
+    if (label) label.innerHTML = `${_positionIcon(pos)} <span>${txt}</span>`;
+    if (depthRow) depthRow.style.display = pos === 'depth' ? '' : 'none';
   }
   function saveCustomFromModal() {
     if (_editCustomIdx === null) return;
-    customsData[_editCustomIdx] = {
-      id: (customsData[_editCustomIdx] && customsData[_editCustomIdx].id) || ('cust_' + Utils.uuid().slice(0,8)),
+    const prev = customsData[_editCustomIdx] || {};
+    const trigger = document.getElementById('wv-cust-modal-trigger').checked;
+    const entry = {
+      id: prev.id || ('know_' + Utils.uuid().slice(0,8)),
       name: document.getElementById('wv-cust-modal-name').value.trim(),
       content: document.getElementById('wv-cust-modal-content').value.trim(),
-      enabled: document.getElementById('wv-cust-modal-enabled').checked
+      enabled: document.getElementById('wv-cust-modal-enabled').checked,
+      keywordTrigger: trigger,
+      keys: trigger ? (document.getElementById('wv-cust-modal-keys').value.trim()) : '',
+      position: document.getElementById('wv-cust-modal-position').value || 'system_top',
+      depth: parseInt(document.getElementById('wv-cust-modal-depth').value, 10) || 0
     };
-    _renderCustoms(customsData);
+    // 跨模式：从 customsData 移除，追加到 knowledgesData，刷新两边
+    if (trigger) {
+      customsData.splice(_editCustomIdx, 1);
+      knowledgesData.push(entry);
+      _renderCustoms(customsData);
+      _renderKnowledges(knowledgesData);
+      // 切到动态 tab 让用户看到迁移结果
+      switchExtSubtab('dynamic');
+    } else {
+      customsData[_editCustomIdx] = entry;
+      _renderCustoms(customsData);
+    }
     closeCustomModal();
   }
   function deleteCustomFromModal() {
@@ -1085,16 +1609,29 @@ knowledgesData = list || [];
 const container = document.getElementById('wv-knowledges-container');
 if (!container) return;
 container.innerHTML = knowledgesData.map((k, i) => {
+const enabled = k.enabled !== false;
 const keys = (k.keys || '').trim();
 const keyTags = keys
 ? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(t)}</span>`).join('')
 : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>';
-return `<div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editKnowledge(${i})">
-<div style="font-size:15px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(k.name || '未命名条目')}</div>
+const posLabel = _positionLabel(k.position || 'system_top', k.depth);
+return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px 12px 12px 44px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editKnowledge(${i})">
+<button type="button" onclick="event.stopPropagation();Worldview.toggleKnowledgeEnabled(${i})" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;border:2px solid ${enabled ? 'var(--accent)' : 'var(--text-secondary)'};background:${enabled ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
+${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+</button>
+<div style="font-size:14px;font-weight:bold;color:${enabled ? 'var(--accent)' : 'var(--text-secondary)'};margin-bottom:4px">${Utils.escapeHtml(k.name || '未命名条目')}</div>
+<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;display:flex;align-items:center;gap:4px">${_positionIcon(k.position || 'system_top')}<span>${posLabel}</span></div>
 <div style="margin-bottom:6px">${keyTags}</div>
 ${k.content ? `<div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(k.content)}</div>` : ''}
 </div>`;
 }).join('');
+_updateExtCounts();
+_applyExtSearch();
+}
+function toggleKnowledgeEnabled(i) {
+if (!knowledgesData[i]) return;
+knowledgesData[i].enabled = !knowledgesData[i].enabled;
+_renderKnowledges(knowledgesData);
 }
 let _editKnowledgeIdx = null;
 function addKnowledge() {
@@ -1107,17 +1644,67 @@ const k = knowledgesData[i] || _defaultKnowledge();
 document.getElementById('wv-know-modal-name').value = k.name || '';
 document.getElementById('wv-know-modal-keys').value = k.keys || '';
 document.getElementById('wv-know-modal-content').value = k.content || '';
+// 动态条目默认 keywordTrigger=true
+const trigger = (k.keywordTrigger === undefined || k.keywordTrigger === null) ? true : !!k.keywordTrigger;
+document.getElementById('wv-know-modal-trigger').checked = trigger;
+_selectKnowPosition(k.position || 'system_top');
+document.getElementById('wv-know-modal-depth').value = (typeof k.depth === 'number') ? k.depth : 0;
+document.getElementById('wv-know-modal-trigger').onchange = _syncKnowTriggerUI;
+_syncKnowTriggerUI();
 document.getElementById('wv-knowledge-modal').classList.remove('hidden');
+}
+function _syncKnowTriggerUI() {
+const input = document.getElementById('wv-know-modal-trigger');
+const ui = document.getElementById('wv-know-modal-trigger-ui');
+const keysRow = document.getElementById('wv-know-modal-keys-row');
+if (!input || !ui) return;
+ui.style.background = input.checked ? 'var(--accent)' : 'transparent';
+ui.style.borderColor = input.checked ? 'var(--accent)' : 'var(--text-secondary)';
+ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+if (keysRow) keysRow.style.display = input.checked ? '' : 'none';
+}
+function toggleKnowPositionDropdown() {
+const dd = document.getElementById('wv-know-modal-position-dropdown');
+if (dd) dd.classList.toggle('hidden');
+}
+function selectKnowPosition(pos) {
+_selectKnowPosition(pos);
+const dd = document.getElementById('wv-know-modal-position-dropdown');
+if (dd) dd.classList.add('hidden');
+}
+function _selectKnowPosition(pos) {
+document.getElementById('wv-know-modal-position').value = pos;
+const label = document.getElementById('wv-know-modal-position-label');
+const depthRow = document.getElementById('wv-know-modal-depth-row');
+const txt = pos === 'system_bottom' ? '系统底部' : pos === 'depth' ? '按聊天深度插入' : '系统顶部';
+if (label) label.innerHTML = `${_positionIcon(pos)} <span>${txt}</span>`;
+if (depthRow) depthRow.style.display = pos === 'depth' ? '' : 'none';
 }
 function saveKnowledgeFromModal() {
 if (_editKnowledgeIdx === null) return;
-knowledgesData[_editKnowledgeIdx] = {
-id: (knowledgesData[_editKnowledgeIdx] && knowledgesData[_editKnowledgeIdx].id) || ('know_' + Utils.uuid().slice(0,8)),
+const prev = knowledgesData[_editKnowledgeIdx] || {};
+const trigger = document.getElementById('wv-know-modal-trigger').checked;
+const entry = {
+id: prev.id || ('know_' + Utils.uuid().slice(0,8)),
 name: document.getElementById('wv-know-modal-name').value.trim(),
-keys: document.getElementById('wv-know-modal-keys').value.trim(),
-content: document.getElementById('wv-know-modal-content').value.trim()
+keys: trigger ? (document.getElementById('wv-know-modal-keys').value.trim()) : '',
+content: document.getElementById('wv-know-modal-content').value.trim(),
+enabled: (prev.enabled === undefined || prev.enabled === null) ? true : !!prev.enabled,
+keywordTrigger: trigger,
+position: document.getElementById('wv-know-modal-position').value || 'system_top',
+depth: parseInt(document.getElementById('wv-know-modal-depth').value, 10) || 0
 };
+// 跨模式：移到 customsData
+if (!trigger) {
+knowledgesData.splice(_editKnowledgeIdx, 1);
+customsData.push(entry);
 _renderKnowledges(knowledgesData);
+_renderCustoms(customsData);
+switchExtSubtab('constant');
+} else {
+knowledgesData[_editKnowledgeIdx] = entry;
+_renderKnowledges(knowledgesData);
+}
 closeKnowledgeModal();
 }
 function deleteKnowledgeFromModal() {
@@ -1160,6 +1747,25 @@ document.getElementById('wv-knowledge-modal').classList.add('hidden');
     if (!editingWorldviewId) return;
     
     const w = await DB.get('worldviews', editingWorldviewId) || _defaultWorldview(editingWorldviewId);
+
+    // v596：隐藏世界观特殊保存（只存扩展数据，不改基础字段）
+    if (isHiddenWv(w)) {
+      w.festivals = festivalsData.slice();
+      w.knowledges = customsData.concat(knowledgesData).map(k => ({
+        id: k.id,
+        name: k.name || '',
+        content: k.content || '',
+        enabled: (k.enabled === undefined || k.enabled === null) ? true : !!k.enabled,
+        keywordTrigger: !!k.keywordTrigger,
+        keys: k.keywordTrigger ? (k.keys || '') : '',
+        position: k.position || 'system_top',
+        depth: (typeof k.depth === 'number') ? k.depth : 0
+      }));
+      if ('customs' in w) delete w.customs;
+      await DB.put('worldviews', w);
+      UI.showToast('已保存扩展设定');
+      return;
+    }
     
     // 基础设定
     w.name = document.getElementById('wv-name').value.trim() || '未命名';
@@ -1198,11 +1804,21 @@ document.getElementById('wv-knowledge-modal').classList.add('hidden');
     // 节日
     w.festivals = festivalsData.slice();
     
-    // 自定义
-w.customs = customsData.slice();
-
-// 知识设定
-w.knowledges = knowledgesData.slice();
+    // v581：customs + knowledges 统一写入 w.knowledges
+    // customsData = 常驻条目（keywordTrigger=false）
+    // knowledgesData = 动态条目（keywordTrigger=true）
+    w.knowledges = customsData.concat(knowledgesData).map(k => ({
+      id: k.id,
+      name: k.name || '',
+      content: k.content || '',
+      enabled: (k.enabled === undefined || k.enabled === null) ? true : !!k.enabled,
+      keywordTrigger: !!k.keywordTrigger,
+      keys: k.keywordTrigger ? (k.keys || '') : '',
+      position: k.position || 'system_top',
+      depth: (typeof k.depth === 'number') ? k.depth : 0
+    }));
+    // 删除旧字段（保证导出/存储干净）
+    if ('customs' in w) delete w.customs;
     
     await DB.put('worldviews', w);
     
@@ -1647,7 +2263,7 @@ w.knowledges = knowledgesData.slice();
     let rHtml = `<div class="custom-dropdown-item active" onclick="Worldview.selectViewerNPCFilter('region','','全部地区')">全部地区</div>`;
     let fHtml = `<div class="custom-dropdown-item active" onclick="Worldview.selectViewerNPCFilter('faction','','全部势力')">全部势力</div>`;
     if (hasGlobalNpcs) {
-      rHtml += `<div class="custom-dropdown-item" onclick="Worldview.selectViewerNPCFilter('region','__global__','全图角色')">全图角色</div>`;
+      rHtml += `<div class="custom-dropdown-item" onclick="Worldview.selectViewerNPCFilter('region','__global__','常驻角色')">常驻角色</div>`;
     }
     regions.forEach(reg => {
       if (reg.name) rHtml += `<div class="custom-dropdown-item" onclick="Worldview.selectViewerNPCFilter('region','${Utils.escapeHtml(reg.name)}','${Utils.escapeHtml(reg.name)}')">${Utils.escapeHtml(reg.name)}</div>`;
@@ -1723,12 +2339,12 @@ w.knowledges = knowledgesData.slice();
     const container = document.getElementById('wv-viewer-npcs');
     if (!container) return;
     
-    // 收集所有角色（带归属信息），包含全图角色
+    // 收集所有角色（带归属信息），包含常驻角色
 const allNPCs = [];
     const includeGlobal = !regionFilter || regionFilter === '__global__';
     if (includeGlobal && !factionFilter) {
       (_viewerData.globalNpcs || []).forEach(npc => {
-        allNPCs.push({ ...npc, regionName: '全图角色', factionName: '—', _isGlobalNpc: true });
+        allNPCs.push({ ...npc, regionName: '常驻角色', factionName: '—', _isGlobalNpc: true });
       });
     }
     if (regionFilter !== '__global__') {
@@ -1786,8 +2402,9 @@ const allNPCs = [];
       html += '<div style="margin-bottom:16px"></div>';
     }
     
-    // 自定义设定
-    const customs = w.customs || [];
+    // 自定义设定（v581：从 knowledges 中筛 keywordTrigger=false）
+    _migrateToKnowledges(w);
+    const customs = (w.knowledges || []).filter(k => !k.keywordTrigger);
     html += '<div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.364 13.634a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506l4.013-4.009a1 1 0 0 0-3.004-3.004z"/><path d="M14.487 7.858A1 1 0 0 1 14 7V2"/><path d="M20 19.645V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l2.516 2.516"/><path d="M8 18h1"/></svg> 自定义设定</div>';
     if (customs.length === 0) {
       html += '<div style="color:var(--text-secondary);font-size:13px">暂无自定义设定</div>';
@@ -1803,8 +2420,8 @@ const allNPCs = [];
       });
     }
 
-    // 知识设定
-    const knowledges = w.knowledges || [];
+    // 知识设定（v581：从 knowledges 中筛 keywordTrigger=true）
+    const knowledges = (w.knowledges || []).filter(k => !!k.keywordTrigger);
     html += '<div style="font-size:15px;font-weight:bold;color:var(--text);margin:18px 0 8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg> 知识设定</div>';
     if (knowledges.length === 0) {
       html += '<div style="color:var(--text-secondary);font-size:13px">暂无知识设定</div>';
@@ -2143,12 +2760,14 @@ async function pickDefaultTheme(value) {
           existing.description = w.description || existing.description;
           existing.icon = w.icon || existing.icon;
           existing.iconImage = w.iconImage || existing.iconImage;
+          _migrateToKnowledges(w); // v581
           await DB.put('worldviews', w);
           loadedMap[w.id] = ver;
           updateCount++;
         } else {
           // 全新的内置世界观
           list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || '🌍', iconImage: w.iconImage || '' });
+          _migrateToKnowledges(w); // v581
           await DB.put('worldviews', w);
           loadedMap[w.id] = ver;
           newCount++;
@@ -2222,6 +2841,8 @@ async function pickDefaultTheme(value) {
     deleteSelectedWorldviews,
     toggleSelectAll,
     switchEditTab,
+switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromMenu, toggleExtIoMenu, exportExtended, importExtended,
+    toggleCustomEnabled, toggleKnowledgeEnabled, toggleFestivalEnabled,
     _onCardClick,
     handleIconImageUpload,
     clearIconImage,
@@ -2233,6 +2854,7 @@ async function pickDefaultTheme(value) {
     addFestival, editFestival, saveFestivalFromModal, deleteFestivalFromModal, closeFestivalModal,
   addCustom, editCustom, saveCustomFromModal, deleteCustomFromModal, closeCustomModal,
 addKnowledge, editKnowledge, saveKnowledgeFromModal, deleteKnowledgeFromModal, closeKnowledgeModal,
+toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, selectKnowPosition,
     getCurrent, setCurrentId, getCurrentId,
     openViewer, switchViewerTab, filterViewerNPCs,
     toggleViewerNPCDropdown, selectViewerNPCFilter,
@@ -2242,6 +2864,8 @@ addKnowledge, editKnowledge, saveKnowledgeFromModal, deleteKnowledgeFromModal, c
     openDefaultThemePicker, closeDefaultThemePicker, pickDefaultTheme,
     restoreCurrentWorldview: _restoreCurrentWorldview,
     exportCurrent, importSingle, restoreBuiltinWorldview: _restoreBuiltinWorldview, toggleEditMoreMenu: _toggleEditMoreMenu, closeEditMoreMenu: _closeEditMoreMenu, loadBuiltinWorldviews: _loadBuiltinWorldviews, migrateTianshuchengNpcNames: _migrateTianshuchengNpcNames,
+    ensureHiddenWvForCard, deleteHiddenWvForCard, isHiddenWv,
+    getEditReturnTo, clearEditReturnTo,
     switchWorldTab(tab) {
       const wvBtn = document.getElementById('world-tab-wv-btn');
       const charBtn = document.getElementById('world-tab-char-btn');

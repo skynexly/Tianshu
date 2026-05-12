@@ -40,7 +40,8 @@ const SingleMode = (() => {
       enableStartPlot: false,
       enableFestival: false,
       enableCustom: false,
-      enableKnowledge: false
+      enableKnowledge: false,
+      enableCardExtended: true
     };
     if (!convId && preset) {
       initial = {
@@ -54,7 +55,8 @@ const SingleMode = (() => {
         enableStartPlot: !!preset.enableStartPlot,
         enableFestival: !!preset.enableFestival,
         enableCustom: !!preset.enableCustom,
-        enableKnowledge: !!preset.enableKnowledge
+        enableKnowledge: !!preset.enableKnowledge,
+        enableCardExtended: preset.enableCardExtended !== false
       };
     }
     if (convId) {
@@ -70,7 +72,8 @@ const SingleMode = (() => {
           enableStartPlot: !!conv.singleEnableStartPlot,
           enableFestival: !!conv.singleEnableFestival,
           enableCustom: !!conv.singleEnableCustom,
-          enableKnowledge: !!conv.singleEnableKnowledge
+          enableKnowledge: !!conv.singleEnableKnowledge,
+          enableCardExtended: conv.singleEnableCardExtended !== false
         };
       }
     }
@@ -90,9 +93,13 @@ const SingleMode = (() => {
     document.getElementById('sm-enable-detail').checked = initial.enableDetail;
     document.getElementById('sm-enable-npc').checked = initial.enableNpc;
     document.getElementById('sm-enable-startplot').checked = initial.enableStartPlot;
-    document.getElementById('sm-enable-festival').checked = initial.enableFestival;
-    document.getElementById('sm-enable-custom').checked = initial.enableCustom;
-    document.getElementById('sm-enable-knowledge').checked = initial.enableKnowledge;
+    // v599：扩展设定合并为单一总开关（任一旧字段为真即视为开启，向后兼容）
+    document.getElementById('sm-enable-extended').checked =
+      !!(initial.enableFestival || initial.enableCustom || initial.enableKnowledge);
+    // 单人卡扩展设定开关
+    const cardExtEl = document.getElementById('sm-enable-card-extended');
+    if (cardExtEl) cardExtEl.checked = initial.enableCardExtended;
+    _updateCardExtRowVisibility();
 
     // 标题
     document.getElementById('sm-modal-title').textContent = convId ? '单人对话设置' : '新建单人对话';
@@ -112,7 +119,7 @@ const SingleMode = (() => {
     const hidden = document.getElementById('sm-worldview-select');
     if (!dropdown || !hidden) return;
     const wvs = await DB.getAll('worldviews');
-    const wvList = wvs.filter(w => w.id !== '__default_wv__');
+    const wvList = wvs.filter(w => w.id !== '__default_wv__' && !w._hidden);
 
     // 全部世界观选项
     const items = [{ id: '', name: '无', icon: '', iconImage: '' }].concat(wvList);
@@ -172,7 +179,7 @@ const SingleMode = (() => {
     const hidden = document.getElementById('sm-worldview-select');
     hidden.value = wvId;
     const wvs = await DB.getAll('worldviews');
-    const all = [{ id: '', name: '无', icon: '', iconImage: '' }].concat(wvs.filter(w => w.id !== '__default_wv__'));
+    const all = [{ id: '', name: '无', icon: '', iconImage: '' }].concat(wvs.filter(w => w.id !== '__default_wv__' && !w._hidden));
     const w = all.find(x => x.id === wvId) || all[0];
     _updateWorldviewLabel(w);
     document.getElementById('sm-worldview-dropdown').classList.add('hidden');
@@ -185,7 +192,7 @@ const SingleMode = (() => {
   function _updateWorldviewOptionsState() {
     const wvId = document.getElementById('sm-worldview-select').value;
     const hasWv = !!wvId;
-    ['sm-enable-detail','sm-enable-npc','sm-enable-startplot','sm-enable-festival','sm-enable-custom','sm-enable-knowledge'].forEach(id => {
+    ['sm-enable-detail','sm-enable-npc','sm-enable-startplot','sm-enable-extended'].forEach(id => {
       const cb = document.getElementById(id);
       if (cb) {
         cb.disabled = !hasWv;
@@ -194,6 +201,15 @@ const SingleMode = (() => {
         if (label) label.style.opacity = hasWv ? '1' : '0.4';
       }
     });
+  }
+
+  // 单人卡扩展设定开关行：选了单人卡时显示
+  function _updateCardExtRowVisibility() {
+    const row = document.getElementById('sm-card-ext-row');
+    if (!row) return;
+    const isCard = _state.charType === 'card' && !!_state.charId;
+    if (isCard) row.classList.remove('hidden');
+    else row.classList.add('hidden');
   }
 
   // ===== 角色选择器 =====
@@ -215,6 +231,7 @@ const SingleMode = (() => {
       npcBtn.style.color = '#111';
     }
     _renderCharList();
+    _updateCardExtRowVisibility();
   }
 
   async function _renderCharList() {
@@ -252,6 +269,7 @@ const SingleMode = (() => {
       const npcs = [];
       allWvs.forEach(wv => {
         if (wv.id === '__default_wv__') return;
+        if (wv._hidden) return;
         // 全图 NPC
         (wv.globalNpcs || []).forEach(n => {
           npcs.push({ ...n, _wvId: wv.id, _wvName: wv.name || '未命名世界观', _faction: '全图常驻', _region: '全图', _avatar: avatarMap[n.id] || n.avatar || '' });
@@ -292,6 +310,7 @@ const SingleMode = (() => {
     _state.charId = id;
     _state.charSourceWvId = sourceWvId || '';
     _renderCharList();
+    _updateCardExtRowVisibility();
   }
 
   function _onCharSearch(text) {
@@ -316,9 +335,14 @@ const SingleMode = (() => {
     const enableDetail = document.getElementById('sm-enable-detail').checked;
     const enableNpc = document.getElementById('sm-enable-npc').checked;
     const enableStartPlot = document.getElementById('sm-enable-startplot').checked;
-    const enableFestival = document.getElementById('sm-enable-festival').checked;
-    const enableCustom = document.getElementById('sm-enable-custom').checked;
-    const enableKnowledge = document.getElementById('sm-enable-knowledge').checked;
+    // v599：扩展设定合并为单一总开关，三个细分字段一起 toggle 保持向后兼容
+    const enableExtended = document.getElementById('sm-enable-extended').checked;
+    const enableFestival = enableExtended;
+    const enableCustom = enableExtended;
+    const enableKnowledge = enableExtended;
+    // 单人卡扩展设定开关（仅在选了单人卡时有意义；其他情况默认 true 不影响）
+    const cardExtEl = document.getElementById('sm-enable-card-extended');
+    const enableCardExtended = cardExtEl ? cardExtEl.checked : true;
 
     // 取角色名作为默认对话名
     let charName = '';
@@ -356,6 +380,7 @@ const SingleMode = (() => {
         conv.singleEnableFestival = enableFestival;
         conv.singleEnableCustom = enableCustom;
       conv.singleEnableKnowledge = enableKnowledge;
+        conv.singleEnableCardExtended = enableCardExtended;
         // 同步对话归属世界观（裸跑→默认世界观）
         const newWv = wvId || '__default_wv__';
         const oldWv = conv.worldviewId;
@@ -395,7 +420,8 @@ const SingleMode = (() => {
       singleEnableStartPlot: enableStartPlot,
       singleEnableFestival: enableFestival,
       singleEnableCustom: enableCustom,
-      singleEnableKnowledge: enableKnowledge
+      singleEnableKnowledge: enableKnowledge,
+      singleEnableCardExtended: enableCardExtended
     };
     Conversations.getList().push(conv);
     await Conversations.saveList();
@@ -417,7 +443,8 @@ const SingleMode = (() => {
       enableStartPlot: !!conv.singleEnableStartPlot,
       enableFestival: !!conv.singleEnableFestival,
       enableCustom: !!conv.singleEnableCustom,
-      enableKnowledge: !!conv.singleEnableKnowledge
+      enableKnowledge: !!conv.singleEnableKnowledge,
+      enableCardExtended: conv.singleEnableCardExtended !== false
     };
   }
 

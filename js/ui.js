@@ -161,9 +161,6 @@ const UI = (() => {
       // 长按菜单
       const ctxMenu = document.querySelector('.context-menu:not(.hidden)');
       if (ctxMenu) return true;
-      // 剧情总结
-      const summary = document.getElementById('chat-summary-modal');
-      if (summary && !summary.classList.contains('hidden')) return true;
       // 管理模式底栏（面具/记忆/世界观）
       for (const barId of ['mask-manage-bar', 'memory-manage-bar', 'worldview-manage-bar-fixed']) {
         const bar = document.getElementById(barId);
@@ -186,7 +183,21 @@ const UI = (() => {
       switch (id) {
         case 'panel-chat': return null; // 聊天面板不走返回
         case 'panel-worldview': return () => showPanel('chat', 'back');
-        case 'panel-worldview-edit': return () => showPanel('worldview', 'back');
+        case 'panel-worldview-edit': return () => {
+          // v596：检查是否从单人卡跳进来
+          const rt = (typeof Worldview !== 'undefined' && Worldview.getEditReturnTo) ? Worldview.getEditReturnTo() : null;
+          if (rt === 'single-card-edit') {
+            if (Worldview.clearEditReturnTo) Worldview.clearEditReturnTo();
+            // 让 single_card 自己恢复编辑状态
+            if (typeof SingleCard !== 'undefined' && SingleCard.restoreEditPanel) {
+              SingleCard.restoreEditPanel();
+            } else {
+              showPanel('single-card-edit', 'back');
+            }
+          } else {
+            showPanel('worldview', 'back');
+          }
+        };
         case 'panel-wv-region': return () => showPanel('worldview-edit', 'back');
         case 'panel-wv-faction': return () => showPanel('wv-region', 'back');
         case 'panel-wv-npc': return () => {
@@ -198,6 +209,12 @@ const UI = (() => {
       };
         case 'panel-wv-viewer': return () => showPanel('worldview', 'back');
         case 'panel-character': return () => showPanel('chat', 'back');
+        case 'panel-single-card-edit': return () => {
+          showPanel('worldview', 'back');
+          if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
+            Worldview.switchWorldTab('char');
+          }
+        };
         case 'panel-mask-edit': return () => showPanel(_maskEditFrom || 'character', 'back');
         case 'panel-memory': return () => showPanel('chat', 'back');
     case 'panel-gaiden': return () => showPanel('chat', 'back');
@@ -439,7 +456,12 @@ if (phoneFab && name !== 'chat') {
 }
 
     if (name === 'memory' || name === 'memory-edit') { Memory.onPanelShow(); if (typeof Memory.exitManageMode === 'function') Memory.exitManageMode(); }
-    if (name === 'summary') { showPanel('chat'); openChatSummary(); return; }
+    if (name === 'summary') {
+      const cid = Conversations.getCurrent();
+      Summary.setConvId(cid);
+      const data = await Summary.get(cid);
+      Summary.renderSummaryView(data, cid, 'summary-content');
+    }
     if (name === 'character') { Character.load(); if (typeof Character.exitManageMode === 'function') Character.exitManageMode(); }
     if (name === 'gaiden') { await Gaiden.ensureLoaded(); Gaiden.renderList(); }
     if (name === 'worldview') { await Worldview.load(); }
@@ -693,24 +715,8 @@ if (contentArea) contentArea.style.display = 'none';
   }
 
   async function toggleChatSummary() {
-    const modal = document.getElementById('summary-modal');
-    if (!modal) return;
-    if (modal.classList.contains('hidden')) {
-      const cid = Conversations.getCurrent();
-      Summary.setConvId(cid);
-      // 渲染到模态框容器
-      const data = await Summary.get(cid);
-      Summary.renderSummaryView(data, cid, 'chat-summary-content');
-      modal.classList.remove('hidden', 'closing');
-    } else {
-      modal.classList.add('closing');
-      const content = modal.querySelector('.modal-content');
-      if (content) content.classList.add('closing');
-      await new Promise(r => setTimeout(r, 150));
-      modal.classList.remove('closing');
-      if (content) content.classList.remove('closing');
-      modal.classList.add('hidden');
-    }
+    // v604：从弹窗改为走全屏 panel（渲染由 showPanel('summary') 内统一处理）
+    showPanel('summary');
   }
 
   function showCopyText(title, value) {
