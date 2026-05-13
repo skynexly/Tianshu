@@ -523,6 +523,9 @@ async function _getMasksForCurrentWv() {
           const items = [{ id: '', name: '通用（所有世界观可见）' }];
           for (const w of allWvs) {
             if (!w?.id) continue;
+            // v619：过滤掉隐藏世界观（单人卡扩展专属容器，不应出现在面具下拉中）
+            if (w._hidden) continue;
+            if (typeof w.id === 'string' && w.id.startsWith('__sc_')) continue;
             items.push({ id: w.id, name: w.name || '未命名世界观' });
           }
           // 当前绑了一个已失效 wvId，添加灰项

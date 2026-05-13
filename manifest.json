@@ -1,7 +1,7 @@
 {
-  "name": "天枢城",
-  "short_name": "天枢城",
-  "description": "文字游戏引擎",
+  "name": "skynex",
+  "short_name": "skynex",
+  "description": "文字游戏引擎 · 内置天枢城 / 心动模拟",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",
