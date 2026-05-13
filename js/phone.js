@@ -1863,16 +1863,23 @@ ${wvPrompt}` },
 
   async function _collectMomentVisibleOptions() {
     const map = new Map();
-    const add = (name, source) => {
+    const add = (name, source, avatar) => {
       name = String(name || '').trim();
       if (!name) return;
-      if (!map.has(name)) map.set(name, { name, sources: new Set() });
+      if (!map.has(name)) map.set(name, { name, sources: new Set(), avatar: '' });
       if (source) map.get(name).sources.add(source);
+      if (avatar && !map.get(name).avatar) map.get(name).avatar = avatar;
     };
+    // v621: 预加载 NPC 头像
+    let avatarById = {};
+    try {
+      const avatarRows = await DB.getAll('npcAvatars').catch(() => []);
+      (avatarRows || []).forEach(a => { if (a?.id) avatarById[a.id] = a.avatar || ''; });
+    } catch(_) {}
     const addNpcFromWv = (wv, sourcePrefix = '世界观') => {
       if (!wv) return;
-      (wv.globalNpcs || []).forEach(n => add(n.name, '全图NPC'));
-      (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => add(n.name, sourcePrefix))));
+      (wv.globalNpcs || []).forEach(n => add(n.name, '全图NPC', avatarById[n.id] || n.avatar || ''));
+      (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => add(n.name, sourcePrefix, avatarById[n.id] || n.avatar || ''))));
     };
     try {
       const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
@@ -1884,29 +1891,29 @@ ${wvPrompt}` },
 
       if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
         const attached = await AttachedChars.resolveAll();
-        attached.forEach(c => add(c.name, c.type === 'npc' ? '常驻NPC' : '常驻角色'));
+        attached.forEach(c => add(c.name, c.type === 'npc' ? '常驻NPC' : '常驻角色', c.avatar || ''));
       }
 
       if (conv?.isSingle && conv.singleCharId) {
         if (conv.singleCharType === 'card') {
           const card = await DB.get('singleCards', conv.singleCharId);
-          add(card?.name, '角色');
+          add(card?.name, '角色', card?.avatar || '');
         } else if (conv.singleCharType === 'npc') {
-          let found = '';
+          let found = '', foundAvatar = '';
           for (const id of wvIds) {
             const wv = await DB.get('worldviews', id).catch(() => null);
             if (!wv) continue;
-            for (const n of (wv.globalNpcs || [])) if (n.id === conv.singleCharId) found = n.name;
-            (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => { if (n.id === conv.singleCharId) found = n.name; })));
+            for (const n of (wv.globalNpcs || [])) if (n.id === conv.singleCharId) { found = n.name; foundAvatar = avatarById[n.id] || n.avatar || ''; }
+            (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => { if (n.id === conv.singleCharId) { found = n.name; foundAvatar = avatarById[n.id] || n.avatar || ''; } })));
           }
-          add(found, '单人NPC');
+          add(found, '单人NPC', foundAvatar);
         }
       }
 
       const pd = await _getPhoneData();
-      if (pd?.relations) Object.values(pd.relations).forEach(r => add(r.name, '关系NPC'));
+      if (pd?.relations) Object.values(pd.relations).forEach(r => add(r.name, '关系NPC', r.avatar || ''));
     } catch(_) {}
-    return Array.from(map.values()).map(x => ({ name: x.name, source: Array.from(x.sources).join(' / ') || 'NPC' })).sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+    return Array.from(map.values()).map(x => ({ name: x.name, source: Array.from(x.sources).join(' / ') || 'NPC', avatar: x.avatar || '' })).sort((a, b) => a.name.localeCompare(b.name, 'zh'));
   }
 
   function _renderMomentVisibleLabel() {
@@ -1958,7 +1965,7 @@ ${wvPrompt}` },
     if (!modal) {
       modal = document.createElement('div');
       modal.id = 'phone-visible-modal';
-      modal.className = 'modal hidden';
+      modal.className = 'phone-inner-modal hidden';
       modal.innerHTML = `<div class="modal-content phone-visible-modal-content">
 <div class="phone-visible-header"><h3>对谁可见</h3><button onclick="Phone._closeMomentVisibleModal()" class="btn-icon modal-corner-btn close-btn">×</button></div>
 <label class="phone-visible-all circle-check-label">
@@ -1968,8 +1975,9 @@ ${wvPrompt}` },
 <input id="phone-visible-search" class="phone-visible-search" placeholder="搜索角色…" oninput="Phone._filterMomentVisibleOptions(this.value)">
 <div id="phone-moment-visible-list" class="phone-visible-list"></div>
 <button type="button" class="phone-visible-done" onclick="Phone._closeMomentVisibleModal()">完成</button>
-</div>`;
-      document.body.appendChild(modal);
+    </div>`;
+      const shell = document.querySelector('#phone-modal .phone-shell');
+      (shell || document.body).appendChild(modal);
     }
     document.getElementById('phone-visible-all').checked = _momentVisibleSelected.has('__all__');
     const search = document.getElementById('phone-visible-search');
@@ -2784,15 +2792,15 @@ _renderMemo(pd);
           ${o.shop ? `<div class="phone-map-result-address">${_uiIcon('pin', 12)}<span>${Utils.escapeHtml(o.shop)}</span></div>` : ''}
           ${o.desc ? `<div class="phone-map-result-desc">${Utils.escapeHtml(o.desc)}</div>` : ''}
           <div class="phone-map-result-foot">
-            <div class="phone-map-result-foot-left">
-              <span class="phone-map-distance-pill">¥ ${Utils.escapeHtml(String(o.price || '--'))}</span>
-              <span class="phone-map-distance-pill">${Utils.escapeHtml(targetLabel)}</span>
-            </div>
-            <div class="phone-map-result-actions">
-              <button type="button" onclick="Phone._shopDeleteOrder('${kind}','${o.id}')" class="phone-map-action-btn danger">${_uiIcon('trash', 12)} 删除</button>
-            </div>
-          </div>
-          <div style="font-size:10px;color:var(--text-secondary);margin-top:6px">下单于 ${Utils.escapeHtml(o.time || '')}</div>
+  <div class="phone-map-result-foot-left">
+    <span class="phone-map-distance-pill">¥ ${Utils.escapeHtml(String(o.price || '--'))}</span>
+    <span class="phone-map-distance-pill">${Utils.escapeHtml(targetLabel)}</span>
+  </div>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+  <span style="font-size:10px;color:var(--text-secondary)">下单于 ${Utils.escapeHtml(o.time || '')}</span>
+  <button type="button" onclick="Phone._shopDeleteOrder('${kind}','${o.id}')" class="phone-map-action-btn danger">${_uiIcon('trash', 12)} 删除</button>
+</div>
         </div>`;
     }).join('');
   }
@@ -2955,8 +2963,9 @@ ${fullCtx}`;
     if (!modal) {
       modal = document.createElement('div');
       modal.id = 'phone-shop-custom-modal';
-      modal.className = 'modal hidden';
-      document.body.appendChild(modal);
+      modal.className = 'phone-inner-modal hidden';
+      const shell = document.querySelector('#phone-modal .phone-shell');
+      (shell || document.body).appendChild(modal);
     }
     modal.innerHTML = `<div class="modal-content" style="max-width:360px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -3043,17 +3052,21 @@ ${fullCtx}`;
     if (!modal) {
       modal = document.createElement('div');
       modal.id = 'phone-shop-target-modal';
-      modal.className = 'modal hidden';
-      document.body.appendChild(modal);
+      modal.className = 'phone-inner-modal hidden';
+      const shell = document.querySelector('#phone-modal .phone-shell');
+      (shell || document.body).appendChild(modal);
     }
-    const listHtml = options.map(o => `
-      <div class="phone-shop-target-item" onclick="Phone._shopConfirmTarget('${kind}', ${idx}, '${Utils.escapeHtml(o.name).replaceAll("'","\\'")}')" style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;background:var(--bg-tertiary);display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div style="font-size:13px;color:var(--text);font-weight:600">${Utils.escapeHtml(o.name)}</div>
-          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(o.source)}</div>
-        </div>
-        <span style="color:var(--accent);font-size:12px">选 →</span>
-      </div>`).join('');
+    const listHtml = options.map(o => {
+      const avatarEl = o.avatar
+        ? `<img src="${Utils.escapeHtml(o.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+        : `<div style="width:32px;height:32px;border-radius:50%;background:var(--accent-light, #f3e8e2);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--accent);font-weight:600;flex-shrink:0">${Utils.escapeHtml((o.name || '?')[0])}</div>`;
+      return `
+      <div class="phone-shop-target-item" onclick="Phone._shopConfirmTarget('${kind}', ${idx}, '${Utils.escapeHtml(o.name).replaceAll("'","\\'")}')" style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;background:var(--bg-tertiary);display:flex;align-items:center;gap:10px">
+        ${avatarEl}
+        <div style="flex:1;min-width:0;font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(o.name)}</div>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:0.6"><rect x="3" y="8" width="18" height="4" rx="1" ry="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/></svg>
+      </div>`;
+    }).join('');
     modal.innerHTML = `<div class="modal-content" style="max-width:360px;max-height:70vh;display:flex;flex-direction:column">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
         <h3 style="margin:0">送给谁</h3>
@@ -3186,7 +3199,7 @@ async function _renderHeartSimApp(pd) {
         <div class="phone-tab ${_hsAppTab === 'profiles' ? 'active' : ''}" onclick="Phone._switchHsAppTab('profiles')">心动目标</div>
         <div class="phone-tab ${_hsAppTab === 'service' ? 'active' : ''}" onclick="Phone._switchHsAppTab('service')">心动模拟客服</div>
       </div>
-      <div id="phone-hs-edit-overlay" class="hidden" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px"></div>
+      <div id="phone-hs-edit-overlay" class="hidden" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px;border-radius:inherit;overflow:hidden"></div>
     </div>
   `;
 
