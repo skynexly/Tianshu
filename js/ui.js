@@ -162,7 +162,7 @@ const UI = (() => {
       const ctxMenu = document.querySelector('.context-menu:not(.hidden)');
       if (ctxMenu) return true;
       // 管理模式底栏（面具/记忆/世界观）
-      for (const barId of ['mask-manage-bar', 'memory-manage-bar', 'worldview-manage-bar-fixed']) {
+      for (const barId of ['mask-manage-bar', 'mask-sort-bar', 'memory-manage-bar', 'memory-sort-bar', 'worldview-manage-bar-fixed', 'worldview-sort-bar', 'single-card-manage-bar', 'single-card-sort-bar']) {
         const bar = document.getElementById(barId);
         if (bar && !bar.classList.contains('hidden')) return true;
       }

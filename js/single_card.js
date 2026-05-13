@@ -3,6 +3,15 @@
  */
 const SingleCard = (() => {
   let _editingId = null;
+  
+  // 管理模式
+  let manageMode = false;
+  let selectedIds = new Set();
+  // 排序模式
+  let sortMode = false;
+  let sortedList = [];
+  // 菜单
+  let menuVisible = false;
 
   async function getAll() {
     return await DB.getAll('singleCards');
@@ -49,10 +58,19 @@ const SingleCard = (() => {
 
   // 列表渲染
   async function renderList(filterText) {
+    if (sortMode) { _renderSortList(); return; }
     const container = document.getElementById('single-card-list');
     if (!container) return;
     const cards = await getAll();
-    cards.sort((a, b) => (b.updated || 0) - (a.updated || 0));
+    // 排序：有 sortOrder 的在前（升序），没有的按 updated 降序
+    cards.sort((a, b) => {
+      const hasA = typeof a.sortOrder === 'number';
+      const hasB = typeof b.sortOrder === 'number';
+      if (hasA && hasB) return a.sortOrder - b.sortOrder;
+      if (hasA) return -1;
+      if (hasB) return 1;
+      return (b.updated || 0) - (a.updated || 0);
+    });
     const q = (filterText || '').trim().toLowerCase();
     const filtered = q
       ? cards.filter(c =>
@@ -60,11 +78,20 @@ const SingleCard = (() => {
           (c.aliases || '').toLowerCase().includes(q))
       : cards;
     if (filtered.length === 0) {
-      container.innerHTML = `<div style="text-align:center;color:var(--text-secondary);padding:40px 20px;font-size:13px">${q ? '没有匹配的角色' : '还没有角色，点上方"新建"创建第一张'}</div>`;
+      container.innerHTML = `<div style="text-align:center;color:var(--text-secondary);padding:40px 20px;font-size:13px">${q ? '没有匹配的角色' : '还没有角色，点右上菜单新建第一张'}</div>`;
+      _updateSelectAllIcon();
       return;
     }
-    container.innerHTML = filtered.map(c => `
-      <div onclick="SingleCard.edit('${c.id}')" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;align-items:center;gap:12px;cursor:pointer">
+    container.innerHTML = filtered.map(c => {
+      const checked = selectedIds.has(c.id);
+      const clickHandler = manageMode
+        ? `SingleCard._onCardClick('${c.id}')`
+        : `SingleCard.edit('${c.id}')`;
+      return `
+      <div class="single-card-item" data-id="${c.id}" onclick="${clickHandler}" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;align-items:center;gap:12px;cursor:pointer">
+        ${manageMode ? `<span class="single-card-check-circle ${checked ? 'checked' : ''}" style="width:22px;height:22px;border-radius:50%;border:2px solid ${checked ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${checked ? 'background:var(--accent);' : ''}">
+          ${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+        </span>` : ''}
         <div style="width:48px;height:48px;border-radius:50%;flex-shrink:0;overflow:hidden;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center">
           ${c.avatar
             ? `<img src="${Utils.escapeHtml(c.avatar)}" style="width:100%;height:100%;object-fit:cover">`
@@ -75,9 +102,17 @@ const SingleCard = (() => {
           ${c.aliases ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.aliases)}</div>` : ''}
           ${c.creator ? `<div style="font-size:11px;color:var(--text-tertiary,var(--text-secondary));margin-top:2px;opacity:0.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">by ${Utils.escapeHtml(c.creator)}</div>` : ''}
         </div>
-        <button type="button" onclick="event.stopPropagation();SingleCard.quickCreateConversation('${c.id}')" style="flex-shrink:0;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap">创建对话</button>
+        ${!manageMode ? `<button type="button" onclick="event.stopPropagation();SingleCard.quickCreateConversation('${c.id}')" style="flex-shrink:0;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap">创建对话</button>` : ''}
       </div>
-    `).join('');
+    `;}).join('');
+    _updateSelectAllIcon();
+  }
+  
+  function _onCardClick(id) {
+    if (!manageMode) return;
+    if (selectedIds.has(id)) selectedIds.delete(id);
+    else selectedIds.add(id);
+    renderList(document.getElementById('single-card-search')?.value || '');
   }
 
   async function quickCreateConversation(cardId) {
@@ -491,6 +526,27 @@ const SingleCard = (() => {
       const file = e.target.files[0];
       if (!file) return;
       try {
+        // 先尝试批量格式
+        if (file.name.toLowerCase().endsWith('.json') || file.type === 'application/json') {
+          const text = await file.text();
+          let json;
+          try { json = JSON.parse(text); } catch (_) { json = null; }
+          if (json && json.__format === 'tianshu_single_card_v1_batch' && Array.isArray(json.cards)) {
+            let count = 0;
+            for (const c of json.cards) {
+              const copy = JSON.parse(JSON.stringify(c));
+              delete copy.id;
+              delete copy.created;
+              delete copy.updated;
+              delete copy.sortOrder;
+              await save(copy);
+              count++;
+            }
+            await renderList();
+            UI.showToast(`已导入 ${count} 个角色`);
+            return;
+          }
+        }
         let parsed;
         if (file.name.toLowerCase().endsWith('.png') || file.type === 'image/png') {
           parsed = await _parsePngCard(file);
@@ -808,6 +864,290 @@ const SingleCard = (() => {
     renderNpcAvatarList(document.getElementById('npc-avatar-search')?.value || '');
     UI.showToast('已删除');
   }
+  
+  // ===== v614 菜单 / 批量 / 排序（对齐 Memory & Worldview） =====
+  function toggleMenu() {
+    const dropdown = document.getElementById('single-card-menu-dropdown');
+    if (!dropdown) return;
+    menuVisible = !menuVisible;
+    if (menuVisible) {
+      dropdown.classList.remove('hidden', 'closing');
+      setTimeout(() => {
+        document.addEventListener('click', _closeMenuOutside, { once: true });
+      }, 0);
+    } else {
+      dropdown.classList.add('closing');
+      setTimeout(() => {
+        dropdown.classList.add('hidden');
+        dropdown.classList.remove('closing');
+      }, 120);
+    }
+  }
+  function _closeMenuOutside(e) {
+    const btn = document.getElementById('single-card-menu-btn');
+    if (btn && btn.contains(e.target)) return;
+    menuVisible = false;
+    const dropdown = document.getElementById('single-card-menu-dropdown');
+    if (dropdown) {
+      dropdown.classList.add('closing');
+      setTimeout(() => {
+        dropdown.classList.add('hidden');
+        dropdown.classList.remove('closing');
+      }, 120);
+    }
+  }
+  
+  // ----- 管理模式 -----
+  async function toggleManageMode() {
+    if (manageMode) { exitManageMode(); return; }
+    if (sortMode) exitSortMode();
+    manageMode = true;
+    const bar = document.getElementById('single-card-manage-bar');
+    if (bar) bar.classList.remove('hidden');
+    const container = document.getElementById('single-card-list');
+    if (container) container.style.paddingBottom = '72px';
+    await renderList(document.getElementById('single-card-search')?.value || '');
+  }
+  function exitManageMode() {
+    manageMode = false;
+    selectedIds.clear();
+    const bar = document.getElementById('single-card-manage-bar');
+    if (bar) bar.classList.add('hidden');
+    const container = document.getElementById('single-card-list');
+    if (container) container.style.paddingBottom = '';
+    renderList(document.getElementById('single-card-search')?.value || '');
+  }
+  async function toggleSelectAll() {
+    const container = document.getElementById('single-card-list');
+    const allIds = Array.from(container.querySelectorAll('.single-card-item')).map(el => el.dataset.id);
+    const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
+    if (allSelected) selectedIds.clear();
+    else allIds.forEach(id => selectedIds.add(id));
+    await renderList(document.getElementById('single-card-search')?.value || '');
+  }
+  function _updateSelectAllIcon() {
+    const iconEl = document.getElementById('single-card-select-all-icon');
+    if (!iconEl) return;
+    const container = document.getElementById('single-card-list');
+    if (!container) return;
+    const allIds = Array.from(container.querySelectorAll('.single-card-item')).map(el => el.dataset.id);
+    const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
+    if (allSelected) {
+      iconEl.style.background = 'var(--accent)';
+      iconEl.style.border = '2px solid var(--accent)';
+      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    } else {
+      iconEl.style.background = '';
+      iconEl.style.border = '2px solid var(--text-secondary)';
+      iconEl.innerHTML = '';
+    }
+  }
+  
+  // 批量导出
+  async function exportSelected() {
+    if (selectedIds.size === 0) { await UI.showAlert('提示', '请先选择角色'); return; }
+    const cards = [];
+    for (const id of selectedIds) {
+      const c = await get(id);
+      if (c) cards.push(c);
+    }
+    if (cards.length === 0) { UI.showToast('未找到可导出的角色'); return; }
+    const exportData = { __format: 'tianshu_single_card_v1_batch', cards };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `single_cards_${cards.length}个_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    UI.showToast(`已导出 ${cards.length} 个角色`);
+  }
+  
+  // 批量复制
+  async function batchClone() {
+    if (selectedIds.size === 0) { await UI.showAlert('提示', '请先选择角色'); return; }
+    let count = 0;
+    for (const id of selectedIds) {
+      const c = await get(id);
+      if (!c) continue;
+      const copy = JSON.parse(JSON.stringify(c));
+      delete copy.id;
+      delete copy.created;
+      delete copy.updated;
+      delete copy.sortOrder;
+      copy.name = (copy.name || '未命名') + ' (副本)';
+      await save(copy);
+      count++;
+    }
+    selectedIds.clear();
+    await renderList(document.getElementById('single-card-search')?.value || '');
+    UI.showToast(`已复制 ${count} 个角色`);
+  }
+  
+  // 批量删除
+  async function batchDelete() {
+    if (selectedIds.size === 0) { await UI.showAlert('提示', '请先选择角色'); return; }
+    if (!await UI.showConfirm('批量删除', `确定删除选中的 ${selectedIds.size} 个角色？\n\n关联对话不会被删除，但会失去角色绑定。`)) return;
+    for (const id of selectedIds) {
+      await remove(id);
+    }
+    selectedIds.clear();
+    exitManageMode();
+    UI.showToast('已删除');
+  }
+  
+  // ----- 排序模式 -----
+  async function toggleSortMode() {
+    if (sortMode) { exitSortMode(); return; }
+    if (manageMode) exitManageMode();
+    sortMode = true;
+    const cards = await getAll();
+    sortedList = cards.slice().sort((a, b) => {
+      const hasA = typeof a.sortOrder === 'number';
+      const hasB = typeof b.sortOrder === 'number';
+      if (hasA && hasB) return a.sortOrder - b.sortOrder;
+      if (hasA) return -1;
+      if (hasB) return 1;
+      return (b.updated || 0) - (a.updated || 0);
+    });
+    _renderSortList();
+  }
+  function exitSortMode() {
+    sortMode = false;
+    sortedList = [];
+    const bar = document.getElementById('single-card-sort-bar');
+    if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
+    const container = document.getElementById('single-card-list');
+    if (container) container.style.paddingBottom = '';
+    renderList(document.getElementById('single-card-search')?.value || '');
+  }
+  function _renderSortList() {
+    const container = document.getElementById('single-card-list');
+    if (!container) return;
+    container.style.paddingBottom = '72px';
+    const bar = document.getElementById('single-card-sort-bar');
+    if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
+    container.innerHTML = sortedList.length === 0 ?
+      '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无角色</p>' :
+      sortedList.map((c, i) => {
+        const sub = c.aliases || c.creator || '';
+        return `
+        <div class="sort-item" style="display:flex;align-items:center;gap:8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;transition:transform 0.15s ease,opacity 0.15s ease" data-sort-idx="${i}" data-id="${c.id}">
+          <div class="sort-handle" style="display:flex;align-items:center;justify-content:center;width:24px;flex-shrink:0;cursor:grab;color:var(--text-secondary);font-size:18px;user-select:none;-webkit-user-select:none;touch-action:none">≡</div>
+          <div style="flex:1;overflow:hidden">
+            <h3 style="margin:0 0 2px 0;font-size:13px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.name || '未命名')}</h3>
+            <p style="margin:0;font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(sub || '—')}</p>
+          </div>
+          <span style="font-size:11px;color:var(--text-secondary);flex-shrink:0">${i + 1}</span>
+        </div>`;
+      }).join('');
+    _bindSortDrag(container);
+  }
+  let _dragState = null;
+  function _bindSortDrag(container) {
+    const items = container.querySelectorAll('.sort-item');
+    items.forEach(item => {
+      const handle = item.querySelector('.sort-handle');
+      if (!handle) return;
+      handle.addEventListener('touchstart', e => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = item.getBoundingClientRect();
+        const placeholder = document.createElement('div');
+        placeholder.className = 'sort-placeholder';
+        placeholder.style.cssText = `height:${rect.height}px;margin-bottom:6px;border:2px dashed var(--border);border-radius:var(--radius);background:transparent;box-sizing:border-box`;
+        item.style.position = 'fixed';
+        item.style.left = rect.left + 'px';
+        item.style.width = rect.width + 'px';
+        item.style.top = rect.top + 'px';
+        item.style.zIndex = '9999';
+        item.style.opacity = '0.9';
+        item.style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)';
+        item.style.pointerEvents = 'none';
+        item.style.transition = 'none';
+        item.parentNode.insertBefore(placeholder, item);
+        _dragState = {
+          item, placeholder, container,
+          idx: parseInt(item.dataset.sortIdx),
+          startY: touch.clientY,
+          itemTop: rect.top,
+          itemHeight: rect.height + 6,
+          scrollContainer: container.closest('.panel-content') || container.parentElement
+        };
+        document.addEventListener('touchmove', _onSortTouchMove, { passive: false });
+        document.addEventListener('touchend', _onSortTouchEnd);
+        document.addEventListener('touchcancel', _onSortTouchEnd);
+      }, { passive: false });
+    });
+  }
+  function _onSortTouchMove(e) {
+    if (!_dragState) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const dy = touch.clientY - _dragState.startY;
+    _dragState.item.style.top = (_dragState.itemTop + dy) + 'px';
+    const sc = _dragState.scrollContainer;
+    if (sc) {
+      const scRect = sc.getBoundingClientRect();
+      const edgeZone = 60;
+      const speed = 8;
+      if (touch.clientY < scRect.top + edgeZone) sc.scrollTop -= speed;
+      else if (touch.clientY > scRect.bottom - edgeZone) sc.scrollTop += speed;
+    }
+    const allItems = _dragState.container.querySelectorAll('.sort-item, .sort-placeholder');
+    const dragCenterY = _dragState.itemTop + dy + _dragState.item.offsetHeight / 2;
+    for (let i = 0; i < allItems.length; i++) {
+      const el = allItems[i];
+      if (el === _dragState.item) continue;
+      const r = el.getBoundingClientRect();
+      const midY = r.top + r.height / 2;
+      if (el.classList.contains('sort-placeholder')) continue;
+      const elIdx = parseInt(el.dataset.sortIdx);
+      if (dragCenterY < midY && elIdx < _dragState.idx) {
+        _dragState.container.insertBefore(_dragState.placeholder, el);
+        break;
+      } else if (dragCenterY > midY && elIdx > _dragState.idx) {
+        if (el.nextSibling) _dragState.container.insertBefore(_dragState.placeholder, el.nextSibling);
+        else _dragState.container.appendChild(_dragState.placeholder);
+      }
+    }
+  }
+  function _onSortTouchEnd() {
+    if (!_dragState) return;
+    const { item, placeholder, container } = _dragState;
+    item.style.position = '';
+    item.style.left = '';
+    item.style.width = '';
+    item.style.top = '';
+    item.style.zIndex = '';
+    item.style.opacity = '';
+    item.style.boxShadow = '';
+    item.style.pointerEvents = '';
+    item.style.transition = '';
+    container.insertBefore(item, placeholder);
+    placeholder.remove();
+    const sortItems = Array.from(container.querySelectorAll('.sort-item'));
+    const oldIdx = _dragState.idx;
+    const realNewIdx = sortItems.indexOf(item);
+    if (realNewIdx !== -1 && realNewIdx !== oldIdx) {
+      const [moved] = sortedList.splice(oldIdx, 1);
+      sortedList.splice(realNewIdx, 0, moved);
+      _renderSortList();
+    }
+    _dragState = null;
+    document.removeEventListener('touchmove', _onSortTouchMove);
+    document.removeEventListener('touchend', _onSortTouchEnd);
+    document.removeEventListener('touchcancel', _onSortTouchEnd);
+  }
+  async function saveSortOrder() {
+    for (let i = 0; i < sortedList.length; i++) {
+      const c = sortedList[i];
+      c.sortOrder = i;
+      await DB.put('singleCards', c);
+    }
+    UI.showToast('排序已保存');
+    exitSortMode();
+  }
 
   return {
     getAll, get, save, remove,
@@ -819,6 +1159,11 @@ const SingleCard = (() => {
     openCardExtEdit, restoreEditPanel,
     formatForPrompt,
     importCard, exportCurrent,
+    // v614 批量管理 / 排序 / 菜单（对齐记忆/世界观）
+    toggleMenu,
+    toggleManageMode, exitManageMode, toggleSelectAll, _onCardClick,
+    exportSelected, batchClone, batchDelete,
+    toggleSortMode, exitSortMode, saveSortOrder,
     switchCharSubtab, renderNpcAvatarList, getNpcAvatar, setNpcAvatar,
     _pickNpcAvatar, _removeNpcAvatar
   };

@@ -90,12 +90,27 @@ async function _getMasksForCurrentWv() {
 
   let manageMode = false;
   let selectedIds = new Set();
+  // v616 排序模式 / 菜单
+  let sortMode = false;
+  let sortedList = [];
+  let menuVisible = false;
 
   async function renderMaskList(filter = '') {
+    if (sortMode) { _renderSortList(); return; }
     const list = await getMaskList();
     const query = filter.trim().toLowerCase();
     const container = document.getElementById('mask-list-container');
     if (!container) return;
+
+    // 按 sortOrder 升序，没有的按列表原顺序
+    list.sort((a, b) => {
+      const hasA = typeof a.sortOrder === 'number';
+      const hasB = typeof b.sortOrder === 'number';
+      if (hasA && hasB) return a.sortOrder - b.sortOrder;
+      if (hasA) return -1;
+      if (hasB) return 1;
+      return 0;
+    });
 
     // 分组：通用 + 各世界观（wvId 失效的归通用）
     const allWvs = (await DB.getAll('worldviews').catch(() => [])) || [];
@@ -175,40 +190,23 @@ async function _getMasksForCurrentWv() {
     manageMode = false;
     selectedIds.clear();
     const bar = document.getElementById('mask-manage-bar');
-    const btn = document.getElementById('mask-manage-btn');
     if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
     const container = document.getElementById('mask-list-container');
     if (container) container.style.paddingBottom = '';
-    if (btn) {
-      btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 管理`;
-      btn.style.background = 'none';
-      btn.style.color = 'var(--text-secondary)';
-      btn.style.borderColor = 'var(--border)';
-    }
   }
 
   function toggleManageMode() {
+    if (sortMode) exitSortMode();
     manageMode = !manageMode;
     selectedIds.clear();
     const bar = document.getElementById('mask-manage-bar');
-    const btn = document.getElementById('mask-manage-btn');
     const container = document.getElementById('mask-list-container');
     if (manageMode) {
-      bar.classList.remove('hidden');
-      bar.style.display = 'flex';
+      if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
       if (container) container.style.paddingBottom = '72px';
-      btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> 退出`;
-      btn.style.background = 'var(--accent)';
-      btn.style.color = '#111';
-      btn.style.borderColor = 'var(--accent)';
     } else {
-      bar.classList.add('hidden');
-      bar.style.display = '';
+      if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
       if (container) container.style.paddingBottom = '';
-      btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 管理`;
-      btn.style.background = 'none';
-      btn.style.color = 'var(--text-secondary)';
-      btn.style.borderColor = 'var(--border)';
     }
     renderMaskList(document.getElementById('mask-search')?.value || '');
   }
@@ -264,7 +262,108 @@ async function _getMasksForCurrentWv() {
       await switchMask(newList[0].id);
     }
     selectedIds.clear();
+    exitManageMode();
     await load();
+  }
+
+  // ===== v616 菜单 / 导入 / 批量导出 / 排序（对齐记忆·世界观·单人卡） =====
+  function toggleMenu() {
+    const dropdown = document.getElementById('mask-menu-dropdown');
+    if (!dropdown) return;
+    menuVisible = !menuVisible;
+    if (menuVisible) {
+      dropdown.classList.remove('hidden', 'closing');
+      setTimeout(() => {
+        document.addEventListener('click', _closeMenuOutside, { once: true });
+      }, 0);
+    } else {
+      dropdown.classList.add('closing');
+      setTimeout(() => {
+        dropdown.classList.add('hidden');
+        dropdown.classList.remove('closing');
+      }, 120);
+    }
+  }
+  function _closeMenuOutside(e) {
+    const btn = document.getElementById('mask-menu-btn');
+    if (btn && btn.contains(e.target)) return;
+    menuVisible = false;
+    const dropdown = document.getElementById('mask-menu-dropdown');
+    if (dropdown) {
+      dropdown.classList.add('closing');
+      setTimeout(() => {
+        dropdown.classList.add('hidden');
+        dropdown.classList.remove('closing');
+      }, 120);
+    }
+  }
+
+  // 批量导出选中面具（含列表元数据 + characters 条目）
+  async function exportSelected() {
+    if (selectedIds.size === 0) { await UI.showAlert('提示', '请先选择面具'); return; }
+    const list = await getMaskList();
+    const entries = [];
+    const chars = [];
+    for (const sid of selectedIds) {
+      const entry = list.find(m => m.id === sid);
+      if (!entry) continue;
+      const data = await DB.get('characters', sid);
+      entries.push(entry);
+      if (data) chars.push(data);
+    }
+    if (entries.length === 0) { UI.showToast('未找到可导出的面具'); return; }
+    const exportData = { __format: 'tianshu_masks_v1_batch', list: entries, characters: chars };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `masks_${entries.length}个_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    UI.showToast(`已导出 ${entries.length} 个面具`);
+  }
+
+  // 导入面具：支持 tianshu_masks_v1_batch 批量包，也支持单个面具 JSON
+  function importMask() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+        const list = await getMaskList();
+        let count = 0;
+        if (json.__format === 'tianshu_masks_v1_batch' && Array.isArray(json.list) && Array.isArray(json.characters)) {
+          for (const entry of json.list) {
+            const newId = 'mask_' + Utils.uuid().slice(0, 8);
+            const data = json.characters.find(c => c.id === entry.id) || { id: newId };
+            const cloned = { ...data, id: newId };
+            await DB.put('characters', cloned);
+            list.push({ id: newId, name: entry.name || '导入面具', worldviewId: entry.worldviewId || '' });
+            count++;
+          }
+        } else if (json.__format === 'tianshu_mask_v1' && json.entry && json.character) {
+          const newId = 'mask_' + Utils.uuid().slice(0, 8);
+          const cloned = { ...json.character, id: newId };
+          await DB.put('characters', cloned);
+          list.push({ id: newId, name: json.entry.name || '导入面具', worldviewId: json.entry.worldviewId || '' });
+          count = 1;
+        } else {
+          UI.showToast('无法识别的面具文件格式', 3000);
+          return;
+        }
+        await saveMaskList(list);
+        await renderMaskList();
+        UI.showToast(`已导入 ${count} 个面具`);
+      } catch (err) {
+        console.error('[importMask]', err);
+        UI.showToast('导入失败：' + (err.message || err));
+      }
+    };
+    input.click();
   }
 
   // ===== 面具自动保存 =====
@@ -1057,6 +1156,161 @@ async function closeItemModal() {
     return true;
   }
 
+    // ===== v616 排序模式（对齐记忆·世界观·单人卡） =====
+  async function toggleSortMode() {
+    if (sortMode) { exitSortMode(); return; }
+    if (manageMode) exitManageMode();
+    sortMode = true;
+    const list = await getMaskList();
+    sortedList = list.slice().sort((a, b) => {
+      const hasA = typeof a.sortOrder === 'number';
+      const hasB = typeof b.sortOrder === 'number';
+      if (hasA && hasB) return a.sortOrder - b.sortOrder;
+      if (hasA) return -1;
+      if (hasB) return 1;
+      return 0;
+    });
+    _renderSortList();
+  }
+  function exitSortMode() {
+    sortMode = false;
+    sortedList = [];
+    const bar = document.getElementById('mask-sort-bar');
+    if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
+    const container = document.getElementById('mask-list-container');
+    if (container) container.style.paddingBottom = '';
+    renderMaskList(document.getElementById('mask-search')?.value || '');
+  }
+  function _renderSortList() {
+    const container = document.getElementById('mask-list-container');
+    if (!container) return;
+    container.style.paddingBottom = '72px';
+    const bar = document.getElementById('mask-sort-bar');
+    if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
+    container.innerHTML = sortedList.length === 0 ?
+      '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无面具</p>' :
+      sortedList.map((m, i) => `
+        <div class="sort-item" style="display:flex;align-items:center;gap:8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;transition:transform 0.15s ease,opacity 0.15s ease" data-sort-idx="${i}" data-id="${m.id}">
+          <div class="sort-handle" style="display:flex;align-items:center;justify-content:center;width:24px;flex-shrink:0;cursor:grab;color:var(--text-secondary);font-size:18px;user-select:none;-webkit-user-select:none;touch-action:none">≡</div>
+          <div style="flex:1;overflow:hidden">
+            <h3 style="margin:0 0 2px 0;font-size:13px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.name || '未命名')}</h3>
+          </div>
+          <span style="font-size:11px;color:var(--text-secondary);flex-shrink:0">${i + 1}</span>
+        </div>`).join('');
+    _bindSortDrag(container);
+  }
+  let _dragState = null;
+  function _bindSortDrag(container) {
+    const items = container.querySelectorAll('.sort-item');
+    items.forEach(item => {
+      const handle = item.querySelector('.sort-handle');
+      if (!handle) return;
+      handle.addEventListener('touchstart', e => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = item.getBoundingClientRect();
+        const placeholder = document.createElement('div');
+        placeholder.className = 'sort-placeholder';
+        placeholder.style.cssText = `height:${rect.height}px;margin-bottom:6px;border:2px dashed var(--border);border-radius:var(--radius);background:transparent;box-sizing:border-box`;
+        item.style.position = 'fixed';
+        item.style.left = rect.left + 'px';
+        item.style.width = rect.width + 'px';
+        item.style.top = rect.top + 'px';
+        item.style.zIndex = '9999';
+        item.style.opacity = '0.9';
+        item.style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)';
+        item.style.pointerEvents = 'none';
+        item.style.transition = 'none';
+        item.parentNode.insertBefore(placeholder, item);
+        _dragState = {
+          item, placeholder, container,
+          idx: parseInt(item.dataset.sortIdx),
+          startY: touch.clientY,
+          itemTop: rect.top,
+          scrollContainer: container.closest('.panel-content') || container.parentElement
+        };
+        document.addEventListener('touchmove', _onSortTouchMove, { passive: false });
+        document.addEventListener('touchend', _onSortTouchEnd);
+        document.addEventListener('touchcancel', _onSortTouchEnd);
+      }, { passive: false });
+    });
+  }
+  function _onSortTouchMove(e) {
+    if (!_dragState) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const dy = touch.clientY - _dragState.startY;
+    _dragState.item.style.top = (_dragState.itemTop + dy) + 'px';
+    const sc = _dragState.scrollContainer;
+    if (sc) {
+      const scRect = sc.getBoundingClientRect();
+      const edgeZone = 60;
+      const speed = 8;
+      if (touch.clientY < scRect.top + edgeZone) sc.scrollTop -= speed;
+      else if (touch.clientY > scRect.bottom - edgeZone) sc.scrollTop += speed;
+    }
+    const allItems = _dragState.container.querySelectorAll('.sort-item, .sort-placeholder');
+    const dragCenterY = _dragState.itemTop + dy + _dragState.item.offsetHeight / 2;
+    for (let i = 0; i < allItems.length; i++) {
+      const el = allItems[i];
+      if (el === _dragState.item) continue;
+      const r = el.getBoundingClientRect();
+      const midY = r.top + r.height / 2;
+      if (el.classList.contains('sort-placeholder')) continue;
+      const elIdx = parseInt(el.dataset.sortIdx);
+      if (dragCenterY < midY && elIdx < _dragState.idx) {
+        _dragState.container.insertBefore(_dragState.placeholder, el);
+        break;
+      } else if (dragCenterY > midY && elIdx > _dragState.idx) {
+        if (el.nextSibling) _dragState.container.insertBefore(_dragState.placeholder, el.nextSibling);
+        else _dragState.container.appendChild(_dragState.placeholder);
+      }
+    }
+  }
+  function _onSortTouchEnd() {
+    if (!_dragState) return;
+    const { item, placeholder, container } = _dragState;
+    item.style.position = '';
+    item.style.left = '';
+    item.style.width = '';
+    item.style.top = '';
+    item.style.zIndex = '';
+    item.style.opacity = '';
+    item.style.boxShadow = '';
+    item.style.pointerEvents = '';
+    item.style.transition = '';
+    container.insertBefore(item, placeholder);
+    placeholder.remove();
+    const sortItems = Array.from(container.querySelectorAll('.sort-item'));
+    const oldIdx = _dragState.idx;
+    const realNewIdx = sortItems.indexOf(item);
+    if (realNewIdx !== -1 && realNewIdx !== oldIdx) {
+      const [moved] = sortedList.splice(oldIdx, 1);
+      sortedList.splice(realNewIdx, 0, moved);
+      _renderSortList();
+    }
+    _dragState = null;
+    document.removeEventListener('touchmove', _onSortTouchMove);
+    document.removeEventListener('touchend', _onSortTouchEnd);
+    document.removeEventListener('touchcancel', _onSortTouchEnd);
+  }
+  async function saveSortOrder() {
+    const list = await getMaskList();
+    const orderMap = new Map();
+    sortedList.forEach((m, i) => orderMap.set(m.id, i));
+    list.forEach(m => {
+      if (orderMap.has(m.id)) m.sortOrder = orderMap.get(m.id);
+    });
+    list.sort((a, b) => {
+      const oa = (typeof a.sortOrder === 'number') ? a.sortOrder : 999999;
+      const ob = (typeof b.sortOrder === 'number') ? b.sortOrder : 999999;
+      return oa - ob;
+    });
+    await saveMaskList(list);
+    UI.showToast('排序已保存');
+    exitSortMode();
+  }
+
   function getAvatar() { return activeAvatar; }
 
   function searchMasks(query) {
@@ -1070,6 +1324,9 @@ return {
   addAbility, removeAbility, editAbility, saveAbility, deleteAbility, closeAbilityEdit, closeAbilityModal,
   addItem, removeItem, editItem, saveItem, deleteItem, closeItemEdit, closeItemModal, addItemDirect, removeItemByName, cloneMask, cloneMaskFrom,
   onAvatarPicked, removeAvatar, searchMasks,
-  toggleManageMode, toggleSelectAll, batchClone, batchDelete, _onCardClick, exitManageMode
+  toggleManageMode, toggleSelectAll, batchClone, batchDelete, _onCardClick, exitManageMode,
+  // v616
+  toggleMenu, exportSelected, importMask,
+  toggleSortMode, exitSortMode, saveSortOrder
 };
 })();

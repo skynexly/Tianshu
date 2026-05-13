@@ -8,6 +8,11 @@ const Worldview = (() => {
   // 管理模式
   let manageMode = false;
   let selectedIds = new Set();
+  // 排序模式
+  let sortMode = false;
+  let sortedList = [];
+  // 菜单
+  let menuVisible = false;
   
   // ---------- 列表 CRUD ----------
   async function getWorldviewList() {
@@ -192,13 +197,20 @@ function _defaultRegion() {
   }
   
   async function renderWorldviewList(filter = '') {
+    if (sortMode) { _renderSortList(); return; }
     const list = await getWorldviewList();
     const query = filter.trim().toLowerCase();
     const container = document.getElementById('worldview-list-container');
     if (!container) return;
+    // 按 sortOrder 排序（没有 sortOrder 的按原顺序）
+    const sorted = list.slice().sort((a, b) => {
+      const oa = (typeof a.sortOrder === 'number') ? a.sortOrder : 999999;
+      const ob = (typeof b.sortOrder === 'number') ? b.sortOrder : 999999;
+      return oa - ob;
+    });
     
     let html = '';
-    for (const w of list) {
+    for (const w of sorted) {
       if (w.id === '__default_wv__') continue; // 无世界观不显示预览卡片
       if (w._hidden) continue; // v596：隐藏世界观（单人卡专属）不出现在列表
       if (query && !w.name.toLowerCase().includes(query)) continue;
@@ -282,11 +294,31 @@ function _defaultRegion() {
     await saveWorldviewList(list.filter(w => !selectedIds.has(w.id)));
     selectedIds.clear();
     manageMode = false;
-    const btn = document.getElementById('worldview-manage-btn');
     const bar = document.getElementById('worldview-manage-bar-fixed');
-    if (btn) { btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 管理`; btn.style.background = 'none'; btn.style.color = 'var(--text-secondary)'; btn.style.border = '1px solid var(--border)'; }
     if (bar) bar.classList.add('hidden');
+    const container = document.getElementById('worldview-list-container');
+    if (container) container.style.paddingBottom = '';
     await renderWorldviewList();
+  }
+  
+  // 批量导出选中的世界观
+  async function exportSelectedWorldviews() {
+    if (selectedIds.size === 0) { await UI.showAlert('提示', '请先选择世界观'); return; }
+    const wvArr = [];
+    for (const id of selectedIds) {
+      const w = await DB.get('worldviews', id);
+      if (w) wvArr.push(w);
+    }
+    if (wvArr.length === 0) { UI.showToast('未找到可导出的世界观'); return; }
+    const exportData = { worldviews: wvArr };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `worldviews_${wvArr.length}个_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    UI.showToast(`已导出 ${wvArr.length} 个世界观`);
   }
   
   function _updateSelectAllIcon() {
@@ -313,6 +345,207 @@ function _defaultRegion() {
     if (allSelected) { selectedIds.clear(); } else { allIds.forEach(id => selectedIds.add(id)); }
     await renderWorldviewList(document.getElementById('worldview-search')?.value || '');
     _updateSelectAllIcon();
+  }
+  
+  // ===== 菜单（参考 Memory.toggleMenu） =====
+  function toggleMenu() {
+    const dropdown = document.getElementById('worldview-menu-dropdown');
+    if (!dropdown) return;
+    menuVisible = !menuVisible;
+    if (menuVisible) {
+      dropdown.classList.remove('hidden', 'closing');
+      setTimeout(() => {
+        document.addEventListener('click', _closeMenuOutside, { once: true });
+      }, 0);
+    } else {
+      dropdown.classList.add('closing');
+      setTimeout(() => {
+        dropdown.classList.add('hidden');
+        dropdown.classList.remove('closing');
+      }, 120);
+    }
+  }
+  function _closeMenuOutside(e) {
+    const btn = document.getElementById('worldview-menu-btn');
+    if (btn && btn.contains(e.target)) return;
+    menuVisible = false;
+    const dropdown = document.getElementById('worldview-menu-dropdown');
+    if (dropdown) {
+      dropdown.classList.add('closing');
+      setTimeout(() => {
+        dropdown.classList.add('hidden');
+        dropdown.classList.remove('closing');
+      }, 120);
+    }
+  }
+  
+  // ===== 排序模式 =====
+  async function toggleSortMode() {
+    if (sortMode) { exitSortMode(); return; }
+    if (manageMode) {
+      // 退出管理模式
+      manageMode = false;
+      selectedIds.clear();
+      const mbar = document.getElementById('worldview-manage-bar-fixed');
+      if (mbar) mbar.classList.add('hidden');
+    }
+    sortMode = true;
+    const list = await getWorldviewList();
+    sortedList = list.filter(w => w.id !== '__default_wv__' && !w._hidden).slice();
+    sortedList.sort((a, b) => {
+      const oa = (typeof a.sortOrder === 'number') ? a.sortOrder : 999999;
+      const ob = (typeof b.sortOrder === 'number') ? b.sortOrder : 999999;
+      return oa - ob;
+    });
+    _renderSortList();
+  }
+  function exitSortMode() {
+    sortMode = false;
+    sortedList = [];
+    const bar = document.getElementById('worldview-sort-bar');
+    if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
+    const container = document.getElementById('worldview-list-container');
+    if (container) container.style.paddingBottom = '';
+    renderWorldviewList(document.getElementById('worldview-search')?.value || '');
+  }
+  function _renderSortList() {
+    const container = document.getElementById('worldview-list-container');
+    if (!container) return;
+    container.style.paddingBottom = '72px';
+    const bar = document.getElementById('worldview-sort-bar');
+    if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
+    container.innerHTML = sortedList.length === 0 ?
+      '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无世界观</p>' :
+      sortedList.map((w, i) => {
+        const desc = w.description || '暂无描述';
+        return `
+        <div class="sort-item" style="display:flex;align-items:center;gap:8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;transition:transform 0.15s ease,opacity 0.15s ease" data-sort-idx="${i}" data-id="${w.id}">
+          <div class="sort-handle" style="display:flex;align-items:center;justify-content:center;width:24px;flex-shrink:0;cursor:grab;color:var(--text-secondary);font-size:18px;user-select:none;-webkit-user-select:none;touch-action:none">≡</div>
+          <div style="flex:1;overflow:hidden">
+            <h3 style="margin:0 0 2px 0;font-size:13px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(w.name)}</h3>
+            <p style="margin:0;font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(desc)}</p>
+          </div>
+          <span style="font-size:11px;color:var(--text-secondary);flex-shrink:0">${i + 1}</span>
+        </div>`;
+      }).join('');
+    _bindSortDrag(container);
+  }
+  // 拖拽排序（参考 Memory）
+  let _dragState = null;
+  function _bindSortDrag(container) {
+    const items = container.querySelectorAll('.sort-item');
+    items.forEach(item => {
+      const handle = item.querySelector('.sort-handle');
+      if (!handle) return;
+      handle.addEventListener('touchstart', e => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = item.getBoundingClientRect();
+        const placeholder = document.createElement('div');
+        placeholder.className = 'sort-placeholder';
+        placeholder.style.cssText = `height:${rect.height}px;margin-bottom:6px;border:2px dashed var(--border);border-radius:var(--radius);background:transparent;box-sizing:border-box`;
+        item.style.position = 'fixed';
+        item.style.left = rect.left + 'px';
+        item.style.width = rect.width + 'px';
+        item.style.top = rect.top + 'px';
+        item.style.zIndex = '9999';
+        item.style.opacity = '0.9';
+        item.style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)';
+        item.style.pointerEvents = 'none';
+        item.style.transition = 'none';
+        item.parentNode.insertBefore(placeholder, item);
+        _dragState = {
+          item, placeholder, container,
+          idx: parseInt(item.dataset.sortIdx),
+          startY: touch.clientY,
+          itemTop: rect.top,
+          itemHeight: rect.height + 6,
+          scrollContainer: container.closest('.panel-content') || container.parentElement
+        };
+        document.addEventListener('touchmove', _onSortTouchMove, { passive: false });
+        document.addEventListener('touchend', _onSortTouchEnd);
+        document.addEventListener('touchcancel', _onSortTouchEnd);
+      }, { passive: false });
+    });
+  }
+  function _onSortTouchMove(e) {
+    if (!_dragState) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const dy = touch.clientY - _dragState.startY;
+    _dragState.item.style.top = (_dragState.itemTop + dy) + 'px';
+    const sc = _dragState.scrollContainer;
+    if (sc) {
+      const scRect = sc.getBoundingClientRect();
+      const edgeZone = 60;
+      const speed = 8;
+      if (touch.clientY < scRect.top + edgeZone) sc.scrollTop -= speed;
+      else if (touch.clientY > scRect.bottom - edgeZone) sc.scrollTop += speed;
+    }
+    const allItems = _dragState.container.querySelectorAll('.sort-item, .sort-placeholder');
+    const dragCenterY = _dragState.itemTop + dy + _dragState.item.offsetHeight / 2;
+    for (let i = 0; i < allItems.length; i++) {
+      const el = allItems[i];
+      if (el === _dragState.item) continue;
+      const r = el.getBoundingClientRect();
+      const midY = r.top + r.height / 2;
+      if (el.classList.contains('sort-placeholder')) continue;
+      const elIdx = parseInt(el.dataset.sortIdx);
+      if (dragCenterY < midY && elIdx < _dragState.idx) {
+        _dragState.container.insertBefore(_dragState.placeholder, el);
+        break;
+      } else if (dragCenterY > midY && elIdx > _dragState.idx) {
+        if (el.nextSibling) _dragState.container.insertBefore(_dragState.placeholder, el.nextSibling);
+        else _dragState.container.appendChild(_dragState.placeholder);
+      }
+    }
+  }
+  function _onSortTouchEnd() {
+    if (!_dragState) return;
+    const { item, placeholder, container } = _dragState;
+    item.style.position = '';
+    item.style.left = '';
+    item.style.width = '';
+    item.style.top = '';
+    item.style.zIndex = '';
+    item.style.opacity = '';
+    item.style.boxShadow = '';
+    item.style.pointerEvents = '';
+    item.style.transition = '';
+    container.insertBefore(item, placeholder);
+    placeholder.remove();
+    const sortItems = Array.from(container.querySelectorAll('.sort-item'));
+    const oldIdx = _dragState.idx;
+    const realNewIdx = sortItems.indexOf(item);
+    if (realNewIdx !== -1 && realNewIdx !== oldIdx) {
+      const [moved] = sortedList.splice(oldIdx, 1);
+      sortedList.splice(realNewIdx, 0, moved);
+      _renderSortList();
+    }
+    _dragState = null;
+    document.removeEventListener('touchmove', _onSortTouchMove);
+    document.removeEventListener('touchend', _onSortTouchEnd);
+    document.removeEventListener('touchcancel', _onSortTouchEnd);
+  }
+  async function saveSortOrder() {
+    // 把 sortedList 中的顺序写回 worldviewList
+    const list = await getWorldviewList();
+    const orderMap = new Map();
+    sortedList.forEach((w, i) => { orderMap.set(w.id, i); });
+    list.forEach(w => {
+      if (orderMap.has(w.id)) {
+        w.sortOrder = orderMap.get(w.id);
+      }
+    });
+    // 把 list 按 sortOrder 重排（保留 __default_wv__ 等特殊项）
+    list.sort((a, b) => {
+      const oa = (typeof a.sortOrder === 'number') ? a.sortOrder : 999999;
+      const ob = (typeof b.sortOrder === 'number') ? b.sortOrder : 999999;
+      return oa - ob;
+    });
+    await saveWorldviewList(list);
+    UI.showToast('排序已保存');
+    exitSortMode();
   }
   
   function _isBuiltinWorldview(w) {
@@ -560,9 +793,10 @@ function _defaultRegion() {
       // 隐藏世界观只用扩展 tab
       switchEditTab('special');
       _renderFestivals(w.festivals || []);
-      _renderCustoms((w.knowledges || []).filter(k => !k.keywordTrigger));
-      _renderKnowledges((w.knowledges || []).filter(k => !!k.keywordTrigger));
-      return;
+    _renderCustoms((w.knowledges || []).filter(k => !k.keywordTrigger));
+    _renderKnowledges((w.knowledges || []).filter(k => !!k.keywordTrigger));
+    _renderEvents(w.events || []);
+    return;
     }
 
     _syncBuiltinRestoreButton(w);
@@ -603,11 +837,14 @@ function _defaultRegion() {
     // 节日
     _renderFestivals(w.festivals || []);
     
-    // 自定义设定（常驻条目：从 knowledges 中筛 keywordTrigger=false）
-_renderCustoms((w.knowledges || []).filter(k => !k.keywordTrigger));
-
-// 知识设定（动态条目：从 knowledges 中筛 keywordTrigger=true）
-_renderKnowledges((w.knowledges || []).filter(k => !!k.keywordTrigger));
+// 自定义设定（常驻条目：从 knowledges 中筛 keywordTrigger=false）
+    _renderCustoms((w.knowledges || []).filter(k => !k.keywordTrigger));
+    
+    // 知识设定（动态条目：从 knowledges 中筛 keywordTrigger=true）
+    _renderKnowledges((w.knowledges || []).filter(k => !!k.keywordTrigger));
+    
+    // 事件设定
+    _renderEvents(w.events || []);
     
     // 绑定主题下拉
 _populateThemeSelect(w.themeName || '');
@@ -661,14 +898,16 @@ _populateThemeSelect(w.themeName || '');
     _applyExtSearch();
   }
 
-  // 刷新三个子 tab 的计数
+  // 刷新四个子 tab 的数量提示（v612：改为不显示数字，tab 只保留图标 + 文字；函数保留以便后续复用）
   function _updateExtCounts() {
     const fEl = document.getElementById('wv-ext-count-festival');
     const cEl = document.getElementById('wv-ext-count-constant');
     const dEl = document.getElementById('wv-ext-count-dynamic');
-    if (fEl) fEl.textContent = festivalsData.length ? `(${festivalsData.length})` : '';
-    if (cEl) cEl.textContent = customsData.length ? `(${customsData.length})` : '';
-    if (dEl) dEl.textContent = knowledgesData.length ? `(${knowledgesData.length})` : '';
+    const eEl = document.getElementById('wv-ext-count-event');
+    if (fEl) fEl.textContent = '';
+    if (cEl) cEl.textContent = '';
+    if (dEl) dEl.textContent = '';
+    if (eEl) eEl.textContent = '';
   }
 
   // 跨 tab 搜索：名称 + 关键词 + 内容
@@ -718,6 +957,9 @@ _populateThemeSelect(w.themeName || '');
     } else if (type === 'dynamic') {
       switchExtSubtab('dynamic');
       addKnowledge();
+    } else if (type === 'event') {
+      switchExtSubtab('event');
+      addEvent();
     }
   }
 
@@ -912,7 +1154,8 @@ _populateThemeSelect(w.themeName || '');
     const containers = [
       { box: document.getElementById('wv-festivals-container'), match: (el) => _matchFestivalCard(el, q) },
       { box: document.getElementById('wv-customs-container'), match: (el) => _matchKnowledgeCard(el, q) },
-      { box: document.getElementById('wv-knowledges-container'), match: (el) => _matchKnowledgeCard(el, q) }
+      { box: document.getElementById('wv-knowledges-container'), match: (el) => _matchKnowledgeCard(el, q) },
+      { box: document.getElementById('wv-events-container'), match: (el) => _matchKnowledgeCard(el, q) }
     ];
     for (const { box, match } of containers) {
       if (!box) continue;
@@ -1714,9 +1957,81 @@ _renderKnowledges(knowledgesData);
 closeKnowledgeModal();
 }
 function closeKnowledgeModal() {
-_editKnowledgeIdx = null;
-document.getElementById('wv-knowledge-modal').classList.add('hidden');
-}
+    _editKnowledgeIdx = null;
+    document.getElementById('wv-knowledge-modal').classList.add('hidden');
+  }
+
+  // ---------- 事件设定（关键词触发 → 持续注入 → 结束关键词关闭） ----------
+  let eventsData = [];
+  function _renderEvents(list) {
+    eventsData = list || [];
+    const container = document.getElementById('wv-events-container');
+    if (!container) return;
+    container.innerHTML = eventsData.map((ev, i) => {
+      const keys = (ev.keys || '').trim();
+      const keyTags = keys
+        ? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(t)}</span>`).join('')
+        : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>';
+      const completeKey = ev.completeKey ? `<span style="font-size:11px;color:var(--text-secondary)">结束词：${Utils.escapeHtml(ev.completeKey)}</span>` : '<span style="font-size:11px;color:var(--danger)">未设置结束词</span>';
+      return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editEvent(${i})">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
+          <span style="font-size:14px;font-weight:bold;color:var(--accent)">${Utils.escapeHtml(ev.name || '未命名事件')}</span>
+        </div>
+        <div style="margin-bottom:4px">${keyTags}</div>
+        <div style="margin-bottom:4px">${completeKey}</div>
+        ${ev.content ? `<div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(ev.content)}</div>` : ''}
+      </div>`;
+    }).join('');
+    _updateExtCounts();
+    _applyExtSearch();
+  }
+  let _editEventIdx = null;
+  function addEvent() {
+    eventsData.push({
+      id: 'evt_' + Utils.uuid().slice(0, 8),
+      name: '',
+      keys: '',
+      completeKey: '',
+      content: '',
+      triggerMode: 'event'
+    });
+    editEvent(eventsData.length - 1);
+  }
+  function editEvent(i) {
+    _editEventIdx = i;
+    const ev = eventsData[i] || {};
+    document.getElementById('wv-event-modal-title').textContent = ev.name ? '编辑事件' : '新建事件';
+    document.getElementById('wv-event-modal-name').value = ev.name || '';
+    document.getElementById('wv-event-modal-keys').value = ev.keys || '';
+    document.getElementById('wv-event-modal-complete-key').value = ev.completeKey || '';
+    document.getElementById('wv-event-modal-content').value = ev.content || '';
+    document.getElementById('wv-event-modal').classList.remove('hidden');
+  }
+  function saveEventFromModal() {
+    if (_editEventIdx === null) return;
+    const prev = eventsData[_editEventIdx] || {};
+    eventsData[_editEventIdx] = {
+      id: prev.id || ('evt_' + Utils.uuid().slice(0, 8)),
+      name: document.getElementById('wv-event-modal-name').value.trim(),
+      keys: document.getElementById('wv-event-modal-keys').value.trim(),
+      completeKey: document.getElementById('wv-event-modal-complete-key').value.trim(),
+      content: document.getElementById('wv-event-modal-content').value.trim(),
+      triggerMode: 'event'
+    };
+    _renderEvents(eventsData);
+    closeEventModal();
+  }
+  function deleteEventFromModal() {
+    if (_editEventIdx === null) return;
+    eventsData.splice(_editEventIdx, 1);
+    _renderEvents(eventsData);
+    closeEventModal();
+  }
+  function closeEventModal() {
+    _editEventIdx = null;
+    document.getElementById('wv-event-modal').classList.add('hidden');
+  }
   
   // ---------- 同步到运行时 ----------
   // 把 DB 中的世界观数据同步给 Chat（worldviewPrompt）和 NPC 模块。
@@ -1761,6 +2076,7 @@ document.getElementById('wv-knowledge-modal').classList.add('hidden');
         position: k.position || 'system_top',
         depth: (typeof k.depth === 'number') ? k.depth : 0
       }));
+      w.events = eventsData.slice();
       if ('customs' in w) delete w.customs;
       await DB.put('worldviews', w);
       UI.showToast('已保存扩展设定');
@@ -1819,6 +2135,9 @@ document.getElementById('wv-knowledge-modal').classList.add('hidden');
     }));
     // 删除旧字段（保证导出/存储干净）
     if ('customs' in w) delete w.customs;
+    
+    // 事件设定
+    w.events = eventsData.slice();
     
     await DB.put('worldviews', w);
     
@@ -2839,10 +3158,15 @@ async function pickDefaultTheme(value) {
     deleteCurrentWorldview,
     toggleManageMode,
     deleteSelectedWorldviews,
+    exportSelectedWorldviews,
     toggleSelectAll,
+    toggleMenu,
+    toggleSortMode, exitSortMode, saveSortOrder,
+    renderWorldviewList,
     switchEditTab,
 switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromMenu, toggleExtIoMenu, exportExtended, importExtended,
     toggleCustomEnabled, toggleKnowledgeEnabled, toggleFestivalEnabled,
+    addEvent, editEvent, saveEventFromModal, deleteEventFromModal, closeEventModal,
     _onCardClick,
     handleIconImageUpload,
     clearIconImage,

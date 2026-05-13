@@ -39,20 +39,43 @@ const Memory = (() => {
     if (type === 'relation') {
       return upsertRelation(data);
     }
+    const scope = data.scope || Character.getCurrentId();
+    const content = data.content || _mergeEventContent(data);
+    const title = data.title || '';
+    // 自动提取事件去重：同面具 + 同标题 + 同内容视为同一事件，避免游标丢失/总结前提取造成重复记忆
+    try {
+      const all = await DB.getAll('memories');
+      const existing = all.find(m =>
+        m.type === type &&
+        (m.scope || 'default') === scope &&
+        (m.title || '') === title &&
+        (_getContent(m) || '') === content
+      );
+      if (existing) {
+        existing.time = existing.time || data.time || '';
+        existing.location = existing.location || data.location || '';
+        existing.participants = existing.participants?.length ? existing.participants : (data.participants || []);
+        existing.keywords = existing.keywords || Utils.tokenize(title + ' ' + content + ' ' + (existing.location || data.location || ''));
+        existing.timestamp = Utils.timestamp();
+        existing.roundCreated = existing.roundCreated || data.roundCreated || 0;
+        await DB.put('memories', existing);
+        return existing;
+      }
+    } catch(e) { console.warn('[Memory] 事件去重检查失败:', e); }
     const memory = {
       id: Utils.uuid(),
       type,
-    title: data.title || '',
+    title,
     // 事件内容（统一合并为content）
     time: data.time || '',
     location: data.location || '',
-    content: data.content || _mergeEventContent(data),
+    content,
     keywords: data.keywords || Utils.tokenize(
-      data.title + ' ' + (data.content || _mergeEventContent(data)) + ' ' + (data.location||'')
+      title + ' ' + content + ' ' + (data.location||'')
     ),
       participants: data.participants || [],
       // 优先使用调用方传入的 scope（异步写入时锁定原面具，避免和当前激活面具串线）
-      scope: data.scope || Character.getCurrentId(),
+      scope,
       timestamp: Utils.timestamp(),
       roundCreated: data.roundCreated || 0
     };

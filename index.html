@@ -378,17 +378,28 @@
 
           <div id="wv-tab-worldview" class="wv-tab active">
             <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
-              <button type="button" onclick="Worldview.createWorldview()" style="white-space:nowrap;padding:6px 12px;font-size:12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
-                新建
-              </button>
-              <button type="button" id="worldview-manage-btn" onclick="Worldview.toggleManageMode()" style="white-space:nowrap;padding:6px 12px;font-size:12px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-                管理
-              </button>
               <div style="position:relative;flex:1">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--text-secondary);pointer-events:none"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
                 <input type="text" id="worldview-search" placeholder="搜索世界观..." oninput="Worldview.renderWorldviewList(this.value)" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px 6px 32px;font-size:13px;outline:none">
+              </div>
+              <div style="position:relative">
+                <button type="button" id="worldview-menu-btn" onclick="Worldview.toggleMenu()" style="padding:6px 8px;background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;display:flex;align-items:center;color:var(--text-secondary)">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                </button>
+                <div id="worldview-menu-dropdown" class="custom-dropdown hidden" style="right:0;left:auto;min-width:140px">
+                  <div class="custom-dropdown-item" onclick="Worldview.toggleMenu();Worldview.createWorldview()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg> 新建
+                  </div>
+                  <div class="custom-dropdown-item" onclick="Worldview.toggleMenu();Worldview.toggleManageMode()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> 批量选择
+                  </div>
+                  <div class="custom-dropdown-item" onclick="Worldview.toggleMenu();Worldview.toggleSortMode()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/></svg> 排序
+                  </div>
+                  <div class="custom-dropdown-item" onclick="Worldview.toggleMenu();setTimeout(()=>Worldview.importSingle(),150)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 导入
+                  </div>
+                </div>
               </div>
             </div>
             <div id="worldview-manage-bar" class="hidden"></div>
@@ -406,18 +417,29 @@
 
           <!-- 角色子页 -->
           <div id="char-subtab-card">
-            <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
-              <button type="button" onclick="SingleCard.create()" style="white-space:nowrap;padding:6px 12px;font-size:12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
-                新建角色
-              </button>
-              <button type="button" onclick="SingleCard.importCard()" title="导入角色（支持 .json / .png）" style="white-space:nowrap;padding:6px 10px;font-size:12px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:4px">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                导入
-              </button>
-              <div style="position:relative;flex:1;min-width:120px">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-secondary);pointer-events:none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+              <div style="position:relative;flex:1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--text-secondary);pointer-events:none"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
                 <input type="text" id="single-card-search" placeholder="搜索角色..." oninput="SingleCard.renderList(this.value)" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px 6px 32px;font-size:13px;outline:none">
+              </div>
+              <div style="position:relative">
+                <button type="button" id="single-card-menu-btn" onclick="SingleCard.toggleMenu()" style="padding:6px 8px;background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;display:flex;align-items:center;color:var(--text-secondary)">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                </button>
+                <div id="single-card-menu-dropdown" class="custom-dropdown hidden" style="right:0;left:auto;min-width:140px">
+                  <div class="custom-dropdown-item" onclick="SingleCard.toggleMenu();SingleCard.create()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg> 新建
+                  </div>
+                  <div class="custom-dropdown-item" onclick="SingleCard.toggleMenu();SingleCard.toggleManageMode()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> 批量选择
+                  </div>
+                  <div class="custom-dropdown-item" onclick="SingleCard.toggleMenu();SingleCard.toggleSortMode()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/></svg> 排序
+                  </div>
+                  <div class="custom-dropdown-item" onclick="SingleCard.toggleMenu();setTimeout(()=>SingleCard.importCard(),150)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 导入
+                  </div>
+                </div>
               </div>
             </div>
             <div id="single-card-list" style="display:flex;flex-direction:column;gap:12px;"></div>
@@ -442,20 +464,31 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
           </button>
           <h2 style="margin:0;font-size:24px;color:var(--text)">面具</h2>
-        </div>
-        <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
-          <button type="button" onclick="Character.createMask()" style="white-space:nowrap;padding:6px 12px;font-size:12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
-            新建
-          </button>
-          <button type="button" id="mask-manage-btn" onclick="Character.toggleManageMode()" style="white-space:nowrap;padding:6px 12px;font-size:12px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-            管理
-          </button>
+<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
           <div style="position:relative;flex:1">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--text-secondary);pointer-events:none"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
             <input type="text" id="mask-search" placeholder="搜索面具..." oninput="Character.searchMasks(this.value)" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px 6px 32px;font-size:13px;outline:none">
           </div>
+          <div style="position:relative">
+            <button type="button" id="mask-menu-btn" onclick="Character.toggleMenu()" style="padding:6px 8px;background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;display:flex;align-items:center;color:var(--text-secondary)">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </button>
+            <div id="mask-menu-dropdown" class="custom-dropdown hidden" style="right:0;left:auto;min-width:140px">
+              <div class="custom-dropdown-item" onclick="Character.toggleMenu();Character.createMask()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg> 新建
+              </div>
+              <div class="custom-dropdown-item" onclick="Character.toggleMenu();Character.toggleManageMode()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> 批量选择
+              </div>
+              <div class="custom-dropdown-item" onclick="Character.toggleMenu();Character.toggleSortMode()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/></svg> 排序
+              </div>
+              <div class="custom-dropdown-item" onclick="Character.toggleMenu();setTimeout(()=>Character.importMask(),150)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 导入
+              </div>
+            </div>
+          </div>
+        </div>
         </div>
         <div id="mask-list-container" style="display:flex;flex-direction:column;gap:12px;">
           <!-- 面具预览卡片将由JS渲染至此 -->
@@ -1204,6 +1237,18 @@
           <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">允许 AI 在剧情中插入「QQ/微信式」线上消息气泡，包含 NPC 名、头像、内容。心动模拟世界观自带启用无需手动开。开启后 AI 会消耗少量额外 token 学习这个格式</span>
 
           <label class="circle-check-label">
+            <span class="circle-check-text">事件系统<br><span style="font-size:11px;color:var(--text-secondary)">允许世界观事件按关键词触发、持续注入并在完成后关闭</span></span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-events-enabled" class="circle-check" checked>
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">查看并重置当前对话的事件进度。</div>
+            <button type="button" onclick="Chat.openEventManagerModal()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap">管理事件</button>
+          </div>
+
+          <label class="circle-check-label">
             <span class="circle-check-text">启用语音朗读</span>
             <span style="position:relative;display:inline-flex">
               <input type="checkbox" id="cs-voice-enabled" class="circle-check" onchange="Chat._onVoiceEnabledChange()">
@@ -1263,6 +1308,21 @@
         <div class="modal-actions" style="flex-shrink:0;margin-top:20px;padding-top:12px">
           <button onclick="Chat.closeConvSettingsModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
           <button onclick="Chat.saveConvSettings()" style="flex:1">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 当前对话事件管理弹窗 -->
+    <div id="event-manager-modal" class="modal hidden">
+      <div class="modal-content" style="max-height:85vh;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
+          <h3 style="margin:0">事件进度</h3>
+          <button onclick="Chat.closeEventManagerModal()" class="btn-icon modal-corner-btn close-btn" title="关闭">×</button>
+        </div>
+        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px">仅管理当前对话的事件状态，不影响世界观模板或其他对话。</p>
+        <div id="event-manager-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+        <div class="modal-actions" style="flex-shrink:0;margin-top:16px;padding-top:12px">
+          <button onclick="Chat.closeEventManagerModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">关闭</button>
         </div>
       </div>
     </div>
@@ -1370,7 +1430,7 @@
                 </span>
               </label>
               <label class="circle-check-label">
-                <span class="circle-check-text" style="font-size:13px">启用扩展设定<br><span style="font-size:11px;color:var(--text-secondary)">节日 / 常驻条目 / 动态条目</span></span>
+                <span class="circle-check-text" style="font-size:13px">启用扩展设定<br><span style="font-size:11px;color:var(--text-secondary)">节日 / 常驻条目 / 动态条目 / 事件</span></span>
                 <span style="position:relative;display:inline-flex">
                   <input type="checkbox" id="sm-enable-extended" class="circle-check">
                   <span class="circle-check-ui"></span>
@@ -1379,7 +1439,7 @@
             </div>
             <!-- 单人卡扩展设定开关（仅在选了单人卡时显示） -->
             <div id="sm-card-ext-row" class="hidden" style="display:flex;flex-direction:column;gap:14px;padding:12px;background:var(--bg-tertiary);border-radius:8px">
-              <div style="font-size:12px;color:var(--text-secondary);margin-bottom:-2px;line-height:1.4">单人卡扩展设定<br><span style="font-size:11px;opacity:0.7">添加的单人卡有自己的节日/常驻/动态条目时启用</span></div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-bottom:-2px;line-height:1.4">单人卡扩展设定<br><span style="font-size:11px;opacity:0.7">添加的单人卡有自己的节日/常驻/动态/事件条目时启用</span></div>
               <label class="circle-check-label">
                 <span class="circle-check-text" style="font-size:13px">启用单人卡扩展设定</span>
                 <span style="position:relative;display:inline-flex">
@@ -1472,7 +1532,7 @@
       <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
         <div>
           <div style="font-size:14px;color:var(--text);margin-bottom:4px">启用扩展设定</div>
-          <div style="font-size:11px;color:var(--text-secondary);line-height:1.5">关闭后，本卡的节日/常驻/动态条目都不会注入。只影响本张单人卡，不影响世界观。</div>
+          <div style="font-size:11px;color:var(--text-secondary);line-height:1.5">关闭后，本卡的节日/常驻/动态/事件条目都不会注入。只影响本张单人卡，不影响世界观。</div>
         </div>
         <label style="position:relative;display:inline-flex;cursor:pointer;flex-shrink:0">
           <input type="checkbox" id="sc-panel-ext-enabled" class="circle-check">
@@ -2228,14 +2288,11 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
       </button>
     </div>
-    <button type="button" onclick="Worldview.toggleExtAddMenu(event)" title="添加条目" style="flex:0 0 auto;width:34px;height:34px;background:var(--accent);border:none;border-radius:6px;color:#111;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
+    <button type="button" onclick="Worldview.toggleExtAddMenu(event)" title="扩展设定操作" style="flex:0 0 auto;width:34px;height:34px;background:var(--accent);border:none;border-radius:6px;color:#111;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
     </button>
-    <button type="button" onclick="Worldview.toggleExtIoMenu(event)" title="导入导出" style="flex:0 0 auto;width:34px;height:34px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-    </button>
-    <!-- 添加菜单（右上角弹出） -->
-    <div id="wv-ext-add-menu" class="hidden" style="position:absolute;top:calc(100% + 4px);right:0;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px;z-index:100;min-width:140px;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
+    <!-- 添加 + 导入导出 合并菜单（右上角弹出） -->
+    <div id="wv-ext-add-menu" class="hidden" style="position:absolute;top:calc(100% + 4px);right:0;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px;z-index:100;min-width:150px;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
       <div onclick="Worldview.addFromMenu('festival')" style="padding:8px 10px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 2v4"/></svg>
         节日设定
@@ -2248,9 +2305,11 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
         动态条目
       </div>
-    </div>
-    <!-- 导入导出菜单（右上角弹出） -->
-    <div id="wv-ext-io-menu" class="hidden" style="position:absolute;top:calc(100% + 4px);right:0;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px;z-index:100;min-width:140px;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
+      <div onclick="Worldview.addFromMenu('event')" style="padding:8px 10px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
+        事件
+      </div>
+      <div style="height:1px;background:var(--border);margin:4px 6px"></div>
       <div onclick="Worldview.exportExtended()" style="padding:8px 10px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
         导出扩展设定
@@ -2276,6 +2335,10 @@
       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
       动态 <span id="wv-ext-count-dynamic" style="font-size:11px;opacity:0.7"></span>
     </button>
+    <button class="wv-ext-subtab-btn" data-subtab="event" onclick="Worldview.switchExtSubtab('event')" style="flex:1;padding:8px 10px;font-size:12px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
+      事件 <span id="wv-ext-count-event" style="font-size:11px;opacity:0.7"></span>
+    </button>
   </div>
 
   <!-- 节日设定 -->
@@ -2297,6 +2360,13 @@
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">最近 2 轮对话命中关键词时自动注入。</div>
     <div id="wv-knowledges-container"></div>
     <button type="button" onclick="Worldview.addKnowledge()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加动态条目</button>
+  </div>
+
+  <!-- 事件设定 -->
+  <div class="wv-ext-subtab-content hidden" data-subtab="event">
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">关键词触发后持续注入，直到 AI 回复中出现结束关键词后自动关闭，不再触发。</div>
+    <div id="wv-events-container"></div>
+    <button type="button" onclick="Worldview.addEvent()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加事件</button>
   </div>
 </div>
       </div>
@@ -2979,25 +3049,92 @@ document.addEventListener('click', (e) => {
 
 <!-- 管理模式底栏（独立于panel，保证fixed生效） -->
 <!-- 管理模式底栏（独立于panel，保证fixed生效） -->
-<div id="mask-manage-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:12px">
-  <button type="button" onclick="Character.toggleSelectAll()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;padding:6px 0">
+<div id="mask-manage-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:8px">
+  <button type="button" onclick="Character.toggleSelectAll()" style="display:flex;align-items:center;gap:4px;background:none;border:none;color:var(--text);font-size:13px;cursor:pointer;padding:4px 0;flex-shrink:0">
     <span id="mask-select-all-icon" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease"></span>
     全选
   </button>
+  <div style="display:flex;gap:6px">
+    <button type="button" onclick="Character.exportSelected()" title="导出" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+    </button>
+    <button type="button" onclick="Character.batchClone()" title="复制" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+    </button>
+    <button type="button" onclick="Character.batchDelete()" title="删除" style="padding:8px;background:var(--danger);color:#fff;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+    </button>
+    <button type="button" onclick="Character.toggleManageMode()" title="退出" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- 面具排序模式底栏 -->
+<div id="mask-sort-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:12px">
+  <span style="font-size:13px;color:var(--text-secondary)">拖动 ≡ 调整顺序</span>
   <div style="display:flex;gap:8px">
-    <button type="button" onclick="Character.batchClone()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer">复制</button>
-    <button type="button" onclick="Character.batchDelete()" style="padding:6px 16px;font-size:13px;background:var(--danger);color:#fff;border:none;border-radius:6px;cursor:pointer">删除</button>
+    <button type="button" onclick="Character.saveSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存排序</button>
+    <button type="button" onclick="Character.exitSortMode()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer">取消</button>
   </div>
 </div>
 
 <!-- 世界观管理模式底栏 -->
-<div id="worldview-manage-bar-fixed" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:12px">
-  <button type="button" onclick="Worldview.toggleSelectAll()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;padding:6px 0">
+<div id="worldview-manage-bar-fixed" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:8px">
+  <button type="button" onclick="Worldview.toggleSelectAll()" style="display:flex;align-items:center;gap:4px;background:none;border:none;color:var(--text);font-size:13px;cursor:pointer;padding:4px 0;flex-shrink:0">
     <span id="worldview-select-all-icon" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease"></span>
     全选
   </button>
+  <div style="display:flex;gap:6px">
+    <button type="button" onclick="Worldview.exportSelectedWorldviews()" title="导出" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+    </button>
+    <button type="button" onclick="Worldview.deleteSelectedWorldviews()" title="删除" style="padding:8px;background:var(--danger);color:#fff;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+    </button>
+    <button type="button" onclick="Worldview.toggleManageMode()" title="退出" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- 世界观排序模式底栏 -->
+<div id="worldview-sort-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:12px">
+  <span style="font-size:13px;color:var(--text-secondary)">拖动 ≡ 调整顺序</span>
   <div style="display:flex;gap:8px">
-    <button type="button" onclick="Worldview.deleteSelectedWorldviews()" style="padding:6px 16px;font-size:13px;background:var(--danger);color:#fff;border:none;border-radius:6px;cursor:pointer">删除</button>
+    <button type="button" onclick="Worldview.saveSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存排序</button>
+    <button type="button" onclick="Worldview.exitSortMode()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer">取消</button>
+  </div>
+</div>
+
+<!-- 单人卡管理模式底栏 -->
+<div id="single-card-manage-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:8px">
+  <button type="button" onclick="SingleCard.toggleSelectAll()" style="display:flex;align-items:center;gap:4px;background:none;border:none;color:var(--text);font-size:13px;cursor:pointer;padding:4px 0;flex-shrink:0">
+    <span id="single-card-select-all-icon" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease"></span>
+    全选
+  </button>
+  <div style="display:flex;gap:6px">
+    <button type="button" onclick="SingleCard.exportSelected()" title="导出" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+    </button>
+    <button type="button" onclick="SingleCard.batchClone()" title="复制" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+    </button>
+    <button type="button" onclick="SingleCard.batchDelete()" title="删除" style="padding:8px;background:var(--danger);color:#fff;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+    </button>
+    <button type="button" onclick="SingleCard.toggleManageMode()" title="退出" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- 单人卡排序模式底栏 -->
+<div id="single-card-sort-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:12px">
+  <span style="font-size:13px;color:var(--text-secondary)">拖动 ≡ 调整顺序</span>
+  <div style="display:flex;gap:8px">
+    <button type="button" onclick="SingleCard.saveSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存排序</button>
+    <button type="button" onclick="SingleCard.exitSortMode()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer">取消</button>
   </div>
 </div>
 
@@ -3181,6 +3318,26 @@ document.addEventListener('click', (e) => {
 <div class="modal-actions" style="flex-shrink:0;margin-top:12px">
 <button onclick="Worldview.closeKnowledgeModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
 <button onclick="Worldview.saveKnowledgeFromModal()" style="flex:1">保存</button>
+</div>
+</div>
+</div>
+
+<!-- 事件编辑弹窗 -->
+<div id="wv-event-modal" class="modal hidden">
+<div class="modal-content">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+<h3 id="wv-event-modal-title">编辑事件</h3>
+<button class="btn-icon" onclick="Worldview.deleteEventFromModal()" style="width:32px;height:32px;padding:4px;color:var(--danger)">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+</button>
+</div>
+<div class="form-group"><span class="form-label">事件名称</span><input type="text" id="wv-event-modal-name" placeholder="如：深蓝教会袭击"></div>
+<div class="form-group"><span class="form-label">触发关键词 <span style="font-size:11px;color:var(--text-secondary)">（多个用逗号或空格分隔）</span></span><input type="text" id="wv-event-modal-keys" placeholder="如：深蓝教会, 深蓝, 阿司霍尔"></div>
+<div class="form-group"><span class="form-label">结束关键词 <span style="font-size:11px;color:var(--text-secondary)">（AI 回复中出现此词后事件自动关闭）</span></span><input type="text" id="wv-event-modal-complete-key" placeholder="如：__EVENT_COMPLETE_深蓝袭击__"></div>
+<div class="form-group"><span class="form-label">事件内容 <span style="font-size:11px;color:var(--text-secondary)">（触发后每轮注入，直到结束）</span></span><div style="position:relative;width:100%"><textarea id="wv-event-modal-content" rows="8" placeholder="事件剧情引导、NPC行为指令、结局走向提示等…&#10;&#10;建议在末尾提示AI：当事件结束时请输出结束关键词。" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-event-modal-content','事件内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
+<div class="modal-actions" style="flex-shrink:0;margin-top:12px">
+<button onclick="Worldview.closeEventModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
+<button onclick="Worldview.saveEventFromModal()" style="flex:1">保存</button>
 </div>
 </div>
 </div>

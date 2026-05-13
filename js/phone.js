@@ -406,6 +406,54 @@ function _isAppStillActive(appId) {
       }
     } catch(_) {}
 
+    // 3.5 v617：当前对话绑定的单人卡主角（AI 扮演角色）
+    try {
+      const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+      if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+        const card = await DB.get('singleCards', conv.singleCharId);
+        if (card && card.name) {
+          let cardStr = `姓名：${card.name}`;
+          if (card.aliases) cardStr += `\n别名：${card.aliases}`;
+          if (card.detail) cardStr += `\n设定：${card.detail}`;
+          parts.push('【当前对话主角（AI 扮演角色）】\n' + cardStr);
+        }
+      } else if (conv && conv.isSingle && conv.singleCharType === 'npc' && conv.singleCharId) {
+        // 单人·NPC 模式：从 worldviews 里查
+        try {
+          const wvs = await DB.getAll('worldviews');
+          for (const wv of wvs) {
+            if (!wv) continue;
+            let found = null;
+            (wv.globalNpcs || []).forEach(n => { if (n.id === conv.singleCharId) found = n; });
+            (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => { if (n.id === conv.singleCharId) found = n; })));
+            if (found) {
+              let s = `姓名：${found.name || '未命名'}`;
+              if (found.aliases) s += `\n别名：${found.aliases}`;
+              if (found.detail) s += `\n设定：${found.detail}`;
+              parts.push('【当前对话主角（AI 扮演角色）】\n' + s);
+              break;
+            }
+          }
+        } catch(_) {}
+      }
+    } catch(_) {}
+
+    // 3.6 v617：对话级挂载角色（拉郎 / 客串 / 常驻）
+    try {
+      if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+        const attached = await AttachedChars.resolveAll();
+        if (attached && attached.length > 0) {
+          const attStrs = attached.map(c => {
+            let s = `${c.name || '未命名'}`;
+            if (c.aliases) s += `（别名：${c.aliases}）`;
+            if (c.detail) s += `\n${c.detail}`;
+            return s;
+          });
+          parts.push('【临时加入的角色（挂载角色）】\n以下角色是玩家临时挂载到本对话的，和世界观 NPC 一样可以作为帖子/动态的发布者或评论者。玩家可能就是喜欢这几个角色才挂载进来的，按剧情需要自然安排他们出场。\n' + attStrs.join('\n---\n'));
+        }
+      }
+    } catch(_) {}
+
     // 4. 最近10轮主线对话记录
     try {
       const msgs = Chat.getMessages() || [];
@@ -2088,8 +2136,14 @@ ${wvPrompt}` },
       const wvPrompt = await _buildFullContext();
     const visibleStr = (m.visibleNpcs || []).join('、') || '所有人';
     const imgInfo = m.imageDesc ? `（配图描述：${m.imageDesc}）` : (m.image ? '（附带了一张图片）' : '');
+    // v617：禁止冒充玩家
+    let _userName = '';
+    try { const mask = await Character.get(); _userName = mask?.name || ''; } catch(_) {}
+    const userBan = _userName
+      ? `\n【严格约束】评论者姓名绝对不能是"${_userName}"（那是玩家本人），也不允许任何评论以"我"（指代玩家）的口吻发言。这条动态是玩家自己发的，不需要玩家自评。`
+      : '\n【严格约束】评论者不能是玩家本人。';
     const prompt = `用户发了一条动态："${m.text}"${imgInfo}（对 ${visibleStr} 可见）。
-请根据NPC列表中角色的性格和当前剧情，让可见的NPC评论这条动态。每个NPC最多评论一条，总评论数不超过15条。部分NPC可以选择不评论。
+请根据NPC列表中角色的性格和当前剧情，让可见的NPC评论这条动态。每个NPC最多评论一条，总评论数不超过15条。部分NPC可以选择不评论。${userBan}
 返回纯JSON数组：[{"name":"NPC名","text":"评论内容"}]`;
 
     const comments = await _phoneJsonArrayWithRetry({
@@ -2146,6 +2200,8 @@ ${wvPrompt}` },
 
     // 收集 NPC 名字列表（优先从当前世界观 globalNpcs + 区域 NPC）
     let npcNames = [];
+    // v617：用户名（用于禁止 AI 发言时冒充玩家）
+    let userName = '';
     try {
       const convId = Conversations.getCurrent();
       const conv = Conversations.getList().find(c => c.id === convId);
@@ -2159,6 +2215,20 @@ ${wvPrompt}` },
           })));
         }
       }
+      // v617：挂载角色加入 NPC 候选
+      try {
+        if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+          const attached = await AttachedChars.resolveAll();
+          attached.forEach(c => {
+            if (c.name && !npcNames.includes(c.name)) npcNames.push(c.name);
+          });
+        }
+      } catch(_) {}
+      // v617：取用户名（面具 name）
+      try {
+        const mask = await Character.get();
+        if (mask?.name) userName = mask.name;
+      } catch(_) {}
     } catch(_) {}
 
     try {
@@ -2176,10 +2246,14 @@ ${wvPrompt}` },
       const fullCtx = await _buildFullContext();
 
       const nameConstraint = npcNames.length > 0
-        ? `\n\n【严格约束】动态发布者必须从以下NPC列表中选：${npcNames.join('、')}。评论者可以是列表中的NPC，也可以是虚构的路人账号（但路人名字要符合世界观风格）。禁止编造列表外的NPC。`
-        : '';
-
-      const systemPrompt = `根据以下世界观、NPC资料和剧情，生成4条NPC的社交媒体动态。从NPC列表中随机挑选（不重复），内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。每条带1-3条路人或者与该NPC有关的其他NPC的评论，若NPC相互不认识或没有交集，可以仅路人评论。${nameConstraint}
+      ? `\n\n【严格约束】动态发布者必须从以下NPC列表中选：${npcNames.join('、')}。评论者可以是列表中的NPC，也可以是虚构的路人账号（但路人名字要符合世界观风格）。禁止编造列表外的NPC。`
+      : '';
+    // v617：禁止冒充玩家
+    const userBan = userName
+      ? `\n\n【禁止冒充玩家】玩家角色"${userName}"绝对不能作为动态发布者出现，也不能作为任何评论者出现（包括路人评论）。评论者 name 字段不允许是"${userName}"，也不允许任何评论以"我"（指代玩家）的口吻发布。玩家会自己评论，不需要 AI 代劳。`
+      : '\n\n【禁止冒充玩家】不要让玩家角色作为动态发布者或评论者，也不要让任何角色冒充用户/玩家发言。';
+    
+    const systemPrompt = `根据以下世界观、NPC资料和剧情，生成4条NPC的社交媒体动态。从NPC列表中随机挑选（不重复），内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。每条带1-3条路人或者与该NPC有关的其他NPC的评论，若NPC相互不认识或没有交集，可以仅路人评论。${nameConstraint}${userBan}
 
 时间要求：每条动态必须带发布时间 time，格式为“YYYY.MM.DD 星期X HH:mm”。发布时间必须在当前/截止剧情最新时间之前，且不早于该时间前7天；禁止生成未来时间。若能从上下文中的【当前游戏时间】读取到时间，就以它为基准生成；如果无法确定具体剧情日期，也要使用世界观/状态栏中能推断出的最新时间附近的过去7天内时间。
 
