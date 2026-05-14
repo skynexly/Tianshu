@@ -262,12 +262,10 @@ detail 使用 Markdown 格式，包含：
       _genData.step1 = { ...data, _userPrompt: prompt, _wordCount: wordCount, _createRegions: createRegions, _regionCount: regionCount };
       _setLoading(false);
       // 自动进入下一步
-      if (createRegions && data.regions?.length) {
+      if (createRegions) {
         _step = 2;
-      } else if (createRegions) {
-        _step = 2; // 即使 AI 没生成 regions，仍跳地区步骤
       } else {
-        _step = 4; // 没地区直接跳角色
+        _step = 4; // 没地区 → 跳过势力 → 直接角色（全图NPC）
       }
       _renderStep();
     } catch (e) {
@@ -650,7 +648,8 @@ detail 使用 Markdown 格式，包含：
 
   // ---- 跳过 ----
   function _skipStep() {
-    if (_step === 2) { _step = 4; } // 跳地区 → 跳势力 → 直接角色
+    const hasRegions = (_genData.step2?.regions || _genData.step1?.regions || []).length > 0;
+    if (_step === 2) { _step = hasRegions ? 3 : 4; } // 有地区 → 势力；无地区 → 角色
     else if (_step === 3) { _step = 4; }
     else if (_step === 4) { _step = 5; }
     else if (_step === 5) { _step = 99; }
@@ -671,6 +670,140 @@ detail 使用 Markdown 格式，包含：
     }
   }
 
+  // ========== 内联生成（编辑页内使用）==========
+
+  /** 基础设定内联生成 */
+  async function inlineSetting() {
+    const settingEl = document.getElementById('wv-setting');
+    if (!settingEl) return;
+    const desc = document.getElementById('wv-description')?.value?.trim() || '';
+    const existingSetting = settingEl.value?.trim() || '';
+    const prompt = window.prompt('描述你想要的世界观（已有设定会作为参考）\n\n如：赛博朋克废土、现代校园恋爱…', desc);
+    if (prompt === null) return;
+    if (!prompt.trim()) { UI.showToast('请输入描述', 1500); return; }
+
+    UI.showToast('正在生成设定…', 60000);
+    try {
+      const sysPrompt = PROMPTS.step1
+        .replace('##WORD_COUNT##', 2500)
+        .replace('##REGION_INSTRUCTION##', '')
+        .replace('##REGION_SETTING_NOTE##', '简要带过或跳过');
+      const userMsg = prompt.trim() + (existingSetting ? '\n\n## 现有设定（参考/重写）\n' + existingSetting : '');
+      const raw = await API.generate(sysPrompt, userMsg);
+      const data = _parseJSON(raw);
+      if (data.name) { const nameEl = document.getElementById('wv-name'); if (nameEl && !nameEl.value.trim()) nameEl.value = data.name; }
+      if (data.description) { const descEl = document.getElementById('wv-description'); if (descEl && !descEl.value.trim()) descEl.value = data.description; }
+      if (data.setting) { settingEl.value = data.setting; settingEl.style.height = 'auto'; settingEl.style.height = settingEl.scrollHeight + 'px'; }
+      if (data.currency?.name) { const cn = document.getElementById('wv-currency-name'); const cd = document.getElementById('wv-currency-desc'); if (cn) cn.value = data.currency.name; if (cd) cd.value = data.currency.desc || ''; }
+      UI.showToast('设定已生成，可继续编辑', 2000);
+    } catch (e) {
+      UI.showToast('生成失败: ' + e.message, 3000);
+    }
+  }
+
+  /** 开场内联生成 */
+  async function inlineOpening() {
+    const settingEl = document.getElementById('wv-setting');
+    const setting = settingEl?.value?.trim() || '';
+    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+
+    const prompt = window.prompt('对开场有什么要求？留空则由 AI 自由发挥\n\n如：从选灵根开始、酒馆偶遇…', '');
+    if (prompt === null) return;
+
+    UI.showToast('正在生成开场…', 60000);
+    try {
+      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + '## 世界观设定\n' + setting;
+      const raw = await API.generate(PROMPTS.step5, userMsg);
+      const data = _parseJSON(raw);
+      if (data.startTime) { const el = document.getElementById('wv-start-time'); if (el) el.value = data.startTime; }
+      if (data.startPlot) { const el = document.getElementById('wv-start-plot'); if (el) { el.value = data.startPlot; el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }
+      if (data.startMessage) { const el = document.getElementById('wv-start-message'); if (el) { el.value = data.startMessage; el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }
+      UI.showToast('开场已生成，可继续编辑', 2000);
+    } catch (e) {
+      UI.showToast('生成失败: ' + e.message, 3000);
+    }
+  }
+
+  /** 地区内联生成（在详细设定tab内，为当前世界观批量生成地区） */
+  async function inlineRegions() {
+    const settingEl = document.getElementById('wv-setting');
+    const setting = settingEl?.value?.trim() || '';
+    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+
+    const prompt = window.prompt('对地区有什么要求？留空则由 AI 自由发挥\n（将生成 5 个地区）', '');
+    if (prompt === null) return;
+
+    UI.showToast('正在生成地区…', 60000);
+    try {
+      const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', 300).replace('##EXISTING_REGIONS##', '');
+      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + '生成 5 个地区。\n\n## 世界观设定\n' + setting;
+      const raw = await API.generate(sysPrompt, userMsg);
+      const regions = _parseJSON(raw);
+      const arr = Array.isArray(regions) ? regions : (regions.regions || []);
+
+      // 写入当前编辑中的世界观
+      if (typeof Worldview !== 'undefined' && Worldview._getEditingWV) {
+        const w = await Worldview._getEditingWV();
+        if (w) {
+          for (const r of arr) {
+            w.regions.push({
+              name: r.name || '',
+              description: r.description || '',
+              setting: r.setting || '',
+              factions: [{ name: '默认势力', summary: '', detail: '', npcs: [] }]
+            });
+          }
+          await Worldview._saveEditingWV(w);
+          Worldview.switchEditTab('detail');
+        }
+      }
+      UI.showToast(`已生成 ${arr.length} 个地区`, 2000);
+    } catch (e) {
+      UI.showToast('生成失败: ' + e.message, 3000);
+    }
+  }
+
+  /** 全图NPC内联生成 */
+  async function inlineGlobalNpcs() {
+    const settingEl = document.getElementById('wv-setting');
+    const setting = settingEl?.value?.trim() || '';
+    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+
+    const prompt = window.prompt('对角色有什么要求？留空则由 AI 自由发挥\n（将生成 5 个常驻角色）', '');
+    if (prompt === null) return;
+
+    UI.showToast('正在生成角色…', 60000);
+    try {
+      let sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', 500);
+      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + '生成 5 个角色。所有角色都是常驻角色（不归属地区）。\n\n## 世界观设定\n' + setting;
+      const raw = await API.generate(sysPrompt, userMsg);
+      const npcs = _parseJSON(raw);
+      const arr = Array.isArray(npcs) ? npcs : (npcs.npcs || []);
+
+      if (typeof Worldview !== 'undefined' && Worldview._getEditingWV) {
+        const w = await Worldview._getEditingWV();
+        if (w) {
+          if (!w.globalNpcs) w.globalNpcs = [];
+          for (const npc of arr) {
+            w.globalNpcs.push({
+              name: npc.name || '',
+              aliases: npc.alias || '',
+              summary: npc.identity || '',
+              detail: npc.detail || '',
+              avatar: ''
+            });
+          }
+          await Worldview._saveEditingWV(w);
+          // 刷新全图NPC列表
+          if (Worldview._renderGlobalNpcs) Worldview._renderGlobalNpcs(w.globalNpcs);
+        }
+      }
+      UI.showToast(`已生成 ${arr.length} 个常驻角色`, 2000);
+    } catch (e) {
+      UI.showToast('生成失败: ' + e.message, 3000);
+    }
+  }
+
   return {
     open,
     close,
@@ -681,6 +814,10 @@ detail 使用 Markdown 格式，包含：
     _runStep4,
     _runStep5,
     _skipStep,
-    _commit
+    _commit,
+    inlineSetting,
+    inlineOpening,
+    inlineRegions,
+    inlineGlobalNpcs
   };
 })();
