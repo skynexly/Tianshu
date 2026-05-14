@@ -242,5 +242,42 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     return json.choices?.[0]?.message?.content || '';
   }
 
-  return { getConfig, buildMessages, streamChat, summarize, extractMemory, fetchModelList };
+  /**
+   * 世界观生成专用（非流式，主模型，高温度）
+   */
+  async function generate(systemPrompt, userPrompt, options = {}) {
+    const mainConfig = await getConfig();
+    const url = (mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = mainConfig.apiKey;
+    const model = cleanModelName(mainConfig.model);
+    if (!url || !key || !model) throw new Error('请先配置API');
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        stream: false,
+        temperature: options.temperature ?? 0.8,
+        max_tokens: options.maxTokens ?? 16000
+      }),
+      signal: options.signal
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      throw new Error(`生成API错误 ${resp.status}: ${errText.substring(0, 200)}`);
+    }
+    const json = await resp.json();
+    return json.choices?.[0]?.message?.content || '';
+  }
+
+  return { getConfig, buildMessages, streamChat, summarize, extractMemory, fetchModelList, generate };
 })();

@@ -140,8 +140,9 @@ function flushActionLogForBackstage() {
  mapLastResults: [], // 上一次地图搜索结果，持久化
  mapLastQuery: '', // 上一次搜索关键词
  wallpaper: '', // 用户自定义手机壁纸 DataURL
-      wallpaperOverlay: false, // 壁纸遮罩（深色半透明层，适配深色壁纸）
-      wallpaperOpacity: 75, // 卡片/底栏/顶栏不透明度（0-100，仅有壁纸时生效）
+wallpaperOverlay: false, // 壁纸遮罩（深色半透明层，适配深色壁纸）
+wallpaperOpacity: 75, // 卡片/底栏/顶栏不透明度（0-100，仅有壁纸时生效）
+sendActionLog: true, // v627：是否把本轮手机操作日志发送给 AI（默认开）
  // 外卖
  takeoutCachedItems: [],   // 上一次刷新/搜索的商品列表
  takeoutLastQuery: '',     // 上一次搜索关键词
@@ -843,6 +844,17 @@ function _renderSettings(pd) {
    <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.4">调节卡片、顶栏、底栏的不透明度，让壁纸透出来（仅在有壁纸时生效）</div>
  </div>
  </div>
+ <div class="phone-settings-card">
+ <div class="phone-settings-title">本轮操作发送</div>
+ <div class="phone-settings-desc">把你在手机里的操作（发动态/下单/搜索等）作为背景行为告诉 AI，让剧情自然回应。关闭后本轮操作仅本地记录，不会发送给 AI。</div>
+ <label class="circle-check-label" style="margin-top:0;padding:0">
+   <span class="circle-check-text" style="font-size:13px">发送本轮手机操作</span>
+   <span style="position:relative;display:inline-flex">
+     <input type="checkbox" id="phone-send-actionlog" class="circle-check" ${pd?.sendActionLog !== false ? 'checked' : ''} onchange="Phone._toggleSendActionLog(this.checked)">
+     <span class="circle-check-ui"></span>
+   </span>
+ </label>
+ </div>
  </div>
  `;
 }
@@ -897,11 +909,18 @@ async function _resetWallpaper() {
   }
 
   async function _saveWallpaperOpacity(val) {
-    const pd = await _getPhoneData();
-    if (!pd) return;
-    pd.wallpaperOpacity = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
-    await _savePhoneData();
-  }
+const pd = await _getPhoneData();
+if (!pd) return;
+pd.wallpaperOpacity = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
+await _savePhoneData();
+}
+
+async function _toggleSendActionLog(checked) {
+const pd = await _getPhoneData();
+if (!pd) return;
+pd.sendActionLog = !!checked;
+await _savePhoneData();
+}
 
 async function _onMomentsCoverPicked(input) {
  const file = input?.files?.[0];
@@ -3820,7 +3839,7 @@ async function buildHeartsimServiceChatForBackstage() {
     buildHeartsimServiceChatForBackstage,
     flushActionLog, peekActionLog, pushLog, reloadActionLog,
     flushActionLogForBackstage,
-    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _onMomentsCoverPicked, _clearMomentsCover,
+    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _onMomentsCoverPicked, _clearMomentsCover,
     // 内部方法需要暴露给 onclick
     _addMemo, _editMemo, _saveMemo, _deleteMemo, _shareMemo, _collectMemo,
     _forumRefresh, _forumSearch, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,

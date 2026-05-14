@@ -151,11 +151,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告 =====
   try {
-    const APP_VERSION = 'v445';
-    const CHANGELOG = `· 性能与稳定性优化
-· 心动模拟相关内容更新
-· 世界观切换体验调整
-· 部分开场动画体验调整`;
+      const APP_VERSION = 'v627';
+      const CHANGELOG = `· 新增事件系统
+· UI 调整
+· 手机功能优化
+· 内置世界观「天枢城」更新`;
     const SEEN_KEY = 'changelog_seen_version';
     const lastSeen = localStorage.getItem(SEEN_KEY);
     if (lastSeen !== APP_VERSION) {

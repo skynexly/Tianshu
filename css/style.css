@@ -107,7 +107,7 @@ button, input, select, textarea, option, label {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
+  padding: max(16px, env(safe-area-inset-top, 16px)) 16px 16px;
 }
 .sidebar-header h2 { font-size: 16px; font-weight: 600; }
 .sidebar-nav {
@@ -236,7 +236,7 @@ body:has(#panel-chat.active) #panel-chat .chat-messages {
 .topbar {
   display: flex;
   align-items: center;
-  padding: 12px 12px;
+  padding: max(12px, env(safe-area-inset-top, 12px)) 12px 12px;
   background: var(--bg-secondary);
   gap: 12px;
   flex-shrink: 0;
@@ -334,7 +334,7 @@ body:has(#panel-chat.active) #panel-chat .chat-messages {
   }
 }
 .panel-content {
-  padding: 16px;
+  padding: max(16px, env(safe-area-inset-top, 16px)) 16px 16px;
   max-width: 720px;
   width: 100%;
   margin: 0 auto;
@@ -3093,11 +3093,11 @@ body.glass-on .topbar-with-status {
   background: transparent !important;
 }
 .topbar-row-main {
-  display: flex;
-  align-items: center;
-  padding: 12px 12px;
-  gap: 12px;
-  background: transparent;
+ display: flex;
+ align-items: center;
+ padding: max(12px, env(safe-area-inset-top, 12px)) 12px 12px;
+ gap: 12px;
+ background: transparent;
 }
 .topbar-row-status {
   display: flex;
