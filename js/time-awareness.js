@@ -63,10 +63,18 @@ window.TimeAwareness = (function() {
       if (m.role !== 'user') return m;
       const ts = withTs[i] && withTs[i].timestamp;
       if (!ts) return m;
-      const d = new Date(ts);
-      const pad = n => String(n).padStart(2, '0');
-      const tag = `[${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}] `;
-      return { ...m, content: tag + (m.content || '') };
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    const tag = `[${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}] `;
+    // multimodal content (数组) → 给第一个 text 块加时间戳；纯字符串 → 直接拼
+    if (Array.isArray(m.content)) {
+      const stamped = m.content.map((part, pi) => {
+        if (pi === 0 && part.type === 'text') return { ...part, text: tag + (part.text || '') };
+        return part;
+      });
+      return { ...m, content: stamped };
+    }
+    return { ...m, content: tag + (m.content || '') };
     });
   }
 

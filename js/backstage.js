@@ -442,7 +442,12 @@ const container = document.getElementById('backstage-messages');
     const apiMessages = await API.buildMessages(stampedHistory, systemParts);
 
     const maxTokens = settings.maxTokens || 8000;
-    const _estimateTokens = (msgs) => msgs.reduce((sum, m) => sum + Math.ceil((m.content || '').length / 2), 0);
+    const _estimateTokens = (msgs) => msgs.reduce((sum, m) => {
+      const c = m.content;
+      if (typeof c === 'string') return sum + Math.ceil(c.length / 2);
+      if (Array.isArray(c)) return sum + c.reduce((s, p) => s + (p.type === 'text' ? Math.ceil((p.text || '').length / 2) : 200), 0);
+      return sum;
+    }, 0);
     while (_estimateTokens(apiMessages) > maxTokens && apiMessages.length > 2) {
       const idx = apiMessages.findIndex(m => m.role !== 'system');
       if (idx === -1) break;
