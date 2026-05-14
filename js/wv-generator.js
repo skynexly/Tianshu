@@ -13,7 +13,7 @@ const WvGenerator = (() => {
 - name（string）：世界观名称
 - description（string）：一句话简介，50字以内
 - setting（string）：核心设定文本，详见下方规范
-- currency（object: {name, desc}）：仅当需要非现实货币体系时输出，现代日常题材不需要此字段
+- currency（object: {name, desc}）：仅当需要非现实货币体系时输出，现代日常题材不需要此字段。desc 必须说明基础单位与购买力，并举例常见消费价格，例如“一顿普通餐食约 8-12 枚”“普通旅店一晚约 30 枚”“工人日薪约 80 枚”等；不要只写抽象设定。
 ##REGION_INSTRUCTION##
 
 ## setting 规范
@@ -325,7 +325,7 @@ ${_stepIntro('map', '第 2 步 · 地区详细', '为每个地区生成详细设
       </div>
       <div class="wv-gen-grid">
         <div class="wv-gen-field">
-          <label class="wv-gen-label">每条地区字数（最多1000）</label>
+          <label class="wv-gen-label">单条字数（≤1000）</label>
           <input id="wv-gen-words" type="number" min="100" max="1000" step="50" value="${_genData.step2?._wordCount || 300}" class="wv-gen-input">
         </div>
         <div class="wv-gen-field">
@@ -450,7 +450,7 @@ ${_stepIntro('users', '第 4 步 · 角色', '生成 NPC 角色')}
       </div>
       <div class="wv-gen-grid">
         <div class="wv-gen-field">
-          <label class="wv-gen-label">每个角色字数（最多1500）</label>
+          <label class="wv-gen-label">单条字数（≤1500）</label>
           <input id="wv-gen-words" type="number" min="200" max="1500" step="50" value="${_genData.step4?._wordCount || 500}" class="wv-gen-input">
         </div>
         <div class="wv-gen-field">
