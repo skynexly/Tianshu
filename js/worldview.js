@@ -3197,7 +3197,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     openFactionEdit, saveFaction, deleteFaction,
     openNPCEdit, saveNPC, deleteNPC,
     addGlobalNpc, editGlobalNpc, backFromNpcEdit,
-    _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions,
+    _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards,
     addFestival, editFestival, saveFestivalFromModal, deleteFestivalFromModal, closeFestivalModal,
   addCustom, editCustom, saveCustomFromModal, deleteCustomFromModal, closeCustomModal,
 addKnowledge, editKnowledge, saveKnowledgeFromModal, deleteKnowledgeFromModal, closeKnowledgeModal,

@@ -68,13 +68,16 @@ setting 使用 Markdown 格式，按需包含以下内容：
 不是所有地区都需要四个板块全写，简单的地区可以合并或省略。
 ##EXISTING_REGIONS##`,
 
-    step3: `基于以下世界观和地区设定，为指定地区生成势力。
+    step3: `基于以下世界观和地区设定，生成势力。
 
 ## 输出要求
-严格输出 JSON 数组，不要用 \`\`\`json 包裹。
+严格输出 JSON。
+默认输出 JSON 数组；如果要求为多个地区分别生成势力，则输出对象：{ "地区名": [ {势力对象}, ... ] }。
+不要用 \`\`\`json 包裹。
 每个势力包含：
 - name（string）：势力名称
 - description（string）：50字以内简介（用于速查表）
+- region（string）：所属地区名（如果有地区）
 - setting（string）：势力详细设定，目标约 ##WORD_COUNT## 字
 
 setting 使用 Markdown 格式，包含：
@@ -163,6 +166,27 @@ detail 使用 Markdown 格式，包含：
     }
     return JSON.parse(cleaned);
   }
+
+  function _normalizeArray(data, key) {
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data[key])) return data[key];
+    return [];
+  }
+
+  function _promptText(title, label, def = '') {
+    const v = window.prompt(`${title}\n\n${label}`, def);
+    return v;
+  }
+  function _promptInt(title, label, def, min, max) {
+    const raw = window.prompt(`${title}\n\n${label}`, String(def));
+    if (raw === null) return null;
+    const n = parseInt(raw, 10);
+    return Math.min(max, Math.max(min, isNaN(n) ? def : n));
+  }
+  function _regionBrief(r) { return `${r.name || ''}：${r.description || r.summary || ''}`; }
+  function _regionDetail(r) { return r.setting || r.detail || r.description || r.summary || ''; }
+  function _facBrief(f) { return `${f.name || ''}：${f.description || f.summary || ''}`; }
+  function _facDetail(f) { return f.setting || f.detail || f.description || f.summary || ''; }
 
   // ---- UI 渲染 ----
   function _getModal() { return document.getElementById('wv-gen-modal'); }
@@ -376,19 +400,26 @@ detail 使用 Markdown 格式，包含：
     const wordCount = Math.min(1200, Math.max(200, parseInt(document.getElementById('wv-gen-words')?.value) || 500));
     const count = parseInt(document.getElementById('wv-gen-count')?.value) || 5;
 
-    _setLoading(true, '正在生成势力…（按地区逐个生成）');
+    _setLoading(true, '正在生成势力…');
 
     const allFactions = {};
     try {
       _abortCtrl = new AbortController();
-      for (const reg of regions) {
-        _setLoading(true, `正在生成「${reg.name}」的势力…`);
-        const sysPrompt = PROMPTS.step3.replace('##WORD_COUNT##', wordCount);
-        const regionsDesc = regions.map(r => `- ${r.name}：${r.description || ''}`).join('\n');
-        const userMsg = `${userPrompt ? '用户要求：' + userPrompt + '\n\n' : ''}为「${reg.name}」生成 ${count} 个势力。\n\n## 世界观设定\n${s1.setting || ''}\n\n## 地区列表\n${regionsDesc}\n\n## 当前地区详细\n${reg.setting || reg.description || ''}`;
-        const raw = await API.generate(sysPrompt, userMsg, { signal: _abortCtrl.signal });
-        const arr = _parseJSON(raw);
-        allFactions[reg.name] = Array.isArray(arr) ? arr : [];
+      const sysPrompt = PROMPTS.step3.replace('##WORD_COUNT##', wordCount);
+      const regionsDesc = regions.map(r => `- ${_regionBrief(r)}`).join('\n');
+      const regionsDetail = regions.map(r => `### ${r.name}\n${_regionDetail(r)}`).join('\n\n');
+      const userMsg = `${userPrompt ? '用户要求：' + userPrompt + '\n\n' : ''}请为以下每个地区各生成 ${count} 个势力。必须一次性完成，不要分多次生成。\n\n## 世界观设定\n${s1.setting || ''}\n\n## 地区速查\n${regionsDesc}\n\n## 地区详情\n${regionsDetail}`;
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _abortCtrl.signal, maxTokens: 20000 });
+      const data = _parseJSON(raw);
+      if (Array.isArray(data)) {
+        for (const reg of regions) allFactions[reg.name] = [];
+        data.forEach(f => {
+          const rn = f.region || f.regionName || regions.find(r => (f.setting || '').includes(r.name))?.name || regions[0]?.name || '';
+          if (!allFactions[rn]) allFactions[rn] = [];
+          allFactions[rn].push(f);
+        });
+      } else {
+        Object.assign(allFactions, data || {});
       }
       _genData.step3 = { factions: allFactions, _userPrompt: userPrompt, _wordCount: wordCount, _count: count };
       _setLoading(false);
@@ -443,11 +474,11 @@ detail 使用 Markdown 格式，包含：
 
     let contextParts = [`## 世界观设定\n${s1.setting || ''}`];
     if (regions.length) {
-      contextParts.push(`## 地区\n${regions.map(r => `### ${r.name}\n${r.setting || r.description || ''}`).join('\n\n')}`);
+      contextParts.push(`## 地区\n${regions.map(r => `- ${_regionBrief(r)}`).join('\n')}`);
     }
     if (Object.keys(factions).length) {
       const facDesc = Object.entries(factions).map(([rn, arr]) =>
-        `### ${rn}\n${arr.map(f => `- **${f.name}**：${f.description || ''}`).join('\n')}`
+        `### ${rn}\n${arr.map(f => `- **${f.name}**：${f.description || f.summary || ''}`).join('\n')}`
       ).join('\n\n');
       contextParts.push(`## 势力\n${facDesc}`);
     }
@@ -728,13 +759,15 @@ detail 使用 Markdown 格式，包含：
     const setting = settingEl?.value?.trim() || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
 
-    const prompt = window.prompt('对地区有什么要求？留空则由 AI 自由发挥\n（将生成 5 个地区）', '');
+    const prompt = _promptText('AI 追加地区', '对地区有什么要求？留空则由 AI 自由发挥', '');
     if (prompt === null) return;
+    const count = _promptInt('AI 追加地区', '生成几个地区？', 5, 1, 20); if (count === null) return;
+    const wordCount = _promptInt('AI 追加地区', '每个地区约多少字？', 300, 100, 1000); if (wordCount === null) return;
 
     UI.showToast('正在生成地区…', 60000);
     try {
-      const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', 300).replace('##EXISTING_REGIONS##', '');
-      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + '生成 5 个地区。\n\n## 世界观设定\n' + setting;
+      const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', wordCount).replace('##EXISTING_REGIONS##', '');
+      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + `生成 ${count} 个地区。\n\n## 世界观设定\n` + setting;
       const raw = await API.generate(sysPrompt, userMsg);
       const regions = _parseJSON(raw);
       const arr = Array.isArray(regions) ? regions : (regions.regions || []);
@@ -762,19 +795,74 @@ detail 使用 Markdown 格式，包含：
     }
   }
 
+  /** 当前地区追加势力（一次调用） */
+  async function inlineFactions() {
+    const w = await Worldview._getEditingWV();
+    if (!w) return;
+    const regName = document.getElementById('wv-reg-name')?.value?.trim();
+    if (!regName) { UI.showToast('请先填写/打开地区', 1500); return; }
+    const prompt = _promptText('AI 追加势力', '对势力有什么要求？留空则由 AI 自由发挥', ''); if (prompt === null) return;
+    const count = _promptInt('AI 追加势力', '生成几个势力？', 5, 1, 20); if (count === null) return;
+    const wordCount = _promptInt('AI 追加势力', '每个势力约多少字？', 500, 200, 1200); if (wordCount === null) return;
+    UI.showToast('正在生成势力…', 60000);
+    try {
+      const sysPrompt = PROMPTS.step3.replace('##WORD_COUNT##', wordCount);
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为地区「${regName}」生成 ${count} 个势力。\n\n## 世界观设定\n${w.setting || ''}\n\n## 当前地区\n${regName}\n${document.getElementById('wv-reg-detail')?.value || ''}`;
+      const raw = await API.generate(sysPrompt, userMsg, { maxTokens: 16000 });
+      const data = _parseJSON(raw);
+      const arr = _normalizeArray(data, 'factions');
+      const reg = w.regions.find(r => r.name === regName);
+      if (!reg) { UI.showToast('找不到当前地区，请先保存地区名称', 2000); return; }
+      reg.factions = reg.factions || [];
+      arr.forEach(f => reg.factions.push({ name: f.name || '', summary: f.description || '', detail: f.setting || '', npcs: [] }));
+      await Worldview._saveEditingWV(w);
+      if (Worldview._renderFactionCards) Worldview._renderFactionCards(reg.factions);
+      UI.showToast(`已生成 ${arr.length} 个势力`, 2000);
+    } catch (e) { UI.showToast('生成失败: ' + e.message, 3000); }
+  }
+
+  /** 当前势力追加角色 */
+  async function inlineFactionNpcs() {
+    const w = await Worldview._getEditingWV();
+    if (!w) return;
+    const facName = document.getElementById('wv-fac-name')?.value?.trim();
+    if (!facName) { UI.showToast('请先填写/打开势力', 1500); return; }
+    const prompt = _promptText('AI 追加角色', '对角色有什么要求？留空则由 AI 自由发挥', ''); if (prompt === null) return;
+    const count = _promptInt('AI 追加角色', '生成几个角色？', 5, 1, 30); if (count === null) return;
+    const wordCount = _promptInt('AI 追加角色', '每个角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
+    UI.showToast('正在生成角色…', 60000);
+    try {
+      const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为势力「${facName}」生成 ${count} 个角色。角色 region/faction 字段必须对应当前地区和势力。\n\n## 世界观设定\n${w.setting || ''}\n\n## 当前势力\n${facName}\n${document.getElementById('wv-fac-detail')?.value || ''}`;
+      const raw = await API.generate(sysPrompt, userMsg, { maxTokens: 18000 });
+      const data = _parseJSON(raw);
+      const arr = _normalizeArray(data, 'npcs');
+      let fac = null;
+      for (const r of (w.regions || [])) { fac = (r.factions || []).find(f => f.name === facName); if (fac) break; }
+      if (!fac) { UI.showToast('找不到当前势力，请先保存势力名称', 2000); return; }
+      fac.npcs = fac.npcs || [];
+      arr.forEach(n => fac.npcs.push({ name: n.name || '', aliases: n.alias || '', summary: n.identity || n.description || '', detail: n.detail || '', avatar: '' }));
+      await Worldview._saveEditingWV(w);
+      if (Worldview._renderNPCCards) Worldview._renderNPCCards(fac.npcs);
+      UI.showToast(`已生成 ${arr.length} 个角色`, 2000);
+    } catch (e) { UI.showToast('生成失败: ' + e.message, 3000); }
+  }
+
   /** 全图NPC内联生成 */
   async function inlineGlobalNpcs() {
     const settingEl = document.getElementById('wv-setting');
     const setting = settingEl?.value?.trim() || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
 
-    const prompt = window.prompt('对角色有什么要求？留空则由 AI 自由发挥\n（将生成 5 个常驻角色）', '');
+    const prompt = _promptText('AI 追加常驻角色', '对角色有什么要求？留空则由 AI 自由发挥', '');
     if (prompt === null) return;
+    const count = _promptInt('AI 追加常驻角色', '生成几个角色？', 5, 1, 30); if (count === null) return;
+    const wordCount = _promptInt('AI 追加常驻角色', '每个角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
 
     UI.showToast('正在生成角色…', 60000);
     try {
-      let sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', 500);
-      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + '生成 5 个角色。所有角色都是常驻角色（不归属地区）。\n\n## 世界观设定\n' + setting;
+      let sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
+      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + `生成 ${count} 个角色。所有角色都是常驻角色（不归属地区）。\n\n## 世界观设定\n` + setting;
       const raw = await API.generate(sysPrompt, userMsg);
       const npcs = _parseJSON(raw);
       const arr = Array.isArray(npcs) ? npcs : (npcs.npcs || []);
@@ -811,10 +899,12 @@ detail 使用 Markdown 格式，包含：
     const setting = w?.setting || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
 
+    const prompt = _promptText('AI 填充本地区', '补充要求（可留空）', ''); if (prompt === null) return;
+    const wordCount = _promptInt('AI 填充本地区', '本地区约多少字？', 300, 100, 1000); if (wordCount === null) return;
     UI.showToast('正在为「' + name + '」生成设定…', 60000);
     try {
-      const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', 300).replace('##EXISTING_REGIONS##', '');
-      const userMsg = `仅生成 1 个地区「${name}」的详细设定。\n\n## 世界观设定\n${setting}`;
+      const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', wordCount).replace('##EXISTING_REGIONS##', '');
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}仅生成 1 个地区「${name}」的详细设定。\n\n## 世界观设定\n${setting}`;
       const raw = await API.generate(sysPrompt, userMsg);
       const arr = _parseJSON(raw);
       const r = Array.isArray(arr) ? arr[0] : arr;
@@ -836,10 +926,12 @@ detail 使用 Markdown 格式，包含：
     const setting = w?.setting || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
 
+    const prompt = _promptText('AI 填充本势力', '补充要求（可留空）', ''); if (prompt === null) return;
+    const wordCount = _promptInt('AI 填充本势力', '本势力约多少字？', 500, 200, 1200); if (wordCount === null) return;
     UI.showToast('正在为「' + name + '」生成设定…', 60000);
     try {
-      const sysPrompt = PROMPTS.step3.replace('##WORD_COUNT##', 500);
-      const userMsg = `仅生成 1 个势力「${name}」的详细设定。\n\n## 世界观设定\n${setting}`;
+      const sysPrompt = PROMPTS.step3.replace('##WORD_COUNT##', wordCount);
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}仅生成 1 个势力「${name}」的详细设定。\n\n## 世界观设定\n${setting}`;
       const raw = await API.generate(sysPrompt, userMsg);
       const arr = _parseJSON(raw);
       const f = Array.isArray(arr) ? arr[0] : arr;
@@ -861,11 +953,13 @@ detail 使用 Markdown 格式，包含：
     const setting = w?.setting || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
 
+    const prompt = _promptText('AI 填充本角色', '补充要求（可留空）', ''); if (prompt === null) return;
+    const wordCount = _promptInt('AI 填充本角色', '本角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
     UI.showToast('正在为「' + name + '」生成设定…', 60000);
     try {
-      const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', 500);
+      const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
       const identity = document.getElementById('wv-npc-summary')?.value?.trim() || '';
-      const userMsg = `仅生成 1 个角色「${name}」${identity ? '（' + identity + '）' : ''}的详细设定。\n\n## 世界观设定\n${setting}`;
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}仅生成 1 个角色「${name}」${identity ? '（' + identity + '）' : ''}的详细设定。\n\n## 世界观设定\n${setting}`;
       const raw = await API.generate(sysPrompt, userMsg);
       const arr = _parseJSON(raw);
       const n = Array.isArray(arr) ? arr[0] : arr;
@@ -891,11 +985,13 @@ detail 使用 Markdown 格式，包含：
     const empty = w.regions.filter(r => !r.detail?.trim() && r.name?.trim());
     if (!empty.length) { UI.showToast('没有需要填充的地区（所有地区都已有设定）', 2000); return; }
 
+    const prompt = _promptText('AI 填充已有地区', '补充要求（可留空）', ''); if (prompt === null) return;
+    const wordCount = _promptInt('AI 填充已有地区', '每个地区约多少字？', 300, 100, 1000); if (wordCount === null) return;
     UI.showToast(`正在填充 ${empty.length} 个地区…`, 60000);
     try {
-      const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', 300).replace('##EXISTING_REGIONS##',
+      const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', wordCount).replace('##EXISTING_REGIONS##',
         `\n## 必须对齐的地区\n${empty.map(r => r.name).join('、')}`);
-      const userMsg = `为以下地区生成设定：${empty.map(r => r.name).join('、')}。\n\n## 世界观设定\n${setting}`;
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为以下地区生成设定：${empty.map(r => r.name).join('、')}。\n\n## 世界观设定\n${setting}`;
       const raw = await API.generate(sysPrompt, userMsg);
       const arr = _parseJSON(raw);
       const result = Array.isArray(arr) ? arr : [];
@@ -923,11 +1019,13 @@ detail 使用 Markdown 格式，包含：
     const empty = (w.globalNpcs || []).filter(n => !n.detail?.trim() && n.name?.trim());
     if (!empty.length) { UI.showToast('没有需要填充的角色（所有角色都已有设定）', 2000); return; }
 
+    const prompt = _promptText('AI 填充已有角色', '补充要求（可留空）', ''); if (prompt === null) return;
+    const wordCount = _promptInt('AI 填充已有角色', '每个角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
     UI.showToast(`正在填充 ${empty.length} 个角色…`, 60000);
     try {
-      const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', 500);
+      const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
       const names = empty.map(n => n.name + (n.summary ? '（' + n.summary + '）' : '')).join('、');
-      const userMsg = `为以下角色生成详细设定：${names}。所有角色都是常驻角色。\n\n## 世界观设定\n${setting}`;
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为以下角色生成详细设定：${names}。所有角色都是常驻角色。\n\n## 世界观设定\n${setting}`;
       const raw = await API.generate(sysPrompt, userMsg);
       const arr = _parseJSON(raw);
       const result = Array.isArray(arr) ? arr : [];
@@ -960,6 +1058,8 @@ detail 使用 Markdown 格式，包含：
     inlineSetting,
     inlineOpening,
     inlineRegions,
+    inlineFactions,
+    inlineFactionNpcs,
     inlineGlobalNpcs,
     inlineFillRegion,
     inlineFillFaction,
