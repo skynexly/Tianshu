@@ -127,7 +127,7 @@ const SingleMode = (() => {
       const isActive = (currentId || '') === w.id;
       const iconHtml = w.iconImage
         ? `<span style="display:inline-block;width:22px;height:22px;border-radius:5px;background:url('${Utils.escapeHtml(w.iconImage)}') center/cover;flex-shrink:0;margin-right:8px;vertical-align:middle"></span>`
-        : (w.icon ? `<span style="font-size:16px;margin-right:8px;flex-shrink:0;vertical-align:middle">${Utils.escapeHtml(w.icon)}</span>` : (w.id === '' ? `<span style="display:inline-block;width:22px;margin-right:8px;flex-shrink:0"></span>` : `<span style="font-size:16px;margin-right:8px;flex-shrink:0;vertical-align:middle">🌍</span>`));
+        : (w.id === '' ? `<span style="display:inline-block;width:22px;margin-right:8px;flex-shrink:0"></span>` : `<svg class="wv-fallback-icon" style="margin-right:8px;vertical-align:middle" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/></svg>`);
       return `<div class="custom-dropdown-item${isActive ? ' active' : ''}" style="display:flex;align-items:center" onclick="SingleMode._pickWorldview('${Utils.escapeHtml(w.id)}')">${iconHtml}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(w.name || '未命名')}</span></div>`;
     }).join('');
 

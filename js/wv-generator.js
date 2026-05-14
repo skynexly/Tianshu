@@ -173,12 +173,12 @@ detail 使用 Markdown 格式，包含：
     return [];
   }
 
-  function _promptText(title, label, def = '') {
-    const v = window.prompt(`${title}\n\n${label}`, def);
-    return v;
+  async function _promptText(title, label, def = '') {
+    if (typeof UI !== 'undefined' && UI.showSimpleInput) return await UI.showSimpleInput(`${title}\n${label}`, def);
+    return window.prompt(`${title}\n\n${label}`, def);
   }
-  function _promptInt(title, label, def, min, max) {
-    const raw = window.prompt(`${title}\n\n${label}`, String(def));
+  async function _promptInt(title, label, def, min, max) {
+    const raw = (typeof UI !== 'undefined' && UI.showSimpleInput) ? await UI.showSimpleInput(`${title}\n${label}`, String(def)) : window.prompt(`${title}\n\n${label}`, String(def));
     if (raw === null) return null;
     const n = parseInt(raw, 10);
     return Math.min(max, Math.max(min, isNaN(n) ? def : n));
@@ -187,6 +187,23 @@ detail 使用 Markdown 格式，包含：
   function _regionDetail(r) { return r.setting || r.detail || r.description || r.summary || ''; }
   function _facBrief(f) { return `${f.name || ''}：${f.description || f.summary || ''}`; }
   function _facDetail(f) { return f.setting || f.detail || f.description || f.summary || ''; }
+  function _svg(name, cls = 'wv-gen-step-icon') {
+    const icons = {
+      spark: '<path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/><path d="M5 14l.7 1.8L7.5 16.5l-1.8.7L5 19l-.7-1.8-1.8-.7 1.8-.7L5 14z"/>',
+      book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/>',
+      map: '<path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z"/><path d="M9 3v15"/><path d="M15 6v15"/>',
+      castle: '<path d="M4 21V8l3 2 3-2 2 2 2-2 3 2 3-2v13"/><path d="M9 21v-6a3 3 0 0 1 6 0v6"/><path d="M4 13h16"/>',
+      users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+      message: '<path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>',
+      check: '<path d="M20 6L9 17l-5-5"/>',
+      pin: '<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
+      film: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14"/><path d="M17 5v14"/><path d="M3 10h4"/><path d="M17 10h4"/><path d="M3 14h4"/><path d="M17 14h4"/>',
+      globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/>'
+    };
+    return `<svg class="${cls}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name] || icons.spark}</svg>`;
+  }
+  function _stepIntro(icon, title, desc) { return `<div class="wv-gen-step-card"><div class="wv-gen-step-title">${_svg(icon)}<span>${title}</span></div><div class="wv-gen-desc">${desc}</div></div>`; }
+  function _aiIcon() { return _svg('spark', 'ai-spark-icon'); }
 
   // ---- UI 渲染 ----
   function _getModal() { return document.getElementById('wv-gen-modal'); }
@@ -224,34 +241,31 @@ detail 使用 Markdown 格式，包含：
   function _renderStep1(body) {
     const prev = _genData.step1;
     body.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">第 1 步 · 基础设定</div>
-        <div style="font-size:12px;color:var(--text-secondary)">描述你想创建的世界观，AI 会生成核心设定</div>
+${_stepIntro('book', '第 1 步 · 基础设定', '描述你想创建的世界观，AI 会生成核心设定')}
+      <div class="wv-gen-field">
+        <label class="wv-gen-label">你想要什么样的世界观？</label>
+        <textarea id="wv-gen-prompt" rows="5" placeholder="例如：赛博朋克废土、现代都市恋爱、中世纪魔法大陆……\n可以写得很详细，也可以只写一句话" class="wv-gen-textarea">${prev?._userPrompt || ''}</textarea>
       </div>
-      <div style="margin-bottom:12px">
-        <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px">你想要什么样的世界观？</label>
-        <textarea id="wv-gen-prompt" rows="5" placeholder="例如：赛博朋克废土、现代都市恋爱、中世纪魔法大陆……\n可以写得很详细，也可以只写一句话" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px;resize:vertical;font-family:inherit">${prev?._userPrompt || ''}</textarea>
-      </div>
-      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div style="flex:1;min-width:120px">
-          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">设定字数（最多5000）</label>
-          <input id="wv-gen-words" type="number" min="500" max="5000" step="100" value="${prev?._wordCount || 2500}" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px">
+      <div class="wv-gen-grid">
+        <div class="wv-gen-field">
+          <label class="wv-gen-label">设定字数（最多5000）</label>
+          <input id="wv-gen-words" type="number" min="500" max="5000" step="100" value="${prev?._wordCount || 2500}" class="wv-gen-input">
         </div>
       </div>
-      <div style="margin-bottom:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary)">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--text)">
+      <div class="wv-gen-option">
+        <label class="wv-gen-check">
           <input id="wv-gen-create-regions" type="checkbox" ${prev?._createRegions !== false ? 'checked' : ''} onchange="WvGenerator._onRegionToggle()">
           同时生成地区骨架
         </label>
         <div id="wv-gen-region-count-row" style="margin-top:8px;${prev?._createRegions !== false ? '' : 'display:none'}">
-          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">地区数量</label>
-          <input id="wv-gen-region-count" type="number" min="1" max="20" value="${prev?._regionCount || 5}" style="width:80px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:14px">
+          <label class="wv-gen-label">地区数量</label>
+          <input id="wv-gen-region-count" type="number" min="1" max="20" value="${prev?._regionCount || 5}" class="wv-gen-input" style="max-width:110px">
         </div>
       </div>
-      <div id="wv-gen-status" style="margin-bottom:12px;font-size:13px;color:var(--text-secondary);display:none"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button onclick="WvGenerator.close()" style="padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);cursor:pointer;font-size:14px">取消</button>
-        <button id="wv-gen-submit" onclick="WvGenerator._runStep1()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:#111;cursor:pointer;font-size:14px;font-weight:600">生成</button>
+      <div id="wv-gen-status" class="wv-gen-status"></div>
+      <div class="wv-gen-actions">
+        <button onclick="WvGenerator.close()" class="wv-gen-btn">取消</button>
+        <button id="wv-gen-submit" onclick="WvGenerator._runStep1()" class="wv-gen-btn primary">生成</button>
       </div>`;
   }
 
@@ -304,28 +318,25 @@ detail 使用 Markdown 格式，包含：
     const s1 = _genData.step1 || {};
     const existingNames = (s1.regions || []).map(r => r.name).join('、');
     body.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">第 2 步 · 地区详细</div>
-        <div style="font-size:12px;color:var(--text-secondary)">为每个地区生成详细设定${existingNames ? '（已有骨架：' + existingNames + '）' : ''}</div>
+${_stepIntro('map', '第 2 步 · 地区详细', '为每个地区生成详细设定' + (existingNames ? '（已有骨架：' + existingNames + '）' : ''))}
+      <div class="wv-gen-field">
+        <label class="wv-gen-label">额外要求（可选）</label>
+        <textarea id="wv-gen-prompt" rows="3" placeholder="对地区有什么额外要求？留空则完全由 AI 自由发挥" class="wv-gen-textarea">${_genData.step2?._userPrompt || ''}</textarea>
       </div>
-      <div style="margin-bottom:12px">
-        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">额外要求（可选）</label>
-        <textarea id="wv-gen-prompt" rows="3" placeholder="对地区有什么额外要求？留空则完全由 AI 自由发挥" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px;resize:vertical;font-family:inherit">${_genData.step2?._userPrompt || ''}</textarea>
-      </div>
-      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div style="flex:1;min-width:120px">
-          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">每条地区字数（最多1000）</label>
-          <input id="wv-gen-words" type="number" min="100" max="1000" step="50" value="${_genData.step2?._wordCount || 300}" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px">
+      <div class="wv-gen-grid">
+        <div class="wv-gen-field">
+          <label class="wv-gen-label">每条地区字数（最多1000）</label>
+          <input id="wv-gen-words" type="number" min="100" max="1000" step="50" value="${_genData.step2?._wordCount || 300}" class="wv-gen-input">
         </div>
-        <div style="flex:1;min-width:120px">
-          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">地区数量</label>
-          <input id="wv-gen-count" type="number" min="1" max="20" value="${s1._regionCount || (s1.regions?.length) || 5}" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px">
+        <div class="wv-gen-field">
+          <label class="wv-gen-label">地区数量</label>
+          <input id="wv-gen-count" type="number" min="1" max="20" value="${s1._regionCount || (s1.regions?.length) || 5}" class="wv-gen-input">
         </div>
       </div>
-      <div id="wv-gen-status" style="margin-bottom:12px;font-size:13px;color:var(--text-secondary);display:none"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button onclick="WvGenerator._skipStep()" style="padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);cursor:pointer;font-size:14px">跳过</button>
-        <button id="wv-gen-submit" onclick="WvGenerator._runStep2()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:#111;cursor:pointer;font-size:14px;font-weight:600">生成地区</button>
+      <div id="wv-gen-status" class="wv-gen-status"></div>
+      <div class="wv-gen-actions">
+        <button onclick="WvGenerator._skipStep()" class="wv-gen-btn">跳过</button>
+        <button id="wv-gen-submit" onclick="WvGenerator._runStep2()" class="wv-gen-btn primary">生成地区</button>
       </div>`;
   }
 
@@ -368,28 +379,25 @@ detail 使用 Markdown 格式，包含：
     const regions = _genData.step2?.regions || _genData.step1?.regions || [];
     const regionNames = regions.map(r => r.name).join('、');
     body.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">第 3 步 · 势力</div>
-        <div style="font-size:12px;color:var(--text-secondary)">为地区生成势力组织${regionNames ? '（' + regionNames + '）' : ''}</div>
+${_stepIntro('castle', '第 3 步 · 势力', '为地区生成势力组织' + (regionNames ? '（' + regionNames + '）' : ''))}
+      <div class="wv-gen-field">
+        <label class="wv-gen-label">额外要求（可选）</label>
+        <textarea id="wv-gen-prompt" rows="3" placeholder="对势力有什么要求？留空则由 AI 自由发挥" class="wv-gen-textarea">${_genData.step3?._userPrompt || ''}</textarea>
       </div>
-      <div style="margin-bottom:12px">
-        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">额外要求（可选）</label>
-        <textarea id="wv-gen-prompt" rows="3" placeholder="对势力有什么要求？留空则由 AI 自由发挥" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px;resize:vertical;font-family:inherit">${_genData.step3?._userPrompt || ''}</textarea>
-      </div>
-      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div style="flex:1;min-width:120px">
-          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">每条势力字数（最多1200）</label>
-          <input id="wv-gen-words" type="number" min="200" max="1200" step="50" value="${_genData.step3?._wordCount || 500}" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px">
+      <div class="wv-gen-grid">
+        <div class="wv-gen-field">
+          <label class="wv-gen-label">每条势力字数（最多1200）</label>
+          <input id="wv-gen-words" type="number" min="200" max="1200" step="50" value="${_genData.step3?._wordCount || 500}" class="wv-gen-input">
         </div>
-        <div style="flex:1;min-width:120px">
-          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">每地区势力数</label>
-          <input id="wv-gen-count" type="number" min="1" max="10" value="${_genData.step3?._count || 5}" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px">
+        <div class="wv-gen-field">
+          <label class="wv-gen-label">每地区势力数</label>
+          <input id="wv-gen-count" type="number" min="1" max="10" value="${_genData.step3?._count || 5}" class="wv-gen-input">
         </div>
       </div>
-      <div id="wv-gen-status" style="margin-bottom:12px;font-size:13px;color:var(--text-secondary);display:none"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button onclick="WvGenerator._skipStep()" style="padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);cursor:pointer;font-size:14px">跳过</button>
-        <button id="wv-gen-submit" onclick="WvGenerator._runStep3()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:#111;cursor:pointer;font-size:14px;font-weight:600">生成势力</button>
+      <div id="wv-gen-status" class="wv-gen-status"></div>
+      <div class="wv-gen-actions">
+        <button onclick="WvGenerator._skipStep()" class="wv-gen-btn">跳过</button>
+        <button id="wv-gen-submit" onclick="WvGenerator._runStep3()" class="wv-gen-btn primary">生成势力</button>
       </div>`;
   }
 
@@ -435,28 +443,25 @@ detail 使用 Markdown 格式，包含：
   // ---- Step 4: 角色 ----
   function _renderStep4(body) {
     body.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">第 4 步 · 角色</div>
-        <div style="font-size:12px;color:var(--text-secondary)">生成 NPC 角色</div>
+${_stepIntro('users', '第 4 步 · 角色', '生成 NPC 角色')}
+      <div class="wv-gen-field">
+        <label class="wv-gen-label">额外要求（可选）</label>
+        <textarea id="wv-gen-prompt" rows="3" placeholder="对角色有什么要求？留空则由 AI 自由发挥" class="wv-gen-textarea">${_genData.step4?._userPrompt || ''}</textarea>
       </div>
-      <div style="margin-bottom:12px">
-        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">额外要求（可选）</label>
-        <textarea id="wv-gen-prompt" rows="3" placeholder="对角色有什么要求？留空则由 AI 自由发挥" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px;resize:vertical;font-family:inherit">${_genData.step4?._userPrompt || ''}</textarea>
-      </div>
-      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div style="flex:1;min-width:120px">
-          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">每个角色字数（最多1500）</label>
-          <input id="wv-gen-words" type="number" min="200" max="1500" step="50" value="${_genData.step4?._wordCount || 500}" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px">
+      <div class="wv-gen-grid">
+        <div class="wv-gen-field">
+          <label class="wv-gen-label">每个角色字数（最多1500）</label>
+          <input id="wv-gen-words" type="number" min="200" max="1500" step="50" value="${_genData.step4?._wordCount || 500}" class="wv-gen-input">
         </div>
-        <div style="flex:1;min-width:120px">
-          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">角色总数</label>
-          <input id="wv-gen-count" type="number" min="1" max="30" value="${_genData.step4?._count || 5}" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px">
+        <div class="wv-gen-field">
+          <label class="wv-gen-label">角色总数</label>
+          <input id="wv-gen-count" type="number" min="1" max="30" value="${_genData.step4?._count || 5}" class="wv-gen-input">
         </div>
       </div>
-      <div id="wv-gen-status" style="margin-bottom:12px;font-size:13px;color:var(--text-secondary);display:none"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button onclick="WvGenerator._skipStep()" style="padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);cursor:pointer;font-size:14px">跳过</button>
-        <button id="wv-gen-submit" onclick="WvGenerator._runStep4()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:#111;cursor:pointer;font-size:14px;font-weight:600">生成角色</button>
+      <div id="wv-gen-status" class="wv-gen-status"></div>
+      <div class="wv-gen-actions">
+        <button onclick="WvGenerator._skipStep()" class="wv-gen-btn">跳过</button>
+        <button id="wv-gen-submit" onclick="WvGenerator._runStep4()" class="wv-gen-btn primary">生成角色</button>
       </div>`;
   }
 
@@ -502,18 +507,15 @@ detail 使用 Markdown 格式，包含：
   // ---- Step 5: 开场 ----
   function _renderStep5(body) {
     body.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">第 5 步 · 开场剧情</div>
-        <div style="font-size:12px;color:var(--text-secondary)">生成开场时间、剧情引导和第一条消息</div>
+${_stepIntro('message', '第 5 步 · 开场剧情', '生成开场时间、剧情引导和第一条消息')}
+      <div class="wv-gen-field">
+        <label class="wv-gen-label">开场要求（可选）</label>
+        <textarea id="wv-gen-prompt" rows="3" placeholder="例如：从选灵根开始、日常校园开场、酒馆偶遇…留空则由 AI 自由发挥" class="wv-gen-textarea">${_genData.step5?._userPrompt || ''}</textarea>
       </div>
-      <div style="margin-bottom:12px">
-        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">开场要求（可选）</label>
-        <textarea id="wv-gen-prompt" rows="3" placeholder="例如：从选灵根开始、日常校园开场、酒馆偶遇…留空则由 AI 自由发挥" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px;resize:vertical;font-family:inherit">${_genData.step5?._userPrompt || ''}</textarea>
-      </div>
-      <div id="wv-gen-status" style="margin-bottom:12px;font-size:13px;color:var(--text-secondary);display:none"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button onclick="WvGenerator._skipStep()" style="padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);cursor:pointer;font-size:14px">跳过</button>
-        <button id="wv-gen-submit" onclick="WvGenerator._runStep5()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:#111;cursor:pointer;font-size:14px;font-weight:600">生成开场</button>
+      <div id="wv-gen-status" class="wv-gen-status"></div>
+      <div class="wv-gen-actions">
+        <button onclick="WvGenerator._skipStep()" class="wv-gen-btn">跳过</button>
+        <button id="wv-gen-submit" onclick="WvGenerator._runStep5()" class="wv-gen-btn primary">生成开场</button>
       </div>`;
   }
 
@@ -560,24 +562,24 @@ detail 使用 Markdown 格式，包含：
     const hasStart = !!_genData.step5?.startTime;
 
     body.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">✨ 生成完毕</div>
+      <div class="wv-gen-step-card">
+        <div class="wv-gen-step-title">${_svg('check')}<span>生成完毕</span></div>
         <div style="font-size:13px;color:var(--text-secondary);line-height:1.6">
           <div><b>${Utils.escapeHtml(s1.name || '新世界观')}</b> — ${Utils.escapeHtml(s1.description || '')}</div>
           <div style="margin-top:8px">
-            ${regionCount ? `📍 ${regionCount} 个地区` : ''}
-            ${facCount ? ` · 🏛 ${facCount} 个势力` : ''}
-            ${npcCount ? ` · 👤 ${npcCount} 个角色` : ''}
-            ${hasStart ? ' · 🎬 开场已就绪' : ''}
+            ${regionCount ? `${_svg('pin', 'wv-gen-mini-svg')} ${regionCount} 个地区` : ''}
+            ${facCount ? ` · ${_svg('castle', 'wv-gen-mini-svg')} ${facCount} 个势力` : ''}
+            ${npcCount ? ` · ${_svg('users', 'wv-gen-mini-svg')} ${npcCount} 个角色` : ''}
+            ${hasStart ? ` · ${_svg('film', 'wv-gen-mini-svg')} 开场已就绪` : ''}
           </div>
         </div>
       </div>
-      <div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);margin-bottom:12px;font-size:12px;color:var(--text-secondary)">
+      <div class="wv-gen-summary">
         点击「创建」将生成完整世界观并跳转到编辑页面，你可以在那里继续调整。
       </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button onclick="WvGenerator.close()" style="padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);cursor:pointer;font-size:14px">取消</button>
-        <button onclick="WvGenerator._commit()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:#111;cursor:pointer;font-size:14px;font-weight:600">创建世界观</button>
+      <div class="wv-gen-actions">
+        <button onclick="WvGenerator.close()" class="wv-gen-btn">取消</button>
+        <button onclick="WvGenerator._commit()" class="wv-gen-btn primary">创建世界观</button>
       </div>`;
   }
 
@@ -594,7 +596,7 @@ detail 使用 Markdown 格式，包含：
       id,
       name: s1.name || '新世界观',
       description: s1.description || '',
-      icon: '🌍',
+      icon: 'world',
       iconImage: '',
       setting: s1.setting || '',
       currency: s1.currency || { name: '', desc: '' },
@@ -691,7 +693,7 @@ detail 使用 Markdown 格式，包含：
     const btn = document.getElementById('wv-gen-submit');
     if (status) {
       status.style.display = on ? '' : 'none';
-      status.innerHTML = on ? `<span style="display:inline-block;animation:spin 1s linear infinite;margin-right:6px">⏳</span>${msg || ''}` : '';
+      status.innerHTML = on ? `<span class="wv-gen-spinner"></span>${msg || ''}` : '';
     }
     if (btn) {
       btn.disabled = on;
@@ -707,7 +709,7 @@ detail 使用 Markdown 格式，包含：
     if (!settingEl) return;
     const desc = document.getElementById('wv-description')?.value?.trim() || '';
     const existingSetting = settingEl.value?.trim() || '';
-    const prompt = window.prompt('描述你想要的世界观（已有设定会作为参考）\n\n如：赛博朋克废土、现代校园恋爱…', desc);
+    const prompt = await _promptText('AI 生成设定', '描述你想要的世界观（已有设定会作为参考）\n如：赛博朋克废土、现代校园恋爱…', desc);
     if (prompt === null) return;
     if (!prompt.trim()) { UI.showToast('请输入描述', 1500); return; }
 
@@ -736,7 +738,7 @@ detail 使用 Markdown 格式，包含：
     const setting = settingEl?.value?.trim() || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
 
-    const prompt = window.prompt('对开场有什么要求？留空则由 AI 自由发挥\n\n如：从选灵根开始、酒馆偶遇…', '');
+    const prompt = await _promptText('AI 生成开场', '对开场有什么要求？留空则由 AI 自由发挥\n如：从选灵根开始、酒馆偶遇…', '');
     if (prompt === null) return;
 
     UI.showToast('正在生成开场…', 60000);
@@ -759,10 +761,10 @@ detail 使用 Markdown 格式，包含：
     const setting = settingEl?.value?.trim() || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
 
-    const prompt = _promptText('AI 追加地区', '对地区有什么要求？留空则由 AI 自由发挥', '');
+    const prompt = await _promptText('AI 追加地区', '对地区有什么要求？留空则由 AI 自由发挥', '');
     if (prompt === null) return;
-    const count = _promptInt('AI 追加地区', '生成几个地区？', 5, 1, 20); if (count === null) return;
-    const wordCount = _promptInt('AI 追加地区', '每个地区约多少字？', 300, 100, 1000); if (wordCount === null) return;
+    const count = await _promptInt('AI 追加地区', '生成几个地区？', 5, 1, 20); if (count === null) return;
+    const wordCount = await _promptInt('AI 追加地区', '每个地区约多少字？', 300, 100, 1000); if (wordCount === null) return;
 
     UI.showToast('正在生成地区…', 60000);
     try {
@@ -801,9 +803,9 @@ detail 使用 Markdown 格式，包含：
     if (!w) return;
     const regName = document.getElementById('wv-reg-name')?.value?.trim();
     if (!regName) { UI.showToast('请先填写/打开地区', 1500); return; }
-    const prompt = _promptText('AI 追加势力', '对势力有什么要求？留空则由 AI 自由发挥', ''); if (prompt === null) return;
-    const count = _promptInt('AI 追加势力', '生成几个势力？', 5, 1, 20); if (count === null) return;
-    const wordCount = _promptInt('AI 追加势力', '每个势力约多少字？', 500, 200, 1200); if (wordCount === null) return;
+    const prompt = await _promptText('AI 追加势力', '对势力有什么要求？留空则由 AI 自由发挥', ''); if (prompt === null) return;
+    const count = await _promptInt('AI 追加势力', '生成几个势力？', 5, 1, 20); if (count === null) return;
+    const wordCount = await _promptInt('AI 追加势力', '每个势力约多少字？', 500, 200, 1200); if (wordCount === null) return;
     UI.showToast('正在生成势力…', 60000);
     try {
       const sysPrompt = PROMPTS.step3.replace('##WORD_COUNT##', wordCount);
@@ -827,9 +829,9 @@ detail 使用 Markdown 格式，包含：
     if (!w) return;
     const facName = document.getElementById('wv-fac-name')?.value?.trim();
     if (!facName) { UI.showToast('请先填写/打开势力', 1500); return; }
-    const prompt = _promptText('AI 追加角色', '对角色有什么要求？留空则由 AI 自由发挥', ''); if (prompt === null) return;
-    const count = _promptInt('AI 追加角色', '生成几个角色？', 5, 1, 30); if (count === null) return;
-    const wordCount = _promptInt('AI 追加角色', '每个角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
+    const prompt = await _promptText('AI 追加角色', '对角色有什么要求？留空则由 AI 自由发挥', ''); if (prompt === null) return;
+    const count = await _promptInt('AI 追加角色', '生成几个角色？', 5, 1, 30); if (count === null) return;
+    const wordCount = await _promptInt('AI 追加角色', '每个角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
     UI.showToast('正在生成角色…', 60000);
     try {
       const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
@@ -854,10 +856,10 @@ detail 使用 Markdown 格式，包含：
     const setting = settingEl?.value?.trim() || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
 
-    const prompt = _promptText('AI 追加常驻角色', '对角色有什么要求？留空则由 AI 自由发挥', '');
+    const prompt = await _promptText('AI 追加常驻角色', '对角色有什么要求？留空则由 AI 自由发挥', '');
     if (prompt === null) return;
-    const count = _promptInt('AI 追加常驻角色', '生成几个角色？', 5, 1, 30); if (count === null) return;
-    const wordCount = _promptInt('AI 追加常驻角色', '每个角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
+    const count = await _promptInt('AI 追加常驻角色', '生成几个角色？', 5, 1, 30); if (count === null) return;
+    const wordCount = await _promptInt('AI 追加常驻角色', '每个角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
 
     UI.showToast('正在生成角色…', 60000);
     try {
@@ -899,8 +901,8 @@ detail 使用 Markdown 格式，包含：
     const setting = w?.setting || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
 
-    const prompt = _promptText('AI 填充本地区', '补充要求（可留空）', ''); if (prompt === null) return;
-    const wordCount = _promptInt('AI 填充本地区', '本地区约多少字？', 300, 100, 1000); if (wordCount === null) return;
+    const prompt = await _promptText('AI 填充本地区', '补充要求（可留空）', ''); if (prompt === null) return;
+    const wordCount = await _promptInt('AI 填充本地区', '本地区约多少字？', 300, 100, 1000); if (wordCount === null) return;
     UI.showToast('正在为「' + name + '」生成设定…', 60000);
     try {
       const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', wordCount).replace('##EXISTING_REGIONS##', '');
@@ -926,8 +928,8 @@ detail 使用 Markdown 格式，包含：
     const setting = w?.setting || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
 
-    const prompt = _promptText('AI 填充本势力', '补充要求（可留空）', ''); if (prompt === null) return;
-    const wordCount = _promptInt('AI 填充本势力', '本势力约多少字？', 500, 200, 1200); if (wordCount === null) return;
+    const prompt = await _promptText('AI 填充本势力', '补充要求（可留空）', ''); if (prompt === null) return;
+    const wordCount = await _promptInt('AI 填充本势力', '本势力约多少字？', 500, 200, 1200); if (wordCount === null) return;
     UI.showToast('正在为「' + name + '」生成设定…', 60000);
     try {
       const sysPrompt = PROMPTS.step3.replace('##WORD_COUNT##', wordCount);
@@ -953,8 +955,8 @@ detail 使用 Markdown 格式，包含：
     const setting = w?.setting || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
 
-    const prompt = _promptText('AI 填充本角色', '补充要求（可留空）', ''); if (prompt === null) return;
-    const wordCount = _promptInt('AI 填充本角色', '本角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
+    const prompt = await _promptText('AI 填充本角色', '补充要求（可留空）', ''); if (prompt === null) return;
+    const wordCount = await _promptInt('AI 填充本角色', '本角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
     UI.showToast('正在为「' + name + '」生成设定…', 60000);
     try {
       const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
@@ -985,8 +987,8 @@ detail 使用 Markdown 格式，包含：
     const empty = w.regions.filter(r => !r.detail?.trim() && r.name?.trim());
     if (!empty.length) { UI.showToast('没有需要填充的地区（所有地区都已有设定）', 2000); return; }
 
-    const prompt = _promptText('AI 填充已有地区', '补充要求（可留空）', ''); if (prompt === null) return;
-    const wordCount = _promptInt('AI 填充已有地区', '每个地区约多少字？', 300, 100, 1000); if (wordCount === null) return;
+    const prompt = await _promptText('AI 填充已有地区', '补充要求（可留空）', ''); if (prompt === null) return;
+    const wordCount = await _promptInt('AI 填充已有地区', '每个地区约多少字？', 300, 100, 1000); if (wordCount === null) return;
     UI.showToast(`正在填充 ${empty.length} 个地区…`, 60000);
     try {
       const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', wordCount).replace('##EXISTING_REGIONS##',
@@ -1019,8 +1021,8 @@ detail 使用 Markdown 格式，包含：
     const empty = (w.globalNpcs || []).filter(n => !n.detail?.trim() && n.name?.trim());
     if (!empty.length) { UI.showToast('没有需要填充的角色（所有角色都已有设定）', 2000); return; }
 
-    const prompt = _promptText('AI 填充已有角色', '补充要求（可留空）', ''); if (prompt === null) return;
-    const wordCount = _promptInt('AI 填充已有角色', '每个角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
+    const prompt = await _promptText('AI 填充已有角色', '补充要求（可留空）', ''); if (prompt === null) return;
+    const wordCount = await _promptInt('AI 填充已有角色', '每个角色约多少字？', 500, 200, 1500); if (wordCount === null) return;
     UI.showToast(`正在填充 ${empty.length} 个角色…`, 60000);
     try {
       const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);

@@ -39,7 +39,7 @@ const Worldview = (() => {
       id,
       name: '新世界观',
       description: '',
-      icon: '🌍',
+      icon: 'world',
       iconImage: '',        // base64图片（本地展示用，不发AI）
       setting: '',           // 世界观核心设定（每轮发送）
       currency: { name: '', desc: '' }, // 通用货币：名称+说明，仅发AI，前端仍显示 ¥
@@ -630,14 +630,14 @@ function _defaultRegion() {
     if (entry) {
       entry.name = restored.name || entry.name || '未命名';
       entry.description = restored.description || '';
-      entry.icon = restored.icon || '🌍';
+      entry.icon = restored.icon || 'world';
       entry.iconImage = restored.iconImage || '';
     } else {
       list.push({
         id: restored.id,
         name: restored.name || '未命名',
         description: restored.description || '',
-        icon: restored.icon || '🌍',
+        icon: restored.icon || 'world',
         iconImage: restored.iconImage || ''
       });
     }
@@ -2086,7 +2086,7 @@ function closeKnowledgeModal() {
     // 基础设定
     w.name = document.getElementById('wv-name').value.trim() || '未命名';
     w.description = document.getElementById('wv-description').value.trim();
-    w.icon = w.icon || '🌍'; // 保留原值
+    w.icon = w.icon || 'world'; // 保留原值
     w.setting = document.getElementById('wv-setting').value.trim();
     w.currency = w.currency || { name: '', desc: '' };
     w.currency.name = (document.getElementById('wv-currency-name')?.value || '').trim();
@@ -3055,10 +3055,10 @@ async function pickDefaultTheme(value) {
             if (!await UI.showConfirm('覆盖', `已存在「${existing.name}」，确定覆盖？`)) continue;
             existing.name = w.name;
             existing.description = w.description;
-            existing.icon = w.icon || '🌍';
+            existing.icon = w.icon || 'world';
             existing.iconImage = w.iconImage || '';
           } else {
-            list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || '🌍', iconImage: w.iconImage || '' });
+            list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || 'world', iconImage: w.iconImage || '' });
           }
           await DB.put('worldviews', w);
           count++;
@@ -3107,7 +3107,7 @@ async function pickDefaultTheme(value) {
           updateCount++;
         } else {
           // 全新的内置世界观
-          list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || '🌍', iconImage: w.iconImage || '' });
+          list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || 'world', iconImage: w.iconImage || '' });
           _migrateToKnowledges(w); // v581
           await DB.put('worldviews', w);
           loadedMap[w.id] = ver;

@@ -779,6 +779,8 @@ if (contentArea) contentArea.style.display = 'none';
       titleEl.textContent = title;
       inputEl.value = defaultValue || '';
       inputEl.dataset.resolve = '';
+      inputEl.rows = String((title || '').startsWith('AI ') ? 4 : 1);
+      inputEl.style.minHeight = (title || '').startsWith('AI ') ? '110px' : '';
 
       // 确保弹窗挂在 body 最顶层，不被任何 transform/will-change 父级夹住
       if (modal.parentNode !== document.body) {
@@ -812,7 +814,7 @@ if (contentArea) contentArea.style.display = 'none';
       };
 
       inputEl.onkeydown = (e) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !e.shiftKey && inputEl.rows === 1) {
           confirmBtn.click();
         } else if (e.key === 'Escape') {
           cancelBtn.click();
