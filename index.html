@@ -2221,8 +2221,9 @@
               <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">不受地区限制，本世界观下全程常驻，每轮注入 AI。适合小世界观 / 无势力结构的作品。</div>
               <div id="wv-global-npcs-container"></div>
 <div style="display:flex;gap:8px;margin-top:6px">
-<button type="button" onclick="Worldview.addGlobalNpc()" style="flex:1;padding:10px;background:var(--bg-tertiary);border:1px dashed var(--border);border-radius:8px;color:var(--text-secondary);font-size:13px;cursor:pointer;font-family:inherit">+ 添加常驻角色</button>
-<button type="button" onclick="WvGenerator.inlineGlobalNpcs()" style="flex:1;padding:10px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit">✨ AI 生成角色</button>
+<button type="button" onclick="Worldview.addGlobalNpc()" style="flex:1;padding:10px;background:var(--bg-tertiary);border:1px dashed var(--border);border-radius:8px;color:var(--text-secondary);font-size:13px;cursor:pointer;font-family:inherit">+ 添加</button>
+<button type="button" onclick="WvGenerator.inlineFillAllGlobalNpcs()" style="flex:1;padding:10px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit">✨ 填充已有</button>
+<button type="button" onclick="WvGenerator.inlineGlobalNpcs()" style="flex:1;padding:10px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit">✨ 追加新的</button>
 </div>
             </div>
             
@@ -2284,7 +2285,8 @@
           <div id="wv-regions-container"></div>
 <div style="display:flex;gap:8px;margin-top:4px">
 <button type="button" onclick="Worldview.addRegion()" style="flex:1;padding:12px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:14px">+ 添加地区</button>
-<button type="button" onclick="WvGenerator.inlineRegions()" style="flex:1;padding:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:14px">✨ AI 生成地区</button>
+<button type="button" onclick="WvGenerator.inlineFillAllRegions()" style="flex:1;padding:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px">✨ 填充已有</button>
+<button type="button" onclick="WvGenerator.inlineRegions()" style="flex:1;padding:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px">✨ 追加新的</button>
 </div>
         </div>
         
@@ -2403,7 +2405,8 @@
         <form onsubmit="return false">
           <label>地区名称<input type="text" id="wv-reg-name" placeholder="如：中央区"></label>
           <label>简介（速查表用）<textarea id="wv-reg-summary" class="auto-resize-textarea" rows="3" placeholder="一句话简介"></textarea></label>
-          <label>完整设定（命中时发送）<div style="position:relative;width:100%"><textarea id="wv-reg-detail" class="auto-resize-textarea" rows="8" placeholder="地区的详细设定..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-reg-detail','完整设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
+<label>完整设定（命中时发送）<div style="position:relative;width:100%"><textarea id="wv-reg-detail" class="auto-resize-textarea" rows="8" placeholder="地区的详细设定..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-reg-detail','完整设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
+<button type="button" onclick="WvGenerator.inlineFillRegion()" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">✨ AI 填充本地区</button>
         </form>
         <div style="padding-top:16px;margin-top:16px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -2436,6 +2439,7 @@
           <label>势力名称<input type="text" id="wv-fac-name" placeholder="如：银翼集团"></label>
           <label>简介（速查表用）<textarea id="wv-fac-summary" class="auto-resize-textarea" rows="3" placeholder="一句话简介"></textarea></label>
           <label>完整设定（命中时发送）<div style="position:relative;width:100%"><textarea id="wv-fac-detail" class="auto-resize-textarea" rows="8" placeholder="势力详细设定..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-fac-detail','完整设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
+<button type="button" onclick="WvGenerator.inlineFillFaction()" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">✨ AI 填充本势力</button>
         </form>
         <div style="padding-top:16px;margin-top:16px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -2469,6 +2473,7 @@
 <label>代号/别名<input type="text" id="wv-npc-aliases" placeholder="多个用逗号或顿号分隔，如：影、Agent-7"></label>
           <label id="wv-npc-summary-label">简介（速查表用）<textarea id="wv-npc-summary" class="auto-resize-textarea" rows="3" placeholder="一句话简介"></textarea></label>
           <label>完整设定<div style="position:relative;width:100%"><textarea id="wv-npc-detail" class="auto-resize-textarea" rows="10" placeholder="角色详细设定..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-npc-detail','完整设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
+<button type="button" onclick="WvGenerator.inlineFillNpc()" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">✨ AI 填充本角色</button>
         </form>
       </div>
     </div>

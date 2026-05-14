@@ -804,6 +804,148 @@ detail 使用 Markdown 格式，包含：
     }
   }
 
+  /** 单条地区填充（在地区编辑面板内） */
+  async function inlineFillRegion() {
+    const name = document.getElementById('wv-reg-name')?.value?.trim();
+    if (!name) { UI.showToast('请先填写地区名称', 1500); return; }
+    const w = await Worldview._getEditingWV();
+    const setting = w?.setting || '';
+    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+
+    UI.showToast('正在为「' + name + '」生成设定…', 60000);
+    try {
+      const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', 300).replace('##EXISTING_REGIONS##', '');
+      const userMsg = `仅生成 1 个地区「${name}」的详细设定。\n\n## 世界观设定\n${setting}`;
+      const raw = await API.generate(sysPrompt, userMsg);
+      const arr = _parseJSON(raw);
+      const r = Array.isArray(arr) ? arr[0] : arr;
+      if (r) {
+        const desc = document.getElementById('wv-reg-summary');
+        const detail = document.getElementById('wv-reg-detail');
+        if (desc && !desc.value.trim() && r.description) desc.value = r.description;
+        if (detail && r.setting) { detail.value = r.setting; detail.style.height = 'auto'; detail.style.height = detail.scrollHeight + 'px'; }
+      }
+      UI.showToast('地区设定已填充', 2000);
+    } catch (e) { UI.showToast('生成失败: ' + e.message, 3000); }
+  }
+
+  /** 单条势力填充 */
+  async function inlineFillFaction() {
+    const name = document.getElementById('wv-fac-name')?.value?.trim();
+    if (!name) { UI.showToast('请先填写势力名称', 1500); return; }
+    const w = await Worldview._getEditingWV();
+    const setting = w?.setting || '';
+    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+
+    UI.showToast('正在为「' + name + '」生成设定…', 60000);
+    try {
+      const sysPrompt = PROMPTS.step3.replace('##WORD_COUNT##', 500);
+      const userMsg = `仅生成 1 个势力「${name}」的详细设定。\n\n## 世界观设定\n${setting}`;
+      const raw = await API.generate(sysPrompt, userMsg);
+      const arr = _parseJSON(raw);
+      const f = Array.isArray(arr) ? arr[0] : arr;
+      if (f) {
+        const summary = document.getElementById('wv-fac-summary');
+        const detail = document.getElementById('wv-fac-detail');
+        if (summary && !summary.value.trim() && f.description) summary.value = f.description;
+        if (detail && f.setting) { detail.value = f.setting; detail.style.height = 'auto'; detail.style.height = detail.scrollHeight + 'px'; }
+      }
+      UI.showToast('势力设定已填充', 2000);
+    } catch (e) { UI.showToast('生成失败: ' + e.message, 3000); }
+  }
+
+  /** 单条NPC填充 */
+  async function inlineFillNpc() {
+    const name = document.getElementById('wv-npc-name')?.value?.trim();
+    if (!name) { UI.showToast('请先填写角色名称', 1500); return; }
+    const w = await Worldview._getEditingWV();
+    const setting = w?.setting || '';
+    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+
+    UI.showToast('正在为「' + name + '」生成设定…', 60000);
+    try {
+      const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', 500);
+      const identity = document.getElementById('wv-npc-summary')?.value?.trim() || '';
+      const userMsg = `仅生成 1 个角色「${name}」${identity ? '（' + identity + '）' : ''}的详细设定。\n\n## 世界观设定\n${setting}`;
+      const raw = await API.generate(sysPrompt, userMsg);
+      const arr = _parseJSON(raw);
+      const n = Array.isArray(arr) ? arr[0] : arr;
+      if (n) {
+        const detail = document.getElementById('wv-npc-detail');
+        if (detail && n.detail) { detail.value = n.detail; detail.style.height = 'auto'; detail.style.height = detail.scrollHeight + 'px'; }
+        // 填充空字段
+        const aliases = document.getElementById('wv-npc-aliases');
+        const summary = document.getElementById('wv-npc-summary');
+        if (aliases && !aliases.value.trim() && n.alias) aliases.value = n.alias;
+        if (summary && !summary.value.trim() && (n.identity || n.description)) summary.value = n.identity || n.description || '';
+      }
+      UI.showToast('角色设定已填充', 2000);
+    } catch (e) { UI.showToast('生成失败: ' + e.message, 3000); }
+  }
+
+  /** 批量填充已有地区（只填 setting 为空的） */
+  async function inlineFillAllRegions() {
+    const w = await Worldview._getEditingWV();
+    if (!w) return;
+    const setting = w.setting || '';
+    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+    const empty = w.regions.filter(r => !r.setting?.trim() && r.name?.trim());
+    if (!empty.length) { UI.showToast('没有需要填充的地区（所有地区都已有设定）', 2000); return; }
+
+    UI.showToast(`正在填充 ${empty.length} 个地区…`, 60000);
+    try {
+      const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', 300).replace('##EXISTING_REGIONS##',
+        `\n## 必须对齐的地区\n${empty.map(r => r.name).join('、')}`);
+      const userMsg = `为以下地区生成设定：${empty.map(r => r.name).join('、')}。\n\n## 世界观设定\n${setting}`;
+      const raw = await API.generate(sysPrompt, userMsg);
+      const arr = _parseJSON(raw);
+      const result = Array.isArray(arr) ? arr : [];
+      let filled = 0;
+      for (const r of result) {
+        const target = w.regions.find(reg => reg.name === r.name);
+        if (target && !target.setting?.trim()) {
+          if (r.description && !target.description?.trim()) target.description = r.description;
+          if (r.setting) { target.setting = r.setting; filled++; }
+        }
+      }
+      await Worldview._saveEditingWV(w);
+      Worldview.switchEditTab('detail');
+      UI.showToast(`已填充 ${filled} 个地区`, 2000);
+    } catch (e) { UI.showToast('生成失败: ' + e.message, 3000); }
+  }
+
+  /** 批量填充已有全图NPC */
+  async function inlineFillAllGlobalNpcs() {
+    const w = await Worldview._getEditingWV();
+    if (!w) return;
+    const setting = w.setting || '';
+    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+    const empty = (w.globalNpcs || []).filter(n => !n.detail?.trim() && n.name?.trim());
+    if (!empty.length) { UI.showToast('没有需要填充的角色（所有角色都已有设定）', 2000); return; }
+
+    UI.showToast(`正在填充 ${empty.length} 个角色…`, 60000);
+    try {
+      const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', 500);
+      const names = empty.map(n => n.name + (n.summary ? '（' + n.summary + '）' : '')).join('、');
+      const userMsg = `为以下角色生成详细设定：${names}。所有角色都是常驻角色。\n\n## 世界观设定\n${setting}`;
+      const raw = await API.generate(sysPrompt, userMsg);
+      const arr = _parseJSON(raw);
+      const result = Array.isArray(arr) ? arr : [];
+      let filled = 0;
+      for (const n of result) {
+        const target = w.globalNpcs.find(g => g.name === n.name);
+        if (target && !target.detail?.trim()) {
+          if (n.detail) { target.detail = n.detail; filled++; }
+          if (n.alias && !target.aliases?.trim()) target.aliases = n.alias;
+          if ((n.identity || n.description) && !target.summary?.trim()) target.summary = n.identity || n.description || '';
+        }
+      }
+      await Worldview._saveEditingWV(w);
+      Worldview._renderGlobalNpcs(w.globalNpcs);
+      UI.showToast(`已填充 ${filled} 个角色`, 2000);
+    } catch (e) { UI.showToast('生成失败: ' + e.message, 3000); }
+  }
+
   return {
     open,
     close,
@@ -818,6 +960,11 @@ detail 使用 Markdown 格式，包含：
     inlineSetting,
     inlineOpening,
     inlineRegions,
-    inlineGlobalNpcs
+    inlineGlobalNpcs,
+    inlineFillRegion,
+    inlineFillFaction,
+    inlineFillNpc,
+    inlineFillAllRegions,
+    inlineFillAllGlobalNpcs
   };
 })();
