@@ -754,6 +754,7 @@ detail 使用 Markdown 格式，包含：
             });
           }
           await Worldview._saveEditingWV(w);
+          Worldview._renderRegions(w.regions);
           Worldview.switchEditTab('detail');
         }
       }
@@ -909,6 +910,7 @@ detail 使用 Markdown 格式，包含：
         }
       }
       await Worldview._saveEditingWV(w);
+      Worldview._renderRegions(w.regions);
       Worldview.switchEditTab('detail');
       UI.showToast(`已填充 ${filled} 个地区`, 2000);
     } catch (e) { UI.showToast('生成失败: ' + e.message, 3000); }
