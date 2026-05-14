@@ -386,7 +386,7 @@ ${_stepIntro('castle', '第 3 步 · 势力', '为地区生成势力组织' + (r
       </div>
       <div class="wv-gen-grid">
         <div class="wv-gen-field">
-          <label class="wv-gen-label">每条势力字数（最多1200）</label>
+          <label class="wv-gen-label">单条字数（≤1200）</label>
           <input id="wv-gen-words" type="number" min="200" max="1200" step="50" value="${_genData.step3?._wordCount || 500}" class="wv-gen-input">
         </div>
         <div class="wv-gen-field">
