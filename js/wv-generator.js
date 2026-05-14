@@ -594,8 +594,8 @@ detail 使用 Markdown 格式，包含：
         }
         return {
           name: r.name || '',
-          description: r.description || '',
-          setting: r.setting || '',
+          summary: r.description || '',
+          detail: r.setting || '',
           factions: regionFacs
         };
       });
@@ -605,10 +605,8 @@ detail 使用 Markdown 格式，包含：
     for (const npc of npcs) {
       const npcObj = {
         name: npc.name || '',
-        alias: npc.alias || '',
-        age: npc.age || '',
-        gender: npc.gender || '',
-        identity: npc.identity || '',
+        aliases: npc.alias || '',
+        summary: npc.identity || '',
         detail: npc.detail || '',
         avatar: ''
       };
@@ -748,8 +746,8 @@ detail 使用 Markdown 格式，包含：
           for (const r of arr) {
             w.regions.push({
               name: r.name || '',
-              description: r.description || '',
-              setting: r.setting || '',
+              summary: r.description || '',
+              detail: r.setting || '',
               factions: [{ name: '默认势力', summary: '', detail: '', npcs: [] }]
             });
           }
@@ -890,7 +888,7 @@ detail 使用 Markdown 格式，包含：
     if (!w) return;
     const setting = w.setting || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
-    const empty = w.regions.filter(r => !r.setting?.trim() && r.name?.trim());
+    const empty = w.regions.filter(r => !r.detail?.trim() && r.name?.trim());
     if (!empty.length) { UI.showToast('没有需要填充的地区（所有地区都已有设定）', 2000); return; }
 
     UI.showToast(`正在填充 ${empty.length} 个地区…`, 60000);
@@ -904,9 +902,9 @@ detail 使用 Markdown 格式，包含：
       let filled = 0;
       for (const r of result) {
         const target = w.regions.find(reg => reg.name === r.name);
-        if (target && !target.setting?.trim()) {
-          if (r.description && !target.description?.trim()) target.description = r.description;
-          if (r.setting) { target.setting = r.setting; filled++; }
+        if (target && !target.detail?.trim()) {
+          if (r.description && !target.summary?.trim()) target.summary = r.description;
+          if (r.setting) { target.detail = r.setting; filled++; }
         }
       }
       await Worldview._saveEditingWV(w);
