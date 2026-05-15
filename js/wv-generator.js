@@ -174,7 +174,11 @@ detail 使用 Markdown 格式，包含：
   }
 
   async function _promptText(title, label, def = '') {
-    if (typeof UI !== 'undefined' && UI.showSimpleInput) return await UI.showSimpleInput(`${title}\n${label}`, def);
+    if (typeof UI !== 'undefined' && UI.showSimpleInput) {
+      const v = await UI.showSimpleInput(`${title}\n${label}`, def, { allowEmpty: true });
+      // allowEmpty 模式下：null 表示取消，'' 表示留空确认
+      return v;
+    }
     return window.prompt(`${title}\n\n${label}`, def);
   }
   async function _promptInt(title, label, def, min, max) {

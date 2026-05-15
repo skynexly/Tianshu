@@ -768,7 +768,9 @@ if (contentArea) contentArea.style.display = 'none';
 
   // ===== 简单输入框 =====
 
-  function showSimpleInput(title, defaultValue) {
+  function showSimpleInput(title, defaultValue, options) {
+    const opts = options || {};
+    const allowEmpty = !!opts.allowEmpty;
     return new Promise((resolve) => {
       const modal = document.getElementById('simple-input-modal');
       const titleEl = document.getElementById('simple-input-title');
@@ -805,7 +807,9 @@ if (contentArea) contentArea.style.display = 'none';
       confirmBtn.onclick = () => {
         const value = inputEl.value.trim();
         cleanup();
-        resolve(value || null);
+        // allowEmpty=true 时，空字符串也算确认（用于"留空则由 AI 自由发挥"这类场景）
+        // allowEmpty=false（默认，向后兼容）时，空字符串等同取消（返回 null）
+        resolve(allowEmpty ? value : (value || null));
       };
 
       cancelBtn.onclick = () => {
