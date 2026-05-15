@@ -14,6 +14,7 @@ let visionPresets = [];
   let worldvoicePresets = [];
   let backstagePresets = [];
   let ttsPresets = [];
+  let drawPresets = [];
   let currentSummaryId = 'default';
   let currentMemoryId = 'default';
   let currentVisionId = 'default';
@@ -21,6 +22,7 @@ let visionPresets = [];
   let currentWorldvoiceId = 'default';
   let currentBackstageId = 'default';
   let currentTtsId = 'default';
+  let currentDrawId = 'default';
   let editingSummaryId = null;
   let editingMemoryId = null;
   let editingVisionId = null;
@@ -28,12 +30,13 @@ let visionPresets = [];
   let editingWorldvoiceId = null;
   let editingBackstageId = null;
   let editingTtsId = null;
+  let editingDrawId = null;
 
 // 管理模式状态
 let presetManageMode = false;
 let presetSelectedIds = new Set();
-let funcManageMode = { summary: false, memory: false, vision: false, gaiden: false, worldvoice: false, backstage: false, tts: false };
-  let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set(), gaiden: new Set(), worldvoice: new Set(), backstage: new Set(), tts: new Set() };
+let funcManageMode = { summary: false, memory: false, vision: false, gaiden: false, worldvoice: false, backstage: false, tts: false, draw: false };
+  let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set(), gaiden: new Set(), worldvoice: new Set(), backstage: new Set(), tts: new Set(), draw: new Set() };
   let regexManageMode = false;
   let regexSelectedIdxs = new Set();
 
@@ -91,6 +94,8 @@ const bsData = await DB.get('settings', 'backstagePresets');
     backstagePresets = (bsData?.value && bsData.value.length > 0) ? bsData.value : [{ id: 'default', name: '默认', apiUrl: '', apiKey: '', model: '' }];
     const ttsData = await DB.get('settings', 'ttsPresets');
     ttsPresets = (ttsData?.value && ttsData.value.length > 0) ? ttsData.value : [{ id: 'default', name: '默认', apiUrl: 'https://api.minimaxi.com/v1/t2a_v2', apiKey: '', model: 'speech-2.8-hd', groupId: '' }];
+    const drawData = await DB.get('settings', 'drawPresets');
+    drawPresets = (drawData?.value && drawData.value.length > 0) ? drawData.value : [{ id: 'default', name: '默认', apiUrl: '', apiKey: '', model: '' }];
 
     const currSum = await DB.get('settings', 'currentSummary');
     currentSummaryId = currSum?.value || 'default';
@@ -106,6 +111,8 @@ const bsData = await DB.get('settings', 'backstagePresets');
     currentBackstageId = currBs?.value || 'default';
     const currTts = await DB.get('settings', 'currentTts');
     currentTtsId = currTts?.value || 'default';
+    const currDraw = await DB.get('settings', 'currentDraw');
+    currentDrawId = currDraw?.value || 'default';
 
     // 安全校验：currentId 指向的预设不存在则重置到第一个
     if (!summaryPresets.find(p => p.id === currentSummaryId)) currentSummaryId = summaryPresets[0]?.id || 'default';
@@ -115,6 +122,7 @@ const bsData = await DB.get('settings', 'backstagePresets');
     if (!worldvoicePresets.find(p => p.id === currentWorldvoiceId)) currentWorldvoiceId = worldvoicePresets[0]?.id || 'default';
     if (!backstagePresets.find(p => p.id === currentBackstageId)) currentBackstageId = backstagePresets[0]?.id || 'default';
     if (!ttsPresets.find(p => p.id === currentTtsId)) currentTtsId = ttsPresets[0]?.id || 'default';
+    if (!drawPresets.find(p => p.id === currentDrawId)) currentDrawId = drawPresets[0]?.id || 'default';
 
     await savePresets();
   }
@@ -136,6 +144,8 @@ const bsData = await DB.get('settings', 'backstagePresets');
     await DB.put('settings', { key: 'currentBackstage', value: currentBackstageId });
     await DB.put('settings', { key: 'ttsPresets', value: ttsPresets });
     await DB.put('settings', { key: 'currentTts', value: currentTtsId });
+    await DB.put('settings', { key: 'drawPresets', value: drawPresets });
+    await DB.put('settings', { key: 'currentDraw', value: currentDrawId });
   }
 
   function getCurrent() {
@@ -177,6 +187,9 @@ const bsData = await DB.get('settings', 'backstagePresets');
     const c = _cleanFuncConfig(preset);
     if (preset.groupId && preset.groupId.trim()) c.groupId = preset.groupId.trim();
     return c;
+  }
+  function getDrawConfig() {
+    return _cleanFuncConfig(drawPresets.find(p => p.id === currentDrawId) || drawPresets[0]);
   }
 
   async function switchPreset(id, updateConv = true) {
@@ -627,6 +640,7 @@ async function cancelEdit() {
     else if (type === 'worldvoice') { list = worldvoicePresets; currentId = currentWorldvoiceId; }
     else if (type === 'backstage') { list = backstagePresets; currentId = currentBackstageId; }
     else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; }
+    else if (type === 'draw') { list = drawPresets; currentId = currentDrawId; }
     else return;
 
     const switchFnName = 'switch' + type.charAt(0).toUpperCase() + type.slice(1);
@@ -689,6 +703,7 @@ async function cancelEdit() {
     else if (type === 'worldvoice') { list = worldvoicePresets; currentId = currentWorldvoiceId; switchFn = (x) => currentWorldvoiceId = x; }
     else if (type === 'backstage') { list = backstagePresets; currentId = currentBackstageId; switchFn = (x) => currentBackstageId = x; }
     else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; switchFn = (x) => currentTtsId = x; }
+    else if (type === 'draw') { list = drawPresets; currentId = currentDrawId; switchFn = (x) => currentDrawId = x; }
     else return;
     const selected = funcSelectedIds[type];
     if (selected.size === 0) return;
@@ -705,7 +720,8 @@ async function cancelEdit() {
     else if (type === 'worldvoice') worldvoicePresets = list.filter(p => !toDelete.has(p.id));
     else if (type === 'backstage') backstagePresets = list.filter(p => !toDelete.has(p.id));
     else if (type === 'tts') ttsPresets = list.filter(p => !toDelete.has(p.id));
-    const newList = type === 'summary' ? summaryPresets : type === 'memory' ? memoryPresets : type === 'vision' ? visionPresets : type === 'gaiden' ? gaidenPresets : type === 'worldvoice' ? worldvoicePresets : type === 'tts' ? ttsPresets : backstagePresets;
+    else if (type === 'draw') drawPresets = list.filter(p => !toDelete.has(p.id));
+    const newList = type === 'summary' ? summaryPresets : type === 'memory' ? memoryPresets : type === 'vision' ? visionPresets : type === 'gaiden' ? gaidenPresets : type === 'worldvoice' ? worldvoicePresets : type === 'tts' ? ttsPresets : type === 'draw' ? drawPresets : backstagePresets;
     // 删光后自动补回默认预设
     if (newList.length === 0) {
       const defaultPreset = { id: 'default', name: '默认', apiUrl: '', apiKey: '', model: '' };
@@ -726,6 +742,7 @@ async function cancelEdit() {
     else if (type === 'worldvoice') list = worldvoicePresets;
     else if (type === 'backstage') list = backstagePresets;
     else if (type === 'tts') list = ttsPresets;
+    else if (type === 'draw') list = drawPresets;
     else return;
     const selected = funcSelectedIds[type];
     if (selected.size === 0) return;
@@ -781,6 +798,12 @@ async function cancelEdit() {
     savePresets();
     renderFuncPresetList('tts');
   }
+  function switchDraw(id) {
+    if (!drawPresets.find(p => p.id === id)) return;
+    currentDrawId = id;
+    savePresets();
+    renderFuncPresetList('draw');
+  }
 
   // ===== 从主模型预设填充功能模型 =====
   function fillFromMainPreset(type, presetId) {
@@ -823,6 +846,7 @@ async function cancelEdit() {
     else if (type === 'worldvoice') { list = worldvoicePresets; editingIdVar = 'editingWorldvoiceId'; modalId = 'func-worldvoice-modal'; }
     else if (type === 'backstage') { list = backstagePresets; editingIdVar = 'editingBackstageId'; modalId = 'func-backstage-modal'; }
     else if (type === 'tts') { list = ttsPresets; editingIdVar = 'editingTtsId'; modalId = 'func-tts-modal'; }
+    else if (type === 'draw') { list = drawPresets; editingIdVar = 'editingDrawId'; modalId = 'func-draw-modal'; }
     else return;
 
     const preset = list.find(p => p.id === id);
@@ -860,9 +884,10 @@ async function cancelEdit() {
     else if (type === 'worldvoice') { list = worldvoicePresets; editingIdVar = 'editingWorldvoiceId'; modalId = 'func-worldvoice-modal'; }
     else if (type === 'backstage') { list = backstagePresets; editingIdVar = 'editingBackstageId'; modalId = 'func-backstage-modal'; }
     else if (type === 'tts') { list = ttsPresets; editingIdVar = 'editingTtsId'; modalId = 'func-tts-modal'; }
+    else if (type === 'draw') { list = drawPresets; editingIdVar = 'editingDrawId'; modalId = 'func-draw-modal'; }
     else return;
 
-    const editingId = type === 'summary' ? editingSummaryId : type === 'memory' ? editingMemoryId : type === 'vision' ? editingVisionId : type === 'gaiden' ? editingGaidenId : type === 'worldvoice' ? editingWorldvoiceId : type === 'tts' ? editingTtsId : editingBackstageId;
+    const editingId = type === 'summary' ? editingSummaryId : type === 'memory' ? editingMemoryId : type === 'vision' ? editingVisionId : type === 'gaiden' ? editingGaidenId : type === 'worldvoice' ? editingWorldvoiceId : type === 'tts' ? editingTtsId : type === 'draw' ? editingDrawId : editingBackstageId;
     if (!editingId) return;
 
     const preset = list.find(p => p.id === editingId);
@@ -889,6 +914,7 @@ async function cancelEdit() {
     else if (type === 'worldvoice') editingWorldvoiceId = null;
     else if (type === 'backstage') editingBackstageId = null;
     else if (type === 'tts') editingTtsId = null;
+    else if (type === 'draw') editingDrawId = null;
 
     renderFuncPresetList(type);
   }
@@ -901,6 +927,7 @@ async function cancelEdit() {
     else if (type === 'worldvoice') editingWorldvoiceId = null;
     else if (type === 'backstage') editingBackstageId = null;
     else if (type === 'tts') editingTtsId = null;
+    else if (type === 'draw') editingDrawId = null;
 
     const modalId = `func-${type}-modal`;
     document.getElementById(modalId).classList.add('hidden');
@@ -943,6 +970,11 @@ async function cancelEdit() {
       modalId = 'func-tts-modal';
       titlePrefix = '语音';
     }
+    else if (type === 'draw') {
+      list = drawPresets;
+      modalId = 'func-draw-modal';
+      titlePrefix = '生图';
+    }
     else return;
 
     const id = 'func_' + type + '_' + Utils.uuid().slice(0, 8);
@@ -958,6 +990,7 @@ async function cancelEdit() {
     else if (type === 'worldvoice') editingWorldvoiceId = id;
     else if (type === 'backstage') editingBackstageId = id;
     else if (type === 'tts') editingTtsId = id;
+    else if (type === 'draw') editingDrawId = id;
 
     await savePresets();
     renderFuncPresetList(type);
@@ -973,6 +1006,7 @@ async function cancelEdit() {
     else if (type === 'worldvoice') { list = worldvoicePresets; currentId = currentWorldvoiceId; }
     else if (type === 'backstage') { list = backstagePresets; currentId = currentBackstageId; }
     else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; }
+    else if (type === 'draw') { list = drawPresets; currentId = currentDrawId; }
     else return;
 
     const src = list.find(p => p.id === id);
@@ -1107,8 +1141,8 @@ async function cancelEdit() {
     getRegexRules, addRegex, editRegex, saveRegex, closeRegexEdit,
     toggleRegex, removeRegex, renderRegexRules,
     toggleRegexSelect, toggleRegexManageMode, exitRegexManageMode, batchDeleteRegex,
-    getSummaryConfig, getMemoryConfig, getVisionConfig, getGaidenConfig, getWorldvoiceConfig, getBackstageConfig, getTtsConfig,
-    renderFuncPresetList, switchSummary, switchMemory, switchVision, switchGaiden, switchWorldvoice, switchBackstage, switchTts,
+    getSummaryConfig, getMemoryConfig, getVisionConfig, getGaidenConfig, getWorldvoiceConfig, getBackstageConfig, getTtsConfig, getDrawConfig,
+    renderFuncPresetList, switchSummary, switchMemory, switchVision, switchGaiden, switchWorldvoice, switchBackstage, switchTts, switchDraw,
     editFuncPreset, saveFuncPreset, cancelFuncEdit, createFuncPreset,
     cloneFuncPreset, deleteFuncPreset, fetchFuncModels, fillFromMainPreset, toggleFillDropdown,
     toggleFuncSelect, toggleFuncManageMode, batchDeleteFunc, batchCloneFunc

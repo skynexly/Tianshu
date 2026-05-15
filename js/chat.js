@@ -374,6 +374,8 @@ const Chat = (() => {
     try { renderQuickSwitches(); } catch(_) {}
     // 异步加载 AI 头像，加载好后回填到已渲染的消息
     refreshAiAvatar();
+    // 更新加号菜单里的生图按钮可见性
+    _updateImgGenButtons();
 
   // 淡入动画
   if (container) {
@@ -889,6 +891,11 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       } catch(e) { console.warn('[Chat] 时间感知注入失败', e); }
     }
 
+    // 7a. 生图模式（对话设置里开关控制）
+    if (convSettings.imgGen) {
+      systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念');
+    }
+
 // 8. 心动模拟：累计状态注入
       // 已返航后，停止注入心动模拟的状态/任务/好感数据，改为注入"已回家"提示
       let _hsHomecoming = false;
@@ -1358,6 +1365,12 @@ messages.push(aiMsg);
                 UI.showToast('正在重试剧情总结…', 4000);
               }
               await checkAutoSummary();
+
+              // 生图模式：异步解析 [IMG:] 标记（不阻塞resolve）
+              if (convSettings.imgGen && /\[IMG:\s*[^\]]+\]/i.test(fullContent)) {
+                _processImgTags(aiMsg.id, fullContent).catch(e => console.warn('[Chat] 生图标记处理失败', e));
+              }
+
               resolve();
             } catch(e) {
               GameLog.log('error', `onDone处理错误: ${e.message}`);
@@ -3639,6 +3652,11 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       } catch(e) {}
     }
 
+    // 7a. 生图模式
+    if (convSettings.imgGen) {
+      systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念');
+    }
+
 // 8. 心动模拟：累计状态注入（调试预览与实际发送保持一致）
       let _hsHomecomingDbg = false;
       try {
@@ -3998,7 +4016,8 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         all: !!voice.scopeAll,
         quotes: Array.isArray(voice.quotes) ? voice.quotes : []
       },
-      bgImage: conv?.convBgImage || ''
+      bgImage: conv?.convBgImage || '',
+      imgGen: !!conv?.convImgGen                  // 默认关（生图模式）
     };
   }
 
@@ -4105,6 +4124,9 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       preview.style.display = s.bgImage ? 'block' : 'none';
     }
     if (clearBtn) clearBtn.style.display = s.bgImage ? 'inline-flex' : 'none';
+    // 生图模式
+    const igEl = document.getElementById('cs-imggen');
+    if (igEl) igEl.checked = s.imgGen;
     document.getElementById('conv-settings-modal').classList.remove('hidden');
   }
 
@@ -4120,6 +4142,8 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     if (taEl) conv.convTimeAware = taEl.checked;
     const ocEl = document.getElementById('cs-online-chat');
     if (ocEl) conv.convOnlineChat = ocEl.checked;
+    const igSaveEl = document.getElementById('cs-imggen');
+    if (igSaveEl) conv.convImgGen = igSaveEl.checked;
     const evEl = document.getElementById('cs-events-enabled');
     if (evEl) conv.convEventsEnabled = evEl.checked;
     // 语音
@@ -4146,6 +4170,8 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     } catch(_) {}
     await Conversations.saveList();
     closeConvSettingsModal();
+    // 更新加号菜单里的生图按钮可见性
+    _updateImgGenButtons();
     // 更新后台悬浮按钮
     if (typeof Backstage !== 'undefined') Backstage.updateFab();
     // 如果刚开启后台，弹出要求编辑面板
@@ -4236,6 +4262,156 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     }
   }
 
+  // ===== 生图模式 =====
+
+  function _updateImgGenButtons() {
+    const s = _getConvSettings();
+    const show = s.imgGen;
+    const mainBtn = document.getElementById('plus-imggen-btn');
+    if (mainBtn) mainBtn.style.display = show ? 'flex' : 'none';
+    const bsBtn = document.getElementById('backstage-imggen-btn');
+    if (bsBtn) bsBtn.style.display = show ? 'flex' : 'none';
+  }
+
+  let _imgGenSource = 'main'; // 'main' | 'backstage'
+
+  function openImgGenModal(source) {
+    _imgGenSource = source || 'main';
+    // 清空上次内容
+    const p = document.getElementById('imggen-prompt');
+    if (p) p.value = '';
+    const w = document.getElementById('imggen-width');
+    if (w) w.value = '1024';
+    const h = document.getElementById('imggen-height');
+    if (h) h.value = '768';
+    const n = document.getElementById('imggen-count');
+    if (n) n.value = '1';
+    const status = document.getElementById('imggen-status');
+    if (status) { status.style.display = 'none'; status.textContent = ''; }
+    const btn = document.getElementById('imggen-submit');
+    if (btn) { btn.disabled = false; btn.textContent = '生成'; }
+    document.getElementById('imggen-modal')?.classList.remove('hidden');
+  }
+
+  async function submitImgGen() {
+    const prompt = (document.getElementById('imggen-prompt')?.value || '').trim();
+    const width = parseInt(document.getElementById('imggen-width')?.value) || 1024;
+    const height = parseInt(document.getElementById('imggen-height')?.value) || 768;
+    const count = Math.min(Math.max(parseInt(document.getElementById('imggen-count')?.value) || 1, 1), 4);
+    const status = document.getElementById('imggen-status');
+    const btn = document.getElementById('imggen-submit');
+
+    if (!prompt) {
+      // 留空：让AI根据剧情生成描述——直接以用户消息形式发送指令
+      document.getElementById('imggen-modal')?.classList.add('hidden');
+      const input = _imgGenSource === 'backstage'
+        ? document.getElementById('backstage-input')
+        : document.getElementById('chat-input');
+      if (input) {
+        input.value = '请为当前场景生成一张配图。';
+        if (_imgGenSource === 'backstage' && typeof Backstage !== 'undefined') {
+          Backstage.send();
+        } else {
+          send();
+        }
+      }
+      return;
+    }
+
+    // 有描述：直接调生图API
+    if (status) { status.style.display = 'block'; status.textContent = '正在生成图片…'; }
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+
+    try {
+      const images = await API.generateImage(prompt, {
+        n: count,
+        size: `${width}x${height}`
+      });
+      if (!images || images.length === 0) throw new Error('未返回图片');
+
+      // 构建消息内容
+      let content = `[手动生图] ${prompt}\n\n`;
+      images.forEach((src, i) => {
+        content += `![生成图片${i + 1}](${src})\n\n`;
+      });
+
+      // 作为系统消息插入当前对话
+      const msgObj = {
+        id: Utils.uuid(),
+        role: 'system',
+        content,
+        conversationId: Conversations.getCurrent(),
+        branchId: _imgGenSource === 'backstage' ? 'backstage' : (currentBranchId || 'main'),
+        timestamp: Utils.timestamp()
+      };
+      await DB.put('messages', msgObj);
+
+      if (_imgGenSource === 'backstage') {
+        // 后台频道：用 _renderMessages 刷新
+        if (typeof Backstage !== 'undefined' && Backstage._renderMessages) Backstage._renderMessages();
+      } else {
+        messages.push(msgObj);
+        appendMessage(msgObj, false, true);
+      }
+
+      document.getElementById('imggen-modal')?.classList.add('hidden');
+      UI.showToast(`已生成 ${images.length} 张图片`);
+    } catch(e) {
+      if (status) { status.style.display = 'block'; status.textContent = '生成失败: ' + e.message; }
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    }
+  }
+
+  /**
+   * 解析 AI 回复中的 [IMG: ...] 标记并替换为实际图片
+   * 在 onDone 之后异步执行，不阻塞主流程
+   */
+  async function _processImgTags(msgId, content) {
+    const regex = /\[IMG:\s*([^\]]+)\]/gi;
+    const matches = [...content.matchAll(regex)];
+    if (matches.length === 0) return;
+
+    const s = _getConvSettings();
+    if (!s.imgGen) return; // 未开启生图模式则跳过
+
+    const msgEl = document.querySelector(`[data-id="${msgId}"]`);
+    if (!msgEl) return;
+
+    // 先给每个 [IMG:] 占位
+    let html = msgEl.querySelector('.msg-body')?.innerHTML || '';
+    matches.forEach((m, i) => {
+      const placeholder = `<div class="imggen-placeholder" data-imggen-idx="${i}" style="display:flex;align-items:center;gap:8px;padding:12px;margin:8px 0;border-radius:8px;background:var(--bg-tertiary);border:1px solid var(--border);font-size:13px;color:var(--text-secondary)"><div class="typing-indicator" style="flex-shrink:0"><span></span><span></span><span></span></div>正在生成图片…</div>`;
+      html = html.replace(Utils.escapeHtml(m[0]), placeholder);
+    });
+    const bodyEl = msgEl.querySelector('.msg-body');
+    if (bodyEl) bodyEl.innerHTML = html;
+
+    // 逐个生成
+    for (let i = 0; i < matches.length; i++) {
+      const desc = matches[i][1].trim();
+      const ph = msgEl.querySelector(`[data-imggen-idx="${i}"]`);
+      try {
+        const images = await API.generateImage(desc, { n: 1, size: '1024x768' });
+        if (images && images.length > 0) {
+          if (ph) {
+            ph.outerHTML = `<img src="${images[0]}" style="max-width:100%;border-radius:8px;margin:8px 0;cursor:pointer" onclick="window.open(this.src)" loading="lazy">`;
+          }
+          // 更新消息内容（将 [IMG:] 替换为 markdown 图片）
+          const msg = messages.find(m => m.id === msgId);
+          if (msg) {
+            msg.content = msg.content.replace(matches[i][0], `![${desc}](${images[0]})`);
+            try { delete msg._cachedFullHTML; delete msg._cachedPlainHTML; } catch(_) {}
+            await DB.put('messages', msg);
+          }
+        } else {
+          if (ph) ph.outerHTML = `<div style="padding:8px;margin:8px 0;border-radius:8px;background:rgba(255,100,100,0.1);color:var(--danger);font-size:13px">图片生成失败：未返回数据</div>`;
+        }
+      } catch(e) {
+        if (ph) ph.outerHTML = `<div style="padding:8px;margin:8px 0;border-radius:8px;background:rgba(255,100,100,0.1);color:var(--danger);font-size:13px">图片生成失败：${Utils.escapeHtml(e.message)}</div>`;
+      }
+    }
+  }
+
   return {
     loadHistory, send, cancelRequest, editMessage, saveEdit,
     createBranch, switchBranch, regenerate,
@@ -4263,6 +4439,7 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     _onVoiceEnabledChange, _onVoiceScopeAllChange,
     _onConvBgPicked, _onConvBgClear,
     playVoiceForMessage, stopVoice,
-    buildAIMessageHTML, appendMessage
+    buildAIMessageHTML, appendMessage,
+    openImgGenModal, submitImgGen, _updateImgGenButtons
   };
 })();

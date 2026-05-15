@@ -279,5 +279,41 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     return json.choices?.[0]?.message?.content || '';
   }
 
-  return { getConfig, buildMessages, streamChat, summarize, extractMemory, fetchModelList, generate };
+  /**
+   * 生成图片（OpenAI 兼容 /v1/images/generations）
+   */
+  async function generateImage(prompt, options = {}) {
+    const drawConfig = Settings.getDrawConfig();
+    const mainConfig = await getConfig();
+    const url = (drawConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/images/generations';
+    const key = drawConfig.apiKey || mainConfig.apiKey;
+    const model = drawConfig.model || '';
+    if (!url || !key) throw new Error('请先在设置→功能模型→生图模型中配置 API');
+
+    const body = {
+      prompt,
+      n: options.n || 1,
+      size: options.size || '1024x768',
+      response_format: 'b64_json'
+    };
+    if (model) body.model = model;
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify(body),
+      signal: options.signal
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => resp.statusText);
+      throw new Error(`生图失败: ${resp.status} ${errText.substring(0, 200)}`);
+    }
+
+    const json = await resp.json();
+    const images = (json.data || []).map(d => d.b64_json ? `data:image/png;base64,${d.b64_json}` : (d.url || ''));
+    return images.filter(Boolean);
+  }
+
+  return { getConfig, buildMessages, streamChat, summarize, extractMemory, fetchModelList, generate, generateImage };
 })();
