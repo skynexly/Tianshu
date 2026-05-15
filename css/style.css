@@ -4320,25 +4320,31 @@ body[data-worldview="心动模拟"] .sb-npc-dot.active {
 
 /* ===== 单人卡+无世界观 皮（data-skin="single-default"） ===== */
 /* 复用心动模拟的 neumorphism 变量 */
-body[data-skin="single-default"] {
+body[data-skin="single-default"],
+body[data-sb-skin="neumorph"] {
   --hs-shadow-neu: 5px 6px 13px rgba(0,0,0,0.13), -3px -3px 9px rgba(255,255,255,0.42), inset 0 1px 0 rgba(255,255,255,0.22);
   --hs-shadow-neu-hover: 6px 8px 16px rgba(0,0,0,0.15), -3px -3px 10px rgba(255,255,255,0.44), inset 0 1px 0 rgba(255,255,255,0.24);
   --hs-shadow-neu-dialog: 7px 9px 22px rgba(0,0,0,0.20), -4px -4px 12px rgba(255,255,255,0.36), inset 0 1px 0 rgba(255,255,255,0.20);
 }
 /* 状态卡整体：复用心动模拟的衬线/间距风 */
-body[data-skin="single-default"] .sb-status-card {
+body[data-skin="single-default"] .sb-status-card,
+body[data-sb-skin="neumorph"] .sb-status-card {
   gap: 16px;
   font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
 }
 /* 标题：与心动模拟一致 */
-body[data-skin="single-default"] .sb-status-title {
+body[data-skin="single-default"] .sb-status-title,
+body[data-sb-skin="neumorph"] .sb-status-title {
   align-items: baseline;
   gap: 10px;
   letter-spacing: 0;
   font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+}
 body[data-skin="single-default"] .sb-status-title .sb-dot,
+body[data-sb-skin="neumorph"] .sb-status-title .sb-dot,
 body[data-skin="single-default"] .sb-title-default,
-body[data-skin="single-default"] .sb-title-hs {
+body[data-skin="single-default"] .sb-title-hs,
+body[data-sb-skin="neumorph"] .sb-title-hs {
   display: none;
 }
 body[data-skin="single-default"] .sb-title-single {
@@ -4351,16 +4357,17 @@ body[data-skin="single-default"] .sb-title-single {
   text-transform: uppercase;
   font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
 }
-}
 /* === 单人卡皮：场景 + 用户状态（直接克隆自心动模拟） === */
-body[data-skin="single-default"] .sb-scene-wrap {
+body[data-skin="single-default"] .sb-scene-wrap,
+body[data-sb-skin="neumorph"] .sb-scene-wrap {
   padding: 12px 14px 13px;
   border-radius: 16px;
   background: var(--status-card, var(--bg-tertiary));
   box-shadow: var(--hs-shadow-neu);
   border: 1px solid rgba(255,255,255,0.16);
 }
-body[data-skin="single-default"] .sb-scene-label {
+body[data-skin="single-default"] .sb-scene-label,
+body[data-sb-skin="neumorph"] .sb-scene-label {
   display: block;
   margin-bottom: 7px;
   font-size: 11px;
@@ -4369,7 +4376,8 @@ body[data-skin="single-default"] .sb-scene-label {
   color: var(--accent);
   letter-spacing: .06em;
 }
-body[data-skin="single-default"] .sb-scene {
+body[data-skin="single-default"] .sb-scene,
+body[data-sb-skin="neumorph"] .sb-scene {
   margin: 0;
   padding: 0;
   border: none;
@@ -4382,7 +4390,8 @@ body[data-skin="single-default"] .sb-scene {
   letter-spacing: .02em;
   color: var(--text);
 }
-body[data-skin="single-default"] .sb-scene:hover {
+body[data-skin="single-default"] .sb-scene,
+body[data-sb-skin="neumorph"] .sb-scene:hover {
   background: transparent;
 }
 .sb-player-card {
@@ -4420,12 +4429,14 @@ body[data-skin="single-default"] .sb-scene:hover {
  padding-left:10px;
  margin-left:2px;
 }
-body[data-skin="single-default"] .sb-player-card {
+body[data-skin="single-default"] .sb-player-card,
+body[data-sb-skin="neumorph"] .sb-player-card {
  display: grid;
  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
  gap:10px;
 }
-body[data-skin="single-default"] .sb-player-card::before {
+body[data-skin="single-default"] .sb-player-card,
+body[data-sb-skin="neumorph"] .sb-player-card::before {
  content: "Your Status";
  grid-column:1 / -1;
  display: block;
@@ -4436,7 +4447,8 @@ body[data-skin="single-default"] .sb-player-card::before {
  color: var(--accent);
  letter-spacing: .06em;
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-row {
+body[data-skin="single-default"] .sb-player-card .sb-field-row ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-row {
  min-width:0;
  gap:8px;
  padding: 12px 12px 13px;
@@ -4447,11 +4459,13 @@ body[data-skin="single-default"] .sb-player-card .sb-field-row {
  box-shadow: var(--hs-shadow-neu);
  border:1px solid rgba(255,255,255,0.14);
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(1) {
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(1) ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-row:nth-child(1) {
  background: var(--status-bg, var(--bg-secondary));
  color: var(--accent);
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-row::after {
+body[data-skin="single-default"] .sb-player-card .sb-field-row::after ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-row::after {
  content: "";
  position: absolute;
  top:9px;
@@ -4464,15 +4478,18 @@ body[data-skin="single-default"] .sb-player-card .sb-field-row::after {
  opacity: .92;
  pointer-events: none;
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(2) {
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(2) ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-row:nth-child(2) {
  background: var(--status-card, var(--bg-tertiary));
  color: var(--text);
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-row:hover {
+body[data-skin="single-default"] .sb-player-card .sb-field-row:hover ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-row:hover {
  transform: translateY(-1px);
  box-shadow: var(--hs-shadow-neu-hover);
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-label {
+body[data-skin="single-default"] .sb-player-card .sb-field-label ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-label {
  font-size:11px;
  line-height:1;
  font-weight:800;
@@ -4481,19 +4498,24 @@ body[data-skin="single-default"] .sb-player-card .sb-field-label {
  opacity: .86;
  padding:0;
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(1) .sb-field-label::before {
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(1) .sb-field-label::before ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-row:nth-child(1) .sb-field-label::before {
  content: "今日穿搭";
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(2) .sb-field-label::before {
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(2) .sb-field-label::before ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-row:nth-child(2) .sb-field-label::before {
  content: "当前姿势";
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-label {
+body[data-skin="single-default"] .sb-player-card .sb-field-label ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-label {
  font-size:0;
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-label::before {
+body[data-skin="single-default"] .sb-player-card .sb-field-label::before ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-label::before {
  font-size:11px;
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-val {
+body[data-skin="single-default"] .sb-player-card .sb-field-val ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-val {
  margin:0;
  padding:0;
  border: none;
@@ -4504,30 +4526,37 @@ body[data-skin="single-default"] .sb-player-card .sb-field-val {
  letter-spacing: .01em;
  word-break: break-word;
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(1) .sb-field-val {
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(1) .sb-field-val ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-row:nth-child(1) .sb-field-val {
  color: var(--accent);
 }
-body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(2) .sb-field-val {
+body[data-skin="single-default"] .sb-player-card .sb-field-row:nth-child(2) .sb-field-val ,
+body[data-sb-skin="neumorph"] .sb-player-card .sb-field-row:nth-child(2) .sb-field-val {
  color: var(--text);
 }
 
 /* NPC 折叠区：Presence 标签 */
-body[data-skin="single-default"] .sb-npcs-accordion {
+body[data-skin="single-default"] .sb-npcs-accordion,
+body[data-sb-skin="neumorph"] .sb-npcs-accordion {
   gap: 7px;
 }
-body[data-skin="single-default"] .sb-npcs-header {
+body[data-skin="single-default"] .sb-npcs-header,
+body[data-sb-skin="neumorph"] .sb-npcs-header {
   padding: 0;
   cursor: default;
 }
-body[data-skin="single-default"] .sb-npcs-header:hover {
+body[data-skin="single-default"] .sb-npcs-header,
+body[data-sb-skin="neumorph"] .sb-npcs-header:hover {
   background: transparent;
 }
-body[data-skin="single-default"] .sb-npcs-title {
+body[data-skin="single-default"] .sb-npcs-title,
+body[data-sb-skin="neumorph"] .sb-npcs-title {
   font-size: 0;
   opacity: 1;
   letter-spacing: 0;
 }
-body[data-skin="single-default"] .sb-npcs-title::before {
+body[data-skin="single-default"] .sb-npcs-title,
+body[data-sb-skin="neumorph"] .sb-npcs-title::before {
   content: "Presence";
   font-size: 11px;
   line-height: 1;
@@ -4535,19 +4564,22 @@ body[data-skin="single-default"] .sb-npcs-title::before {
   color: var(--accent);
   letter-spacing: .06em;
 }
-body[data-skin="single-default"] .sb-npcs-body {
+body[data-skin="single-default"] .sb-npcs-body,
+body[data-sb-skin="neumorph"] .sb-npcs-body {
   max-height: none;
   overflow: visible;
 }
 /* NPC 列表：纵向排列、不折叠、不横滑 */
-body[data-skin="single-default"] .sb-npcs-list {
+body[data-skin="single-default"] .sb-npcs-list,
+body[data-sb-skin="neumorph"] .sb-npcs-list {
   flex-direction: column;
   gap: 10px;
   padding: 0 2px 2px;
   overflow: visible;
 }
 /* NPC 卡：拟态阴影 + 头像在右 + 名字在头像下 */
-body[data-skin="single-default"] .sb-npc-card {
+body[data-skin="single-default"] .sb-npc-card,
+body[data-sb-skin="neumorph"] .sb-npc-card {
   position: relative;
   display: flex;
   flex-direction: row;
@@ -4562,14 +4594,17 @@ body[data-skin="single-default"] .sb-npc-card {
   min-width: 0;
 }
 /* 交替底色：偶数张用 secondary */
-body[data-skin="single-default"] .sb-npc-card:nth-child(even) {
+body[data-skin="single-default"] .sb-npc-card,
+body[data-sb-skin="neumorph"] .sb-npc-card:nth-child(even) {
   background: var(--bg-secondary);
 }
-body[data-skin="single-default"] .sb-npc-card:hover {
+body[data-skin="single-default"] .sb-npc-card,
+body[data-sb-skin="neumorph"] .sb-npc-card:hover {
   filter: none;
   box-shadow: var(--hs-shadow-neu-hover);
 }
-body[data-skin="single-default"] .sb-npc-card .sb-npc-content {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-content ,
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-content {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -4577,7 +4612,8 @@ body[data-skin="single-default"] .sb-npc-card .sb-npc-content {
   gap: 4px;
   justify-content: center;
 }
-body[data-skin="single-default"] .sb-npc-card .sb-npc-val {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-val ,
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-val {
   position: relative;
   padding-left: 13px;
   font-size: 12.5px;
@@ -4587,7 +4623,8 @@ body[data-skin="single-default"] .sb-npc-card .sb-npc-val {
   word-break: break-word;
   font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
 }
-body[data-skin="single-default"] .sb-npc-card .sb-npc-val::before {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-val::before ,
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-val::before {
   content: "";
   position: absolute;
   left: 0;
@@ -4599,7 +4636,8 @@ body[data-skin="single-default"] .sb-npc-card .sb-npc-val::before {
   box-shadow: 0 1px 3px rgba(0,0,0,.16);
 }
 /* 右侧：头像 + 名字 */
-body[data-skin="single-default"] .sb-npc-card .sb-npc-side {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-side ,
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-side {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -4608,7 +4646,8 @@ body[data-skin="single-default"] .sb-npc-card .sb-npc-side {
   justify-content: center;
   width: 64px;
 }
-body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar ,
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-avatar {
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -4620,7 +4659,8 @@ body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar {
   overflow: hidden;
   position: relative;
 }
-body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar-initial {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar-initial ,
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-avatar-initial {
   font-size: 22px;
   font-weight: 800;
   color: var(--accent);
@@ -4628,10 +4668,12 @@ body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar-initial {
   font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
   opacity: .8;
 }
-body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar.has-img .sb-npc-avatar-initial {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar.has-img .sb-npc-avatar-initial ,
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-avatar.has-img .sb-npc-avatar-initial {
   display: none;
 }
-body[data-skin="single-default"] .sb-npc-card .sb-npc-name {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-name ,
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-name {
   font-size: 12px;
   font-weight: 800;
   color: var(--text);
@@ -4645,7 +4687,8 @@ body[data-skin="single-default"] .sb-npc-card .sb-npc-name {
   white-space: nowrap;
 }
 /* "+ 添加 NPC" 占位：保持原 dashed 风，但走单人卡皮的色 */
-body[data-skin="single-default"] .sb-npc-empty {
+body[data-skin="single-default"] .sb-npc-empty,
+body[data-sb-skin="neumorph"] .sb-npc-empty {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4659,12 +4702,14 @@ body[data-skin="single-default"] .sb-npc-empty {
   font-family: var(--font-family, sans-serif);
   opacity: .8;
 }
-body[data-skin="single-default"] .sb-npc-empty:hover {
+body[data-skin="single-default"] .sb-npc-empty,
+body[data-sb-skin="neumorph"] .sb-npc-empty:hover {
   opacity: 1;
   border-color: var(--decoration);
 }
 /* 单人卡皮下不显示横向滑动指示点 */
-body[data-skin="single-default"] .sb-npc-dots {
+body[data-skin="single-default"] .sb-npc-dots,
+body[data-sb-skin="neumorph"] .sb-npc-dots {
   display: none;
 }
 

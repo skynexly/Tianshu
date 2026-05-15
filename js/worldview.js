@@ -48,6 +48,7 @@ const Worldview = (() => {
         shop:    { name: '', desc: '' }, // 长时效商城（默认桃宝）
         forum:   { name: '', desc: '' }, // 信息载体（默认论坛）
       },
+      statusBarSkin: 'terminal', // 状态栏风格：terminal=终端风格，neumorph=拟态风格
       startTime: '',         // 开场时间
       startPlot: '',         // 开场剧情
       startPlotRounds: 5,    // 开场剧情保留轮数
@@ -576,8 +577,21 @@ function _defaultRegion() {
     }
   }
 
-  function _syncBuiltinRestoreButton(w) {
-    const btn = document.getElementById('worldview-restore-builtin-btn');
+  function _applyStatusBarSkin(w) {
+  try {
+    if (!w) { document.body.removeAttribute('data-sb-skin'); return; }
+    // 内置世界观锁死：天枢城走终端；心动模拟走专属 CSS；无世界观/其他内置不强行套自定义 skin
+    if (_isBuiltinWorldview(w)) {
+      if (w.id === 'wv_tianshucheng' || w.name === '天枢城') document.body.setAttribute('data-sb-skin', 'terminal');
+      else document.body.removeAttribute('data-sb-skin');
+      return;
+    }
+    document.body.setAttribute('data-sb-skin', w.statusBarSkin || 'terminal');
+  } catch(_) {}
+}
+
+function _syncBuiltinRestoreButton(w) {
+  const btn = document.getElementById('worldview-restore-builtin-btn');
     if (!btn) return;
     const canRestore = !!_getBuiltinSource(w?.id);
     btn.classList.toggle('hidden', !canRestore);
@@ -711,6 +725,8 @@ function _defaultRegion() {
       w.phoneApps.shop.desc = document.getElementById('wv-shop-desc')?.value || '';
       w.phoneApps.forum.name = document.getElementById('wv-forum-name')?.value || '';
       w.phoneApps.forum.desc = document.getElementById('wv-forum-desc')?.value || '';
+      const skinEl = document.getElementById('wv-statusbar-skin');
+      if (skinEl && !_isBuiltinWorldview(w)) w.statusBarSkin = skinEl.value || 'terminal';
       w.startTime = document.getElementById('wv-start-time')?.value || '';
       w.startPlot = document.getElementById('wv-start-plot')?.value || '';
       w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds')?.value) || 5;
@@ -732,9 +748,14 @@ function _defaultRegion() {
 
   function _attachWVAutoSave() {
     // 主编辑页
-    ['wv-name','wv-description','wv-setting','wv-currency-name','wv-currency-desc','wv-takeout-name','wv-takeout-desc','wv-shop-name','wv-shop-desc','wv-forum-name','wv-forum-desc','wv-start-time','wv-start-plot','wv-start-plot-rounds','wv-start-message'].forEach(id => {
+    ['wv-name','wv-description','wv-setting','wv-currency-name','wv-currency-desc','wv-takeout-name','wv-takeout-desc','wv-shop-name','wv-shop-desc','wv-forum-name','wv-forum-desc','wv-statusbar-skin','wv-start-time','wv-start-plot','wv-start-plot-rounds','wv-start-message'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) { el.removeEventListener('input', _wvAutoSave); el.addEventListener('input', _wvAutoSave); }
+      if (el) {
+        el.removeEventListener('input', _wvAutoSave);
+        el.removeEventListener('change', _wvAutoSave);
+        el.addEventListener('input', _wvAutoSave);
+        el.addEventListener('change', _wvAutoSave);
+      }
     });
   }
   function _attachWVRegionAutoSave() {
@@ -819,6 +840,8 @@ function _defaultRegion() {
     const _shD = document.getElementById('wv-shop-desc'); if (_shD) _shD.value = _paSh.desc || '';
     const _fmN = document.getElementById('wv-forum-name'); if (_fmN) _fmN.value = _paFm.name || '';
     const _fmD = document.getElementById('wv-forum-desc'); if (_fmD) _fmD.value = _paFm.desc || '';
+    const _skin = document.getElementById('wv-statusbar-skin');
+    if (_skin) { _skin.value = w.statusBarSkin || 'terminal'; _skin.disabled = _isBuiltinWorldview(w); }
     document.getElementById('wv-start-time').value = w.startTime || '';
     document.getElementById('wv-start-plot').value = w.startPlot || '';
     document.getElementById('wv-start-plot-rounds').value = w.startPlotRounds ?? 5;
@@ -2039,6 +2062,7 @@ function closeKnowledgeModal() {
   async function _syncRuntime(w) {
     if (!w) return;
     if (w.id !== currentWorldviewId) return; // 不是当前激活世界观，跳过
+    _applyStatusBarSkin(w);
     try { Chat.setWorldview(_buildSettingWithExtras(w)); } catch(e) { console.warn('[Worldview] sync prompt 失败', e); }
     try {
       const flatNpcs = [];
@@ -2101,6 +2125,8 @@ function closeKnowledgeModal() {
     w.phoneApps.shop.desc = (document.getElementById('wv-shop-desc')?.value || '').trim();
     w.phoneApps.forum.name = (document.getElementById('wv-forum-name')?.value || '').trim();
     w.phoneApps.forum.desc = (document.getElementById('wv-forum-desc')?.value || '').trim();
+    const skinInput = document.getElementById('wv-statusbar-skin');
+    if (skinInput && !_isBuiltinWorldview(w)) w.statusBarSkin = skinInput.value || 'terminal';
     w.startTime = document.getElementById('wv-start-time').value.trim();
     w.startPlot = document.getElementById('wv-start-plot').value.trim();
     w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds').value) || 5;

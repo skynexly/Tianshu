@@ -336,6 +336,13 @@ const Chat = (() => {
       // 天枢城专属：设置 body 标签 + 用当前 region 预热（避免加载已有对话时误触发）
       try {
         if (window.TianshuFX) TianshuFX.setBodyTag(_currentWvName);
+        // 自定义世界观状态栏风格：terminal / neumorph；内置世界观保持专属锁定
+        try {
+          if (_wvForName && _wvForName.id === 'wv_tianshucheng') document.body.setAttribute('data-sb-skin', 'terminal');
+          else if (_wvForName && _wvForName.id === 'wv_heartsim') document.body.removeAttribute('data-sb-skin');
+          else if (_wvForName && _wvForName.id && _wvForName.id !== '__default_wv__') document.body.setAttribute('data-sb-skin', _wvForName.statusBarSkin || 'terminal');
+          else document.body.removeAttribute('data-sb-skin');
+        } catch(_) {}
         if (window.TianshuRegion) {
           TianshuRegion.reset();
           const s = Conversations.getStatusBar();
