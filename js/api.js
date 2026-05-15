@@ -311,7 +311,36 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     }
 
     const json = await resp.json();
-    const images = (json.data || []).map(d => d.b64_json ? `data:image/png;base64,${d.b64_json}` : (d.url || ''));
+    // 把 b64_json 直接转 dataURL；URL 形式则下载一遍转 base64，避免临时URL过期后图灰飞烟灭
+    const rawList = (json.data || []).map(d => {
+      if (d.b64_json) return { type: 'b64', value: d.b64_json };
+      if (d.url) return { type: 'url', value: d.url };
+      return null;
+    }).filter(Boolean);
+
+    const images = [];
+    for (const item of rawList) {
+      if (item.type === 'b64') {
+        images.push(`data:image/png;base64,${item.value}`);
+      } else {
+        // URL 模式：下载并转 base64
+        try {
+          const imgResp = await fetch(item.value);
+          if (!imgResp.ok) throw new Error(`下载失败 ${imgResp.status}`);
+          const blob = await imgResp.blob();
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          images.push(dataUrl);
+        } catch(e) {
+          console.warn('[generateImage] URL转base64失败，回退到原URL（可能很快过期）:', e);
+          images.push(item.value);
+        }
+      }
+    }
     return images.filter(Boolean);
   }
 
