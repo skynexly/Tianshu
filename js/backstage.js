@@ -413,12 +413,20 @@ const container = document.getElementById('backstage-messages');
     systemParts.push(backstageInstruction);
 
     // 现实时间感知（后台默认开）
-    if (settings.timeAware && window.TimeAwareness) {
-      try {
-        const { lastAssistantTs, lastUserTs } = TimeAwareness.extractTimestamps(historyMsgs);
-        systemParts.push(TimeAwareness.buildPrompt(lastAssistantTs, lastUserTs));
-      } catch(e) {}
-    }
+if (settings.timeAware && window.TimeAwareness) {
+try {
+const { lastAssistantTs, lastUserTs } = TimeAwareness.extractTimestamps(historyMsgs);
+systemParts.push(TimeAwareness.buildPrompt(lastAssistantTs, lastUserTs));
+} catch(e) {}
+}
+
+// 生图模式（与主对话共用同一开关：convImgGen）
+try {
+const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+if (conv && conv.convImgGen) {
+systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念');
+}
+} catch(e) {}
 
     const mainMessages = Chat.getMessages();
     const contextCount = settings.contextCount;
@@ -513,6 +521,15 @@ const container = document.getElementById('backstage-messages');
             aiMsg.timestamp = Date.now();
             await DB.put('messages', aiMsg);
             _renderMessages();
+
+            // 生图：解析 [IMG:] 标记
+            try {
+              const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+              if (conv && conv.convImgGen && /\[IMG:\s*[^\]]+\]/i.test(aiMsg.content)) {
+                _processImgTagsBackstage(aiMsg).catch(e => console.warn('[Backstage] 生图标记处理失败', e));
+              }
+            } catch(_) {}
+
             resolve('done');
           },
           async (error) => {
@@ -937,6 +954,32 @@ await DB.del('messages', m.id);
     modal.classList.add('hidden');
   }, 220);
 }
+
+  // 解析后台 AI 回复中的 [IMG:] 标记，逐个生图，替换为 markdown 图片
+  async function _processImgTagsBackstage(aiMsg) {
+    const regex = /\[IMG:\s*([^\]]+)\]/gi;
+    const matches = [...aiMsg.content.matchAll(regex)];
+    if (matches.length === 0) return;
+    for (const m of matches) {
+      const desc = m[1].trim();
+      try {
+        const images = await API.generateImage(desc, { n: 1, size: '1024x768' });
+        if (images && images.length > 0) {
+          aiMsg.content = aiMsg.content.replace(m[0], `![${desc}](${images[0]})`);
+          await DB.put('messages', aiMsg);
+          _renderMessages();
+        } else {
+          aiMsg.content = aiMsg.content.replace(m[0], `\n\n> ⚠ 图片生成失败：未返回数据\n\n`);
+          await DB.put('messages', aiMsg);
+          _renderMessages();
+        }
+      } catch(e) {
+        aiMsg.content = aiMsg.content.replace(m[0], `\n\n> ⚠ 图片生成失败：${e.message}\n\n`);
+        await DB.put('messages', aiMsg);
+        _renderMessages();
+      }
+    }
+  }
 
   // 更新悬浮按钮显隐（对话切换时调用）
   function updateFab() {
