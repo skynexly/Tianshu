@@ -484,7 +484,7 @@ ${_stepIntro('map', '第 2 步 · 地区详细', '为每个地区生成详细设
     }
   }
 
-  // ---- Step 3: 势力 ----
+  // ---- Step 3: 势力（按地区分批串行）----
   function _renderStep3(body) {
     const regions = _genData.step2?.regions || _genData.step1?.regions || [];
     const regionNames = regions.map(r => r.name).join('、');
@@ -501,9 +501,10 @@ ${_stepIntro('castle', '第 3 步 · 势力', '为地区生成势力组织' + (r
         </div>
         <div class="wv-gen-field">
           <label class="wv-gen-label">每地区势力数</label>
-          <input id="wv-gen-count" type="number" min="1" max="10" value="${_genData.step3?._count || 5}" class="wv-gen-input">
+          <input id="wv-gen-count" type="number" min="1" max="10" value="${_genData.step3?._count || 3}" class="wv-gen-input">
         </div>
       </div>
+      <div id="wv-gen-batch-progress" class="wv-gen-batch-progress" style="display:none"></div>
       <div id="wv-gen-status" class="wv-gen-status"></div>
       <div class="wv-gen-actions">
         <button onclick="WvGenerator._skipStep()" class="wv-gen-btn">跳过</button>
@@ -511,36 +512,76 @@ ${_stepIntro('castle', '第 3 步 · 势力', '为地区生成势力组织' + (r
       </div>`;
   }
 
+  function _renderBatchProgress(items, currentIdx, results) {
+    const el = document.getElementById('wv-gen-batch-progress');
+    if (!el) return;
+    el.style.display = '';
+    const total = items.length;
+    const done = results.filter(r => r.status === 'done').length;
+    const failed = results.filter(r => r.status === 'failed').length;
+    let html = `<div class="wv-gen-batch-bar"><div class="wv-gen-batch-fill" style="width:${(done + failed) / total * 100}%"></div></div>
+      <div class="wv-gen-batch-meta">进度 ${done + failed}/${total} · 成功 ${done} · 失败 ${failed}</div>
+      <div class="wv-gen-batch-list">`;
+    items.forEach((name, i) => {
+      const r = results[i] || { status: 'pending' };
+      let icon = '○', color = 'var(--text-secondary)';
+      if (i === currentIdx && r.status === 'pending') { icon = '⏳'; color = 'var(--accent)'; }
+      else if (r.status === 'done') { icon = '✓'; color = 'var(--accent)'; }
+      else if (r.status === 'failed') { icon = '✗'; color = 'var(--danger,#e57373)'; }
+      html += `<div class="wv-gen-batch-item" style="color:${color}">${icon} ${name}${r.status === 'done' ? `（${r.count}条）` : ''}${r.status === 'failed' ? `（${r.error || '失败'}）` : ''}</div>`;
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
   async function _runStep3() {
     const s1 = _genData.step1 || {};
     const regions = _genData.step2?.regions || s1.regions || [];
+    if (regions.length === 0) {
+      UI.showToast('没有地区可用，请先完成第 2 步', 2000);
+      return;
+    }
     const userPrompt = document.getElementById('wv-gen-prompt')?.value?.trim() || '';
     const wordCount = Math.min(1200, Math.max(200, parseInt(document.getElementById('wv-gen-words')?.value) || 500));
-    const count = parseInt(document.getElementById('wv-gen-count')?.value) || 5;
+    const count = parseInt(document.getElementById('wv-gen-count')?.value) || 3;
 
-    _setLoading(true, '正在生成势力…');
+    _setLoading(true, `正在生成势力（共 ${regions.length} 个地区）…`);
+    const items = regions.map(r => r.name);
+    const results = items.map(() => ({ status: 'pending' }));
+    _renderBatchProgress(items, 0, results);
 
     const allFactions = {};
     try {
       _abortCtrl = new AbortController();
       const sysPrompt = PROMPTS.step3.replace('##WORD_COUNT##', wordCount);
-      const regionsDesc = regions.map(r => `- ${_regionBrief(r)}`).join('\n');
-      const regionsDetail = regions.map(r => `### ${r.name}\n${_regionDetail(r)}`).join('\n\n');
-      const userMsg = `${userPrompt ? '用户要求：' + userPrompt + '\n\n' : ''}请为以下每个地区各生成 ${count} 个势力。必须一次性完成，不要分多次生成。\n\n## 世界观设定\n${s1.setting || ''}\n\n## 地区速查\n${regionsDesc}\n\n## 地区详情\n${regionsDetail}`;
-      const raw = await API.generate(sysPrompt, userMsg, { signal: _abortCtrl.signal, maxTokens: 20000 });
-      const data = _parseJSON(raw);
-      if (Array.isArray(data)) {
-        for (const reg of regions) allFactions[reg.name] = [];
-        data.forEach(f => {
-          const rn = f.region || f.regionName || regions.find(r => (f.setting || '').includes(r.name))?.name || regions[0]?.name || '';
-          if (!allFactions[rn]) allFactions[rn] = [];
-          allFactions[rn].push(f);
-        });
-      } else {
-        Object.assign(allFactions, data || {});
+
+      for (let i = 0; i < regions.length; i++) {
+        const reg = regions[i];
+        _renderBatchProgress(items, i, results);
+        try {
+          const userMsg = `${userPrompt ? '用户要求：' + userPrompt + '\n\n' : ''}请为下面这一个地区生成 ${count} 个势力。\n\n## 世界观设定\n${s1.setting || ''}\n\n## 当前地区\n### ${reg.name}\n${_regionDetail(reg)}`;
+          const raw = await API.generate(sysPrompt, userMsg, { signal: _abortCtrl.signal, maxTokens: 8000 });
+          const data = _parseJSON(raw);
+          const arr = _normalizeArray(data, 'factions');
+          if (arr.length === 0) throw new Error('AI返回空');
+          allFactions[reg.name] = arr;
+          results[i] = { status: 'done', count: arr.length };
+        } catch (err) {
+          if (err.name === 'AbortError') throw err;
+          console.warn(`[WvGen Step3] 地区「${reg.name}」失败:`, err);
+          results[i] = { status: 'failed', error: err.message?.substring(0, 30) || '失败' };
+          allFactions[reg.name] = [];
+        }
+        _renderBatchProgress(items, -1, results);
       }
+
       _genData.step3 = { factions: allFactions, _userPrompt: userPrompt, _wordCount: wordCount, _count: count };
       _setLoading(false);
+      const totalSucc = results.filter(r => r.status === 'done').length;
+      const totalFail = results.filter(r => r.status === 'failed').length;
+      if (totalFail > 0) {
+        UI.showToast(`完成：${totalSucc} 成功 · ${totalFail} 失败（可在编辑页补生成）`, 3000);
+      }
       _step = 4;
       _renderStep();
     } catch (e) {
@@ -550,10 +591,10 @@ ${_stepIntro('castle', '第 3 步 · 势力', '为地区生成势力组织' + (r
     }
   }
 
-  // ---- Step 4: 角色 ----
+  // ---- Step 4: 角色（按势力分批串行）----
   function _renderStep4(body) {
     body.innerHTML = `
-${_stepIntro('users', '第 4 步 · 角色', '生成 NPC 角色')}
+${_stepIntro('users', '第 4 步 · 角色', '为每个势力生成 NPC 角色')}
       <div class="wv-gen-field">
         <label class="wv-gen-label">额外要求（可选）</label>
         <textarea id="wv-gen-prompt" rows="3" placeholder="对角色有什么要求？留空则由 AI 自由发挥" class="wv-gen-textarea">${_genData.step4?._userPrompt || ''}</textarea>
@@ -564,10 +605,11 @@ ${_stepIntro('users', '第 4 步 · 角色', '生成 NPC 角色')}
           <input id="wv-gen-words" type="number" min="200" max="1500" step="50" value="${_genData.step4?._wordCount || 500}" class="wv-gen-input">
         </div>
         <div class="wv-gen-field">
-          <label class="wv-gen-label">角色总数</label>
-          <input id="wv-gen-count" type="number" min="1" max="30" value="${_genData.step4?._count || 5}" class="wv-gen-input">
+          <label class="wv-gen-label">每势力角色数</label>
+          <input id="wv-gen-count" type="number" min="1" max="10" value="${_genData.step4?._count || 3}" class="wv-gen-input">
         </div>
       </div>
+      <div id="wv-gen-batch-progress" class="wv-gen-batch-progress" style="display:none"></div>
       <div id="wv-gen-status" class="wv-gen-status"></div>
       <div class="wv-gen-actions">
         <button onclick="WvGenerator._skipStep()" class="wv-gen-btn">跳过</button>
@@ -581,30 +623,82 @@ ${_stepIntro('users', '第 4 步 · 角色', '生成 NPC 角色')}
     const factions = _genData.step3?.factions || {};
     const userPrompt = document.getElementById('wv-gen-prompt')?.value?.trim() || '';
     const wordCount = Math.min(1500, Math.max(200, parseInt(document.getElementById('wv-gen-words')?.value) || 500));
-    const count = parseInt(document.getElementById('wv-gen-count')?.value) || 5;
+    const count = parseInt(document.getElementById('wv-gen-count')?.value) || 3;
 
-    _setLoading(true, '正在生成角色…');
-
-    let sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
-
-    let contextParts = [`## 世界观设定\n${s1.setting || ''}`];
-    if (regions.length) {
-      contextParts.push(`## 地区\n${regions.map(r => `- ${_regionBrief(r)}`).join('\n')}`);
+    // 把所有 {地区,势力} 平铺成任务列表
+    const tasks = [];
+    for (const [rn, arr] of Object.entries(factions)) {
+      for (const fac of (arr || [])) {
+        if (fac && fac.name) tasks.push({ region: rn, faction: fac });
+      }
     }
-    if (Object.keys(factions).length) {
-      const facDesc = Object.entries(factions).map(([rn, arr]) =>
-        `### ${rn}\n${arr.map(f => `- **${f.name}**：${f.description || f.summary || ''}`).join('\n')}`
-      ).join('\n\n');
-      contextParts.push(`## 势力\n${facDesc}`);
-    }
-    const userMsg = `${userPrompt ? '用户要求：' + userPrompt + '\n\n' : ''}生成 ${count} 个角色。\n\n${contextParts.join('\n\n')}`;
 
+    // 如果完全没势力（用户跳过了 step3），降级为旧逻辑：一次性生成 count 个常驻角色
+    if (tasks.length === 0) {
+      _setLoading(true, '正在生成角色…');
+      try {
+        _abortCtrl = new AbortController();
+        let sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
+        const ctxParts = [`## 世界观设定\n${s1.setting || ''}`];
+        if (regions.length) ctxParts.push(`## 地区\n${regions.map(r => `- ${_regionBrief(r)}`).join('\n')}`);
+        const userMsg = `${userPrompt ? '用户要求：' + userPrompt + '\n\n' : ''}生成 ${count} 个角色。\n\n${ctxParts.join('\n\n')}`;
+        const raw = await API.generate(sysPrompt, userMsg, { signal: _abortCtrl.signal, maxTokens: 8000 });
+        const data = _parseJSON(raw);
+        const arr = Array.isArray(data) ? data : (data.npcs || []);
+        _genData.step4 = { npcs: arr, _userPrompt: userPrompt, _wordCount: wordCount, _count: count };
+        _setLoading(false);
+        _step = 5;
+        _renderStep();
+      } catch (e) {
+        _setLoading(false);
+        if (e.name === 'AbortError') return;
+        UI.showToast('生成失败: ' + e.message, 3000);
+      }
+      return;
+    }
+
+    _setLoading(true, `正在生成角色（共 ${tasks.length} 个势力）…`);
+    const items = tasks.map(t => `${t.region}/${t.faction.name}`);
+    const results = items.map(() => ({ status: 'pending' }));
+    _renderBatchProgress(items, 0, results);
+
+    const allNpcs = [];
     try {
       _abortCtrl = new AbortController();
-      const raw = await API.generate(sysPrompt, userMsg, { signal: _abortCtrl.signal });
-      const data = _parseJSON(raw);
-      _genData.step4 = { npcs: Array.isArray(data) ? data : (data.npcs || []), _userPrompt: userPrompt, _wordCount: wordCount, _count: count };
+      const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
+
+      for (let i = 0; i < tasks.length; i++) {
+        const t = tasks[i];
+        _renderBatchProgress(items, i, results);
+        try {
+          const facDetail = t.faction.setting || t.faction.detail || t.faction.description || '';
+          const userMsg = `${userPrompt ? '用户要求：' + userPrompt + '\n\n' : ''}为势力「${t.faction.name}」（位于地区「${t.region}」）生成 ${count} 个角色。每个角色的 region 必须是「${t.region}」、faction 必须是「${t.faction.name}」。\n\n## 世界观设定\n${s1.setting || ''}\n\n## 当前势力\n### ${t.faction.name}（${t.region}）\n${facDetail}`;
+          const raw = await API.generate(sysPrompt, userMsg, { signal: _abortCtrl.signal, maxTokens: 10000 });
+          const data = _parseJSON(raw);
+          const arr = _normalizeArray(data, 'npcs');
+          if (arr.length === 0) throw new Error('AI返回空');
+          // 强制对齐 region / faction
+          arr.forEach(n => {
+            n.region = t.region;
+            n.faction = t.faction.name;
+            allNpcs.push(n);
+          });
+          results[i] = { status: 'done', count: arr.length };
+        } catch (err) {
+          if (err.name === 'AbortError') throw err;
+          console.warn(`[WvGen Step4] 势力「${t.region}/${t.faction.name}」失败:`, err);
+          results[i] = { status: 'failed', error: err.message?.substring(0, 30) || '失败' };
+        }
+        _renderBatchProgress(items, -1, results);
+      }
+
+      _genData.step4 = { npcs: allNpcs, _userPrompt: userPrompt, _wordCount: wordCount, _count: count };
       _setLoading(false);
+      const totalSucc = results.filter(r => r.status === 'done').length;
+      const totalFail = results.filter(r => r.status === 'failed').length;
+      if (totalFail > 0) {
+        UI.showToast(`完成：${totalSucc} 成功 · ${totalFail} 失败（可在编辑页补生成）`, 3000);
+      }
       _step = 5;
       _renderStep();
     } catch (e) {
