@@ -8,8 +8,11 @@ const StatusBar = (() => {
   let _currentStatus = null;
 let _editBuf = null; // 编辑缓冲 { mode: 'field'|'npc'|'all', ... }
  let _hsSkipSelectedIdx = null;
+let _customAttrDefs = [];
+let _characterAttrCards = [];
 
-  function _el(id) { return document.getElementById(id); }
+function _el(id) { return document.getElementById(id); }
+function _attrTargetKey(t) { return [t?.targetType || '', t?.targetId || '', t?.sourceWorldviewId || ''].join(':'); }
   function _esc(s) { return Utils && Utils.escapeHtml ? Utils.escapeHtml(s) : (s || ''); }
 
   // 从 time 字段里拆出"时:分"和"年月日星期"
@@ -21,16 +24,20 @@ let _editBuf = null; // 编辑缓冲 { mode: 'field'|'npc'|'all', ... }
  let rest = timeStr.replace(/\s*\d{1,2}:\d{2}\s*/, ' ').trim();
  return { clock: clock || '—', rest: rest || '—' };
  }
+function _useNpcCarousel() {
+  return _isHeartSim() || document.body?.getAttribute('data-sb-skin') === 'neumorph';
+}
 
- function _refreshNpcDots(count) {
- const dotsEl = _el('sb-npc-dots');
- const listEl = _el('sb-npcs-list');
- if (!dotsEl || !listEl) return;
- if (!_isHeartSim() || count <=0) {
- dotsEl.innerHTML = '';
- dotsEl.classList.add('hidden');
- return;
- }
+function _refreshNpcDots(count) {
+  const dotsEl = _el('sb-npc-dots');
+  const listEl = _el('sb-npcs-list');
+  if (!dotsEl || !listEl) return;
+  if (!_useNpcCarousel() || count <=0) {
+    dotsEl.innerHTML = '';
+    dotsEl.classList.add('hidden');
+    listEl.onscroll = null;
+    return;
+  }
  dotsEl.classList.remove('hidden');
  dotsEl.innerHTML = Array.from({ length: count }, (_, i) => `<span class="sb-npc-dot${i ===0 ? ' active' : ''}"></span>`).join('');
  const update = () => {
@@ -154,10 +161,310 @@ let _editBuf = null; // 编辑缓冲 { mode: 'field'|'npc'|'all', ... }
   }
 
   // 占位卡：从当前对话的单人卡读 name + avatar 填充
-  async function _hydrateSingleCharPlaceholder(rootEl) {
+async function _getCurrentWorldview() {
+  try {
+    const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+    const wvId = conv?.singleWorldviewId || conv?.worldviewId || '';
+    if (!wvId || wvId === '__default_wv__') return null;
+    return await DB.get('worldviews', wvId);
+  } catch(_) { return null; }
+}
+
+async function _renderCustomAttrs(status) {
+  const wrap = _el('sb-custom-attrs');
+  if (!wrap) return;
+  const wv = await _getCurrentWorldview();
+  const skin = wv?.statusBarSkin || document.body?.getAttribute('data-sb-skin') || '';
+  const canShowCustomAttrs = skin === 'neumorph' || skin === 'terminal' || document.body?.getAttribute('data-skin') === 'single-default';
+  if (!canShowCustomAttrs || !status) {
+    wrap.classList.add('hidden');
+    wrap.innerHTML = '';
+    _customAttrDefs = [];
+    return;
+  }
+  const attrs = (wv?.gameplay?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+  _customAttrDefs = attrs;
+  if (!attrs.length) {
+    wrap.classList.add('hidden');
+    wrap.innerHTML = '';
+    return;
+  }
+  status.customAttrs = status.customAttrs || {};
+  status.customAttrs.global = status.customAttrs.global || {};
+  let changed = false;
+  attrs.forEach(a => {
+    if (status.customAttrs.global[a.id] === undefined || status.customAttrs.global[a.id] === null || status.customAttrs.global[a.id] === '') {
+      status.customAttrs.global[a.id] = (a.initial === '' || a.initial === undefined || a.initial === null) ? 0 : Number(a.initial);
+      changed = true;
+    }
+  });
+  if (changed) {
+    try { await Conversations.setStatusBar(status); } catch(_) {}
+  }
+  wrap.classList.remove('hidden');
+  wrap.innerHTML = `
+    <div class="sb-custom-attrs-title">自定义属性</div>
+    <div class="sb-custom-attrs-grid">
+      ${attrs.map(a => {
+        const val = status.customAttrs.global[a.id] ?? a.initial ?? 0;
+        return `<div class="sb-custom-attr-card" onclick="event.stopPropagation();StatusBar.editCustomAttr('${_esc(a.id)}')">
+          <div class="sb-custom-attr-name">${_esc(a.name || '未命名属性')}</div>
+          <div class="sb-custom-attr-val">${_esc(String(val ?? 0))}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+async function editCustomAttr(attrId) {
+  const def = _customAttrDefs.find(a => a.id === attrId);
+  if (!def) return;
+  if (!_currentStatus) _currentStatus = { region:'',location:'',time:'',weather:'',scene:'',playerOutfit:'',playerPosture:'',npcs:[] };
+  _currentStatus.customAttrs = _currentStatus.customAttrs || {};
+  _currentStatus.customAttrs.global = _currentStatus.customAttrs.global || {};
+  const oldVal = _currentStatus.customAttrs.global[attrId] ?? def.initial ?? 0;
+  const input = await UI.showSimpleInput(`修改「${def.name || '属性'}」`, String(oldVal), { placeholder: '当前值' });
+  if (input === null || input === undefined) return;
+  const txt = String(input).trim();
+  if (txt === '') return;
+  const num = Number(txt);
+  if (!Number.isFinite(num)) { UI.showToast('请输入数字', 1800); return; }
+  _currentStatus.customAttrs.global[attrId] = num;
+  try { await Conversations.setStatusBar(_currentStatus); } catch(e) {}
+  render(_currentStatus);
+}
+
+async function _renderCharacterAttrs(status) {
+  const wrap = _el('sb-character-attrs');
+  if (!wrap) return;
+  const wv = await _getCurrentWorldview();
+  const skin = wv?.statusBarSkin || document.body?.getAttribute('data-sb-skin') || '';
+  const isNeumorph = skin === 'neumorph';
+  const isTerminal = skin === 'terminal';
+  const cards = (wv?.gameplay?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim()));
+  _characterAttrCards = cards;
+  if ((!isNeumorph && !isTerminal) || !status || !cards.length) {
+    wrap.classList.add('hidden');
+    wrap.innerHTML = '';
+    return;
+  }
+  status.customAttrs = status.customAttrs || {};
+  status.customAttrs.characters = status.customAttrs.characters || {};
+  let changed = false;
+  cards.forEach(c => {
+    const key = _attrTargetKey(c);
+    status.customAttrs.characters[key] = status.customAttrs.characters[key] || {};
+    (c.attrs || []).forEach(a => {
+      if (!a || !a.id || !(a.name || '').trim()) return;
+      if (status.customAttrs.characters[key][a.id] === undefined || status.customAttrs.characters[key][a.id] === null || status.customAttrs.characters[key][a.id] === '') {
+        status.customAttrs.characters[key][a.id] = (a.initial === '' || a.initial === undefined || a.initial === null) ? 0 : Number(a.initial);
+        changed = true;
+      }
+    });
+  });
+  if (changed) { try { await Conversations.setStatusBar(status); } catch(_) {} }
+  wrap.classList.remove('hidden');
+  wrap.innerHTML = `
+    <div class="sb-character-attrs-title">角色属性</div>
+    <div class="sb-character-attrs-list">
+      ${cards.map((c, ci) => {
+        const key = _attrTargetKey(c);
+        const attrs = (c.attrs || []).filter(a => a && a.id && (a.name || '').trim());
+        return `<div class="sb-character-attr-card">
+          <div class="sb-character-attr-name">${_esc(c.targetName || '未命名角色')}</div>
+          <div class="sb-character-attr-lines">
+            ${attrs.map((a, ai) => {
+              const val = status.customAttrs.characters[key]?.[a.id] ?? a.initial ?? 0;
+              const hasMax = !(a.max === '' || a.max === null || a.max === undefined);
+              const max = Number(a.max);
+              const pct = hasMax && max > 0 ? Math.max(0, Math.min(100, Number(val) / max * 100)) : 0;
+              const displayVal = hasMax && Number.isFinite(max) ? `${val ?? 0} / ${max}` : String(val ?? 0);
+              return `<div class="sb-character-attr-line" onclick="event.stopPropagation();StatusBar.editCharacterAttr(${ci}, ${ai})">
+                <div class="sb-character-attr-row"><span>${_esc(a.name || '未命名属性')}</span><b>${_esc(displayVal)}</b></div>
+                ${hasMax ? `<div class="sb-character-attr-bar"><i style="width:${pct}%"></i></div>` : ''}
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+async function _getCustomAttrPromptData() {
+  const wv = await _getCurrentWorldview();
+  if (!wv || wv.id === 'wv_heartsim') return null;
+  const globalAttrs = (wv.gameplay?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+  const charCards = (wv.gameplay?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim()));
+  if (!globalAttrs.length && !charCards.length) return null;
+  return { wv, globalAttrs, charCards };
+}
+
+async function formatCustomAttrsFormatPrompt() {
+  try {
+    const data = await _getCustomAttrPromptData();
+    if (!data) return '';
+    const lines = [];
+    lines.push('【可选追加：自定义属性变化】');
+    lines.push('当前世界观配置了自定义属性。若本轮剧情明确造成属性变化，请在 `status` 代码块之后追加 `custom-attrs` 代码块；若没有属性变化，完全不要输出该代码块。');
+    lines.push('');
+    lines.push('规则：');
+    lines.push('- `custom-attrs` 中的数字表示本轮增量/减量，不是最终值。');
+    lines.push('- 没有变化的属性不要输出。');
+    lines.push('- 不要新增未列出的属性；属性名和角色名必须与后续【自定义属性当前状态】一致。');
+    lines.push('- 有最大值的属性由系统自动限制在 0 到最大值之间；无最大值的属性最低为 0。');
+    lines.push('');
+    lines.push('回复格式示例：');
+    lines.push('```custom-attrs');
+    lines.push('{');
+    lines.push('  "global": {');
+    lines.push('    "体力": -10');
+    lines.push('  },');
+    lines.push('  "characters": {');
+    lines.push('    "角色名": {');
+    lines.push('      "好感度": 3');
+    lines.push('    }');
+    lines.push('  }');
+    lines.push('}');
+    lines.push('```');
+    return lines.join('\n');
+  } catch(e) { return ''; }
+}
+
+async function formatCustomAttrsStatePrompt() {
+  try {
+    const data = await _getCustomAttrPromptData();
+    if (!data) return '';
+    const { globalAttrs, charCards } = data;
+    const status = Conversations.getStatusBar() || {};
+    status.customAttrs = status.customAttrs || {};
+    status.customAttrs.global = status.customAttrs.global || {};
+    status.customAttrs.characters = status.customAttrs.characters || {};
+    const lines = [];
+    lines.push('【自定义属性当前状态】');
+    lines.push('以下属性来自当前世界观的玩法配置，当前值保存在本对话状态栏中。以上为当前累计状态，不是本轮增量。');
+    lines.push('');
+    if (globalAttrs.length) {
+      lines.push('全局属性：');
+      globalAttrs.forEach(a => {
+        const val = status.customAttrs.global[a.id] ?? a.initial ?? 0;
+        const hasMax = !(a.max === '' || a.max === null || a.max === undefined);
+        const maxText = hasMax ? ` / ${a.max}` : '';
+        const desc = (a.desc || '').trim() ? `。说明：${a.desc.trim()}` : '';
+        lines.push(`- ${a.name}：当前 ${val}${maxText}${desc}`);
+      });
+    }
+    if (charCards.length) {
+      if (globalAttrs.length) lines.push('');
+      lines.push('角色属性：');
+      charCards.forEach(c => {
+        const key = _attrTargetKey(c);
+        const attrs = (c.attrs || []).filter(a => a && a.id && (a.name || '').trim());
+        if (!attrs.length) return;
+        const source = c.sourceLabel ? `（${c.sourceLabel}）` : '';
+        lines.push(`- ${c.targetName || '未命名角色'}${source}：`);
+        attrs.forEach(a => {
+          const val = status.customAttrs.characters[key]?.[a.id] ?? a.initial ?? 0;
+          const hasMax = !(a.max === '' || a.max === null || a.max === undefined);
+          const maxText = hasMax ? ` / ${a.max}` : '';
+          const desc = (a.desc || '').trim() ? `。说明：${a.desc.trim()}` : '';
+          lines.push(`  - ${a.name}：当前 ${val}${maxText}${desc}`);
+        });
+      });
+    }
+    return lines.join('\n');
+  } catch(e) { return ''; }
+}
+
+async function formatCustomAttrsForPrompt() {
+  const format = await formatCustomAttrsFormatPrompt();
+  const state = await formatCustomAttrsStatePrompt();
+  return [format, state].filter(Boolean).join('\n\n');
+}
+
+
+async function applyCustomAttrsDelta(deltaObj) {
+  if (!deltaObj || typeof deltaObj !== 'object') return false;
+  const wv = await _getCurrentWorldview();
+  if (!wv || wv.id === 'wv_heartsim') return false;
+  const status = _currentStatus || Conversations.getStatusBar() || { time: '', weather: '', region: '', location: '', scene: '', playerOutfit: '', playerPosture: '', npcs: [] };
+  status.customAttrs = status.customAttrs || {};
+  status.customAttrs.global = status.customAttrs.global || {};
+  status.customAttrs.characters = status.customAttrs.characters || {};
+  let changed = false;
+  const toNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const clamp = (next, attr) => {
+    let v = Number.isFinite(Number(next)) ? Number(next) : 0;
+    const hasMax = !(attr.max === '' || attr.max === null || attr.max === undefined);
+    if (hasMax) {
+      const max = Number(attr.max);
+      if (Number.isFinite(max)) v = Math.min(max, v);
+    }
+    v = Math.max(0, v);
+    return v;
+  };
+  const globalDefs = (wv.gameplay?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+  const globalDelta = deltaObj.global && typeof deltaObj.global === 'object' ? deltaObj.global : {};
+  Object.entries(globalDelta).forEach(([name, delta]) => {
+    const attr = globalDefs.find(a => (a.name || '').trim() === String(name).trim());
+    const d = toNum(delta);
+    if (!attr || d === null) return;
+    const cur = status.customAttrs.global[attr.id] ?? attr.initial ?? 0;
+    status.customAttrs.global[attr.id] = clamp(Number(cur || 0) + d, attr);
+    changed = true;
+  });
+  const charDelta = deltaObj.characters && typeof deltaObj.characters === 'object' ? deltaObj.characters : {};
+  const cards = (wv.gameplay?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs));
+  Object.entries(charDelta).forEach(([charName, attrsObj]) => {
+    if (!attrsObj || typeof attrsObj !== 'object') return;
+    const card = cards.find(c => (c.targetName || '').trim() === String(charName).trim());
+    if (!card) return;
+    const key = _attrTargetKey(card);
+    status.customAttrs.characters[key] = status.customAttrs.characters[key] || {};
+    const defs = (card.attrs || []).filter(a => a && a.id && (a.name || '').trim());
+    Object.entries(attrsObj).forEach(([attrName, delta]) => {
+      const attr = defs.find(a => (a.name || '').trim() === String(attrName).trim());
+      const d = toNum(delta);
+      if (!attr || d === null) return;
+      const cur = status.customAttrs.characters[key][attr.id] ?? attr.initial ?? 0;
+      status.customAttrs.characters[key][attr.id] = clamp(Number(cur || 0) + d, attr);
+      changed = true;
+    });
+  });
+  if (changed) {
+    _currentStatus = status;
+    try { await Conversations.setStatusBar(status); } catch(_) {}
+    try { await render(status); } catch(_) {}
+  }
+  return changed;
+}
+
+async function editCharacterAttr(cardIdx, attrIdx) {
+  const card = _characterAttrCards[cardIdx];
+  const attrs = (card?.attrs || []).filter(a => a && a.id && (a.name || '').trim());
+  const attr = attrs[attrIdx];
+  if (!card || !attr) return;
+  if (!_currentStatus) _currentStatus = { region:'',location:'',time:'',weather:'',scene:'',playerOutfit:'',playerPosture:'',npcs:[] };
+  _currentStatus.customAttrs = _currentStatus.customAttrs || {};
+  _currentStatus.customAttrs.characters = _currentStatus.customAttrs.characters || {};
+  const key = _attrTargetKey(card);
+  _currentStatus.customAttrs.characters[key] = _currentStatus.customAttrs.characters[key] || {};
+  const oldVal = _currentStatus.customAttrs.characters[key][attr.id] ?? attr.initial ?? 0;
+  const input = await UI.showSimpleInput(`修改「${card.targetName || '角色'} · ${attr.name || '属性'}」`, String(oldVal), { placeholder: '当前值' });
+  if (input === null || input === undefined) return;
+  const txt = String(input).trim();
+  if (txt === '') return;
+  const num = Number(txt);
+  if (!Number.isFinite(num)) { UI.showToast('请输入数字', 1800); return; }
+  _currentStatus.customAttrs.characters[key][attr.id] = num;
+  try { await Conversations.setStatusBar(_currentStatus); } catch(e) {}
+  render(_currentStatus);
+}
+
+async function _hydrateSingleCharPlaceholder(rootEl) {
+  try {
     if (!rootEl) return;
-    try {
-      const curId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
+    const curId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
       const conv = curId ? (Conversations.getList().find(c => c.id === curId) || null) : null;
       if (!conv || !conv.isSingle || !conv.singleCharId) return;
       let name = '角色', avatar = '';
@@ -194,14 +501,24 @@ let _editBuf = null; // 编辑缓冲 { mode: 'field'|'npc'|'all', ... }
     } catch(_) {}
   }
 
-function render(status) {
+async function render(status) {
     _currentStatus = status;
     const row = _el('topbar-row-status');
     if (!row) return;
     const _isSingleSkin = document.body.getAttribute('data-skin') === 'single-default';
+    const _isNeumorphSkin = document.body.getAttribute('data-sb-skin') === 'neumorph';
     if (!status) {
-      if (_isSingleSkin) {
-        // 单人卡皮：即使没有 AI 状态也显示空壳，方便用户预览/手动编辑
+      let hasCustomGlobalAttrs = false;
+      try {
+        const wv = await _getCurrentWorldview();
+        const skin = wv?.statusBarSkin || document.body.getAttribute('data-sb-skin') || '';
+        if (skin === 'neumorph' || skin === 'terminal') {
+          hasCustomGlobalAttrs = !!(wv?.gameplay?.globalAttrs || []).some(a => a && a.id && (a.name || '').trim())
+          || !!((skin === 'neumorph' || skin === 'terminal') && (wv?.gameplay?.characterAttrs || []).some(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim())));
+        }
+      } catch(_) {}
+      if (_isSingleSkin || hasCustomGlobalAttrs) {
+        // 拟态皮：允许没有 AI status 时也显示空壳，以便展示/编辑自定义属性
         status = { time: '', weather: '', region: '', location: '', scene: '', playerOutfit: '', playerPosture: '', npcs: [] };
         _currentStatus = status;
       } else {
@@ -239,6 +556,10 @@ function render(status) {
     _el('sb-player-outfit').textContent = status.playerOutfit || '—';
     _el('sb-player-posture').textContent = status.playerPosture || '—';
 
+    // 自定义属性（当前只在拟态风格显示）
+    _renderCustomAttrs(status);
+    _renderCharacterAttrs(status);
+
     // NPC 列表
     const npcEl = _el('sb-npcs-list');
     const npcsCount = _el('sb-npcs-count');
@@ -265,7 +586,7 @@ function render(status) {
  <div class="sb-npc-empty" onclick="event.stopPropagation();StatusBar.addNPC()">+ 添加 NPC</div>`;
           _hydrateSingleCharPlaceholder(npcEl);
         } else {
-          npcEl.innerHTML = '<div class="sb-npc-empty" onclick="event.stopPropagation();StatusBar.addNPC()">+ 添加 NPC</div>';
+          npcEl.innerHTML = '<div class="sb-npc-empty" onclick="event.stopPropagation();StatusBar.addNPC()"><span class="sb-npc-add-full">+ 添加 NPC</span><span class="sb-npc-add-plus">+</span></div>';
         }
       } else {
         npcEl.innerHTML = npcs.map((n, i) => {
@@ -294,7 +615,7 @@ function render(status) {
  </div>
  `;
           }
-        }).join('') + '<div class="sb-npc-empty" onclick="event.stopPropagation();StatusBar.addNPC()">+ 添加 NPC</div>';
+        }).join('') + '<div class="sb-npc-empty" onclick="event.stopPropagation();StatusBar.addNPC()"><span class="sb-npc-add-full">+ 添加 NPC</span><span class="sb-npc-add-plus">+</span></div>';
 
         // 单人卡皮：异步填充头像
         if (_isSingleSkin) {
@@ -1236,7 +1557,7 @@ reason: <一句话写明剧情原因，如"看到了搜索记录里的另一个�
   }
 
   return {
-    render, toggle, editField, editEnv, editNPC, addNPC, deleteNPC, saveEdit, closeEdit, refreshFromConv, toggleNpcs,
+    render, toggle, editField, editEnv, editCustomAttr, editCharacterAttr, applyCustomAttrsDelta, formatCustomAttrsForPrompt, formatCustomAttrsFormatPrompt, formatCustomAttrsStatePrompt, editNPC, addNPC, deleteNPC, saveEdit, closeEdit, refreshFromConv, toggleNpcs,
     _clearNpcAvatarCache,
     // 心动模拟
     hsApplyRelation, hsApplyTasks, hsApplyPhoneLock, hsSkipTask, hsRefreshTasksFromLatestAI, hsOpenSkipModal, hsCloseSkipModal, hsSelectSkipTask, hsConfirmSkipTask, hsAddTarget, hsRemoveTarget, hsEditBaseFavor, hsGetDarknessWarnings, hsFormatForPrompt, hsCheckClearCondition,

@@ -49,6 +49,7 @@ const Worldview = (() => {
         forum:   { name: '', desc: '' }, // 信息载体（默认论坛）
       },
       statusBarSkin: 'terminal', // 状态栏风格：terminal=终端风格，neumorph=拟态风格
+      gameplay: { globalAttrs: [], characterAttrs: [] }, // 玩法配置：属性定义/触发器/状态栏布局
       startTime: '',         // 开场时间
       startPlot: '',         // 开场剧情
       startPlotRounds: 5,    // 开场剧情保留轮数
@@ -587,6 +588,7 @@ function _defaultRegion() {
       return;
     }
     document.body.setAttribute('data-sb-skin', w.statusBarSkin || 'terminal');
+    try { setTimeout(() => StatusBar?.refreshFromConv?.(), 0); } catch(_) {}
   } catch(_) {}
 }
 
@@ -783,6 +785,7 @@ function _syncBuiltinRestoreButton(w) {
   
   async function openEdit(id, opts) {
     const w = await DB.get('worldviews', id);
+    window.__wvEditingCache = w;
     if (!w) return;
     if (!await _confirmBuiltinWorldviewAccess('edit', w)) return;
     editingWorldviewId = id;
@@ -873,9 +876,11 @@ function _syncBuiltinRestoreButton(w) {
 _populateThemeSelect(w.themeName || '');
 
     // 全图 NPC 渲染
-    _renderGlobalNpcs(w.globalNpcs || []);
-    
-    switchEditTab('basic');
+_renderGlobalNpcs(w.globalNpcs || []);
+// 玩法配置：自定义属性
+_renderGameplayAttrs(w);
+
+switchEditTab('basic');
     // 绑定主编辑页自动保存
     requestAnimationFrame(_attachWVAutoSave);
 
@@ -953,19 +958,39 @@ _populateThemeSelect(w.themeName || '');
     const menu = document.getElementById('wv-ext-add-menu');
     if (!menu) return;
     const willOpen = menu.classList.contains('hidden');
-    menu.classList.toggle('hidden');
-    if (willOpen) {
-      // 点空白处关闭
-      setTimeout(() => {
-        const onDocClick = (ev) => {
-          if (!menu.contains(ev.target)) {
-            menu.classList.add('hidden');
-            document.removeEventListener('click', onDocClick);
-          }
-        };
-        document.addEventListener('click', onDocClick);
-      }, 0);
+    if (!willOpen) {
+      menu.classList.add('hidden');
+      menu.style.position = 'absolute';
+      return;
     }
+    const btn = e?.currentTarget || e?.target;
+    const rect = btn?.getBoundingClientRect ? btn.getBoundingClientRect() : null;
+    menu.classList.remove('hidden');
+    if (rect) {
+      const menuW = Math.max(menu.offsetWidth || 150, 150);
+      const left = Math.max(8, Math.min(window.innerWidth - menuW - 8, rect.right - menuW));
+      const top = Math.min(window.innerHeight - 12, rect.bottom + 4);
+      menu.style.position = 'fixed';
+      menu.style.left = left + 'px';
+      menu.style.right = 'auto';
+      menu.style.top = top + 'px';
+      menu.style.zIndex = '999999';
+      try { document.body.appendChild(menu); } catch(_) {}
+    }
+    // 点空白处关闭
+    setTimeout(() => {
+      const onDocClick = (ev) => {
+        if (!menu.contains(ev.target)) {
+          menu.classList.add('hidden');
+          menu.style.position = 'absolute';
+          menu.style.left = '';
+          menu.style.right = '0';
+          menu.style.top = 'calc(100% + 4px)';
+          document.removeEventListener('click', onDocClick);
+        }
+      };
+      document.addEventListener('click', onDocClick);
+    }, 0);
   }
   // 从菜单添加：自动切到目标 tab + 调原有 add 函数
   function addFromMenu(type) {
@@ -1183,13 +1208,15 @@ _populateThemeSelect(w.themeName || '');
     for (const { box, match } of containers) {
       if (!box) continue;
       const cards = box.children;
+      let visibleCount = 0;
       for (const card of cards) {
-        if (!q) {
-          card.style.display = '';
-          continue;
-        }
-        card.style.display = match(card) ? '' : 'none';
+        if (card.id && card.id.endsWith('-empty')) continue;
+        const show = !q || match(card);
+        card.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
       }
+      const empty = Array.from(cards).find(el => el.id && el.id.endsWith('-empty'));
+      if (empty) empty.style.display = (!q && visibleCount === 0) ? '' : 'none';
     }
   }
   // 卡片内文本搜索（节日：name + content）
@@ -1570,9 +1597,277 @@ return;
       UI.showPanel('wv-faction', 'back');
     }
   }
-  let _globalNpcsCache = [];   // 渲染缓存（只用于显示）
+  function _ensureGameplay(w) {
+  if (!w.gameplay) w.gameplay = {};
+  if (!Array.isArray(w.gameplay.globalAttrs)) w.gameplay.globalAttrs = [];
+  if (!Array.isArray(w.gameplay.characterAttrs)) w.gameplay.characterAttrs = [];
+  return w.gameplay;
+}
 
-  function _renderGlobalNpcs(list) {
+function _defaultGameplayAttr() {
+  return { id: 'attr_' + Utils.uuid().slice(0, 8), name: '', desc: '', max: '', initial: 0 };
+}
+
+function _attrTargetKey(t) {
+  return [t?.targetType || '', t?.targetId || '', t?.sourceWorldviewId || ''].join(':');
+}
+
+let _attrModalCtx = null; // { scope, charIdx, attrIdx, isNew }
+
+function _renderAttrRows(attrs, scope, charIdx) {
+  if (!attrs || attrs.length === 0) {
+    return '<div style="padding:12px;color:var(--text-secondary);font-size:12px;text-align:center;border:1px dashed var(--border);border-radius:8px">暂无属性</div>';
+  }
+  return attrs.map((a, i) => {
+    const name = (a.name || '').trim() || '未命名属性';
+    const maxText = (a.max === '' || a.max === null || a.max === undefined) ? '无上限' : `最大 ${a.max}`;
+    const summary = `初始 ${a.initial ?? 0} / ${maxText}`;
+    return `
+      <div onclick="Worldview.openGameplayAttrModal('${scope}', ${charIdx}, ${i})" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;background:var(--bg-secondary);border:1px solid color-mix(in srgb, var(--border) 55%, transparent);cursor:pointer">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(name)}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(summary)}</div>
+        </div>
+        <div style="color:var(--text-secondary);font-size:18px;line-height:1;opacity:.65">›</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function _renderGameplayAttrs(w) {
+  if (!w) return;
+  window.__wvEditingCache = w;
+  const gp = _ensureGameplay(w);
+  const globalEl = document.getElementById('wv-global-attrs-container');
+  const charEl = document.getElementById('wv-character-attrs-container');
+  if (globalEl) {
+    globalEl.innerHTML = `
+      <div style="padding:2px 0 10px;background:transparent">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">用户 / 全局属性</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">通用于当前世界观玩法，可添加多条。</div>
+          </div>
+          <button type="button" onclick="Worldview.addGameplayAttr('global', -1)" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 添加属性</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">${_renderAttrRows(gp.globalAttrs, 'global', -1)}</div>
+      </div>`;
+  }
+  if (charEl) {
+    const cards = gp.characterAttrs.map((c, idx) => `
+      <div style="padding:2px 0 10px;background:transparent">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+          <div style="min-width:0">
+            <div style="font-size:14px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.targetName || '未命名角色')}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.sourceLabel || '')}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button type="button" onclick="Worldview.addGameplayAttr('character', ${idx})" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 属性</button>
+            <button type="button" onclick="Worldview.deleteGameplayCharacter(${idx})" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--danger);font-size:12px;cursor:pointer">移除</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">${_renderAttrRows(c.attrs || [], 'character', idx)}</div>
+      </div>
+    `).join('');
+    charEl.innerHTML = `
+      <div style="padding:2px 0 10px;background:transparent">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">角色属性</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">先选择角色，再为该角色添加多条属性。同一角色不能重复建卡。</div>
+          </div>
+          <button type="button" onclick="Worldview.toggleGameplayCharPicker()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">+ 角色</button>
+        </div>
+        <div id="wv-attr-char-picker" class="hidden" style="margin-bottom:12px;border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--bg-secondary)">
+          <input id="wv-attr-char-search" placeholder="搜索角色 / 别名 / 世界观" oninput="Worldview.renderGameplayCharPicker(this.value)" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;margin-bottom:8px">
+          <div id="wv-attr-char-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">${cards || '<div style="padding:12px;color:var(--text-secondary);font-size:12px;text-align:center;border:1px dashed var(--border);border-radius:8px">暂无角色属性卡片</div>'}</div>
+      </div>`;
+  }
+}
+
+async function updateGameplayAttr(scope, charIdx, attrIdx, field, value) {
+  // 兼容旧内联输入入口；当前 UI 主要通过弹窗保存。
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const list = scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[charIdx]?.attrs || []);
+  const attr = list[attrIdx];
+  if (!attr) return;
+  if (field === 'name') {
+    const name = String(value || '').trim();
+    if (name && list.some((x, i) => i !== attrIdx && String(x.name || '').trim() === name)) {
+      UI.showToast(scope === 'global' ? '全局属性名称不能重复' : '同一角色的属性名称不能重复', 1800);
+      return;
+    }
+  }
+  if (field === 'max') attr.max = value === '' ? '' : Number(value);
+  else if (field === 'initial') attr.initial = value === '' ? 0 : Number(value);
+  else attr[field] = value;
+  await _saveEditingWV(w);
+}
+
+async function addGameplayAttr(scope, charIdx) {
+  await openGameplayAttrModal(scope, charIdx, -1);
+}
+
+async function openGameplayAttrModal(scope, charIdx, attrIdx) {
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const list = scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[charIdx]?.attrs || []);
+  const isNew = attrIdx < 0;
+  const attr = isNew ? _defaultGameplayAttr() : list[attrIdx];
+  if (!attr) return;
+  _attrModalCtx = { scope, charIdx, attrIdx, isNew };
+  const title = document.getElementById('wv-attr-modal-title');
+  if (title) title.textContent = isNew ? (scope === 'global' ? '新增全局属性' : '新增角色属性') : '编辑属性';
+  const delBtn = document.getElementById('wv-attr-delete-btn');
+  if (delBtn) delBtn.style.visibility = isNew ? 'hidden' : 'visible';
+  const nameEl = document.getElementById('wv-attr-name'); if (nameEl) nameEl.value = attr.name || '';
+  const initEl = document.getElementById('wv-attr-initial'); if (initEl) initEl.value = attr.initial ?? 0;
+  const maxEl = document.getElementById('wv-attr-max'); if (maxEl) maxEl.value = attr.max ?? '';
+  const descEl = document.getElementById('wv-attr-desc'); if (descEl) descEl.value = attr.desc || '';
+  document.getElementById('wv-attr-modal')?.classList.remove('hidden');
+  setTimeout(() => nameEl?.focus(), 80);
+}
+
+function closeGameplayAttrModal() {
+  _attrModalCtx = null;
+  document.getElementById('wv-attr-modal')?.classList.add('hidden');
+}
+
+async function saveGameplayAttrFromModal() {
+  if (!_attrModalCtx || !editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const list = _attrModalCtx.scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[_attrModalCtx.charIdx]?.attrs || []);
+  const name = (document.getElementById('wv-attr-name')?.value || '').trim();
+  if (!name) { UI.showToast('请填写属性名称', 1800); return; }
+  if (list.some((x, i) => i !== _attrModalCtx.attrIdx && String(x.name || '').trim() === name)) {
+    UI.showToast(_attrModalCtx.scope === 'global' ? '全局属性名称不能重复' : '同一角色的属性名称不能重复', 1800);
+    return;
+  }
+  const attr = _attrModalCtx.isNew ? _defaultGameplayAttr() : list[_attrModalCtx.attrIdx];
+  if (!attr) return;
+  attr.name = name;
+  attr.desc = document.getElementById('wv-attr-desc')?.value || '';
+  const maxVal = document.getElementById('wv-attr-max')?.value || '';
+  const initVal = document.getElementById('wv-attr-initial')?.value || '';
+  attr.max = maxVal === '' ? '' : Number(maxVal);
+  attr.initial = initVal === '' ? 0 : Number(initVal);
+  if (_attrModalCtx.isNew) list.push(attr);
+  await _saveEditingWV(w);
+  window.__wvEditingCache = w;
+  closeGameplayAttrModal();
+  _renderGameplayAttrs(w);
+}
+
+async function deleteGameplayAttr(scope, charIdx, attrIdx) {
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const list = scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[charIdx]?.attrs || []);
+  list.splice(attrIdx, 1);
+  await _saveEditingWV(w);
+  _renderGameplayAttrs(w);
+}
+
+async function deleteGameplayAttrFromModal() {
+  if (!_attrModalCtx || _attrModalCtx.isNew) return;
+  await deleteGameplayAttr(_attrModalCtx.scope, _attrModalCtx.charIdx, _attrModalCtx.attrIdx);
+  closeGameplayAttrModal();
+}
+
+async function deleteGameplayCharacter(idx) {
+  if (!editingWorldviewId) return;
+  const ok = await UI.showConfirm('移除角色属性', '只会移除此角色的属性配置，不会删除角色本身。确定移除吗？');
+  if (!ok) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  gp.characterAttrs.splice(idx, 1);
+  await _saveEditingWV(w);
+  _renderGameplayAttrs(w);
+}
+
+async function toggleGameplayCharPicker() {
+  const box = document.getElementById('wv-attr-char-picker');
+  if (!box) return;
+  box.classList.toggle('hidden');
+  if (!box.classList.contains('hidden')) {
+    const input = document.getElementById('wv-attr-char-search');
+    if (input) input.value = '';
+    await renderGameplayCharPicker('');
+    setTimeout(() => input?.focus(), 50);
+  }
+}
+
+async function _collectGameplayCharacters() {
+  const out = [];
+  try {
+    const cards = await SingleCard.getAll();
+    cards.forEach(c => out.push({ targetType: 'singleCard', targetId: c.id, sourceWorldviewId: '', targetName: c.name || '未命名角色', aliases: c.aliases || '', sourceLabel: '单人卡', avatar: c.avatar || '' }));
+  } catch(_) {}
+  try {
+    const allWvs = await DB.getAll('worldviews');
+    const avatarsArr = await DB.getAll('npcAvatars');
+    const avatarMap = {}; avatarsArr.forEach(a => { avatarMap[a.id] = a.avatar || ''; });
+    allWvs.forEach(wv => {
+      if (!wv || wv.id === '__default_wv__' || wv._hidden) return;
+      (wv.globalNpcs || []).forEach(n => out.push({ targetType: 'worldviewNpc', targetId: n.id, sourceWorldviewId: wv.id, targetName: n.name || '未命名', aliases: n.aliases || '', sourceLabel: `世界观：${wv.name || '未命名世界观'} / 全图常驻`, avatar: avatarMap[n.id] || n.avatar || '' }));
+      (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => out.push({ targetType: 'worldviewNpc', targetId: n.id, sourceWorldviewId: wv.id, targetName: n.name || '未命名', aliases: n.aliases || '', sourceLabel: `世界观：${wv.name || '未命名世界观'} / ${r.name || '未命名地区'} / ${f.name || '未命名势力'}`, avatar: avatarMap[n.id] || n.avatar || '' }))));
+    });
+  } catch(_) {}
+  return out;
+}
+
+async function renderGameplayCharPicker(query = '') {
+  const listEl = document.getElementById('wv-attr-char-list');
+  if (!listEl) return;
+  const q = String(query || '').toLowerCase().trim();
+  const chars = await _collectGameplayCharacters();
+  const filtered = q ? chars.filter(c => [c.targetName, c.aliases, c.sourceLabel].some(v => String(v || '').toLowerCase().includes(q))) : chars;
+  if (!filtered.length) {
+    listEl.innerHTML = `<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:12px">${q ? '没有匹配的角色' : '暂无可选角色'}</div>`;
+    return;
+  }
+  listEl.innerHTML = filtered.map((c, i) => `
+    <div onclick="Worldview.selectGameplayCharacter(${i})" style="display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);cursor:pointer">
+      <div style="width:34px;height:34px;border-radius:50%;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex-shrink:0">${c.avatar ? `<img src="${Utils.escapeHtml(c.avatar)}" style="width:100%;height:100%;object-fit:cover">` : Utils.escapeHtml((c.targetName || '?').slice(0,1))}</div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.targetName || '未命名')}${c.aliases ? `<span style="font-size:11px;color:var(--text-secondary)"> · ${Utils.escapeHtml(c.aliases)}</span>` : ''}</div>
+        <div style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.sourceLabel || '')}</div>
+      </div>
+    </div>
+  `).join('');
+  window.__wvAttrCharPickerCache = filtered;
+}
+
+async function selectGameplayCharacter(idx) {
+  const c = (window.__wvAttrCharPickerCache || [])[idx];
+  if (!c || !editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const key = _attrTargetKey({ targetType: c.targetType, targetId: c.targetId, sourceWorldviewId: c.sourceWorldviewId });
+  if (gp.characterAttrs.some(x => _attrTargetKey(x) === key)) {
+    UI.showToast('这个角色已经有属性卡片了', 2000);
+    return;
+  }
+  gp.characterAttrs.push({ targetType: c.targetType, targetId: c.targetId, targetName: c.targetName, sourceWorldviewId: c.sourceWorldviewId || '', sourceLabel: c.sourceLabel || '', attrs: [] });
+  await _saveEditingWV(w);
+  _renderGameplayAttrs(w);
+}
+
+let _globalNpcsCache = [];   // 渲染缓存（只用于显示）
+
+function _renderGlobalNpcs(list) {
     _globalNpcsCache = list || [];
     const container = document.getElementById('wv-global-npcs-container');
     if (!container) return;
@@ -1984,22 +2279,55 @@ function closeKnowledgeModal() {
     document.getElementById('wv-knowledge-modal').classList.add('hidden');
   }
 
-  // ---------- 事件设定（关键词触发 → 持续注入 → 结束关键词关闭） ----------
+  // ---------- 事件设定（关键词 / 数值触发 → 持续注入 → 结束关键词关闭） ----------
   let eventsData = [];
+  let _eventAttrConditionsDraft = [];
+  function _collectEventAttrOptions() {
+    const opts = [];
+    const w = window.__wvEditingCache || null;
+    const gp = w?.gameplay || {};
+    (gp.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim()).forEach(a => {
+      opts.push({ value: `global|||${a.id}`, scope: 'global', targetKey: '', targetName: '', attrId: a.id, attrName: a.name, label: `全局 / ${a.name}` });
+    });
+    (gp.characterAttrs || []).forEach(c => {
+      const key = _attrTargetKey(c);
+      (c.attrs || []).filter(a => a && a.id && (a.name || '').trim()).forEach(a => {
+        opts.push({ value: `character||${key}||${a.id}`, scope: 'character', targetKey: key, targetName: c.targetName || '', attrId: a.id, attrName: a.name, label: `${c.targetName || '未命名角色'} / ${a.name}` });
+      });
+    });
+    return opts;
+  }
+  function _eventAttrConditionSummary(ev) {
+    const conds = Array.isArray(ev.attrConditions) ? ev.attrConditions : [];
+    if ((ev.triggerType || 'keyword') !== 'attr') return null;
+    if (!conds.length) return '<span style="font-size:11px;color:var(--danger)">未设置数值条件</span>';
+    return conds.map(c => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(`${c.targetName ? c.targetName + ' / ' : '全局 / '}${c.attrName || '属性'} ${c.operator || '>='} ${c.value ?? 0}`)}</span>`).join('');
+  }
   function _renderEvents(list) {
     eventsData = list || [];
     const container = document.getElementById('wv-events-container');
     if (!container) return;
+    const oldEmpty = document.getElementById('wv-events-empty');
+    if (oldEmpty) oldEmpty.remove();
+    if (!eventsData.length) {
+      container.innerHTML = '';
+      _updateExtCounts();
+      _applyExtSearch();
+      return;
+    }
     container.innerHTML = eventsData.map((ev, i) => {
+      const triggerType = ev.triggerType || 'keyword';
       const keys = (ev.keys || '').trim();
-      const keyTags = keys
+      const keyTags = triggerType === 'attr' ? _eventAttrConditionSummary(ev) : (keys
         ? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(t)}</span>`).join('')
-        : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>';
+        : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>');
+      const modeLabel = triggerType === 'attr' ? '数值触发' : '关键词触发';
       const completeKey = ev.completeKey ? `<span style="font-size:11px;color:var(--text-secondary)">结束词：${Utils.escapeHtml(ev.completeKey)}</span>` : '<span style="font-size:11px;color:var(--danger)">未设置结束词</span>';
       return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editEvent(${i})">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
           <span style="font-size:14px;font-weight:bold;color:var(--accent)">${Utils.escapeHtml(ev.name || '未命名事件')}</span>
+          <span style="font-size:10px;color:var(--text-secondary);border:1px solid var(--border);border-radius:999px;padding:1px 6px">${modeLabel}</span>
         </div>
         <div style="margin-bottom:4px">${keyTags}</div>
         <div style="margin-bottom:4px">${completeKey}</div>
@@ -2015,11 +2343,78 @@ function closeKnowledgeModal() {
       id: 'evt_' + Utils.uuid().slice(0, 8),
       name: '',
       keys: '',
+      triggerType: 'attr',
+      attrConditions: [],
       completeKey: '',
       content: '',
       triggerMode: 'event'
     });
     editEvent(eventsData.length - 1);
+  }
+  function _isEditingHiddenWv() {
+    try { return isHiddenWv(window.__wvEditingCache); } catch(_) { return false; }
+  }
+  function syncEventTriggerTypeUI() {
+    const typeEl = document.getElementById('wv-event-modal-trigger-type');
+    const typeRow = typeEl?.closest('.form-group');
+    const hidden = _isEditingHiddenWv();
+    if (hidden && typeEl) typeEl.value = 'keyword';
+    if (typeRow) typeRow.classList.toggle('hidden', hidden);
+    const type = hidden ? 'keyword' : (typeEl?.value || 'keyword');
+    document.getElementById('wv-event-keyword-row')?.classList.toggle('hidden', type === 'attr');
+    document.getElementById('wv-event-attr-row')?.classList.toggle('hidden', type !== 'attr');
+    if (type === 'attr') {
+      if (_eventAttrConditionsDraft.length === 0) addEventAttrCondition();
+      else _renderEventAttrConditions();
+    }
+  }
+  function _renderEventAttrConditions() {
+    const box = document.getElementById('wv-event-attr-conditions');
+    if (!box) return;
+    const opts = _collectEventAttrOptions();
+    if (!opts.length) {
+      box.innerHTML = '<div style="font-size:12px;color:var(--danger);padding:10px;border:1px dashed var(--border);border-radius:8px">请先在玩法配置里添加全局属性或角色属性。</div>';
+      return;
+    }
+    const opHtml = ['>','>=','<','<=','==','!='].map(op => `<option value="${op}">${op}</option>`).join('');
+    box.innerHTML = _eventAttrConditionsDraft.map((c, i) => {
+      const curVal = c.scope === 'character' ? `character||${c.targetKey || ''}||${c.attrId || ''}` : `global|||${c.attrId || ''}`;
+      const optHtml = opts.map(o => `<option value="${Utils.escapeHtml(o.value)}" ${o.value === curVal ? 'selected' : ''}>${Utils.escapeHtml(o.label)}</option>`).join('');
+      return `<div style="display:grid;grid-template-columns:1fr 64px 74px 32px;gap:6px;align-items:center">
+        <select onchange="Worldview.updateEventAttrCondition(${i}, 'attr', this.value)" style="min-width:0;width:100%;box-sizing:border-box">${optHtml}</select>
+        <select onchange="Worldview.updateEventAttrCondition(${i}, 'operator', this.value)" style="width:100%;box-sizing:border-box">${opHtml}</select>
+        <input type="number" value="${Utils.escapeHtml(c.value ?? 0)}" oninput="Worldview.updateEventAttrCondition(${i}, 'value', this.value)" style="width:100%;box-sizing:border-box">
+        <button type="button" onclick="Worldview.removeEventAttrCondition(${i})" style="width:32px;height:32px;border:1px solid var(--border);background:none;border-radius:6px;color:var(--danger);cursor:pointer">×</button>
+      </div>`;
+    }).join('');
+    _eventAttrConditionsDraft.forEach((c, i) => {
+      if (!c.attrId && opts[0]) updateEventAttrCondition(i, 'attr', opts[0].value, true);
+    });
+  }
+  function addEventAttrCondition() {
+    const opts = _collectEventAttrOptions();
+    if (!opts.length) { UI.showToast('请先配置自定义属性', 1800); return; }
+    const o = opts[0];
+    _eventAttrConditionsDraft.push({ scope: o.scope, targetKey: o.targetKey, targetName: o.targetName, attrId: o.attrId, attrName: o.attrName, operator: '>=', value: 0 });
+    _renderEventAttrConditions();
+  }
+  function updateEventAttrCondition(i, field, value, silent) {
+    const c = _eventAttrConditionsDraft[i];
+    if (!c) return;
+    if (field === 'attr') {
+      const o = _collectEventAttrOptions().find(x => x.value === value);
+      if (!o) return;
+      Object.assign(c, { scope: o.scope, targetKey: o.targetKey, targetName: o.targetName, attrId: o.attrId, attrName: o.attrName });
+    } else if (field === 'value') {
+      c.value = Number(value);
+    } else if (field === 'operator') {
+      c.operator = value || '>=';
+    }
+    if (!silent && field === 'attr') _renderEventAttrConditions();
+  }
+  function removeEventAttrCondition(i) {
+    _eventAttrConditionsDraft.splice(i, 1);
+    _renderEventAttrConditions();
   }
   function editEvent(i) {
     _editEventIdx = i;
@@ -2027,27 +2422,54 @@ function closeKnowledgeModal() {
     document.getElementById('wv-event-modal-title').textContent = ev.name ? '编辑事件' : '新建事件';
     document.getElementById('wv-event-modal-name').value = ev.name || '';
     document.getElementById('wv-event-modal-keys').value = ev.keys || '';
+    const triggerType = _isEditingHiddenWv() ? 'keyword' : (ev.triggerType || 'keyword');
+    const typeEl = document.getElementById('wv-event-modal-trigger-type');
+    if (typeEl) typeEl.value = triggerType;
+    _eventAttrConditionsDraft = Array.isArray(ev.attrConditions) ? JSON.parse(JSON.stringify(ev.attrConditions)) : [];
     document.getElementById('wv-event-modal-complete-key').value = ev.completeKey || '';
+    const finishEl = document.getElementById('wv-event-modal-finish-rule');
+    if (finishEl) finishEl.value = ev.finishRule || '';
     document.getElementById('wv-event-modal-content').value = ev.content || '';
+    syncEventTriggerTypeUI();
     document.getElementById('wv-event-modal').classList.remove('hidden');
   }
-  function saveEventFromModal() {
+  async function saveEventFromModal() {
     if (_editEventIdx === null) return;
     const prev = eventsData[_editEventIdx] || {};
+    const triggerType = _isEditingHiddenWv() ? 'keyword' : (document.getElementById('wv-event-modal-trigger-type')?.value || 'keyword');
     eventsData[_editEventIdx] = {
       id: prev.id || ('evt_' + Utils.uuid().slice(0, 8)),
       name: document.getElementById('wv-event-modal-name').value.trim(),
-      keys: document.getElementById('wv-event-modal-keys').value.trim(),
+      keys: triggerType === 'keyword' ? document.getElementById('wv-event-modal-keys').value.trim() : '',
+      triggerType,
+      attrConditions: triggerType === 'attr' ? _eventAttrConditionsDraft.filter(c => c && c.attrId && Number.isFinite(Number(c.value))).map(c => ({ ...c, value: Number(c.value), operator: c.operator || '>=' })) : [],
       completeKey: document.getElementById('wv-event-modal-complete-key').value.trim(),
+      finishRule: (document.getElementById('wv-event-modal-finish-rule')?.value || '').trim(),
       content: document.getElementById('wv-event-modal-content').value.trim(),
       triggerMode: 'event'
     };
+    try {
+      const w = await _getEditingWV();
+      if (w) {
+        w.events = eventsData.slice();
+        await _saveEditingWV(w);
+        window.__wvEditingCache = w;
+      }
+    } catch(e) { console.warn('[Worldview] 保存事件失败', e); }
     _renderEvents(eventsData);
     closeEventModal();
   }
-  function deleteEventFromModal() {
+  async function deleteEventFromModal() {
     if (_editEventIdx === null) return;
     eventsData.splice(_editEventIdx, 1);
+    try {
+      const w = await _getEditingWV();
+      if (w) {
+        w.events = eventsData.slice();
+        await _saveEditingWV(w);
+        window.__wvEditingCache = w;
+      }
+    } catch(e) { console.warn('[Worldview] 删除事件失败', e); }
     _renderEvents(eventsData);
     closeEventModal();
   }
@@ -3214,7 +3636,7 @@ async function pickDefaultTheme(value) {
     switchEditTab,
 switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromMenu, toggleExtIoMenu, exportExtended, importExtended,
     toggleCustomEnabled, toggleKnowledgeEnabled, toggleFestivalEnabled,
-    addEvent, editEvent, saveEventFromModal, deleteEventFromModal, closeEventModal,
+    addEvent, editEvent, saveEventFromModal, deleteEventFromModal, closeEventModal, syncEventTriggerTypeUI, addEventAttrCondition, updateEventAttrCondition, removeEventAttrCondition,
     _onCardClick,
     handleIconImageUpload,
     clearIconImage,
@@ -3223,6 +3645,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     openFactionEdit, saveFaction, deleteFaction,
     openNPCEdit, saveNPC, deleteNPC,
     addGlobalNpc, editGlobalNpc, backFromNpcEdit,
+    addGameplayAttr, updateGameplayAttr, deleteGameplayAttr, openGameplayAttrModal, closeGameplayAttrModal, saveGameplayAttrFromModal, deleteGameplayAttrFromModal, deleteGameplayCharacter, toggleGameplayCharPicker, renderGameplayCharPicker, selectGameplayCharacter,
     _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards,
     addFestival, editFestival, saveFestivalFromModal, deleteFestivalFromModal, closeFestivalModal,
   addCustom, editCustom, saveCustomFromModal, deleteCustomFromModal, closeCustomModal,

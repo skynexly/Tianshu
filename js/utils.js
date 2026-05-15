@@ -95,6 +95,7 @@ const Utils = (() => {
     tasks: null,       // 心动模拟：任务列表
     phoneLock: null,   // 心动模拟：char 锁/解锁手机指令 { status, by, reason }
     chat: null,        // 心动模拟：线上消息
+    customAttrs: null, // 自定义世界观：属性增量 { global, characters }
     raw: raw
   };
 
@@ -169,12 +170,19 @@ const Utils = (() => {
     }
 
     const chatMatch = raw.match(/```chat\s*\n([\s\S]*?)```/i);
-    if (chatMatch) {
-      try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
-      raw = raw.replace(chatMatch[0], '').trim();
-    }
-
-    // 心动模拟：返航触发 marker（空代码块即可）
+ if (chatMatch) {
+try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
+ raw = raw.replace(chatMatch[0], '').trim();
+ }
+ 
+ // 自定义世界观：属性增量（JSON）
+ const customAttrsMatch = raw.match(/```custom-attrs\s*\n([\s\S]*?)```/i);
+ if (customAttrsMatch) {
+ try { result.customAttrs = JSON.parse(customAttrsMatch[1].trim()); } catch(e) {}
+ raw = raw.replace(customAttrsMatch[0], '').trim();
+ }
+ 
+ // 心动模拟：返航触发 marker（空代码块即可）
     // 形如 ```homecoming\n``` 或 ```homecoming``` 或 ```homecoming\n任何内容\n```
     const homecomingMatch = raw.match(/```homecoming\s*([\s\S]*?)```/i);
     if (homecomingMatch) {

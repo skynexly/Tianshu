@@ -216,6 +216,7 @@ const bsData = await DB.get('settings', 'backstagePresets');
     renderFuncPresetList('worldvoice');
     renderFuncPresetList('backstage');
     renderFuncPresetList('tts');
+    renderFuncPresetList('draw');
   }
 
   function editPreset(id) {

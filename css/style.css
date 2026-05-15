@@ -1894,6 +1894,16 @@ input[type="range"] {
   outline: none;
   border-color: var(--accent);
 }
+#wv-attr-modal input:focus,
+#wv-attr-modal textarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: var(--border) !important;
+}
+#wv-attr-modal input,
+#wv-attr-modal textarea {
+  -webkit-tap-highlight-color: transparent;
+}
 .modal-actions {
   display: flex;
   gap: 8px;
@@ -3503,6 +3513,318 @@ body[data-worldview="心动模拟"] .sb-scene {
 body[data-worldview="心动模拟"] .sb-scene:hover {
   background: transparent;
 }
+body[data-sb-skin="neumorph"] #sb-custom-attrs,
+body[data-skin="single-default"] #sb-custom-attrs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#sb-custom-attrs.hidden { display: none !important; }
+body[data-sb-skin="neumorph"] .sb-custom-attrs-title,
+body[data-skin="single-default"] .sb-custom-attrs-title {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: .06em;
+}
+body[data-sb-skin="terminal"] #sb-custom-attrs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+body[data-sb-skin="terminal"] .sb-custom-attrs-title {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+body[data-sb-skin="neumorph"] .sb-custom-attrs-grid,
+body[data-skin="single-default"] .sb-custom-attrs-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+body[data-sb-skin="terminal"] .sb-custom-attrs-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+}
+body[data-sb-skin="neumorph"] .sb-custom-attr-card,
+body[data-skin="single-default"] .sb-custom-attr-card {
+  min-width: 0;
+  border-radius: 14px;
+  padding: 10px 11px;
+  background: var(--status-card, var(--bg-tertiary));
+  box-shadow: var(--hs-shadow-neu);
+  border: 1px solid rgba(255,255,255,0.14);
+  cursor: pointer;
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+body[data-sb-skin="neumorph"] .sb-custom-attr-card:hover,
+body[data-skin="single-default"] .sb-custom-attr-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--hs-shadow-neu-hover);
+}
+body[data-sb-skin="terminal"] .sb-custom-attr-card {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 0;
+  padding: 10px 10px;
+  min-height: 38px;
+  background: transparent;
+  box-shadow: none;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-family: var(--font-family, inherit);
+}
+body[data-sb-skin="neumorph"] .sb-custom-attr-name,
+body[data-skin="single-default"] .sb-custom-attr-name {
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: var(--text-secondary);
+  letter-spacing: .04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body[data-sb-skin="neumorph"] .sb-custom-attr-val,
+body[data-skin="single-default"] .sb-custom-attr-val {
+  margin-top: 6px;
+  font-size: 18px;
+  line-height: 1.1;
+  font-weight: 800;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body[data-sb-skin="terminal"] .sb-custom-attr-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family, inherit);
+  font-size: 13px;
+  line-height: 1.15;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: .02em;
+}
+body[data-sb-skin="terminal"] .sb-custom-attr-val {
+  flex-shrink: 0;
+  max-width: 44%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family, inherit);
+  font-size: 13px;
+  line-height: 1.15;
+  font-weight: 800;
+  color: var(--text);
+}
+body[data-sb-skin="neumorph"] #sb-character-attrs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#sb-character-attrs.hidden { display: none !important; }
+body[data-sb-skin="neumorph"] .sb-character-attrs-title {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: .06em;
+}
+body[data-sb-skin="neumorph"] .sb-character-attrs-list {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  padding: 0 2px 2px;
+}
+body[data-sb-skin="neumorph"] .sb-character-attrs-list::-webkit-scrollbar { display: none; }
+body[data-sb-skin="neumorph"] .sb-character-attr-card {
+  flex: 0 0 82%;
+  min-width: 230px;
+  max-width: 300px;
+  border-radius: 18px;
+  background: var(--status-bg, var(--bg-secondary));
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: inset 4px 4px 9px rgba(0,0,0,0.13), inset -3px -3px 8px rgba(255,255,255,0.36);
+  padding: 13px 14px 14px;
+  scroll-snap-align: start;
+  box-sizing: border-box;
+}
+body[data-sb-skin="neumorph"] .sb-character-attr-card:nth-child(odd) {
+  background: var(--status-bg, var(--bg-secondary));
+}
+body[data-sb-skin="neumorph"] .sb-character-attr-card:nth-child(even) {
+  background: var(--status-card, var(--bg-tertiary));
+}
+body[data-sb-skin="neumorph"] .sb-character-attr-name {
+  font-size: 15px;
+  line-height: 1.2;
+  font-weight: 850;
+  color: var(--text);
+  letter-spacing: .02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 12px;
+}
+body[data-sb-skin="neumorph"] .sb-character-attr-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+body[data-sb-skin="neumorph"] .sb-character-attr-line {
+  cursor: pointer;
+}
+body[data-sb-skin="neumorph"] .sb-character-attr-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--text-secondary);
+}
+body[data-sb-skin="neumorph"] .sb-character-attr-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body[data-sb-skin="neumorph"] .sb-character-attr-row b {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+body[data-sb-skin="neumorph"] .sb-character-attr-bar {
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  box-shadow: inset 3px 3px 7px rgba(0,0,0,0.12), inset -2px -2px 6px rgba(255,255,255,0.34);
+}
+body[data-sb-skin="neumorph"] .sb-character-attr-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width .3s ease;
+}
+body[data-sb-skin="terminal"] #sb-character-attrs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-family, inherit);
+}
+body[data-sb-skin="terminal"] .sb-character-attrs-title {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+body[data-sb-skin="terminal"] .sb-character-attrs-list {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  padding: 0 2px 2px;
+}
+body[data-sb-skin="terminal"] .sb-character-attrs-list::-webkit-scrollbar { display: none; }
+body[data-sb-skin="terminal"] .sb-character-attr-card {
+  flex: 0 0 82%;
+  min-width: 230px;
+  max-width: 300px;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 11px 12px;
+  scroll-snap-align: start;
+  box-sizing: border-box;
+  font-family: var(--font-family, inherit);
+}
+body[data-sb-skin="terminal"] .sb-character-attr-card:nth-child(odd) {
+  background: var(--status-card, var(--bg-tertiary));
+  border: 1px solid transparent;
+}
+body[data-sb-skin="terminal"] .sb-character-attr-card:nth-child(even) {
+  background: transparent;
+  border: 1px solid var(--border);
+}
+body[data-sb-skin="terminal"] .sb-character-attr-name {
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: .02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 9px;
+}
+body[data-sb-skin="terminal"] .sb-character-attr-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+body[data-sb-skin="terminal"] .sb-character-attr-line {
+  cursor: pointer;
+  padding: 7px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+body[data-sb-skin="terminal"] .sb-character-attr-line:first-child {
+  border-top: 0;
+}
+body[data-sb-skin="terminal"] .sb-character-attr-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 0;
+  font-family: var(--font-family, inherit);
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+body[data-sb-skin="terminal"] .sb-character-attr-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body[data-sb-skin="terminal"] .sb-character-attr-row b {
+  flex-shrink: 0;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+body[data-sb-skin="terminal"] .sb-character-attr-bar {
+  display: none;
+}
 .sb-player-card {
   display: flex;
   flex-direction: column;
@@ -4317,6 +4639,19 @@ body[data-worldview="心动模拟"] .sb-npc-dot.active {
  opacity: .95;
  background: var(--decoration);
 }
+body[data-sb-skin="neumorph"] .sb-npc-dot {
+ width:5px;
+ height:5px;
+ border-radius:999px;
+ background: var(--accent);
+ opacity: .26;
+ transition: width .2s ease, opacity .2s ease, background .2s ease;
+}
+body[data-sb-skin="neumorph"] .sb-npc-dot.active {
+ width:13px;
+ opacity: .95;
+ background: var(--decoration);
+}
 
 /* ===== 单人卡+无世界观 皮（data-skin="single-default"） ===== */
 /* 复用心动模拟的 neumorphism 变量 */
@@ -4545,17 +4880,21 @@ body[data-sb-skin="neumorph"] .sb-npcs-header {
   padding: 0;
   cursor: default;
 }
-body[data-skin="single-default"] .sb-npcs-header,
+body[data-skin="single-default"] .sb-npcs-header:hover,
 body[data-sb-skin="neumorph"] .sb-npcs-header:hover {
   background: transparent;
 }
-body[data-skin="single-default"] .sb-npcs-title,
+body[data-skin="single-default"] .sb-npcs-title {
+  font-size: 0;
+  opacity: 1;
+  letter-spacing: 0;
+}
 body[data-sb-skin="neumorph"] .sb-npcs-title {
   font-size: 0;
   opacity: 1;
   letter-spacing: 0;
 }
-body[data-skin="single-default"] .sb-npcs-title,
+body[data-skin="single-default"] .sb-npcs-title::before,
 body[data-sb-skin="neumorph"] .sb-npcs-title::before {
   content: "Presence";
   font-size: 11px;
@@ -4569,7 +4908,6 @@ body[data-sb-skin="neumorph"] .sb-npcs-body {
   max-height: none;
   overflow: visible;
 }
-/* NPC 列表：纵向排列、不折叠、不横滑 */
 body[data-skin="single-default"] .sb-npcs-list,
 body[data-sb-skin="neumorph"] .sb-npcs-list {
   flex-direction: column;
@@ -4577,9 +4915,8 @@ body[data-sb-skin="neumorph"] .sb-npcs-list {
   padding: 0 2px 2px;
   overflow: visible;
 }
-/* NPC 卡：拟态阴影 + 头像在右 + 名字在头像下 */
-body[data-skin="single-default"] .sb-npc-card,
-body[data-sb-skin="neumorph"] .sb-npc-card {
+/* 单人卡/无世界观拟态：右侧头像 + 名字 */
+body[data-skin="single-default"] .sb-npc-card {
   position: relative;
   display: flex;
   flex-direction: row;
@@ -4593,18 +4930,9 @@ body[data-sb-skin="neumorph"] .sb-npc-card {
   opacity: 1;
   min-width: 0;
 }
-/* 交替底色：偶数张用 secondary */
-body[data-skin="single-default"] .sb-npc-card,
-body[data-sb-skin="neumorph"] .sb-npc-card:nth-child(even) {
-  background: var(--bg-secondary);
-}
-body[data-skin="single-default"] .sb-npc-card,
-body[data-sb-skin="neumorph"] .sb-npc-card:hover {
-  filter: none;
-  box-shadow: var(--hs-shadow-neu-hover);
-}
-body[data-skin="single-default"] .sb-npc-card .sb-npc-content ,
-body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-content {
+body[data-skin="single-default"] .sb-npc-card:nth-child(even) { background: var(--bg-secondary); }
+body[data-skin="single-default"] .sb-npc-card:hover { filter: none; box-shadow: var(--hs-shadow-neu-hover); }
+body[data-skin="single-default"] .sb-npc-card .sb-npc-content {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -4612,32 +4940,7 @@ body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-content {
   gap: 4px;
   justify-content: center;
 }
-body[data-skin="single-default"] .sb-npc-card .sb-npc-val ,
-body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-val {
-  position: relative;
-  padding-left: 13px;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--text-secondary);
-  letter-spacing: .01em;
-  word-break: break-word;
-  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
-}
-body[data-skin="single-default"] .sb-npc-card .sb-npc-val::before ,
-body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-val::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: .62em;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--decoration);
-  box-shadow: 0 1px 3px rgba(0,0,0,.16);
-}
-/* 右侧：头像 + 名字 */
-body[data-skin="single-default"] .sb-npc-card .sb-npc-side ,
-body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-side {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-side {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -4646,8 +4949,7 @@ body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-side {
   justify-content: center;
   width: 64px;
 }
-body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar ,
-body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-avatar {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar {
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -4659,8 +4961,7 @@ body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-avatar {
   overflow: hidden;
   position: relative;
 }
-body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar-initial ,
-body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-avatar-initial {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar-initial {
   font-size: 22px;
   font-weight: 800;
   color: var(--accent);
@@ -4668,12 +4969,8 @@ body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-avatar-initial {
   font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
   opacity: .8;
 }
-body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar.has-img .sb-npc-avatar-initial ,
-body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-avatar.has-img .sb-npc-avatar-initial {
-  display: none;
-}
-body[data-skin="single-default"] .sb-npc-card .sb-npc-name ,
-body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-name {
+body[data-skin="single-default"] .sb-npc-card .sb-npc-avatar.has-img .sb-npc-avatar-initial { display: none; }
+body[data-skin="single-default"] .sb-npc-card .sb-npc-name {
   font-size: 12px;
   font-weight: 800;
   color: var(--text);
@@ -4686,7 +4983,91 @@ body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-name {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* "+ 添加 NPC" 占位：保持原 dashed 风，但走单人卡皮的色 */
+body[data-skin="single-default"] .sb-npc-card .sb-npc-val {
+  position: relative;
+  padding-left: 13px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  letter-spacing: .01em;
+  word-break: break-word;
+  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+}
+body[data-skin="single-default"] .sb-npc-card .sb-npc-val::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--decoration);
+  box-shadow: 0 1px 3px rgba(0,0,0,.16);
+}
+/* 自定义世界观拟态：普通 NPC DOM，横向滚动卡片 */
+body[data-sb-skin="neumorph"] .sb-npcs-list {
+  flex-direction: row;
+  gap: 10px;
+  padding: 0 2px 2px;
+  overflow-x: auto;
+  overflow-y: visible;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+body[data-sb-skin="neumorph"] .sb-npcs-list::-webkit-scrollbar { display: none; }
+body[data-sb-skin="neumorph"] .sb-npc-card {
+  flex: 0 0 84%;
+  min-width: 218px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: transparent;
+  box-shadow: none;
+  opacity: 1;
+  scroll-snap-align: start;
+}
+body[data-sb-skin="neumorph"] .sb-npc-card:nth-child(even) { background: transparent; }
+body[data-sb-skin="neumorph"] .sb-npc-card:hover { filter: none; box-shadow: none; border-color: var(--decoration); }
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-name {
+  display: block;
+  margin: 0 0 4px;
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: .02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-val .sb-field-label-inline {
+  display: none;
+}
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-val {
+  position: relative;
+  padding-left: 13px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  letter-spacing: .01em;
+  word-break: break-word;
+  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+}
+body[data-sb-skin="neumorph"] .sb-npc-card .sb-npc-val::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--decoration);
+  box-shadow: 0 1px 3px rgba(0,0,0,.16);
+}
+.sb-npc-add-plus { display: none; }
 body[data-skin="single-default"] .sb-npc-empty,
 body[data-sb-skin="neumorph"] .sb-npc-empty {
   display: flex;
@@ -4702,14 +5083,31 @@ body[data-sb-skin="neumorph"] .sb-npc-empty {
   font-family: var(--font-family, sans-serif);
   opacity: .8;
 }
-body[data-skin="single-default"] .sb-npc-empty,
+body[data-sb-skin="neumorph"] .sb-npc-empty {
+  flex: 0 0 54px;
+  min-width: 54px;
+  min-height: 112px;
+  font-size: 26px;
+  line-height: 1;
+}
+body[data-sb-skin="neumorph"] .sb-npc-add-full { display: none; }
+body[data-sb-skin="neumorph"] .sb-npc-add-plus { display: inline; }
+body[data-skin="single-default"] .sb-npc-empty:hover,
 body[data-sb-skin="neumorph"] .sb-npc-empty:hover {
   opacity: 1;
   border-color: var(--decoration);
 }
-/* 单人卡皮下不显示横向滑动指示点 */
-body[data-skin="single-default"] .sb-npc-dots,
+body[data-skin="single-default"] .sb-npc-dots {
+  display: none;
+}
 body[data-sb-skin="neumorph"] .sb-npc-dots {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  padding-top: 4px;
+  min-height: 8px;
+}
+body[data-sb-skin="neumorph"] .sb-npc-dots.hidden {
   display: none;
 }
 

@@ -208,6 +208,10 @@
               </div>
             </div>
 
+            <!-- 自定义属性（拟态风格下显示） -->
+            <div id="sb-custom-attrs" class="hidden"></div>
+            <div id="sb-character-attrs" class="hidden"></div>
+
             <!-- NPCS 二级折叠 -->
             <div class="sb-npcs-accordion">
               <div class="sb-npcs-header" onclick="event.stopPropagation();StatusBar.toggleNpcs()">
@@ -1430,6 +1434,40 @@
   </div>
 </div>
 
+<!-- 玩法属性编辑弹窗 -->
+<div id="wv-attr-modal" class="modal hidden">
+  <div class="modal-content" style="max-height:90vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0">
+      <h3 id="wv-attr-modal-title" style="margin:0;font-size:16px;color:var(--accent)">编辑属性</h3>
+      <button onclick="Worldview.closeGameplayAttrModal()" style="background:none;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer">×</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-right:4px">
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">属性名称
+        <input id="wv-attr-name" placeholder="例如：饱食度" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;outline:none;box-shadow:none">
+      </label>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text);min-width:0">初始值
+          <input id="wv-attr-initial" type="number" placeholder="0" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0;outline:none;box-shadow:none">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text);min-width:0">最大值
+          <input id="wv-attr-max" type="number" placeholder="留空=无上限" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0;outline:none;box-shadow:none">
+        </label>
+      </div>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">属性描述
+        <textarea id="wv-attr-desc" placeholder="让 AI 知道这个数值意味着什么" style="width:100%;box-sizing:border-box;min-height:110px;resize:vertical;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;line-height:1.5;outline:none;box-shadow:none"></textarea>
+      </label>
+      <div style="font-size:11px;color:var(--text-secondary);line-height:1.5">最大值留空表示无上限。这里保存的是属性定义，当前值后续存在对话状态栏中。</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;flex-shrink:0">
+      <button id="wv-attr-delete-btn" onclick="Worldview.deleteGameplayAttrFromModal()" style="padding:9px 12px;border-radius:8px;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));background:none;color:var(--danger);font-size:13px;cursor:pointer">删除</button>
+      <div style="display:flex;gap:8px">
+        <button onclick="Worldview.closeGameplayAttrModal()" style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;cursor:pointer">取消</button>
+        <button onclick="Worldview.saveGameplayAttrFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 单人对话设置弹窗 -->
 
 <!-- 生成图片弹窗 -->
@@ -2377,7 +2415,7 @@
         <!-- 扩展设定Tab -->
 <div id="wv-edit-tab-special" class="wv-edit-tab-content settings-tab-content hidden">
   <!-- 搜索框 + 添加菜单 -->
-  <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;position:relative">
+  <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;position:relative;overflow:visible;z-index:20">
     <div style="position:relative;flex:1">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text-secondary);pointer-events:none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       <input type="text" id="wv-ext-search" placeholder="搜索名称 / 关键词 / 内容..." oninput="Worldview.filterExtended()" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 28px;font-size:13px;outline:none">
@@ -2389,7 +2427,7 @@
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
     </button>
     <!-- 添加 + 导入导出 合并菜单（右上角弹出） -->
-    <div id="wv-ext-add-menu" class="hidden" style="position:absolute;top:calc(100% + 4px);right:0;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px;z-index:100;min-width:150px;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
+    <div id="wv-ext-add-menu" class="hidden" style="position:fixed;top:72px;right:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px;z-index:999999;min-width:150px;max-height:min(320px, 55vh);overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
       <div onclick="Worldview.addFromMenu('festival')" style="padding:8px 10px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 2v4"/></svg>
         节日设定
@@ -2499,14 +2537,15 @@
             </div>
           </form>
 
-          <!-- 自定义属性（占位，待实现） -->
-          <div style="margin-bottom:20px;opacity:.55">
+          <!-- 自定义属性 -->
+          <div style="margin-bottom:20px">
             <div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
               自定义属性
-              <span style="font-size:11px;font-weight:normal;color:var(--text-secondary);background:var(--bg-tertiary);padding:2px 8px;border-radius:10px">敬请期待</span>
             </div>
-            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">定义本世界观下的数值（如金钱、声望、时辰），AI 与玩家可读取并在剧情中流动。支持数字、枚举、布尔三种类型。</div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;margin-bottom:12px">这里只定义属性含义与初始规则；当前值后续存在每条对话的状态栏里，不写回世界观。</div>
+            <div id="wv-global-attrs-container"></div>
+            <div id="wv-character-attrs-container" style="margin-top:14px"></div>
           </div>
 
           <!-- 触发器（占位，待实现） -->
@@ -3510,9 +3549,12 @@ document.addEventListener('click', (e) => {
 </button>
 </div>
 <div class="form-group"><span class="form-label">事件名称</span><input type="text" id="wv-event-modal-name" placeholder="如：深蓝教会袭击"></div>
-<div class="form-group"><span class="form-label">触发关键词 <span style="font-size:11px;color:var(--text-secondary)">（多个用逗号或空格分隔）</span></span><input type="text" id="wv-event-modal-keys" placeholder="如：深蓝教会, 深蓝, 阿司霍尔"></div>
+<div class="form-group"><span class="form-label">触发方式</span><select id="wv-event-modal-trigger-type" onchange="Worldview.syncEventTriggerTypeUI()" style="width:100%;box-sizing:border-box"><option value="keyword">关键词触发</option><option value="attr">数值触发</option></select></div>
+<div class="form-group" id="wv-event-keyword-row"><span class="form-label">触发关键词 <span style="font-size:11px;color:var(--text-secondary)">（多个用逗号或空格分隔）</span></span><input type="text" id="wv-event-modal-keys" placeholder="如：深蓝教会, 深蓝, 阿司霍尔"></div>
+<div class="form-group hidden" id="wv-event-attr-row"><span class="form-label">数值触发条件 <span style="font-size:11px;color:var(--text-secondary)">（全部满足才触发）</span></span><div id="wv-event-attr-conditions" style="display:flex;flex-direction:column;gap:8px"></div><button type="button" onclick="Worldview.addEventAttrCondition()" style="width:100%;margin-top:8px;padding:8px 10px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--text-secondary);font-size:12px;cursor:pointer">+ 添加条件</button></div>
 <div class="form-group"><span class="form-label">结束关键词 <span style="font-size:11px;color:var(--text-secondary)">（AI 回复中出现此词后事件自动关闭）</span></span><input type="text" id="wv-event-modal-complete-key" placeholder="如：__EVENT_COMPLETE_深蓝袭击__"></div>
-<div class="form-group"><span class="form-label">事件内容 <span style="font-size:11px;color:var(--text-secondary)">（触发后每轮注入，直到结束）</span></span><div style="position:relative;width:100%"><textarea id="wv-event-modal-content" rows="8" placeholder="事件剧情引导、NPC行为指令、结局走向提示等…&#10;&#10;建议在末尾提示AI：当事件结束时请输出结束关键词。" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-event-modal-content','事件内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
+<div class="form-group"><span class="form-label">如何判断事件结束 <span style="font-size:11px;color:var(--text-secondary)">（满足后 AI 应输出结束关键词）</span></span><textarea id="wv-event-modal-finish-rule" rows="3" placeholder="如：当袭击者撤退、现场危机解除、主要角色确认安全后，视为事件结束。"></textarea></div>
+<div class="form-group"><span class="form-label">事件内容 <span style="font-size:11px;color:var(--text-secondary)">（触发后每轮注入，直到结束）</span></span><div style="position:relative;width:100%"><textarea id="wv-event-modal-content" rows="8" placeholder="事件剧情引导、NPC行为指令、结局走向提示等…" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-event-modal-content','事件内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
 <div class="modal-actions" style="flex-shrink:0;margin-top:12px">
 <button onclick="Worldview.closeEventModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
 <button onclick="Worldview.saveEventFromModal()" style="flex:1">保存</button>

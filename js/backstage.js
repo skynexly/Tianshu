@@ -350,6 +350,16 @@ const container = document.getElementById('backstage-messages');
       if (summaryText) systemParts.push(summaryText);
     } catch(e) {}
 
+    // 自定义属性当前状态（后台只读，不允许修改）
+    try {
+      if (typeof StatusBar !== 'undefined' && StatusBar.formatCustomAttrsStatePrompt) {
+        const customAttrsState = await StatusBar.formatCustomAttrsStatePrompt();
+        if (customAttrsState) {
+          systemParts.push(customAttrsState + '\n\n【后台频道规则】以上自定义属性仅供后台只读参考。后台频道不影响主线剧情，请不要输出 custom-attrs 代码块，也不要尝试修改这些属性。');
+        }
+      }
+    } catch(e) {}
+
     // 心动模拟累计状态（非心动模拟世界观时 hsFormatForPrompt 会返回空）
     // 已返航后停止注入累计状态，改为注入"已返航"情报
     let _bsHsHomecoming = false;
