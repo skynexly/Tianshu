@@ -187,6 +187,57 @@ const NPC = (() => {
   }
 
   /**
+   * 命中提及地区：扫文本里精确出现的地区全名/别名，返回 [提及的地区] 注入文本
+   * - 大小写不敏感
+   * - 排除 excludeRegion（即 currentRegion，避免和"当前区域NPC"重复）
+   * - 命中上限 3 个，按文本中首次出现位置排序
+   * - 仅输出 name + detail，不带势力 / NPC
+   * @param {string} text 要扫描的正文（玩家最新 + AI最近）
+   * @param {string} excludeRegion 当前区域 id 或 name
+   */
+  function formatMentionedForPrompt(text, excludeRegion) {
+    if (!text || !regionData.length) return '';
+    const lower = String(text).toLowerCase();
+    const excludeKey = excludeRegion || '';
+    const hits = [];
+
+    for (const r of regionData) {
+      const rid = r.id || r.name;
+      if (rid === excludeKey || r.name === excludeKey) continue;
+      if (!r.detail || !r.detail.trim()) continue; // 没 detail 不发
+
+      // 候选关键词：name + aliases（aliases 可能是字符串"a,b,c"或数组）
+      const keys = [];
+      if (r.name) keys.push(r.name);
+      if (r.aliases) {
+        const aliasList = Array.isArray(r.aliases)
+          ? r.aliases
+          : String(r.aliases).split(/[,，、\s]+/).filter(Boolean);
+        keys.push(...aliasList);
+      }
+
+      // 找最早出现的位置
+      let earliest = -1;
+      for (const k of keys) {
+        if (!k || k.length < 2) continue; // 太短的跳过，避免被任何长串吞掉
+        const idx = lower.indexOf(k.toLowerCase());
+        if (idx >= 0 && (earliest < 0 || idx < earliest)) earliest = idx;
+      }
+      if (earliest >= 0) hits.push({ region: r, pos: earliest });
+    }
+
+    if (!hits.length) return '';
+    hits.sort((a, b) => a.pos - b.pos);
+    const top = hits.slice(0, 3);
+
+    let txt = '【提及的地区】\n本轮玩家或 AI 在正文中提到了以下地区，仅作参考资料，不代表场景已切换；剧情中无需主动展开。\n';
+    for (const h of top) {
+      txt += `\n[地区：${h.region.name}]\n${h.region.detail.trim()}\n`;
+    }
+    return txt;
+  }
+
+  /**
    * 更新在场NPC名单（从AI输出解析结果里取）
    */
   function setPresentNPCs(names) {
@@ -311,6 +362,7 @@ const NPC = (() => {
     init, getByRegion, getByFaction, getByNames,
     formatQuickRef, formatForPrompt, formatPresentForPrompt,
     parseRegionFromOutput, setRegion, getRegion,
+    formatMentionedForPrompt,
     setPresentNPCs, getPresentNPCs,
     filterByRegion, filterByFaction, renderNPCList, renderFactionList
   };

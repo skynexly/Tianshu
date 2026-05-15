@@ -863,6 +863,17 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       } catch(e) { console.warn('[Chat] 全图NPC注入失败', e); }
     }
 
+    // 4d. 提及的地区（扫玩家最新消息 + AI最近一条消息正文，命中地区全名 → 附该地区 detail）
+    if (isGameMode) {
+      try {
+        const lastUser = [...messages].reverse().find(m => m.role === 'user');
+        const lastAI = [...messages].reverse().find(m => m.role === 'assistant');
+        const scanText = [lastUser?.content || '', lastAI?.content || ''].join('\n');
+        const mentionedPrompt = NPC.formatMentionedForPrompt(scanText, region);
+        if (mentionedPrompt) systemParts.push(mentionedPrompt);
+      } catch(e) { console.warn('[Chat] 提及地区注入失败', e); }
+    }
+
     // 5. 相关记忆（方案B：关系按NPC名直接命中，事件按地点+关键词）
 // v627：人机恋场景下也启用——只要面具+记忆库里有内容就发
 {
@@ -3639,6 +3650,17 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
             }).join('\n\n---\n\n');
           systemParts.push(text);
         }
+      } catch(e) {}
+    }
+
+    // 4d. 提及的地区（debug预览同样要展示，方便排查）
+    if (isGameMode) {
+      try {
+        const lastUser = [...messages].reverse().find(m => m.role === 'user');
+        const lastAI = [...messages].reverse().find(m => m.role === 'assistant');
+        const scanText = [lastUser?.content || '', lastAI?.content || ''].join('\n');
+        const mentionedPrompt = NPC.formatMentionedForPrompt(scanText, region);
+        if (mentionedPrompt) systemParts.push(mentionedPrompt);
       } catch(e) {}
     }
 
