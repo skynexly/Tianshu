@@ -1018,6 +1018,15 @@ if (images && images.length > 0) {
     pickMemories, filterPickMemories, _togglePickMem, confirmPickMemories, closeMemPick,
     removeAttach, exportHistory, importHistory,
     openPromptEdit, savePrompt, closePromptEdit,
-    updateFab
+    updateFab,
+    // 给手动生图弹窗用：把指定消息追加进后台消息列表并刷新渲染
+    appendExternalMessage: async (msg) => {
+      try {
+        await _ensureConvId();
+        await _loadMessages();
+        messages.push(msg);
+        _renderMessages();
+      } catch(e) { console.warn('[Backstage] appendExternalMessage failed', e); }
+    }
   };
 })();

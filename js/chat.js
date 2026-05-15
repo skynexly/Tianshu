@@ -4521,8 +4521,10 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       await DB.put('messages', msgObj);
 
       if (_imgGenSource === 'backstage') {
-        // 后台频道：用 _renderMessages 刷新
-        if (typeof Backstage !== 'undefined' && Backstage._renderMessages) Backstage._renderMessages();
+        // 后台频道：用 appendExternalMessage 追加
+        if (typeof Backstage !== 'undefined' && Backstage.appendExternalMessage) {
+          await Backstage.appendExternalMessage(msgObj);
+        }
       } else {
         messages.push(msgObj);
         appendMessage(msgObj, false, true);
