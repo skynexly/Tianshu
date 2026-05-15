@@ -66,9 +66,9 @@ return `<div class="backstage-msg-wrap ${isUser ? 'user' : 'assistant'}">
 </div>`;
 }).join('');
     container.scrollTop = container.scrollHeight;
-    // 解析 drawn:id 图片引用
+    // 解析图片占位符 [TSIMG:id|desc]
     try {
-      if (container.querySelector('img[src^="drawn:"]') && typeof Chat !== 'undefined' && Chat.resolveDrawnImagesInHTML) {
+      if (container.textContent && container.textContent.includes('[TSIMG:') && typeof Chat !== 'undefined' && Chat.resolveDrawnImagesInHTML) {
         Chat.resolveDrawnImagesInHTML(container).catch(_ => {});
       }
     } catch(_) {}
@@ -970,8 +970,8 @@ await DB.del('messages', m.id);
       const desc = m[1].trim();
       try {
         const images = await API.generateImage(desc, { n: 1, size: '1024x768' });
-        if (images && images.length > 0) {
-          // 存到 drawnImages 表，content 只放引用
+if (images && images.length > 0) {
+          // 存到 drawnImages 表，content 只放占位符 [TSIMG:id|desc]
           const imgId = 'img_' + Utils.uuid();
           await DB.put('drawnImages', {
             id: imgId,
@@ -979,7 +979,8 @@ await DB.del('messages', m.id);
             prompt: desc,
             createdAt: Date.now()
           });
-          aiMsg.content = aiMsg.content.split(m[0]).join(`![${desc.substring(0, 80)}](drawn:${imgId})`);
+          const safeDesc = desc.substring(0, 60).replace(/[\[\]\|\n]/g, ' ');
+          aiMsg.content = aiMsg.content.split(m[0]).join(`[TSIMG:${imgId}|${safeDesc}]`);
           await DB.put('messages', aiMsg);
           _renderMessages();
         } else {

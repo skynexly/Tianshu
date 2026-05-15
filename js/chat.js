@@ -2525,9 +2525,9 @@ async function retractAI(msgId) {
     // renderAll 批量调用时不滚（animate=false），避免上翻浏览历史时被反复拽到底部
     if (animate) scrollToBottomIfFollowing();
 
-    // 异步解析 drawn:id 图片引用为真实 dataURL
+    // 异步解析图片占位符 [TSIMG:id|desc] 为真实 img 元素
     try {
-      if (div.querySelector('img[src^="drawn:"]')) {
+      if (div.textContent && div.textContent.includes('[TSIMG:')) {
         resolveDrawnImagesInHTML(div).catch(_ => {});
       }
     } catch(_) {}
@@ -2646,9 +2646,9 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
     } else {
       el.innerHTML = `<div class="msg-body md-content">${Markdown.render(msg.content || '')}</div>`;
     }
-    // 解析 drawn:id 引用
+    // 解析图片占位符
     try {
-      if (el.querySelector('img[src^="drawn:"]')) {
+      if (el.textContent && el.textContent.includes('[TSIMG:')) {
         resolveDrawnImagesInHTML(el).catch(_ => {});
       }
     } catch(_) {}
@@ -4290,28 +4290,59 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     return id;
   }
 
-  // 渲染前把 drawn:imageId 引用替换成真实 dataURL
-  // 暴露给外部：appendMessage 等渲染前使用
-  async function resolveDrawnImagesInHTML(htmlOrEl) {
-    const isEl = htmlOrEl && htmlOrEl.querySelectorAll;
-    const target = isEl ? htmlOrEl : document.createElement('div');
-    if (!isEl) target.innerHTML = htmlOrEl;
-    const imgs = target.querySelectorAll('img[src^="drawn:"]');
-    for (const img of imgs) {
-      const id = img.getAttribute('src').slice(6);
-      try {
-        const rec = await DB.get('drawnImages', id);
-        if (rec && rec.dataUrl) {
-          img.setAttribute('src', rec.dataUrl);
-        } else {
-          img.setAttribute('alt', '[图片已丢失]');
-          img.setAttribute('src', '');
-        }
-      } catch(_) {
-        img.setAttribute('src', '');
+  // 渲染后扫描 [TSIMG:xxx] 占位符，替换为真实图片元素
+  // 占位符方案：markdown 不参与图片渲染，避免 base64 / drawn: 协议带来的解析问题
+  async function resolveDrawnImagesInHTML(el) {
+    if (!el || !el.querySelectorAll) return;
+    // 用 walker 找所有文本节点，扫描 [TSIMG:xxx] 占位
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    const tasks = [];
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.nodeValue && node.nodeValue.includes('[TSIMG:')) {
+        tasks.push(node);
       }
     }
-    return isEl ? target : target.innerHTML;
+    for (const textNode of tasks) {
+      const text = textNode.nodeValue;
+      const regex = /\[TSIMG:([a-z0-9_-]+)(?:\|([^\]]*))?\]/gi;
+      const matches = [...text.matchAll(regex)];
+      if (matches.length === 0) continue;
+      // 将该文本节点替换为：text片段 + img + text片段...
+      const frag = document.createDocumentFragment();
+      let lastIdx = 0;
+      for (const m of matches) {
+        if (m.index > lastIdx) {
+          frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+        }
+        const id = m[1];
+        const desc = m[2] || '';
+        try {
+          const rec = await DB.get('drawnImages', id);
+          if (rec && rec.dataUrl) {
+            const img = document.createElement('img');
+            img.src = rec.dataUrl;
+            img.alt = desc;
+            img.style.cssText = 'max-width:100%;border-radius:8px;margin:8px 0;display:block';
+            img.loading = 'lazy';
+            // 不加 onclick — 避免点击触发 window.open 加载几兆 dataURL 导致白屏
+            frag.appendChild(img);
+          } else {
+            const span = document.createElement('span');
+            span.style.cssText = 'display:inline-block;padding:8px;background:rgba(255,100,100,0.1);color:var(--text-secondary);border-radius:6px;font-size:12px';
+            span.textContent = '[图片已丢失]';
+            frag.appendChild(span);
+          }
+        } catch(_) {
+          frag.appendChild(document.createTextNode(m[0]));
+        }
+        lastIdx = m.index + m[0].length;
+      }
+      if (lastIdx < text.length) {
+        frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+      }
+      textNode.parentNode.replaceChild(frag, textNode);
+    }
   }
 
   function _updateImgGenButtons() {
@@ -4379,11 +4410,12 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       });
       if (!images || images.length === 0) throw new Error('未返回图片');
 
-      // 构建消息内容（图片存独立表，content 只放 drawn:id 引用）
+      // 构建消息内容（图片存独立表，content 只放占位符 [TSIMG:id|desc]，markdown不解析）
       let content = `[手动生图] ${prompt}\n\n`;
       for (let i = 0; i < images.length; i++) {
         const imgId = await _saveDrawnImage(images[i], prompt);
-        content += `![生成图片${i + 1}](drawn:${imgId})\n\n`;
+        const safeDesc = `生成图片${i + 1}`;
+        content += `[TSIMG:${imgId}|${safeDesc}]\n\n`;
       }
 
       // 作为系统消息插入当前对话
@@ -4447,13 +4479,18 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           // 存独立表，拿到引用ID
           const imgId = await _saveDrawnImage(images[0], desc);
           if (ph) {
-            ph.outerHTML = `<img src="${images[0]}" style="max-width:100%;border-radius:8px;margin:8px 0;cursor:pointer" onclick="window.open(this.src)" loading="lazy">`;
+            // 直接替换占位符为 img 元素，不走 markdown 渲染
+            const newImg = document.createElement('img');
+            newImg.src = images[0];
+            newImg.style.cssText = 'max-width:100%;border-radius:8px;margin:8px 0;display:block';
+            newImg.loading = 'lazy';
+            ph.parentNode.replaceChild(newImg, ph);
           }
-          // 更新消息内容：把 [IMG:] 替换成 ![](drawn:id)
+          // 更新消息内容：把 [IMG: ...] 替换成 [TSIMG:id|短描述]
           const msg = messages.find(m => m.id === msgId);
           if (msg) {
-            // 短的安全字符替换，避免特殊字符破坏 string.replace
-            msg.content = msg.content.split(matches[i][0]).join(`![${desc.substring(0, 80)}](drawn:${imgId})`);
+            const safeDesc = desc.substring(0, 60).replace(/[\[\]\|\n]/g, ' ');
+            msg.content = msg.content.split(matches[i][0]).join(`[TSIMG:${imgId}|${safeDesc}]`);
             try { delete msg._cachedFullHTML; delete msg._cachedPlainHTML; } catch(_) {}
             await DB.put('messages', msg);
           }
