@@ -858,6 +858,7 @@ async function cancelEdit() {
     else if (editingIdVar === 'editingWorldvoiceId') editingWorldvoiceId = id;
     else if (editingIdVar === 'editingBackstageId') editingBackstageId = id;
     else if (editingIdVar === 'editingTtsId') editingTtsId = id;
+    else if (editingIdVar === 'editingDrawId') editingDrawId = id;
 
     document.getElementById(`func-${type}-name`).value = preset.name || '';
     document.getElementById(`func-${type}-url`).value = preset.apiUrl || '';
