@@ -550,7 +550,7 @@ ${_stepIntro('castle', '第 3 步 · 势力', '为地区生成势力组织' + (r
     if (regions.length >= 2) {
       const ok = await UI.showConfirm(
         '一键生成提示',
-        `将为 ${regions.length} 个地区分别调用 AI，共 ${regions.length} 次请求。\n按次计费的中转站请留意消耗。\n确定开始？`
+        `将为 ${regions.length} 个地区分别调用 AI，共 ${regions.length} 次请求。\n确定开始？`
       );
       if (!ok) return;
     }
@@ -647,7 +647,7 @@ ${_stepIntro('users', '第 4 步 · 角色', '为每个势力生成 NPC 角色')
     if (tasks.length >= 2) {
       const ok = await UI.showConfirm(
         '一键生成提示',
-        `将为 ${tasks.length} 个势力分别调用 AI，共 ${tasks.length} 次请求。\n按次计费的中转站请留意消耗。\n确定开始？`
+        `将为 ${tasks.length} 个势力分别调用 AI，共 ${tasks.length} 次请求。\n确定开始？`
       );
       if (!ok) return;
     }
