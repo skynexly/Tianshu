@@ -2524,6 +2524,14 @@ async function retractAI(msgId) {
     // 只在主动追加（animate=true）+ 跟随状态下才自动滚；
     // renderAll 批量调用时不滚（animate=false），避免上翻浏览历史时被反复拽到底部
     if (animate) scrollToBottomIfFollowing();
+
+    // 异步解析 drawn:id 图片引用为真实 dataURL
+    try {
+      if (div.querySelector('img[src^="drawn:"]')) {
+        resolveDrawnImagesInHTML(div).catch(_ => {});
+      }
+    } catch(_) {}
+
     return div;
   }
 
@@ -2638,6 +2646,12 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
     } else {
       el.innerHTML = `<div class="msg-body md-content">${Markdown.render(msg.content || '')}</div>`;
     }
+    // 解析 drawn:id 引用
+    try {
+      if (el.querySelector('img[src^="drawn:"]')) {
+        resolveDrawnImagesInHTML(el).catch(_ => {});
+      }
+    } catch(_) {}
   }
 
   function renderAll() {
@@ -4264,6 +4278,42 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
 
   // ===== 生图模式 =====
 
+  // 把 base64 dataURL 存入 drawnImages 表，返回引用ID
+  async function _saveDrawnImage(dataUrl, prompt) {
+    const id = 'img_' + Utils.uuid();
+    await DB.put('drawnImages', {
+      id,
+      dataUrl,
+      prompt: prompt || '',
+      createdAt: Date.now()
+    });
+    return id;
+  }
+
+  // 渲染前把 drawn:imageId 引用替换成真实 dataURL
+  // 暴露给外部：appendMessage 等渲染前使用
+  async function resolveDrawnImagesInHTML(htmlOrEl) {
+    const isEl = htmlOrEl && htmlOrEl.querySelectorAll;
+    const target = isEl ? htmlOrEl : document.createElement('div');
+    if (!isEl) target.innerHTML = htmlOrEl;
+    const imgs = target.querySelectorAll('img[src^="drawn:"]');
+    for (const img of imgs) {
+      const id = img.getAttribute('src').slice(6);
+      try {
+        const rec = await DB.get('drawnImages', id);
+        if (rec && rec.dataUrl) {
+          img.setAttribute('src', rec.dataUrl);
+        } else {
+          img.setAttribute('alt', '[图片已丢失]');
+          img.setAttribute('src', '');
+        }
+      } catch(_) {
+        img.setAttribute('src', '');
+      }
+    }
+    return isEl ? target : target.innerHTML;
+  }
+
   function _updateImgGenButtons() {
     const s = _getConvSettings();
     const show = s.imgGen;
@@ -4329,11 +4379,12 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       });
       if (!images || images.length === 0) throw new Error('未返回图片');
 
-      // 构建消息内容
+      // 构建消息内容（图片存独立表，content 只放 drawn:id 引用）
       let content = `[手动生图] ${prompt}\n\n`;
-      images.forEach((src, i) => {
-        content += `![生成图片${i + 1}](${src})\n\n`;
-      });
+      for (let i = 0; i < images.length; i++) {
+        const imgId = await _saveDrawnImage(images[i], prompt);
+        content += `![生成图片${i + 1}](drawn:${imgId})\n\n`;
+      }
 
       // 作为系统消息插入当前对话
       const msgObj = {
@@ -4393,13 +4444,16 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       try {
         const images = await API.generateImage(desc, { n: 1, size: '1024x768' });
         if (images && images.length > 0) {
+          // 存独立表，拿到引用ID
+          const imgId = await _saveDrawnImage(images[0], desc);
           if (ph) {
             ph.outerHTML = `<img src="${images[0]}" style="max-width:100%;border-radius:8px;margin:8px 0;cursor:pointer" onclick="window.open(this.src)" loading="lazy">`;
           }
-          // 更新消息内容（将 [IMG:] 替换为 markdown 图片）
+          // 更新消息内容：把 [IMG:] 替换成 ![](drawn:id)
           const msg = messages.find(m => m.id === msgId);
           if (msg) {
-            msg.content = msg.content.replace(matches[i][0], `![${desc}](${images[0]})`);
+            // 短的安全字符替换，避免特殊字符破坏 string.replace
+            msg.content = msg.content.split(matches[i][0]).join(`![${desc.substring(0, 80)}](drawn:${imgId})`);
             try { delete msg._cachedFullHTML; delete msg._cachedPlainHTML; } catch(_) {}
             await DB.put('messages', msg);
           }
@@ -4440,6 +4494,7 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     _onConvBgPicked, _onConvBgClear,
     playVoiceForMessage, stopVoice,
     buildAIMessageHTML, appendMessage,
-    openImgGenModal, submitImgGen, _updateImgGenButtons
+    openImgGenModal, submitImgGen, _updateImgGenButtons,
+    resolveDrawnImagesInHTML
   };
 })();

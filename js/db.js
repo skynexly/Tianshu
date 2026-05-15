@@ -3,7 +3,7 @@
  */
 const DB = (() => {
   const DB_NAME = 'TextGameEngine';
-  const DB_VERSION = 8;
+  const DB_VERSION = 9;
   let db = null;
 
   const STORES = {
@@ -17,7 +17,8 @@ const DB = (() => {
     summaries: { keyPath: 'conversationId' },
     singleCards: { keyPath: 'id', indexes: ['updated'] },
     npcAvatars: { keyPath: 'id', indexes: ['updated'] },
-    ttsCache:  { keyPath: 'key', indexes: ['accessedAt'] }
+    ttsCache:  { keyPath: 'key', indexes: ['accessedAt'] },
+    drawnImages: { keyPath: 'id', indexes: ['createdAt'] }  // v9：生图独立存储，消息只存引用
   };
 
   function open() {

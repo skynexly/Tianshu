@@ -66,6 +66,12 @@ return `<div class="backstage-msg-wrap ${isUser ? 'user' : 'assistant'}">
 </div>`;
 }).join('');
     container.scrollTop = container.scrollHeight;
+    // 解析 drawn:id 图片引用
+    try {
+      if (container.querySelector('img[src^="drawn:"]') && typeof Chat !== 'undefined' && Chat.resolveDrawnImagesInHTML) {
+        Chat.resolveDrawnImagesInHTML(container).catch(_ => {});
+      }
+    } catch(_) {}
   }
 
   // 切换后台窗口显隐
@@ -965,16 +971,24 @@ await DB.del('messages', m.id);
       try {
         const images = await API.generateImage(desc, { n: 1, size: '1024x768' });
         if (images && images.length > 0) {
-          aiMsg.content = aiMsg.content.replace(m[0], `![${desc}](${images[0]})`);
+          // 存到 drawnImages 表，content 只放引用
+          const imgId = 'img_' + Utils.uuid();
+          await DB.put('drawnImages', {
+            id: imgId,
+            dataUrl: images[0],
+            prompt: desc,
+            createdAt: Date.now()
+          });
+          aiMsg.content = aiMsg.content.split(m[0]).join(`![${desc.substring(0, 80)}](drawn:${imgId})`);
           await DB.put('messages', aiMsg);
           _renderMessages();
         } else {
-          aiMsg.content = aiMsg.content.replace(m[0], `\n\n> ⚠ 图片生成失败：未返回数据\n\n`);
+          aiMsg.content = aiMsg.content.split(m[0]).join(`\n\n> ⚠ 图片生成失败：未返回数据\n\n`);
           await DB.put('messages', aiMsg);
           _renderMessages();
         }
       } catch(e) {
-        aiMsg.content = aiMsg.content.replace(m[0], `\n\n> ⚠ 图片生成失败：${e.message}\n\n`);
+        aiMsg.content = aiMsg.content.split(m[0]).join(`\n\n> ⚠ 图片生成失败：${e.message}\n\n`);
         await DB.put('messages', aiMsg);
         _renderMessages();
       }
