@@ -714,6 +714,12 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
     const container = document.getElementById('gaiden-list');
     if (!container) return;
 
+    // 图片 tab 走独立逻辑（数据源是 drawnImages 表，不是 gaidenList）
+    if (_collectionTab === 'image') {
+      _renderImageGrid(container);
+      return;
+    }
+
     // 按类型过滤
     let filtered = gaidenList;
     if (_collectionTab === 'gaiden') {
@@ -796,6 +802,44 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
         </div>`;
       }
     }).join('');
+  }
+
+  // 图片网格渲染（数据源：drawnImages 表）
+  async function _renderImageGrid(container) {
+    container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:40px 0;font-size:13px">加载中…</p>';
+    try {
+      const all = await DB.getAll('drawnImages');
+      const list = (all || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      if (list.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:40px 0;font-size:13px">还没有生成的图片<br>在对话设置开启「生图模式」后，让 AI 画图</p>';
+        return;
+      }
+      const cards = list.map(img => {
+        const ts = new Date(img.createdAt || 0);
+        const pad = n => String(n).padStart(2, '0');
+        const tsStr = `${pad(ts.getMonth()+1)}.${pad(ts.getDate())} ${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
+        const promptShort = (img.prompt || '').substring(0, 30);
+        return `<div class="tsimg-card" data-id="${img.id}" style="background:var(--bg-tertiary);border-radius:8px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column">
+          <div style="aspect-ratio:1/1;overflow:hidden;background:#000">
+            <img src="${img.dataUrl}" style="width:100%;height:100%;object-fit:cover" loading="lazy">
+          </div>
+          <div style="padding:6px 8px;font-size:11px;color:var(--text-secondary);line-height:1.4">
+            <div style="opacity:0.7;margin-bottom:2px">${tsStr}</div>
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(promptShort) || '(无描述)'}</div>
+          </div>
+        </div>`;
+      }).join('');
+      container.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${cards}</div>`;
+      // 绑点击
+      container.querySelectorAll('.tsimg-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const id = card.dataset.id;
+          if (typeof Chat !== 'undefined' && Chat.openImageLightbox) Chat.openImageLightbox(id);
+        });
+      });
+    } catch(e) {
+      container.innerHTML = `<p style="text-align:center;color:var(--danger);padding:40px 0;font-size:13px">加载失败：${Utils.escapeHtml(e.message)}</p>`;
+    }
   }
 
   async function toggleFilter(type) {

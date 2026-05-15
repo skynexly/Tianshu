@@ -4290,8 +4290,78 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     return id;
   }
 
+  // 下载图片到本地（手机一般会进相册的 Download 目录）
+  async function downloadImage(imgId) {
+    try {
+      const rec = await DB.get('drawnImages', imgId);
+      if (!rec || !rec.dataUrl) {
+        UI.showToast('图片已丢失', 1500);
+        return;
+      }
+      const ts = new Date(rec.createdAt || Date.now());
+      const pad = n => String(n).padStart(2, '0');
+      const fname = `tianshu_${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.png`;
+      const a = document.createElement('a');
+      a.href = rec.dataUrl;
+      a.download = fname;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { try { document.body.removeChild(a); } catch(_) {} }, 100);
+      UI.showToast('已保存到下载目录', 1500);
+    } catch(e) {
+      UI.showToast('保存失败: ' + e.message, 2000);
+    }
+  }
+
+  // 弹出图片放大查看 + 详情
+  async function openImageLightbox(imgId) {
+    try {
+      const rec = await DB.get('drawnImages', imgId);
+      if (!rec || !rec.dataUrl) { UI.showToast('图片已丢失', 1500); return; }
+      let modal = document.getElementById('tsimg-lightbox');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'tsimg-lightbox';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+        modal.addEventListener('click', (ev) => {
+          if (ev.target === modal) modal.remove();
+        });
+        document.body.appendChild(modal);
+      }
+      const ts = new Date(rec.createdAt || Date.now());
+      const pad = n => String(n).padStart(2, '0');
+      const tsStr = `${ts.getFullYear()}.${pad(ts.getMonth()+1)}.${pad(ts.getDate())} ${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
+      modal.innerHTML = `
+        <button type="button" id="tsimg-lightbox-close" style="position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;z-index:1">×</button>
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;width:100%;overflow:auto">
+          <img src="${rec.dataUrl}" style="max-width:100%;max-height:100%;border-radius:8px">
+        </div>
+        <div style="width:100%;max-width:600px;margin-top:12px;color:#ddd;font-size:12px;display:flex;flex-direction:column;gap:6px">
+          <div style="opacity:0.6">${tsStr}</div>
+          <div style="line-height:1.6;max-height:120px;overflow-y:auto;padding:8px;background:rgba(255,255,255,0.06);border-radius:6px">${Utils.escapeHtml(rec.prompt || '(无描述)')}</div>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button type="button" id="tsimg-lightbox-save" style="flex:1;padding:10px;border:none;border-radius:8px;background:var(--accent);color:#111;font-weight:600;cursor:pointer">保存到相册</button>
+            <button type="button" id="tsimg-lightbox-delete" style="flex:1;padding:10px;border:1px solid rgba(255,100,100,0.5);border-radius:8px;background:none;color:#ff7070;cursor:pointer">删除</button>
+          </div>
+        </div>`;
+      modal.querySelector('#tsimg-lightbox-close').addEventListener('click', () => modal.remove());
+      modal.querySelector('#tsimg-lightbox-save').addEventListener('click', () => downloadImage(imgId));
+      modal.querySelector('#tsimg-lightbox-delete').addEventListener('click', async () => {
+        const ok = await UI.showConfirm('删除图片', '从图库中删除这张图？\n（消息里的占位符会保留显示"图片已丢失"）');
+        if (!ok) return;
+        try { await DB.del('drawnImages', imgId); } catch(_) {}
+        modal.remove();
+        UI.showToast('已删除', 1200);
+        // 如果当前在收藏页且是图片tab，刷新一下
+        try { if (typeof Gaiden !== 'undefined' && Gaiden.renderList) Gaiden.renderList(); } catch(_) {}
+      });
+    } catch(e) {
+      UI.showToast('打开失败: ' + e.message, 2000);
+    }
+  }
+
   // 渲染后扫描 [TSIMG:xxx] 占位符，替换为真实图片元素
-  // 占位符方案：markdown 不参与图片渲染，避免 base64 / drawn: 协议带来的解析问题
   async function resolveDrawnImagesInHTML(el) {
     if (!el || !el.querySelectorAll) return;
     // 用 walker 找所有文本节点，扫描 [TSIMG:xxx] 占位
@@ -4320,13 +4390,34 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         try {
           const rec = await DB.get('drawnImages', id);
           if (rec && rec.dataUrl) {
+            const wrap = document.createElement('span');
+            wrap.style.cssText = 'position:relative;display:block;margin:8px 0';
             const img = document.createElement('img');
             img.src = rec.dataUrl;
             img.alt = desc;
-            img.style.cssText = 'max-width:100%;border-radius:8px;margin:8px 0;display:block';
+            img.style.cssText = 'max-width:100%;border-radius:8px;display:block;cursor:pointer';
             img.loading = 'lazy';
-            // 不加 onclick — 避免点击触发 window.open 加载几兆 dataURL 导致白屏
-            frag.appendChild(img);
+            img.dataset.tsimgId = id;
+            // 点击 → 弹 lightbox（不走 window.open）
+            img.addEventListener('click', (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              openImageLightbox(id);
+            });
+            // 右下角保存按钮
+            const saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.title = '保存到相册';
+            saveBtn.style.cssText = 'position:absolute;right:8px;bottom:8px;width:32px;height:32px;border-radius:50%;border:none;background:rgba(0,0,0,0.55);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+            saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+            saveBtn.addEventListener('click', (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              downloadImage(id);
+            });
+            wrap.appendChild(img);
+            wrap.appendChild(saveBtn);
+            frag.appendChild(wrap);
           } else {
             const span = document.createElement('span');
             span.style.cssText = 'display:inline-block;padding:8px;background:rgba(255,100,100,0.1);color:var(--text-secondary);border-radius:6px;font-size:12px';
@@ -4532,6 +4623,6 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     playVoiceForMessage, stopVoice,
     buildAIMessageHTML, appendMessage,
     openImgGenModal, submitImgGen, _updateImgGenButtons,
-    resolveDrawnImagesInHTML
+    resolveDrawnImagesInHTML, downloadImage, openImageLightbox
   };
 })();
