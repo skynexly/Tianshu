@@ -792,7 +792,7 @@ function _syncBuiltinRestoreButton(w) {
     _editReturnTo = (opts && opts.returnTo) || null;
     closePreview(); // 关闭预览弹窗（如果有的话）
     UI.showPanel('worldview-edit');
-    _loadEditForm(id);
+    await _loadEditForm(id);
   }
   // 给外部调用：编辑面板返回时的目标路径
   function getEditReturnTo() {
