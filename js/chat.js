@@ -1066,7 +1066,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         if (_convForEvt && !_convForEvt.eventStates) _convForEvt.eventStates = {};
         const _wvEvents = (convSettings.eventsEnabled !== false) ? (currentWv.events || []) : [];
         if (wantSrc.length > 0 || _wvEvents.length > 0) {
-          const extInj = _buildExtendedInjections(wantSrc, messages, _wvEvents, _convForEvt ? _convForEvt.eventStates : {});
+          const extInj = _buildExtendedInjections(wantSrc, messages, _wvEvents, _convForEvt ? _convForEvt.eventStates : {}, { wv: currentWv });
           if (_wvEvents.length > 0 && _convForEvt) { try { await Conversations.saveList(); } catch(_) {} }
           // system_top：放进 apiMessages 最前面（紧跟原有 system）
           // 找到第一条非 system 的位置，插在它前面
@@ -3334,7 +3334,8 @@ return `【世界观·相关知识】\n（根据最近对话内容触发，请�
   function _getCustomAttrValueForEvent(cond, wvOverride) {
     try {
       const status = Conversations.getStatusBar() || {};
-      const wv = wvOverride || ((typeof Worldview !== 'undefined' && Worldview.getCurrent) ? Worldview.getCurrent() : null);
+      // 注意：Worldview.getCurrent() 是 async，不能同步调用。必须由调用方 await 后通过 wvOverride 传入。
+      const wv = wvOverride || null;
       if (!cond || !wv) return null;
       if (cond.scope === 'character') {
         const card = (wv.gameplay?.characterAttrs || []).find(c => [c?.targetType || '', c?.targetId || '', c?.sourceWorldviewId || ''].join(':') === cond.targetKey);
@@ -3890,7 +3891,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           const _scEvtStates = _scConv?.eventStates ? { ..._scConv.eventStates } : {};
           const _scEvents = (convSettings.eventsEnabled !== false) ? (currentWv.events || []) : [];
           if (wantSrc.length > 0 || _scEvents.length > 0) {
-            const extInj = _buildExtendedInjections(wantSrc, messages, _scEvents, _scEvtStates);
+            const extInj = _buildExtendedInjections(wantSrc, messages, _scEvents, _scEvtStates, { wv: currentWv });
             if (extInj.systemTop.length > 0) {
               let firstNonSystemIdx = apiMessages.findIndex(m => m.role !== 'system');
               if (firstNonSystemIdx === -1) firstNonSystemIdx = apiMessages.length;
