@@ -685,7 +685,7 @@ if (placeholder) placeholder.style.display = '';
     if (!targetId) targetId = editingMaskId;
     if (!targetId) return;
     const list = await getMaskList();
-    if (list.length <= 1) { alert('至少保留一个面具'); return; }
+    if (list.length <= 1) { UI.showToast('至少保留一个面具', 1800); return; }
     if (!await UI.showConfirm('确认删除', '确定删除此面具？')) return;
 
     await DB.del('characters', targetId);

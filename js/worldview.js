@@ -578,6 +578,28 @@ function _defaultRegion() {
     }
   }
 
+  // ---- 状态栏风格下拉（自定义组件替代原生 select）----
+  function _toggleSkinDropdown() {
+    const trigger = document.getElementById('wv-skin-trigger');
+    if (trigger && trigger.getAttribute('data-locked') === '1') { UI.showToast('内置世界观不可修改风格', 1500); return; }
+    const dd = document.getElementById('wv-skin-dropdown');
+    if (dd) dd.classList.toggle('hidden');
+  }
+  function _selectSkin(value) {
+    const hidden = document.getElementById('wv-statusbar-skin');
+    if (hidden) hidden.value = value;
+    const labelMap = { neumorph: '拟态风格', terminal: '终端风格' };
+    const label = document.getElementById('wv-skin-label');
+    if (label) label.textContent = labelMap[value] || value;
+    const dd = document.getElementById('wv-skin-dropdown');
+    if (dd) {
+      dd.classList.add('hidden');
+      dd.querySelectorAll('.custom-dropdown-item').forEach(el => el.classList.toggle('active', el.dataset.value === value));
+    }
+    // 触发自动保存
+    if (hidden) hidden.dispatchEvent(new Event('change'));
+  }
+
   function _applyStatusBarSkin(w) {
   try {
     if (!w) { document.body.removeAttribute('data-sb-skin'); return; }
@@ -844,7 +866,17 @@ function _syncBuiltinRestoreButton(w) {
     const _fmN = document.getElementById('wv-forum-name'); if (_fmN) _fmN.value = _paFm.name || '';
     const _fmD = document.getElementById('wv-forum-desc'); if (_fmD) _fmD.value = _paFm.desc || '';
     const _skin = document.getElementById('wv-statusbar-skin');
-    if (_skin) { _skin.value = w.statusBarSkin || 'terminal'; _skin.disabled = _isBuiltinWorldview(w); }
+    if (_skin) {
+      const skinVal = w.statusBarSkin || 'terminal';
+      _skin.value = skinVal;
+      const labelMap = { neumorph: '拟态风格', terminal: '终端风格' };
+      const skinLabel = document.getElementById('wv-skin-label');
+      if (skinLabel) skinLabel.textContent = labelMap[skinVal] || skinVal;
+      const skinDd = document.getElementById('wv-skin-dropdown');
+      if (skinDd) skinDd.querySelectorAll('.custom-dropdown-item').forEach(el => el.classList.toggle('active', el.dataset.value === skinVal));
+      const skinTrigger = document.getElementById('wv-skin-trigger');
+      if (skinTrigger) { skinTrigger.style.opacity = _isBuiltinWorldview(w) ? '0.5' : '1'; if (_isBuiltinWorldview(w)) skinTrigger.setAttribute('data-locked', '1'); else skinTrigger.removeAttribute('data-locked'); }
+    }
     document.getElementById('wv-start-time').value = w.startTime || '';
     document.getElementById('wv-start-plot').value = w.startPlot || '';
     document.getElementById('wv-start-plot-rounds').value = w.startPlotRounds ?? 5;
@@ -1303,7 +1335,8 @@ switchEditTab('basic');
     }
     let html = '';
     regions.forEach((reg, ri) => {
-      const facCount = (reg.factions || []).length;
+      const realFacs = (reg.factions || []).filter(f => f.name && f.name !== '默认势力');
+      const facCount = realFacs.length;
       const npcCount = (reg.factions || []).reduce((sum, f) => sum + (f.npcs || []).length, 0);
       html += `<div class="card" onclick="Worldview.openRegionEdit(${ri})" style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-tertiary);cursor:pointer;margin-bottom:8px;border-radius:8px">
  <div style="flex:1;min-width:0">
@@ -1779,10 +1812,17 @@ async function deleteGameplayAttr(scope, charIdx, attrIdx) {
 }
 
 async function deleteGameplayAttrFromModal() {
-  if (!_attrModalCtx || _attrModalCtx.isNew) return;
-  await deleteGameplayAttr(_attrModalCtx.scope, _attrModalCtx.charIdx, _attrModalCtx.attrIdx);
-  closeGameplayAttrModal();
-}
+    if (!_attrModalCtx || _attrModalCtx.isNew) return;
+    const w = await DB.get('worldviews', editingWorldviewId);
+    if (!w) return;
+    const gp = _ensureGameplay(w);
+    const list = _attrModalCtx.scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[_attrModalCtx.charIdx]?.attrs || []);
+    const attr = list[_attrModalCtx.attrIdx];
+    const name = attr?.name || '此属性';
+    if (!await UI.showConfirm('删除属性', `确定删除「${name}」？\n删除后，对话中该属性的累计数值也将失效。`)) return;
+    await deleteGameplayAttr(_attrModalCtx.scope, _attrModalCtx.charIdx, _attrModalCtx.attrIdx);
+    closeGameplayAttrModal();
+  }
 
 async function deleteGameplayCharacter(idx) {
   if (!editingWorldviewId) return;
@@ -2353,20 +2393,34 @@ function closeKnowledgeModal() {
   }
   function _isEditingHiddenWv() {
     try { return isHiddenWv(window.__wvEditingCache); } catch(_) { return false; }
-  }
-  function syncEventTriggerTypeUI() {
+function syncEventTriggerTypeUI() {
     const typeEl = document.getElementById('wv-event-modal-trigger-type');
-    const typeRow = typeEl?.closest('.form-group');
+    const typeRow = document.getElementById('wv-event-trigger-type-row');
     const hidden = _isEditingHiddenWv();
     if (hidden && typeEl) typeEl.value = 'keyword';
     if (typeRow) typeRow.classList.toggle('hidden', hidden);
     const type = hidden ? 'keyword' : (typeEl?.value || 'keyword');
+    // 同步 segmented control 按钮样式
+    const seg = document.getElementById('wv-event-trigger-seg');
+    if (seg) seg.querySelectorAll('button').forEach(btn => {
+      const active = btn.dataset.value === type;
+      btn.style.background = active ? 'var(--accent)' : 'var(--bg-tertiary)';
+      btn.style.color = active ? '#111' : 'var(--text-secondary)';
+      btn.style.fontWeight = active ? '600' : '400';
+    });
     document.getElementById('wv-event-keyword-row')?.classList.toggle('hidden', type === 'attr');
     document.getElementById('wv-event-attr-row')?.classList.toggle('hidden', type !== 'attr');
     if (type === 'attr') {
       if (_eventAttrConditionsDraft.length === 0) addEventAttrCondition();
       else _renderEventAttrConditions();
     }
+  }
+  function _toggleEventTriggerDropdown() {}
+  function _selectEventTrigger(value) {
+    const typeEl = document.getElementById('wv-event-modal-trigger-type');
+    if (typeEl) typeEl.value = value;
+    syncEventTriggerTypeUI();
+  }
   }
   function _renderEventAttrConditions() {
     const box = document.getElementById('wv-event-attr-conditions');
@@ -2381,9 +2435,9 @@ function closeKnowledgeModal() {
       const curVal = c.scope === 'character' ? `character||${c.targetKey || ''}||${c.attrId || ''}` : `global|||${c.attrId || ''}`;
       const optHtml = opts.map(o => `<option value="${Utils.escapeHtml(o.value)}" ${o.value === curVal ? 'selected' : ''}>${Utils.escapeHtml(o.label)}</option>`).join('');
       return `<div style="display:grid;grid-template-columns:1fr 64px 74px 32px;gap:6px;align-items:center">
-        <select onchange="Worldview.updateEventAttrCondition(${i}, 'attr', this.value)" style="min-width:0;width:100%;box-sizing:border-box">${optHtml}</select>
-        <select onchange="Worldview.updateEventAttrCondition(${i}, 'operator', this.value)" style="width:100%;box-sizing:border-box">${opHtml}</select>
-        <input type="number" value="${Utils.escapeHtml(c.value ?? 0)}" oninput="Worldview.updateEventAttrCondition(${i}, 'value', this.value)" style="width:100%;box-sizing:border-box">
+        <select onchange="Worldview.updateEventAttrCondition(${i}, 'attr', this.value)" class="custom-select-btn" style="min-width:0;width:100%;box-sizing:border-box;padding:7px 8px;font-size:12px">${optHtml}</select>
+        <select onchange="Worldview.updateEventAttrCondition(${i}, 'operator', this.value)" class="custom-select-btn" style="width:100%;box-sizing:border-box;padding:7px 8px;font-size:12px;text-align:center">${opHtml}</select>
+        <input type="number" value="${Utils.escapeHtml(c.value ?? 0)}" oninput="Worldview.updateEventAttrCondition(${i}, 'value', this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:12px">
         <button type="button" onclick="Worldview.removeEventAttrCondition(${i})" style="width:32px;height:32px;border:1px solid var(--border);background:none;border-radius:6px;color:var(--danger);cursor:pointer">×</button>
       </div>`;
     }).join('');
@@ -3636,7 +3690,7 @@ async function pickDefaultTheme(value) {
     switchEditTab,
 switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromMenu, toggleExtIoMenu, exportExtended, importExtended,
     toggleCustomEnabled, toggleKnowledgeEnabled, toggleFestivalEnabled,
-    addEvent, editEvent, saveEventFromModal, deleteEventFromModal, closeEventModal, syncEventTriggerTypeUI, addEventAttrCondition, updateEventAttrCondition, removeEventAttrCondition,
+    addEvent, editEvent, saveEventFromModal, deleteEventFromModal, closeEventModal, syncEventTriggerTypeUI, _toggleEventTriggerDropdown, _selectEventTrigger, addEventAttrCondition, updateEventAttrCondition, removeEventAttrCondition,
     _onCardClick,
     handleIconImageUpload,
     clearIconImage,
@@ -3655,6 +3709,7 @@ toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, sele
     openViewer, switchViewerTab, filterViewerNPCs,
     toggleViewerNPCDropdown, selectViewerNPCFilter,
     toggleScopeDropdown,
+    _toggleSkinDropdown, _selectSkin,
     selectWorldview,
     toggleThemeDropdown, selectTheme,
     openDefaultThemePicker, closeDefaultThemePicker, pickDefaultTheme,

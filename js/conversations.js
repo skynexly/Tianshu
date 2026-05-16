@@ -389,7 +389,7 @@ async function init() {
   }
 
   async function remove(id) {
-    if (list.length <= 1) { alert('至少保留一个对话'); return; }
+    if (list.length <= 1) { UI.showToast('至少保留一个对话', 1800); return; }
     const conv = list.find(c => c.id === id);
     if (!await UI.showConfirm('确认删除', `确定删除「${conv?.name || id}」？`)) return;
 
@@ -1204,7 +1204,7 @@ const allArchives = await DB.getAll('archives');
   async function createBranchFromConv(id) {
     if (id !== currentId) await switchTo(id);
     const msgs = Chat.getMessages();
-    if (msgs.length === 0) { alert('该对话没有消息，无法创建分支'); return; }
+    if (msgs.length === 0) { UI.showToast('该对话没有消息，无法创建分支', 1800); return; }
     Chat.createBranch(msgs[msgs.length - 1].id);
   }
 

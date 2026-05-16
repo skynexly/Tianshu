@@ -183,7 +183,7 @@ const container = document.getElementById('backstage-messages');
       Chat._openFilePreview(f.name, f.content);
     } else {
       // fallback: 调 Chat.previewFile 通过临时挂载
-      alert(f.content.slice(0, 2000));
+      UI.showToast('文件预览不可用', 1800);
     }
   }
 

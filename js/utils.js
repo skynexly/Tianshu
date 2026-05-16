@@ -505,7 +505,7 @@ async function copyFromDataset(btn) {
     if (ok) {
       if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已复制', 1500);
     } else {
-      prompt('复制以下内容：', text);
+      UI.showToast('复制失败，请手动复制', 2000);
     }
   }
 

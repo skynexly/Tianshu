@@ -1035,7 +1035,7 @@ participants: document.getElementById('mem-edit-participants-input').value.split
       navigator.clipboard.writeText(text);
       GameLog.log('info', '已复制为文本');
     } catch(e) {
-      prompt('复制以下内容：', text);
+      UI.showToast('复制失败，请手动复制', 2000);
     }
   }
 
@@ -1184,7 +1184,7 @@ participants: document.getElementById('mem-edit-participants-input').value.split
       await navigator.clipboard.writeText(text);
       GameLog.log('info', '已复制记忆');
     } catch(e) {
-      prompt('复制以下内容：', text);
+      UI.showToast('复制失败，请手动复制', 2000);
     }
   }
 

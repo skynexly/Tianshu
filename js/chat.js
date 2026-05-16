@@ -3114,7 +3114,7 @@ menu.classList.add('hidden');
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-      if (pendingImages.length >= 3) { alert('最多3张图片'); return; }
+      if (pendingImages.length >= 3) { UI.showToast('最多3张图片', 1800); return; }
       pendingImages.push({
         base64: e.target.result,
         name: file.name,
