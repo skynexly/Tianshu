@@ -34,9 +34,14 @@ const NPC = (() => {
           text += `  ├ ${f.name}`;
           if (f.summary) text += `：${f.summary}`;
           text += '\n';
-          // 该势力下的NPC
+          // 该势力下的NPC（同势力名 + 同地区，避免「默认势力」这种重名势力跨地区串台）
           if (includeNpc) {
-            const npcs = npcData.filter(n => n.faction === f.name);
+            const npcs = npcData.filter(n => {
+              if (n.faction !== f.name) return false;
+              // 没标 regions 的旧数据兜底：只按 faction 名匹配
+              if (!n.regions || n.regions.length === 0) return true;
+              return n.regions.includes(r.id) || n.regions.includes(r.name);
+            });
             npcs.forEach(n => {
               text += `  │  └ ${n.name}`;
               if (n.aliases) text += `（${n.aliases}）`;

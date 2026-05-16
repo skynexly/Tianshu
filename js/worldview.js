@@ -2491,13 +2491,13 @@ function closeKnowledgeModal() {
       const flatFacs = [];
       const flatRegions = [];
       (w.regions || []).forEach(reg => {
-        flatRegions.push({ name: reg.name, summary: reg.summary, detail: reg.detail });
-        (reg.factions || []).forEach(fac => {
-          flatFacs.push({ name: fac.name, summary: fac.summary, detail: fac.detail, regionName: reg.name });
-          (fac.npcs || []).forEach(npc => {
-            flatNpcs.push({ ...npc, regionName: reg.name, factionName: fac.name });
+          flatRegions.push({ id: reg.id, name: reg.name, summary: reg.summary, detail: reg.detail });
+          (reg.factions || []).forEach(fac => {
+            flatFacs.push({ id: fac.id, name: fac.name, summary: fac.summary, detail: fac.detail, regionName: reg.name, regionId: reg.id });
+            (fac.npcs || []).forEach(npc => {
+              flatNpcs.push({ ...npc, faction: fac.name, regions: [reg.id || reg.name], regionName: reg.name, factionName: fac.name });
+            });
           });
-        });
       });
       NPC.init({ npcs: flatNpcs, factions: flatFacs, regions: flatRegions });
     } catch(e) { console.warn('[Worldview] sync NPC 失败', e); }

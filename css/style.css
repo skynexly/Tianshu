@@ -1930,7 +1930,8 @@ input[type="range"] {
   max-width: 520px !important;
   width: min(520px, calc(100vw - 28px)) !important;
   padding: 0 !important;
-  overflow: hidden !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
   border-radius: 20px !important;
   border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border)) !important;
   background:
@@ -2002,7 +2003,7 @@ input[type="range"] {
 .wv-gen-status { margin-bottom:12px; font-size:13px; color:var(--text-secondary); display:none; padding:10px 12px; border-radius:12px; background: color-mix(in srgb, var(--accent) 7%, var(--bg-tertiary)); border:1px solid color-mix(in srgb, var(--accent) 18%, var(--border)); }
 .wv-gen-actions { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; padding-top:2px; }
 .wv-gen-btn { padding:9px 16px; border-radius:11px; cursor:pointer; font-size:14px; font-family:inherit; border:1px solid var(--border); background:transparent; color:var(--text); display:inline-flex; align-items:center; gap:6px; justify-content:center; }
-.wv-gen-btn.primary { padding:9px 20px; border:none; background:linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 74%, #fff)); color:#111; font-weight:700; box-shadow:0 8px 20px color-mix(in srgb, var(--accent) 18%, transparent); }
+.wv-gen-btn.primary { padding:9px 20px; border:none; background:linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 74%, #fff)); color:#111; font-weight:700; }
 .wv-gen-btn:disabled { cursor:not-allowed; opacity:.55; }
 .wv-gen-summary { padding:14px; border:1px solid color-mix(in srgb, var(--accent) 18%, var(--border)); border-radius:16px; background:color-mix(in srgb, var(--bg-tertiary) 72%, transparent); margin-bottom:12px; font-size:12px; color:var(--text-secondary); }
 .wv-gen-mini-svg { width:15px; height:15px; vertical-align:-2px; color:var(--accent); }

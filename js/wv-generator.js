@@ -893,6 +893,7 @@ ${_stepIntro('message', '第 5 步 · 开场剧情', '生成开场时间、剧�
     if (regions.length) {
       wv.regions = regions.map(r => {
         const regionFacs = (factions[r.name] || []).map(f => ({
+          id: 'fac_' + Utils.uuid().slice(0,8),
           name: f.name || '',
           summary: f.description || '',
           detail: f.setting || '',
@@ -900,9 +901,10 @@ ${_stepIntro('message', '第 5 步 · 开场剧情', '生成开场时间、剧�
         }));
         // 如果没势力，建一个默认
         if (!regionFacs.length) {
-          regionFacs.push({ name: '默认势力', summary: '', detail: '', npcs: [] });
+          regionFacs.push({ id: 'fac_' + Utils.uuid().slice(0,8), name: '默认势力', summary: '', detail: '', npcs: [] });
         }
         return {
+          id: 'reg_' + Utils.uuid().slice(0,8),
           name: r.name || '',
           summary: r.description || '',
           detail: r.setting || '',
@@ -1058,10 +1060,11 @@ ${_stepIntro('message', '第 5 步 · 开场剧情', '生成开场时间、剧�
         if (w) {
           for (const r of arr) {
             w.regions.push({
+              id: 'reg_' + Utils.uuid().slice(0,8),
               name: r.name || '',
               summary: r.description || '',
               detail: r.setting || '',
-              factions: [{ name: '默认势力', summary: '', detail: '', npcs: [] }]
+              factions: [{ id: 'fac_' + Utils.uuid().slice(0,8), name: '默认势力', summary: '', detail: '', npcs: [] }]
             });
           }
           await Worldview._saveEditingWV(w);
