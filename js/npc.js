@@ -164,22 +164,25 @@ const NPC = (() => {
    */
   function parseRegionFromOutput(parsed) {
     const regionText = (parsed.header?.region || '').trim();
-    if (!regionText) return currentRegion;
-    
-    // 直接用完整文本匹配
-    const directMatch = regionData.find(r =>
-      r.name === regionText || r.aliases?.includes(regionText)
-    );
-    if (directMatch) return directMatch.id || directMatch.name;
-    
-    // 模糊匹配：AI输出包含地区名，或者地区名包含AI输出
-    const fuzzyMatch = regionData.find(r => {
-      if (regionText.includes(r.name) || r.name.includes(regionText)) return true;
-      if (r.aliases) return r.aliases.some(a => regionText.includes(a) || a.includes(regionText));
-      return false;
-    });
-    if (fuzzyMatch) return fuzzyMatch.id || fuzzyMatch.name;
-    
+    const locationText = (parsed.header?.location || '').trim();
+    // 依次尝试 region → location，因为 AI 有时会把地区名放进小地点
+    const candidates = [regionText, locationText].filter(Boolean);
+    for (const text of candidates) {
+      // 精确匹配
+      const directMatch = regionData.find(r =>
+        r.name === text || r.aliases?.includes(text)
+      );
+      if (directMatch) return directMatch.id || directMatch.name;
+
+      // 模糊匹配：文本包含地区名，或者地区名包含文本
+      const fuzzyMatch = regionData.find(r => {
+        if (text.includes(r.name) || r.name.includes(text)) return true;
+        if (r.aliases) return r.aliases.some(a => text.includes(a) || a.includes(text));
+        return false;
+      });
+      if (fuzzyMatch) return fuzzyMatch.id || fuzzyMatch.name;
+    }
+
     return currentRegion;
   }
 

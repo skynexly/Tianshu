@@ -1265,6 +1265,11 @@
             </span>
           </label>
           <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后不再发送内置回复格式提示词，AI回复仅做Markdown渲染。关闭格式可能导致无法命中详细设定与扩展设定中的内容</span>
+<div style="display:flex;align-items:center;gap:10px;margin-top:-4px">
+<span style="font-size:13px;color:var(--text);white-space:nowrap">正文字数</span>
+<input type="number" id="cs-reply-wordcount" value="800" min="200" max="3000" step="100" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;text-align:center">
+<span style="font-size:11px;color:var(--text-secondary)">字（建议 400-1500）</span>
+</div>
           <label class="circle-check-label">
             <span class="circle-check-text">后台频道</span>
             <span style="position:relative;display:inline-flex">
