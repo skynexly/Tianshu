@@ -3770,12 +3770,13 @@ body[data-sb-skin="terminal"] .sb-character-attr-card {
   max-width: 300px;
   border-radius: 0;
   box-shadow: none;
-  padding: 10px;
+  padding: 8px 10px;
   scroll-snap-align: start;
   box-sizing: border-box;
   font-family: var(--font-family, inherit);
   background: transparent;
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border: none;
+  border-left: 2px solid var(--accent);
 }
 body[data-sb-skin="terminal"] .sb-character-attr-name {
   font-size: 13px;
@@ -3786,14 +3787,12 @@ body[data-sb-skin="terminal"] .sb-character-attr-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  padding-bottom: 6px;
+  margin-bottom: 6px;
 }
-body[data-sb-skin="terminal"] .sb-character-attr-name::before {
-  content: '+-- ';
-  color: var(--text-secondary);
-  font-weight: normal;
+body[data-sb-skin="terminal"] .sb-character-attr-name::after {
+  content: '_';
+  color: var(--text);
+  opacity: 1;
 }
 body[data-sb-skin="terminal"] .sb-character-attr-lines {
   display: flex;
@@ -3845,72 +3844,32 @@ body[data-sb-skin="terminal"] .sb-character-attr-row b {
 body[data-sb-skin="terminal"] .sb-character-attr-bar {
   display: none;
 }
-/* 终端风格：任务系统卡片 — 取景框四角 + 透明背景 + 无阴影 */
+/* 终端风格：任务系统卡片 — 透明背景 + 无阴影 + 虚线边框 */
+body[data-sb-skin="terminal"] #sb-task-system .hs-module-title {
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
 body[data-sb-skin="terminal"] #sb-task-system .hs-mission-card {
   background: transparent;
   border: none;
   box-shadow: none;
   border-radius: 0;
   position: relative;
-  padding: 18px 20px;
+  padding: 0;
 }
-body[data-sb-skin="terminal"] #sb-task-system .hs-mission-card::before,
-body[data-sb-skin="terminal"] #sb-task-system .hs-mission-card::after {
-  content: '';
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  pointer-events: none;
-}
-body[data-sb-skin="terminal"] #sb-task-system .hs-mission-card::before {
-  top: 0; left: 0;
-  border-top: 2px solid var(--accent);
-  border-left: 2px solid var(--accent);
-}
-body[data-sb-skin="terminal"] #sb-task-system .hs-mission-card::after {
-  top: 0; right: 0;
-  border-top: 2px solid var(--accent);
-  border-right: 2px solid var(--accent);
-}
-/* 下方两角：用 mission-card 内第一个子元素的 hack 不行，用 outline + clip 也不优雅，
-   这里用 task-list 末尾的 padding 区域放一个绝对定位的 wrapper */
 body[data-sb-skin="terminal"] #sb-task-system .hs-mission-section {
   position: relative;
 }
-body[data-sb-skin="terminal"] #sb-task-system .hs-mission-section::before,
-body[data-sb-skin="terminal"] #sb-task-system .hs-mission-section::after {
-  content: '';
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  pointer-events: none;
-  bottom: 0;
-}
-body[data-sb-skin="terminal"] #sb-task-system .hs-mission-section::before {
-  left: 0;
-  border-bottom: 2px solid var(--accent);
-  border-left: 2px solid var(--accent);
-}
-body[data-sb-skin="terminal"] #sb-task-system .hs-mission-section::after {
-  right: 0;
-  border-bottom: 2px solid var(--accent);
-  border-right: 2px solid var(--accent);
-}
 body[data-sb-skin="terminal"] #sb-task-system .hs-score-track {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-secondary) 30%, transparent);
+  box-shadow: none;
   border-radius: 0;
-  height: 8px;
-  background: transparent;
+  height: 6px;
+  background: color-mix(in srgb, var(--text-secondary) 20%, transparent);
+  border: none;
 }
 body[data-sb-skin="terminal"] #sb-task-system .hs-score-fill {
   border-radius: 0;
-  background: repeating-linear-gradient(
-    to right,
-    var(--accent),
-    var(--accent) 4px,
-    transparent 4px,
-    transparent 6px
-  );
+  background: var(--accent);
 }
 /* 终端风格：任务项 — 命令行符号 + 纯文本标签 */
 body[data-sb-skin="terminal"] #sb-task-system .hs-task-dot {
@@ -3944,6 +3903,9 @@ body[data-sb-skin="terminal"] #sb-task-system .hs-task-type::before {
   content: '[';
   color: var(--text-secondary);
 }
+body[data-sb-skin="terminal"] #sb-task-system .hs-task-text {
+  color: var(--accent);
+}
 body[data-sb-skin="terminal"] #sb-task-system .hs-task-type::after {
   content: ']';
   color: var(--text-secondary);
@@ -3976,13 +3938,27 @@ body[data-sb-skin="terminal"] #sb-task-system .hs-skip-btn:hover::after {
   color: var(--accent);
 }
 /* 终端风格：任务进度数字 */
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-label {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  margin-bottom: 0;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-head {
+  margin-bottom: 10px;
+  align-items: center;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-score {
+  display: none;
+}
 body[data-sb-skin="terminal"] #sb-task-system #ts-progress {
   font-family: var(--font-family, monospace);
-  font-size: 16px;
+  font-size: 12px;
   letter-spacing: 0;
 }
 body[data-sb-skin="terminal"] #sb-task-system #ts-progress-percent {
   font-family: var(--font-family, monospace);
+  font-size: 11px;
 }
 /* 终端风格：空任务提示 */
 body[data-sb-skin="terminal"] #sb-task-system .hs-task-empty {
