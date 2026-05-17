@@ -588,7 +588,6 @@ ${dialogue}
             const raw = _getContent(m);
             preview = raw.substring(0, 100) + (raw.length > 100 ? '…' : '');
         }
-        const isSelected = selectedIds.has(m.id);
         return `
         <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px;cursor:${manageMode ? 'default' : 'pointer'}" class="card" data-id="${m.id}" onclick="${manageMode ? `Memory.toggleSelect('${m.id}')` : `Memory.edit('${m.id}')`}">
           ${manageMode ? `
