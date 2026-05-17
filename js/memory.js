@@ -42,20 +42,25 @@ const Memory = (() => {
     const scope = data.scope || Character.getCurrentId();
     const content = data.content || _mergeEventContent(data);
     const title = data.title || '';
-    // 自动提取事件去重：同面具 + 同标题 + 同内容视为同一事件，避免游标丢失/总结前提取造成重复记忆
+    // 自动提取事件去重：同面具 + 标题相似视为同一事件，避免重复提取
     try {
       const all = await DB.getAll('memories');
       const existing = all.find(m =>
         m.type === type &&
         (m.scope || 'default') === scope &&
-        (m.title || '') === title &&
-        (_getContent(m) || '') === content
+        (m.title || '') && title && (
+          (m.title || '') === title ||
+          (m.title || '').includes(title) ||
+          title.includes((m.title || ''))
+        )
       );
       if (existing) {
-        existing.time = existing.time || data.time || '';
-        existing.location = existing.location || data.location || '';
-        existing.participants = existing.participants?.length ? existing.participants : (data.participants || []);
-        existing.keywords = existing.keywords || Utils.tokenize(title + ' ' + content + ' ' + (existing.location || data.location || ''));
+        // 用新数据更新（更新内容到最新版本，补充缺失字段）
+        if (content) existing.content = content;
+        if (data.time) existing.time = data.time;
+        existing.location = data.location || existing.location || '';
+        existing.participants = (data.participants?.length ? data.participants : existing.participants) || [];
+        existing.keywords = Utils.tokenize((existing.title || title) + ' ' + (existing.content || content) + ' ' + (existing.location || ''));
         existing.timestamp = Utils.timestamp();
         existing.roundCreated = existing.roundCreated || data.roundCreated || 0;
         await DB.put('memories', existing);
@@ -372,7 +377,7 @@ const Memory = (() => {
     return combined;
   }
 
-  function buildExtractionPrompt(recentMessages, charName, charInfo, extractLimits) {
+  function buildExtractionPrompt(recentMessages, charName, charInfo, extractLimits, existingTitles) {
 const displayName = charName || '用户角色';
 const dialogue = recentMessages.map(m =>
 `[${m.role === 'user' ? displayName : 'AI'}] ${m.content}`
@@ -438,7 +443,12 @@ ${dialogue}
 - relations 最多 ${maxRelations} 条。以下情况需要提取关系：1）新角色首次与${playerName}产生交互；2）已有角色本轮与${playerName}有实质互动（即使关系没有剧烈变化，也需要更新其当前的 relationship 和 impression 到最新状态）；3）已有角色与${playerName}的关系发生了明显转变或情感冲突。emotion 字段描述关系变化过程，首次建立关系或无明显变化填""。
 - **称呼规则**：禁止在事件标题、事件正文、关系字段、印象字段、emotion、participants 中用“玩家”“NPC”泛称角色；必须直接使用角色姓名。用户角色使用“${playerName}”，其他角色使用各自姓名。只有确实不知道姓名时，才可用“对方”“那名角色”等临时称呼。
 - 事件字段如无对应信息留空字符串，不要编造。
-- 只输出 JSON，确保完整闭合。`;
+- 只输出 JSON，确保完整闭合。${existingTitles && existingTitles.length > 0 ? `
+
+【已存在的记忆（不要重复提取）】
+以下事件和关系已经被提取过了。如果对话中的内容和已有记忆描述的是同一件事，不要再次输出。只提取新发生的事件、新出现的角色关系、或已有关系的最新状态更新。
+已有事件：${existingTitles.filter(t => t.type === 'event').map(t => t.title).join('、') || '无'}
+已有关系：${existingTitles.filter(t => t.type === 'relation').map(t => t.title).join('、') || '无'}` : ''}`;
   }
 
   function formatForPrompt(memories) {

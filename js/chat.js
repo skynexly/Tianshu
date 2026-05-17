@@ -1741,7 +1741,17 @@ const config = await API.getConfig();
       maxRelations: parseInt(config.maxExtractRelations) || 5
     };
     const charInfo = char ? { name: char.name, gender: char.gender, background: char.background } : null;
-    const prompt = Memory.buildExtractionPrompt(toExtract, charName, charInfo, extractLimits);
+    // 获取已有记忆标题用于去重
+    let existingTitles = [];
+    try {
+      const scope = Character.getCurrentId();
+      const allMem = await DB.getAll('memories');
+      existingTitles = allMem
+        .filter(m => (m.type === 'event' || m.type === 'relation') && (m.scope === scope || !m.scope))
+        .map(m => ({ type: m.type, title: m.title || '' }))
+        .filter(t => t.title);
+    } catch(_) {}
+    const prompt = Memory.buildExtractionPrompt(toExtract, charName, charInfo, extractLimits, existingTitles);
     const dialogue = toExtract.map(m =>
       `[${m.role === 'user' ? charName : 'AI'}] ${m.content}`
     ).join('\n\n');
