@@ -1800,29 +1800,54 @@ if (_conv) { _conv.lastExtractedMsgId = lastExtractedMsgId; _conv.extractPending
 _extractPending = false;
 GameLog.log('info', `[Memory] 事件/关系提取完成: ${eventCount}个事件, ${relCount}个关系`);
 
-// 第二次调用：独立提取小纸条
+// 第二次调用：独立提取小纸条（带重试+兜底）
 let noteCount2 = 0;
-try {
-  const notesPrompt = Memory.buildNotesPrompt(toExtract, charName, charInfo);
-  const notesDialogue = toExtract.map(m => `[${m.role === 'user' ? charName : 'AI'}] ${m.content}`).join('\n\n');
-  const notesResult = await API.extractMemory(notesDialogue, notesPrompt);
-  let notesCleaned = (notesResult || '').trim();
-  if (notesCleaned.startsWith('```')) notesCleaned = notesCleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
-  let notesData;
-  try { notesData = JSON.parse(notesCleaned); } catch(pe) {
-    notesData = _tryFixTruncatedJSON(notesCleaned);
-  }
-  if (notesData && notesData.notes) {
-    for (const n of notesData.notes) {
-      if (n.tag && n.detail) {
-        await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound });
-        noteCount2++;
+const notesPrompt = Memory.buildNotesPrompt(toExtract, charName, charInfo);
+const notesDialogue = toExtract.map(m => `[${m.role === 'user' ? charName : 'AI'}] ${m.content}`).join('\n\n');
+let notesSuccess = false;
+for (let nAttempt = 1; nAttempt <= 2; nAttempt++) {
+  try {
+    const notesResult = await API.extractMemory(notesDialogue, notesPrompt);
+    let notesCleaned = (notesResult || '').trim();
+    if (notesCleaned.startsWith('```')) notesCleaned = notesCleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+    let notesData;
+    try { notesData = JSON.parse(notesCleaned); } catch(pe) { notesData = _tryFixTruncatedJSON(notesCleaned); }
+    if (notesData && notesData.notes) {
+      for (const n of notesData.notes) {
+        if (n.tag && n.detail) {
+          await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound });
+          noteCount2++;
+        }
       }
     }
+    GameLog.log('info', `[Memory] 小纸条提取完成: ${noteCount2}条`);
+    notesSuccess = true;
+    break;
+  } catch(noteErr) {
+    GameLog.log('warn', `[Memory] 小纸条提取第${nAttempt}次失败: ${noteErr.message}`);
+    if (nAttempt < 2) await new Promise(r => setTimeout(r, 1000));
   }
-  GameLog.log('info', `[Memory] 小纸条提取完成: ${noteCount2}条`);
-} catch(noteErr) {
-  GameLog.log('warn', `[Memory] 小纸条提取失败(不影响事件/关系): ${noteErr.message}`);
+}
+if (!notesSuccess) {
+  // 主模型兜底
+  try {
+    const notesResult = await API.extractMemory(notesDialogue, notesPrompt, { useMainModel: true });
+    let notesCleaned = (notesResult || '').trim();
+    if (notesCleaned.startsWith('```')) notesCleaned = notesCleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+    let notesData;
+    try { notesData = JSON.parse(notesCleaned); } catch(pe) { notesData = _tryFixTruncatedJSON(notesCleaned); }
+    if (notesData && notesData.notes) {
+      for (const n of notesData.notes) {
+        if (n.tag && n.detail) {
+          await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound });
+          noteCount2++;
+        }
+      }
+    }
+    GameLog.log('info', `[Memory] 小纸条主模型兜底成功: ${noteCount2}条`);
+  } catch(noteErr2) {
+    GameLog.log('warn', `[Memory] 小纸条提取全部失败(不影响事件/关系): ${noteErr2.message}`);
+  }
 }
 
 UI.showToast(`记忆提取完成（${eventCount} 条事件 / ${relCount} 条关系 / ${noteCount2} 条小纸条）`, 2500);
