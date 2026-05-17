@@ -139,7 +139,7 @@ const Utils = (() => {
       raw = raw.replace(relationMatch[0], '').trim();
     }
 
-    const taskMatch = raw.match(/```tasks?\s*\n([\s\S]*?)```/i);
+    const taskMatch = raw.match(/```tasks?\s*\n?([\s\S]*?)```/i);
     if (taskMatch) {
       try { result.tasks = JSON.parse(taskMatch[1].trim()); } catch(e) {
         // 兜底：尝试修复常见JSON问题
@@ -204,7 +204,7 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
  }
  
 // 自定义世界观：属性增量（JSON）
-    const customAttrsMatch = raw.match(/```custom-attrs\s*\n([\s\S]*?)```/i);
+    const customAttrsMatch = raw.match(/```custom-attrs\s*\n?([\s\S]*?)```/i);
     if (customAttrsMatch) {
       try { result.customAttrs = JSON.parse(customAttrsMatch[1].trim()); } catch(e) {
         try {
