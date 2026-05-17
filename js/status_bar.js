@@ -1102,12 +1102,17 @@ async function taskFormatForPrompt() {
   lines.push(`本阶段进度：${ts.doneInPhase}/${phase.totalTasks}`);
   lines.push('');
 
-  // 可用类型池
+  // 可用类型池（含奖励信息）
   if (phase.types && phase.types.length > 0) {
     lines.push('可用任务类型：');
     for (const t of phase.types) {
       let line = `- ${t.label}`;
       if (t.desc) line += `：${t.desc}`;
+      if (t.rewardMode === 'attr' && t.rewardAttr) {
+        line += `（完成奖励：${t.rewardAttr} ${t.rewardValue >= 0 ? '+' : ''}${t.rewardValue}，由游戏引擎自动结算，AI不要重复操作）`;
+      } else if (t.rewardMode === 'free' && t.rewardFree) {
+        line += `（完成奖励：${t.rewardFree}，由游戏引擎自动结算，AI不要重复操作）`;
+      }
       lines.push(line);
     }
     lines.push('');
@@ -1129,6 +1134,7 @@ async function taskFormatForPrompt() {
   lines.push('- 输出格式：```tasks [{"text":"具体任务内容","type":"类型名","status":"active/done/skipped"}] ```');
   lines.push('- AI 输出 type 字段时必须精确使用上面「可用任务类型」中列出的类型名称，不要自创类型名。');
   lines.push('- done/skipped 是结算事件，系统处理后会自动移除，不需要下一轮继续输出。');
+  lines.push('- 【重要】标注"由游戏引擎自动结算"的任务奖励属性，引擎会在任务完成时自动增减对应数值，AI 不要在 custom-attrs 代码块中对这些属性重复操作。');
 
   if (ts.active.length === 0) {
     if (ts.pendingPublish) {
