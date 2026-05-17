@@ -203,7 +203,7 @@ async function _renderCustomAttrs(status) {
   }
   wrap.classList.remove('hidden');
   wrap.innerHTML = `
-    <div class="sb-custom-attrs-title">自定义属性</div>
+    <div class="sb-custom-attrs-title">Custom Attributes</div>
     <div class="sb-custom-attrs-grid">
       ${attrs.map(a => {
         const val = status.customAttrs.global[a.id] ?? a.initial ?? 0;
@@ -264,7 +264,7 @@ async function _renderCharacterAttrs(status) {
   if (changed) { try { await Conversations.setStatusBar(status); } catch(_) {} }
   wrap.classList.remove('hidden');
   wrap.innerHTML = `
-    <div class="sb-character-attrs-title">角色属性</div>
+    <div class="sb-character-attrs-title">Character Attributes</div>
     <div class="sb-character-attrs-list">
       ${cards.map((c, ci) => {
         const key = _attrTargetKey(c);
@@ -638,6 +638,8 @@ async function render(status) {
 
     // 心动模拟专区
     _renderHS();
+    // 通用任务面板
+    _renderTaskPanel();
   }
 
   function toggleNpcs() {
@@ -836,7 +838,429 @@ async function saveEdit() {
     setTimeout(() => _el('sb-edit-env-time')?.focus(), 100);
   }
 
-  // ======== 心动模拟 ========
+  // ======== 通用任务系统 ========
+
+function _getTaskState() {
+  if (!_currentStatus) {
+    try { _currentStatus = Conversations.getStatusBar() || {}; } catch(_) { _currentStatus = {}; }
+  }
+  if (!_currentStatus.taskSystem) {
+    _currentStatus.taskSystem = { phaseIndex: 0, doneInPhase: 0, active: [], pendingPublish: false, finished: false };
+  }
+  return _currentStatus.taskSystem;
+}
+
+async function _saveTaskState() {
+  try {
+    const sb = Conversations.getStatusBar() || {};
+    sb.taskSystem = _getTaskState();
+    await Conversations.setStatusBar(sb);
+  } catch(_) {}
+}
+
+async function _getTaskConfig() {
+  const wv = await _getCurrentWorldview();
+  if (!wv || !wv.gameplay?.taskSystem?.phases?.length) return null;
+  return wv.gameplay.taskSystem;
+}
+
+// 查找类型模板 by label，在当前阶段
+function _findTypeTemplate(config, phaseIndex, typeLabel) {
+  const phase = config?.phases?.[phaseIndex];
+  if (!phase) return null;
+  return (phase.types || []).find(t => t.label === typeLabel) || null;
+}
+
+// AI 输出 tasks 后调用——核心结算逻辑
+async function taskApply(tasksArr) {
+  // 心动模拟走自己的 hsApplyTasks，这里跳过
+  if (_isHeartSim()) return;
+  // 尊重对话设置开关
+  try {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (conv && conv.convTasksEnabled === false) return;
+  } catch(_) {}
+  const config = await _getTaskConfig();
+  if (!config) return;
+  const ts = _getTaskState();
+  if (ts.finished) return;
+
+  const phase = config.phases[ts.phaseIndex];
+  if (!phase) { ts.finished = true; _saveTaskState(); return; }
+
+  if (!Array.isArray(tasksArr)) return;
+  let changed = false;
+  const hadActive = ts.active.length > 0;
+
+  // 1. 处理已有任务的状态变化（done / skipped）
+  for (const t of tasksArr) {
+    if (!t) continue;
+    const text = String(t.text || '').trim();
+    const status = t.status || '';
+    if (!text) continue;
+
+    const existing = ts.active.find(a => (t.id && a.id === t.id) || a.text === text);
+    if (!existing) continue;
+
+    if (status === 'done' && existing.status === 'active') {
+      existing.status = 'done';
+      ts.doneInPhase++;
+      changed = true;
+
+      // 结算单条奖励
+      const tmpl = _findTypeTemplate(config, ts.phaseIndex, existing.type);
+      if (tmpl) await _settleTaskReward(tmpl);
+    } else if (status === 'skipped' && existing.status === 'active') {
+      existing.status = 'skipped';
+      changed = true;
+    }
+  }
+
+  // 2. 清理已完成/已跳过的任务
+  const beforeLen = ts.active.length;
+  ts.active = ts.active.filter(a => a.status === 'active');
+  if (ts.active.length !== beforeLen) changed = true;
+
+  // 3. 检查阶段是否完成
+  if (ts.doneInPhase >= phase.totalTasks) {
+    // 结算阶段奖励
+    if (phase.completionReward && phase.completionReward.mode !== 'none') {
+      await _settlePhaseReward(phase.completionReward);
+    }
+    // 进入下一阶段
+    ts.phaseIndex++;
+    ts.doneInPhase = 0;
+    ts.active = [];
+    ts.pendingPublish = false;
+    if (ts.phaseIndex >= config.phases.length) {
+      ts.finished = true;
+    }
+    changed = true;
+  }
+
+  // 4. 如果任务栏空了，标记下一轮可发布（不是本轮发）
+  if (ts.active.length === 0 && !ts.finished && !ts.pendingPublish) {
+    ts.pendingPublish = true;
+    changed = true;
+  }
+
+  // 5. 新增 active 任务（仅当 pendingPublish 已就绪且本轮没有 active）
+  // 注意：这里不处理新增，新增由 AI 在下一轮输出（pendingPublish 标记会在 prompt 里通知 AI）
+  // 但如果 AI 在 pendingPublish 轮提交了新 active，这里接受
+  if (!hadActive || (ts.active.length === 0 && ts.pendingPublish)) {
+    let addedCount = 0;
+    for (const t of tasksArr) {
+      if (!t || t.status !== 'active') continue;
+      const text = String(t.text || '').trim();
+      if (!text) continue;
+      if (ts.active.find(a => a.text === text)) continue;
+      if (addedCount >= (phase.batchSize || 3)) break;
+
+      // 验证 type 是否在当前阶段模板池中
+      const typeLabel = String(t.type || '').trim();
+      const tmpl = _findTypeTemplate(config, ts.phaseIndex, typeLabel);
+
+      ts.active.push({
+        id: t.id || ('t_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5)),
+        text,
+        type: typeLabel,
+        status: 'active'
+      });
+      addedCount++;
+      changed = true;
+    }
+    if (addedCount > 0) ts.pendingPublish = false;
+  }
+
+  if (changed) await _saveTaskState();
+  _renderTaskPanel();
+}
+
+// 单条任务奖励结算
+async function _settleTaskReward(tmpl) {
+  if (!tmpl) return;
+  if (tmpl.rewardMode === 'attr' && tmpl.rewardAttr && tmpl.rewardValue) {
+    try {
+      // 通过自定义属性 delta 机制加减
+      const delta = { global: {}, characters: {} };
+      delta.global[tmpl.rewardAttr] = tmpl.rewardValue;
+      if (typeof StatusBar !== 'undefined' && StatusBar.applyCustomAttrsDelta) {
+        StatusBar.applyCustomAttrsDelta(delta);
+      }
+    } catch(e) { console.warn('[TaskSystem] 属性奖励结算失败', e); }
+  }
+  // free 模式的奖励在 prompt 注入时处理，不需要代码结算
+}
+
+// 阶段完成奖励结算
+async function _settlePhaseReward(cr) {
+  if (!cr) return;
+  if (cr.mode === 'attr' && cr.attr && cr.value) {
+    try {
+      const delta = { global: {}, characters: {} };
+      delta.global[cr.attr] = cr.value;
+      if (typeof StatusBar !== 'undefined' && StatusBar.applyCustomAttrsDelta) {
+        StatusBar.applyCustomAttrsDelta(delta);
+      }
+    } catch(e) { console.warn('[TaskSystem] 阶段奖励结算失败', e); }
+  }
+}
+
+// 跳过任务（玩家手动操作，从状态面板调用）
+async function taskSkip(idx) {
+  const ts = _getTaskState();
+  const task = ts.active?.[idx];
+  if (!task || task.status !== 'active') return;
+  if (!await UI.showConfirm('跳过任务', `确定跳过「${task.text}」？`)) return;
+  task.status = 'skipped';
+  ts.active.splice(idx, 1);
+  // 通知 AI
+  if (window.Phone && Phone.pushLog) {
+    Phone.pushLog(`跳过了任务：${task.text}`);
+  }
+  // 如果任务栏空了 → 标记下一轮可发布
+  if (ts.active.length === 0 && !ts.finished) {
+    ts.pendingPublish = true;
+  }
+  await _saveTaskState();
+}
+
+// 重置任务系统（对话设置里调用）
+async function taskReset() {
+  const sb = Conversations.getStatusBar() || {};
+  sb.taskSystem = { phaseIndex: 0, doneInPhase: 0, active: [], pendingPublish: false, finished: false };
+  await Conversations.setStatusBar(sb);
+  _currentStatus = sb;
+}
+
+// 兜底：以最新一条 AI 回复为唯一真相，重建任务栏。
+// 不动 doneInPhase（避免重复计数），只保留 active。
+async function taskRefreshFromLatestAI() {
+  const config = await _getTaskConfig();
+  if (!config) { UI.showToast?.('当前世界观未配置任务系统'); return; }
+  const ts = _getTaskState();
+  if (ts.finished) { UI.showToast?.('任务系统已全部完成'); return; }
+  if (typeof Chat === 'undefined' || !Chat.getMessages) { UI.showToast?.('Chat 未就绪'); return; }
+
+  const ok = await UI.showConfirm(
+    '同步任务栏',
+    '将以最新一条 AI 回复为唯一真相，重建任务栏：\n\n' +
+    '· 清空当前所有活跃任务\n' +
+    '· 只保留最新回复中标为 active 的任务\n' +
+    '· 不重新结算已完成进度和奖励\n\n' +
+    '这是兜底机制，仅在任务栏卡 bug 时使用。\n确定继续？'
+  );
+  if (!ok) return;
+
+  const msgs = Chat.getMessages() || [];
+  const latestAI = [...msgs].reverse().find(m => m.role === 'assistant' && m.content);
+  if (!latestAI) { UI.showToast?.('没有找到 AI 回复'); return; }
+
+  let parsed = null;
+  try { parsed = Utils.parseAIOutput(latestAI.content); } catch(e) { console.warn('[TaskSystem] 解析失败', e); }
+  const tasksArr = (parsed && Array.isArray(parsed.tasks)) ? parsed.tasks : [];
+
+  const phase = config.phases[ts.phaseIndex];
+  const maxBatch = phase?.batchSize || 3;
+
+  const activeTasks = tasksArr
+    .filter(t => t && (t.status || 'active') === 'active' && String(t.text || '').trim())
+    .slice(0, maxBatch)
+    .map(t => ({
+      id: t.id || ('t_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5)),
+      text: String(t.text).trim(),
+      type: String(t.type || '').trim(),
+      status: 'active'
+    }));
+
+  const before = ts.active.length;
+  ts.active = activeTasks;
+  ts.pendingPublish = activeTasks.length === 0;
+  await _saveTaskState();
+
+  UI.showToast?.(`已同步：清掉 ${before} 条，重建 ${activeTasks.length} 条 active`);
+}
+
+// 为 AI 生成当前任务系统状态提示词
+async function taskFormatForPrompt() {
+  if (_isHeartSim()) return '';
+  try {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (conv && conv.convTasksEnabled === false) return '';
+  } catch(_) {}
+  const config = await _getTaskConfig();
+  if (!config) return '';
+  const ts = _getTaskState();
+  if (ts.finished) return '【任务系统】\n所有阶段已完成，不再发布新任务。';
+
+  const phase = config.phases[ts.phaseIndex];
+  if (!phase) return '';
+
+  const lines = [];
+  lines.push(`【任务系统·当前阶段${phase.name ? '：' + phase.name : ' ' + (ts.phaseIndex + 1)}】`);
+  lines.push(`本阶段进度：${ts.doneInPhase}/${phase.totalTasks}`);
+  lines.push('');
+
+  // 可用类型池
+  if (phase.types && phase.types.length > 0) {
+    lines.push('可用任务类型：');
+    for (const t of phase.types) {
+      let line = `- ${t.label}`;
+      if (t.desc) line += `：${t.desc}`;
+      lines.push(line);
+    }
+    lines.push('');
+  }
+
+  // 当前活跃任务
+  if (ts.active.length > 0) {
+    lines.push('当前活跃任务：');
+    ts.active.forEach(a => {
+      lines.push(`- [active] ${a.text}${a.type ? '（类型：' + a.type + '）' : ''}`);
+    });
+    lines.push('');
+  }
+
+  // 规则
+  lines.push('任务规则：');
+  lines.push(`- 从可用类型中选择发布任务，每批最多 ${phase.batchSize || 3} 条。`);
+  lines.push('- 有活跃任务时不发新的，全部完成或跳过后的下一轮才可发布新任务。');
+  lines.push('- 输出格式：```tasks [{"text":"具体任务内容","type":"类型名","status":"active/done/skipped"}] ```');
+  lines.push('- AI 输出 type 字段时必须精确使用上面「可用任务类型」中列出的类型名称，不要自创类型名。');
+  lines.push('- done/skipped 是结算事件，系统处理后会自动移除，不需要下一轮继续输出。');
+
+  if (ts.active.length === 0) {
+    if (ts.pendingPublish) {
+      lines.push('- 任务栏已清空，本轮可以发布新一批任务。');
+    } else {
+      lines.push('- 任务栏为空但本轮刚清空，下一轮再发布新任务。');
+    }
+  }
+
+  // 自由奖励提示（如果有刚完成的任务带自由奖励）
+  // 这里不处理——自由奖励的 prompt 注入在 chat.js 里做
+
+  return lines.join('\n');
+}
+
+// ===== 通用任务面板渲染 =====
+
+async function _renderTaskPanel() {
+  const container = document.getElementById('sb-task-system');
+  if (!container) return;
+
+  const config = await _getTaskConfig();
+  if (!config) { container.classList.add('hidden'); return; }
+
+  const ts = _getTaskState();
+  if (ts.finished) {
+    container.classList.remove('hidden');
+    const label = _el('ts-phase-label');
+    const progress = _el('ts-progress');
+    const percent = _el('ts-progress-percent');
+    const bar = _el('ts-progress-bar');
+    const list = _el('ts-task-list');
+    const skipBtn = _el('ts-skip-btn');
+    if (label) label.textContent = '已全部完成';
+    if (progress) progress.textContent = '✓';
+    if (percent) percent.textContent = '100%';
+    if (bar) bar.style.width = '100%';
+    if (list) list.innerHTML = '<div class="hs-task-empty">所有阶段已完成</div>';
+    if (skipBtn) skipBtn.disabled = true;
+    return;
+  }
+
+  const phase = config.phases[ts.phaseIndex];
+  if (!phase) { container.classList.add('hidden'); return; }
+
+  container.classList.remove('hidden');
+
+  const label = _el('ts-phase-label');
+  const progress = _el('ts-progress');
+  const percent = _el('ts-progress-percent');
+  const bar = _el('ts-progress-bar');
+  const list = _el('ts-task-list');
+  const skipBtn = _el('ts-skip-btn');
+
+  const phaseName = phase.name || `阶段 ${ts.phaseIndex + 1}`;
+  const total = phase.totalTasks || 10;
+  const done = ts.doneInPhase || 0;
+  const pct = Math.min(100, Math.max(0, done / total * 100));
+
+  if (label) label.textContent = phaseName;
+  if (progress) progress.textContent = `${done}/${total}`;
+  if (percent) percent.textContent = `${Math.round(pct)}%`;
+  if (bar) bar.style.width = pct + '%';
+  if (skipBtn) skipBtn.disabled = !ts.active.some(a => a.status === 'active');
+
+  if (list) {
+    const active = (ts.active || []).filter(a => a.status === 'active');
+    if (active.length > 0) {
+      list.innerHTML = active.map((t, idx) => {
+        const typeTag = t.type ? `<span class="hs-task-type">${_esc(t.type)}</span>` : '';
+        return `<div class="hs-task-item active">
+          <span class="hs-task-dot"></span>
+          ${typeTag}
+          <span class="hs-task-text">${_esc(t.text)}</span>
+        </div>`;
+      }).join('');
+    } else {
+      list.innerHTML = '<div class="hs-task-empty">暂无任务</div>';
+    }
+  }
+}
+
+// 跳过弹窗
+let _tsSkipSelectedIdx = null;
+
+function taskOpenSkipModal() {
+  const ts = _getTaskState();
+  const active = (ts?.active || []).map((t, idx) => ({ ...t, idx })).filter(t => t.status === 'active');
+  _tsSkipSelectedIdx = null;
+
+  document.getElementById('ts-skip-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'ts-skip-modal';
+  modal.className = 'hs-skip-modal';
+  modal.onclick = (e) => { if (e.target === modal) taskCloseSkipModal(); };
+
+  let listHtml = active.length > 0
+    ? active.map(t => `<div class="hs-skip-option" data-idx="${t.idx}" onclick="StatusBar.taskSelectSkipTask(${t.idx})">${_esc(t.text)}</div>`).join('')
+    : '<div style="padding:12px;color:var(--text-secondary);font-size:13px;text-align:center">没有可跳过的任务</div>';
+
+  modal.innerHTML = `<div class="hs-skip-modal-content">
+    <div class="hs-skip-modal-title">选择要跳过的任务</div>
+    <div class="hs-skip-modal-list">${listHtml}</div>
+    <div class="hs-skip-modal-actions">
+      <button class="hs-skip-modal-btn cancel" onclick="StatusBar.taskCloseSkipModal()">取消</button>
+      <button class="hs-skip-modal-btn confirm" id="ts-skip-confirm-btn" disabled onclick="StatusBar.taskConfirmSkipTask()">确认跳过</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function taskCloseSkipModal() {
+  document.getElementById('ts-skip-modal')?.remove();
+  _tsSkipSelectedIdx = null;
+}
+
+function taskSelectSkipTask(idx) {
+  _tsSkipSelectedIdx = idx;
+  document.querySelectorAll('#ts-skip-modal .hs-skip-option').forEach(el => {
+    el.classList.toggle('selected', Number(el.dataset.idx) === idx);
+  });
+  const btn = document.getElementById('ts-skip-confirm-btn');
+  if (btn) btn.disabled = false;
+}
+
+async function taskConfirmSkipTask() {
+  if (_tsSkipSelectedIdx == null) return;
+  taskCloseSkipModal();
+  await taskSkip(_tsSkipSelectedIdx);
+  _renderTaskPanel();
+}
+
+// ======== 心动模拟 ========
 
   function _isHeartSim() {
     try {
@@ -1559,6 +1983,9 @@ reason: <一句话写明剧情原因，如"看到了搜索记录里的另一个�
   return {
     render, toggle, editField, editEnv, editCustomAttr, editCharacterAttr, applyCustomAttrsDelta, formatCustomAttrsForPrompt, formatCustomAttrsFormatPrompt, formatCustomAttrsStatePrompt, editNPC, addNPC, deleteNPC, saveEdit, closeEdit, refreshFromConv, toggleNpcs,
     _clearNpcAvatarCache,
+    // 通用任务系统
+    taskApply, taskSkip, taskReset, taskRefreshFromLatestAI, taskFormatForPrompt,
+    taskOpenSkipModal, taskCloseSkipModal, taskSelectSkipTask, taskConfirmSkipTask,
     // 心动模拟
     hsApplyRelation, hsApplyTasks, hsApplyPhoneLock, hsSkipTask, hsRefreshTasksFromLatestAI, hsOpenSkipModal, hsCloseSkipModal, hsSelectSkipTask, hsConfirmSkipTask, hsAddTarget, hsRemoveTarget, hsEditBaseFavor, hsGetDarknessWarnings, hsFormatForPrompt, hsCheckClearCondition,
     isPhoneLocked, getPhoneLockInfo, hsForceUnlockPhone,

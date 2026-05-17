@@ -3549,9 +3549,9 @@ body[data-skin="single-default"] .sb-custom-attrs-grid {
   gap: 10px;
 }
 body[data-sb-skin="terminal"] .sb-custom-attrs-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 body[data-sb-skin="neumorph"] .sb-custom-attr-card,
 body[data-skin="single-default"] .sb-custom-attr-card {
@@ -3572,17 +3572,24 @@ body[data-skin="single-default"] .sb-custom-attr-card:hover {
 body[data-sb-skin="terminal"] .sb-custom-attr-card {
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   border-radius: 0;
-  padding: 10px 10px;
-  min-height: 38px;
+  padding: 0;
+  min-height: 0;
   background: transparent;
   box-shadow: none;
-  border: 1px solid var(--border);
+  border: none;
   cursor: pointer;
   font-family: var(--font-family, inherit);
+}
+body[data-sb-skin="terminal"] .sb-custom-attr-card::before {
+  content: '';
+  flex-grow: 1;
+  border-bottom: 1px dotted color-mix(in srgb, var(--text-secondary) 60%, transparent);
+  margin-bottom: 4px;
+  order: 1;
 }
 body[data-sb-skin="neumorph"] .sb-custom-attr-name,
 body[data-skin="single-default"] .sb-custom-attr-name {
@@ -3608,27 +3615,32 @@ body[data-skin="single-default"] .sb-custom-attr-val {
 }
 body[data-sb-skin="terminal"] .sb-custom-attr-name {
   min-width: 0;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-family, inherit);
-  font-size: 13px;
-  line-height: 1.15;
-  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 400;
   color: var(--text-secondary);
   letter-spacing: .02em;
+  order: 0;
+}
+body[data-sb-skin="terminal"] .sb-custom-attr-name::before {
+  content: '> ';
+  color: var(--accent);
+  opacity: 0.8;
 }
 body[data-sb-skin="terminal"] .sb-custom-attr-val {
   flex-shrink: 0;
-  max-width: 44%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-family, inherit);
-  font-size: 13px;
-  line-height: 1.15;
+  font-size: 12px;
+  line-height: 1.2;
   font-weight: 800;
   color: var(--text);
+  order: 2;
 }
 body[data-sb-skin="neumorph"] #sb-character-attrs {
   display: flex;
@@ -3758,18 +3770,12 @@ body[data-sb-skin="terminal"] .sb-character-attr-card {
   max-width: 300px;
   border-radius: 0;
   box-shadow: none;
-  padding: 11px 12px;
+  padding: 10px;
   scroll-snap-align: start;
   box-sizing: border-box;
   font-family: var(--font-family, inherit);
-}
-body[data-sb-skin="terminal"] .sb-character-attr-card:nth-child(odd) {
-  background: var(--status-card, var(--bg-tertiary));
-  border: 1px solid transparent;
-}
-body[data-sb-skin="terminal"] .sb-character-attr-card:nth-child(even) {
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
 }
 body[data-sb-skin="terminal"] .sb-character-attr-name {
   font-size: 13px;
@@ -3780,7 +3786,14 @@ body[data-sb-skin="terminal"] .sb-character-attr-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 9px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  padding-bottom: 6px;
+}
+body[data-sb-skin="terminal"] .sb-character-attr-name::before {
+  content: '+-- ';
+  color: var(--text-secondary);
+  font-weight: normal;
 }
 body[data-sb-skin="terminal"] .sb-character-attr-lines {
   display: flex;
@@ -3789,42 +3802,209 @@ body[data-sb-skin="terminal"] .sb-character-attr-lines {
 }
 body[data-sb-skin="terminal"] .sb-character-attr-line {
   cursor: pointer;
-  padding: 7px 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  padding: 4px 0;
+  border-top: none;
 }
 body[data-sb-skin="terminal"] .sb-character-attr-line:first-child {
-  border-top: 0;
+  border-top: none;
 }
 body[data-sb-skin="terminal"] .sb-character-attr-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
   margin-bottom: 0;
   font-family: var(--font-family, inherit);
   font-size: 12px;
   line-height: 1.2;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--text-secondary);
+}
+body[data-sb-skin="terminal"] .sb-character-attr-row::before {
+  content: '';
+  flex-grow: 1;
+  border-bottom: 1px dotted color-mix(in srgb, var(--text-secondary) 60%, transparent);
+  margin-bottom: 3px;
+  order: 1;
 }
 body[data-sb-skin="terminal"] .sb-character-attr-row span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  order: 0;
 }
 body[data-sb-skin="terminal"] .sb-character-attr-row b {
   flex-shrink: 0;
-  max-width: 46%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text);
   font-size: 12px;
   font-weight: 800;
+  order: 2;
 }
 body[data-sb-skin="terminal"] .sb-character-attr-bar {
   display: none;
+}
+/* 终端风格：任务系统卡片 — 取景框四角 + 透明背景 + 无阴影 */
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  position: relative;
+  padding: 18px 20px;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-card::before,
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-card::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-card::before {
+  top: 0; left: 0;
+  border-top: 2px solid var(--accent);
+  border-left: 2px solid var(--accent);
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-card::after {
+  top: 0; right: 0;
+  border-top: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
+}
+/* 下方两角：用 mission-card 内第一个子元素的 hack 不行，用 outline + clip 也不优雅，
+   这里用 task-list 末尾的 padding 区域放一个绝对定位的 wrapper */
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-section {
+  position: relative;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-section::before,
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-section::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  bottom: 0;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-section::before {
+  left: 0;
+  border-bottom: 2px solid var(--accent);
+  border-left: 2px solid var(--accent);
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-mission-section::after {
+  right: 0;
+  border-bottom: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-score-track {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-secondary) 30%, transparent);
+  border-radius: 0;
+  height: 8px;
+  background: transparent;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-score-fill {
+  border-radius: 0;
+  background: repeating-linear-gradient(
+    to right,
+    var(--accent),
+    var(--accent) 4px,
+    transparent 4px,
+    transparent 6px
+  );
+}
+/* 终端风格：任务项 — 命令行符号 + 纯文本标签 */
+body[data-sb-skin="terminal"] #sb-task-system .hs-task-dot {
+  display: none;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-task-item::before {
+  content: '[ ]';
+  color: var(--text-secondary);
+  font-family: var(--font-family, monospace);
+  font-weight: bold;
+  font-size: 12px;
+  margin-top: 1px;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-task-item.done::before {
+  content: '[x]';
+  color: var(--accent);
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-task-item.skipped::before {
+  content: '[-]';
+  opacity: 0.5;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-task-type {
+  background: transparent;
+  color: var(--accent);
+  padding: 0;
+  font-weight: bold;
+  border: none;
+  border-radius: 0;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-task-type::before {
+  content: '[';
+  color: var(--text-secondary);
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-task-type::after {
+  content: ']';
+  color: var(--text-secondary);
+}
+/* 终端风格：Sync / Skip 按钮 */
+body[data-sb-skin="terminal"] #sb-task-system .hs-skip-btn {
+  border-radius: 0;
+  border: none;
+  background: transparent !important;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-family: var(--font-family, monospace);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 4px 2px;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-skip-btn::before {
+  content: '[ ';
+  color: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-skip-btn::after {
+  content: ' ]';
+  color: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-skip-btn:hover {
+  color: var(--accent);
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-skip-btn:hover::before,
+body[data-sb-skin="terminal"] #sb-task-system .hs-skip-btn:hover::after {
+  color: var(--accent);
+}
+/* 终端风格：任务进度数字 */
+body[data-sb-skin="terminal"] #sb-task-system #ts-progress {
+  font-family: var(--font-family, monospace);
+  font-size: 16px;
+  letter-spacing: 0;
+}
+body[data-sb-skin="terminal"] #sb-task-system #ts-progress-percent {
+  font-family: var(--font-family, monospace);
+}
+/* 终端风格：空任务提示 */
+body[data-sb-skin="terminal"] #sb-task-system .hs-task-empty {
+  text-align: left;
+  font-family: var(--font-family, monospace);
+  color: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-size: 11px;
+}
+body[data-sb-skin="terminal"] #sb-task-system .hs-task-empty::before {
+  content: '> ';
+}
+/* 通用任务面板：进度数字样式 */
+#ts-progress {
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: -.02em;
+}
+#ts-progress-percent {
+  font-size: 11px;
+  color: var(--accent);
 }
 .sb-player-card {
   display: flex;
@@ -4023,11 +4203,11 @@ body[data-worldview="心动模拟"] .sb-player-card .sb-field-row:nth-child(2) .
  cursor: default;
 }
 .hs-score-track {
- height:9px;
- border-radius:999px;
- overflow: hidden;
- background: color-mix(in srgb, var(--bg-tertiary)82%, var(--text)18%);
- box-shadow: inset 3px 3px 7px rgba(0,0,0,0.12), inset -2px -2px 6px rgba(255,255,255,0.34);
+  height:9px;
+  border-radius:999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-tertiary)82%, var(--text)18%);
+  box-shadow: inset 3px 3px 7px rgba(0,0,0,0.12), inset -2px -2px 6px rgba(255,255,255,0.34);
 }
 .hs-score-fill {
  height:100%;

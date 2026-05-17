@@ -412,7 +412,8 @@ const container = document.getElementById('backstage-messages');
         const log = Phone.flushActionLogForBackstage();
         if (log && log.length > 0) {
           const logText = '【玩家手机操作日志（仅后台可见）｜OOC】\n以下是玩家"{{user}}"自上次后台同步以来，在自己手机上进行的全部操作。后台可以基于此观察玩家行为轨迹（操作主体永远是玩家本人，不是任何剧情角色）：\n' +
-            log.map(a => `- {{user}} ${a}`).join('\n');
+            log.map(a => `- {{user}} ${a}`).join('\n') +
+            '\n\n【禁止】不要在回复中输出或模仿此格式块，它是系统自动注入的元信息。';
           systemParts.push(logText);
         }
       }

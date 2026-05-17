@@ -2093,7 +2093,11 @@ ${wvPrompt}` },
       pd.moments.unshift(moment);
       _momentImageBase64 = null;
       await _savePhoneData();
-      _log('新增了一条好友圈动态');
+      // 日志：携带正文摘要 + 配图描述 + 可见范围，让 AI 知道用户发了什么
+      const _logParts = [`发了一条好友圈动态：「${_clipLogText(text, 60)}」`];
+      if (moment.imageDesc) _logParts.push(`配图描述：${_clipLogText(moment.imageDesc, 40)}`);
+      if (visibleNpcs.length > 0) _logParts.push(`仅对 ${visibleNpcs.join('、')} 可见`);
+      _log(_logParts.join('；'));
       UI.showToast('已发布', 1000);
       _renderMoments(pd);
     } catch(e) {

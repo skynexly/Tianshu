@@ -177,11 +177,17 @@ function _defaultRegion() {
   }
   // v596：根据"是否隐藏世界观"调整编辑面板 UI
   function _applyHiddenWvUI(isHidden) {
-    // 基础/详细 tab 按钮：隐藏时只显示扩展
-    const basicBtn = document.querySelector('.wv-edit-tab-btn[data-tab="basic"]');
-    const detailBtn = document.querySelector('.wv-edit-tab-btn[data-tab="detail"]');
-    if (basicBtn) basicBtn.style.display = isHidden ? 'none' : '';
-    if (detailBtn) detailBtn.style.display = isHidden ? 'none' : '';
+  // 基础/详细 tab 按钮：隐藏时只显示扩展
+  const basicBtn = document.querySelector('.wv-edit-tab-btn[data-tab="basic"]');
+  const detailBtn = document.querySelector('.wv-edit-tab-btn[data-tab="detail"]');
+  if (basicBtn) basicBtn.style.display = isHidden ? 'none' : '';
+  if (detailBtn) detailBtn.style.display = isHidden ? 'none' : '';
+  // 心动模拟世界观：禁止编辑玩法页（任务/属性/状态栏由内置机制管理）
+  const gameplayBtn = document.querySelector('.wv-edit-tab-btn[data-tab="gameplay"]');
+  if (gameplayBtn) {
+    const isHS = editingWorldviewId === 'wv_heartsim';
+    gameplayBtn.style.display = isHS ? 'none' : '';
+  }
     // ⋯ 菜单：隐藏世界观时不允许删除整个世界观、不允许导出（整包）；只保留"扩展设定导入导出"
     const exportBtn = document.querySelector('#worldview-edit-more-menu button[onclick*="exportCurrent"]');
     const importBtn = document.querySelector('#worldview-edit-more-menu button[onclick*="importSingle"]');
@@ -1601,6 +1607,8 @@ return;
   if (!w.gameplay) w.gameplay = {};
   if (!Array.isArray(w.gameplay.globalAttrs)) w.gameplay.globalAttrs = [];
   if (!Array.isArray(w.gameplay.characterAttrs)) w.gameplay.characterAttrs = [];
+  if (!w.gameplay.taskSystem) w.gameplay.taskSystem = { phases: [] };
+  if (!Array.isArray(w.gameplay.taskSystem.phases)) w.gameplay.taskSystem.phases = [];
   return w.gameplay;
 }
 
@@ -1685,6 +1693,366 @@ function _renderGameplayAttrs(w) {
         <div style="display:flex;flex-direction:column;gap:12px">${cards || '<div style="padding:12px;color:var(--text-secondary);font-size:12px;text-align:center;border:1px dashed var(--border);border-radius:8px">暂无角色属性卡片</div>'}</div>
       </div>`;
   }
+  // 渲染任务系统
+  _renderTaskSystem(w);
+}
+
+// ===== 任务系统编辑器 =====
+
+function _defaultTaskPhase() {
+  return {
+    id: 'phase_' + Utils.uuid().slice(0, 8),
+    name: '',
+    batchSize: 3,
+    totalTasks: 10,
+    types: [],
+    completionReward: { mode: 'none', attr: '', value: 0, free: '' }
+  };
+}
+
+function _defaultTaskType() {
+  return {
+    id: 'tt_' + Utils.uuid().slice(0, 8),
+    label: '',
+    desc: '',
+    rewardMode: 'none',
+    rewardAttr: '',
+    rewardValue: 0,
+    rewardFree: ''
+  };
+}
+
+function _getGlobalAttrNames(w) {
+  const gp = _ensureGameplay(w);
+  return (gp.globalAttrs || []).map(a => a.name).filter(Boolean);
+}
+
+function _renderTaskSystem(w) {
+  const el = document.getElementById('wv-task-system-container');
+  if (!el) return;
+  const gp = _ensureGameplay(w);
+  const phases = gp.taskSystem.phases;
+
+  if (phases.length === 0) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:20px;border:1px dashed var(--border);border-radius:8px">
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px">尚未配置任务阶段</div>
+        <button type="button" onclick="Worldview.addTaskPhase()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 添加阶段</button>
+      </div>`;
+    return;
+  }
+
+  let html = '';
+  phases.forEach((phase, pi) => {
+    // 类型模板卡片（紧凑版，点击打开弹窗编辑）
+    const typeCards = (phase.types || []).map((t, ti) => {
+      let rewardTag = '';
+      if (t.rewardMode === 'attr' && t.rewardAttr) rewardTag = `<span style="font-size:11px;color:var(--accent);background:color-mix(in srgb, var(--accent) 15%, transparent);padding:1px 6px;border-radius:4px">${Utils.escapeHtml(t.rewardAttr)} ${t.rewardValue >= 0 ? '+' : ''}${t.rewardValue || 0}</span>`;
+      else if (t.rewardMode === 'free') rewardTag = `<span style="font-size:11px;color:var(--accent);background:color-mix(in srgb, var(--accent) 15%, transparent);padding:1px 6px;border-radius:4px">自由奖励</span>`;
+      return `
+      <div onclick="Worldview.openTaskTypeModal(${pi},${ti})" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;cursor:pointer">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(t.label || '未命名类型')}</div>
+          ${t.desc ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(t.desc)}</div>` : ''}
+        </div>
+        ${rewardTag}
+        <div style="color:var(--text-secondary);font-size:18px;line-height:1;opacity:.65;flex-shrink:0">›</div>
+      </div>`;
+    }).join('');
+
+    // 阶段完成奖励摘要
+    const cr = phase.completionReward || { mode: 'none' };
+    let crSummary = '无';
+    if (cr.mode === 'attr' && cr.attr) crSummary = `${cr.attr} ${cr.value >= 0 ? '+' : ''}${cr.value || 0}`;
+    else if (cr.mode === 'free') crSummary = '自由奖励';
+
+    html += `
+    <div style="background:var(--bg-tertiary);padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:700;color:var(--accent);flex-shrink:0">阶段 ${pi + 1}</div>
+          <input value="${Utils.escapeHtml(phase.name || '')}" placeholder="阶段名称（可选）" onchange="Worldview.updateTaskPhase(${pi},'name',this.value)" style="flex:1;min-width:0;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:12px">
+        </div>
+        <button type="button" onclick="Worldview.deleteTaskPhase(${pi})" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">删除</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <label style="flex:1;font-size:12px;color:var(--text-secondary)">每批最多
+          <input type="number" min="1" max="5" value="${phase.batchSize || 3}" onchange="Worldview.updateTaskPhase(${pi},'batchSize',Number(this.value))" style="width:100%;margin-top:4px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:12px;box-sizing:border-box">
+        </label>
+        <label style="flex:1;font-size:12px;color:var(--text-secondary)">本阶段总任务数
+          <input type="number" min="1" max="999" value="${phase.totalTasks || 10}" onchange="Worldview.updateTaskPhase(${pi},'totalTasks',Number(this.value))" style="width:100%;margin-top:4px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:12px;box-sizing:border-box">
+        </label>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">任务类型模板</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${typeCards || '<div style="padding:10px;color:var(--text-secondary);font-size:12px;text-align:center;border:1px dashed var(--border);border-radius:6px">暂无类型，点击下方添加</div>'}</div>
+      <button type="button" onclick="Worldview.openTaskTypeModal(${pi},-1)" style="width:100%;padding:6px;border-radius:6px;border:1px dashed var(--border);background:none;color:var(--accent);font-size:12px;cursor:pointer;margin-bottom:10px">+ 添加任务类型</button>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:12px;font-weight:600;color:var(--text)">阶段完成奖励：</span>
+        <span style="font-size:12px;color:var(--text-secondary)">${Utils.escapeHtml(crSummary)}</span>
+        <button type="button" onclick="Worldview.openPhaseRewardModal(${pi})" style="padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--accent);font-size:11px;cursor:pointer;margin-left:auto">编辑</button>
+      </div>
+    </div>`;
+  });
+
+  html += `<button type="button" onclick="Worldview.addTaskPhase()" style="width:100%;padding:8px;border-radius:8px;border:1px dashed var(--border);background:none;color:var(--accent);font-size:13px;cursor:pointer">+ 添加新阶段</button>`;
+  el.innerHTML = html;
+}
+
+// ===== 任务类型弹窗 =====
+let _ttModalPhaseIdx = -1;
+let _ttModalTypeIdx = -1; // -1 = 新建
+
+function openTaskTypeModal(pi, ti) {
+  _ttModalPhaseIdx = pi;
+  _ttModalTypeIdx = ti;
+  const w = window.__wvEditingCache;
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const phase = gp.taskSystem.phases[pi];
+  if (!phase) return;
+  const isNew = ti < 0;
+  const t = isNew ? _defaultTaskType() : (phase.types?.[ti] || _defaultTaskType());
+
+  document.getElementById('wv-task-type-modal-title').textContent = isNew ? '新建任务类型' : '编辑任务类型';
+  document.getElementById('wv-tt-label').value = t.label || '';
+  document.getElementById('wv-tt-desc').value = t.desc || '';
+  document.getElementById('wv-tt-reward-mode').value = t.rewardMode || 'none';
+  document.getElementById('wv-tt-reward-value').value = t.rewardValue || 0;
+  document.getElementById('wv-tt-reward-free').value = t.rewardFree || '';
+  document.getElementById('wv-tt-delete-btn').style.display = isNew ? 'none' : '';
+
+  // 填充属性下拉
+  const attrSel = document.getElementById('wv-tt-reward-attr');
+  const attrNames = _getGlobalAttrNames(w);
+  attrSel.innerHTML = `<option value="">选择属性</option>` + attrNames.map(a => `<option value="${Utils.escapeHtml(a)}" ${t.rewardAttr === a ? 'selected' : ''}>${Utils.escapeHtml(a)}</option>`).join('');
+
+  onTaskTypeRewardModeChange();
+  document.getElementById('wv-task-type-modal').classList.remove('hidden');
+}
+
+function closeTaskTypeModal() {
+  document.getElementById('wv-task-type-modal').classList.add('hidden');
+}
+
+function onTaskTypeRewardModeChange() {
+  const mode = document.getElementById('wv-tt-reward-mode').value;
+  const attrRow = document.getElementById('wv-tt-reward-attr-row');
+  const freeRow = document.getElementById('wv-tt-reward-free-row');
+  attrRow.style.display = mode === 'attr' ? '' : 'none';
+  attrRow.classList.toggle('hidden', mode !== 'attr');
+  freeRow.style.display = mode === 'free' ? '' : 'none';
+  freeRow.classList.toggle('hidden', mode !== 'free');
+}
+
+async function saveTaskTypeFromModal() {
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const phase = gp.taskSystem.phases[_ttModalPhaseIdx];
+  if (!phase) return;
+  if (!phase.types) phase.types = [];
+
+  const label = document.getElementById('wv-tt-label').value.trim();
+  if (!label) { UI.showToast('请填写类型名称', 1500); return; }
+  const mode = document.getElementById('wv-tt-reward-mode').value;
+
+  const data = {
+    label,
+    desc: document.getElementById('wv-tt-desc').value.trim(),
+    rewardMode: mode,
+    rewardAttr: mode === 'attr' ? document.getElementById('wv-tt-reward-attr').value : '',
+    rewardValue: mode === 'attr' ? Number(document.getElementById('wv-tt-reward-value').value) || 0 : 0,
+    rewardFree: mode === 'free' ? document.getElementById('wv-tt-reward-free').value.trim() : ''
+  };
+
+  if (_ttModalTypeIdx < 0) {
+    data.id = 'tt_' + Utils.uuid().slice(0, 8);
+    phase.types.push(data);
+  } else {
+    const existing = phase.types[_ttModalTypeIdx];
+    if (existing) Object.assign(existing, data);
+  }
+
+  await DB.put('worldviews', w);
+  window.__wvEditingCache = w;
+  closeTaskTypeModal();
+  _renderTaskSystem(w);
+}
+
+async function deleteTaskTypeFromModal() {
+  if (!editingWorldviewId || _ttModalTypeIdx < 0) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const phase = gp.taskSystem.phases[_ttModalPhaseIdx];
+  if (!phase || !phase.types?.[_ttModalTypeIdx]) return;
+  phase.types.splice(_ttModalTypeIdx, 1);
+  await DB.put('worldviews', w);
+  window.__wvEditingCache = w;
+  closeTaskTypeModal();
+  _renderTaskSystem(w);
+}
+
+// 阶段完成奖励也用弹窗复用任务类型弹窗的思路，但更简单——直接用 confirm 式交互
+async function openPhaseRewardModal(pi) {
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const phase = gp.taskSystem.phases[pi];
+  if (!phase) return;
+  if (!phase.completionReward) phase.completionReward = { mode: 'none', attr: '', value: 0, free: '' };
+  const cr = phase.completionReward;
+  const attrNames = _getGlobalAttrNames(w);
+
+  // 复用任务类型弹窗的字段
+  _ttModalPhaseIdx = pi;
+  _ttModalTypeIdx = -999; // 标记为阶段奖励模式
+  document.getElementById('wv-task-type-modal-title').textContent = `阶段 ${pi + 1} 完成奖励`;
+  document.getElementById('wv-tt-label').value = '阶段完成奖励';
+  document.getElementById('wv-tt-label').disabled = true;
+  document.getElementById('wv-tt-desc').value = '';
+  document.getElementById('wv-tt-desc').parentElement.style.display = 'none';
+  document.getElementById('wv-tt-reward-mode').value = cr.mode || 'none';
+  document.getElementById('wv-tt-reward-value').value = cr.value || 0;
+  document.getElementById('wv-tt-reward-free').value = cr.free || '';
+  document.getElementById('wv-tt-delete-btn').style.display = 'none';
+  const attrSel = document.getElementById('wv-tt-reward-attr');
+  attrSel.innerHTML = `<option value="">选择属性</option>` + attrNames.map(a => `<option value="${Utils.escapeHtml(a)}" ${cr.attr === a ? 'selected' : ''}>${Utils.escapeHtml(a)}</option>`).join('');
+  onTaskTypeRewardModeChange();
+  document.getElementById('wv-task-type-modal').classList.remove('hidden');
+}
+
+// 覆写保存：检测是阶段奖励模式还是类型模式
+const _origSaveTaskTypeFromModal = saveTaskTypeFromModal;
+saveTaskTypeFromModal = async function() {
+  if (_ttModalTypeIdx === -999) {
+    // 阶段奖励模式
+    if (!editingWorldviewId) return;
+    const w = await DB.get('worldviews', editingWorldviewId);
+    if (!w) return;
+    const gp = _ensureGameplay(w);
+    const phase = gp.taskSystem.phases[_ttModalPhaseIdx];
+    if (!phase) return;
+    const mode = document.getElementById('wv-tt-reward-mode').value;
+    phase.completionReward = {
+      mode,
+      attr: mode === 'attr' ? document.getElementById('wv-tt-reward-attr').value : '',
+      value: mode === 'attr' ? Number(document.getElementById('wv-tt-reward-value').value) || 0 : 0,
+      free: mode === 'free' ? document.getElementById('wv-tt-reward-free').value.trim() : ''
+    };
+    await DB.put('worldviews', w);
+    window.__wvEditingCache = w;
+    // 恢复弹窗状态
+    document.getElementById('wv-tt-label').disabled = false;
+    document.getElementById('wv-tt-desc').parentElement.style.display = '';
+    closeTaskTypeModal();
+    _renderTaskSystem(w);
+  } else {
+    return _origSaveTaskTypeFromModal();
+  }
+};
+
+// 关闭时恢复弹窗状态
+const _origCloseTaskTypeModal = closeTaskTypeModal;
+closeTaskTypeModal = function() {
+  document.getElementById('wv-tt-label').disabled = false;
+  document.getElementById('wv-tt-desc').parentElement.style.display = '';
+  _origCloseTaskTypeModal();
+};
+
+async function addTaskPhase() {
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  gp.taskSystem.phases.push(_defaultTaskPhase());
+  await DB.put('worldviews', w);
+  _renderTaskSystem(w);
+}
+
+async function deleteTaskPhase(pi) {
+  if (!editingWorldviewId) return;
+  if (!await UI.showConfirm('删除阶段', `确定删除阶段 ${pi + 1}？`)) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  gp.taskSystem.phases.splice(pi, 1);
+  await DB.put('worldviews', w);
+  _renderTaskSystem(w);
+}
+
+async function updateTaskPhase(pi, field, value) {
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const phase = gp.taskSystem.phases[pi];
+  if (!phase) return;
+  if (field === 'batchSize') value = Math.max(1, Math.min(5, value || 3));
+  if (field === 'totalTasks') value = Math.max(1, Math.min(999, value || 10));
+  phase[field] = value;
+  await DB.put('worldviews', w);
+}
+
+async function addTaskType(pi) {
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const phase = gp.taskSystem.phases[pi];
+  if (!phase) return;
+  if (!phase.types) phase.types = [];
+  phase.types.push(_defaultTaskType());
+  await DB.put('worldviews', w);
+  _renderTaskSystem(w);
+}
+
+async function deleteTaskType(pi, ti) {
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const phase = gp.taskSystem.phases[pi];
+  if (!phase || !phase.types) return;
+  phase.types.splice(ti, 1);
+  await DB.put('worldviews', w);
+  _renderTaskSystem(w);
+}
+
+async function updateTaskType(pi, ti, field, value) {
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const phase = gp.taskSystem.phases[pi];
+  if (!phase || !phase.types?.[ti]) return;
+  phase.types[ti][field] = value;
+  // 切换 rewardMode 时清空无关字段
+  if (field === 'rewardMode') {
+    if (value !== 'attr') { phase.types[ti].rewardAttr = ''; phase.types[ti].rewardValue = 0; }
+    if (value !== 'free') { phase.types[ti].rewardFree = ''; }
+  }
+  await DB.put('worldviews', w);
+  if (field === 'rewardMode') _renderTaskSystem(w);
+}
+
+async function updateTaskPhaseReward(pi, field, value) {
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const phase = gp.taskSystem.phases[pi];
+  if (!phase) return;
+  if (!phase.completionReward) phase.completionReward = { mode: 'none', attr: '', value: 0, free: '' };
+  phase.completionReward[field] = value;
+  if (field === 'mode') {
+    if (value !== 'attr') { phase.completionReward.attr = ''; phase.completionReward.value = 0; }
+    if (value !== 'free') { phase.completionReward.free = ''; }
+  }
+  await DB.put('worldviews', w);
+  if (field === 'mode') _renderTaskSystem(w);
 }
 
 async function updateGameplayAttr(scope, charIdx, attrIdx, field, value) {
@@ -3646,6 +4014,8 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     openNPCEdit, saveNPC, deleteNPC,
     addGlobalNpc, editGlobalNpc, backFromNpcEdit,
     addGameplayAttr, updateGameplayAttr, deleteGameplayAttr, openGameplayAttrModal, closeGameplayAttrModal, saveGameplayAttrFromModal, deleteGameplayAttrFromModal, deleteGameplayCharacter, toggleGameplayCharPicker, renderGameplayCharPicker, selectGameplayCharacter,
+    addTaskPhase, deleteTaskPhase, updateTaskPhase, addTaskType, deleteTaskType, updateTaskType, updateTaskPhaseReward,
+    openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal, onTaskTypeRewardModeChange, openPhaseRewardModal,
     _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards,
     addFestival, editFestival, saveFestivalFromModal, deleteFestivalFromModal, closeFestivalModal,
   addCustom, editCustom, saveCustomFromModal, deleteCustomFromModal, closeCustomModal,

@@ -41,6 +41,43 @@ const Chat = (() => {
       });
     } catch(_) {}
     _onlineNpcAvatarMap = map;
+    // 补充：单人卡头像（单人卡不在世界观 NPC 里，但可能在线上气泡中出现）
+    try {
+      const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+      if (conv && conv.isSingle && conv.singleCharId) {
+        let scName = '', scAvatar = '';
+        if (conv.singleCharType === 'card') {
+          const card = await DB.get('singleCards', conv.singleCharId);
+          if (card) { scName = card.name || ''; scAvatar = card.avatar || ''; }
+        } else if (conv.singleCharType === 'npc') {
+          scAvatar = (await DB.get('npcAvatars', conv.singleCharId).catch(() => null))?.avatar || '';
+          // NPC 名在世界观里已经加过了，但头像可能存在 npcAvatars 表
+          const wvId = conv.singleCharSourceWvId || conv.singleWorldviewId;
+          if (wvId) {
+            const wv = await DB.get('worldviews', wvId);
+            if (wv) {
+              outer: for (const r of (wv.regions || [])) {
+                for (const f of (r.factions || [])) {
+                  for (const n of (f.npcs || [])) {
+                    if (n.id === conv.singleCharId) { scName = n.name || ''; break outer; }
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (scName && scAvatar && !_onlineNpcAvatarMap[scName]) {
+          _onlineNpcAvatarMap[scName] = scAvatar;
+        }
+      }
+      // 挂载卡（面具）头像
+      if (typeof Character !== 'undefined' && Character.get) {
+        const char = await Character.get();
+        if (char && char.name && char.avatar && !_onlineNpcAvatarMap[char.name]) {
+          _onlineNpcAvatarMap[char.name] = char.avatar;
+        }
+      }
+    } catch(_) {}
   }
 
   async function refreshOnlineChatAvatars() {
@@ -221,7 +258,8 @@ const Chat = (() => {
 5. npc 必须使用角色真名，与正文/status 中的名字一致。
 6. 当输出了 \`\`\`chat 块时，**消息的具体内容只写在 chat 块里，正文不要复述**。正文需要简短交代"发送/收到了消息"这个动作或场景本身（例如"她拿起手机，给他发了一条消息"/"手机震了一下，是来自{{NPC}}的消息"），但不要把消息原文也写进正文，避免一条消息出现两次。
 7. **chat 块里只放 NPC 发出的消息，不要包含{{user}}的消息**。用户的消息由用户自己输入，AI 既不要复述也不要替用户写入 chat 块。
-8. **chat 块只填本轮新产生的线上消息，不要把历史轮次已经出现过的消息再填一遍**。历史消息前端已经渲染过，重复输出会导致用户看到同一条消息出现多次。`;
+8. **chat 块只填本轮新产生的线上消息，不要把历史轮次已经出现过的消息再填一遍**。历史消息前端已经渲染过，重复输出会导致用户看到同一条消息出现多次。
+9. **chat 块只用于私聊/群聊类的即时通讯消息**。论坛帖子、论坛评论、好友圈动态、好友圈评论等内容不要放入 chat 块——它们有独立的手机 APP 界面承载，不属于线上消息。`;
 
 
   /**
@@ -956,11 +994,19 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       } else if (typeof StatusBar !== 'undefined' && StatusBar.hsFormatForPrompt) {
         try {
           const hsStateText = StatusBar.hsFormatForPrompt();
-          if (hsStateText) systemParts.push(hsStateText);
-        } catch(e) { console.warn('[Chat] 心动模拟累计状态注入失败', e); }
-      }
+        if (hsStateText) systemParts.push(hsStateText);
+      } catch(e) { console.warn('[Chat] 心动模拟累计状态注入失败', e); }
+    }
 
-      // 8a. 心动模拟：通关后的"返航 marker"持续提示（直到 AI 实际触发为止）
+    // 8. 通用任务系统 prompt 注入（非心动模拟世界观）
+    try {
+      if (typeof StatusBar !== 'undefined' && StatusBar.taskFormatForPrompt) {
+        const taskText = await StatusBar.taskFormatForPrompt();
+        if (taskText) systemParts.push(taskText);
+      }
+    } catch(e) { console.warn('[Chat] 通用任务系统注入失败', e); }
+
+    // 8a. 心动模拟：通关后的"返航 marker"持续提示（直到 AI 实际触发为止）
       try {
         if (!_hsHomecoming && typeof StatusBar !== 'undefined' && StatusBar.hsCheckClearCondition) {
           const check = StatusBar.hsCheckClearCondition();
@@ -1179,7 +1225,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       if (_snapshot && _snapshot.length > 0) {
         const _phoneLogContent = '【玩家手机操作记录｜OOC】\n以下是"{{user}}"本轮在自己手机里的操作，由系统旁白记录，不是角色对白，也不是任何一方的剧情发言：\n\n' +
           _snapshot.map(a => `- {{user}} ${a}`).join('\n') +
-          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。';
+          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。\n⑤ 【禁止】你的回复中不要输出或模仿【玩家手机操作记录｜OOC】这个格式。它是系统自动注入的元信息，你只需阅读理解并自然融入剧情描写，绝对不要在你的输出中复制、仿写或引用此格式块。';
         const insertIdx = apiMessages.length - 1; // 最后一条是当前 user 消息
         if (insertIdx >= 0) {
           apiMessages.splice(insertIdx, 0, { role: 'system', content: _phoneLogContent });
@@ -2770,6 +2816,8 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
     }
     if (parsed.tasks && typeof StatusBar !== 'undefined') {
       StatusBar.hsApplyTasks(parsed.tasks);
+      // 通用任务系统（非心动模拟世界观时生效，心动模拟走自己的 hsApplyTasks）
+      if (StatusBar.taskApply) StatusBar.taskApply(parsed.tasks);
     }
     if (parsed.phoneLock && typeof StatusBar !== 'undefined' && StatusBar.hsApplyPhoneLock) {
       StatusBar.hsApplyPhoneLock(parsed.phoneLock);
@@ -3814,10 +3862,17 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       } else if (typeof StatusBar !== 'undefined' && StatusBar.hsFormatForPrompt) {
         try {
           const hsStateText = StatusBar.hsFormatForPrompt();
-          if (hsStateText) systemParts.push(hsStateText);
-        } catch(e) { console.warn('[showContext] 心动模拟累计状态注入失败', e); }
+        if (hsStateText) systemParts.push(hsStateText);
+      } catch(e) { console.warn('[showContext] 心动模拟累计状态注入失败', e); }
+    }
+    // 通用任务系统 prompt 注入
+    try {
+      if (typeof StatusBar !== 'undefined' && StatusBar.taskFormatForPrompt) {
+        const taskText = await StatusBar.taskFormatForPrompt();
+        if (taskText) systemParts.push(taskText);
       }
-      try {
+    } catch(e) { console.warn('[showContext] 通用任务系统注入失败', e); }
+    try {
         if (!_hsHomecomingDbg && typeof StatusBar !== 'undefined' && StatusBar.hsCheckClearCondition) {
           const chk = StatusBar.hsCheckClearCondition();
           if (chk && chk.passed) {
@@ -4006,7 +4061,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       if (_snapshot && _snapshot.length > 0) {
         const _phoneLogContent = '【玩家手机操作记录｜OOC】\n以下是"{{user}}"本轮在自己手机里的操作，由系统旁白记录，不是角色对白，也不是任何一方的剧情发言：\n\n' +
           _snapshot.map(a => `- {{user}} ${a}`).join('\n') +
-          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。';
+          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。\n⑤ 【禁止】你的回复中不要输出或模仿【玩家手机操作记录｜OOC】这个格式。它是系统自动注入的元信息，你只需阅读理解并自然融入剧情描写，绝对不要在你的输出中复制、仿写或引用此格式块。';
         const insertIdx = apiMessages.length - 1;
         if (insertIdx >= 0) {
           apiMessages.splice(insertIdx, 0, { role: 'system', content: _phoneLogContent });
@@ -4155,6 +4210,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       timeAware: !!conv?.convTimeAware,         // 默认关
       onlineChat: !!conv?.convOnlineChat,       // 默认关（线上消息气泡）
       eventsEnabled: conv?.convEventsEnabled !== false, // 默认开（世界观事件系统）
+      tasksEnabled: conv?.convTasksEnabled !== false,   // 默认开（通用任务系统）
       voiceEnabled: !!voice.enabled,
       voiceId: voice.voiceId || '',
       voiceScope: {
@@ -4244,6 +4300,8 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     if (oc) oc.checked = s.onlineChat;
     const evEnabled = document.getElementById('cs-events-enabled');
     if (evEnabled) evEnabled.checked = s.eventsEnabled;
+    const tsEnabled = document.getElementById('cs-tasks-enabled');
+    if (tsEnabled) tsEnabled.checked = s.tasksEnabled;
     // 语音
     const ve = document.getElementById('cs-voice-enabled');
     if (ve) {
@@ -4295,6 +4353,8 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     if (igSaveEl) conv.convImgGen = igSaveEl.checked;
     const evEl = document.getElementById('cs-events-enabled');
     if (evEl) conv.convEventsEnabled = evEl.checked;
+    const tsEl = document.getElementById('cs-tasks-enabled');
+    if (tsEl) conv.convTasksEnabled = tsEl.checked;
     // 正文字数
     const wcEl = document.getElementById('cs-reply-wordcount');
     if (wcEl) conv.convReplyWordCount = parseInt(wcEl.value) || 800;

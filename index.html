@@ -264,9 +264,32 @@
  </div>
           </div>
 
+          <!-- 通用任务系统面板（非心动模拟世界观显示） -->
+          <div id="sb-task-system" class="hidden" style="margin-top:12px">
+            <div class="hs-mission-section">
+              <div class="hs-module-title">Tasks</div>
+              <div class="hs-mission-card">
+                <div class="hs-mission-head">
+                  <div>
+                    <div class="hs-mission-label" id="ts-phase-label">阶段 1</div>
+                    <div class="hs-mission-score"><span id="ts-progress">0/10</span><span id="ts-progress-percent">0%</span></div>
+                  </div>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <button class="hs-skip-btn" title="以最新一条AI回复为唯一真相，重建任务栏" onclick="event.stopPropagation();StatusBar.taskRefreshFromLatestAI()" style="background:rgba(255,255,255,0.06)">Sync</button>
+                    <button class="hs-skip-btn" id="ts-skip-btn" onclick="event.stopPropagation();StatusBar.taskOpenSkipModal()">Skip</button>
+                  </div>
+                </div>
+                <div class="hs-score-track">
+                  <div id="ts-progress-bar" class="hs-score-fill"></div>
+                </div>
+                <div id="ts-task-list" class="hs-task-list"></div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div><!-- /sb-expanded-scroll -->
-      </div>
+      </div><!-- /sb-expanded-overlay -->
 <div id="chat-messages" class="chat-messages"></div>
 <!-- 语音迷你播放器（朗读时浮现） -->
 <div id="voice-mini-player" class="voice-mini-player hidden">
@@ -1318,6 +1341,18 @@
           </div>
 
           <label class="circle-check-label">
+            <span class="circle-check-text">任务系统<br><span style="font-size:11px;color:var(--text-secondary)">启用世界观配置的任务阶段，AI 按类型池发布任务并自动结算奖励</span></span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-tasks-enabled" class="circle-check" checked>
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">重置当前对话的任务进度（阶段、已完成数、活跃任务全部清空）。</div>
+            <button type="button" onclick="UI.showConfirm('重置任务系统','将清空当前对话的所有任务进度（阶段、已完成数、活跃任务），不可撤销。\n确定继续？').then(ok=>{if(ok)StatusBar.taskReset().then(()=>{UI.showToast('任务系统已重置',1500);StatusBar.refreshFromConv()})})" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--danger);font-size:12px;cursor:pointer;white-space:nowrap">重置任务</button>
+          </div>
+
+          <label class="circle-check-label">
             <span class="circle-check-text">启用语音朗读</span>
             <span style="position:relative;display:inline-flex">
               <input type="checkbox" id="cs-voice-enabled" class="circle-check" onchange="Chat._onVoiceEnabledChange()">
@@ -1473,9 +1508,54 @@
   </div>
 </div>
 
-<!-- 单人对话设置弹窗 -->
+<!-- 任务类型编辑弹窗 -->
+<div id="wv-task-type-modal" class="modal hidden">
+  <div class="modal-content" style="max-height:90vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0">
+      <h3 id="wv-task-type-modal-title" style="margin:0;font-size:16px;color:var(--accent)">编辑任务类型</h3>
+      <button onclick="Worldview.closeTaskTypeModal()" style="background:none;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer">×</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-right:4px">
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">类型名称
+        <input id="wv-tt-label" placeholder="例如：唱歌练习" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;outline:none;box-shadow:none">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">类型描述
+        <textarea id="wv-tt-desc" placeholder="告诉 AI 任务的含义、发布时机、频率等" rows="3" style="width:100%;box-sizing:border-box;min-height:70px;resize:vertical;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;line-height:1.5;outline:none;box-shadow:none"></textarea>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">奖励类型
+        <select id="wv-tt-reward-mode" onchange="Worldview.onTaskTypeRewardModeChange()" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px">
+          <option value="none">无奖励</option>
+          <option value="attr">自定义属性</option>
+          <option value="free">自由奖励</option>
+        </select>
+      </label>
+      <div id="wv-tt-reward-attr-row" class="hidden" style="display:none">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text);min-width:0">属性
+            <select id="wv-tt-reward-attr" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0"></select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text);min-width:0">奖励值
+            <input id="wv-tt-reward-value" type="number" placeholder="例如：+5" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0;outline:none;box-shadow:none">
+          </label>
+        </div>
+      </div>
+      <div id="wv-tt-reward-free-row" class="hidden" style="display:none">
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">自由奖励描述
+          <textarea id="wv-tt-reward-free" placeholder="注入给 AI，让它在剧情里演绎的奖励" rows="2" style="width:100%;box-sizing:border-box;min-height:50px;resize:vertical;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;line-height:1.5;outline:none;box-shadow:none"></textarea>
+        </label>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;flex-shrink:0">
+      <button id="wv-tt-delete-btn" onclick="Worldview.deleteTaskTypeFromModal()" style="padding:9px 12px;border-radius:8px;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));background:none;color:var(--danger);font-size:13px;cursor:pointer">删除</button>
+      <div style="display:flex;gap:8px">
+        <button onclick="Worldview.closeTaskTypeModal()" style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;cursor:pointer">取消</button>
+        <button onclick="Worldview.saveTaskTypeFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-<!-- 生成图片弹窗 -->
+<!-- 单人对话设置弹窗 -->
 <div id="imggen-modal" class="modal hidden">
 <div class="modal-content" style="max-width:400px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -2551,6 +2631,16 @@
             <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;margin-bottom:12px">这里只定义属性含义与初始规则；当前值后续存在每条对话的状态栏里，不写回世界观。</div>
             <div id="wv-global-attrs-container"></div>
             <div id="wv-character-attrs-container" style="margin-top:14px"></div>
+          </div>
+
+          <!-- 任务系统 -->
+          <div style="margin-bottom:20px">
+            <div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+              任务系统
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;margin-bottom:12px">定义任务阶段和类型模板，AI 根据类型池发布任务，系统自动结算奖励。可在对话设置中启用/关闭/重置。</div>
+            <div id="wv-task-system-container"></div>
           </div>
 
           <!-- 状态栏布局 -->
