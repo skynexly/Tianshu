@@ -582,31 +582,37 @@ if (placeholder) placeholder.style.display = '';
 }
 }
 
+  async function pickAvatar() {
+    const dataUrl = await Utils.promptImageInput({ maxSize: 256, quality: 0.85 });
+    if (!dataUrl) return;
+    _processAvatarDataUrl(dataUrl);
+  }
+
   function onAvatarPicked(input) {
     const file = input.files?.[0];
     if (!file) return;
-    // 压缩到 128x128 以节省存储
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const size = 128;
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        // 居中裁切正方形
-        const min = Math.min(img.width, img.height);
-        const sx = (img.width - min) / 2;
-        const sy = (img.height - min) / 2;
-        ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
-        currentAvatar = canvas.toDataURL('image/jpeg', 0.8);
-        updateAvatarPreview();
-      };
-      img.src = e.target.result;
-    };
+    reader.onload = (e) => { _processAvatarDataUrl(e.target.result); };
     reader.readAsDataURL(file);
     input.value = '';
+  }
+
+  function _processAvatarDataUrl(dataUrl) {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = 128;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2;
+      const sy = (img.height - min) / 2;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+      currentAvatar = canvas.toDataURL('image/jpeg', 0.8);
+      updateAvatarPreview();
+    };
+    img.src = dataUrl;
   }
 
   function removeAvatar() {
@@ -1326,7 +1332,7 @@ return {
     _toggleWvDropdown, _selectWv,
   addAbility, removeAbility, editAbility, saveAbility, deleteAbility, closeAbilityEdit, closeAbilityModal,
   addItem, removeItem, editItem, saveItem, deleteItem, closeItemEdit, closeItemModal, addItemDirect, removeItemByName, cloneMask, cloneMaskFrom,
-  onAvatarPicked, removeAvatar, searchMasks,
+  onAvatarPicked, pickAvatar, removeAvatar, searchMasks,
   toggleManageMode, toggleSelectAll, batchClone, batchDelete, _onCardClick, exitManageMode,
   // v616
   toggleMenu, exportSelected, importMask,

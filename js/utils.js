@@ -587,5 +587,131 @@ async function copyFromDataset(btn) {
     });
   }
 
-  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText };
+  /**
+   * 通用图片输入：弹出选择弹窗（本地文件 / 粘贴URL）
+   * @param {Object} opts - 选项
+   * @param {number} opts.maxSize - 压缩后最大尺寸(px)，默认800
+   * @param {number} opts.quality - JPEG压缩质量，默认0.8
+   * @param {string} opts.outputFormat - 'jpeg'|'png'|'webp'，默认'jpeg'
+   * @returns {Promise<string|null>} dataUrl 或 null（取消）
+   */
+  function promptImageInput(opts = {}) {
+    const maxSize = opts.maxSize || 800;
+    const quality = opts.quality || 0.8;
+    const format = opts.outputFormat || 'jpeg';
+    const mimeType = `image/${format}`;
+
+    return new Promise(resolve => {
+      // 构建弹窗
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+      overlay.innerHTML = `
+        <div style="background:var(--bg-secondary,#1a1a1a);border:1px solid var(--border,#333);border-radius:12px;padding:20px;max-width:360px;width:100%;display:flex;flex-direction:column;gap:14px">
+          <div style="font-size:15px;font-weight:600;color:var(--text,#eee)">选择图片来源</div>
+          <button id="_img-pick-file" style="padding:10px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg-tertiary,#222);color:var(--text,#eee);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;justify-content:center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            从本地选择
+          </button>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:1px;background:var(--border,#333)"></div>
+            <span style="font-size:11px;color:var(--text-secondary,#888)">或</span>
+            <div style="flex:1;height:1px;background:var(--border,#333)"></div>
+          </div>
+          <input id="_img-pick-url" type="text" placeholder="粘贴图片URL…" style="padding:10px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg-tertiary,#222);color:var(--text,#eee);font-size:13px;outline:none">
+          <div id="_img-pick-url-err" style="display:none;font-size:11px;color:var(--danger,#e55)"></div>
+          <div style="display:flex;gap:8px">
+            <button id="_img-pick-cancel" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border,#333);background:transparent;color:var(--text-secondary,#888);font-size:13px;cursor:pointer">取消</button>
+            <button id="_img-pick-confirm" style="flex:1;padding:8px;border-radius:8px;border:none;background:var(--accent,#f60);color:#111;font-size:13px;font-weight:600;cursor:pointer">确认URL</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/*';
+
+      function cleanup() { overlay.remove(); }
+
+      // 压缩图片 dataUrl
+      function compress(dataUrl) {
+        return new Promise(res => {
+          const img = new Image();
+          img.onload = () => {
+            let w = img.width, h = img.height;
+            if (w > maxSize || h > maxSize) {
+              if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+              else { w = Math.round(w * maxSize / h); h = maxSize; }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            res(canvas.toDataURL(mimeType, quality));
+          };
+          img.onerror = () => res(dataUrl); // 压缩失败就用原图
+          img.src = dataUrl;
+        });
+      }
+
+      // 本地文件
+      overlay.querySelector('#_img-pick-file').onclick = () => fileInput.click();
+      fileInput.onchange = () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const result = await compress(e.target.result);
+          cleanup();
+          resolve(result);
+        };
+        reader.readAsDataURL(file);
+      };
+
+      // URL 确认
+      overlay.querySelector('#_img-pick-confirm').onclick = async () => {
+        const urlInput = overlay.querySelector('#_img-pick-url');
+        const errEl = overlay.querySelector('#_img-pick-url-err');
+        const url = urlInput.value.trim();
+        if (!url) { errEl.style.display = 'block'; errEl.textContent = '请输入URL'; return; }
+        errEl.style.display = 'block'; errEl.textContent = '加载中…'; errEl.style.color = 'var(--text-secondary,#888)';
+        try {
+          const resp = await fetch(url, { mode: 'cors' });
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const blob = await resp.blob();
+          if (!blob.type.startsWith('image/')) throw new Error('不是图片');
+          const dataUrl = await new Promise((res, rej) => {
+            const r = new FileReader();
+            r.onload = () => res(r.result);
+            r.onerror = rej;
+            r.readAsDataURL(blob);
+          });
+          const result = await compress(dataUrl);
+          cleanup();
+          resolve(result);
+        } catch(e) {
+          // CORS 失败时尝试直接用 URL（不转 base64）
+          errEl.style.color = 'var(--text-secondary,#888)';
+          errEl.textContent = '无法下载图片，尝试直接使用URL…';
+          // 验证是否能作为 img src 加载
+          const testImg = new Image();
+          testImg.onload = () => { cleanup(); resolve(url); };
+          testImg.onerror = () => {
+            errEl.style.color = 'var(--danger,#e55)';
+            errEl.textContent = '图片加载失败，请检查URL是否正确';
+          };
+          testImg.src = url;
+        }
+      };
+
+      // URL 输入框回车
+      overlay.querySelector('#_img-pick-url').onkeydown = (e) => {
+        if (e.key === 'Enter') overlay.querySelector('#_img-pick-confirm').click();
+      };
+
+      // 取消
+      overlay.querySelector('#_img-pick-cancel').onclick = () => { cleanup(); resolve(null); };
+      overlay.onclick = (e) => { if (e.target === overlay) { cleanup(); resolve(null); } };
+    });
+  }
+
+  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, promptImageInput };
 })();

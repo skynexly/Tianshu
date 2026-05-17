@@ -334,24 +334,12 @@ const SingleCard = (() => {
     }
   }
 
-  function pickAvatarPanel() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const dataUrl = ev.target.result;
-        const preview = document.getElementById('sc-panel-avatar-preview');
-        preview.innerHTML = `<img src="${dataUrl}" data-value="${dataUrl}" style="width:80px;height:80px;border-radius:50%;object-fit:cover">`;
-        // 触发自动保存
-        _scAutoSave();
-      };
-      reader.readAsDataURL(file);
-    };
-    input.click();
+  async function pickAvatarPanel() {
+    const dataUrl = await Utils.promptImageInput({ maxSize: 256, quality: 0.85 });
+    if (!dataUrl) return;
+    const preview = document.getElementById('sc-panel-avatar-preview');
+    preview.innerHTML = `<img src="${dataUrl}" data-value="${dataUrl}" style="width:80px;height:80px;border-radius:50%;object-fit:cover">`;
+    _scAutoSave();
   }
 
   // 从 panel 读字段并保存

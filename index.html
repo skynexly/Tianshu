@@ -548,7 +548,7 @@
     <div style="overflow-y:auto;max-height:calc(100vh - 120px);padding-right:4px">
       <!-- 头像上传 -->
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:12px;background:var(--bg-tertiary);border-radius:8px">
-        <div id="mask-avatar-preview" style="width:64px;height:64px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;flex-shrink:0" onclick="document.getElementById('mask-avatar-input').click()">
+        <div id="mask-avatar-preview" style="width:64px;height:64px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;flex-shrink:0" onclick="Character.pickAvatar()">
           <div id="mask-avatar-placeholder" style="font-size:36px;color:rgba(255,255,255,0.8)">✦</div>
         </div>
         <div style="flex:1">
@@ -1381,11 +1381,10 @@
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
                 <span style="font-size:14px;color:var(--text)">对话背景图</span>
                 <div style="display:flex;gap:8px;align-items:center">
-                  <label style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer">
+                  <button type="button" onclick="Chat._onConvBgPicked()" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     <span>选择图片</span>
-                    <input type="file" accept="image/*" onchange="Chat._onConvBgPicked(this)" style="display:none">
-                  </label>
+                  </button>
                   <button id="cs-bg-clear" onclick="Chat._onConvBgClear()" style="display:none;align-items:center;gap:4px;padding:6px 12px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);font-size:12px;cursor:pointer">移除</button>
                 </div>
               </div>

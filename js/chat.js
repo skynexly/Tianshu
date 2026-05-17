@@ -4345,43 +4345,21 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
 
   // 对话级背景图：上传 + 清除
   let _pendingConvBg = null; // 弹窗内的暂存值，保存时才落到 conv 上
-  function _onConvBgPicked(input) {
-    const file = input.files && input.files[0];
-    input.value = '';
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      const raw = e.target.result;
-      const img = new Image();
-      img.onload = () => {
-        // 压缩到 max 1200px 宽/高，JPEG 0.7（与主题级背景图保持一致）
-        const MAX = 1200;
-        let w = img.naturalWidth, h = img.naturalHeight;
-        if (w > MAX || h > MAX) {
-          const ratio = Math.min(MAX / w, MAX / h);
-          w = Math.round(w * ratio);
-          h = Math.round(h * ratio);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-        if (dataUrl.length > 2_000_000) {
-          UI.showToast('图片过大，请选择更小的图片', 2500);
-          return;
-        }
-        _pendingConvBg = dataUrl;
-        const preview = document.getElementById('cs-bg-preview');
-        if (preview) {
-          preview.src = dataUrl;
-          preview.style.display = 'block';
-        }
-        const clearBtn = document.getElementById('cs-bg-clear');
-        if (clearBtn) clearBtn.style.display = 'inline-flex';
-      };
-      img.src = raw;
-    };
-    reader.readAsDataURL(file);
+  async function _onConvBgPicked() {
+    const dataUrl = await Utils.promptImageInput({ maxSize: 1200, quality: 0.7 });
+    if (!dataUrl) return;
+    if (typeof dataUrl === 'string' && dataUrl.length > 2_000_000) {
+      UI.showToast('图片过大，请选择更小的图片', 2500);
+      return;
+    }
+    _pendingConvBg = dataUrl;
+    const preview = document.getElementById('cs-bg-preview');
+    if (preview) {
+      preview.src = dataUrl;
+      preview.style.display = 'block';
+    }
+    const clearBtn = document.getElementById('cs-bg-clear');
+    if (clearBtn) clearBtn.style.display = 'inline-flex';
   }
   function _onConvBgClear() {
     _pendingConvBg = '';
