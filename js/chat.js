@@ -4375,7 +4375,20 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     if (clearBtn) clearBtn.style.display = 'none';
   }
 
+  function _switchCsTab(tab) {
+    const outputPanel = document.getElementById('cs-tab-output');
+    const funcPanel = document.getElementById('cs-tab-function');
+    if (outputPanel) outputPanel.style.display = tab === 'output' ? 'flex' : 'none';
+    if (funcPanel) funcPanel.style.display = tab === 'function' ? 'flex' : 'none';
+    document.querySelectorAll('.cs-tab').forEach(btn => {
+      const isActive = btn.dataset.csTab === tab;
+      btn.style.borderBottomColor = isActive ? 'var(--accent)' : 'transparent';
+      btn.style.color = isActive ? 'var(--accent)' : 'var(--text-secondary)';
+    });
+  }
+
   function openConvSettingsModal() {
+    _switchCsTab('output'); // 默认显示输出 tab
     const s = _getConvSettings();
     document.getElementById('cs-stream').checked = s.stream;
     document.getElementById('cs-gamemode').checked = s.gameMode;
@@ -4913,7 +4926,7 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     searchMessages, toggleSearchBar, renderQuickSwitches, renderAll,
     scrollToBottom, updateScrollBtn,
     _toggleThink,
-    openConvSettingsModal, saveConvSettings, closeConvSettingsModal,
+    openConvSettingsModal, saveConvSettings, closeConvSettingsModal, _switchCsTab,
     openEventManagerModal, closeEventManagerModal, resetEventState,
     _onVoiceEnabledChange, _onVoiceScopeAllChange,
     _onConvBgPicked, _onConvBgClear,

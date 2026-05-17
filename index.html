@@ -1263,166 +1263,199 @@
           <button onclick="Chat.closeConvSettingsModal()" class="btn-icon modal-corner-btn close-btn" title="关闭">×</button>
         </div>
         <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px">调整仅对当前对话生效。</p>
-        <div style="display:flex;flex-direction:column;gap:16px">
-          <label class="circle-check-label">
-            <span class="circle-check-text">流式输出</span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-stream" class="circle-check" checked>
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后AI回复将在生成完毕后一次性显示</span>
-          <label class="circle-check-label">
-            <span class="circle-check-text">文游模式</span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-gamemode" class="circle-check" checked>
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后不再发送世界观、回复格式等文游相关提示词，回复仅做Markdown渲染，适合和AI本体聊天</span>
-          <label class="circle-check-label">
-            <span class="circle-check-text">回复格式</span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-format" class="circle-check" checked>
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后不再发送内置回复格式提示词，AI回复仅做Markdown渲染。关闭格式可能导致无法命中详细设定与扩展设定中的内容</span>
-<div style="display:flex;align-items:center;gap:10px;margin-top:-4px">
-<span style="font-size:13px;color:var(--text);white-space:nowrap">正文字数</span>
-<input type="number" id="cs-reply-wordcount" value="800" min="200" max="3000" step="100" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;text-align:center">
-<span style="font-size:11px;color:var(--text-secondary)">字（建议 400-1500）</span>
-</div>
-          <label class="circle-check-label">
-            <span class="circle-check-text">后台频道</span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-backstage" class="circle-check">
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-<span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">开启后在聊天界面出现悬浮按钮，点击打开后台窗口。后台与主线共享世界观和角色，但对话独立，不影响主线剧情。适合吐槽剧情、讨论设定、聊题外话</span>
-          <label class="circle-check-label">
-            <span class="circle-check-text">现实时间感知</span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-time-aware" class="circle-check">
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">让 AI 感知现实世界的时间流逝。用户消息会带时间戳前缀，AI 能知道距离上次回复过去了多久。文游剧情模式建议关闭</span>
 
-          <label class="circle-check-label">
-            <span class="circle-check-text">生图模式</span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-imggen" class="circle-check">
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">开启后 AI 具备生成图片的能力，加号菜单出现「生成图片」入口。需先在「设置 → 功能模型 → 生图模型」配置 API</span>
-
-          <label class="circle-check-label">
-            <span class="circle-check-text">线上消息气泡</span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-online-chat" class="circle-check">
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">允许 AI 在剧情中插入「QQ/微信式」线上消息气泡，包含 NPC 名、头像、内容。心动模拟世界观自带启用无需手动开。开启后 AI 会消耗少量额外 token 学习这个格式</span>
-
-          <label class="circle-check-label">
-            <span class="circle-check-text">事件系统<br><span style="font-size:11px;color:var(--text-secondary)">允许世界观事件按关键词触发、持续注入并在完成后关闭</span></span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-events-enabled" class="circle-check" checked>
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
-            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">查看并重置当前对话的事件进度。</div>
-            <button type="button" onclick="Chat.openEventManagerModal()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap">管理事件</button>
-          </div>
-
-          <label class="circle-check-label">
-            <span class="circle-check-text">任务系统<br><span style="font-size:11px;color:var(--text-secondary)">启用世界观配置的任务阶段，AI 按类型池发布任务并自动结算奖励</span></span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-tasks-enabled" class="circle-check" checked>
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
-            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">重置当前对话的任务进度（阶段、已完成数、活跃任务全部清空）。</div>
-            <button type="button" onclick="UI.showConfirm('重置任务系统','将清空当前对话的所有任务进度（阶段、已完成数、活跃任务），不可撤销。\n确定继续？').then(ok=>{if(ok)StatusBar.taskReset().then(()=>{UI.showToast('任务系统已重置',1500);StatusBar.refreshFromConv()})})" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--danger);font-size:12px;cursor:pointer;white-space:nowrap">重置任务</button>
-          </div>
-
-          <label class="circle-check-label">
-            <span class="circle-check-text">启用语音朗读</span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-voice-enabled" class="circle-check" onchange="Chat._onVoiceEnabledChange()">
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">开启后，AI 消息长按菜单出现「播放语音」。需先在「设置 → 功能模型 → 语音模型」配置 MiniMax API Key（GroupId 仅老版 key 需要）</span>
-          <div id="cs-voice-options" style="display:none;flex-direction:column;gap:10px;margin-top:-4px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
-            <div>
-              <div style="font-size:13px;color:var(--text);margin-bottom:6px">音色名（voice_id）</div>
-              <input type="text" id="cs-voice-id" placeholder="例如：female-shaonv" style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:13px">
-              <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">MiniMax 支持的系统音色或克隆音色 ID。留空则使用默认 female-shaonv</div>
-            </div>
-            <div>
-              <div style="font-size:13px;color:var(--text);margin-bottom:6px">朗读范围</div>
-              <div style="display:flex;flex-direction:column;gap:6px">
-                <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
-                  <input type="checkbox" id="cs-voice-scope-all" onchange="Chat._onVoiceScopeAllChange()" style="margin:0">
-                  <span>朗读全部内容（含旁白）</span>
-                </label>
-                <label class="cs-voice-quote-opt" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
-                  <input type="checkbox" id="cs-voice-scope-cjk-double" class="cs-voice-quote-cb" style="margin:0">
-                  <span>中文双引号 “……”</span>
-                </label>
-                <label class="cs-voice-quote-opt" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
-                  <input type="checkbox" id="cs-voice-scope-cjk-bracket" class="cs-voice-quote-cb" style="margin:0">
-                  <span>中文方括号 「……」</span>
-                </label>
-                <label class="cs-voice-quote-opt" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
-                  <input type="checkbox" id="cs-voice-scope-ascii-double" class="cs-voice-quote-cb" style="margin:0">
-                  <span>英文双引号 "……"</span>
-                </label>
-                <label class="cs-voice-quote-opt" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
-                  <input type="checkbox" id="cs-voice-scope-cjk-single" class="cs-voice-quote-cb" style="margin:0">
-                  <span>中文单引号 ‘……’</span>
-                </label>
-              </div>
-              <div style="font-size:11px;color:var(--text-secondary);margin-top:6px">勾选「朗读全部内容」时，引号选项失效</div>
-            </div>
-          </div>
-          <label class="circle-check-label">
-            <span class="circle-check-text">允许调用工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 主动查询和记录小纸条等信息，需要站点支持 Function Calling</span></span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-tools-enabled" class="circle-check">
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <label class="circle-check-label">
-            <span class="circle-check-text">自动记忆提取<br><span style="font-size:11px;color:var(--text-secondary)">每隔 N 轮自动提取事件/关系/小纸条记忆（需配置记忆提取模型）</span></span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-auto-extract" class="circle-check" checked>
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px;border-top:1px solid var(--border)">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-              <span style="font-size:14px;color:var(--text)">对话背景图</span>
-              <div style="display:flex;gap:8px;align-items:center">
-                <label style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  <span>选择图片</span>
-                  <input type="file" accept="image/*" onchange="Chat._onConvBgPicked(this)" style="display:none">
-                </label>
-                <button id="cs-bg-clear" onclick="Chat._onConvBgClear()" style="display:none;align-items:center;gap:4px;padding:6px 12px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);font-size:12px;cursor:pointer">移除</button>
-              </div>
-            </div>
-            <div style="font-size:12px;color:var(--text-secondary)">仅对当前对话生效，未设置时使用主题背景</div>
-            <img id="cs-bg-preview" style="display:none;max-width:100%;max-height:140px;border-radius:8px;border:1px solid var(--border);object-fit:cover;align-self:flex-start" alt="">
-          </div>
+        <!-- Tab 栏 -->
+        <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid var(--border);flex-shrink:0">
+          <button class="cs-tab active" onclick="Chat._switchCsTab('output')" data-cs-tab="output" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">输出</button>
+          <button class="cs-tab" onclick="Chat._switchCsTab('function')" data-cs-tab="function" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">功能</button>
         </div>
+
+        <div style="flex:1;overflow-y:auto">
+
+          <!-- ===== 输出 Tab ===== -->
+          <div id="cs-tab-output" style="display:flex;flex-direction:column;gap:16px">
+
+            <!-- 区域1：回复格式 -->
+            <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em">回复格式</div>
+            <label class="circle-check-label">
+              <span class="circle-check-text">流式输出</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-stream" class="circle-check" checked>
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后AI回复将在生成完毕后一次性显示</span>
+            <label class="circle-check-label">
+              <span class="circle-check-text">文游模式</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-gamemode" class="circle-check" checked>
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后不再发送世界观、回复格式等文游相关提示词，回复仅做Markdown渲染，适合和AI本体聊天</span>
+            <label class="circle-check-label">
+              <span class="circle-check-text">回复格式</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-format" class="circle-check" checked>
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后不再发送内置回复格式提示词，AI回复仅做Markdown渲染</span>
+            <label class="circle-check-label">
+              <span class="circle-check-text">线上消息气泡</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-online-chat" class="circle-check">
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">允许 AI 插入 QQ/微信式线上消息气泡</span>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:-4px">
+              <span style="font-size:13px;color:var(--text);white-space:nowrap">正文字数</span>
+              <input type="number" id="cs-reply-wordcount" value="800" min="200" max="3000" step="100" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;text-align:center">
+              <span style="font-size:11px;color:var(--text-secondary)">字（建议 400-1500）</span>
+            </div>
+
+            <!-- 区域2：多媒体 -->
+            <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+              <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em;margin-bottom:12px">多媒体</div>
+            </div>
+            <label class="circle-check-label">
+              <span class="circle-check-text">生图模式</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-imggen" class="circle-check">
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">开启后 AI 具备生成图片的能力，需先配置生图模型</span>
+            <label class="circle-check-label">
+              <span class="circle-check-text">启用语音朗读</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-voice-enabled" class="circle-check" onchange="Chat._onVoiceEnabledChange()">
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">需先在「设置 → 功能模型 → 语音模型」配置 MiniMax API Key</span>
+            <div id="cs-voice-options" style="display:none;flex-direction:column;gap:10px;margin-top:-4px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
+              <div>
+                <div style="font-size:13px;color:var(--text);margin-bottom:6px">音色名（voice_id）</div>
+                <input type="text" id="cs-voice-id" placeholder="例如：female-shaonv" style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:13px">
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">留空则使用默认 female-shaonv</div>
+              </div>
+              <div>
+                <div style="font-size:13px;color:var(--text);margin-bottom:6px">朗读范围</div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
+                    <input type="checkbox" id="cs-voice-scope-all" onchange="Chat._onVoiceScopeAllChange()" style="margin:0">
+                    <span>朗读全部内容（含旁白）</span>
+                  </label>
+                  <label class="cs-voice-quote-opt" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
+                    <input type="checkbox" id="cs-voice-scope-cjk-double" class="cs-voice-quote-cb" style="margin:0">
+                    <span>中文双引号 \u201c……\u201d</span>
+                  </label>
+                  <label class="cs-voice-quote-opt" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
+                    <input type="checkbox" id="cs-voice-scope-cjk-bracket" class="cs-voice-quote-cb" style="margin:0">
+                    <span>中文方括号 「……」</span>
+                  </label>
+                  <label class="cs-voice-quote-opt" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
+                    <input type="checkbox" id="cs-voice-scope-ascii-double" class="cs-voice-quote-cb" style="margin:0">
+                    <span>英文双引号 "……"</span>
+                  </label>
+                  <label class="cs-voice-quote-opt" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
+                    <input type="checkbox" id="cs-voice-scope-cjk-single" class="cs-voice-quote-cb" style="margin:0">
+                    <span>中文单引号 '……'</span>
+                  </label>
+                </div>
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:6px">勾选「朗读全部内容」时，引号选项失效</div>
+              </div>
+            </div>
+
+            <!-- 区域3：外观 -->
+            <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+              <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em;margin-bottom:12px">外观</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <span style="font-size:14px;color:var(--text)">对话背景图</span>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <label style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <span>选择图片</span>
+                    <input type="file" accept="image/*" onchange="Chat._onConvBgPicked(this)" style="display:none">
+                  </label>
+                  <button id="cs-bg-clear" onclick="Chat._onConvBgClear()" style="display:none;align-items:center;gap:4px;padding:6px 12px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);font-size:12px;cursor:pointer">移除</button>
+                </div>
+              </div>
+              <div style="font-size:12px;color:var(--text-secondary)">仅对当前对话生效，未设置时使用主题背景</div>
+              <img id="cs-bg-preview" style="display:none;max-width:100%;max-height:140px;border-radius:8px;border:1px solid var(--border);object-fit:cover;align-self:flex-start" alt="">
+            </div>
+          </div>
+
+          <!-- ===== 功能 Tab ===== -->
+          <div id="cs-tab-function" style="display:none;flex-direction:column;gap:16px">
+
+            <!-- 区域1：游戏系统 -->
+            <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em">游戏系统</div>
+            <label class="circle-check-label">
+              <span class="circle-check-text">事件系统<br><span style="font-size:11px;color:var(--text-secondary)">允许世界观事件按关键词触发、持续注入并在完成后关闭</span></span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-events-enabled" class="circle-check" checked>
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
+              <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">查看并重置当前对话的事件进度。</div>
+              <button type="button" onclick="Chat.openEventManagerModal()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap">管理事件</button>
+            </div>
+            <label class="circle-check-label">
+              <span class="circle-check-text">任务系统<br><span style="font-size:11px;color:var(--text-secondary)">启用世界观配置的任务阶段，AI 按类型池发布任务并自动结算奖励</span></span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-tasks-enabled" class="circle-check" checked>
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
+              <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">重置当前对话的任务进度。</div>
+              <button type="button" onclick="UI.showConfirm('重置任务系统','将清空当前对话的所有任务进度（阶段、已完成数、活跃任务），不可撤销。\n确定继续？').then(ok=>{if(ok)StatusBar.taskReset().then(()=>{UI.showToast('任务系统已重置',1500);StatusBar.refreshFromConv()})})" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--danger);font-size:12px;cursor:pointer;white-space:nowrap">重置任务</button>
+            </div>
+
+            <!-- 区域2：AI 能力 -->
+            <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+              <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em;margin-bottom:12px">AI 能力</div>
+            </div>
+            <label class="circle-check-label">
+              <span class="circle-check-text">现实时间感知</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-time-aware" class="circle-check">
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">让 AI 感知现实时间流逝，文游剧情模式建议关闭</span>
+            <label class="circle-check-label">
+              <span class="circle-check-text">后台频道</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-backstage" class="circle-check">
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">独立于主线的后台对话窗口，适合聊题外话</span>
+            <label class="circle-check-label">
+              <span class="circle-check-text">自动记忆提取<br><span style="font-size:11px;color:var(--text-secondary)">每隔 N 轮自动提取事件/关系/小纸条记忆</span></span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-auto-extract" class="circle-check" checked>
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <label class="circle-check-label">
+              <span class="circle-check-text">允许调用工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 主动查询和记录记忆，需站点支持 Function Calling</span></span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-tools-enabled" class="circle-check">
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+          </div>
+
+        </div>
+
         <div class="modal-actions" style="flex-shrink:0;margin-top:20px;padding-top:12px">
           <button onclick="Chat.closeConvSettingsModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
           <button onclick="Chat.saveConvSettings()" style="flex:1">保存</button>
