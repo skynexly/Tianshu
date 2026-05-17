@@ -3872,6 +3872,11 @@ body[data-sb-skin="terminal"] #sb-task-system .hs-score-fill {
   background: var(--accent);
 }
 /* 终端风格：任务项 — 命令行符号 + 纯文本标签 */
+body[data-sb-skin="terminal"] #sb-task-system .hs-task-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
 body[data-sb-skin="terminal"] #sb-task-system .hs-task-dot {
   display: none;
 }
