@@ -209,6 +209,80 @@ const Memory = (() => {
     return text;
   }
 
+  // ===== 后台小纸条（全局情绪记忆）=====
+  const BACKSTAGE_SCOPE = '__backstage__';
+  const BACKSTAGE_NOTE_MAX = 1000;
+
+  async function addBackstageNote(data) {
+    const tag = NOTE_TAGS.includes(data.tag) ? data.tag : '有趣';
+    const detail = String(data.detail || '').trim();
+    if (!detail) return null;
+
+    // 去重
+    const all = await DB.getAll('memories');
+    const dup = all.find(m => m.type === 'backstage_note' && m.tag === tag && m.detail === detail);
+    if (dup) return dup;
+
+    const now = new Date();
+    const timeStr = `${now.getFullYear()}.${now.getMonth()+1}.${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+    const memory = {
+      id: Utils.uuid(),
+      type: 'backstage_note',
+      tag,
+      detail,
+      time: data.time || timeStr,
+      scope: BACKSTAGE_SCOPE,
+      timestamp: Utils.timestamp(),
+      roundCreated: data.roundCreated || 0
+    };
+    await DB.put('memories', memory);
+
+    // FIFO
+    const notes = all.filter(m => m.type === 'backstage_note');
+    notes.push(memory);
+    if (notes.length > BACKSTAGE_NOTE_MAX) {
+      notes.sort((a, b) => a.timestamp - b.timestamp);
+      const toRemove = notes.slice(0, notes.length - BACKSTAGE_NOTE_MAX);
+      for (const old of toRemove) { try { await DB.delete('memories', old.id); } catch(_){} }
+    }
+    return memory;
+  }
+
+  async function queryBackstageNotes(opts = {}) {
+    const all = await DB.getAll('memories');
+    let notes = all.filter(m => m.type === 'backstage_note');
+
+    if (opts.tag) notes = notes.filter(n => n.tag === opts.tag);
+    if (opts.keyword) {
+      const kw = opts.keyword.toLowerCase();
+      notes = notes.filter(n => (n.detail || '').toLowerCase().includes(kw));
+    }
+
+    notes.sort((a, b) => b.timestamp - a.timestamp);
+    return notes.slice(0, opts.limit || 5);
+  }
+
+  async function retrieveBackstageNotes() {
+    const all = await DB.getAll('memories');
+    const notes = all.filter(m => m.type === 'backstage_note');
+    if (notes.length === 0) return [];
+    const count = Math.min(notes.length, 3 + Math.floor(Math.random() * 3));
+    const shuffled = notes.slice().sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
+  }
+
+  function formatBackstageNotesForPrompt(notes) {
+    if (!notes || notes.length === 0) return '';
+    let text = '【记忆碎片】你记得关于用户的这些真实片段——这些是用户本人在后台聊天中表达过的，不是游戏角色说的。自然地融入对话，不要机械引用。\n';
+    notes.forEach(n => {
+      text += `- [${n.tag}] ${n.detail}`;
+      if (n.time) text += `（${n.time}）`;
+      text += '\n';
+    });
+    return text;
+  }
+
   /**
    * - 关系：只按NPC名字（标题）精确匹配在场NPC或对话提及
    * - 事件：按参与者交叉+地点+标题提及，不用n-gram关键词
@@ -1657,8 +1731,70 @@ function _collectEmotionsForEdit() {
   // ===== UI - 搜索 =====
 
   function search(query) {
+    // 彩蛋：输入 1001 进入/退出后台记忆库
+    if (query.trim() === '1001') {
+      _toggleBackstageView();
+      // 清空搜索框
+      const input = document.querySelector('#memory-panel input[type="search"], #memory-panel input[type="text"]');
+      if (input) input.value = '';
+      return;
+    }
     searchQuery = query.toLowerCase();
     renderList();
+  }
+
+  // 后台记忆库视图
+  let _backstageViewActive = false;
+
+  async function _toggleBackstageView() {
+    _backstageViewActive = !_backstageViewActive;
+    if (_backstageViewActive) {
+      await _renderBackstageNotes();
+    } else {
+      renderList();
+      // 恢复 tab 显示
+      document.querySelectorAll('.memory-tabs .tab-btn').forEach(b => b.style.display = '');
+    }
+  }
+
+  async function _renderBackstageNotes() {
+    // 隐藏 tab 按钮
+    document.querySelectorAll('.memory-tabs .tab-btn').forEach(b => b.style.display = 'none');
+
+    const all = await DB.getAll('memories');
+    const notes = all.filter(m => m.type === 'backstage_note').sort((a, b) => b.timestamp - a.timestamp);
+
+    const container = document.getElementById('memory-list');
+    if (!container) return;
+
+    const header = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:8px 12px;background:color-mix(in srgb, var(--accent) 8%, transparent);border-radius:var(--radius)">
+      <span style="font-size:13px;font-weight:700;color:var(--accent)">🔒 后台记忆库（${notes.length}条）</span>
+      <span style="font-size:11px;color:var(--text-secondary);cursor:pointer" onclick="Memory.search('')">退出</span>
+    </div>`;
+
+    if (notes.length === 0) {
+      container.innerHTML = header + '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无后台记忆</p>';
+      return;
+    }
+
+    container.innerHTML = header + notes.map(n => `
+      <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px" class="card">
+        <div style="flex:1;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);font-weight:700;flex-shrink:0">${Utils.escapeHtml(n.tag)}</span>
+            <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(n.time || '')}</span>
+          </div>
+          <p style="margin:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.detail || '')}</p>
+        </div>
+        <span style="font-size:11px;color:var(--text-secondary);cursor:pointer;flex-shrink:0" onclick="Memory._deleteBackstageNote('${n.id}')">×</span>
+      </div>
+    `).join('');
+  }
+
+  async function _deleteBackstageNote(id) {
+    if (!await UI.showConfirm('删除后台记忆', '确定删除这条记忆？')) return;
+    await DB.del('memories', id);
+    await _renderBackstageNotes();
   }
 
   // ===== 事件信息卡片与编辑弹窗 =====
@@ -1793,8 +1929,10 @@ function _toggleEditScopeDropdown() { _toggleDropdown('mem-edit-scope-dropdown')
   }
 
   return {
-    add, upsertRelation, addNote, retrieve, retrieveNotes, formatNotesForPrompt, NOTE_TAGS, buildExtractionPrompt, formatForPrompt,
-    showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove, deleteNoteConfirm,
+    add, upsertRelation, addNote, retrieve, retrieveNotes, formatNotesForPrompt, NOTE_TAGS,
+    addBackstageNote, queryBackstageNotes, retrieveBackstageNotes, formatBackstageNotesForPrompt,
+    buildExtractionPrompt, formatForPrompt,
+    showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove, deleteNoteConfirm, _deleteBackstageNote,
     copyMemory, filterByScope, renderScopeSelector, onPanelShow,
     addManual,
     renderEmotionList,

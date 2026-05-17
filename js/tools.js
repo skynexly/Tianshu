@@ -61,6 +61,58 @@ const Tools = (() => {
     }
   ];
 
+  // 后台专用工具定义
+  const backstageDefinitions = [
+    {
+      type: 'function',
+      function: {
+        name: 'query_backstage_notes',
+        description: '查询关于用户本人的真实记忆碎片（后台记忆库）。这里记录的是用户在后台聊天中表达过的真实喜好、情绪、习惯，不是游戏角色的。',
+        parameters: {
+          type: 'object',
+          properties: {
+            tag: {
+              type: 'string',
+              enum: ['喜欢','讨厌','期待','恐惧','愤怒','有趣','习惯','秘密','悲伤','迷茫','痛苦'],
+              description: '按标签筛选'
+            },
+            keyword: {
+              type: 'string',
+              description: '按关键词模糊搜索'
+            },
+            limit: {
+              type: 'number',
+              description: '返回条数上限，默认5'
+            }
+          },
+          required: []
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'add_backstage_note',
+        description: '记录一条关于用户本人的真实记忆。当用户在后台聊天中表达了真实的喜好、情绪、习惯、秘密等值得记住的信息时调用。只记录用户亲口说的/做的，不揣测，不修饰。',
+        parameters: {
+          type: 'object',
+          properties: {
+            tag: {
+              type: 'string',
+              enum: ['喜欢','讨厌','期待','恐惧','愤怒','有趣','习惯','秘密','悲伤','迷茫','痛苦'],
+              description: '情绪/偏好标签'
+            },
+            detail: {
+              type: 'string',
+              description: '以用户名为主语，如实记录。例如：「用户讨厌秋葵」「用户最近在研究MCP服务器」'
+            }
+          },
+          required: ['tag', 'detail']
+        }
+      }
+    }
+  ];
+
   // ===== 工具 handler =====
   const handlers = {
     async query_notes(args) {
@@ -109,6 +161,35 @@ const Tools = (() => {
       } else {
         return JSON.stringify({ success: false, message: '重复记录，已跳过。' });
       }
+    },
+
+    // 后台工具 handler
+    async query_backstage_notes(args) {
+      const notes = await Memory.queryBackstageNotes({
+        tag: args.tag,
+        keyword: args.keyword,
+        limit: args.limit || 5
+      });
+      if (notes.length === 0) {
+        return JSON.stringify({ result: '没有找到相关记忆。' });
+      }
+      const items = notes.map(n => ({ tag: n.tag, detail: n.detail, time: n.time || '' }));
+      return JSON.stringify({ result: items });
+    },
+
+    async add_backstage_note(args) {
+      if (!args.tag || !args.detail) {
+        return JSON.stringify({ error: '缺少 tag 或 detail' });
+      }
+      const note = await Memory.addBackstageNote({
+        tag: args.tag,
+        detail: args.detail
+      });
+      if (note) {
+        return JSON.stringify({ success: true, id: note.id, message: '已记住。' });
+      } else {
+        return JSON.stringify({ success: false, message: '重复记录，已跳过。' });
+      }
     }
   };
 
@@ -137,5 +218,9 @@ const Tools = (() => {
     return definitions;
   }
 
-  return { getDefinitions, execute };
+  function getBackstageDefinitions() {
+    return backstageDefinitions;
+  }
+
+  return { getDefinitions, getBackstageDefinitions, execute };
 })();
