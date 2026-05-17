@@ -120,7 +120,7 @@ const Tools = (() => {
   const backstageDefinitions = [
     { type:'function', function:{
       name:'query_backstage_notes',
-      description:'查询用户本人的真实记忆碎片（后台记忆库）。不是游戏角色的，是用户本人的。',
+      description:'查询用户本人的记忆碎片（后台记忆库）。不是游戏角色的，是用户本人的。',
       parameters:{ type:'object', properties:{
         tag:{ type:'string', enum:NOTE_TAGS, description:'按标签筛选' },
         keyword:{ type:'string', description:'模糊搜索' },
@@ -129,7 +129,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'add_backstage_note',
-      description:'记录用户本人的真实记忆。只记用户亲口说的/做的，不揣测。可同时调用多次。',
+      description:'记录一条关于用户本人的记忆。只记用户亲口说的/做的，不揣测。可同时调用多次。',
       parameters:{ type:'object', properties:{
         tag:{ type:'string', enum:NOTE_TAGS, description:'标签' },
         detail:{ type:'string', description:'以用户名为主语如实记录' }
