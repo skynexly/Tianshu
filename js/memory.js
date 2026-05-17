@@ -644,14 +644,14 @@ ${dialogue}
         // 小纸条独立渲染
         if (m.type === 'note') {
           return `
-          <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;cursor:pointer" class="card" data-id="${m.id}" onclick="Memory.deleteNoteConfirm('${m.id}')">
+          <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;cursor:pointer" class="card" data-id="${m.id}" onclick="${manageMode ? `Memory.toggleSelect('${m.id}')` : `Memory.editNote('${m.id}')`}">
             ${manageMode ? `<span class="memory-select-checkbox" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);border-color:var(--accent);' : ''}" onclick="event.stopPropagation();Memory.toggleSelect('${m.id}')">${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>` : ''}
             <div style="flex:1;overflow:hidden">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
                 <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);font-weight:700;flex-shrink:0">${Utils.escapeHtml(m.tag)}</span>
                 ${m.characters?.length ? `<span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.characters.join('、')}</span>` : ''}
               </div>
-              <p style="margin:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.detail || '')}</p>
+              <p style="margin:0;font-size:13px;color:var(--text);line-height:1.4">${Utils.escapeHtml(m.detail || '')}</p>
               ${m.time ? `<p style="margin:2px 0 0 0;font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(m.time)}</p>` : ''}
             </div>
           </div>`;
@@ -1732,6 +1732,71 @@ function _collectEmotionsForEdit() {
     renderList();
   }
 
+  // 小纸条编辑弹窗
+  let _editingNoteId = null;
+
+  async function editNote(id) {
+    const m = await DB.get('memories', id);
+    if (!m) return;
+    _editingNoteId = id;
+
+    // 构建弹窗
+    const tagOptions = NOTE_TAGS.map(t => `<option value="${t}" ${t === m.tag ? 'selected' : ''}>${t}</option>`).join('');
+    const html = `
+    <div id="note-edit-overlay" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)Memory.closeNoteEdit()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:400px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 16px 0;font-size:16px;color:var(--text)">编辑小纸条</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">标签</label>
+        <select id="note-edit-tag" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px">${tagOptions}</select>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">内容</label>
+        <textarea id="note-edit-detail" style="width:100%;min-height:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:14px;line-height:1.4">${Utils.escapeHtml(m.detail || '')}</textarea>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px 0">在场角色（逗号分隔）</label>
+        <input id="note-edit-characters" type="text" value="${Utils.escapeHtml((m.characters || []).join('、'))}" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px" />
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="Memory.deleteNoteFromEdit()" style="padding:8px 14px;border:1px solid var(--danger, #e53935);border-radius:var(--radius);background:transparent;color:var(--danger, #e53935);font-size:13px;cursor:pointer">删除</button>
+          <button onclick="Memory.closeNoteEdit()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button onclick="Memory.saveNoteEdit()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#fff;font-size:13px;cursor:pointer">保存</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  function closeNoteEdit() {
+    _editingNoteId = null;
+    document.getElementById('note-edit-overlay')?.remove();
+  }
+
+  async function saveNoteEdit() {
+    if (!_editingNoteId) return;
+    const m = await DB.get('memories', _editingNoteId);
+    if (!m) { closeNoteEdit(); return; }
+
+    const tag = document.getElementById('note-edit-tag').value;
+    const detail = document.getElementById('note-edit-detail').value.trim();
+    const charsRaw = document.getElementById('note-edit-characters').value.trim();
+    const characters = charsRaw ? charsRaw.split(/[,，、]/).map(s => s.trim()).filter(Boolean) : [];
+
+    if (!detail) { UI.showToast('内容不能为空'); return; }
+
+    m.tag = tag;
+    m.detail = detail;
+    m.characters = characters;
+    await DB.put('memories', m);
+
+    closeNoteEdit();
+    renderList();
+    UI.showToast('已保存');
+  }
+
+  async function deleteNoteFromEdit() {
+    if (!_editingNoteId) return;
+    if (!await UI.showConfirm('删除小纸条', '确定删除这条小纸条？')) return;
+    await DB.del('memories', _editingNoteId);
+    closeNoteEdit();
+    renderList();
+  }
+
   // ===== UI - 搜索 =====
 
   function search(query) {
@@ -1937,6 +2002,7 @@ function _toggleEditScopeDropdown() { _toggleDropdown('mem-edit-scope-dropdown')
     addBackstageNote, queryBackstageNotes, retrieveBackstageNotes, formatBackstageNotesForPrompt,
     buildExtractionPrompt, formatForPrompt,
     showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove, deleteNoteConfirm, _deleteBackstageNote,
+    editNote, closeNoteEdit, saveNoteEdit, deleteNoteFromEdit,
     copyMemory, filterByScope, renderScopeSelector, onPanelShow,
     addManual,
     renderEmotionList,
