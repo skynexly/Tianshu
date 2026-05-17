@@ -1493,7 +1493,66 @@ messages.push(aiMsg);
           // abortSignal
 requestController.signal,
 // options
-          { forceNoStream: !convSettings.stream }
+          {
+            forceNoStream: !convSettings.stream,
+            tools: (typeof Tools !== 'undefined') ? Tools.getDefinitions() : undefined,
+            onToolCalls: async (toolCalls, assistantMessage) => {
+              try {
+                GameLog.log('info', `[Chat] AI 调用工具: ${toolCalls.map(t => t.function?.name).join(', ')}`);
+                // 1. 把 assistant 的 tool_calls 消息加入 apiMessages
+                apiMessages.push({
+                  role: 'assistant',
+                  content: assistantMessage.content || null,
+                  tool_calls: toolCalls
+                });
+                // 2. 执行每个工具，把结果以 tool role 加入
+                for (const tc of toolCalls) {
+                  const result = await Tools.execute(tc);
+                  apiMessages.push({
+                    role: 'tool',
+                    tool_call_id: tc.id,
+                    content: result
+                  });
+                  GameLog.log('info', `[Chat] 工具 ${tc.function?.name} 返回: ${result.substring(0, 200)}`);
+                }
+                // 3. 再次请求（不带 tools，让模型基于工具结果正常回复）
+                API.streamChat(
+                  apiMessages,
+                  (chunk, fullContent) => {
+                    aiMsg.content = fullContent;
+                    let renderContent = fullContent;
+                    renderContent = renderContent.replace(/```homecoming\s*[\s\S]*?```/gi, '');
+                    renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
+                    contentEl.innerHTML = Markdown.render(renderContent);
+                    if (convSettings.stream) contentEl.classList.add('streaming-cursor');
+                    scrollToBottomIfFollowing();
+                  },
+                  async (fullContent) => {
+                    // 走和普通 onDone 一样的后处理
+                    const regexRules = await Settings.getRegexRules();
+                    for (const rule of regexRules) {
+                      if (rule.enabled === false) continue;
+                      try { fullContent = fullContent.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement ?? ''); } catch(e) {}
+                    }
+                    aiMsg.content = fullContent;
+                    aiMsg.timestamp = Utils.timestamp();
+                    try { delete aiMsg._cachedFullHTML; delete aiMsg._cachedPlainHTML; } catch(_) {}
+                    await DB.put('messages', aiMsg);
+                    messages.push(aiMsg);
+                    contentEl.classList.remove('streaming-cursor');
+                    contentEl.innerHTML = Markdown.render(fullContent);
+                    resolve();
+                  },
+                  (err) => { reject(new Error(err)); },
+                  requestController.signal,
+                  { forceNoStream: !convSettings.stream }
+                ).catch(e => { if (e.name === 'AbortError') resolve(); else reject(e); });
+              } catch(e) {
+                GameLog.log('error', `[Chat] tool calling 处理失败: ${e.message}`);
+                reject(e);
+              }
+            }
+          }
         ).catch(e => {
           if (e.name === 'AbortError') {
             resolve(); // 用户主动取消不重试

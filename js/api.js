@@ -60,6 +60,11 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
       messages: messages
     };
 
+    // 工具定义（tool calling）
+    if (options?.tools?.length) {
+      body.tools = options.tools;
+    }
+
     // 只在有值时加可选参数
     const temp = parseFloat(config.temperature);
     if (!isNaN(temp)) body.temperature = temp;
@@ -93,7 +98,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     // 尝试流式，失败则降级非流式
     if (body.stream) {
       try {
-        await readStream(resp, onChunk, onDone, abortSignal);
+        await readStream(resp, onChunk, onDone, abortSignal, options);
         return;
       } catch (streamErr) {
         // AbortError 不降级，直接向上抛
@@ -103,7 +108,15 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     }
     // 非流式降级
     const json = await resp.json();
-    const content = json.choices?.[0]?.message?.content || '';
+    const message = json.choices?.[0]?.message;
+    const toolCalls = message?.tool_calls;
+    // 如果模型返回了 tool_calls，走工具回调
+    if (toolCalls?.length && options?.onToolCalls) {
+      GameLog.log('info', `[API] 收到 tool_calls: ${toolCalls.map(t => t.function?.name).join(', ')}`);
+      options.onToolCalls(toolCalls, message);
+      return;
+    }
+    const content = message?.content || '';
     GameLog.log('info', `响应: ${content.length}字`);
     onChunk(content, content);
     onDone(content);
@@ -117,11 +130,12 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
   }
 }
 
-  async function readStream(resp, onChunk, onDone, abortSignal) {
+  async function readStream(resp, onChunk, onDone, abortSignal, options) {
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   let fullContent = '';
+  let toolCallsAccum = []; // 流式累积 tool_calls
 
   try {
     while (!abortSignal?.aborted) {
@@ -138,10 +152,22 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
         if (!trimmed.startsWith('data: ')) continue;
         try {
           const json = JSON.parse(trimmed.slice(6));
-          const delta = json.choices?.[0]?.delta?.content;
-          if (delta) {
-            fullContent += delta;
-            onChunk(delta, fullContent);
+          const delta = json.choices?.[0]?.delta;
+          if (delta?.content) {
+            fullContent += delta.content;
+            onChunk(delta.content, fullContent);
+          }
+          // 流式 tool_calls 累积
+          if (delta?.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!toolCallsAccum[idx]) {
+                toolCallsAccum[idx] = { id: tc.id || '', type: 'function', function: { name: '', arguments: '' } };
+              }
+              if (tc.id) toolCallsAccum[idx].id = tc.id;
+              if (tc.function?.name) toolCallsAccum[idx].function.name += tc.function.name;
+              if (tc.function?.arguments) toolCallsAccum[idx].function.arguments += tc.function.arguments;
+            }
           }
         } catch (e) { /* skip */ }
       }
@@ -156,6 +182,17 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     err.name = 'AbortError';
     throw err;
   }
+
+  // 如果有 tool_calls，走工具回调
+  if (toolCallsAccum.length > 0 && options?.onToolCalls) {
+    const validCalls = toolCallsAccum.filter(t => t.function?.name);
+    if (validCalls.length > 0) {
+      GameLog.log('info', `[API] 流式收到 tool_calls: ${validCalls.map(t => t.function?.name).join(', ')}`);
+      options.onToolCalls(validCalls, { role: 'assistant', content: fullContent || null, tool_calls: validCalls });
+      return;
+    }
+  }
+
   onDone(fullContent);
 }
 
