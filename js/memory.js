@@ -129,8 +129,87 @@ const Memory = (() => {
     }
   }
 
+  // ===== 小纸条（情绪记忆）=====
+  const NOTE_TAGS = ['喜欢','讨厌','期待','恐惧','愤怒','有趣','习惯','秘密','悲伤','迷茫','痛苦'];
+  const NOTE_MAX = 1000;
+
+  async function addNote(data) {
+    const scope = data.scope || Character.getCurrentId();
+    const tag = NOTE_TAGS.includes(data.tag) ? data.tag : '有趣';
+    const detail = String(data.detail || '').trim();
+    if (!detail) return null;
+
+    // 去重：同 scope + 同 tag + 同 detail
+    const all = await DB.getAll('memories');
+    const dup = all.find(m => m.type === 'note' && m.scope === scope && m.tag === tag && m.detail === detail);
+    if (dup) return dup;
+
+    const memory = {
+      id: Utils.uuid(),
+      type: 'note',
+      tag,
+      detail,
+      time: data.time || '',
+      characters: data.characters || [],
+      scope,
+      timestamp: Utils.timestamp(),
+      roundCreated: data.roundCreated || 0
+    };
+    await DB.put('memories', memory);
+
+    // FIFO：超出上限时删最早的
+    const notes = all.filter(m => m.type === 'note' && m.scope === scope);
+    notes.push(memory);
+    if (notes.length > NOTE_MAX) {
+      notes.sort((a, b) => a.timestamp - b.timestamp);
+      const toRemove = notes.slice(0, notes.length - NOTE_MAX);
+      for (const old of toRemove) { try { await DB.delete('memories', old.id); } catch(_){} }
+    }
+    return memory;
+  }
+
   /**
-   * 检索相关记忆（方案C：精确命中）
+   * 小纸条检索：按在场角色 + 标签命中，无命中随机，返回 3-5 条
+   */
+  async function retrieveNotes(presentNPCNames = []) {
+    const allMemories = await DB.getAll('memories');
+    const currentScope = Character.getCurrentId();
+    const notes = allMemories.filter(m => m.type === 'note' && m.scope === currentScope);
+    if (notes.length === 0) return [];
+
+    // 计算匹配分
+    const scored = notes.map(n => {
+      let score = 0;
+      // 角色命中（任意一个在场就算）
+      if (n.characters?.length && presentNPCNames.length) {
+        const hit = n.characters.some(c => presentNPCNames.includes(c));
+        if (hit) score += 2;
+      }
+      return { note: n, score };
+    });
+
+    // 有命中的优先取命中的，否则全池随机
+    const matched = scored.filter(s => s.score > 0);
+    const pool = matched.length > 0 ? matched.map(s => s.note) : notes;
+
+    // 随机抽 3-5 条
+    const count = Math.min(pool.length, 3 + Math.floor(Math.random() * 3)); // 3~5
+    const shuffled = pool.slice().sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
+  }
+
+  function formatNotesForPrompt(notes) {
+    if (!notes || notes.length === 0) return '';
+    let text = '【小纸条】你记得关于{{user}}的这些碎片——不需要刻意提起，但如果剧情自然触及，可以像真的记得一样回应。\n';
+    notes.forEach(n => {
+      text += `- [${n.tag}] ${n.detail}`;
+      if (n.characters?.length) text += `（在场：${n.characters.join('、')}）`;
+      text += '\n';
+    });
+    return text;
+  }
+
+  /**
    * - 关系：只按NPC名字（标题）精确匹配在场NPC或对话提及
    * - 事件：按参与者交叉+地点+标题提及，不用n-gram关键词
    */
@@ -262,9 +341,17 @@ ${dialogue}
 "participants": ["角色姓名"],
       "keywords": ["关键词"]
     }
+  ],
+  "notes": [
+    {
+      "tag": "从以下标签中选一个：喜欢/讨厌/期待/恐惧/愤怒/有趣/习惯/秘密/悲伤/迷茫/痛苦",
+      "detail": "用一句带场景的话描述，像你亲眼看到的瞬间",
+      "characters": ["当时在场的角色姓名"]
+    }
   ]
 }
 
+- notes（小纸条）：提取${playerName}在对话中表达的偏好、情绪、习惯等，用一句带场景的话描述那个瞬间。tag 必须从固定标签中选择。没有明显偏好/情绪表达时 notes 可以为空数组。
 提取规则（重要，请严格遵守）：
 - **从对话最开头开始，按时间顺序逐段扫描**，不要只看后半段。每出现一个独立场景/转折/重要决策/到达新地点/关键对话/情感变化，都算一个独立事件。
 - **不要做"重要性筛选"**：哪怕是吃饭、闲聊、路过某地，只要在对话中有具体内容也要记录；宁可粒度细，不要漏掉早期发生的事。
@@ -441,7 +528,7 @@ ${dialogue}
     const scopeFilter = scope === 'all' ? (() => true) : (m => m.scope === scope);
 
     let filtered = all.filter(m =>
-      (currentTab === 'events' ? m.type === 'event' : m.type === 'relation') &&
+      (currentTab === 'events' ? m.type === 'event' : currentTab === 'relations' ? m.type === 'relation' : m.type === 'note') &&
       scopeFilter(m)
     );
 
@@ -449,13 +536,18 @@ ${dialogue}
       filtered = filtered.filter(m =>
         (m.title || '').toLowerCase().includes(searchQuery) ||
         (m.content || '').toLowerCase().includes(searchQuery) ||
-        (m.participants || []).join(' ').toLowerCase().includes(searchQuery)
+        (m.detail || '').toLowerCase().includes(searchQuery) ||
+        (m.tag || '').toLowerCase().includes(searchQuery) ||
+        (m.participants || []).join(' ').toLowerCase().includes(searchQuery) ||
+        (m.characters || []).join(' ').toLowerCase().includes(searchQuery)
       );
     }
 
     // 按 sortOrder 排序（有 sortOrder 用 sortOrder，没有用 timestamp）
     if (currentTab === 'events') {
       filtered.sort((a, b) => (a.sortOrder ?? a.timestamp) - (b.sortOrder ?? b.timestamp));
+    } else if (currentTab === 'notes') {
+      filtered.sort((a, b) => (b.timestamp) - (a.timestamp));
     } else {
       filtered.sort((a, b) => (b.sortOrder ?? b.timestamp) - (a.sortOrder ?? a.timestamp));
     }
@@ -470,6 +562,22 @@ ${dialogue}
     container.innerHTML = filtered.length === 0 ?
       '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无记忆</p>' :
       filtered.map(m => {
+        const isSelected = selectedIds.has(m.id);
+        // 小纸条独立渲染
+        if (m.type === 'note') {
+          return `
+          <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;cursor:pointer" class="card" data-id="${m.id}" onclick="Memory.deleteNoteConfirm('${m.id}')">
+            ${manageMode ? `<span class="memory-select-checkbox" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);border-color:var(--accent);' : ''}" onclick="event.stopPropagation();Memory.toggleSelect('${m.id}')">${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>` : ''}
+            <div style="flex:1;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);font-weight:700;flex-shrink:0">${Utils.escapeHtml(m.tag)}</span>
+                ${m.characters?.length ? `<span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.characters.join('、')}</span>` : ''}
+              </div>
+              <p style="margin:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.detail || '')}</p>
+              ${m.time ? `<p style="margin:2px 0 0 0;font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(m.time)}</p>` : ''}
+            </div>
+          </div>`;
+        }
         // 关系记忆的摘要显示
         let preview = '';
         if (m.type === 'relation') {
@@ -1541,6 +1649,12 @@ function _collectEmotionsForEdit() {
     renderList();
   }
 
+  async function deleteNoteConfirm(id) {
+    if (!await UI.showConfirm('删除小纸条', '确定删除这条小纸条？')) return;
+    await DB.del('memories', id);
+    renderList();
+  }
+
   // ===== UI - 搜索 =====
 
   function search(query) {
@@ -1680,8 +1794,8 @@ function _toggleEditScopeDropdown() { _toggleDropdown('mem-edit-scope-dropdown')
   }
 
   return {
-    add, upsertRelation, retrieve, buildExtractionPrompt, formatForPrompt,
-    showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove,
+    add, upsertRelation, addNote, retrieve, retrieveNotes, formatNotesForPrompt, NOTE_TAGS, buildExtractionPrompt, formatForPrompt,
+    showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove, deleteNoteConfirm,
     copyMemory, filterByScope, renderScopeSelector, onPanelShow,
     addManual,
     renderEmotionList,

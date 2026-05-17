@@ -956,6 +956,13 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
   const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLoc);
   const memoryPrompt = Memory.formatForPrompt(relatedMemories);
   if (memoryPrompt) systemParts.push(memoryPrompt);
+
+  // 5b. 小纸条（情绪记忆碎片）
+  try {
+    const notes = await Memory.retrieveNotes(presentNPCs);
+    const notesPrompt = Memory.formatNotesForPrompt(notes);
+    if (notesPrompt) systemParts.push(notesPrompt);
+  } catch(_) {}
 }
 
     // 6. 自定义提示词注入（system_top和system_bottom）
@@ -1695,16 +1702,23 @@ await Memory.upsertRelation({ ...r, roundCreated: extractRound, scope: extractSc
 relCount++;
 }
 }
+let noteCount = 0;
+if (data.notes) {
+for (const n of data.notes) {
+await Memory.addNote({ ...n, roundCreated: extractRound, scope: extractScope });
+noteCount++;
+}
+}
 if (updateLastExtracted) {
-          lastExtractedMsgId = lastMsg.id;
-          try {
-            const _conv = Conversations.getList().find(c => c.id === extractConvId);
-            if (_conv) { _conv.lastExtractedMsgId = lastExtractedMsgId; _conv.extractPending = false; await Conversations.saveList(); }
-          } catch(_) {}
-        }
-        _extractPending = false; // 成功，清除重试标记
-        GameLog.log('info', `[Memory] 提取完成: ${eventCount}个事件, ${relCount}个关系已存入/更新`);
-        UI.showToast(`记忆提取完成（${eventCount} 条事件 / ${relCount} 条关系）`, 2500);
+lastExtractedMsgId = lastMsg.id;
+try {
+const _conv = Conversations.getList().find(c => c.id === extractConvId);
+if (_conv) { _conv.lastExtractedMsgId = lastExtractedMsgId; _conv.extractPending = false; await Conversations.saveList(); }
+} catch(_) {}
+}
+_extractPending = false; // 成功，清除重试标记
+GameLog.log('info', `[Memory] 提取完成: ${eventCount}个事件, ${relCount}个关系, ${noteCount}条小纸条已存入/更新`);
+UI.showToast(`记忆提取完成（${eventCount} 条事件 / ${relCount} 条关系 / ${noteCount} 条小纸条）`, 2500);
         return; // 成功，退出
       } catch (e) {
         GameLog.log('warn', `[Memory] 提取第${attempt}次失败: ${e.message}`);
@@ -1729,19 +1743,20 @@ if (updateLastExtracted) {
         data = _tryFixTruncatedJSON(cleaned);
         if (!data) throw pe;
       }
-      let eventCount = 0, relCount = 0;
+      let eventCount = 0, relCount = 0, noteCount = 0;
       if (data.events) { for (const e of data.events) { await Memory.add('event', { ...e, roundCreated: extractRound, scope: extractScope }); eventCount++; } }
 if (data.relations) { for (const r of data.relations) { await Memory.upsertRelation({ ...r, roundCreated: extractRound, scope: extractScope }); relCount++; } }
+if (data.notes) { for (const n of data.notes) { if (n.tag && n.detail) { await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound }); noteCount++; } } }
 if (updateLastExtracted) {
         lastExtractedMsgId = lastMsg.id;
         try {
-          const _conv = Conversations.getList().find(c => c.id === extractConvId);
-          if (_conv) { _conv.lastExtractedMsgId = lastExtractedMsgId; _conv.extractPending = false; await Conversations.saveList(); }
-        } catch(_) {}
+        const _conv = Conversations.getList().find(c => c.id === extractConvId);
+        if (_conv) { _conv.lastExtractedMsgId = lastExtractedMsgId; _conv.extractPending = false; await Conversations.saveList(); }
+} catch(_) {}
       }
       _extractPending = false;
-      GameLog.log('info', `[Memory] 主模型兜底成功: ${eventCount}个事件, ${relCount}个关系`);
-      UI.showToast(`记忆提取完成（主模型兜底：${eventCount} 条事件 / ${relCount} 条关系）`, 2500);
+      GameLog.log('info', `[Memory] 主模型兜底成功: ${eventCount}个事件, ${relCount}个关系, ${noteCount}个小纸条`);
+      UI.showToast(`记忆提取完成（主模型兜底：${eventCount} 条事件 / ${relCount} 条关系 / ${noteCount} 条小纸条）`, 2500);
       return;
     } catch(fallbackErr) {
       GameLog.log('warn', `[Memory] 主模型兜底也失败: ${fallbackErr.message}`);
@@ -3831,6 +3846,13 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLoc);
       const memoryPrompt = Memory.formatForPrompt(relatedMemories);
       if (memoryPrompt) systemParts.push(memoryPrompt);
+
+      // 小纸条（情绪记忆碎片）
+      try {
+        const notes = await Memory.retrieveNotes(presentNPCs);
+        const notesPrompt = Memory.formatNotesForPrompt(notes);
+        if (notesPrompt) systemParts.push(notesPrompt);
+      } catch(_) {}
     }
 
     // 6. 提示词注入
