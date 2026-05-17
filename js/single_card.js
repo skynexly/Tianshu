@@ -828,22 +828,12 @@ const SingleCard = (() => {
     }).join('');
   }
 
-  function _pickNpcAvatar(npcId) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async () => {
-      const file = input.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async () => {
-        await setNpcAvatar(npcId, reader.result);
-        renderNpcAvatarList(document.getElementById('npc-avatar-search')?.value || '');
-        UI.showToast('头像已更新');
-      };
-      reader.readAsDataURL(file);
-    };
-    input.click();
+  async function _pickNpcAvatar(npcId) {
+    const dataUrl = await Utils.promptImageInput({ maxSize: 256, quality: 0.85 });
+    if (!dataUrl) return;
+    await setNpcAvatar(npcId, dataUrl);
+    renderNpcAvatarList(document.getElementById('npc-avatar-search')?.value || '');
+    UI.showToast('头像已更新');
   }
 
   async function _removeNpcAvatar(npcId) {
