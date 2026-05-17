@@ -15,13 +15,14 @@ let pendingImages = [];   // [{base64, name, type}]
   function _getSettings() {
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     return {
-      enabled: !!conv?.backstageEnabled,
-      prompt: conv?.backstagePrompt || '',
-      contextCount: conv?.backstageContextCount ?? 15,
-      maxTokens: conv?.backstageMaxTokens ?? 8000,
-      convId: conv?.backstageConvId || null,
-      timeAware: conv?.backstageTimeAware !== false  // 默认开
-    };
+    enabled: !!conv?.backstageEnabled,
+    prompt: conv?.backstagePrompt || '',
+    contextCount: conv?.backstageContextCount ?? 15,
+    maxTokens: conv?.backstageMaxTokens ?? 8000,
+    convId: conv?.backstageConvId || null,
+    timeAware: conv?.backstageTimeAware !== false,  // 默认开
+    toolsEnabled: conv?.backstageToolsEnabled !== false  // 默认开
+  };
   }
 
   // 确保后台有独立的conversationId
@@ -581,7 +582,8 @@ systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要�
           abortCtrl.signal,
           (() => {
             const opts = overrideConfig ? { overrideConfig } : {};
-            opts.tools = (typeof Tools !== 'undefined') ? Tools.getBackstageDefinitions() : undefined;
+            const bsSettings = _getSettings();
+            opts.tools = (bsSettings.toolsEnabled && typeof Tools !== 'undefined') ? Tools.getBackstageDefinitions() : undefined;
             opts.onToolCalls = async (toolCalls, assistantMessage) => {
               try {
                 // 把 assistant tool_calls 加入消息链
@@ -997,6 +999,8 @@ await DB.del('messages', m.id);
     document.getElementById('backstage-max-tokens').value = settings.maxTokens || 8000;
     const taEl = document.getElementById('backstage-time-aware');
     if (taEl) taEl.checked = settings.timeAware;
+    const toolsEl = document.getElementById('backstage-tools-enabled');
+    if (toolsEl) toolsEl.checked = settings.toolsEnabled;
     document.getElementById('backstage-prompt-modal').classList.remove('hidden');
   }
 
@@ -1008,6 +1012,8 @@ await DB.del('messages', m.id);
     conv.backstageMaxTokens = parseInt(document.getElementById('backstage-max-tokens').value) || 8000;
     const taEl = document.getElementById('backstage-time-aware');
     if (taEl) conv.backstageTimeAware = taEl.checked;
+    const toolsEl = document.getElementById('backstage-tools-enabled');
+    if (toolsEl) conv.backstageToolsEnabled = toolsEl.checked;
     await Conversations.saveList();
     closePromptEdit();
     UI.showToast('后台设定已保存');

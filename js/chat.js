@@ -1495,7 +1495,7 @@ requestController.signal,
 // options
           {
             forceNoStream: !convSettings.stream,
-            tools: (typeof Tools !== 'undefined') ? Tools.getDefinitions() : undefined,
+            tools: (convSettings.toolsEnabled && typeof Tools !== 'undefined') ? Tools.getDefinitions() : undefined,
             onToolCalls: async (toolCalls, assistantMessage) => {
               try {
                 GameLog.log('info', `[Chat] AI 调用工具: ${toolCalls.map(t => t.function?.name).join(', ')}`);
@@ -4301,6 +4301,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       },
       bgImage: conv?.convBgImage || '',
       imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
+      toolsEnabled: !!conv?.convToolsEnabled,       // 默认关（AI工具调用）
       replyWordCount: conv?.convReplyWordCount || 800  // 默认800字
     };
   }
@@ -4413,6 +4414,9 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     // 生图模式
     const igEl = document.getElementById('cs-imggen');
     if (igEl) igEl.checked = s.imgGen;
+    // 工具调用
+    const toolsEl = document.getElementById('cs-tools-enabled');
+    if (toolsEl) toolsEl.checked = s.toolsEnabled;
     // 正文字数
     const wcOpenEl = document.getElementById('cs-reply-wordcount');
     if (wcOpenEl) wcOpenEl.value = s.replyWordCount || 800;
@@ -4433,6 +4437,8 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     if (ocEl) conv.convOnlineChat = ocEl.checked;
     const igSaveEl = document.getElementById('cs-imggen');
     if (igSaveEl) conv.convImgGen = igSaveEl.checked;
+    const toolsSaveEl = document.getElementById('cs-tools-enabled');
+    if (toolsSaveEl) conv.convToolsEnabled = toolsSaveEl.checked;
     const evEl = document.getElementById('cs-events-enabled');
     if (evEl) conv.convEventsEnabled = evEl.checked;
     const tsEl = document.getElementById('cs-tasks-enabled');

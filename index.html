@@ -1393,6 +1393,13 @@
               <div style="font-size:11px;color:var(--text-secondary);margin-top:6px">勾选「朗读全部内容」时，引号选项失效</div>
             </div>
           </div>
+          <label class="circle-check-label">
+            <span class="circle-check-text">允许调用工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 主动查询和记录小纸条等信息，需要站点支持 Function Calling</span></span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-tools-enabled" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
           <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px;border-top:1px solid var(--border)">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
               <span style="font-size:14px;color:var(--text)">对话背景图</span>
@@ -3867,6 +3874,14 @@ if ('serviceWorker' in navigator) {
       </span>
     </label>
     <span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">让后台 AI 感知现实世界的时间流逝（用户消息会带时间戳，并告诉 AI 距离上次回复多久）</span>
+<label class="circle-check-label" style="margin-top:16px">
+<span class="circle-check-text">允许调用工具</span>
+<span style="position:relative;display:inline-flex">
+<input type="checkbox" id="backstage-tools-enabled" class="circle-check" checked>
+<span class="circle-check-ui"></span>
+</span>
+</label>
+<span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 主动记录和查询你的真实偏好/情绪/习惯（后台记忆库）</span>
     <div class="modal-actions" style="margin-top:16px">
       <button onclick="Backstage.closePromptEdit()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
       <button onclick="Backstage.savePrompt()" style="flex:1;touch-action:manipulation;-webkit-tap-highlight-color:transparent">保存</button>
