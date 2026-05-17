@@ -1788,7 +1788,7 @@ function _collectEmotionsForEdit() {
             <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);font-weight:700;flex-shrink:0">${Utils.escapeHtml(n.tag)}</span>
             <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(n.time || '')}</span>
           </div>
-          <p style="margin:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.detail || '')}</p>
+          <p style="margin:0;font-size:13px;color:var(--text);line-height:1.4">${Utils.escapeHtml(n.detail || '')}</p>
         </div>
         <span style="font-size:11px;color:var(--text-secondary);cursor:pointer;flex-shrink:0" onclick="Memory._deleteBackstageNote('${n.id}')">×</span>
       </div>

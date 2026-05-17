@@ -93,7 +93,7 @@ const Tools = (() => {
       type: 'function',
       function: {
         name: 'add_backstage_note',
-        description: '记录一条关于用户本人的真实记忆。当用户在后台聊天中表达了真实的喜好、情绪、习惯、秘密等值得记住的信息时调用。只记录用户亲口说的/做的，不揣测，不修饰。',
+        description: '记录一条关于用户本人的真实记忆。当用户在后台聊天中表达了真实的喜好、情绪、习惯、秘密等值得记住的信息时调用。只记录用户亲口说的/做的，不揣测，不修饰。如果用户一次表达了多条值得记的内容，可以同时调用多次。',
         parameters: {
           type: 'object',
           properties: {
