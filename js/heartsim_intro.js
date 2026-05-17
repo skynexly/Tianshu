@@ -561,9 +561,8 @@ content.innerHTML = `
       <div style="font-size:13px;color:var(--text);font-weight:600">上传头像</div>
       <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">可选，点击左侧头像上传</div>
     </div>
-    <input id="hs-mask-avatar-input" type="file" accept="image/*" style="display:none" onchange="HeartSimIntro._onNewMaskAvatarPicked(this)">
   </div>
-  <label style="font-size:12px;color:var(--text-secondary)">姓名
+<label style="font-size:12px;color:var(--text-secondary)">姓名
     <input id="hs-mask-name" type="text" placeholder="请输入姓名" style="width:100%;padding:8px;font-size:14px;margin-top:4px">
   </label>
           <label style="font-size:12px;color:var(--text-secondary)">性别
@@ -606,36 +605,18 @@ return `
   }
 
   function _pickNewMaskAvatar() {
-  document.getElementById('hs-mask-avatar-input')?.click();
+  _onNewMaskAvatarPicked();
 }
 
-function _onNewMaskAvatarPicked(input) {
-  const file = input?.files?.[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const size = 128;
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      const min = Math.min(img.width, img.height);
-      const sx = (img.width - min) / 2;
-      const sy = (img.height - min) / 2;
-      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
-      _newMaskAvatar = canvas.toDataURL('image/jpeg', 0.82);
-      const preview = document.getElementById('hs-mask-avatar-preview');
-      if (preview) {
-        preview.innerHTML = '';
-        preview.style.background = `url("${_newMaskAvatar}") center/cover no-repeat`;
-      }
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-  input.value = '';
+async function _onNewMaskAvatarPicked() {
+  const dataUrl = await Utils.promptImageInput({ maxSize: 256, quality: 0.85 });
+  if (!dataUrl) return;
+  _newMaskAvatar = dataUrl;
+  const preview = document.getElementById('hs-mask-avatar-preview');
+  if (preview) {
+    preview.innerHTML = '';
+    preview.style.background = `url("${_newMaskAvatar}") center/cover no-repeat`;
+  }
 }
 
 // tab 切换

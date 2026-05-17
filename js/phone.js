@@ -823,10 +823,7 @@ function _renderSettings(pd) {
  <div class="phone-settings-card">
  <div class="phone-settings-title">壁纸</div>
  <div class="phone-settings-desc">上传一张图片作为当前对话的手机桌面壁纸。</div>
- <label class="phone-settings-btn">
- <input type="file" accept="image/*" onchange="Phone._onWallpaperPicked(event)" hidden>
- <span>更换壁纸</span>
- </label>
+ <button class="phone-settings-btn" onclick="Phone._onWallpaperPicked()">更换壁纸</button>
  <button class="phone-settings-btn secondary" onclick="Phone._resetWallpaper()">恢复默认壁纸</button>
  <label class="circle-check-label" style="margin-top:10px;padding:0">
    <span class="circle-check-text" style="font-size:13px">壁纸遮罩<br><span style="font-size:11px;color:var(--text-secondary)">为深色壁纸添加半透明遮罩，让文字更清晰</span></span>
@@ -859,22 +856,21 @@ function _renderSettings(pd) {
  `;
 }
 
-async function _onWallpaperPicked(e) {
- const file = e?.target?.files?.[0];
- if (!file) return;
- try {
- const dataUrl = await _compressWallpaper(file);
- const pd = await _getPhoneData();
- if (!pd) return;
- pd.wallpaper = dataUrl;
- await _savePhoneData();
- _applyWallpaper(pd);
- _log('更换了手机壁纸');
- UI.showToast('壁纸已更新');
- _renderSettings(pd);
- } catch(err) {
- console.error('[Phone] 壁纸上传失败', err);
- UI.showToast('壁纸上传失败');
+async function _onWallpaperPicked() {
+    const dataUrl = await Utils.promptImageInput({ maxSize: 1600, quality: 0.82 });
+    if (!dataUrl) return;
+    try {
+      const pd = await _getPhoneData();
+      if (!pd) return;
+      pd.wallpaper = dataUrl;
+      await _savePhoneData();
+      _applyWallpaper(pd);
+      _log('更换了手机壁纸');
+      UI.showToast('壁纸已更新');
+      _renderSettings(pd);
+    } catch(err) {
+      console.error('[Phone] 壁纸上传失败', err);
+      UI.showToast('壁纸上传失败');
  }
 }
 async function _resetWallpaper() {
@@ -922,23 +918,20 @@ pd.sendActionLog = !!checked;
 await _savePhoneData();
 }
 
-async function _onMomentsCoverPicked(input) {
- const file = input?.files?.[0];
- if (!file) return;
- try {
- const dataUrl = await _compressWallpaper(file, { maxW: 1200, maxH: 520, quality: 0.82 });
- const pd = await _getPhoneData();
- if (!pd) return;
- pd.momentsCover = dataUrl;
- await _savePhoneData();
- UI.showToast('好友圈封面已更新');
- _renderMoments(pd);
- } catch(e) {
- console.error('[Phone] 好友圈封面上传失败', e);
- UI.showToast('封面上传失败');
- } finally {
- if (input) input.value = '';
- }
+async function _onMomentsCoverPicked() {
+  const dataUrl = await Utils.promptImageInput({ maxSize: 1200, quality: 0.82 });
+  if (!dataUrl) return;
+  try {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  pd.momentsCover = dataUrl;
+  await _savePhoneData();
+  UI.showToast('好友圈封面已更新');
+  _renderMoments(pd);
+  } catch(e) {
+  console.error('[Phone] 好友圈封面上传失败', e);
+  UI.showToast('封面上传失败');
+  }
 }
 
 async function _clearMomentsCover() {
@@ -1674,8 +1667,7 @@ ${wvPrompt}` },
 
     body.innerHTML = `
       <div style="display:flex;flex-direction:column;height:100%">
-        <div class="phone-moments-cover" onclick="document.getElementById('phone-moments-cover-input')?.click()" style="${pd.momentsCover ? `background-image:linear-gradient(180deg,rgba(0,0,0,0.10),rgba(0,0,0,0.46)),url('${pd.momentsCover}')` : ''}">
-          <input id="phone-moments-cover-input" type="file" accept="image/*" hidden onchange="Phone._onMomentsCoverPicked(this)">
+        <div class="phone-moments-cover" onclick="Phone._onMomentsCoverPicked()" style="${pd.momentsCover ? `background-image:linear-gradient(180deg,rgba(0,0,0,0.10),rgba(0,0,0,0.46)),url('${pd.momentsCover}')` : ''}">
           <button type="button" class="phone-moments-cover-action" onclick="event.stopPropagation();${_momentsTab === 'mine' ? 'Phone._postMoment()' : 'Phone._refreshNpcMoments()'}" title="${_momentsTab === 'mine' ? '发动态' : '刷新好友动态'}">
             ${_momentsTab === 'mine' ? _uiIcon('camera', 15) : _uiIcon('refresh', 15)}
           </button>
@@ -3319,12 +3311,11 @@ function _hsRenderEditOverlay(target) {
       </div>
       <div style="padding:14px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px">
         <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-          <div id="hs-edit-avatar-preview" style="width:80px;height:80px;border-radius:50%;overflow:hidden;background:var(--bg-tertiary);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="document.getElementById('hs-edit-avatar-input').click()">
+          <div id="hs-edit-avatar-preview" style="width:80px;height:80px;border-radius:50%;overflow:hidden;background:var(--bg-tertiary);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="Phone._hsEditAvatarPicked()">
             ${avatarSrc
               ? `<img src="${Utils.escapeHtml(avatarSrc)}" alt="" style="width:100%;height:100%;object-fit:cover">`
               : `<span style="font-size:11px;color:var(--text-secondary)">点击上传</span>`}
           </div>
-          <input type="file" id="hs-edit-avatar-input" accept="image/*" style="display:none" onchange="Phone._hsEditAvatarPicked(this)">
           <div style="font-size:11px;color:var(--text-secondary)">点击头像上传</div>
         </div>
         ${_hsEditField('hs-ed-name',     '名字',         t.name,     'TA 叫什么')}
@@ -3375,35 +3366,14 @@ function _hsCloseEdit() {
   _hsEditingTargetId = null;
   _hsEditPendingAvatar = null;
 }
-function _hsEditAvatarPicked(input) {
-  const file = input.files && input.files[0];
-  input.value = '';
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    const raw = e.target.result;
-    const img = new Image();
-    img.onload = () => {
-      // 压缩到 200×200，JPEG 0.85（头像够用）
-      const SIZE = 200;
-      const canvas = document.createElement('canvas');
-      canvas.width = SIZE; canvas.height = SIZE;
-      const ctx = canvas.getContext('2d');
-      // 居中裁剪
-      const minSide = Math.min(img.naturalWidth, img.naturalHeight);
-      const sx = (img.naturalWidth - minSide) / 2;
-      const sy = (img.naturalHeight - minSide) / 2;
-      ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, SIZE, SIZE);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      _hsEditPendingAvatar = dataUrl;
-      const preview = document.getElementById('hs-edit-avatar-preview');
-      if (preview) {
-        preview.innerHTML = `<img src="${Utils.escapeHtml(dataUrl)}" alt="" style="width:100%;height:100%;object-fit:cover">`;
-      }
-    };
-    img.src = raw;
-  };
-  reader.readAsDataURL(file);
+async function _hsEditAvatarPicked() {
+  const dataUrl = await Utils.promptImageInput({ maxSize: 200, quality: 0.85 });
+  if (!dataUrl) return;
+  _hsEditPendingAvatar = dataUrl;
+  const preview = document.getElementById('hs-edit-avatar-preview');
+  if (preview) {
+    preview.innerHTML = `<img src="${Utils.escapeHtml(dataUrl)}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+  }
 }
 async function _hsSaveEdit() {
   const name = document.getElementById('hs-ed-name')?.value.trim() || '';
