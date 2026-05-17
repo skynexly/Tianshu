@@ -2706,6 +2706,127 @@ function closeKnowledgeModal() {
     _applyExtSearch();
   }
   let _editEventIdx = null;
+
+  // ===== AI 批量生成事件 =====
+  let _aiEventAbort = null;
+
+  async function aiGenerateEvents() {
+    // 收集世界观上下文
+    const w = window.__wvEditingCache;
+    if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+
+    const settingText = w.setting || '';
+    const regionNames = (w.regions || []).map(r => r.name).filter(Boolean);
+    const existingEvents = eventsData.map(e => e.name).filter(Boolean);
+
+    // 弹窗让用户输入需求和数量
+    const html = `
+    <div id="ai-event-gen-overlay" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-event-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent)">✨ AI 生成事件</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-event-gen-prompt" rows="3" placeholder="例如：生成几个日常生活事件和一个主线危机事件" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px"></textarea>
+        <div style="display:flex;gap:12px;margin-top:12px">
+          <div style="flex:1">
+            <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成数量</label>
+            <input type="number" id="ai-event-gen-count" value="5" min="1" max="20" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-event-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-event-gen-btn" onclick="Worldview._doAiGenerateEvents()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-event-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  async function _doAiGenerateEvents() {
+    const overlay = document.getElementById('ai-event-gen-overlay');
+    const btn = document.getElementById('ai-event-gen-btn');
+    const status = document.getElementById('ai-event-gen-status');
+    const prompt = document.getElementById('ai-event-gen-prompt')?.value?.trim() || '';
+    const count = Math.max(1, Math.min(20, parseInt(document.getElementById('ai-event-gen-count')?.value) || 5));
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = `正在生成 ${count} 个事件…`; }
+
+    const w = window.__wvEditingCache;
+    const settingText = w?.setting || '';
+    const regionNames = (w?.regions || []).map(r => r.name).filter(Boolean);
+    const existingEvents = eventsData.map(e => e.name).filter(Boolean);
+
+    const sysPrompt = `你是一个文字冒险游戏的事件设计师。请根据世界观设定，生成游戏内的剧情事件。
+
+每个事件需要包含：
+- name：事件名称（简短有力）
+- keys：触发关键词（2-4个，逗号分隔，是玩家在对话中可能提到的词）
+- completeKey：结束关键词（格式为 __EVENT_COMPLETE_事件名缩写__，AI回复中出现此词表示事件结束）
+- finishRule：事件结束条件（1-2句话描述什么情况下事件算结束）
+- content：事件内容（触发后每轮注入给AI的剧情指令，100-300字，包含事件背景、NPC行为、氛围描写、可能的发展方向。写给AI看的指令，不是写给玩家看的）
+
+要求：
+- 事件之间有剧情关联性，可以形成事件链（前一个事件的结果可能触发下一个）
+- 触发关键词要自然，是玩家在探索中容易提到的词
+- 事件内容要具体，给AI足够的发挥空间但有明确的方向
+- 不要和已有事件重复
+
+输出纯JSON数组，不要其他内容。`;
+
+    const userMsg = `${prompt ? '用户需求：' + prompt + '\n\n' : ''}请生成 ${count} 个事件。
+
+## 世界观设定
+${settingText || '（未提供）'}
+
+${regionNames.length ? '## 地区\n' + regionNames.join('、') : ''}
+
+${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents.join('、') : ''}`;
+
+    try {
+      _aiEventAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _aiEventAbort.signal, maxTokens: 8000 });
+
+      // 解析 JSON
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const arr = JSON.parse(cleaned);
+
+      if (!Array.isArray(arr) || arr.length === 0) throw new Error('AI 返回的不是有效数组');
+
+      // 转换成事件数据结构并追加
+      let added = 0;
+      for (const item of arr) {
+        if (!item.name) continue;
+        eventsData.push({
+          id: 'evt_' + Utils.uuid().slice(0, 8),
+          name: item.name || '',
+          keys: item.keys || '',
+          triggerType: 'keyword',
+          attrConditions: [],
+          completeKey: item.completeKey || '',
+          finishRule: item.finishRule || '',
+          content: item.content || '',
+          triggerMode: 'event'
+        });
+        added++;
+      }
+
+      _renderEvents(eventsData);
+      overlay?.remove();
+      UI.showToast(`已生成 ${added} 个事件`, 2000);
+    } catch(e) {
+      if (e.name === 'AbortError') {
+        if (status) status.textContent = '已取消';
+        return;
+      }
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiEventAbort = null;
+    }
+  }
+
   function addEvent() {
     eventsData.push({
       id: 'evt_' + Utils.uuid().slice(0, 8),
@@ -4005,6 +4126,7 @@ async function pickDefaultTheme(value) {
 switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromMenu, toggleExtIoMenu, exportExtended, importExtended,
     toggleCustomEnabled, toggleKnowledgeEnabled, toggleFestivalEnabled,
     addEvent, editEvent, saveEventFromModal, deleteEventFromModal, closeEventModal, syncEventTriggerTypeUI, addEventAttrCondition, updateEventAttrCondition, removeEventAttrCondition,
+    aiGenerateEvents, _doAiGenerateEvents,
     _onCardClick,
     handleIconImageUpload,
     clearIconImage,
