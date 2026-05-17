@@ -1237,31 +1237,12 @@ switchEditTab('basic');
   }
   
   // ---------- 图片上传 ----------
-  function handleIconImageUpload(input) {
-    const file = input.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const size = 128;
-        canvas.width = size; canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        const scale = Math.max(size / img.width, size / img.height);
-        const w = img.width * scale, h = img.height * scale;
-        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        const preview = document.getElementById('wv-icon-image-preview');
-        // 用img替换placeholder
-        preview.innerHTML = `<img src="${dataUrl}" style="width:64px;height:64px;object-fit:cover" data-value="${dataUrl}">`;
-        // 立刻保存到DB并刷新
-        _saveIconImageToDB(dataUrl);
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-    input.value = '';
+  async function handleIconImageUpload() {
+    const dataUrl = await Utils.promptImageInput({ maxSize: 256, quality: 0.85 });
+    if (!dataUrl) return;
+    const preview = document.getElementById('wv-icon-image-preview');
+    preview.innerHTML = `<img src="${dataUrl}" style="width:64px;height:64px;object-fit:cover" data-value="${dataUrl}">`;
+    _saveIconImageToDB(dataUrl);
   }
   function clearIconImage() {
     const preview = document.getElementById('wv-icon-image-preview');

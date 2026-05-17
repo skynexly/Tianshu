@@ -480,38 +480,17 @@ apply(cfg);
   }
 
   // 背景图
-  function handleBgImageUpload(input) {
-    const file = input.files[0];
-    if (!file) return;
-    // 压缩到 max 1200px 宽/高，JPEG 0.7
-    const reader = new FileReader();
-    reader.onload = e => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 1200;
-        let w = img.width, h = img.height;
-        if (w > MAX || h > MAX) {
-          const scale = MAX / Math.max(w, h);
-          w = Math.round(w * scale);
-          h = Math.round(h * scale);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-        // 检查压缩后大小（base64 长度 ≈ 实际字节 × 4/3）
-        if (dataUrl.length > 1.5 * 1024 * 1024) {
-          UI.showToast('图片太大，请选择更小的图片', 3000);
-          return;
-        }
-        const cfg = readForm(); cfg.chatBgImage = dataUrl;
-        save(cfg); apply(cfg);
-        const preview = document.getElementById('th-bg-image-preview');
-        if (preview) { preview.src = dataUrl; preview.style.display = 'block'; }
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+  async function handleBgImageUpload() {
+    const dataUrl = await Utils.promptImageInput({ maxSize: 1200, quality: 0.7 });
+    if (!dataUrl) return;
+    if (typeof dataUrl === 'string' && dataUrl.length > 1.5 * 1024 * 1024) {
+      UI.showToast('图片太大，请选择更小的图片', 3000);
+      return;
+    }
+    const cfg = readForm(); cfg.chatBgImage = dataUrl;
+    save(cfg); apply(cfg);
+    const preview = document.getElementById('th-bg-image-preview');
+    if (preview) { preview.src = dataUrl; preview.style.display = 'block'; }
   }
 
   function clearBgImage() {
