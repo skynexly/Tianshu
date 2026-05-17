@@ -1085,9 +1085,20 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
  historyForAPI[idx] = { ...historyForAPI[idx], content: `${hsRule}\n\n${historyForAPI[idx].content}` };
  }
  }
- } catch(e) { console.warn('[Chat] 心动模拟数值规则注入失败', e); }
+} catch(e) { console.warn('[Chat] 心动模拟数值规则注入失败', e); }
 
- const apiMessages = await API.buildMessages(historyForAPI, systemParts);
+    // 剧情引导注入（拼在最后一条用户消息前面）
+    try {
+      const directiveText = _buildDirectiveInjection();
+      if (directiveText) {
+        const lastUserIdx = [...historyForAPI].map((m, i) => ({ m, i })).reverse().find(x => x.m.role === 'user')?.i;
+        if (lastUserIdx !== undefined) {
+          historyForAPI[lastUserIdx] = { ...historyForAPI[lastUserIdx], content: `${directiveText}\n\n${historyForAPI[lastUserIdx].content}` };
+        }
+      }
+    } catch(e) { console.warn('[Chat] 剧情引导注入失败', e); }
+
+    const apiMessages = await API.buildMessages(historyForAPI, systemParts);
   try { GameLog.log('info', `[Chat] API消息构建完成: history=${historyForAPI.length}, systemParts=${systemParts.length}, apiMessages=${apiMessages.length}`); } catch(_) {}
 
     // 深度注入（在对话历史中间插入）
@@ -1334,6 +1345,9 @@ try { delete aiMsg._cachedFullHTML; delete aiMsg._cachedPlainHTML; } catch(_) {}
 await DB.put('messages', aiMsg);
 messages.push(aiMsg);
 
+              // 剧情引导轮数递减
+              try { await _decrementDirective(); } catch(_) {}
+
               // v610：扫描 AI 回复中的事件结束关键词
               try {
                 const _evtConv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
@@ -1542,6 +1556,8 @@ requestController.signal,
                     try { delete aiMsg._cachedFullHTML; delete aiMsg._cachedPlainHTML; } catch(_) {}
                     await DB.put('messages', aiMsg);
                     messages.push(aiMsg);
+                    // 剧情引导轮数递减
+                    try { await _decrementDirective(); } catch(_) {}
                     contentEl.classList.remove('streaming-cursor');
                     contentEl.innerHTML = Markdown.render(fullContent);
                     resolve();
@@ -4306,7 +4322,10 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
       toolsEnabled: !!conv?.convToolsEnabled,       // 默认关（AI工具调用）
       autoExtract: conv?.convAutoExtract !== false,  // 默认开（自动记忆提取）
-      replyWordCount: conv?.convReplyWordCount || 800  // 默认800字
+      replyWordCount: conv?.convReplyWordCount || 800,  // 默认800字
+      directive: conv?.convDirective || '',              // 剧情引导内容
+      directiveRemaining: conv?.convDirectiveRemaining || 0, // 剩余轮数
+      directiveTotal: conv?.convDirectiveTotal || 0      // 原始设定轮数
     };
   }
 
@@ -4505,6 +4524,79 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
 
   function closeConvSettingsModal() {
     document.getElementById('conv-settings-modal')?.classList.add('hidden');
+  }
+
+  // ===== 剧情引导 =====
+
+  function openDirectiveModal() {
+    const s = _getConvSettings();
+    const contentEl = document.getElementById('directive-content');
+    const roundsEl = document.getElementById('directive-rounds');
+    const statusEl = document.getElementById('directive-status');
+    if (contentEl) contentEl.value = s.directive;
+    if (roundsEl) roundsEl.value = s.directiveRemaining || s.directiveTotal || 3;
+    // 状态提示
+    if (statusEl) {
+      if (s.directive && s.directiveRemaining > 0) {
+        statusEl.style.display = 'block';
+        statusEl.textContent = `当前生效中 · 剩余 ${s.directiveRemaining}/${s.directiveTotal} 轮`;
+      } else {
+        statusEl.style.display = 'none';
+      }
+    }
+    document.getElementById('directive-modal')?.classList.remove('hidden');
+  }
+
+  function closeDirectiveModal() {
+    document.getElementById('directive-modal')?.classList.add('hidden');
+  }
+
+  async function saveDirective() {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (!conv) return;
+    const content = document.getElementById('directive-content')?.value?.trim() || '';
+    const rounds = Math.max(1, Math.min(50, parseInt(document.getElementById('directive-rounds')?.value) || 3));
+    if (!content) {
+      UI.showToast('请输入引导内容', 2000);
+      return;
+    }
+    conv.convDirective = content;
+    conv.convDirectiveRemaining = rounds;
+    conv.convDirectiveTotal = rounds;
+    await Conversations.saveList();
+    closeDirectiveModal();
+    UI.showToast('剧情引导已设置（' + rounds + '轮）', 2000);
+  }
+
+  async function clearDirective() {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (!conv) return;
+    conv.convDirective = '';
+    conv.convDirectiveRemaining = 0;
+    conv.convDirectiveTotal = 0;
+    await Conversations.saveList();
+    closeDirectiveModal();
+    UI.showToast('剧情引导已清空', 1500);
+  }
+
+  /** 构建剧情引导注入文本（每轮发消息时调用） */
+  function _buildDirectiveInjection() {
+    const s = _getConvSettings();
+    if (!s.directive || s.directiveRemaining <= 0) return '';
+    return `[剧情引导·剩余${s.directiveRemaining}轮]\n接下来的剧情请自然地朝以下方向过渡。\n如果转变较大，不需要一轮就彻底完成转变——可以用多轮逐步推进。\n转折需要逻辑自洽，并且符合角色设定和世界观设定。不要生硬转折。\n\n${s.directive}`;
+  }
+
+  /** 每轮发送后递减剩余轮数 */
+  async function _decrementDirective() {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (!conv || !conv.convDirective || !conv.convDirectiveRemaining) return;
+    conv.convDirectiveRemaining--;
+    if (conv.convDirectiveRemaining <= 0) {
+      conv.convDirective = '';
+      conv.convDirectiveRemaining = 0;
+      conv.convDirectiveTotal = 0;
+    }
+    await Conversations.saveList();
   }
 
   async function _getCurrentWorldviewForEvents() {
@@ -4927,6 +5019,7 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     scrollToBottom, updateScrollBtn,
     _toggleThink,
     openConvSettingsModal, saveConvSettings, closeConvSettingsModal, _switchCsTab,
+    openDirectiveModal, closeDirectiveModal, saveDirective, clearDirective, _getConvSettings,
     openEventManagerModal, closeEventManagerModal, resetEventState,
     _onVoiceEnabledChange, _onVoiceScopeAllChange,
     _onConvBgPicked, _onConvBgClear,

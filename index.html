@@ -366,6 +366,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path fill-rule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0 0 16.5 9h-1.875a1.875 1.875 0 0 1-1.875-1.875V5.25A3.75 3.75 0 0 0 9 1.5H5.625ZM7.5 15a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 7.5 15Zm.75 2.25a.75.75 0 0 0 0 1.5H12a.75.75 0 0 0 0-1.5H8.25Z" clip-rule="evenodd"/><path d="M12.971 1.816A5.23 5.23 0 0 1 14.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 0 1 3.434 1.279 9.768 9.768 0 0 0-6.963-6.963Z"/></svg>
 手动总结
 </button>
+<button onclick="Chat.openDirectiveModal(); Chat.togglePlusMenu()" style="display:flex;align-items:center;gap:8px">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z"/></svg>
+剧情引导
+</button>
 </div>
             </div>
             <button id="btn-send" style="width:36px;height:36px;border-radius:50%;background:var(--accent);color:#111;display:flex;align-items:center;justify-content:center;outline:none;border:none">
@@ -1464,6 +1468,36 @@
     </div>
 
     <!-- 当前对话事件管理弹窗 -->
+
+    <!-- 剧情引导弹窗 -->
+    <div id="directive-modal" class="modal hidden">
+      <div class="modal-content" style="max-height:75vh;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
+          <h3 style="margin:0;display:flex;align-items:center;gap:8px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z"/></svg>
+            剧情引导
+          </h3>
+          <button onclick="Chat.closeDirectiveModal()" class="btn-icon modal-corner-btn close-btn" title="关闭">×</button>
+        </div>
+        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px">写下你希望剧情走向的方向，AI 会在接下来的对话中自然过渡。</p>
+        <div style="flex:1;display:flex;flex-direction:column;gap:12px;overflow-y:auto">
+          <div>
+            <div style="font-size:13px;color:var(--text);margin-bottom:6px">引导内容</div>
+            <textarea id="directive-content" rows="5" placeholder="例如：节奏放慢一些，加入一段日常生活的过渡……" style="width:100%;padding:10px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;resize:vertical;line-height:1.6"></textarea>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:13px;color:var(--text);white-space:nowrap">持续轮数</span>
+            <input type="number" id="directive-rounds" value="3" min="1" max="50" step="1" style="width:70px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;text-align:center">
+            <span style="font-size:11px;color:var(--text-secondary)">轮（到期后自动清空）</span>
+          </div>
+          <div id="directive-status" style="display:none;padding:8px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-secondary)"></div>
+        </div>
+        <div class="modal-actions" style="flex-shrink:0;margin-top:16px;padding-top:12px">
+          <button onclick="Chat.clearDirective()" style="flex:1;background:none;border:1px solid var(--border);color:var(--danger)">清空</button>
+          <button onclick="Chat.saveDirective()" style="flex:1">保存</button>
+        </div>
+      </div>
+    </div>
     <div id="event-manager-modal" class="modal hidden">
       <div class="modal-content" style="max-height:85vh;display:flex;flex-direction:column">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">

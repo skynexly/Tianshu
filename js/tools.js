@@ -150,6 +150,24 @@ const Tools = (() => {
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'记忆 id' }
       }, required:['id'] }
+    }},
+    { type:'function', function:{
+      name:'query_directive',
+      description:'查询当前主线的剧情引导状态（是否有生效中的引导、内容、剩余轮数）。',
+      parameters:{ type:'object', properties:{}, required:[] }
+    }},
+    { type:'function', function:{
+      name:'set_directive',
+      description:'设置或修改主线的剧情引导。会覆盖当前已有内容。使用前必须向用户确认内容和轮数。',
+      parameters:{ type:'object', properties:{
+        content:{ type:'string', description:'引导内容（希望剧情朝什么方向发展）' },
+        rounds:{ type:'number', description:'持续轮数，默认3' }
+      }, required:['content'] }
+    }},
+    { type:'function', function:{
+      name:'remove_directive',
+      description:'清空当前主线的剧情引导。仅在用户明确同意撤销时使用。',
+      parameters:{ type:'object', properties:{}, required:[] }
     }}
   ];
 
@@ -301,6 +319,34 @@ const Tools = (() => {
       if (!args.id) return ERR('缺少 id');
       await DB.del('memories', args.id);
       return OK({ success:true, message:'已删除。' });
+    },
+
+    // --- 剧情引导 ---
+    async query_directive() {
+      if (typeof Chat === 'undefined' || !Chat._getConvSettings) return ERR('Chat 模块不可用');
+      const s = Chat._getConvSettings();
+      if (!s.directive || s.directiveRemaining <= 0) return OK({ active:false, message:'当前没有生效中的剧情引导。' });
+      return OK({ active:true, content:s.directive, remaining:s.directiveRemaining, total:s.directiveTotal });
+    },
+    async set_directive(args) {
+      if (!args.content) return ERR('缺少 content');
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      if (!conv) return ERR('找不到当前对话');
+      const rounds = Math.max(1, Math.min(50, args.rounds || 3));
+      conv.convDirective = args.content;
+      conv.convDirectiveRemaining = rounds;
+      conv.convDirectiveTotal = rounds;
+      await Conversations.saveList();
+      return OK({ success:true, message:`剧情引导已设置，持续${rounds}轮。` });
+    },
+    async remove_directive() {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      if (!conv) return ERR('找不到当前对话');
+      conv.convDirective = '';
+      conv.convDirectiveRemaining = 0;
+      conv.convDirectiveTotal = 0;
+      await Conversations.saveList();
+      return OK({ success:true, message:'剧情引导已清空。' });
     }
   };
 
