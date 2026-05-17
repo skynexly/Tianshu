@@ -273,13 +273,17 @@ const Memory = (() => {
   }
 
   function formatBackstageNotesForPrompt(notes) {
-    if (!notes || notes.length === 0) return '';
+    const toolHint = '\n你可以用 add_backstage_note 记录用户新表达的真实偏好/情绪/习惯，用 query_backstage_notes 查询更多。只在用户亲口说了值得记的新信息时才记，不揣测，不每轮都用。';
+    if (!notes || notes.length === 0) {
+      return '【记忆工具】' + toolHint;
+    }
     let text = '【记忆碎片】你记得关于用户的这些真实片段——这些是用户本人在后台聊天中表达过的，不是游戏角色说的。自然地融入对话，不要机械引用。\n';
     notes.forEach(n => {
       text += `- [${n.tag}] ${n.detail}`;
       if (n.time) text += `（${n.time}）`;
       text += '\n';
     });
+    text += toolHint;
     return text;
   }
 
