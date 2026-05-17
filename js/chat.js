@@ -1396,6 +1396,7 @@ messages.push(aiMsg);
                     // 保留旧的 heartSim / customAttrs 字段（基础状态栏不包含它们）
                     if (oldStatus?.heartSim) merged.heartSim = oldStatus.heartSim;
                     if (oldStatus?.customAttrs) merged.customAttrs = oldStatus.customAttrs;
+                    if (oldStatus?.taskSystem) merged.taskSystem = oldStatus.taskSystem;
                     await Conversations.setStatusBar(merged);
                     if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(merged);
                   }

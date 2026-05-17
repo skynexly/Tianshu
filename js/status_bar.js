@@ -899,7 +899,8 @@ async function taskApply(tasksArr) {
     const status = t.status || '';
     if (!text) continue;
 
-    const existing = ts.active.find(a => (t.id && a.id === t.id) || a.text === text);
+    const existing = ts.active.find(a => (t.id && a.id === t.id) || a.text === text)
+      || ts.active.find(a => a.status === 'active' && t.type && a.type === String(t.type).trim());
     if (!existing) continue;
 
     if (status === 'done' && existing.status === 'active') {
