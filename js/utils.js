@@ -141,7 +141,35 @@ const Utils = (() => {
 
     const taskMatch = raw.match(/```tasks?\s*\n([\s\S]*?)```/i);
     if (taskMatch) {
-      try { result.tasks = JSON.parse(taskMatch[1].trim()); } catch(e) {}
+      try { result.tasks = JSON.parse(taskMatch[1].trim()); } catch(e) {
+        // 兜底：尝试修复常见JSON问题
+        try {
+          let fix = taskMatch[1].trim();
+          // 补全截断的数组
+          if (!fix.endsWith(']')) fix += ']';
+          // 移除尾部多余逗号
+          fix = fix.replace(/,\s*([}\]])/g, '$1');
+          // 尝试解析
+          result.tasks = JSON.parse(fix);
+        } catch(_) {
+          // 再试：提取所有能找到的对象
+          try {
+            const objects = [];
+            const objRegex = /\{[^{}]*\}/g;
+            let m;
+            while ((m = objRegex.exec(taskMatch[1])) !== null) {
+              try { objects.push(JSON.parse(m[0])); } catch(_) {
+                // 尝试修复单个对象的引号/逗号问题
+                try {
+                  let o = m[0].replace(/'/g, '"').replace(/,\s*}/g, '}');
+                  objects.push(JSON.parse(o));
+                } catch(_) {}
+              }
+            }
+            if (objects.length > 0) result.tasks = objects;
+          } catch(_) {}
+        }
+      }
       raw = raw.replace(taskMatch[0], '').trim();
     }
 
@@ -175,12 +203,19 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
  raw = raw.replace(chatMatch[0], '').trim();
  }
  
- // 自定义世界观：属性增量（JSON）
- const customAttrsMatch = raw.match(/```custom-attrs\s*\n([\s\S]*?)```/i);
- if (customAttrsMatch) {
- try { result.customAttrs = JSON.parse(customAttrsMatch[1].trim()); } catch(e) {}
- raw = raw.replace(customAttrsMatch[0], '').trim();
- }
+// 自定义世界观：属性增量（JSON）
+    const customAttrsMatch = raw.match(/```custom-attrs\s*\n([\s\S]*?)```/i);
+    if (customAttrsMatch) {
+      try { result.customAttrs = JSON.parse(customAttrsMatch[1].trim()); } catch(e) {
+        try {
+          let fix = customAttrsMatch[1].trim();
+          fix = fix.replace(/,\s*([}\]])/g, '$1');
+          if (fix.startsWith('{') && !fix.endsWith('}')) fix += '}';
+          result.customAttrs = JSON.parse(fix);
+        } catch(_) {}
+      }
+      raw = raw.replace(customAttrsMatch[0], '').trim();
+    }
  
  // 心动模拟：返航触发 marker（空代码块即可）
     // 形如 ```homecoming\n``` 或 ```homecoming``` 或 ```homecoming\n任何内容\n```
