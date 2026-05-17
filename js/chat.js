@@ -1459,7 +1459,7 @@ messages.push(aiMsg);
               GameLog.log('info', `当前轮数: ${roundCount}`);
               // 记忆提取间隔从配置读取
               const extractInterval = parseInt((await API.getConfig()).extractInterval) || 20;
-              const shouldExtract = (roundCount > 0 && roundCount % extractInterval === 0) || _extractPending;
+              const shouldExtract = convSettings.autoExtract && ((roundCount > 0 && roundCount % extractInterval === 0) || _extractPending);
               if (shouldExtract) {
                 GameLog.log('info', `触发记忆提取 (第${roundCount}轮, 间隔${extractInterval}, pending=${_extractPending})`);
                 UI.showToast(_extractPending ? '正在重试记忆提取…' : '正在进行记忆提取，请稍候…', 4000);
@@ -1877,7 +1877,7 @@ _extractRunning = false;
       const lastIdx = toSummarize.findIndex(m => m.id === lastExtractedMsgId);
       toExtractBeforeSummary = lastIdx >= 0 ? toSummarize.slice(lastIdx + 1) : toSummarize;
     }
-    if (toExtractBeforeSummary.length > 0) {
+    if (toExtractBeforeSummary.length > 0 && _getConvSettings().autoExtract) {
       GameLog.log('info', `[Summary] 总结前提取 ${toExtractBeforeSummary.length} 条消息的记忆`);
       await autoExtractMemory(toExtractBeforeSummary);
     }
@@ -4302,6 +4302,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       bgImage: conv?.convBgImage || '',
       imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
       toolsEnabled: !!conv?.convToolsEnabled,       // 默认关（AI工具调用）
+      autoExtract: conv?.convAutoExtract !== false,  // 默认开（自动记忆提取）
       replyWordCount: conv?.convReplyWordCount || 800  // 默认800字
     };
   }
@@ -4417,6 +4418,9 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     // 工具调用
     const toolsEl = document.getElementById('cs-tools-enabled');
     if (toolsEl) toolsEl.checked = s.toolsEnabled;
+    // 自动记忆提取
+    const aeEl = document.getElementById('cs-auto-extract');
+    if (aeEl) aeEl.checked = s.autoExtract;
     // 正文字数
     const wcOpenEl = document.getElementById('cs-reply-wordcount');
     if (wcOpenEl) wcOpenEl.value = s.replyWordCount || 800;
@@ -4439,6 +4443,8 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     if (igSaveEl) conv.convImgGen = igSaveEl.checked;
     const toolsSaveEl = document.getElementById('cs-tools-enabled');
     if (toolsSaveEl) conv.convToolsEnabled = toolsSaveEl.checked;
+    const aeSaveEl = document.getElementById('cs-auto-extract');
+    if (aeSaveEl) conv.convAutoExtract = aeSaveEl.checked;
     const evEl = document.getElementById('cs-events-enabled');
     if (evEl) conv.convEventsEnabled = evEl.checked;
     const tsEl = document.getElementById('cs-tasks-enabled');
