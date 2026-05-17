@@ -251,7 +251,7 @@
  text-align: center;
  text-shadow: 0 1px 4px rgba(0,0,0,0.30);
 }
-.phone-settings-page { padding: 14px 18px 24px; color: currentColor; }
+.phone-settings-page { padding: 14px 18px 24px; color: currentColor; display:flex; flex-direction:column; gap:14px; }
 .phone-settings-card {
  border-radius:20px;
  padding:16px;
