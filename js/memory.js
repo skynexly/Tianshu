@@ -378,6 +378,11 @@ const Memory = (() => {
   }
 
   function buildExtractionPrompt(recentMessages, charName, charInfo, extractLimits, existingTitles) {
+    // 保留向后兼容，返回事件+关系的提示词
+    return _buildEventRelationPrompt(recentMessages, charName, charInfo, extractLimits, existingTitles);
+  }
+
+  function _buildEventRelationPrompt(recentMessages, charName, charInfo, extractLimits, existingTitles) {
 const displayName = charName || '用户角色';
 const dialogue = recentMessages.map(m =>
 `[${m.role === 'user' ? displayName : 'AI'}] ${m.content}`
@@ -386,7 +391,6 @@ const playerName = displayName;
     const maxEvents = extractLimits?.maxEvents || 5;
     const maxRelations = extractLimits?.maxRelations || 5;
 
-    // 角色基本信息
     let charLine = '';
     if (charInfo) {
       const parts = [charInfo.name];
@@ -418,30 +422,22 @@ ${dialogue}
   "relations": [
     {
       "title": "角色姓名",
-"relationship": "与${playerName}当前的关系（一句话，不要写“玩家”或“NPC”）",
-"impression": "该角色目前对${playerName}的看法（一句话，不要写“玩家”或“NPC”）",
+"relationship": "与${playerName}当前的关系（一句话，不要写"玩家"或"NPC"）",
+"impression": "该角色目前对${playerName}的看法（一句话，不要写"玩家"或"NPC"）",
 "emotion": "在经历了XXX后，角色姓名与${playerName}的关系从XXX变为XXX，角色姓名对此感到XXX（无明显变化则留空字符串）",
 "participants": ["角色姓名"],
       "keywords": ["关键词"]
     }
-  ],
-  "notes": [
-    {
-      "tag": "从以下标签中选最合适的一个（附定义）：喜欢（明确表达喜爱/偏好的事物）/讨厌（明确表达厌恶/排斥的事物）/期待（对未来某事表达期望或向往）/恐惧（表达害怕/恐惧/不安）/愤怒（表达生气/愤怒/不满）/有趣（做了或说了有意思的事，不是日常行为而是值得一记的趣事）/习惯（反复出现的行为模式，不是只做过一次的事）/秘密（不想被人知道或只对特定人透露的事）/悲伤（表达难过/伤心/失落）/迷茫（表达困惑/不知所措/对未来不确定）/痛苦（身体或心理上的痛苦）。如果一个行为不符合任何标签的定义，不要硬写，直接跳过不记。",
-      "detail": "以${playerName}为主语，如实记录说了什么或做了什么反应",
-      "characters": ["当时在场的角色姓名"]
-    }
   ]
 }
 
-- notes（小纸条）：只从${playerName}的发言和行为中提取，只看${playerName}说了什么、做了什么。不揣测内心，不修饰，不加工，不记录${playerName}以外角色的信息。characters 只记录当时在场的角色。tag 必须从固定标签中选择。detail 以"${playerName}"作为主语如实记录，例如：「${playerName}吃了麻辣烫觉得很好吃」「${playerName}看到猫就上去逗了」「${playerName}因为不知道之后要做什么而迷茫」。没有明显偏好/情绪/行为表达时 notes 为空数组。
 提取规则（重要，请严格遵守）：
 - **从对话最开头开始，按时间顺序逐段扫描**，不要只看后半段。每出现一个独立场景/转折/重要决策/到达新地点/关键对话/情感变化，都算一个独立事件。
 - **不要做"重要性筛选"**：哪怕是吃饭、闲聊、路过某地，只要在对话中有具体内容也要记录；宁可粒度细，不要漏掉早期发生的事。
 - **events 最多 ${maxEvents} 条是上限，不是目标**——如果对话里发生了 ${maxEvents} 件独立事件，就输出 ${maxEvents} 条；如果只有 2 件，就只输出 2 条；不要为了凑数也不要为了精简而丢早期事件。
 - **如果事件数量超过上限**：合并相邻同场景的小事件，但**仍要保证时间跨度从开头到结尾都被覆盖**，不允许只保留后半段。
 - relations 最多 ${maxRelations} 条。以下情况需要提取关系：1）新角色首次与${playerName}产生交互；2）已有角色本轮与${playerName}有实质互动（即使关系没有剧烈变化，也需要更新其当前的 relationship 和 impression 到最新状态）；3）已有角色与${playerName}的关系发生了明显转变或情感冲突。emotion 字段描述关系变化过程，首次建立关系或无明显变化填""。
-- **称呼规则**：禁止在事件标题、事件正文、关系字段、印象字段、emotion、participants 中用“玩家”“NPC”泛称角色；必须直接使用角色姓名。用户角色使用“${playerName}”，其他角色使用各自姓名。只有确实不知道姓名时，才可用“对方”“那名角色”等临时称呼。
+- **称呼规则**：禁止在事件标题、事件正文、关系字段、印象字段、emotion、participants 中用"玩家""NPC"泛称角色；必须直接使用角色姓名。用户角色使用"${playerName}"，其他角色使用各自姓名。只有确实不知道姓名时，才可用"对方""那名角色"等临时称呼。
 - 事件字段如无对应信息留空字符串，不要编造。
 - 只输出 JSON，确保完整闭合。${existingTitles && existingTitles.length > 0 ? `
 
@@ -449,6 +445,45 @@ ${dialogue}
 以下事件和关系已经被提取过了。如果对话中的内容和已有记忆描述的是同一件事，不要再次输出。只提取新发生的事件、新出现的角色关系、或已有关系的最新状态更新。
 已有事件：${existingTitles.filter(t => t.type === 'event').map(t => t.title).join('、') || '无'}
 已有关系：${existingTitles.filter(t => t.type === 'relation').map(t => t.title).join('、') || '无'}` : ''}`;
+  }
+
+  function _buildNotesPrompt(recentMessages, charName, charInfo) {
+const displayName = charName || '用户角色';
+const dialogue = recentMessages.map(m =>
+`[${m.role === 'user' ? displayName : 'AI'}] ${m.content}`
+).join('\n\n');
+const playerName = displayName;
+
+    let charLine = '';
+    if (charInfo) {
+      const parts = [charInfo.name];
+      if (charInfo.gender) parts.push(charInfo.gender);
+      charLine = `\n用户角色：${parts.join('，')}\n`;
+    }
+
+    return `请从以下对话中提取用户角色的偏好、情绪、习惯等小纸条，按JSON格式输出。只输出JSON，不要其他内容。
+${charLine}
+对话内容：
+${dialogue}
+
+输出格式：
+{
+  "notes": [
+    {
+      "tag": "从以下标签中选最合适的一个（附定义）：喜欢（明确表达喜爱/偏好的事物）/讨厌（明确表达厌恶/排斥的事物）/期待（对未来某事表达期望或向往）/恐惧（表达害怕/恐惧/不安）/愤怒（表达生气/愤怒/不满）/有趣（做了或说了有意思的事，不是日常行为而是值得一记的趣事）/习惯（反复出现的行为模式，不是只做过一次的事）/秘密（不想被人知道或只对特定人透露的事）/悲伤（表达难过/伤心/失落）/迷茫（表达困惑/不知所措/对未来不确定）/痛苦（身体或心理上的痛苦）",
+      "detail": "以${playerName}为主语，如实记录说了什么或做了什么反应",
+      "characters": ["当时在场的角色姓名"]
+    }
+  ]
+}
+
+提取规则：
+- 只从${playerName}的发言和行为中提取，只看${playerName}说了什么、做了什么。
+- 不揣测内心，不修饰，不加工，不记录${playerName}以外角色的信息。
+- characters 只记录当时在场的角色。
+- **如果一个行为不符合任何标签的定义，不要硬写，直接跳过。**
+- 宁可少记也不要乱归类。没有明显偏好/情绪/行为表达时 notes 为空数组。
+- 只输出 JSON，确保完整闭合。`;
   }
 
   function formatForPrompt(memories) {
@@ -2010,7 +2045,7 @@ function _toggleEditScopeDropdown() { _toggleDropdown('mem-edit-scope-dropdown')
   return {
     add, upsertRelation, addNote, retrieve, retrieveNotes, formatNotesForPrompt, NOTE_TAGS,
     addBackstageNote, queryBackstageNotes, retrieveBackstageNotes, formatBackstageNotesForPrompt,
-    buildExtractionPrompt, formatForPrompt,
+    buildExtractionPrompt, buildNotesPrompt: _buildNotesPrompt, formatForPrompt,
     showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove, deleteNoteConfirm, _deleteBackstageNote,
     editNote, closeNoteEdit, saveNoteEdit, deleteNoteFromEdit,
     copyMemory, filterByScope, renderScopeSelector, onPanelShow,
