@@ -739,7 +739,7 @@ function _syncBuiltinRestoreButton(w) {
       w.startPlot = document.getElementById('wv-start-plot')?.value || '';
       w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds')?.value) || 5;
       w.startMessage = document.getElementById('wv-start-message')?.value || '';
-      await DB.put('worldviews', w);
+      await _saveEditingWV(w);
       // 同步到运行时（仅当编辑的是当前激活世界观才生效）
       await _syncRuntime(w);
       // 静默同步名字到列表
@@ -1255,7 +1255,7 @@ switchEditTab('basic');
     const w = await _getEditingWV();
     if (!w) return;
     w.iconImage = dataUrl;
-    await DB.put('worldviews', w);
+    await _saveEditingWV(w);
     const list = await getWorldviewList();
     const entry = list.find(e => e.id === editingWorldviewId);
     if (entry) { entry.iconImage = dataUrl; }
@@ -1932,7 +1932,7 @@ async function saveTaskTypeFromModal() {
     if (existing) Object.assign(existing, data);
   }
 
-  await DB.put('worldviews', w);
+  await _saveEditingWV(w);
   window.__wvEditingCache = w;
   closeTaskTypeModal();
   _renderTaskSystem(w);
@@ -1946,7 +1946,7 @@ async function deleteTaskTypeFromModal() {
   const phase = gp.taskSystem.phases[_ttModalPhaseIdx];
   if (!phase || !phase.types?.[_ttModalTypeIdx]) return;
   phase.types.splice(_ttModalTypeIdx, 1);
-  await DB.put('worldviews', w);
+  await _saveEditingWV(w);
   window.__wvEditingCache = w;
   closeTaskTypeModal();
   _renderTaskSystem(w);
@@ -2000,7 +2000,7 @@ saveTaskTypeFromModal = async function() {
       value: mode === 'attr' ? Number(document.getElementById('wv-tt-reward-value').value) || 0 : 0,
       free: mode === 'free' ? document.getElementById('wv-tt-reward-free').value.trim() : ''
     };
-    await DB.put('worldviews', w);
+    await _saveEditingWV(w);
     window.__wvEditingCache = w;
     // 恢复弹窗状态
     document.getElementById('wv-tt-label').disabled = false;
@@ -2026,7 +2026,7 @@ async function addTaskPhase() {
   if (!w) return;
   const gp = _ensureGameplay(w);
   gp.taskSystem.phases.push(_defaultTaskPhase());
-  await DB.put('worldviews', w);
+  await _saveEditingWV(w);
   _renderTaskSystem(w);
 }
 
@@ -2037,7 +2037,7 @@ async function deleteTaskPhase(pi) {
   if (!w) return;
   const gp = _ensureGameplay(w);
   gp.taskSystem.phases.splice(pi, 1);
-  await DB.put('worldviews', w);
+  await _saveEditingWV(w);
   _renderTaskSystem(w);
 }
 
@@ -2051,7 +2051,7 @@ async function updateTaskPhase(pi, field, value) {
   if (field === 'batchSize') value = Math.max(1, Math.min(5, value || 3));
   if (field === 'totalTasks') value = Math.max(1, Math.min(999, value || 10));
   phase[field] = value;
-  await DB.put('worldviews', w);
+  await _saveEditingWV(w);
 }
 
 async function addTaskType(pi) {
@@ -2063,7 +2063,7 @@ async function addTaskType(pi) {
   if (!phase) return;
   if (!phase.types) phase.types = [];
   phase.types.push(_defaultTaskType());
-  await DB.put('worldviews', w);
+  await _saveEditingWV(w);
   _renderTaskSystem(w);
 }
 
@@ -2075,7 +2075,7 @@ async function deleteTaskType(pi, ti) {
   const phase = gp.taskSystem.phases[pi];
   if (!phase || !phase.types) return;
   phase.types.splice(ti, 1);
-  await DB.put('worldviews', w);
+  await _saveEditingWV(w);
   _renderTaskSystem(w);
 }
 
@@ -2092,7 +2092,7 @@ async function updateTaskType(pi, ti, field, value) {
     if (value !== 'attr') { phase.types[ti].rewardAttr = ''; phase.types[ti].rewardValue = 0; }
     if (value !== 'free') { phase.types[ti].rewardFree = ''; }
   }
-  await DB.put('worldviews', w);
+  await _saveEditingWV(w);
   if (field === 'rewardMode') _renderTaskSystem(w);
 }
 
@@ -2109,7 +2109,7 @@ async function updateTaskPhaseReward(pi, field, value) {
     if (value !== 'attr') { phase.completionReward.attr = ''; phase.completionReward.value = 0; }
     if (value !== 'free') { phase.completionReward.free = ''; }
   }
-  await DB.put('worldviews', w);
+  await _saveEditingWV(w);
   if (field === 'mode') _renderTaskSystem(w);
 }
 
@@ -3071,7 +3071,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
       }));
       w.events = eventsData.slice();
       if ('customs' in w) delete w.customs;
-      await DB.put('worldviews', w);
+      await _saveEditingWV(w);
       UI.showToast('已保存扩展设定');
       return;
     }
@@ -3134,7 +3134,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     // 事件设定
     w.events = eventsData.slice();
     
-    await DB.put('worldviews', w);
+    await _saveEditingWV(w);
     
     // 更新列表元数据
     const list = await getWorldviewList();
@@ -4055,7 +4055,7 @@ async function pickDefaultTheme(value) {
           } else {
             list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || 'world', iconImage: w.iconImage || '' });
           }
-          await DB.put('worldviews', w);
+          await _saveEditingWV(w);
           count++;
         }
         await saveWorldviewList(list);
@@ -4097,14 +4097,14 @@ async function pickDefaultTheme(value) {
           existing.icon = w.icon || existing.icon;
           existing.iconImage = w.iconImage || existing.iconImage;
           _migrateToKnowledges(w); // v581
-          await DB.put('worldviews', w);
+          await _saveEditingWV(w);
           loadedMap[w.id] = ver;
           updateCount++;
         } else {
           // 全新的内置世界观
           list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || 'world', iconImage: w.iconImage || '' });
           _migrateToKnowledges(w); // v581
-          await DB.put('worldviews', w);
+          await _saveEditingWV(w);
           loadedMap[w.id] = ver;
           newCount++;
         }
