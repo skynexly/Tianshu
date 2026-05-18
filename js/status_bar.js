@@ -170,10 +170,21 @@ async function _getCurrentWorldview() {
   } catch(_) { return null; }
 }
 
+// 获取当前对话的 gameplay 配置（优先对话级副本，fallback 到世界观）
+async function _getConvGameplay() {
+  try {
+    const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+    if (conv?.convGameplay) return conv.convGameplay;
+    const wv = await _getCurrentWorldview();
+    return wv?.gameplay || null;
+  } catch(_) { return null; }
+}
+
 async function _renderCustomAttrs(status) {
   const wrap = _el('sb-custom-attrs');
   if (!wrap) return;
   const wv = await _getCurrentWorldview();
+  const gp = await _getConvGameplay();
   const skin = wv?.statusBarSkin || document.body?.getAttribute('data-sb-skin') || '';
   const canShowCustomAttrs = skin === 'neumorph' || skin === 'terminal' || document.body?.getAttribute('data-skin') === 'single-default';
   if (!canShowCustomAttrs || !status) {
@@ -182,7 +193,7 @@ async function _renderCustomAttrs(status) {
     _customAttrDefs = [];
     return;
   }
-  const attrs = (wv?.gameplay?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+  const attrs = (gp?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
   _customAttrDefs = attrs;
   if (!attrs.length) {
     wrap.classList.add('hidden');
@@ -237,10 +248,11 @@ async function _renderCharacterAttrs(status) {
   const wrap = _el('sb-character-attrs');
   if (!wrap) return;
   const wv = await _getCurrentWorldview();
+  const gp = await _getConvGameplay();
   const skin = wv?.statusBarSkin || document.body?.getAttribute('data-sb-skin') || '';
   const isNeumorph = skin === 'neumorph';
   const isTerminal = skin === 'terminal';
-  const cards = (wv?.gameplay?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim()));
+  const cards = (gp?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim()));
   _characterAttrCards = cards;
   if ((!isNeumorph && !isTerminal) || !status || !cards.length) {
     wrap.classList.add('hidden');
@@ -291,8 +303,9 @@ async function _renderCharacterAttrs(status) {
 async function _getCustomAttrPromptData() {
   const wv = await _getCurrentWorldview();
   if (!wv || wv.id === 'wv_heartsim') return null;
-  const globalAttrs = (wv.gameplay?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
-  const charCards = (wv.gameplay?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim()));
+  const gp = await _getConvGameplay();
+  const globalAttrs = (gp?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+  const charCards = (gp?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim()));
   if (!globalAttrs.length && !charCards.length) return null;
   return { wv, globalAttrs, charCards };
 }
@@ -384,6 +397,7 @@ async function applyCustomAttrsDelta(deltaObj) {
   if (!deltaObj || typeof deltaObj !== 'object') return false;
   const wv = await _getCurrentWorldview();
   if (!wv || wv.id === 'wv_heartsim') return false;
+  const gp = await _getConvGameplay();
   const status = _currentStatus || Conversations.getStatusBar() || { time: '', weather: '', region: '', location: '', scene: '', playerOutfit: '', playerPosture: '', npcs: [] };
   status.customAttrs = status.customAttrs || {};
   status.customAttrs.global = status.customAttrs.global || {};
@@ -403,7 +417,7 @@ async function applyCustomAttrsDelta(deltaObj) {
     v = Math.max(0, v);
     return v;
   };
-  const globalDefs = (wv.gameplay?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+  const globalDefs = (gp?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
   const globalDelta = deltaObj.global && typeof deltaObj.global === 'object' ? deltaObj.global : {};
   Object.entries(globalDelta).forEach(([name, delta]) => {
     const attr = globalDefs.find(a => (a.name || '').trim() === String(name).trim());
@@ -414,7 +428,7 @@ async function applyCustomAttrsDelta(deltaObj) {
     changed = true;
   });
   const charDelta = deltaObj.characters && typeof deltaObj.characters === 'object' ? deltaObj.characters : {};
-  const cards = (wv.gameplay?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs));
+  const cards = (gp?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs));
   Object.entries(charDelta).forEach(([charName, attrsObj]) => {
     if (!attrsObj || typeof attrsObj !== 'object') return;
     const card = cards.find(c => (c.targetName || '').trim() === String(charName).trim());
@@ -511,10 +525,11 @@ async function render(status) {
       let hasCustomGlobalAttrs = false;
       try {
         const wv = await _getCurrentWorldview();
+        const gp = await _getConvGameplay();
         const skin = wv?.statusBarSkin || document.body.getAttribute('data-sb-skin') || '';
         if (skin === 'neumorph' || skin === 'terminal') {
-          hasCustomGlobalAttrs = !!(wv?.gameplay?.globalAttrs || []).some(a => a && a.id && (a.name || '').trim())
-          || !!((skin === 'neumorph' || skin === 'terminal') && (wv?.gameplay?.characterAttrs || []).some(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim())));
+          hasCustomGlobalAttrs = !!(gp?.globalAttrs || []).some(a => a && a.id && (a.name || '').trim())
+          || !!((skin === 'neumorph' || skin === 'terminal') && (gp?.characterAttrs || []).some(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim())));
         }
       } catch(_) {}
       if (_isSingleSkin || hasCustomGlobalAttrs) {
@@ -859,9 +874,9 @@ async function _saveTaskState() {
 }
 
 async function _getTaskConfig() {
-  const wv = await _getCurrentWorldview();
-  if (!wv || !wv.gameplay?.taskSystem?.phases?.length) return null;
-  return wv.gameplay.taskSystem;
+  const gp = await _getConvGameplay();
+  if (!gp?.taskSystem?.phases?.length) return null;
+  return gp.taskSystem;
 }
 
 // 查找类型模板 by label，在当前阶段
