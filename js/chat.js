@@ -4715,17 +4715,21 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
 
   // ========= 对话级 gameplay 编辑 =========
 
-  // 确保对话有 convGameplay 副本（首次编辑时从世界观深拷贝）
+  // 确保对话有 convGameplay 副本（首次编辑时从世界观深拷贝，世界观无配置则创建空白）
   async function _ensureConvGameplay() {
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     if (!conv) return null;
     if (!conv.convGameplay) {
       const wvId = conv.singleWorldviewId || conv.worldviewId || '';
-      if (!wvId || wvId === '__default_wv__') { UI.showToast('当前对话未绑定世界观', 1800); return null; }
-      const wv = await DB.get('worldviews', wvId);
-      if (!wv || !wv.gameplay) { UI.showToast('世界观无玩法配置', 1800); return null; }
-      if (!await UI.showConfirm('创建对话级配置', '将从世界观复制一份配置到当前对话。\n之后修改只影响本对话，不影响世界观原件。\n继续？')) return null;
-      conv.convGameplay = JSON.parse(JSON.stringify(wv.gameplay));
+      const wv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : null;
+      const hasExisting = wv && wv.gameplay && (wv.gameplay.globalAttrs?.length || wv.gameplay.characterAttrs?.length || wv.gameplay.taskSystem?.phases?.length);
+      if (hasExisting) {
+        if (!await UI.showConfirm('创建对话级配置', '将从世界观复制一份配置到当前对话。\n之后修改只影响本对话，不影响世界观原件。\n继续？')) return null;
+        conv.convGameplay = JSON.parse(JSON.stringify(wv.gameplay));
+      } else {
+        if (!await UI.showConfirm('创建对话级配置', '当前世界观无已有配置，将为本对话创建空白配置。\n继续？')) return null;
+        conv.convGameplay = { globalAttrs: [], characterAttrs: [], taskSystem: { phases: [] } };
+      }
       await Conversations.saveList();
     }
     return conv;
@@ -4737,11 +4741,15 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     if (!conv) return null;
     if (!conv.convEvents) {
       const wvId = conv.singleWorldviewId || conv.worldviewId || '';
-      if (!wvId || wvId === '__default_wv__') { UI.showToast('当前对话未绑定世界观', 1800); return null; }
-      const wv = await DB.get('worldviews', wvId);
-      if (!wv) { UI.showToast('世界观不存在', 1800); return null; }
-      if (!await UI.showConfirm('创建对话级事件配置', '将从世界观复制事件列表到当前对话。\n之后修改只影响本对话，不影响世界观原件。\n继续？')) return null;
-      conv.convEvents = JSON.parse(JSON.stringify(wv.events || []));
+      const wv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : null;
+      const hasEvents = wv && Array.isArray(wv.events) && wv.events.length > 0;
+      if (hasEvents) {
+        if (!await UI.showConfirm('创建对话级事件配置', '将从世界观复制事件列表到当前对话。\n之后修改只影响本对话，不影响世界观原件。\n继续？')) return null;
+        conv.convEvents = JSON.parse(JSON.stringify(wv.events));
+      } else {
+        if (!await UI.showConfirm('创建对话级事件配置', '当前世界观无已有事件，将为本对话创建空白事件列表。\n继续？')) return null;
+        conv.convEvents = [];
+      }
       await Conversations.saveList();
     }
     return conv;
