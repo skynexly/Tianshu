@@ -4792,67 +4792,292 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     });
   }
 
-  // 编辑属性配置
+  // 编辑属性配置（可视化列表）
   async function openConvAttrEditor() {
     const conv = await _ensureConvGameplay();
     if (!conv) return;
     const gp = conv.convGameplay;
-    const json = JSON.stringify({ globalAttrs: gp.globalAttrs || [], characterAttrs: gp.characterAttrs || [] }, null, 2);
-    const result = await _showJsonEditor('编辑属性配置（JSON）', json);
-    if (result === null) return;
-    try {
-      const parsed = JSON.parse(result);
-      if (Array.isArray(parsed.globalAttrs)) gp.globalAttrs = parsed.globalAttrs;
-      if (Array.isArray(parsed.characterAttrs)) gp.characterAttrs = parsed.characterAttrs;
-      await Conversations.saveList();
-      UI.showToast('属性配置已保存', 1500);
-      if (typeof StatusBar !== 'undefined') StatusBar.refreshFromConv();
-    } catch(e) {
-      UI.showToast('JSON 格式错误: ' + e.message, 2500);
-    }
+    if (!Array.isArray(gp.globalAttrs)) gp.globalAttrs = [];
+
+    const _esc = (s) => Utils.escapeHtml ? Utils.escapeHtml(s) : (s || '');
+    const _renderList = () => {
+      const listEl = document.getElementById('conv-attr-list');
+      if (!listEl) return;
+      if (gp.globalAttrs.length === 0) {
+        listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;border:1px dashed var(--border);border-radius:8px">暂无属性，点击下方添加</div>';
+        return;
+      }
+      listEl.innerHTML = gp.globalAttrs.map((a, i) => {
+        const name = (a.name || '').trim() || '未命名';
+        const maxText = (a.max === '' || a.max === null || a.max === undefined) ? '无上限' : `上限 ${a.max}`;
+        return `<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:var(--bg-tertiary);border:1px solid var(--border)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(name)}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">初始 ${a.initial ?? 0} / ${_esc(maxText)}${a.desc ? ' · ' + _esc(a.desc) : ''}</div>
+          </div>
+          <button onclick="Chat._convAttrEdit(${i})" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--accent);font-size:11px;cursor:pointer">编辑</button>
+          <button onclick="Chat._convAttrDel(${i})" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--danger);font-size:11px;cursor:pointer">删</button>
+        </div>`;
+      }).join('');
+    };
+
+    // 创建弹窗
+    document.getElementById('conv-attr-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'conv-attr-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    modal.innerHTML = `<div style="width:min(440px,95vw);max-height:80vh;display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;background:var(--bg-secondary);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.3)" onclick="event.stopPropagation()">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:14px;font-weight:700;color:var(--text)">属性配置（对话级）</div>
+        <button onclick="document.getElementById('conv-attr-modal').remove()" style="background:none;border:none;color:var(--text-secondary);font-size:18px;cursor:pointer;padding:4px">×</button>
+      </div>
+      <div id="conv-attr-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;max-height:50vh"></div>
+      <button onclick="Chat._convAttrAdd()" style="padding:10px;border-radius:10px;border:1px dashed var(--border);background:transparent;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;width:100%">+ 添加属性</button>
+    </div>`;
+    document.body.appendChild(modal);
+    _renderList();
+
+    // 挂全局临时方法
+    window.__convAttrGp = gp;
+    window.__convAttrRender = _renderList;
   }
 
-  // 编辑任务配置
+  async function _convAttrAdd() {
+    const gp = window.__convAttrGp;
+    if (!gp) return;
+    const name = await UI.showSimpleInput('属性名称', '', { placeholder: '例如：生命值、好感度' });
+    if (!name || !name.trim()) return;
+    gp.globalAttrs.push({ id: 'attr_' + Utils.uuid().slice(0, 8), name: name.trim(), initial: 0, max: '', desc: '' });
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (conv) { conv.convGameplay = gp; await Conversations.saveList(); }
+    if (window.__convAttrRender) window.__convAttrRender();
+    if (typeof StatusBar !== 'undefined') StatusBar.refreshFromConv();
+  }
+
+  async function _convAttrEdit(idx) {
+    const gp = window.__convAttrGp;
+    if (!gp || !gp.globalAttrs[idx]) return;
+    const a = gp.globalAttrs[idx];
+    // 简易多字段编辑：名称 → 初始值 → 最大值 → 说明
+    const name = await UI.showSimpleInput('属性名称', a.name || '', { placeholder: '属性名' });
+    if (name === null) return;
+    if (name.trim()) a.name = name.trim();
+    const initial = await UI.showSimpleInput('初始值', String(a.initial ?? 0), { placeholder: '数字' });
+    if (initial !== null && initial.trim() !== '') a.initial = Number(initial) || 0;
+    const max = await UI.showSimpleInput('最大值（留空=无上限）', String(a.max ?? ''), { placeholder: '留空=无上限', allowEmpty: true });
+    if (max !== null) a.max = max.trim() === '' ? '' : (Number(max) || '');
+    const desc = await UI.showSimpleInput('说明（可选）', a.desc || '', { placeholder: '可选', allowEmpty: true });
+    if (desc !== null) a.desc = desc.trim();
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (conv) { conv.convGameplay = gp; await Conversations.saveList(); }
+    if (window.__convAttrRender) window.__convAttrRender();
+    if (typeof StatusBar !== 'undefined') StatusBar.refreshFromConv();
+  }
+
+  async function _convAttrDel(idx) {
+    const gp = window.__convAttrGp;
+    if (!gp || !gp.globalAttrs[idx]) return;
+    if (!await UI.showConfirm('删除属性', `确定删除「${gp.globalAttrs[idx].name || '未命名'}」？`)) return;
+    gp.globalAttrs.splice(idx, 1);
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (conv) { conv.convGameplay = gp; await Conversations.saveList(); }
+    if (window.__convAttrRender) window.__convAttrRender();
+    if (typeof StatusBar !== 'undefined') StatusBar.refreshFromConv();
+  }
+
+  // 编辑任务配置（可视化列表）
   async function openConvTaskEditor() {
     const conv = await _ensureConvGameplay();
     if (!conv) return;
     const gp = conv.convGameplay;
     if (!gp.taskSystem) gp.taskSystem = { phases: [] };
-    const json = JSON.stringify(gp.taskSystem, null, 2);
-    const result = await _showJsonEditor('编辑任务配置（JSON）', json);
-    if (result === null) return;
-    try {
-      const parsed = JSON.parse(result);
-      const ts = Conversations.getStatusBar()?.taskSystem;
-      if (ts?.active?.length > 0) {
-        const proceed = await UI.showConfirm('任务进度冲突', '当前有进行中的任务，修改配置可能导致冲突。\n建议先重置任务进度。\n\n选择"确定"仅保存配置，选择"取消"放弃修改。');
-        if (!proceed) return;
-      }
-      gp.taskSystem = parsed;
-      await Conversations.saveList();
-      UI.showToast('任务配置已保存', 1500);
+    if (!Array.isArray(gp.taskSystem.phases)) gp.taskSystem.phases = [];
+    const ts = gp.taskSystem;
+    const _esc = (s) => Utils.escapeHtml ? Utils.escapeHtml(s) : (s || '');
+
+    const _save = async () => {
+      const c = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      if (c) { c.convGameplay = gp; await Conversations.saveList(); }
       if (typeof StatusBar !== 'undefined') StatusBar.refreshFromConv();
-    } catch(e) {
-      UI.showToast('JSON 格式错误: ' + e.message, 2500);
-    }
+    };
+    const _renderPhases = () => {
+      const listEl = document.getElementById('conv-task-list');
+      if (!listEl) return;
+      if (ts.phases.length === 0) {
+        listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;border:1px dashed var(--border);border-radius:8px">暂无阶段，点击下方添加</div>';
+        return;
+      }
+      listEl.innerHTML = ts.phases.map((p, i) => {
+        const name = (p.name || '').trim() || `阶段 ${i + 1}`;
+        const typeCount = (p.types || []).length;
+        return `<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:var(--bg-tertiary);border:1px solid var(--border)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">${_esc(name)}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">每批 ${p.batchSize || 3} 条 · 共 ${p.totalTasks || 10} 条完成 · ${typeCount} 种类型</div>
+          </div>
+          <button onclick="Chat._convTaskEditPhase(${i})" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--accent);font-size:11px;cursor:pointer">编辑</button>
+          <button onclick="Chat._convTaskDelPhase(${i})" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--danger);font-size:11px;cursor:pointer">删</button>
+        </div>`;
+      }).join('');
+    };
+
+    document.getElementById('conv-task-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'conv-task-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    modal.innerHTML = `<div style="width:min(440px,95vw);max-height:80vh;display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;background:var(--bg-secondary);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.3)" onclick="event.stopPropagation()">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:14px;font-weight:700;color:var(--text)">任务配置（对话级）</div>
+        <button onclick="document.getElementById('conv-task-modal').remove()" style="background:none;border:none;color:var(--text-secondary);font-size:18px;cursor:pointer;padding:4px">×</button>
+      </div>
+      <div id="conv-task-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;max-height:50vh"></div>
+      <button onclick="Chat._convTaskAddPhase()" style="padding:10px;border-radius:10px;border:1px dashed var(--border);background:transparent;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;width:100%">+ 添加阶段</button>
+    </div>`;
+    document.body.appendChild(modal);
+    _renderPhases();
+    window.__convTaskTs = ts;
+    window.__convTaskGp = gp;
+    window.__convTaskRender = _renderPhases;
+    window.__convTaskSave = _save;
   }
 
-  // 编辑事件列表
+  async function _convTaskAddPhase() {
+    const ts = window.__convTaskTs;
+    if (!ts) return;
+    const name = await UI.showSimpleInput('阶段名称', '', { placeholder: '例如：第一章' });
+    if (!name || !name.trim()) return;
+    ts.phases.push({ id: 'phase_' + Utils.uuid().slice(0, 8), name: name.trim(), batchSize: 3, totalTasks: 10, types: [], completionReward: { mode: 'none', attr: '', value: 0, free: '' } });
+    await window.__convTaskSave();
+    if (window.__convTaskRender) window.__convTaskRender();
+  }
+
+  async function _convTaskEditPhase(pi) {
+    const ts = window.__convTaskTs;
+    if (!ts || !ts.phases[pi]) return;
+    const p = ts.phases[pi];
+    const name = await UI.showSimpleInput('阶段名称', p.name || '', { placeholder: '阶段名' });
+    if (name === null) return;
+    if (name.trim()) p.name = name.trim();
+    const batch = await UI.showSimpleInput('每批任务数', String(p.batchSize || 3), { placeholder: '数字' });
+    if (batch !== null && batch.trim()) p.batchSize = Math.max(1, parseInt(batch) || 3);
+    const total = await UI.showSimpleInput('阶段总完成数', String(p.totalTasks || 10), { placeholder: '数字' });
+    if (total !== null && total.trim()) p.totalTasks = Math.max(1, parseInt(total) || 10);
+    await window.__convTaskSave();
+    if (window.__convTaskRender) window.__convTaskRender();
+  }
+
+  async function _convTaskDelPhase(pi) {
+    const ts = window.__convTaskTs;
+    if (!ts || !ts.phases[pi]) return;
+    if (!await UI.showConfirm('删除阶段', `确定删除「${ts.phases[pi].name || '阶段 ' + (pi + 1)}」？`)) return;
+    // 冲突检查
+    const statusTs = Conversations.getStatusBar()?.taskSystem;
+    if (statusTs?.active?.length > 0) {
+      UI.showToast('建议先重置任务进度再删阶段', 2000);
+    }
+    ts.phases.splice(pi, 1);
+    await window.__convTaskSave();
+    if (window.__convTaskRender) window.__convTaskRender();
+  }
+
+  // 编辑事件列表（可视化列表）
   async function openConvEventEditor() {
     const conv = await _ensureConvEvents();
     if (!conv) return;
-    const json = JSON.stringify(conv.convEvents, null, 2);
-    const result = await _showJsonEditor('编辑事件列表（JSON）', json);
-    if (result === null) return;
-    try {
-      const parsed = JSON.parse(result);
-      if (!Array.isArray(parsed)) throw new Error('事件列表必须是数组');
-      conv.convEvents = parsed;
-      await Conversations.saveList();
-      UI.showToast('事件列表已保存', 1500);
-    } catch(e) {
-      UI.showToast('JSON 格式错误: ' + e.message, 2500);
-    }
+    const events = conv.convEvents;
+    const _esc = (s) => Utils.escapeHtml ? Utils.escapeHtml(s) : (s || '');
+
+    const _save = async () => {
+      const c = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      if (c) { c.convEvents = events; await Conversations.saveList(); }
+    };
+    const _renderList = () => {
+      const listEl = document.getElementById('conv-event-list');
+      if (!listEl) return;
+      if (events.length === 0) {
+        listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;border:1px dashed var(--border);border-radius:8px">暂无事件，点击下方添加</div>';
+        return;
+      }
+      listEl.innerHTML = events.map((ev, i) => {
+        const name = (ev.name || '').trim() || '未命名事件';
+        const trigger = ev.triggerKey ? `关键词: ${ev.triggerKey}` : (ev.triggerCondition ? '数值触发' : '无触发条件');
+        return `<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:var(--bg-tertiary);border:1px solid var(--border)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(name)}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(trigger)}</div>
+          </div>
+          <button onclick="Chat._convEventEdit(${i})" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--accent);font-size:11px;cursor:pointer">编辑</button>
+          <button onclick="Chat._convEventDel(${i})" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--danger);font-size:11px;cursor:pointer">删</button>
+        </div>`;
+      }).join('');
+    };
+
+    document.getElementById('conv-event-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'conv-event-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    modal.innerHTML = `<div style="width:min(440px,95vw);max-height:80vh;display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;background:var(--bg-secondary);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.3)" onclick="event.stopPropagation()">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:14px;font-weight:700;color:var(--text)">事件列表（对话级）</div>
+        <button onclick="document.getElementById('conv-event-modal').remove()" style="background:none;border:none;color:var(--text-secondary);font-size:18px;cursor:pointer;padding:4px">×</button>
+      </div>
+      <div id="conv-event-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;max-height:50vh"></div>
+      <button onclick="Chat._convEventAdd()" style="padding:10px;border-radius:10px;border:1px dashed var(--border);background:transparent;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;width:100%">+ 添加事件</button>
+    </div>`;
+    document.body.appendChild(modal);
+    _renderList();
+    window.__convEvents = events;
+    window.__convEventRender = _renderList;
+    window.__convEventSave = _save;
+  }
+
+  async function _convEventAdd() {
+    const events = window.__convEvents;
+    if (!events) return;
+    const name = await UI.showSimpleInput('事件名称', '', { placeholder: '例如：初遇神秘人' });
+    if (!name || !name.trim()) return;
+    const triggerKey = await UI.showSimpleInput('触发关键词（对话中出现该词时激活）', '', { placeholder: '可留空', allowEmpty: true });
+    const content = await UI.showSimpleInput('事件内容（触发后注入给AI的指令）', '', { placeholder: '场景描述...', allowEmpty: true });
+    const completeKey = await UI.showSimpleInput('结束关键词（AI回复含该词时事件结束）', '', { placeholder: '可留空', allowEmpty: true });
+    events.push({
+      id: 'evt_' + Utils.uuid().slice(0, 8),
+      name: name.trim(),
+      triggerKey: (triggerKey || '').trim(),
+      content: (content || '').trim(),
+      completeKey: (completeKey || '').trim(),
+      enabled: true
+    });
+    await window.__convEventSave();
+    if (window.__convEventRender) window.__convEventRender();
+  }
+
+  async function _convEventEdit(idx) {
+    const events = window.__convEvents;
+    if (!events || !events[idx]) return;
+    const ev = events[idx];
+    const name = await UI.showSimpleInput('事件名称', ev.name || '', { placeholder: '事件名' });
+    if (name === null) return;
+    if (name.trim()) ev.name = name.trim();
+    const triggerKey = await UI.showSimpleInput('触发关键词', ev.triggerKey || '', { placeholder: '可留空', allowEmpty: true });
+    if (triggerKey !== null) ev.triggerKey = triggerKey.trim();
+    const content = await UI.showSimpleInput('事件内容', ev.content || '', { placeholder: '场景描述', allowEmpty: true });
+    if (content !== null) ev.content = content.trim();
+    const completeKey = await UI.showSimpleInput('结束关键词', ev.completeKey || '', { placeholder: '可留空', allowEmpty: true });
+    if (completeKey !== null) ev.completeKey = completeKey.trim();
+    await window.__convEventSave();
+    if (window.__convEventRender) window.__convEventRender();
+  }
+
+  async function _convEventDel(idx) {
+    const events = window.__convEvents;
+    if (!events || !events[idx]) return;
+    if (!await UI.showConfirm('删除事件', `确定删除「${events[idx].name || '未命名'}」？`)) return;
+    events.splice(idx, 1);
+    await window.__convEventSave();
+    if (window.__convEventRender) window.__convEventRender();
   }
 
   // 恢复世界观默认
@@ -5230,6 +5455,9 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     openDirectiveModal, closeDirectiveModal, saveDirective, clearDirective, _getConvSettings,
     openEventManagerModal, closeEventManagerModal, resetEventState,
     openConvAttrEditor, openConvTaskEditor, openConvEventEditor, resetConvGameplay,
+    _convAttrAdd, _convAttrEdit, _convAttrDel,
+    _convTaskAddPhase, _convTaskEditPhase, _convTaskDelPhase,
+    _convEventAdd, _convEventEdit, _convEventDel,
     _onVoiceEnabledChange, _onVoiceScopeAllChange,
     _onConvBgPicked, _onConvBgClear,
     playVoiceForMessage, stopVoice,
