@@ -706,38 +706,390 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
 
   // ----- 属性面板入口 -----
   async function openAttrEditor() {
-    const conv = await _ensureConvGameplay();
-    if (!conv) return;
-    _cgAttrGp = conv.convGameplay;
+    try {
+      const conv = await _ensureConvGameplay();
+      if (!conv) return;
+      _cgAttrGp = conv.convGameplay;
 
-    document.getElementById('conv-settings-modal')?.classList.add('hidden');
-    document.getElementById('cg-attr-panel')?.remove();
+      document.getElementById('conv-settings-modal')?.classList.add('hidden');
+      document.getElementById('cg-attr-panel')?.remove();
 
-    const panel = document.createElement('div');
-    panel.id = 'cg-attr-panel';
-    panel.style.cssText = 'position:fixed;inset:0;z-index:180;background:var(--bg);display:flex;flex-direction:column;overflow:hidden';
-    panel.innerHTML = `
-      <div style="padding:16px 16px 0;flex-shrink:0">
-        <button onclick="ConvGameplay.closeAttrEditor()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;background:none;border:none;color:var(--text);cursor:pointer;margin-bottom:12px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-        </button>
-        <div style="margin-bottom:16px">
-          <div style="font-size:18px;font-weight:700;color:var(--text)">属性配置（对话级）</div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">修改只影响当前对话，不影响世界观原件</div>
+      const panel = document.createElement('div');
+      panel.id = 'cg-attr-panel';
+      panel.style.cssText = 'position:fixed;inset:0;z-index:180;background:var(--bg);display:flex;flex-direction:column;overflow:hidden';
+      panel.innerHTML = `
+        <div style="padding:16px 16px 0;flex-shrink:0">
+          <button onclick="ConvGameplay.closeAttrEditor()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;background:none;border:none;color:var(--text);cursor:pointer;margin-bottom:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <div style="margin-bottom:16px">
+            <div style="font-size:18px;font-weight:700;color:var(--text)">属性配置（对话级）</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">修改只影响当前对话，不影响世界观原件</div>
+          </div>
         </div>
-      </div>
-      <div style="flex:1;overflow-y:auto;padding:0 16px 16px">
-        <div id="cg-global-attrs"></div>
-        <div id="cg-char-attrs" style="margin-top:16px"></div>
-      </div>
-    `;
-    document.body.appendChild(panel);
-    _renderConvAttrs();
+        <div style="flex:1;overflow-y:auto;padding:0 16px 16px">
+          <div id="cg-global-attrs"></div>
+          <div id="cg-char-attrs" style="margin-top:16px"></div>
+        </div>
+      `;
+      document.body.appendChild(panel);
+      _renderConvAttrs();
+    } catch(e) {
+      console.error('[ConvGameplay.openAttrEditor]', e);
+      UI.showToast('打开失败：' + (e.message || e), 3000);
+    }
   }
 
   function closeAttrEditor() {
     _cgAttrGp = null;
     document.getElementById('cg-attr-panel')?.remove();
+  }
+
+  // ========== 对话级任务系统编辑器 ==========
+
+  let _cgTaskTs = null; // 当前编辑的 taskSystem 引用
+
+  function _defaultTaskPhase() {
+    return {
+      id: 'phase_' + Utils.uuid().slice(0, 8),
+      name: '',
+      batchSize: 3,
+      totalTasks: 10,
+      types: [],
+      completionReward: { mode: 'none', attr: '', value: 0, free: '' }
+    };
+  }
+
+  function _defaultTaskType() {
+    return {
+      id: 'tt_' + Utils.uuid().slice(0, 8),
+      label: '',
+      desc: '',
+      rewardMode: 'none',
+      rewardAttr: '',
+      rewardValue: 0,
+      rewardFree: ''
+    };
+  }
+
+  function _getConvGlobalAttrNames() {
+    const gp = _cgAttrGp || _getConv()?.convGameplay;
+    return (gp?.globalAttrs || []).map(a => a.name).filter(Boolean);
+  }
+
+  function _renderTaskSystem() {
+    const el = document.getElementById('cg-task-container');
+    if (!el || !_cgTaskTs) return;
+    const phases = _cgTaskTs.phases || [];
+
+    if (phases.length === 0) {
+      el.innerHTML = `
+        <div style="text-align:center;padding:20px;border:1px dashed var(--border);border-radius:8px">
+          <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px">尚未配置任务阶段</div>
+          <button type="button" onclick="ConvGameplay.addTaskPhase()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 添加阶段</button>
+        </div>`;
+      return;
+    }
+
+    let html = '';
+    phases.forEach((phase, pi) => {
+      const typeCards = (phase.types || []).map((t, ti) => {
+        let rewardTag = '';
+        if (t.rewardMode === 'attr' && t.rewardAttr) rewardTag = `<span style="font-size:11px;color:var(--accent);background:color-mix(in srgb, var(--accent) 15%, transparent);padding:1px 6px;border-radius:4px">${_esc(t.rewardAttr)} ${t.rewardValue >= 0 ? '+' : ''}${t.rewardValue || 0}</span>`;
+        else if (t.rewardMode === 'free') rewardTag = `<span style="font-size:11px;color:var(--accent);background:color-mix(in srgb, var(--accent) 15%, transparent);padding:1px 6px;border-radius:4px">自由奖励</span>`;
+        return `
+        <div onclick="ConvGameplay.openTaskTypeModal(${pi},${ti})" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;cursor:pointer">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(t.label || '未命名类型')}</div>
+            ${t.desc ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(t.desc)}</div>` : ''}
+          </div>
+          ${rewardTag}
+          <div style="color:var(--text-secondary);font-size:18px;line-height:1;opacity:.65;flex-shrink:0">›</div>
+        </div>`;
+      }).join('');
+
+      const cr = phase.completionReward || { mode: 'none' };
+      let crSummary = '无';
+      if (cr.mode === 'attr' && cr.attr) crSummary = `${cr.attr} ${cr.value >= 0 ? '+' : ''}${cr.value || 0}`;
+      else if (cr.mode === 'free') crSummary = '自由奖励';
+
+      html += `
+      <div style="background:var(--bg-tertiary);padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:700;color:var(--accent);flex-shrink:0">阶段 ${pi + 1}</div>
+            <input value="${_esc(phase.name || '')}" placeholder="阶段名称（可选）" onchange="ConvGameplay.updateTaskPhase(${pi},'name',this.value)" style="flex:1;min-width:0;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:12px">
+          </div>
+          <button type="button" onclick="ConvGameplay.deleteTaskPhase(${pi})" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">删除</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <label style="flex:1;font-size:12px;color:var(--text-secondary)">每批最多
+            <input type="number" min="1" max="5" value="${phase.batchSize || 3}" onchange="ConvGameplay.updateTaskPhase(${pi},'batchSize',Number(this.value))" style="width:100%;margin-top:4px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:12px;box-sizing:border-box">
+          </label>
+          <label style="flex:1;font-size:12px;color:var(--text-secondary)">本阶段总任务数
+            <input type="number" min="1" max="999" value="${phase.totalTasks || 10}" onchange="ConvGameplay.updateTaskPhase(${pi},'totalTasks',Number(this.value))" style="width:100%;margin-top:4px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:12px;box-sizing:border-box">
+          </label>
+        </div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">任务类型模板</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${typeCards || '<div style="padding:10px;color:var(--text-secondary);font-size:12px;text-align:center;border:1px dashed var(--border);border-radius:6px">暂无类型，点击下方添加</div>'}</div>
+        <button type="button" onclick="ConvGameplay.openTaskTypeModal(${pi},-1)" style="width:100%;padding:6px;border-radius:6px;border:1px dashed var(--border);background:none;color:var(--accent);font-size:12px;cursor:pointer;margin-bottom:10px">+ 添加任务类型</button>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;font-weight:600;color:var(--text)">阶段完成奖励：</span>
+          <span style="font-size:12px;color:var(--text-secondary)">${_esc(crSummary)}</span>
+          <button type="button" onclick="ConvGameplay.openPhaseRewardModal(${pi})" style="padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--accent);font-size:11px;cursor:pointer;margin-left:auto">编辑</button>
+        </div>
+      </div>`;
+    });
+
+    html += `<button type="button" onclick="ConvGameplay.addTaskPhase()" style="width:100%;padding:8px;border-radius:8px;border:1px dashed var(--border);background:none;color:var(--accent);font-size:13px;cursor:pointer">+ 添加新阶段</button>`;
+    el.innerHTML = html;
+  }
+
+  async function _saveTaskSystem() {
+    if (!_cgAttrGp) return;
+    _cgAttrGp.taskSystem = _cgTaskTs;
+    await _saveConvGameplay(_cgAttrGp);
+  }
+
+  async function addTaskPhase() {
+    if (!_cgTaskTs) return;
+    if (!_cgTaskTs.phases) _cgTaskTs.phases = [];
+    _cgTaskTs.phases.push(_defaultTaskPhase());
+    await _saveTaskSystem();
+    _renderTaskSystem();
+  }
+
+  async function deleteTaskPhase(pi) {
+    if (!_cgTaskTs) return;
+    if (!await UI.showConfirm('删除阶段', `确定删除阶段 ${pi + 1}？`)) return;
+    _cgTaskTs.phases.splice(pi, 1);
+    await _saveTaskSystem();
+    _renderTaskSystem();
+  }
+
+  async function updateTaskPhase(pi, field, value) {
+    if (!_cgTaskTs) return;
+    const phase = _cgTaskTs.phases[pi];
+    if (!phase) return;
+    if (field === 'batchSize') value = Math.max(1, Math.min(5, value || 3));
+    if (field === 'totalTasks') value = Math.max(1, Math.min(999, value || 10));
+    phase[field] = value;
+    await _saveTaskSystem();
+  }
+
+  // ----- 任务类型弹窗 -----
+  let _ttPhaseIdx = -1;
+  let _ttTypeIdx = -1; // -1=新建, -999=阶段奖励模式
+
+  function _ensureTaskTypeModal() {
+    if (document.getElementById('cg-task-type-modal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'cg-task-type-modal';
+    modal.className = 'modal hidden';
+    modal.innerHTML = `
+    <div class="modal-content" style="max-height:90vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0">
+        <h3 id="cg-tt-title" style="margin:0;font-size:16px;color:var(--accent)">编辑任务类型</h3>
+        <button onclick="ConvGameplay.closeTaskTypeModal()" style="background:none;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-right:4px">
+        <label id="cg-tt-label-row" style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">类型名称
+          <input id="cg-tt-label" placeholder="例如：唱歌练习" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;outline:none">
+        </label>
+        <label id="cg-tt-desc-row" style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">类型描述
+          <textarea id="cg-tt-desc" placeholder="告诉 AI 任务的含义、发布时机、频率等" rows="3" style="width:100%;box-sizing:border-box;min-height:70px;resize:vertical;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;line-height:1.5;outline:none"></textarea>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">奖励类型
+          <select id="cg-tt-reward-mode" onchange="ConvGameplay.onTaskRewardModeChange()" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;outline:none">
+            <option value="none">无奖励</option>
+            <option value="attr">属性奖励（数值）</option>
+            <option value="free">自由奖励（描述）</option>
+          </select>
+        </label>
+        <div id="cg-tt-reward-attr-row" style="display:none;flex-direction:column;gap:6px">
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">关联属性
+            <select id="cg-tt-reward-attr" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;outline:none"></select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">数值变化（正数=加，负数=减）
+            <input id="cg-tt-reward-value" type="number" placeholder="例如：+5" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;outline:none">
+          </label>
+        </div>
+        <label id="cg-tt-reward-free-row" style="display:none;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">自由奖励描述
+          <textarea id="cg-tt-reward-free" rows="2" placeholder="例如：解锁新的对话选项 / 获得一件道具" style="width:100%;box-sizing:border-box;min-height:60px;resize:vertical;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;outline:none"></textarea>
+        </label>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;flex-shrink:0">
+        <button id="cg-tt-delete-btn" onclick="ConvGameplay.deleteTaskTypeFromModal()" style="padding:9px 12px;border-radius:8px;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));background:none;color:var(--danger);font-size:13px;cursor:pointer">删除</button>
+        <div style="display:flex;gap:8px">
+          <button onclick="ConvGameplay.closeTaskTypeModal()" style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button onclick="ConvGameplay.saveTaskTypeFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+  }
+
+  function onTaskRewardModeChange() {
+    const mode = document.getElementById('cg-tt-reward-mode')?.value;
+    const attrRow = document.getElementById('cg-tt-reward-attr-row');
+    const freeRow = document.getElementById('cg-tt-reward-free-row');
+    if (attrRow) attrRow.style.display = mode === 'attr' ? 'flex' : 'none';
+    if (freeRow) freeRow.style.display = mode === 'free' ? 'flex' : 'none';
+  }
+
+  function openTaskTypeModal(pi, ti) {
+    if (!_cgTaskTs) return;
+    _ensureTaskTypeModal();
+    _ttPhaseIdx = pi;
+    _ttTypeIdx = ti;
+    const phase = _cgTaskTs.phases[pi];
+    if (!phase) return;
+    const isNew = ti < 0;
+    const t = isNew ? _defaultTaskType() : (phase.types?.[ti] || _defaultTaskType());
+
+    document.getElementById('cg-tt-title').textContent = isNew ? '新建任务类型' : '编辑任务类型';
+    document.getElementById('cg-tt-label').value = t.label || '';
+    document.getElementById('cg-tt-label').disabled = false;
+    document.getElementById('cg-tt-label-row').style.display = '';
+    document.getElementById('cg-tt-desc').value = t.desc || '';
+    document.getElementById('cg-tt-desc-row').style.display = '';
+    document.getElementById('cg-tt-reward-mode').value = t.rewardMode || 'none';
+    document.getElementById('cg-tt-reward-value').value = t.rewardValue || 0;
+    document.getElementById('cg-tt-reward-free').value = t.rewardFree || '';
+    document.getElementById('cg-tt-delete-btn').style.display = isNew ? 'none' : '';
+
+    const attrSel = document.getElementById('cg-tt-reward-attr');
+    const attrNames = _getConvGlobalAttrNames();
+    attrSel.innerHTML = `<option value="">选择属性</option>` + attrNames.map(a => `<option value="${_esc(a)}" ${t.rewardAttr === a ? 'selected' : ''}>${_esc(a)}</option>`).join('');
+
+    onTaskRewardModeChange();
+    document.getElementById('cg-task-type-modal').classList.remove('hidden');
+  }
+
+  function openPhaseRewardModal(pi) {
+    if (!_cgTaskTs) return;
+    _ensureTaskTypeModal();
+    const phase = _cgTaskTs.phases[pi];
+    if (!phase) return;
+    if (!phase.completionReward) phase.completionReward = { mode: 'none', attr: '', value: 0, free: '' };
+    const cr = phase.completionReward;
+    _ttPhaseIdx = pi;
+    _ttTypeIdx = -999;
+
+    document.getElementById('cg-tt-title').textContent = `阶段 ${pi + 1} 完成奖励`;
+    document.getElementById('cg-tt-label-row').style.display = 'none';
+    document.getElementById('cg-tt-desc-row').style.display = 'none';
+    document.getElementById('cg-tt-reward-mode').value = cr.mode || 'none';
+    document.getElementById('cg-tt-reward-value').value = cr.value || 0;
+    document.getElementById('cg-tt-reward-free').value = cr.free || '';
+    document.getElementById('cg-tt-delete-btn').style.display = 'none';
+
+    const attrSel = document.getElementById('cg-tt-reward-attr');
+    const attrNames = _getConvGlobalAttrNames();
+    attrSel.innerHTML = `<option value="">选择属性</option>` + attrNames.map(a => `<option value="${_esc(a)}" ${cr.attr === a ? 'selected' : ''}>${_esc(a)}</option>`).join('');
+
+    onTaskRewardModeChange();
+    document.getElementById('cg-task-type-modal').classList.remove('hidden');
+  }
+
+  function closeTaskTypeModal() {
+    const labelRow = document.getElementById('cg-tt-label-row');
+    const descRow = document.getElementById('cg-tt-desc-row');
+    if (labelRow) labelRow.style.display = '';
+    if (descRow) descRow.style.display = '';
+    document.getElementById('cg-task-type-modal')?.classList.add('hidden');
+  }
+
+  async function saveTaskTypeFromModal() {
+    if (!_cgTaskTs) return;
+    const phase = _cgTaskTs.phases[_ttPhaseIdx];
+    if (!phase) return;
+    const mode = document.getElementById('cg-tt-reward-mode').value;
+
+    if (_ttTypeIdx === -999) {
+      phase.completionReward = {
+        mode,
+        attr: mode === 'attr' ? document.getElementById('cg-tt-reward-attr').value : '',
+        value: mode === 'attr' ? Number(document.getElementById('cg-tt-reward-value').value) || 0 : 0,
+        free: mode === 'free' ? document.getElementById('cg-tt-reward-free').value.trim() : ''
+      };
+    } else {
+      const label = document.getElementById('cg-tt-label').value.trim();
+      if (!label) { UI.showToast('请填写类型名称', 1500); return; }
+      if (!phase.types) phase.types = [];
+      const data = {
+        label,
+        desc: document.getElementById('cg-tt-desc').value.trim(),
+        rewardMode: mode,
+        rewardAttr: mode === 'attr' ? document.getElementById('cg-tt-reward-attr').value : '',
+        rewardValue: mode === 'attr' ? Number(document.getElementById('cg-tt-reward-value').value) || 0 : 0,
+        rewardFree: mode === 'free' ? document.getElementById('cg-tt-reward-free').value.trim() : ''
+      };
+      if (_ttTypeIdx < 0) {
+        data.id = 'tt_' + Utils.uuid().slice(0, 8);
+        phase.types.push(data);
+      } else {
+        const existing = phase.types[_ttTypeIdx];
+        if (existing) Object.assign(existing, data);
+      }
+    }
+
+    await _saveTaskSystem();
+    closeTaskTypeModal();
+    _renderTaskSystem();
+  }
+
+  async function deleteTaskTypeFromModal() {
+    if (!_cgTaskTs || _ttTypeIdx < 0) return;
+    const phase = _cgTaskTs.phases[_ttPhaseIdx];
+    if (!phase || !phase.types?.[_ttTypeIdx]) return;
+    phase.types.splice(_ttTypeIdx, 1);
+    await _saveTaskSystem();
+    closeTaskTypeModal();
+    _renderTaskSystem();
+  }
+
+  // ----- 任务面板入口 -----
+  async function openTaskEditor() {
+    try {
+      const conv = await _ensureConvGameplay();
+      if (!conv) return;
+      _cgAttrGp = conv.convGameplay;
+      if (!_cgAttrGp.taskSystem) _cgAttrGp.taskSystem = { phases: [] };
+      if (!Array.isArray(_cgAttrGp.taskSystem.phases)) _cgAttrGp.taskSystem.phases = [];
+      _cgTaskTs = _cgAttrGp.taskSystem;
+
+      document.getElementById('conv-settings-modal')?.classList.add('hidden');
+      document.getElementById('cg-task-panel')?.remove();
+
+      const panel = document.createElement('div');
+      panel.id = 'cg-task-panel';
+      panel.style.cssText = 'position:fixed;inset:0;z-index:180;background:var(--bg);display:flex;flex-direction:column;overflow:hidden';
+      panel.innerHTML = `
+        <div style="padding:16px 16px 0;flex-shrink:0">
+          <button onclick="ConvGameplay.closeTaskEditor()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;background:none;border:none;color:var(--text);cursor:pointer;margin-bottom:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <div style="margin-bottom:16px">
+            <div style="font-size:18px;font-weight:700;color:var(--text)">任务系统配置（对话级）</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">修改只影响当前对话，不影响世界观原件</div>
+          </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 16px 16px">
+          <div id="cg-task-container"></div>
+        </div>
+      `;
+      document.body.appendChild(panel);
+      _renderTaskSystem();
+    } catch(e) {
+      console.error('[ConvGameplay.openTaskEditor]', e);
+      UI.showToast('打开失败：' + (e.message || e), 3000);
+    }
+  }
+
+  function closeTaskEditor() {
+    _cgTaskTs = null;
+    document.getElementById('cg-task-panel')?.remove();
   }
 
   return {
@@ -748,6 +1100,10 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     openAiGenerate, doAiGenerate,
     openAttrEditor, closeAttrEditor,
     openAttrModal, closeAttrModal, saveAttrFromModal, deleteAttrFromModal,
-    toggleCharPicker, renderCharPicker, selectChar, deleteCharCard
+    toggleCharPicker, renderCharPicker, selectChar, deleteCharCard,
+    openTaskEditor, closeTaskEditor,
+    addTaskPhase, deleteTaskPhase, updateTaskPhase,
+    openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal,
+    openPhaseRewardModal, onTaskRewardModeChange
   };
 })();
