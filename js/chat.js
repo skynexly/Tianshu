@@ -4792,6 +4792,64 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     });
   }
 
+  // 通用多字段表单弹窗
+  // fields: [{ key, label, value, placeholder, type:'text'|'number' }]
+  // 返回 { key: value, ... } 或 null（取消）
+  function _showFormEditor(title, fields) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:210;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
+      overlay.onclick = (e) => { if (e.target === overlay) { overlay.remove(); resolve(null); } };
+      const box = document.createElement('div');
+      box.style.cssText = 'width:min(380px,92vw);max-height:80vh;display:flex;flex-direction:column;gap:14px;padding:18px;border-radius:16px;background:var(--bg-secondary);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.3);overflow-y:auto';
+      box.onclick = (e) => e.stopPropagation();
+      const h = document.createElement('div');
+      h.style.cssText = 'font-size:14px;font-weight:700;color:var(--text)';
+      h.textContent = title;
+      box.appendChild(h);
+      const inputs = {};
+      fields.forEach(f => {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;flex-direction:column;gap:4px';
+        const lbl = document.createElement('label');
+        lbl.style.cssText = 'font-size:12px;color:var(--text-secondary);font-weight:600';
+        lbl.textContent = f.label;
+        const inp = document.createElement(f.type === 'textarea' ? 'textarea' : 'input');
+        inp.style.cssText = 'padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;width:100%';
+        if (f.type === 'textarea') { inp.rows = 3; inp.style.resize = 'vertical'; }
+        else inp.type = f.type || 'text';
+        inp.value = f.value ?? '';
+        inp.placeholder = f.placeholder || '';
+        wrap.appendChild(lbl);
+        wrap.appendChild(inp);
+        box.appendChild(wrap);
+        inputs[f.key] = inp;
+      });
+      const btns = document.createElement('div');
+      btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:4px';
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = '取消';
+      cancelBtn.style.cssText = 'padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-size:13px;cursor:pointer';
+      cancelBtn.onclick = () => { overlay.remove(); resolve(null); };
+      const saveBtn = document.createElement('button');
+      saveBtn.textContent = '保存';
+      saveBtn.style.cssText = 'padding:8px 16px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);font-size:13px;font-weight:600;cursor:pointer';
+      saveBtn.onclick = () => {
+        const result = {};
+        fields.forEach(f => { result[f.key] = inputs[f.key].value; });
+        overlay.remove();
+        resolve(result);
+      };
+      btns.appendChild(cancelBtn);
+      btns.appendChild(saveBtn);
+      box.appendChild(btns);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      const firstInput = box.querySelector('input,textarea');
+      if (firstInput) setTimeout(() => firstInput.focus(), 50);
+    });
+  }
+
   // 编辑属性配置（可视化列表）
   async function openConvAttrEditor() {
     const conv = await _ensureConvGameplay();
@@ -4846,9 +4904,14 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
   async function _convAttrAdd() {
     const gp = window.__convAttrGp;
     if (!gp) return;
-    const name = await UI.showSimpleInput('属性名称', '', { placeholder: '例如：生命值、好感度' });
-    if (!name || !name.trim()) return;
-    gp.globalAttrs.push({ id: 'attr_' + Utils.uuid().slice(0, 8), name: name.trim(), initial: 0, max: '', desc: '' });
+    const result = await _showFormEditor('添加属性', [
+      { key: 'name', label: '属性名称', value: '', placeholder: '例如：生命值、好感度' },
+      { key: 'initial', label: '初始值', value: '0', placeholder: '数字', type: 'number' },
+      { key: 'max', label: '最大值（留空=无上限）', value: '', placeholder: '留空=无上限' },
+      { key: 'desc', label: '说明（可选）', value: '', placeholder: '属性的作用描述' }
+    ]);
+    if (!result || !result.name.trim()) return;
+    gp.globalAttrs.push({ id: 'attr_' + Utils.uuid().slice(0, 8), name: result.name.trim(), initial: Number(result.initial) || 0, max: result.max.trim() === '' ? '' : (Number(result.max) || ''), desc: result.desc.trim() });
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     if (conv) { conv.convGameplay = gp; await Conversations.saveList(); }
     if (window.__convAttrRender) window.__convAttrRender();
@@ -4859,16 +4922,17 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     const gp = window.__convAttrGp;
     if (!gp || !gp.globalAttrs[idx]) return;
     const a = gp.globalAttrs[idx];
-    // 简易多字段编辑：名称 → 初始值 → 最大值 → 说明
-    const name = await UI.showSimpleInput('属性名称', a.name || '', { placeholder: '属性名' });
-    if (name === null) return;
-    if (name.trim()) a.name = name.trim();
-    const initial = await UI.showSimpleInput('初始值', String(a.initial ?? 0), { placeholder: '数字' });
-    if (initial !== null && initial.trim() !== '') a.initial = Number(initial) || 0;
-    const max = await UI.showSimpleInput('最大值（留空=无上限）', String(a.max ?? ''), { placeholder: '留空=无上限', allowEmpty: true });
-    if (max !== null) a.max = max.trim() === '' ? '' : (Number(max) || '');
-    const desc = await UI.showSimpleInput('说明（可选）', a.desc || '', { placeholder: '可选', allowEmpty: true });
-    if (desc !== null) a.desc = desc.trim();
+    const result = await _showFormEditor('编辑属性', [
+      { key: 'name', label: '属性名称', value: a.name || '', placeholder: '属性名' },
+      { key: 'initial', label: '初始值', value: String(a.initial ?? 0), placeholder: '数字', type: 'number' },
+      { key: 'max', label: '最大值（留空=无上限）', value: String(a.max ?? ''), placeholder: '留空=无上限' },
+      { key: 'desc', label: '说明（可选）', value: a.desc || '', placeholder: '属性的作用描述' }
+    ]);
+    if (!result) return;
+    if (result.name.trim()) a.name = result.name.trim();
+    a.initial = Number(result.initial) || 0;
+    a.max = result.max.trim() === '' ? '' : (Number(result.max) || '');
+    a.desc = result.desc.trim();
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     if (conv) { conv.convGameplay = gp; await Conversations.saveList(); }
     if (window.__convAttrRender) window.__convAttrRender();
@@ -4946,9 +5010,13 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
   async function _convTaskAddPhase() {
     const ts = window.__convTaskTs;
     if (!ts) return;
-    const name = await UI.showSimpleInput('阶段名称', '', { placeholder: '例如：第一章' });
-    if (!name || !name.trim()) return;
-    ts.phases.push({ id: 'phase_' + Utils.uuid().slice(0, 8), name: name.trim(), batchSize: 3, totalTasks: 10, types: [], completionReward: { mode: 'none', attr: '', value: 0, free: '' } });
+    const result = await _showFormEditor('添加阶段', [
+      { key: 'name', label: '阶段名称', value: '', placeholder: '例如：第一章' },
+      { key: 'batchSize', label: '每批任务数', value: '3', placeholder: '数字', type: 'number' },
+      { key: 'totalTasks', label: '阶段总完成数', value: '10', placeholder: '数字', type: 'number' }
+    ]);
+    if (!result || !result.name.trim()) return;
+    ts.phases.push({ id: 'phase_' + Utils.uuid().slice(0, 8), name: result.name.trim(), batchSize: Math.max(1, parseInt(result.batchSize) || 3), totalTasks: Math.max(1, parseInt(result.totalTasks) || 10), types: [], completionReward: { mode: 'none', attr: '', value: 0, free: '' } });
     await window.__convTaskSave();
     if (window.__convTaskRender) window.__convTaskRender();
   }
@@ -4957,13 +5025,15 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     const ts = window.__convTaskTs;
     if (!ts || !ts.phases[pi]) return;
     const p = ts.phases[pi];
-    const name = await UI.showSimpleInput('阶段名称', p.name || '', { placeholder: '阶段名' });
-    if (name === null) return;
-    if (name.trim()) p.name = name.trim();
-    const batch = await UI.showSimpleInput('每批任务数', String(p.batchSize || 3), { placeholder: '数字' });
-    if (batch !== null && batch.trim()) p.batchSize = Math.max(1, parseInt(batch) || 3);
-    const total = await UI.showSimpleInput('阶段总完成数', String(p.totalTasks || 10), { placeholder: '数字' });
-    if (total !== null && total.trim()) p.totalTasks = Math.max(1, parseInt(total) || 10);
+    const result = await _showFormEditor('编辑阶段', [
+      { key: 'name', label: '阶段名称', value: p.name || '', placeholder: '阶段名' },
+      { key: 'batchSize', label: '每批任务数', value: String(p.batchSize || 3), placeholder: '数字', type: 'number' },
+      { key: 'totalTasks', label: '阶段总完成数', value: String(p.totalTasks || 10), placeholder: '数字', type: 'number' }
+    ]);
+    if (!result) return;
+    if (result.name.trim()) p.name = result.name.trim();
+    p.batchSize = Math.max(1, parseInt(result.batchSize) || 3);
+    p.totalTasks = Math.max(1, parseInt(result.totalTasks) || 10);
     await window.__convTaskSave();
     if (window.__convTaskRender) window.__convTaskRender();
   }
@@ -5037,17 +5107,19 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
   async function _convEventAdd() {
     const events = window.__convEvents;
     if (!events) return;
-    const name = await UI.showSimpleInput('事件名称', '', { placeholder: '例如：初遇神秘人' });
-    if (!name || !name.trim()) return;
-    const triggerKey = await UI.showSimpleInput('触发关键词（对话中出现该词时激活）', '', { placeholder: '可留空', allowEmpty: true });
-    const content = await UI.showSimpleInput('事件内容（触发后注入给AI的指令）', '', { placeholder: '场景描述...', allowEmpty: true });
-    const completeKey = await UI.showSimpleInput('结束关键词（AI回复含该词时事件结束）', '', { placeholder: '可留空', allowEmpty: true });
+    const result = await _showFormEditor('添加事件', [
+      { key: 'name', label: '事件名称', value: '', placeholder: '例如：初遇神秘人' },
+      { key: 'triggerKey', label: '触发关键词（对话中出现时激活）', value: '', placeholder: '可留空' },
+      { key: 'content', label: '事件内容（触发后注入AI的指令）', value: '', placeholder: '场景描述...', type: 'textarea' },
+      { key: 'completeKey', label: '结束关键词（AI回复含该词时结束）', value: '', placeholder: '可留空' }
+    ]);
+    if (!result || !result.name.trim()) return;
     events.push({
       id: 'evt_' + Utils.uuid().slice(0, 8),
-      name: name.trim(),
-      triggerKey: (triggerKey || '').trim(),
-      content: (content || '').trim(),
-      completeKey: (completeKey || '').trim(),
+      name: result.name.trim(),
+      triggerKey: result.triggerKey.trim(),
+      content: result.content.trim(),
+      completeKey: result.completeKey.trim(),
       enabled: true
     });
     await window.__convEventSave();
@@ -5058,15 +5130,17 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     const events = window.__convEvents;
     if (!events || !events[idx]) return;
     const ev = events[idx];
-    const name = await UI.showSimpleInput('事件名称', ev.name || '', { placeholder: '事件名' });
-    if (name === null) return;
-    if (name.trim()) ev.name = name.trim();
-    const triggerKey = await UI.showSimpleInput('触发关键词', ev.triggerKey || '', { placeholder: '可留空', allowEmpty: true });
-    if (triggerKey !== null) ev.triggerKey = triggerKey.trim();
-    const content = await UI.showSimpleInput('事件内容', ev.content || '', { placeholder: '场景描述', allowEmpty: true });
-    if (content !== null) ev.content = content.trim();
-    const completeKey = await UI.showSimpleInput('结束关键词', ev.completeKey || '', { placeholder: '可留空', allowEmpty: true });
-    if (completeKey !== null) ev.completeKey = completeKey.trim();
+    const result = await _showFormEditor('编辑事件', [
+      { key: 'name', label: '事件名称', value: ev.name || '', placeholder: '事件名' },
+      { key: 'triggerKey', label: '触发关键词', value: ev.triggerKey || '', placeholder: '可留空' },
+      { key: 'content', label: '事件内容', value: ev.content || '', placeholder: '场景描述', type: 'textarea' },
+      { key: 'completeKey', label: '结束关键词', value: ev.completeKey || '', placeholder: '可留空' }
+    ]);
+    if (!result) return;
+    if (result.name.trim()) ev.name = result.name.trim();
+    ev.triggerKey = result.triggerKey.trim();
+    ev.content = result.content.trim();
+    ev.completeKey = result.completeKey.trim();
     await window.__convEventSave();
     if (window.__convEventRender) window.__convEventRender();
   }
