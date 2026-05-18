@@ -715,7 +715,7 @@ function _syncBuiltinRestoreButton(w) {
   const _wvAutoSave = Utils.debounce(async () => {
     if (!editingWorldviewId) return;
     try {
-      const w = await _getEditingWV();
+      const w = await DB.get('worldviews', editingWorldviewId);
       if (!w) return;
       w.name = (document.getElementById('wv-name')?.value || '').trim() || w.name;
       w.description = document.getElementById('wv-description')?.value || '';
@@ -739,7 +739,7 @@ function _syncBuiltinRestoreButton(w) {
       w.startPlot = document.getElementById('wv-start-plot')?.value || '';
       w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds')?.value) || 5;
       w.startMessage = document.getElementById('wv-start-message')?.value || '';
-      await _saveEditingWV(w);
+      await DB.put('worldviews', w);
       // 同步到运行时（仅当编辑的是当前激活世界观才生效）
       await _syncRuntime(w);
       // 静默同步名字到列表
@@ -809,7 +809,7 @@ function _syncBuiltinRestoreButton(w) {
   }
   
   async function _loadEditForm(id) {
-    const w = _convEditMode ? await _getEditingWV() : await DB.get('worldviews', id);
+    const w = await DB.get('worldviews', id);
     if (!w) return;
     
     // 数据迁移（v581）：customs[] + knowledges[] → 统一 knowledges[]
@@ -1045,7 +1045,7 @@ switchEditTab('basic');
     const menu = document.getElementById('wv-ext-io-menu');
     if (menu) menu.classList.add('hidden');
     if (!editingWorldviewId) { UI.showToast('没有正在编辑的世界观'); return; }
-    const w = await _getEditingWV();
+    const w = await DB.get('worldviews', editingWorldviewId);
     const wvName = w?.name || '扩展设定';
     // 注：导出当前内存中的数据（已编辑但未保存的也会一并导出）
     const exportData = {
@@ -1252,10 +1252,10 @@ switchEditTab('basic');
   
   async function _saveIconImageToDB(dataUrl) {
     if (!editingWorldviewId) return;
-    const w = await _getEditingWV();
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) return;
     w.iconImage = dataUrl;
-    await _saveEditingWV(w);
+    await DB.put('worldviews', w);
     const list = await getWorldviewList();
     const entry = list.find(e => e.id === editingWorldviewId);
     if (entry) { entry.iconImage = dataUrl; }
@@ -1269,92 +1269,15 @@ switchEditTab('basic');
   let _editFactionIdx = -1;
   let _editNPCIdx = -1;
   
-  // ====== 对话级编辑模式 ======
-  let _convEditMode = false;  // true = 编辑的是对话级 gameplay 副本
-  let _convEditConvId = null; // 当前编辑的对话 ID
-
   // 获取当前编辑中的worldview（从DB实时读取）
   async function _getEditingWV() {
-    if (_convEditMode && _convEditConvId) {
-      // 对话级模式：构造虚拟 WV 对象
-      const conv = Conversations.getList().find(c => c.id === _convEditConvId);
-      if (!conv || !conv.convGameplay) return null;
-      const wvId = conv.singleWorldviewId || conv.worldviewId || '';
-      const realWv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : {};
-      // 合并：基础信息来自真实世界观，gameplay 来自对话副本，events 来自对话副本
-      return { ...realWv, gameplay: conv.convGameplay, events: conv.convEvents || realWv?.events || [], id: wvId || '__conv_edit__' };
-    }
     if (!editingWorldviewId) return null;
     return await DB.get('worldviews', editingWorldviewId);
   }
   async function _saveEditingWV(w) {
-    if (_convEditMode && _convEditConvId) {
-      // 对话级模式：只保存 gameplay 和 events 到 conv
-      const conv = Conversations.getList().find(c => c.id === _convEditConvId);
-      if (!conv) return;
-      conv.convGameplay = w.gameplay || { globalAttrs: [], characterAttrs: [], taskSystem: { phases: [] } };
-      conv.convEvents = w.events || [];
-      await Conversations.saveList();
-      if (typeof StatusBar !== 'undefined') StatusBar.refreshFromConv();
-      return;
-    }
     await DB.put('worldviews', w);
     // 立刻同步到运行时（仅当编辑的是当前激活世界观）
     await _syncRuntime(w);
-  }
-
-  // 从对话设置进入 gameplay 编辑
-  async function openConvGameplayEdit() {
-    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-    if (!conv) return;
-    // 确保有对话级副本
-    if (!conv.convGameplay) {
-      const wvId = conv.singleWorldviewId || conv.worldviewId || '';
-      const wv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : null;
-      const hasExisting = wv && wv.gameplay && (wv.gameplay.globalAttrs?.length || wv.gameplay.characterAttrs?.length || wv.gameplay.taskSystem?.phases?.length);
-      if (hasExisting) {
-        if (!await UI.showConfirm('创建对话级配置', '将从世界观复制一份配置到当前对话。\n之后修改只影响本对话，不影响世界观原件。\n继续？')) return;
-        conv.convGameplay = JSON.parse(JSON.stringify(wv.gameplay));
-      } else {
-        if (!await UI.showConfirm('创建对话级配置', '当前世界观无已有配置，将为本对话创建空白配置。\n继续？')) return;
-        conv.convGameplay = { globalAttrs: [], characterAttrs: [], taskSystem: { phases: [] } };
-      }
-      await Conversations.saveList();
-    }
-    if (!conv.convEvents) {
-      const wvId = conv.singleWorldviewId || conv.worldviewId || '';
-      const wv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : null;
-      conv.convEvents = JSON.parse(JSON.stringify(wv?.events || []));
-      await Conversations.saveList();
-    }
-    // 设置对话级编辑模式
-    _convEditMode = true;
-    _convEditConvId = conv.id;
-    editingWorldviewId = conv.singleWorldviewId || conv.worldviewId || '__conv_edit__';
-    // 打开世界观编辑面板，直接跳到 gameplay tab
-    UI.showPanel('worldview-edit', 'right');
-    await _loadEditForm(editingWorldviewId);
-    switchEditTab('gameplay');
-  }
-
-  // 退出对话级编辑模式（在返回时调用）
-  function _exitConvEditMode() {
-    _convEditMode = false;
-    _convEditConvId = null;
-  }
-
-  // 编辑面板返回按钮
-  function backFromEdit() {
-    if (_convEditMode) {
-      _exitConvEditMode();
-      UI.showPanel('chat', 'back');
-    } else if (_editReturnTo) {
-      const target = _editReturnTo;
-      _editReturnTo = null;
-      UI.showPanel(target, 'back');
-    } else {
-      UI.showPanel('worldview', 'back');
-    }
   }
   
   // ---------- 详细设定Tab：地区卡片列表 ----------
@@ -1904,7 +1827,7 @@ function onTaskTypeRewardModeChange() {
 
 async function saveTaskTypeFromModal() {
   if (!editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[_ttModalPhaseIdx];
@@ -1932,7 +1855,7 @@ async function saveTaskTypeFromModal() {
     if (existing) Object.assign(existing, data);
   }
 
-  await _saveEditingWV(w);
+  await DB.put('worldviews', w);
   window.__wvEditingCache = w;
   closeTaskTypeModal();
   _renderTaskSystem(w);
@@ -1940,13 +1863,13 @@ async function saveTaskTypeFromModal() {
 
 async function deleteTaskTypeFromModal() {
   if (!editingWorldviewId || _ttModalTypeIdx < 0) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[_ttModalPhaseIdx];
   if (!phase || !phase.types?.[_ttModalTypeIdx]) return;
   phase.types.splice(_ttModalTypeIdx, 1);
-  await _saveEditingWV(w);
+  await DB.put('worldviews', w);
   window.__wvEditingCache = w;
   closeTaskTypeModal();
   _renderTaskSystem(w);
@@ -1955,7 +1878,7 @@ async function deleteTaskTypeFromModal() {
 // 阶段完成奖励也用弹窗复用任务类型弹窗的思路，但更简单——直接用 confirm 式交互
 async function openPhaseRewardModal(pi) {
   if (!editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
@@ -1988,7 +1911,7 @@ saveTaskTypeFromModal = async function() {
   if (_ttModalTypeIdx === -999) {
     // 阶段奖励模式
     if (!editingWorldviewId) return;
-    const w = await _getEditingWV();
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) return;
     const gp = _ensureGameplay(w);
     const phase = gp.taskSystem.phases[_ttModalPhaseIdx];
@@ -2000,7 +1923,7 @@ saveTaskTypeFromModal = async function() {
       value: mode === 'attr' ? Number(document.getElementById('wv-tt-reward-value').value) || 0 : 0,
       free: mode === 'free' ? document.getElementById('wv-tt-reward-free').value.trim() : ''
     };
-    await _saveEditingWV(w);
+    await DB.put('worldviews', w);
     window.__wvEditingCache = w;
     // 恢复弹窗状态
     document.getElementById('wv-tt-label').disabled = false;
@@ -2022,28 +1945,28 @@ closeTaskTypeModal = function() {
 
 async function addTaskPhase() {
   if (!editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   gp.taskSystem.phases.push(_defaultTaskPhase());
-  await _saveEditingWV(w);
+  await DB.put('worldviews', w);
   _renderTaskSystem(w);
 }
 
 async function deleteTaskPhase(pi) {
   if (!editingWorldviewId) return;
   if (!await UI.showConfirm('删除阶段', `确定删除阶段 ${pi + 1}？`)) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   gp.taskSystem.phases.splice(pi, 1);
-  await _saveEditingWV(w);
+  await DB.put('worldviews', w);
   _renderTaskSystem(w);
 }
 
 async function updateTaskPhase(pi, field, value) {
   if (!editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
@@ -2051,37 +1974,37 @@ async function updateTaskPhase(pi, field, value) {
   if (field === 'batchSize') value = Math.max(1, Math.min(5, value || 3));
   if (field === 'totalTasks') value = Math.max(1, Math.min(999, value || 10));
   phase[field] = value;
-  await _saveEditingWV(w);
+  await DB.put('worldviews', w);
 }
 
 async function addTaskType(pi) {
   if (!editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
   if (!phase) return;
   if (!phase.types) phase.types = [];
   phase.types.push(_defaultTaskType());
-  await _saveEditingWV(w);
+  await DB.put('worldviews', w);
   _renderTaskSystem(w);
 }
 
 async function deleteTaskType(pi, ti) {
   if (!editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
   if (!phase || !phase.types) return;
   phase.types.splice(ti, 1);
-  await _saveEditingWV(w);
+  await DB.put('worldviews', w);
   _renderTaskSystem(w);
 }
 
 async function updateTaskType(pi, ti, field, value) {
   if (!editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
@@ -2092,13 +2015,13 @@ async function updateTaskType(pi, ti, field, value) {
     if (value !== 'attr') { phase.types[ti].rewardAttr = ''; phase.types[ti].rewardValue = 0; }
     if (value !== 'free') { phase.types[ti].rewardFree = ''; }
   }
-  await _saveEditingWV(w);
+  await DB.put('worldviews', w);
   if (field === 'rewardMode') _renderTaskSystem(w);
 }
 
 async function updateTaskPhaseReward(pi, field, value) {
   if (!editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
@@ -2109,14 +2032,14 @@ async function updateTaskPhaseReward(pi, field, value) {
     if (value !== 'attr') { phase.completionReward.attr = ''; phase.completionReward.value = 0; }
     if (value !== 'free') { phase.completionReward.free = ''; }
   }
-  await _saveEditingWV(w);
+  await DB.put('worldviews', w);
   if (field === 'mode') _renderTaskSystem(w);
 }
 
 async function updateGameplayAttr(scope, charIdx, attrIdx, field, value) {
   // 兼容旧内联输入入口；当前 UI 主要通过弹窗保存。
   if (!editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const list = scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[charIdx]?.attrs || []);
@@ -2141,7 +2064,7 @@ async function addGameplayAttr(scope, charIdx) {
 
 async function openGameplayAttrModal(scope, charIdx, attrIdx) {
   if (!editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const list = scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[charIdx]?.attrs || []);
@@ -2168,7 +2091,7 @@ function closeGameplayAttrModal() {
 
 async function saveGameplayAttrFromModal() {
   if (!_attrModalCtx || !editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const list = _attrModalCtx.scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[_attrModalCtx.charIdx]?.attrs || []);
@@ -2195,7 +2118,7 @@ async function saveGameplayAttrFromModal() {
 
 async function deleteGameplayAttr(scope, charIdx, attrIdx) {
   if (!editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const list = scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[charIdx]?.attrs || []);
@@ -2214,7 +2137,7 @@ async function deleteGameplayCharacter(idx) {
   if (!editingWorldviewId) return;
   const ok = await UI.showConfirm('移除角色属性', '只会移除此角色的属性配置，不会删除角色本身。确定移除吗？');
   if (!ok) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   gp.characterAttrs.splice(idx, 1);
@@ -2278,7 +2201,7 @@ async function renderGameplayCharPicker(query = '') {
 async function selectGameplayCharacter(idx) {
   const c = (window.__wvAttrCharPickerCache || [])[idx];
   if (!c || !editingWorldviewId) return;
-  const w = await _getEditingWV();
+  const w = await DB.get('worldviews', editingWorldviewId);
   if (!w) return;
   const gp = _ensureGameplay(w);
   const key = _attrTargetKey({ targetType: c.targetType, targetId: c.targetId, sourceWorldviewId: c.sourceWorldviewId });
@@ -3054,7 +2977,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
   async function save() {
     if (!editingWorldviewId) return;
     
-    const w = await _getEditingWV() || _defaultWorldview(editingWorldviewId);
+    const w = await DB.get('worldviews', editingWorldviewId) || _defaultWorldview(editingWorldviewId);
 
     // v596：隐藏世界观特殊保存（只存扩展数据，不改基础字段）
     if (isHiddenWv(w)) {
@@ -3071,7 +2994,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
       }));
       w.events = eventsData.slice();
       if ('customs' in w) delete w.customs;
-      await _saveEditingWV(w);
+      await DB.put('worldviews', w);
       UI.showToast('已保存扩展设定');
       return;
     }
@@ -3134,7 +3057,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     // 事件设定
     w.events = eventsData.slice();
     
-    await _saveEditingWV(w);
+    await DB.put('worldviews', w);
     
     // 更新列表元数据
     const list = await getWorldviewList();
@@ -3160,7 +3083,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
 
   async function deleteCurrentWorldview() {
     if (!editingWorldviewId) return;
-    const w = await _getEditingWV();
+    const w = await DB.get('worldviews', editingWorldviewId);
     const isBuiltin = _isBuiltinWorldview(w);
     if (isBuiltin) {
       const name = w?.name || '此世界观';
@@ -4012,7 +3935,7 @@ async function pickDefaultTheme(value) {
     // 导出单个世界观
   async function exportCurrent() {
     if (!editingWorldviewId) { UI.showToast('没有正在编辑的世界观'); return; }
-    const w = await _getEditingWV();
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('世界观数据不存在'); return; }
     const exportData = { worldviews: [w] };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -4055,7 +3978,7 @@ async function pickDefaultTheme(value) {
           } else {
             list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || 'world', iconImage: w.iconImage || '' });
           }
-          await _saveEditingWV(w);
+          await DB.put('worldviews', w);
           count++;
         }
         await saveWorldviewList(list);
@@ -4097,14 +4020,14 @@ async function pickDefaultTheme(value) {
           existing.icon = w.icon || existing.icon;
           existing.iconImage = w.iconImage || existing.iconImage;
           _migrateToKnowledges(w); // v581
-          await _saveEditingWV(w);
+          await DB.put('worldviews', w);
           loadedMap[w.id] = ver;
           updateCount++;
         } else {
           // 全新的内置世界观
           list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || 'world', iconImage: w.iconImage || '' });
           _migrateToKnowledges(w); // v581
-          await _saveEditingWV(w);
+          await DB.put('worldviews', w);
           loadedMap[w.id] = ver;
           newCount++;
         }
@@ -4180,7 +4103,7 @@ async function pickDefaultTheme(value) {
     toggleMenu,
     toggleSortMode, exitSortMode, saveSortOrder,
     renderWorldviewList,
-    switchEditTab, backFromEdit, openConvGameplayEdit,
+    switchEditTab,
 switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromMenu, toggleExtIoMenu, exportExtended, importExtended,
     toggleCustomEnabled, toggleKnowledgeEnabled, toggleFestivalEnabled,
     addEvent, editEvent, saveEventFromModal, deleteEventFromModal, closeEventModal, syncEventTriggerTypeUI, addEventAttrCondition, updateEventAttrCondition, removeEventAttrCondition,
