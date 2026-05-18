@@ -715,7 +715,7 @@ function _syncBuiltinRestoreButton(w) {
   const _wvAutoSave = Utils.debounce(async () => {
     if (!editingWorldviewId) return;
     try {
-      const w = await DB.get('worldviews', editingWorldviewId);
+      const w = await _getEditingWV();
       if (!w) return;
       w.name = (document.getElementById('wv-name')?.value || '').trim() || w.name;
       w.description = document.getElementById('wv-description')?.value || '';
@@ -809,7 +809,7 @@ function _syncBuiltinRestoreButton(w) {
   }
   
   async function _loadEditForm(id) {
-    const w = await DB.get('worldviews', id);
+    const w = _convEditMode ? await _getEditingWV() : await DB.get('worldviews', id);
     if (!w) return;
     
     // 数据迁移（v581）：customs[] + knowledges[] → 统一 knowledges[]
@@ -1045,7 +1045,7 @@ switchEditTab('basic');
     const menu = document.getElementById('wv-ext-io-menu');
     if (menu) menu.classList.add('hidden');
     if (!editingWorldviewId) { UI.showToast('没有正在编辑的世界观'); return; }
-    const w = await DB.get('worldviews', editingWorldviewId);
+    const w = await _getEditingWV();
     const wvName = w?.name || '扩展设定';
     // 注：导出当前内存中的数据（已编辑但未保存的也会一并导出）
     const exportData = {
@@ -1252,7 +1252,7 @@ switchEditTab('basic');
   
   async function _saveIconImageToDB(dataUrl) {
     if (!editingWorldviewId) return;
-    const w = await DB.get('worldviews', editingWorldviewId);
+    const w = await _getEditingWV();
     if (!w) return;
     w.iconImage = dataUrl;
     await DB.put('worldviews', w);
@@ -1904,7 +1904,7 @@ function onTaskTypeRewardModeChange() {
 
 async function saveTaskTypeFromModal() {
   if (!editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[_ttModalPhaseIdx];
@@ -1940,7 +1940,7 @@ async function saveTaskTypeFromModal() {
 
 async function deleteTaskTypeFromModal() {
   if (!editingWorldviewId || _ttModalTypeIdx < 0) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[_ttModalPhaseIdx];
@@ -1955,7 +1955,7 @@ async function deleteTaskTypeFromModal() {
 // 阶段完成奖励也用弹窗复用任务类型弹窗的思路，但更简单——直接用 confirm 式交互
 async function openPhaseRewardModal(pi) {
   if (!editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
@@ -1988,7 +1988,7 @@ saveTaskTypeFromModal = async function() {
   if (_ttModalTypeIdx === -999) {
     // 阶段奖励模式
     if (!editingWorldviewId) return;
-    const w = await DB.get('worldviews', editingWorldviewId);
+    const w = await _getEditingWV();
     if (!w) return;
     const gp = _ensureGameplay(w);
     const phase = gp.taskSystem.phases[_ttModalPhaseIdx];
@@ -2022,7 +2022,7 @@ closeTaskTypeModal = function() {
 
 async function addTaskPhase() {
   if (!editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   gp.taskSystem.phases.push(_defaultTaskPhase());
@@ -2033,7 +2033,7 @@ async function addTaskPhase() {
 async function deleteTaskPhase(pi) {
   if (!editingWorldviewId) return;
   if (!await UI.showConfirm('删除阶段', `确定删除阶段 ${pi + 1}？`)) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   gp.taskSystem.phases.splice(pi, 1);
@@ -2043,7 +2043,7 @@ async function deleteTaskPhase(pi) {
 
 async function updateTaskPhase(pi, field, value) {
   if (!editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
@@ -2056,7 +2056,7 @@ async function updateTaskPhase(pi, field, value) {
 
 async function addTaskType(pi) {
   if (!editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
@@ -2069,7 +2069,7 @@ async function addTaskType(pi) {
 
 async function deleteTaskType(pi, ti) {
   if (!editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
@@ -2081,7 +2081,7 @@ async function deleteTaskType(pi, ti) {
 
 async function updateTaskType(pi, ti, field, value) {
   if (!editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
@@ -2098,7 +2098,7 @@ async function updateTaskType(pi, ti, field, value) {
 
 async function updateTaskPhaseReward(pi, field, value) {
   if (!editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const phase = gp.taskSystem.phases[pi];
@@ -2116,7 +2116,7 @@ async function updateTaskPhaseReward(pi, field, value) {
 async function updateGameplayAttr(scope, charIdx, attrIdx, field, value) {
   // 兼容旧内联输入入口；当前 UI 主要通过弹窗保存。
   if (!editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const list = scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[charIdx]?.attrs || []);
@@ -2141,7 +2141,7 @@ async function addGameplayAttr(scope, charIdx) {
 
 async function openGameplayAttrModal(scope, charIdx, attrIdx) {
   if (!editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const list = scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[charIdx]?.attrs || []);
@@ -2168,7 +2168,7 @@ function closeGameplayAttrModal() {
 
 async function saveGameplayAttrFromModal() {
   if (!_attrModalCtx || !editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const list = _attrModalCtx.scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[_attrModalCtx.charIdx]?.attrs || []);
@@ -2195,7 +2195,7 @@ async function saveGameplayAttrFromModal() {
 
 async function deleteGameplayAttr(scope, charIdx, attrIdx) {
   if (!editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const list = scope === 'global' ? gp.globalAttrs : (gp.characterAttrs[charIdx]?.attrs || []);
@@ -2214,7 +2214,7 @@ async function deleteGameplayCharacter(idx) {
   if (!editingWorldviewId) return;
   const ok = await UI.showConfirm('移除角色属性', '只会移除此角色的属性配置，不会删除角色本身。确定移除吗？');
   if (!ok) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   gp.characterAttrs.splice(idx, 1);
@@ -2278,7 +2278,7 @@ async function renderGameplayCharPicker(query = '') {
 async function selectGameplayCharacter(idx) {
   const c = (window.__wvAttrCharPickerCache || [])[idx];
   if (!c || !editingWorldviewId) return;
-  const w = await DB.get('worldviews', editingWorldviewId);
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = _ensureGameplay(w);
   const key = _attrTargetKey({ targetType: c.targetType, targetId: c.targetId, sourceWorldviewId: c.sourceWorldviewId });
@@ -3054,7 +3054,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
   async function save() {
     if (!editingWorldviewId) return;
     
-    const w = await DB.get('worldviews', editingWorldviewId) || _defaultWorldview(editingWorldviewId);
+    const w = await _getEditingWV() || _defaultWorldview(editingWorldviewId);
 
     // v596：隐藏世界观特殊保存（只存扩展数据，不改基础字段）
     if (isHiddenWv(w)) {
@@ -3160,7 +3160,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
 
   async function deleteCurrentWorldview() {
     if (!editingWorldviewId) return;
-    const w = await DB.get('worldviews', editingWorldviewId);
+    const w = await _getEditingWV();
     const isBuiltin = _isBuiltinWorldview(w);
     if (isBuiltin) {
       const name = w?.name || '此世界观';
@@ -4012,7 +4012,7 @@ async function pickDefaultTheme(value) {
     // 导出单个世界观
   async function exportCurrent() {
     if (!editingWorldviewId) { UI.showToast('没有正在编辑的世界观'); return; }
-    const w = await DB.get('worldviews', editingWorldviewId);
+    const w = await _getEditingWV();
     if (!w) { UI.showToast('世界观数据不存在'); return; }
     const exportData = { worldviews: [w] };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
