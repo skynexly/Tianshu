@@ -205,7 +205,7 @@ const Memory = (() => {
 
   function formatNotesForPrompt(notes) {
     if (!notes || notes.length === 0) return '';
-    let text = '【小纸条】你记得关于{{user}}的这些碎片——不需要刻意提起，但如果剧情自然触及，可以像真的记得一样回应。\n';
+    let text = '【小纸条】这是 {{user}} 之前在剧情里流露过的碎片，有的可能过时了，有的可能很新鲜。它们不是全部，这只是系统给你塞了一把，可能和当前剧情有关，也可能无关，让你每次回应都会随机想起点什么。\n你可以让角色在合适的时机自然呼应，如果情景不贴合，也可以无视它们。\n\n';
     notes.forEach(n => {
       text += `- [${n.tag}] ${n.detail}`;
       if (n.characters?.length) text += `（在场：${n.characters.join('、')}）`;
@@ -219,13 +219,19 @@ const Memory = (() => {
   const BACKSTAGE_NOTE_MAX = 1000;
 
   async function addBackstageNote(data) {
-    const tag = NOTE_TAGS.includes(data.tag) ? data.tag : '有趣';
+    const tag = String(data.tag || '').trim() || '有趣';
     const detail = String(data.detail || '').trim();
     if (!detail) return null;
 
-    // 去重
+    // 来源信息（convId 为空标记为 legacy）
+    const convId = data.convId || '__legacy__';
+    const convName = data.convName || '';
+    const worldviewId = data.worldviewId || '';
+    const worldviewName = data.worldviewName || '';
+
+    // 去重（同对话内 tag+detail 重复才算重复）
     const all = await DB.getAll('memories');
-    const dup = all.find(m => m.type === 'backstage_note' && m.tag === tag && m.detail === detail);
+    const dup = all.find(m => m.type === 'backstage_note' && m.tag === tag && m.detail === detail && (m.convId || '__legacy__') === convId);
     if (dup) return dup;
 
     const now = new Date();
@@ -238,6 +244,10 @@ const Memory = (() => {
       detail,
       time: data.time || timeStr,
       scope: BACKSTAGE_SCOPE,
+      convId,
+      convName,
+      worldviewId,
+      worldviewName,
       timestamp: Utils.timestamp(),
       roundCreated: data.roundCreated || 0
     };
@@ -268,26 +278,72 @@ const Memory = (() => {
     return notes.slice(0, opts.limit || 5);
   }
 
-  async function retrieveBackstageNotes() {
+  async function retrieveBackstageNotes(opts = {}) {
     const all = await DB.getAll('memories');
-    const notes = all.filter(m => m.type === 'backstage_note');
+    let notes = all.filter(m => m.type === 'backstage_note');
+
+    // 按对话隔离：默认只返回当前对话 + legacy（开关开启时才取legacy）
+    const currentConvId = opts.currentConvId || '';
+    const crossWindow = !!opts.crossWindow;
+
+    if (!crossWindow) {
+      // 关闭跨窗口：只看当前对话的（legacy 也不读，避免污染）
+      notes = notes.filter(n => (n.convId || '__legacy__') === currentConvId);
+    }
+    // crossWindow=true 时全部纳入
+
     if (notes.length === 0) return [];
     const count = Math.min(notes.length, 3 + Math.floor(Math.random() * 3));
     const shuffled = notes.slice().sort(() => Math.random() - 0.5);
     return shuffled.slice(0, count);
   }
 
-  function formatBackstageNotesForPrompt(notes) {
+  function formatBackstageNotesForPrompt(notes, opts = {}) {
     const toolHint = '\n你可以用 add_backstage_note 记录用户新表达的偏好/情绪/习惯，用 query_backstage_notes 查询更多。只在用户亲口说了值得记的新信息时才记，不揣测，不每轮都用。';
     if (!notes || notes.length === 0) {
       return '【记忆工具】' + toolHint;
     }
-    let text = '【记忆碎片】你记得关于用户的这些片段——这些是用户本人在后台聊天中表达过的，不是游戏角色说的。自然地融入对话，不要机械引用。\n';
+    const crossWindow = !!opts.crossWindow;
+    const currentConvId = opts.currentConvId || '';
+
+    if (!crossWindow) {
+      // 单对话模式
+      let text = '【记忆碎片】这是你亲手记下的关于 ta 的事，有的可能过时了，有的可能很新鲜，它们不是全部，这只是系统给你塞了一把，可能和现在的话题有关，也可能无关，让你每轮对话都会随机想起点什么，就像是人类的脑袋里突然闯入的记忆。\n你可以把它们自然地融入对话，如果情景不太合适，也可以无视它们。\n\n';
+      notes.forEach(n => {
+        text += `- [${n.tag}] ${n.detail}`;
+        if (n.time) text += `（${n.time}）`;
+        text += '\n';
+      });
+      text += toolHint;
+      return text;
+    }
+
+    // 跨窗口模式：按来源分组
+    const groups = { current: [], legacy: [], others: {} };
     notes.forEach(n => {
-      text += `- [${n.tag}] ${n.detail}`;
-      if (n.time) text += `（${n.time}）`;
-      text += '\n';
+      const cid = n.convId || '__legacy__';
+      if (cid === currentConvId) groups.current.push(n);
+      else if (cid === '__legacy__') groups.legacy.push(n);
+      else {
+        const label = n.convName || '未知对话';
+        if (!groups.others[label]) groups.others[label] = [];
+        groups.others[label].push(n);
+      }
     });
+
+    let text = '【记忆碎片】这是你在不同后台里亲手记下的关于 ta 的事——ta 这边打开了跨窗口共享，所以你也能想起在别的对话里记过的片段。有的可能过时了，有的可能很新鲜，它们不是全部，这只是系统给你塞了一把，可能和现在的话题有关，也可能无关，让你每轮对话都会随机想起点什么，就像是人类的脑袋里突然闯入的记忆。\n你可以把它们自然地融入对话，如果情景不太合适，也可以无视它们。来自其他后台的片段是 ta 在另一个对话里的状态，不一定贴合此刻——参考着用就好。\n';
+
+    const renderItem = n => `- [${n.tag}] ${n.detail}${n.time ? `（${n.time}）` : ''}\n`;
+    if (groups.current.length) {
+      text += '\n★ 当前对话：\n' + groups.current.map(renderItem).join('');
+    }
+    Object.keys(groups.others).forEach(label => {
+      text += `\n★ 来自《${label}》：\n` + groups.others[label].map(renderItem).join('');
+    });
+    if (groups.legacy.length) {
+      text += '\n★ 来源不详：\n' + groups.legacy.map(renderItem).join('');
+    }
+
     text += toolHint;
     return text;
   }
@@ -461,35 +517,56 @@ const playerName = displayName;
       charLine = `\n用户角色：${parts.join('，')}\n`;
     }
 
-    return `请从以下对话中提取用户角色的偏好、情绪、习惯等小纸条，按JSON格式输出。只输出JSON，不要其他内容。
+    return `小纸条的目的是为了建立起${playerName}的人格画像，只记录能够体现出其性格、偏好、兴趣等的信息。
 ${charLine}
 对话内容：
 ${dialogue}
+
+- 纸条标签包含三个类别
+  - 偏好类：喜欢、讨厌、习惯
+  - 情绪类：标签根据实际情绪填写，建议从下列中选——
+    · 正面：开心、感动、安心、期待、骄傲
+    · 负面：悲伤、愤怒、恐惧、痛苦、迷茫、不悦
+    · 若以上都不贴切，可自行用2-4字的简洁情绪词
+  - 事件类:有趣、伏笔、秘密
+
+- 记录范围
+  - 偏好类
+    - ${playerName}亲口说的喜欢、厌恶、习惯等。例如Ta说"我不爱吃秋葵"，则打"讨厌"标签，记录为"${playerName}不爱吃秋葵"。或Ta说"我喜欢吃辣"，则打"喜欢"标签，记录为"${playerName}喜欢吃辣。"
+    - ${playerName}通过行为表现出的偏好，例如Ta写"美滋滋买了一杯三分甜去冰草莓麻薯奶茶喝"，则打"喜欢"标签，记录为"${playerName}美滋滋地买了一杯三分甜去冰草莓麻薯奶茶"。或Ta写"沉思……习惯性地用手指敲了敲桌面"，则需要根据剧情理解是什么情景的习惯，打"习惯"标签，记录为"${playerName}在沉思时习惯性地用手指敲了敲桌面"。
+  - 情绪类
+    - ${playerName}明确说明情绪的行为或语言。例如Ta写"愤怒地踹开了房门"，此时需要根据剧情写明Ta愤怒的前因，打"愤怒"标签，记录为"听到了妹妹受伤的消息后，${playerName}愤怒地踹开房了。"或Ta说"我很不高兴"，打"不悦"标签，记录为"听到陆文泽提起深蓝教会的罪行后，${playerName}说'我很不高兴'。"
+    - ${playerName}没有明确说明情绪，但表达了强烈情绪的行为，例如Ta写"躲在被子里哭"，依旧需要根据剧情写明哭泣的原因，打"悲伤"标签，记录为"在发现冰箱里一瓶酒都没有了后，${playerName}躲在被子里哭"。
+  - 事件类
+    - ${playerName}值得一记的有趣行为、可能为未来事件埋下伏笔的话/事、或明确的秘密行为。
+      · "有趣"标签：例如"${playerName}走在路上莫名其妙给了树一拳"。
+      · "伏笔"标签——指向未来可能影响剧情走向的话/事：例如"${playerName}说再这样下去总有一天会喜提调查局一日游。"
+      · "秘密"标签——已经发生但不想被知道的事：例如"${playerName}秘密地为林时星准备生日礼物，礼物是一枚胸针。"、"当被问起来历时，${playerName}说这是秘密。"
+
+- 提取规则
+  - 提取时尽可能引用原文：行为/场景用第三人称改写，但${playerName}的原话或情绪外露的关键短语保留引号引用。
+  - 每条记录必须包含触发情景（前因）+ ${playerName}的反应，不要孤立记录行为。
+  - 只提取能够体现${playerName}性格的信息，不记录日常陈述。例如Ta说"我去吃饭了"、"我回来了"这类不体现性格画像，跳过；但若Ta说"我又点了同一家烧烤"——这是稳定偏好，记。
+  - 每次最多提取6条，优先记录偏好类和强烈的情绪波动（如愤怒、幸福等）。
 
 输出格式：
 {
   "notes": [
     {
-      "tag": "从以下标签中选最合适的一个（附定义）：喜欢（明确表达喜爱/偏好的事物）/讨厌（明确表达厌恶/排斥的事物）/期待（对未来某事表达期望或向往）/恐惧（表达害怕/恐惧/不安）/愤怒（表达生气/愤怒/不满）/有趣（做了或说了有意思的事，不是日常行为而是值得一记的趣事）/习惯（反复出现的行为模式，不是只做过一次的事）/秘密（不想被人知道或只对特定人透露的事）/悲伤（表达难过/伤心/失落）/迷茫（表达困惑/不知所措/对未来不确定）/痛苦（身体或心理上的痛苦）",
-      "detail": "以${playerName}为主语，如实记录说了什么或做了什么反应",
+      "tag": "从上述标签中选最贴切的一个",
+      "detail": "包含前因+${playerName}的反应，按上述规则书写",
       "time": "游戏内时间（能从上下文推断就填，推断不出留空字符串）",
       "characters": ["当时在场的角色姓名"]
     }
   ]
 }
 
-提取规则：
-- 只从${playerName}的发言和行为中提取，只看${playerName}说了什么、做了什么。
-- 不揣测内心，不修饰，不加工，不记录${playerName}以外角色的信息。
-- characters 只记录当时在场的角色。
-- **如果一个行为不符合任何标签的定义，不要硬写，直接跳过。**
-- 宁可少记也不要乱归类。没有明显偏好/情绪/行为表达时 notes 为空数组。
-- 只输出 JSON，确保完整闭合。`;
+只输出JSON，确保完整闭合。没有符合条件的内容时notes为空数组。`;
   }
 
   function formatForPrompt(memories) {
     if (!memories || memories.length === 0) return '';
-    let text = '【相关记忆】以下是用户过去经历的事件和角色关系，供AI参考，用于保持剧情一致性。\n- 若记忆与当前对话有关，可通过旁白或角色的言行自然呼应，不要突兀地复述。\n- 若当前场合与这些记忆无关，请仅将其作为背景知识，不必主动提及。\n';
+    let text = '【相关记忆】这是 {{user}} 之前经历过的事件和形成的角色关系，给你参考用，保持剧情一致性。\n- 如果当前情景能自然呼应到这些记忆，让角色通过言行或旁白点出来\n- 如果当前情景无关，作为背景知识就好，不需要硬塞\n- 不要突兀地复述记忆原文\n';
     memories.forEach((m, i) => {
       if (m.type === 'relation') {
         text += `\n[记忆${i + 1}] 🤝关系: ${m.title}\n`;
@@ -1860,10 +1937,12 @@ function _collectEmotionsForEdit() {
 
   // 后台记忆库视图
   let _backstageViewActive = false;
+  let _backstageFilter = 'current'; // 'current' | 'all'
 
   async function _toggleBackstageView() {
     _backstageViewActive = !_backstageViewActive;
     if (_backstageViewActive) {
+      _backstageFilter = 'current';
       await _renderBackstageNotes();
     } else {
       renderList();
@@ -1872,43 +1951,194 @@ function _collectEmotionsForEdit() {
     }
   }
 
+  function _switchBackstageFilter(filter) {
+    _backstageFilter = filter;
+    _renderBackstageNotes();
+  }
+
   async function _renderBackstageNotes() {
     // 隐藏 tab 按钮
     document.querySelectorAll('.memory-tabs .tab-btn').forEach(b => b.style.display = 'none');
 
     const all = await DB.getAll('memories');
-    const notes = all.filter(m => m.type === 'backstage_note').sort((a, b) => b.timestamp - a.timestamp);
+    let notes = all.filter(m => m.type === 'backstage_note').sort((a, b) => b.timestamp - a.timestamp);
+
+    // 当前对话信息（用于过滤和分组）
+    const currentConvId = (typeof Conversations !== 'undefined' ? Conversations.getCurrent() : '') || '';
+    const currentConv = (typeof Conversations !== 'undefined' ? Conversations.getList().find(c => c.id === currentConvId) : null);
+    const currentConvName = currentConv?.title || currentConv?.name || '当前对话';
+
+    // 过滤
+    if (_backstageFilter === 'current') {
+      notes = notes.filter(n => (n.convId || '__legacy__') === currentConvId);
+    }
 
     const container = document.getElementById('memory-list');
     if (!container) return;
 
-    const header = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:8px 12px;background:color-mix(in srgb, var(--accent) 8%, transparent);border-radius:var(--radius)">
-      <span style="font-size:13px;font-weight:700;color:var(--accent)">🔒 后台记忆库（${notes.length}条）</span>
-      <span style="font-size:11px;color:var(--text-secondary);cursor:pointer" onclick="Memory.search('')">退出</span>
+    // 切换条
+    const switchTab = `<div style="display:flex;gap:6px;margin-bottom:8px">
+      <button onclick="Memory._switchBackstageFilter('current')" style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid ${_backstageFilter === 'current' ? 'var(--accent)' : 'var(--border)'};background:${_backstageFilter === 'current' ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--bg-secondary)'};color:${_backstageFilter === 'current' ? 'var(--accent)' : 'var(--text)'};font-size:12px;cursor:pointer">仅当前对话</button>
+      <button onclick="Memory._switchBackstageFilter('all')" style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid ${_backstageFilter === 'all' ? 'var(--accent)' : 'var(--border)'};background:${_backstageFilter === 'all' ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--bg-secondary)'};color:${_backstageFilter === 'all' ? 'var(--accent)' : 'var(--text)'};font-size:12px;cursor:pointer">全部</button>
     </div>`;
 
+    const header = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:8px 12px;background:color-mix(in srgb, var(--accent) 8%, transparent);border-radius:var(--radius)">
+      <span style="font-size:13px;font-weight:700;color:var(--accent)">🔒 后台记忆库（${notes.length}条）</span>
+      <span style="font-size:11px;color:var(--text-secondary);cursor:pointer" onclick="Memory.search('')">退出</span>
+    </div>` + switchTab;
+
     if (notes.length === 0) {
-      container.innerHTML = header + '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无后台记忆</p>';
+      const tip = _backstageFilter === 'current' ? '当前对话暂无后台记忆' : '暂无后台记忆';
+      container.innerHTML = header + `<p style="color:var(--text-secondary);text-align:center;padding:20px;">${tip}</p>`;
       return;
     }
 
-    container.innerHTML = header + notes.map(n => `
-      <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px" class="card">
+    container.innerHTML = header + notes.map(n => {
+      const convId = n.convId || '__legacy__';
+      let sourceLabel = '';
+      let sourceColor = 'var(--text-secondary)';
+      if (convId === '__legacy__') {
+        sourceLabel = '早期记录';
+        sourceColor = 'color-mix(in srgb, var(--text-secondary) 80%, var(--accent))';
+      } else if (convId === currentConvId) {
+        sourceLabel = '当前对话';
+        sourceColor = 'var(--accent)';
+      } else {
+        sourceLabel = n.convName || '未知对话';
+      }
+      const wvLabel = n.worldviewName ? `《${Utils.escapeHtml(n.worldviewName)}》` : '';
+      return `
+      <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;cursor:pointer" class="card" onclick="Memory.editBackstageNote('${n.id}')">
         <div style="flex:1;overflow:hidden">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
             <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);font-weight:700;flex-shrink:0">${Utils.escapeHtml(n.tag)}</span>
+            <span style="font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid ${sourceColor};color:${sourceColor};flex-shrink:0">${Utils.escapeHtml(sourceLabel)}${wvLabel ? ' · ' + wvLabel : ''}</span>
             <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(n.time || '')}</span>
           </div>
           <p style="margin:0;font-size:13px;color:var(--text);line-height:1.4">${Utils.escapeHtml(n.detail || '')}</p>
         </div>
-        <span style="font-size:11px;color:var(--text-secondary);cursor:pointer;flex-shrink:0" onclick="Memory._deleteBackstageNote('${n.id}')">×</span>
+        <span style="font-size:11px;color:var(--text-secondary);cursor:pointer;flex-shrink:0;padding:4px 6px" onclick="event.stopPropagation();Memory._deleteBackstageNote('${n.id}')">×</span>
       </div>
-    `).join('');
+    `}).join('');
   }
 
   async function _deleteBackstageNote(id) {
     if (!await UI.showConfirm('删除后台记忆', '确定删除这条记忆？')) return;
     await DB.del('memories', id);
+    await _renderBackstageNotes();
+  }
+
+  // ===== 后台纸条编辑弹窗 =====
+  let _editingBsNoteId = null;
+
+  async function editBackstageNote(id) {
+    const m = await DB.get('memories', id);
+    if (!m) return;
+    _editingBsNoteId = id;
+    _ensureBsEditModal();
+    document.getElementById('bs-edit-tag').value = m.tag || '有趣';
+    document.getElementById('bs-edit-detail').value = m.detail || '';
+    document.getElementById('bs-edit-time').value = m.time || '';
+
+    // 来源选择器
+    const conversations = (typeof Conversations !== 'undefined' ? Conversations.getList() : []) || [];
+    const sel = document.getElementById('bs-edit-conv');
+    const currentSrc = m.convId || '__legacy__';
+    sel.innerHTML = `
+      <option value="__legacy__" ${currentSrc === '__legacy__' ? 'selected' : ''}>未标记来源（早期记录）</option>
+      ${conversations.map(c => `<option value="${Utils.escapeHtml(c.id)}" ${currentSrc === c.id ? 'selected' : ''}>${Utils.escapeHtml(c.title || c.name || '未命名对话')}</option>`).join('')}
+    `;
+
+    document.getElementById('bs-edit-modal').classList.remove('hidden');
+  }
+
+  function _ensureBsEditModal() {
+    if (document.getElementById('bs-edit-modal')) return;
+    const tagOptions = NOTE_TAGS.map(t => `<option value="${t}">${t}</option>`).join('');
+    const html = `
+    <div id="bs-edit-modal" class="hidden" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)Memory.closeBsEdit()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto" onclick="event.stopPropagation()">
+        <h3 style="margin:0 0 16px 0;font-size:16px;color:var(--text)">编辑后台记忆</h3>
+
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">标签</label>
+        <select id="bs-edit-tag" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px">${tagOptions}</select>
+
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">内容</label>
+        <textarea id="bs-edit-detail" rows="4" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px;resize:vertical;box-sizing:border-box"></textarea>
+
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">时间</label>
+        <input id="bs-edit-time" type="text" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px;box-sizing:border-box">
+
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">来源对话</label>
+        <select id="bs-edit-conv" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:4px;font-size:14px"></select>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px">改了来源后，这条纸条会出现在被认领对话的"仅当前对话"视图里。</div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="Memory.deleteBsFromEdit()" style="padding:8px 14px;border-radius:8px;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));background:none;color:var(--danger);font-size:13px;cursor:pointer;margin-right:auto">删除</button>
+          <button onclick="Memory.closeBsEdit()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button onclick="Memory.saveBsEdit()" style="padding:8px 14px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  function closeBsEdit() {
+    _editingBsNoteId = null;
+    document.getElementById('bs-edit-modal')?.classList.add('hidden');
+  }
+
+  async function saveBsEdit() {
+    if (!_editingBsNoteId) return;
+    const m = await DB.get('memories', _editingBsNoteId);
+    if (!m) { closeBsEdit(); return; }
+
+    const tag = document.getElementById('bs-edit-tag').value;
+    const detail = document.getElementById('bs-edit-detail').value.trim();
+    const time = document.getElementById('bs-edit-time').value.trim();
+    const newConvId = document.getElementById('bs-edit-conv').value;
+
+    if (!detail) { UI.showToast('内容不能为空', 1500); return; }
+
+    m.tag = NOTE_TAGS.includes(tag) ? tag : m.tag;
+    m.detail = detail;
+    m.time = time;
+
+    // 更新来源
+    if (newConvId !== (m.convId || '__legacy__')) {
+      if (newConvId === '__legacy__') {
+        m.convId = '__legacy__';
+        m.convName = '';
+        m.worldviewId = '';
+        m.worldviewName = '';
+      } else {
+        const conv = (typeof Conversations !== 'undefined' ? Conversations.getList().find(c => c.id === newConvId) : null);
+        m.convId = newConvId;
+        m.convName = conv?.title || conv?.name || '';
+        const wvId = conv?.singleWorldviewId || conv?.worldviewId || '';
+        m.worldviewId = wvId;
+        if (wvId && wvId !== '__default_wv__') {
+          try {
+            const wv = await DB.get('worldviews', wvId);
+            m.worldviewName = wv?.name || '';
+          } catch(_) { m.worldviewName = ''; }
+        } else {
+          m.worldviewName = '';
+        }
+      }
+    }
+
+    await DB.put('memories', m);
+    closeBsEdit();
+    await _renderBackstageNotes();
+    UI.showToast('已保存');
+  }
+
+  async function deleteBsFromEdit() {
+    if (!_editingBsNoteId) return;
+    if (!await UI.showConfirm('删除后台记忆', '确定删除这条记忆？')) return;
+    await DB.del('memories', _editingBsNoteId);
+    closeBsEdit();
     await _renderBackstageNotes();
   }
 
@@ -2048,6 +2278,7 @@ function _toggleEditScopeDropdown() { _toggleDropdown('mem-edit-scope-dropdown')
     addBackstageNote, queryBackstageNotes, retrieveBackstageNotes, formatBackstageNotesForPrompt,
     buildExtractionPrompt, buildNotesPrompt: _buildNotesPrompt, formatForPrompt,
     showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove, deleteNoteConfirm, _deleteBackstageNote,
+    _switchBackstageFilter, editBackstageNote, closeBsEdit, saveBsEdit, deleteBsFromEdit,
     editNote, closeNoteEdit, saveNoteEdit, deleteNoteFromEdit,
     copyMemory, filterByScope, renderScopeSelector, onPanelShow,
     addManual,

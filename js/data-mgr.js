@@ -23,6 +23,7 @@ const DataMgr = (() => {
       const gameState = await _safeGetAll('gameState');
       const singleCards = await _safeGetAll('singleCards');
       const npcAvatars = await _safeGetAll('npcAvatars');
+      const drawnImages = await _safeGetAll('drawnImages');
       const data = {
         version: 3,
         exportTime: new Date().toISOString(),
@@ -38,9 +39,11 @@ const DataMgr = (() => {
         summaries: await _safeGetAll('summaries'),
         singleCards,
         npcAvatars,
+        drawnImages,
         // 兼容别名：避免外部检查工具/旧脚本只认 snake_case 时误以为没打包
         single_cards: singleCards,
         npc_avatars: npcAvatars,
+        drawn_images: drawnImages,
         themeConfig: localStorage.getItem('themeConfig') || null,
         themeCustomPresets: localStorage.getItem('themeCustomPresets') || null
       };
@@ -84,6 +87,7 @@ const DataMgr = (() => {
         await _safeClear('summaries');
         await _safeClear('singleCards');
         await _safeClear('npcAvatars');
+        await _safeClear('drawnImages');
 
         // 导入
         for (const m of (data.messages || [])) await _safePut('messages', m);
@@ -101,8 +105,10 @@ const DataMgr = (() => {
         for (const s of (data.summaries || [])) await _safePut('summaries', s);
         const importedSingleCards = data.singleCards || data.single_cards || [];
         const importedNpcAvatars = data.npcAvatars || data.npc_avatars || [];
+        const importedDrawnImages = data.drawnImages || data.drawn_images || [];
         for (const c of importedSingleCards) await _safePut('singleCards', c);
         for (const a of importedNpcAvatars) await _safePut('npcAvatars', a);
+        for (const img of importedDrawnImages) await _safePut('drawnImages', img);
         if (data.themeConfig) localStorage.setItem('themeConfig', data.themeConfig);
         if (data.themeCustomPresets) localStorage.setItem('themeCustomPresets', data.themeCustomPresets);
 

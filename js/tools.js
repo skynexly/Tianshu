@@ -129,24 +129,24 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'add_backstage_note',
-      description:'记录一条关于用户本人的记忆。只记用户亲口说的/做的，不揣测。可同时调用多次。',
+      description:'记录一条值得留下的用户片段。聊天里如果用户表达了什么能反映 ta 是谁的东西（喜好、情绪、事件），就顺手记一条。不用每轮都记。',
       parameters:{ type:'object', properties:{
-        tag:{ type:'string', enum:NOTE_TAGS, description:'标签' },
-        detail:{ type:'string', description:'以用户名为主语如实记录' }
+        tag:{ type:'string', description:'标签。建议从三类里选最贴切的：偏好类（喜欢/讨厌/习惯）、情绪类（实际什么情绪就写什么，如开心/感动/悲伤/愤怒等）、事件类（有趣/伏笔/秘密）' },
+        detail:{ type:'string', description:'内容要带前因+用户的反应，引用原话时保留引号' }
       }, required:['tag','detail'] }
     }},
     { type:'function', function:{
       name:'update_backstage_note',
-      description:'修改一条后台记忆。仅在用户明确要求修改时使用。',
+      description:'改一条已记下的片段。用户说"那条不对，应该是xxx"、主动让你订正时，或者那条现在已经不再适用时用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'记忆 id' },
-        tag:{ type:'string', enum:NOTE_TAGS },
+        tag:{ type:'string' },
         detail:{ type:'string' }
       }, required:['id'] }
     }},
     { type:'function', function:{
       name:'delete_backstage_note',
-      description:'删除一条后台记忆。仅在用户明确要求删除时使用。',
+      description:'删一条已记下的片段。用户明确说"忘掉这条"或类似意思时，或者你发现有重复的记忆时用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'记忆 id' }
       }, required:['id'] }
@@ -302,14 +302,33 @@ const Tools = (() => {
     },
     async add_backstage_note(args) {
       if (!args.tag || !args.detail) return ERR('缺少 tag 或 detail');
-      const note = await Memory.addBackstageNote({ tag:args.tag, detail:args.detail });
+      // 自动注入来源信息
+      const convId = Conversations.getCurrent() || '';
+      const conv = Conversations.getList().find(c => c.id === convId);
+      const convName = conv?.title || conv?.name || '';
+      const wvId = conv?.singleWorldviewId || conv?.worldviewId || '';
+      let worldviewName = '';
+      if (wvId && wvId !== '__default_wv__') {
+        try {
+          const wv = await DB.get('worldviews', wvId);
+          worldviewName = wv?.name || '';
+        } catch(_) {}
+      }
+      const note = await Memory.addBackstageNote({
+        tag: args.tag,
+        detail: args.detail,
+        convId,
+        convName,
+        worldviewId: wvId,
+        worldviewName
+      });
       return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ success:false, message:'重复记录，已跳过。' });
     },
     async update_backstage_note(args) {
       if (!args.id) return ERR('缺少 id');
       const m = await DB.get('memories', args.id);
       if (!m || m.type !== 'backstage_note') return ERR('未找到该记忆');
-      if (args.tag && NOTE_TAGS.includes(args.tag)) m.tag = args.tag;
+      if (args.tag && String(args.tag).trim()) m.tag = String(args.tag).trim();
       if (args.detail) m.detail = args.detail;
       m.timestamp = Utils.timestamp();
       await DB.put('memories', m);
