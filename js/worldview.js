@@ -83,8 +83,8 @@ function _defaultRegion() {
     return { id: 'fac_' + Utils.uuid().slice(0,8), name: '', summary: '', detail: '', npcs: [] };
   }
   function _defaultNPC() {
-    return { id: 'npc_' + Utils.uuid().slice(0,8), name: '', aliases: '', summary: '', detail: '' };
-  }
+  return { id: 'npc_' + Utils.uuid().slice(0,8), name: '', aliases: '', profession: '', summary: '', detail: '' };
+}
   function _defaultFestival() {
     return { id: 'fest_' + Utils.uuid().slice(0,8), name: '', date: '', yearly: true, content: '', enabled: true };
   }
@@ -779,7 +779,7 @@ function _syncBuiltinRestoreButton(w) {
     });
   }
   function _attachWVNpcAutoSave() {
-    ['wv-npc-name','wv-npc-aliases','wv-npc-summary','wv-npc-detail'].forEach(id => {
+    ['wv-npc-name','wv-npc-aliases','wv-npc-profession','wv-npc-summary','wv-npc-detail'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.removeEventListener('input', _wvNpcAutoSave); el.addEventListener('input', _wvNpcAutoSave); }
     });
@@ -797,8 +797,9 @@ function _syncBuiltinRestoreButton(w) {
     editingWorldviewId = id;
     _editReturnTo = (opts && opts.returnTo) || null;
     closePreview(); // 关闭预览弹窗（如果有的话）
-    UI.showPanel('worldview-edit');
+    // 先加载表单数据，再切面板，避免出现"先切到空白页 → 后填内容"的视觉空白
     await _loadEditForm(id);
+    UI.showPanel('worldview-edit');
   }
   // 给外部调用：编辑面板返回时的目标路径
   function getEditReturnTo() {
@@ -1494,6 +1495,8 @@ return;
     document.getElementById('wv-npc-aliases').value = npc.aliases || '';
     document.getElementById('wv-npc-summary').value = npc.summary || '';
     document.getElementById('wv-npc-detail').value = npc.detail || '';
+    const profEl1 = document.getElementById('wv-npc-profession');
+    if (profEl1) profEl1.value = npc.profession || '';
     
     UI.showPanel('wv-npc', 'forward');
     requestAnimationFrame(_attachWVNpcAutoSave);
@@ -1522,6 +1525,8 @@ return;
       npc.aliases = document.getElementById('wv-npc-aliases').value.trim();
       npc.summary = document.getElementById('wv-npc-summary').value.trim();
       npc.detail = document.getElementById('wv-npc-detail').value.trim();
+      const profSaveG = document.getElementById('wv-npc-profession');
+      if (profSaveG) npc.profession = profSaveG.value.trim();
       await _saveEditingWV(w);
       if (!silent) UI.showToast('常驻角色已保存');
       _renderGlobalNpcs(w.globalNpcs);
@@ -1535,6 +1540,8 @@ return;
     npc.aliases = document.getElementById('wv-npc-aliases').value.trim();
     npc.summary = document.getElementById('wv-npc-summary').value.trim();
     npc.detail = document.getElementById('wv-npc-detail').value.trim();
+    const profSave = document.getElementById('wv-npc-profession');
+    if (profSave) npc.profession = profSave.value.trim();
 
     await _saveEditingWV(w);
     if (!silent) UI.showToast('角色已保存');
@@ -2257,10 +2264,11 @@ function _renderGlobalNpcs(list) {
 
     document.getElementById('wv-npc-title').textContent = (npc.name || '编辑角色') + ' · 全图';
     document.getElementById('wv-npc-name').value = npc.name || '';
-    document.getElementById('wv-npc-aliases').value = npc.aliases || '';
-    document.getElementById('wv-npc-summary').value = npc.summary || '';
-    document.getElementById('wv-npc-detail').value = npc.detail || '';
-    // 全图 NPC 不需要简介（不进速查表）
+document.getElementById('wv-npc-aliases').value = npc.aliases || '';
+      document.getElementById('wv-npc-summary').value = npc.summary || '';
+      document.getElementById('wv-npc-detail').value = npc.detail || '';
+      const profEl2 = document.getElementById('wv-npc-profession');
+      if (profEl2) profEl2.value = npc.profession || '';
     const sumLbl = document.getElementById('wv-npc-summary-label');
     if (sumLbl) sumLbl.style.display = 'none';
 

@@ -124,6 +124,7 @@ const NPC = (() => {
           regionNpcs.forEach(n => {
             text += `\n[${n.name}]`;
             if (n.aliases) text += ` 代号/别名:${n.aliases}`;
+            if (n.profession) text += ` 职业:${n.profession}`;
             if (n.faction) text += ` 势力:${n.faction}`;
             text += `\n${n.detail || ''}\n`;
           });
@@ -150,6 +151,7 @@ const NPC = (() => {
         npcs.forEach(n => {
           text += `\n[${n.name}]`;
           if (n.aliases) text += ` 代号/别名:${n.aliases}`;
+          if (n.profession) text += ` 职业:${n.profession}`;
           if (n.faction) text += ` 势力:${n.faction}`;
           text += `\n${n.detail || ''}\n`;
         });
@@ -216,7 +218,13 @@ const NPC = (() => {
 
       // 候选关键词：name + aliases（aliases 可能是字符串"a,b,c"或数组）
       const keys = [];
-      if (r.name) keys.push(r.name);
+      if (r.name) {
+        // 主名也按空格/标点切分，处理"星栎城 Astoria"这类历史脏数据
+        // 完整 name 仍保留作为候选（精确匹配优先）
+        keys.push(r.name);
+        const splitNames = String(r.name).split(/[,，、\s]+/).filter(Boolean);
+        if (splitNames.length > 1) keys.push(...splitNames);
+      }
       if (r.aliases) {
         const aliasList = Array.isArray(r.aliases)
           ? r.aliases
@@ -286,6 +294,7 @@ const NPC = (() => {
     presentNPCs.forEach(n => {
       text += `\n[${n.name}]`;
       if (n.aliases) text += ` 代号/别名:${n.aliases}`;
+      if (n.profession) text += ` 职业:${n.profession}`;
       if (n.faction) { text += ` 势力:${n.faction}`; mentionedFactions.add(n.faction); }
       text += `\n${n.detail || ''}`;
       text += '\n';

@@ -65,9 +65,9 @@ const Tools = (() => {
       const npcMatch = (n, where) => {
         const aliasHit = n.aliases && String(n.aliases).toLowerCase().split(/[,，、]/).some(a => a.trim() === target);
         if (matches(n.name) || aliasHit) {
-          hits.push({ kind: 'npc', exact: true, name: n.name, aliases: n.aliases || '', where, summary: n.summary || '', detail: n.detail || '' });
+          hits.push({ kind: 'npc', exact: true, name: n.name, aliases: n.aliases || '', profession: n.profession || '', where, summary: n.summary || '', detail: n.detail || '' });
         } else if (includes(n.name) || (n.aliases && String(n.aliases).toLowerCase().includes(target))) {
-          hits.push({ kind: 'npc', exact: false, name: n.name, aliases: n.aliases || '', where, summary: n.summary || '', detail: n.detail || '' });
+          hits.push({ kind: 'npc', exact: false, name: n.name, aliases: n.aliases || '', profession: n.profession || '', where, summary: n.summary || '', detail: n.detail || '' });
         }
       };
       (wv.globalNpcs || []).forEach(n => npcMatch(n, '全图常驻'));

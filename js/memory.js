@@ -590,6 +590,7 @@ const playerName = displayName;
     }
 
     return `小纸条的目的是为了建立起${playerName}的人格画像，只记录能够体现出其性格、偏好、兴趣等的信息。
+（注：${playerName}是真实角色名，请直接使用，不要写成 {PlayerName}、{{user}} 等占位符，也不要用"用户""玩家"这种泛称代替。）
 ${charLine}
 对话内容：
 ${dialogue}

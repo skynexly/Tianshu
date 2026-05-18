@@ -306,6 +306,7 @@ const container = document.getElementById('backstage-messages');
   // 构建发给 API 的消息（system + history）
   async function _buildApiMessages(historyMsgs) {
     const systemParts = [];
+
     const wvPrompt = Chat.getWorldviewPrompt();
     if (wvPrompt) systemParts.push(wvPrompt);
     const char = await Character.get();
@@ -647,6 +648,41 @@ systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要�
       if (idx === -1) break;
       apiMessages.splice(idx, 1);
     }
+
+    // 宏替换：{{user}} → OOC昵称（如有） / 面具名 / '玩家'；{{char}} → 单人卡角色名（如有）
+    try {
+      let _macroUser = '';
+      try {
+        const _ooc = await DB.get('settings', 'oocNickname');
+        if (_ooc?.value && String(_ooc.value).trim()) _macroUser = String(_ooc.value).trim();
+      } catch(_) {}
+      if (!_macroUser) {
+        try {
+          const _mc = await Character.get();
+          if (_mc?.name) _macroUser = _mc.name;
+        } catch(_) {}
+      }
+      if (!_macroUser) _macroUser = '玩家';
+
+      let _macroChar = '';
+      try {
+        if (typeof SingleMode !== 'undefined' && SingleMode.getCurrentSingleSettings) {
+          const _ss = await SingleMode.getCurrentSingleSettings();
+          if (_ss?.cardId && typeof SingleCard !== 'undefined') {
+            const _card = await SingleCard.get(_ss.cardId);
+            if (_card?.name) _macroChar = _card.name;
+          }
+        }
+      } catch(_) {}
+
+      for (const m of apiMessages) {
+        if (m.content && typeof m.content === 'string') {
+          if (m.content.includes('{{user}}')) m.content = m.content.replaceAll('{{user}}', _macroUser);
+          if (_macroChar && m.content.includes('{{char}}')) m.content = m.content.replaceAll('{{char}}', _macroChar);
+        }
+      }
+    } catch(_) {}
+
     return apiMessages;
   }
 
