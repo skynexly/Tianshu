@@ -1231,16 +1231,22 @@ function taskOpenSkipModal() {
   modal.className = 'hs-skip-modal';
   modal.onclick = (e) => { if (e.target === modal) taskCloseSkipModal(); };
 
-  let listHtml = active.length > 0
-    ? active.map(t => `<div class="hs-skip-option" data-idx="${t.idx}" onclick="StatusBar.taskSelectSkipTask(${t.idx})">${_esc(t.text)}</div>`).join('')
-    : '<div style="padding:12px;color:var(--text-secondary);font-size:13px;text-align:center">没有可跳过的任务</div>';
+  const listHtml = active.length > 0
+    ? active.map(t => `
+    <button class="hs-skip-choice" data-idx="${t.idx}" onclick="event.stopPropagation();StatusBar.taskSelectSkipTask(${t.idx});">
+      <span class="hs-skip-choice-dot"></span>
+      <span class="hs-skip-choice-text">${_esc(t.text)}</span>
+      ${t.type ? `<span class="hs-skip-choice-type">${_esc(t.type)}</span>` : ''}
+    </button>`).join('')
+    : '<div class="hs-skip-empty">没有可跳过的任务</div>';
 
-  modal.innerHTML = `<div class="hs-skip-modal-content">
-    <div class="hs-skip-modal-title">选择要跳过的任务</div>
-    <div class="hs-skip-modal-list">${listHtml}</div>
-    <div class="hs-skip-modal-actions">
-      <button class="hs-skip-modal-btn cancel" onclick="StatusBar.taskCloseSkipModal()">取消</button>
-      <button class="hs-skip-modal-btn confirm" id="ts-skip-confirm-btn" disabled onclick="StatusBar.taskConfirmSkipTask()">确认跳过</button>
+  modal.innerHTML = `
+  <div class="hs-skip-dialog" onclick="event.stopPropagation()">
+    <div class="hs-skip-title">选择要跳过的任务</div>
+    <div class="hs-skip-list">${listHtml}</div>
+    <div class="hs-skip-actions">
+      <button class="hs-skip-cancel" onclick="event.stopPropagation();StatusBar.taskCloseSkipModal();">取消</button>
+      <button class="hs-skip-confirm" id="ts-skip-confirm-btn" disabled onclick="event.stopPropagation();StatusBar.taskConfirmSkipTask();">确认跳过</button>
     </div>
   </div>`;
   document.body.appendChild(modal);
@@ -1253,7 +1259,7 @@ function taskCloseSkipModal() {
 
 function taskSelectSkipTask(idx) {
   _tsSkipSelectedIdx = idx;
-  document.querySelectorAll('#ts-skip-modal .hs-skip-option').forEach(el => {
+  document.querySelectorAll('#ts-skip-modal .hs-skip-choice').forEach(el => {
     el.classList.toggle('selected', Number(el.dataset.idx) === idx);
   });
   const btn = document.getElementById('ts-skip-confirm-btn');
