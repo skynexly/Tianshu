@@ -1464,37 +1464,36 @@
                 <span class="circle-check-ui"></span>
               </span>
             </label>
-          </div>
 
-          <!-- 工具列表 -->
-          <div style="display:flex;flex-direction:column;gap:14px;padding:12px;background:var(--bg-tertiary);border-radius:8px;margin-top:14px">
-            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:-2px;line-height:1.4">工具列表<br><span style="font-size:11px;opacity:0.7">允许 AI 主动调用的工具，需站点支持 Function Calling。每项独立开关。</span></div>
-            <label class="circle-check-label">
-              <span class="circle-check-text">记忆工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 主动查/记/改 小纸条、事件、人际关系</span></span>
-              <span style="position:relative;display:inline-flex">
-                <input type="checkbox" id="cs-tools-memory" class="circle-check">
-                <span class="circle-check-ui"></span>
-              </span>
-            </label>
-            <label class="circle-check-label">
-              <span class="circle-check-text">世界观查询工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 按名查地区/势力/NPC，按词搜节日/常驻/动态条目（只读）</span></span>
-              <span style="position:relative;display:inline-flex">
-                <input type="checkbox" id="cs-tools-worldview" class="circle-check">
-                <span class="circle-check-ui"></span>
-              </span>
-            </label>
-            <label class="circle-check-label">
-              <span class="circle-check-text">历史搜索工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 按关键词搜被归档的旧消息（只读）</span></span>
-              <span style="position:relative;display:inline-flex">
-                <input type="checkbox" id="cs-tools-history" class="circle-check">
-                <span class="circle-check-ui"></span>
-              </span>
-            </label>
+            <!-- 工具列表 -->
+            <div style="display:flex;flex-direction:column;gap:14px;padding:12px;background:var(--bg-tertiary);border-radius:8px;margin-top:14px">
+              <div style="font-size:12px;color:var(--text-secondary);margin-bottom:-2px;line-height:1.4">工具列表<br><span style="font-size:11px;opacity:0.7">允许 AI 主动调用的工具，需站点支持 Function Calling。每项独立开关。</span></div>
+              <label class="circle-check-label">
+                <span class="circle-check-text">记忆工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 主动查/记/改 小纸条、事件、人际关系</span></span>
+                <span style="position:relative;display:inline-flex">
+                  <input type="checkbox" id="cs-tools-memory" class="circle-check">
+                  <span class="circle-check-ui"></span>
+                </span>
+              </label>
+              <label class="circle-check-label">
+                <span class="circle-check-text">世界观查询工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 按名查地区/势力/NPC，按词搜节日/常驻/动态条目（只读）</span></span>
+                <span style="position:relative;display:inline-flex">
+                  <input type="checkbox" id="cs-tools-worldview" class="circle-check">
+                  <span class="circle-check-ui"></span>
+                </span>
+              </label>
+              <label class="circle-check-label">
+                <span class="circle-check-text">历史搜索工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 按关键词搜被归档的旧消息（只读）</span></span>
+                <span style="position:relative;display:inline-flex">
+                  <input type="checkbox" id="cs-tools-history" class="circle-check">
+                  <span class="circle-check-ui"></span>
+                </span>
+              </label>
+            </div>
           </div>
-
         </div>
 
-        <div class="modal-actions" style="flex-shrink:0;margin-top:20px;padding-top:12px">
+          <div class="modal-actions" style="flex-shrink:0;margin-top:20px;padding-top:12px">
           <button onclick="Chat.closeConvSettingsModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
           <button onclick="Chat.saveConvSettings()" style="flex:1">保存</button>
         </div>
