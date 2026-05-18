@@ -1407,7 +1407,10 @@
             </label>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
               <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">查看并重置当前对话的事件进度。</div>
-              <button type="button" onclick="Chat.openEventManagerModal()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap">管理事件</button>
+              <div style="display:flex;gap:6px">
+                <button type="button" onclick="ConvGameplay.openEventEditor()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap">编辑事件</button>
+                <button type="button" onclick="Chat.openEventManagerModal()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap">管理事件</button>
+              </div>
             </div>
             <label class="circle-check-label">
               <span class="circle-check-text">任务系统<br><span style="font-size:11px;color:var(--text-secondary)">启用世界观配置的任务阶段，AI 按类型池发布任务并自动结算奖励</span></span>
@@ -3329,6 +3332,7 @@ const GameLog = (() => {
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
 <script src="js/worldview.js"></script>
+<script src="js/conv_gameplay.js"></script>
 <script src="js/wv-generator.js"></script>
 <script src="js/single_card.js"></script>
 <script src="js/attached-chars.js"></script>
