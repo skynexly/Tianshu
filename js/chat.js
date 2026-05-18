@@ -892,6 +892,27 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           const idx = _buildKnowledgeIndex(wvForIndex.knowledges || []);
           if (idx) systemParts.push(idx);
         }
+        // 节日索引（让 AI 预知后续节日，提前埋伏笔）
+        const sendFestivalIdx = isSingleConv ? !!singleSettings.enableFestival : true;
+        if (wvForIndex && sendFestivalIdx) {
+          const fIdx = _buildFestivalIndex(wvForIndex.festivals || []);
+          if (fIdx) systemParts.push(fIdx);
+        }
+        // 单人卡扩展设定的节日索引
+        if (isSingleConv && singleSettings.charId && singleSettings.enableCardExtended !== false) {
+          try {
+            const _card = await SingleCard.get(singleSettings.charId);
+            if (_card && _card.extEnabled !== false) {
+              const _hiddenWv = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
+              if (_hiddenWv) {
+                const _cardFIdx = _buildFestivalIndex(_hiddenWv.festivals || []);
+                if (_cardFIdx) systemParts.push(_cardFIdx.replace('【世界观·节日索引】', '【单人卡·节日索引】'));
+                const _cardKIdx = _buildKnowledgeIndex(_hiddenWv.knowledges || []);
+                if (_cardKIdx) systemParts.push(_cardKIdx.replace('【世界观·知识条目索引】', '【单人卡·知识条目索引】'));
+              }
+            }
+          } catch(_) {}
+        }
       } catch (e) {}
     }
 
@@ -962,7 +983,9 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
 
   // 5b. 小纸条（情绪记忆碎片）
   try {
-    const notes = await Memory.retrieveNotes(presentNPCs);
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    const userInputText = lastUserMsg?.content || '';
+    const notes = await Memory.retrieveNotes(presentNPCs, userInputText);
     const notesPrompt = Memory.formatNotesForPrompt(notes);
     if (notesPrompt) systemParts.push(notesPrompt);
   } catch(_) {}
@@ -1512,7 +1535,17 @@ requestController.signal,
 // options
           {
             forceNoStream: !convSettings.stream,
-            tools: (convSettings.toolsEnabled && typeof Tools !== 'undefined') ? Tools.getDefinitions() : undefined,
+            tools: (() => {
+              if (typeof Tools === 'undefined') return undefined;
+              const allDefs = Tools.getDefinitions() || [];
+              const enabledDefs = allDefs.filter(d => {
+                const name = d.function?.name || '';
+                if (name.startsWith('query_worldview_')) return convSettings.toolsWorldview;
+                // 其余全归记忆类（小纸条/事件/关系/历史搜索）
+                return convSettings.toolsMemory;
+              });
+              return enabledDefs.length > 0 ? enabledDefs : undefined;
+            })(),
             onToolCalls: async (toolCalls, assistantMessage) => {
               try {
                 GameLog.log('info', `[Chat] AI 调用工具: ${toolCalls.map(t => t.function?.name).join(', ')}`);
@@ -3527,6 +3560,20 @@ if (names.length === 0) return '';
 return `【世界观·知识条目索引】\n本世界包含以下知识条目（详情会在你或玩家提及时自动补充）：\n${names.map(n => `· ${n}`).join('\n')}\n请在剧情自然的前提下灵活引用。`;
 }
 
+// 构建节日索引（每轮发名字+日期，让 AI 能预知后续节日）
+// 时间命中的节日已通过 _buildFestivalPrompt 单独发完整内容，索引里不去重（就那么点字）
+function _buildFestivalIndex(festivals) {
+if (!festivals || festivals.length === 0) return '';
+const enabled = festivals.filter(f => f && f.enabled !== false);
+if (enabled.length === 0) return '';
+const lines = enabled.map(f => {
+let s = `· ${f.name || '未命名'}`;
+if (f.date) s += `（${f.date}${f.yearly ? '，每年' : ''}）`;
+return s;
+});
+return `【世界观·节日索引】\n本世界包含以下节日（详情会在游戏时间临近时自动补充）：\n${lines.join('\n')}\n可在剧情自然提及时灵活引用，提前埋伏笔。`;
+}
+
 // 构建知识设定提示（最近2轮对话出现关键词时触发）
 // v581：只处理动态条目（keywordTrigger=true）
 function _buildKnowledgePrompt(knowledges, messages) {
@@ -3929,6 +3976,27 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           const idx = _buildKnowledgeIndex(wvForIndex.knowledges || []);
           if (idx) systemParts.push(idx);
         }
+        // 节日索引
+        const sendFestivalIdx2 = isSingleConv ? !!singleSettings.enableFestival : true;
+        if (wvForIndex && sendFestivalIdx2) {
+          const fIdx = _buildFestivalIndex(wvForIndex.festivals || []);
+          if (fIdx) systemParts.push(fIdx);
+        }
+        // 单人卡扩展设定的节日/知识索引
+        if (isSingleConv && singleSettings.charId && singleSettings.enableCardExtended !== false) {
+          try {
+            const _card = await SingleCard.get(singleSettings.charId);
+            if (_card && _card.extEnabled !== false) {
+              const _hiddenWv = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
+              if (_hiddenWv) {
+                const _cardFIdx = _buildFestivalIndex(_hiddenWv.festivals || []);
+                if (_cardFIdx) systemParts.push(_cardFIdx.replace('【世界观·节日索引】', '【单人卡·节日索引】'));
+                const _cardKIdx = _buildKnowledgeIndex(_hiddenWv.knowledges || []);
+                if (_cardKIdx) systemParts.push(_cardKIdx.replace('【世界观·知识条目索引】', '【单人卡·知识条目索引】'));
+              }
+            }
+          } catch(_) {}
+        }
       } catch (e) {}
     }
 
@@ -3997,11 +4065,13 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       if (memoryPrompt) systemParts.push(memoryPrompt);
 
       // 小纸条（情绪记忆碎片）
-      try {
-        const notes = await Memory.retrieveNotes(presentNPCs);
-        const notesPrompt = Memory.formatNotesForPrompt(notes);
-        if (notesPrompt) systemParts.push(notesPrompt);
-      } catch(_) {}
+try {
+  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+  const userInputText = lastUserMsg?.content || '';
+  const notes = await Memory.retrieveNotes(presentNPCs, userInputText);
+  const notesPrompt = Memory.formatNotesForPrompt(notes);
+  if (notesPrompt) systemParts.push(notesPrompt);
+} catch(_) {}
     }
 
     // 6. 提示词注入
@@ -4389,10 +4459,11 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         all: !!voice.scopeAll,
         quotes: Array.isArray(voice.quotes) ? voice.quotes : []
       },
-      bgImage: conv?.convBgImage || '',
-      imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
-      toolsEnabled: !!conv?.convToolsEnabled,       // 默认关（AI工具调用）
-      autoExtract: conv?.convAutoExtract !== false,  // 默认开（自动记忆提取）
+bgImage: conv?.convBgImage || '',
+        imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
+        toolsMemory: !!conv?.convToolsMemory,          // 默认关（记忆类工具）
+        toolsWorldview: !!conv?.convToolsWorldview,    // 默认关（世界观查询工具）
+        autoExtract: conv?.convAutoExtract !== false,  // 默认开（自动记忆提取）
       replyWordCount: conv?.convReplyWordCount || 800,  // 默认800字
       directive: conv?.convDirective || '',              // 剧情引导内容
       directiveRemaining: conv?.convDirectiveRemaining || 0, // 剩余轮数
@@ -4500,8 +4571,10 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     const igEl = document.getElementById('cs-imggen');
     if (igEl) igEl.checked = s.imgGen;
     // 工具调用
-    const toolsEl = document.getElementById('cs-tools-enabled');
-    if (toolsEl) toolsEl.checked = s.toolsEnabled;
+    const toolsMemEl = document.getElementById('cs-tools-memory');
+    if (toolsMemEl) toolsMemEl.checked = s.toolsMemory;
+    const toolsWvEl = document.getElementById('cs-tools-worldview');
+    if (toolsWvEl) toolsWvEl.checked = s.toolsWorldview;
     // 自动记忆提取
     const aeEl = document.getElementById('cs-auto-extract');
     if (aeEl) aeEl.checked = s.autoExtract;
@@ -4525,8 +4598,10 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     if (ocEl) conv.convOnlineChat = ocEl.checked;
     const igSaveEl = document.getElementById('cs-imggen');
     if (igSaveEl) conv.convImgGen = igSaveEl.checked;
-    const toolsSaveEl = document.getElementById('cs-tools-enabled');
-    if (toolsSaveEl) conv.convToolsEnabled = toolsSaveEl.checked;
+    const toolsMemSaveEl = document.getElementById('cs-tools-memory');
+    if (toolsMemSaveEl) conv.convToolsMemory = toolsMemSaveEl.checked;
+    const toolsWvSaveEl = document.getElementById('cs-tools-worldview');
+    if (toolsWvSaveEl) conv.convToolsWorldview = toolsWvSaveEl.checked;
     const aeSaveEl = document.getElementById('cs-auto-extract');
     if (aeSaveEl) conv.convAutoExtract = aeSaveEl.checked;
     const evEl = document.getElementById('cs-events-enabled');

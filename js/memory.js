@@ -174,33 +174,78 @@ const Memory = (() => {
   }
 
   /**
-   * 小纸条检索：按在场角色 + 标签命中，无命中随机，返回 3-5 条
+   * 小纸条检索：双路评分（在场角色 + 本轮用户输入命中），命中不够纯随机补，返回 3-5 条
    */
-  async function retrieveNotes(presentNPCNames = []) {
+  // 简易中文停用词表
+  const _NOTE_STOPWORDS = new Set([
+    '我们','你们','他们','她们','它们','自己','这个','那个','这些','那些','什么',
+    '怎么','为什么','可能','觉得','应该','但是','不过','然后','所以','因为',
+    '一个','一下','一些','一直','一定','已经','或者','不是','就是','还是',
+    '没有','现在','以后','以前','刚才','刚刚','上次','下次','可以','需要',
+    '今天','明天','昨天','后来','后面','前面','里面','外面','上面','下面'
+  ]);
+
+  function _extractDetailTokens(detail) {
+    if (!detail) return [];
+    // 切 2-4 字滑动窗口 token，过滤纯标点/纯空白/停用词
+    const s = String(detail);
+    const tokens = new Set();
+    for (let len = 2; len <= 4; len++) {
+      for (let i = 0; i + len <= s.length; i++) {
+        const tok = s.slice(i, i + len);
+        // 过滤纯标点、含空白、纯数字
+        if (/^[\s\p{P}]+$/u.test(tok)) continue;
+        if (/\s/.test(tok)) continue;
+        if (_NOTE_STOPWORDS.has(tok)) continue;
+        tokens.add(tok);
+      }
+    }
+    return [...tokens];
+  }
+
+  async function retrieveNotes(presentNPCNames = [], userInputText = '') {
     const allMemories = await DB.getAll('memories');
     const currentScope = Character.getCurrentId();
     const notes = allMemories.filter(m => m.type === 'note' && m.scope === currentScope);
     if (notes.length === 0) return [];
 
-    // 计算匹配分
+    const userText = String(userInputText || '');
+
+    // 计算匹配分（双路）
     const scored = notes.map(n => {
       let score = 0;
-      // 角色命中（任意一个在场就算）
+      // 路1：角色命中
       if (n.characters?.length && presentNPCNames.length) {
         const hit = n.characters.some(c => presentNPCNames.includes(c));
         if (hit) score += 2;
       }
+      // 路2：用户本轮输入命中 detail 关键词
+      if (userText && n.detail) {
+        const tokens = _extractDetailTokens(n.detail);
+        const anyHit = tokens.some(t => userText.includes(t));
+        if (anyHit) score += 3;
+      }
       return { note: n, score };
     });
 
-    // 有命中的优先取命中的，否则全池随机
-    const matched = scored.filter(s => s.score > 0);
-    const pool = matched.length > 0 ? matched.map(s => s.note) : notes;
+    const matched = scored.filter(s => s.score > 0).map(s => s.note);
+    const matchedIds = new Set(matched.map(n => n.id));
 
-    // 随机抽 3-5 条
-    const count = Math.min(pool.length, 3 + Math.floor(Math.random() * 3)); // 3~5
-    const shuffled = pool.slice().sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
+    // 目标抽 3-5 条
+    const targetCount = Math.min(notes.length, 3 + Math.floor(Math.random() * 3));
+
+    let result;
+    if (matched.length >= targetCount) {
+      // 命中够多 → 全部从命中里随机抽
+      const shuffled = matched.slice().sort(() => Math.random() - 0.5);
+      result = shuffled.slice(0, targetCount);
+    } else {
+      // 命中不够 → 命中的全要 + 剩下从未命中里随机补
+      const others = notes.filter(n => !matchedIds.has(n.id));
+      const shuffledOthers = others.slice().sort(() => Math.random() - 0.5);
+      result = matched.concat(shuffledOthers.slice(0, targetCount - matched.length));
+    }
+    return result;
   }
 
   function formatNotesForPrompt(notes) {
@@ -285,17 +330,44 @@ const Memory = (() => {
     // 按对话隔离：默认只返回当前对话 + legacy（开关开启时才取legacy）
     const currentConvId = opts.currentConvId || '';
     const crossWindow = !!opts.crossWindow;
+    const userInputText = String(opts.userInputText || '');
 
     if (!crossWindow) {
       // 关闭跨窗口：只看当前对话的（legacy 也不读，避免污染）
       notes = notes.filter(n => (n.convId || '__legacy__') === currentConvId);
     }
-    // crossWindow=true 时全部纳入
 
     if (notes.length === 0) return [];
-    const count = Math.min(notes.length, 3 + Math.floor(Math.random() * 3));
-    const shuffled = notes.slice().sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
+
+    // 路2：用户输入命中 detail 关键词（+1，比主线轻）
+    const scored = notes.map(n => {
+      let score = 0;
+      if (userInputText && n.detail) {
+        const tokens = _extractDetailTokens(n.detail);
+        const anyHit = tokens.some(t => userInputText.includes(t));
+        if (anyHit) score += 1;
+      }
+      return { note: n, score };
+    });
+
+    const matched = scored.filter(s => s.score > 0).map(s => s.note);
+    const matchedIds = new Set(matched.map(n => n.id));
+
+    // 跨窗口模式塞多点：6-10；单对话模式：5-8
+    const baseMin = crossWindow ? 6 : 5;
+    const baseRange = crossWindow ? 5 : 4; // crossWindow: 6-10, 单: 5-8
+    const targetCount = Math.min(notes.length, baseMin + Math.floor(Math.random() * baseRange));
+
+    let result;
+    if (matched.length >= targetCount) {
+      const shuffled = matched.slice().sort(() => Math.random() - 0.5);
+      result = shuffled.slice(0, targetCount);
+    } else {
+      const others = notes.filter(n => !matchedIds.has(n.id));
+      const shuffledOthers = others.slice().sort(() => Math.random() - 0.5);
+      result = matched.concat(shuffledOthers.slice(0, targetCount - matched.length));
+    }
+    return result;
   }
 
   function formatBackstageNotesForPrompt(notes, opts = {}) {

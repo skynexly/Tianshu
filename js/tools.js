@@ -11,6 +11,105 @@ const Tools = (() => {
   const OK = (data) => JSON.stringify(data);
   const ERR = (msg) => JSON.stringify({ error: msg });
 
+  // ===== 世界观查询 helper =====
+  // 返回当前对话能访问的所有世界观对象（主世界观 + 单人卡隐藏世界观）
+  async function _getAccessibleWorldviews() {
+    const result = [];
+    try {
+      const singleSettings = (typeof SingleMode !== 'undefined') ? SingleMode.getCurrentSingleSettings() : null;
+      if (singleSettings && singleSettings.worldviewId) {
+        const wv = await DB.get('worldviews', singleSettings.worldviewId);
+        if (wv) result.push({ wv, source: 'worldview' });
+        if (singleSettings.charType === 'card' && singleSettings.charId) {
+          const hidden = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
+          if (hidden) result.push({ wv: hidden, source: 'card' });
+        }
+      } else if (typeof Worldview !== 'undefined' && Worldview.getCurrent) {
+        const wv = await Worldview.getCurrent();
+        if (wv) result.push({ wv, source: 'worldview' });
+      }
+    } catch(_) {}
+    return result;
+  }
+
+  // 在世界观里找某个名字（地区/势力/地点/全图NPC/角色NPC）
+  // kind: 'region' | 'faction' | 'npc' | undefined（不传则全找）
+  function _findInWorldview(wv, name, kind) {
+    if (!wv || !name) return [];
+    const target = String(name).trim().toLowerCase();
+    const hits = [];
+    const matches = (s) => s && String(s).toLowerCase() === target;
+    const includes = (s) => s && String(s).toLowerCase().includes(target);
+    // 地区
+    if (!kind || kind === 'region') {
+      (wv.regions || []).forEach(r => {
+        if (matches(r.name)) {
+          hits.push({ kind: 'region', exact: true, name: r.name, summary: r.summary || '', detail: r.detail || '' });
+        } else if (includes(r.name)) {
+          hits.push({ kind: 'region', exact: false, name: r.name, summary: r.summary || '', detail: r.detail || '' });
+        }
+      });
+    }
+    // 势力
+    if (!kind || kind === 'faction') {
+      (wv.regions || []).forEach(r => (r.factions || []).forEach(f => {
+        if (matches(f.name)) {
+          hits.push({ kind: 'faction', exact: true, name: f.name, region: r.name, summary: f.summary || '', detail: f.detail || '' });
+        } else if (includes(f.name)) {
+          hits.push({ kind: 'faction', exact: false, name: f.name, region: r.name, summary: f.summary || '', detail: f.detail || '' });
+        }
+      }));
+    }
+    // NPC（全图 + 各势力）
+    if (!kind || kind === 'npc') {
+      const npcMatch = (n, where) => {
+        const aliasHit = n.aliases && String(n.aliases).toLowerCase().split(/[,，、]/).some(a => a.trim() === target);
+        if (matches(n.name) || aliasHit) {
+          hits.push({ kind: 'npc', exact: true, name: n.name, aliases: n.aliases || '', where, summary: n.summary || '', detail: n.detail || '' });
+        } else if (includes(n.name) || (n.aliases && String(n.aliases).toLowerCase().includes(target))) {
+          hits.push({ kind: 'npc', exact: false, name: n.name, aliases: n.aliases || '', where, summary: n.summary || '', detail: n.detail || '' });
+        }
+      };
+      (wv.globalNpcs || []).forEach(n => npcMatch(n, '全图常驻'));
+      (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => npcMatch(n, `${r.name || '?'} / ${f.name || '?'}`))));
+    }
+    return hits;
+  }
+
+  // 在世界观里搜扩展设定（节日/常驻/动态，不含事件）
+  // kind: 'festival' | 'resident' | 'dynamic' | undefined
+  function _searchExtended(wv, keyword, kind) {
+    if (!wv) return [];
+    const kw = String(keyword || '').trim().toLowerCase();
+    if (!kw) return [];
+    const hits = [];
+    const includesKw = (s) => s && String(s).toLowerCase().includes(kw);
+    if (!kind || kind === 'festival') {
+      (wv.festivals || []).filter(f => f && f.enabled !== false).forEach(f => {
+        if (includesKw(f.name) || includesKw(f.content) || includesKw(f.date)) {
+          hits.push({ kind: 'festival', name: f.name || '未命名', date: f.date || '', yearly: !!f.yearly, content: f.content || '' });
+        }
+      });
+    }
+    const knowledges = (wv.knowledges || []).filter(k => k && k.enabled !== false);
+    if (!kind || kind === 'resident') {
+      knowledges.filter(k => !k.keywordTrigger).forEach(k => {
+        if (includesKw(k.name) || includesKw(k.content) || includesKw(k.keys)) {
+          hits.push({ kind: 'resident', name: k.name || '未命名', content: k.content || '' });
+        }
+      });
+    }
+    if (!kind || kind === 'dynamic') {
+      knowledges.filter(k => k.keywordTrigger).forEach(k => {
+        if (includesKw(k.name) || includesKw(k.content) || includesKw(k.keys)) {
+          hits.push({ kind: 'dynamic', name: k.name || '未命名', keys: k.keys || '', content: k.content || '' });
+        }
+      });
+    }
+    return hits;
+  }
+
+
   // ===== 前台工具定义 =====
   const definitions = [
     // --- 小纸条 ---
@@ -113,6 +212,32 @@ const Tools = (() => {
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'关系记忆 id' }
       }, required:['id'] }
+    }},
+    // --- 世界观查询 ---
+    { type:'function', function:{
+      name:'query_worldview_detail',
+      description:'按名字查地区/势力/NPC的详细设定。每轮只发了简介+索引，想要完整 detail 时调用。只返回该条目本身，不会带出下属（查地区不返回里面的势力/NPC）。',
+      parameters:{ type:'object', properties:{
+        name:{ type:'string', description:'要查的名字（地区名/势力名/NPC名/NPC别名）' },
+        kind:{ type:'string', enum:['region','faction','npc'], description:'限定类型；不传则地区/势力/NPC 都搜' }
+      }, required:['name'] }
+    }},
+    { type:'function', function:{
+      name:'query_worldview_extended',
+      description:'按关键词搜扩展设定（节日/常驻条目/动态条目）的完整内容。常驻条目每轮已全发，动态条目只发了名字索引；想看动态条目详情或确认有没有相关设定时调用。不含事件。',
+      parameters:{ type:'object', properties:{
+        keyword:{ type:'string', description:'搜索关键词（在名字/内容/触发词里找）' },
+        kind:{ type:'string', enum:['festival','resident','dynamic'], description:'限定类型；不传则三类都搜' }
+      }, required:['keyword'] }
+    }},
+    // --- 历史消息搜索 ---
+    { type:'function', function:{
+      name:'search_messages',
+      description:'按关键词搜当前对话被归档的历史消息。归档消息是被总结剥离掉、当前已经看不到的旧对话；搜不到通常说明这部分对话还在上下文里能直接看到。每条命中会带上前后各 1 条作为上下文。',
+      parameters:{ type:'object', properties:{
+        keyword:{ type:'string', description:'搜索关键词' },
+        limit:{ type:'number', description:'返回的命中段落数，默认 3，最大 5' }
+      }, required:['keyword'] }
     }}
   ];
 
@@ -168,6 +293,50 @@ const Tools = (() => {
       name:'remove_directive',
       description:'清空当前主线的剧情引导。仅在用户明确同意撤销时使用。',
       parameters:{ type:'object', properties:{}, required:[] }
+    }},
+    // --- 世界观查询（后台也能查，方便闲聊时引用设定） ---
+    { type:'function', function:{
+      name:'query_worldview_detail',
+      description:'按名字查这个对话挂载的世界观里的地区/势力/NPC的详细设定。只返回该条目本身，不含下属。',
+      parameters:{ type:'object', properties:{
+        name:{ type:'string', description:'要查的名字（地区名/势力名/NPC名/NPC别名）' },
+        kind:{ type:'string', enum:['region','faction','npc'], description:'限定类型；不传则全搜' }
+      }, required:['name'] }
+    }},
+    { type:'function', function:{
+      name:'query_worldview_extended',
+      description:'按关键词搜这个对话挂载的世界观的扩展设定（节日/常驻/动态条目）的完整内容。不含事件。',
+      parameters:{ type:'object', properties:{
+        keyword:{ type:'string', description:'搜索关键词' },
+        kind:{ type:'string', enum:['festival','resident','dynamic'], description:'限定类型；不传则三类都搜' }
+      }, required:['keyword'] }
+    }},
+    // --- 历史消息搜索（后台搜的是主线归档，方便回顾旧剧情） ---
+    { type:'function', function:{
+      name:'search_messages',
+      description:'按关键词搜主线对话被归档的历史消息。归档是被总结剥离掉、当前已经看不到的旧对话内容。每条命中会带前后各 1 条作为上下文。',
+      parameters:{ type:'object', properties:{
+        keyword:{ type:'string', description:'搜索关键词' },
+        limit:{ type:'number', description:'返回的命中段落数，默认 3，最大 5' }
+      }, required:['keyword'] }
+    }},
+    // --- 复用前台的事件 / 关系查询 ---
+    { type:'function', function:{
+      name:'query_events',
+      description:'查询主线已记录的剧情事件。可按关键词搜索标题/内容/参与者/地点。',
+      parameters:{ type:'object', properties:{
+        keyword:{ type:'string', description:'搜索关键词' },
+        participant:{ type:'string', description:'按参与者筛选' },
+        limit:{ type:'number', description:'返回条数上限，默认5' }
+      }, required:[] }
+    }},
+    { type:'function', function:{
+      name:'query_relations',
+      description:'查询主线人际关系记忆。可按角色名搜索。',
+      parameters:{ type:'object', properties:{
+        name:{ type:'string', description:'角色名（精确或模糊）' },
+        limit:{ type:'number', description:'返回条数上限，默认5' }
+      }, required:[] }
     }}
   ];
 
@@ -366,6 +535,105 @@ const Tools = (() => {
       conv.convDirectiveTotal = 0;
       await Conversations.saveList();
       return OK({ success:true, message:'剧情引导已清空。' });
+    },
+
+    // --- 世界观查询 ---
+    async query_worldview_detail(args) {
+      if (!args.name) return ERR('缺少 name');
+      const sources = await _getAccessibleWorldviews();
+      if (sources.length === 0) return OK({ result: '当前对话没有挂载世界观。' });
+      const allHits = [];
+      for (const { wv, source } of sources) {
+        const hits = _findInWorldview(wv, args.name, args.kind);
+        hits.forEach(h => allHits.push({ ...h, _from: source === 'card' ? '单人卡' : (wv.name || '世界观') }));
+      }
+      if (allHits.length === 0) return OK({ result: `没找到名为「${args.name}」的${args.kind ? args.kind : '地区/势力/NPC'}。` });
+      // 精确匹配优先
+      const exact = allHits.filter(h => h.exact);
+      const fuzzy = allHits.filter(h => !h.exact);
+      const items = (exact.length > 0 ? exact : fuzzy).slice(0, 5).map(h => {
+        const item = { kind: h.kind, name: h.name, source: h._from };
+        if (h.kind === 'faction') item.region = h.region;
+        if (h.kind === 'npc') {
+          if (h.aliases) item.aliases = h.aliases;
+          if (h.where) item.where = h.where;
+        }
+        if (h.summary) item.summary = h.summary;
+        if (h.detail) item.detail = h.detail;
+        return item;
+      });
+      const note = exact.length === 0 ? `（没有完全匹配，返回模糊匹配结果）` : undefined;
+      return OK(note ? { items, note } : { items });
+    },
+
+    async query_worldview_extended(args) {
+      if (!args.keyword) return ERR('缺少 keyword');
+      const sources = await _getAccessibleWorldviews();
+      if (sources.length === 0) return OK({ result: '当前对话没有挂载世界观。' });
+      const allHits = [];
+      for (const { wv, source } of sources) {
+        const hits = _searchExtended(wv, args.keyword, args.kind);
+        hits.forEach(h => allHits.push({ ...h, source: source === 'card' ? '单人卡' : (wv.name || '世界观') }));
+      }
+      if (allHits.length === 0) return OK({ result: `没找到包含「${args.keyword}」的${args.kind ? args.kind : '扩展'}设定。` });
+      const items = allHits.slice(0, 8);
+      return OK({ items });
+    },
+
+    // --- 历史消息搜索（搜主线归档） ---
+    async search_messages(args) {
+      if (!args.keyword) return ERR('缺少 keyword');
+      const kw = String(args.keyword).toLowerCase();
+      const limit = Math.min(Math.max(parseInt(args.limit) || 3, 1), 5);
+      // 主线 conversationId（不是后台的 backstageConvId）
+      const convId = Conversations.getCurrent();
+      if (!convId) return OK({ result: '当前没有对话。' });
+      let archives = [];
+      try {
+        archives = await Summary.getArchives(convId);
+      } catch(_) {}
+      if (!archives || archives.length === 0) {
+        return OK({ result: '当前对话还没有归档消息。所有历史对话应该都在你的上下文里能直接看到。' });
+      }
+      // 把所有归档消息拍平成一个数组，记下原 archive 的归档时间
+      const flat = [];
+      // 按归档时间倒序（最近归档的优先搜）
+      const sorted = archives.slice().sort((a, b) => (b.archivedAt || 0) - (a.archivedAt || 0));
+      sorted.forEach(arch => {
+        (arch.messages || []).forEach((m, idx) => {
+          flat.push({
+            role: m.role,
+            content: m.content || '',
+            timestamp: m.timestamp,
+            archivedAt: arch.archivedAt,
+            archIdx: flat.length // 全局位置，用于取上下文
+          });
+        });
+      });
+      // 命中
+      const hits = [];
+      for (let i = 0; i < flat.length; i++) {
+        if (typeof flat[i].content !== 'string') continue;
+        if (flat[i].content.toLowerCase().includes(kw)) {
+          hits.push(i);
+          if (hits.length >= limit) break;
+        }
+      }
+      if (hits.length === 0) {
+        return OK({ result: `归档消息里没找到包含「${args.keyword}」的内容。这部分对话可能还在你的上下文里。` });
+      }
+      const segments = hits.map(idx => {
+        const before = idx > 0 ? flat[idx - 1] : null;
+        const hit = flat[idx];
+        const after = idx < flat.length - 1 ? flat[idx + 1] : null;
+        const lines = [];
+        const fmt = (m) => `[${m.role === 'user' ? '玩家' : 'AI'}] ${typeof m.content === 'string' ? m.content : '[非文本内容]'}`;
+        if (before) lines.push(fmt(before));
+        lines.push('▶ ' + fmt(hit));
+        if (after) lines.push(fmt(after));
+        return { archivedAt: hit.archivedAt, context: lines.join('\n') };
+      });
+      return OK({ items: segments });
     }
   };
 

@@ -1464,10 +1464,22 @@
                 <span class="circle-check-ui"></span>
               </span>
             </label>
+          </div>
+
+          <!-- 工具列表 -->
+          <div style="display:flex;flex-direction:column;gap:14px;padding:12px;background:var(--bg-tertiary);border-radius:8px;margin-top:14px">
+            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:-2px;line-height:1.4">工具列表<br><span style="font-size:11px;opacity:0.7">允许 AI 主动调用的工具，需站点支持 Function Calling。每项独立开关。</span></div>
             <label class="circle-check-label">
-              <span class="circle-check-text">允许调用工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 主动查询和记录记忆，需站点支持 Function Calling</span></span>
+              <span class="circle-check-text">记忆工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 主动查/记/改 小纸条、事件、人际关系</span></span>
               <span style="position:relative;display:inline-flex">
-                <input type="checkbox" id="cs-tools-enabled" class="circle-check">
+                <input type="checkbox" id="cs-tools-memory" class="circle-check">
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <label class="circle-check-label">
+              <span class="circle-check-text">世界观查询工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 按名查地区/势力/NPC，按词搜节日/常驻/动态条目（只读）</span></span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-tools-worldview" class="circle-check">
                 <span class="circle-check-ui"></span>
               </span>
             </label>
@@ -3945,6 +3957,20 @@ if ('serviceWorker' in navigator) {
       <h3 style="margin:0">后台设定</h3>
       <button onclick="Backstage.closePromptEdit()" class="btn-icon modal-corner-btn close-btn" title="关闭">×</button>
     </div>
+    <!-- 身份认知 -->
+    <div style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:14px;color:var(--text)">身份认知</span>
+        <button type="button" onclick="Backstage.toggleRolePicker(event)" id="backstage-role-display" style="display:flex;align-items:center;gap:6px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;color:var(--text);cursor:pointer;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <span id="backstage-role-name">自由</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </div>
+      <div id="backstage-role-picker" class="hidden" style="border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);padding:8px;max-height:280px;display:flex;flex-direction:column;gap:8px">
+        <input type="text" id="backstage-role-search" placeholder="搜索角色名…" oninput="Backstage.filterRolePicker()" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:6px 10px;background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;outline:none">
+        <div id="backstage-role-list" style="overflow-y:auto;max-height:220px;display:flex;flex-direction:column;gap:2px"></div>
+      </div>
+    </div>
     <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px">告诉后台AI它应该扮演什么角色、关注什么内容。留空则使用默认设定。</p>
     <textarea id="backstage-prompt-input" rows="6" placeholder="例如：&#10;· 你是（角色名），主线好累，来聊聊天。&#10;· 你是DM，给我解释下刚才的剧情。&#10;· 你是我的赛博军师，帮我支个招……" style="width:100%;resize:vertical;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg-secondary);color:var(--text);font-size:14px;line-height:1.8;box-sizing:border-box"></textarea>
     <label style="display:flex;align-items:center;justify-content:space-between;font-size:14px;margin-top:16px">
@@ -3989,6 +4015,14 @@ if ('serviceWorker' in navigator) {
 </span>
 </label>
 <span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 向主线注入临时剧情引导（设置前会向你确认）。</span>
+<label class="circle-check-label" style="margin-top:16px">
+<span class="circle-check-text">世界观查询工具</span>
+<span style="position:relative;display:inline-flex">
+<input type="checkbox" id="backstage-tools-worldview" class="circle-check" checked>
+<span class="circle-check-ui"></span>
+</span>
+</label>
+<span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 按名查地区/NPC，按词搜节日/常驻/动态条目（只读）。</span>
     <div class="modal-actions" style="margin-top:16px">
       <button onclick="Backstage.closePromptEdit()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
       <button onclick="Backstage.savePrompt()" style="flex:1;touch-action:manipulation;-webkit-tap-highlight-color:transparent">保存</button>
