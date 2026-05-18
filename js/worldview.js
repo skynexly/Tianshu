@@ -1269,15 +1269,92 @@ switchEditTab('basic');
   let _editFactionIdx = -1;
   let _editNPCIdx = -1;
   
+  // ====== 对话级编辑模式 ======
+  let _convEditMode = false;  // true = 编辑的是对话级 gameplay 副本
+  let _convEditConvId = null; // 当前编辑的对话 ID
+
   // 获取当前编辑中的worldview（从DB实时读取）
   async function _getEditingWV() {
+    if (_convEditMode && _convEditConvId) {
+      // 对话级模式：构造虚拟 WV 对象
+      const conv = Conversations.getList().find(c => c.id === _convEditConvId);
+      if (!conv || !conv.convGameplay) return null;
+      const wvId = conv.singleWorldviewId || conv.worldviewId || '';
+      const realWv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : {};
+      // 合并：基础信息来自真实世界观，gameplay 来自对话副本，events 来自对话副本
+      return { ...realWv, gameplay: conv.convGameplay, events: conv.convEvents || realWv?.events || [], id: wvId || '__conv_edit__' };
+    }
     if (!editingWorldviewId) return null;
     return await DB.get('worldviews', editingWorldviewId);
   }
   async function _saveEditingWV(w) {
+    if (_convEditMode && _convEditConvId) {
+      // 对话级模式：只保存 gameplay 和 events 到 conv
+      const conv = Conversations.getList().find(c => c.id === _convEditConvId);
+      if (!conv) return;
+      conv.convGameplay = w.gameplay || { globalAttrs: [], characterAttrs: [], taskSystem: { phases: [] } };
+      conv.convEvents = w.events || [];
+      await Conversations.saveList();
+      if (typeof StatusBar !== 'undefined') StatusBar.refreshFromConv();
+      return;
+    }
     await DB.put('worldviews', w);
     // 立刻同步到运行时（仅当编辑的是当前激活世界观）
     await _syncRuntime(w);
+  }
+
+  // 从对话设置进入 gameplay 编辑
+  async function openConvGameplayEdit() {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (!conv) return;
+    // 确保有对话级副本
+    if (!conv.convGameplay) {
+      const wvId = conv.singleWorldviewId || conv.worldviewId || '';
+      const wv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : null;
+      const hasExisting = wv && wv.gameplay && (wv.gameplay.globalAttrs?.length || wv.gameplay.characterAttrs?.length || wv.gameplay.taskSystem?.phases?.length);
+      if (hasExisting) {
+        if (!await UI.showConfirm('创建对话级配置', '将从世界观复制一份配置到当前对话。\n之后修改只影响本对话，不影响世界观原件。\n继续？')) return;
+        conv.convGameplay = JSON.parse(JSON.stringify(wv.gameplay));
+      } else {
+        if (!await UI.showConfirm('创建对话级配置', '当前世界观无已有配置，将为本对话创建空白配置。\n继续？')) return;
+        conv.convGameplay = { globalAttrs: [], characterAttrs: [], taskSystem: { phases: [] } };
+      }
+      await Conversations.saveList();
+    }
+    if (!conv.convEvents) {
+      const wvId = conv.singleWorldviewId || conv.worldviewId || '';
+      const wv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : null;
+      conv.convEvents = JSON.parse(JSON.stringify(wv?.events || []));
+      await Conversations.saveList();
+    }
+    // 设置对话级编辑模式
+    _convEditMode = true;
+    _convEditConvId = conv.id;
+    editingWorldviewId = conv.singleWorldviewId || conv.worldviewId || '__conv_edit__';
+    // 打开世界观编辑面板，直接跳到 gameplay tab
+    UI.showPanel('worldview-edit', 'right');
+    await _loadEditForm(editingWorldviewId);
+    switchEditTab('gameplay');
+  }
+
+  // 退出对话级编辑模式（在返回时调用）
+  function _exitConvEditMode() {
+    _convEditMode = false;
+    _convEditConvId = null;
+  }
+
+  // 编辑面板返回按钮
+  function backFromEdit() {
+    if (_convEditMode) {
+      _exitConvEditMode();
+      UI.showPanel('chat', 'back');
+    } else if (_editReturnTo) {
+      const target = _editReturnTo;
+      _editReturnTo = null;
+      UI.showPanel(target, 'back');
+    } else {
+      UI.showPanel('worldview', 'back');
+    }
   }
   
   // ---------- 详细设定Tab：地区卡片列表 ----------
@@ -4103,7 +4180,7 @@ async function pickDefaultTheme(value) {
     toggleMenu,
     toggleSortMode, exitSortMode, saveSortOrder,
     renderWorldviewList,
-    switchEditTab,
+    switchEditTab, backFromEdit, openConvGameplayEdit,
 switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromMenu, toggleExtIoMenu, exportExtended, importExtended,
     toggleCustomEnabled, toggleKnowledgeEnabled, toggleFestivalEnabled,
     addEvent, editEvent, saveEventFromModal, deleteEventFromModal, closeEventModal, syncEventTriggerTypeUI, addEventAttrCondition, updateEventAttrCondition, removeEventAttrCondition,

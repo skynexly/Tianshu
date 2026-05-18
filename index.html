@@ -1407,10 +1407,7 @@
             </label>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
               <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">查看并重置当前对话的事件进度。</div>
-              <div style="display:flex;gap:6px">
-                <button type="button" onclick="Chat.openConvEventEditor()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap">编辑事件</button>
-                <button type="button" onclick="Chat.openEventManagerModal()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap">管理事件</button>
-              </div>
+              <button type="button" onclick="Chat.openEventManagerModal()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap">管理事件</button>
             </div>
             <label class="circle-check-label">
               <span class="circle-check-text">任务系统<br><span style="font-size:11px;color:var(--text-secondary)">启用世界观配置的任务阶段，AI 按类型池发布任务并自动结算奖励</span></span>
@@ -1421,15 +1418,12 @@
             </label>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
               <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">重置当前对话的任务进度。</div>
-              <div style="display:flex;gap:6px">
-                <button type="button" onclick="Chat.openConvTaskEditor()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap">编辑任务</button>
-                <button type="button" onclick="UI.showConfirm('重置任务系统','将清空当前对话的所有任务进度（阶段、已完成数、活跃任务），不可撤销。\n确定继续？').then(ok=>{if(ok)StatusBar.taskReset().then(()=>{UI.showToast('任务系统已重置',1500);StatusBar.refreshFromConv()})})" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--danger);font-size:12px;cursor:pointer;white-space:nowrap">重置任务</button>
-              </div>
+              <button type="button" onclick="UI.showConfirm('重置任务系统','将清空当前对话的所有任务进度（阶段、已完成数、活跃任务），不可撤销。\n确定继续？').then(ok=>{if(ok)StatusBar.taskReset().then(()=>{UI.showToast('任务系统已重置',1500);StatusBar.refreshFromConv()})})" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--danger);font-size:12px;cursor:pointer;white-space:nowrap">重置任务</button>
             </div>
-            <!-- 属性配置 -->
+            <!-- 对话级玩法配置编辑 -->
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
-              <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">编辑当前对话的属性配置（不影响世界观原件）。</div>
-              <button type="button" onclick="Chat.openConvAttrEditor()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap">编辑属性</button>
+              <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">编辑当前对话的属性/任务/事件配置（完整编辑面板，不影响世界观原件）。</div>
+              <button type="button" onclick="Chat.closeConvSettingsModal();Worldview.openConvGameplayEdit()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap">编辑配置</button>
             </div>
             <!-- 恢复世界观默认 -->
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
@@ -2488,7 +2482,7 @@
   <section id="panel-worldview-edit" class="panel">
     <div class="panel-content">
       <div style="margin-bottom:16px">
-        <button class="btn-icon" onclick="UI.showPanel('worldview', 'back')" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;margin-bottom:12px">
+        <button class="btn-icon" onclick="Worldview.backFromEdit()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;margin-bottom:12px">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <div style="display:flex;justify-content:space-between;align-items:center">
