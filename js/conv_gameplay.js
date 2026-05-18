@@ -404,11 +404,350 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     document.body.appendChild(modal);
   }
 
+  // ========== 对话级属性编辑器 ==========
+
+  async function _ensureConvGameplay() {
+    const conv = _getConv();
+    if (!conv) return null;
+    if (!conv.convGameplay) {
+      const wvId = conv.singleWorldviewId || conv.worldviewId || '';
+      const wv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : null;
+      const hasGp = wv && wv.gameplay && (
+        (wv.gameplay.globalAttrs && wv.gameplay.globalAttrs.length) ||
+        (wv.gameplay.characterAttrs && wv.gameplay.characterAttrs.length)
+      );
+      const msg = hasGp
+        ? '将从世界观复制属性配置到当前对话。\n之后修改只影响本对话，不影响世界观原件。\n继续？'
+        : '当前世界观无属性配置，将为本对话创建空白属性配置。\n继续？';
+      if (!await UI.showConfirm('创建对话级属性配置', msg)) return null;
+      conv.convGameplay = hasGp
+        ? JSON.parse(JSON.stringify(wv.gameplay))
+        : { globalAttrs: [], characterAttrs: [], taskSystem: { phases: [] } };
+      await Conversations.saveList();
+    }
+    return conv;
+  }
+
+  async function _saveConvGameplay(gp) {
+    const conv = _getConv();
+    if (!conv) return;
+    conv.convGameplay = gp;
+    await Conversations.saveList();
+  }
+
+  // ----- 属性行渲染 -----
+  function _renderConvAttrRows(attrs, scope, charIdx) {
+    if (!attrs || !attrs.length) {
+      return '<div style="padding:12px;color:var(--text-secondary);font-size:12px;text-align:center;border:1px dashed var(--border);border-radius:8px">暂无属性</div>';
+    }
+    return attrs.map((a, i) => {
+      const name = (a.name || '').trim() || '未命名属性';
+      const maxText = (a.max === '' || a.max === null || a.max === undefined) ? '无上限' : `最大 ${a.max}`;
+      const summary = `初始 ${a.initial ?? 0} / ${maxText}`;
+      return `<div onclick="ConvGameplay.openAttrModal('${scope}', ${charIdx}, ${i})" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;background:var(--bg-secondary);border:1px solid color-mix(in srgb, var(--border) 55%, transparent);cursor:pointer">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(name)}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(summary)}</div>
+        </div>
+        <div style="color:var(--text-secondary);font-size:18px;line-height:1;opacity:.65">›</div>
+      </div>`;
+    }).join('');
+  }
+
+  let _cgAttrGp = null; // 当前编辑的 gameplay 引用
+
+  function _renderConvAttrs() {
+    const globalEl = document.getElementById('cg-global-attrs');
+    const charEl = document.getElementById('cg-char-attrs');
+    if (!_cgAttrGp) return;
+    const gp = _cgAttrGp;
+
+    if (globalEl) {
+      globalEl.innerHTML = `
+        <div style="padding:2px 0 10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--text)">用户 / 全局属性</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">通用于当前对话，可添加多条。</div>
+            </div>
+            <button type="button" onclick="ConvGameplay.openAttrModal('global', -1, -1)" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 添加属性</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">${_renderConvAttrRows(gp.globalAttrs, 'global', -1)}</div>
+        </div>`;
+    }
+
+    if (charEl) {
+      const cards = (gp.characterAttrs || []).map((c, idx) => `
+        <div style="padding:2px 0 10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+            <div style="min-width:0">
+              <div style="font-size:14px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(c.targetName || '未命名角色')}</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(c.sourceLabel || '')}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button type="button" onclick="ConvGameplay.openAttrModal('character', ${idx}, -1)" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 属性</button>
+              <button type="button" onclick="ConvGameplay.deleteCharCard(${idx})" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--danger);font-size:12px;cursor:pointer">移除</button>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">${_renderConvAttrRows(c.attrs || [], 'character', idx)}</div>
+        </div>
+      `).join('');
+
+      charEl.innerHTML = `
+        <div style="padding:2px 0 10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--text)">角色属性</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">先选择角色，再为该角色添加属性。</div>
+            </div>
+            <button type="button" onclick="ConvGameplay.toggleCharPicker()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">+ 角色</button>
+          </div>
+          <div id="cg-char-picker" class="hidden" style="margin-bottom:12px;border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--bg-secondary)">
+            <input id="cg-char-search" placeholder="搜索角色 / 别名 / 世界观" oninput="ConvGameplay.renderCharPicker(this.value)" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;margin-bottom:8px">
+            <div id="cg-char-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">${cards || '<div style="padding:12px;color:var(--text-secondary);font-size:12px;text-align:center;border:1px dashed var(--border);border-radius:8px">暂无角色属性卡片</div>'}</div>
+        </div>`;
+    }
+  }
+
+  // ----- 角色选择器 -----
+  let _charPickerCache = [];
+
+  async function _collectChars() {
+    const out = [];
+    try {
+      const cards = await SingleCard.getAll();
+      cards.forEach(c => out.push({ targetType: 'singleCard', targetId: c.id, sourceWorldviewId: '', targetName: c.name || '未命名角色', aliases: c.aliases || '', sourceLabel: '单人卡', avatar: c.avatar || '' }));
+    } catch(_) {}
+    try {
+      const allWvs = await DB.getAll('worldviews');
+      const avatarsArr = await DB.getAll('npcAvatars');
+      const avatarMap = {}; avatarsArr.forEach(a => { avatarMap[a.id] = a.avatar || ''; });
+      allWvs.forEach(wv => {
+        if (!wv || wv.id === '__default_wv__' || wv._hidden) return;
+        (wv.globalNpcs || []).forEach(n => out.push({ targetType: 'worldviewNpc', targetId: n.id, sourceWorldviewId: wv.id, targetName: n.name || '未命名', aliases: n.aliases || '', sourceLabel: `世界观：${wv.name || '未命名世界观'} / 全图常驻`, avatar: avatarMap[n.id] || n.avatar || '' }));
+        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => out.push({ targetType: 'worldviewNpc', targetId: n.id, sourceWorldviewId: wv.id, targetName: n.name || '未命名', aliases: n.aliases || '', sourceLabel: `世界观：${wv.name || '未命名世界观'} / ${r.name || '未命名地区'} / ${f.name || '未命名势力'}`, avatar: avatarMap[n.id] || n.avatar || '' }))));
+      });
+    } catch(_) {}
+    return out;
+  }
+
+  function _attrTargetKey(t) {
+    return [t?.targetType || '', t?.targetId || '', t?.sourceWorldviewId || ''].join(':');
+  }
+
+  async function toggleCharPicker() {
+    const box = document.getElementById('cg-char-picker');
+    if (!box) return;
+    box.classList.toggle('hidden');
+    if (!box.classList.contains('hidden')) {
+      const input = document.getElementById('cg-char-search');
+      if (input) input.value = '';
+      await renderCharPicker('');
+      setTimeout(() => input?.focus(), 50);
+    }
+  }
+
+  async function renderCharPicker(query) {
+    const listEl = document.getElementById('cg-char-list');
+    if (!listEl) return;
+    const q = String(query || '').toLowerCase().trim();
+    const chars = await _collectChars();
+    const filtered = q ? chars.filter(c => [c.targetName, c.aliases, c.sourceLabel].some(v => String(v || '').toLowerCase().includes(q))) : chars;
+    if (!filtered.length) {
+      listEl.innerHTML = `<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:12px">${q ? '没有匹配的角色' : '暂无可选角色'}</div>`;
+      return;
+    }
+    listEl.innerHTML = filtered.map((c, i) => `
+      <div onclick="ConvGameplay.selectChar(${i})" style="display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);cursor:pointer">
+        <div style="width:34px;height:34px;border-radius:50%;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex-shrink:0">${c.avatar ? `<img src="${_esc(c.avatar)}" style="width:100%;height:100%;object-fit:cover">` : _esc((c.targetName || '?').slice(0,1))}</div>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(c.targetName || '未命名')}${c.aliases ? `<span style="font-size:11px;color:var(--text-secondary)"> · ${_esc(c.aliases)}</span>` : ''}</div>
+          <div style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(c.sourceLabel || '')}</div>
+        </div>
+      </div>
+    `).join('');
+    _charPickerCache = filtered;
+  }
+
+  async function selectChar(idx) {
+    const c = _charPickerCache[idx];
+    if (!c || !_cgAttrGp) return;
+    const gp = _cgAttrGp;
+    if (!gp.characterAttrs) gp.characterAttrs = [];
+    const key = _attrTargetKey({ targetType: c.targetType, targetId: c.targetId, sourceWorldviewId: c.sourceWorldviewId });
+    if (gp.characterAttrs.some(x => _attrTargetKey(x) === key)) {
+      UI.showToast('这个角色已经有属性卡片了', 2000);
+      return;
+    }
+    gp.characterAttrs.push({ targetType: c.targetType, targetId: c.targetId, targetName: c.targetName, sourceWorldviewId: c.sourceWorldviewId || '', sourceLabel: c.sourceLabel || '', attrs: [] });
+    await _saveConvGameplay(gp);
+    _renderConvAttrs();
+    document.getElementById('cg-char-picker')?.classList.add('hidden');
+  }
+
+  async function deleteCharCard(idx) {
+    if (!_cgAttrGp) return;
+    const ok = await UI.showConfirm('移除角色属性', '只会移除此角色的属性配置，不会删除角色本身。确定移除吗？');
+    if (!ok) return;
+    _cgAttrGp.characterAttrs.splice(idx, 1);
+    await _saveConvGameplay(_cgAttrGp);
+    _renderConvAttrs();
+  }
+
+  // ----- 属性弹窗 -----
+  let _attrCtx = null; // { scope, charIdx, attrIdx, isNew }
+
+  function _defaultAttr() {
+    return { id: 'attr_' + Utils.uuid().slice(0, 8), name: '', initial: 0, max: '', desc: '' };
+  }
+
+  function _ensureAttrModal() {
+    if (document.getElementById('cg-attr-modal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'cg-attr-modal';
+    modal.className = 'modal hidden';
+    modal.innerHTML = `
+    <div class="modal-content" style="max-height:90vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0">
+        <h3 id="cg-attr-modal-title" style="margin:0;font-size:16px;color:var(--accent)">编辑属性</h3>
+        <button onclick="ConvGameplay.closeAttrModal()" style="background:none;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-right:4px">
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">属性名称
+          <input id="cg-attr-name" placeholder="例如：饱食度" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;outline:none;box-shadow:none">
+        </label>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text);min-width:0">初始值
+            <input id="cg-attr-initial" type="number" placeholder="0" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0;outline:none;box-shadow:none">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text);min-width:0">最大值
+            <input id="cg-attr-max" type="number" placeholder="留空=无上限" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0;outline:none;box-shadow:none">
+          </label>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">属性描述
+          <textarea id="cg-attr-desc" placeholder="让 AI 知道这个数值意味着什么" style="width:100%;box-sizing:border-box;min-height:110px;resize:vertical;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;line-height:1.5;outline:none;box-shadow:none"></textarea>
+        </label>
+        <div style="font-size:11px;color:var(--text-secondary);line-height:1.5">最大值留空表示无上限。这里保存的是属性定义，当前值存在对话状态栏中。</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;flex-shrink:0">
+        <button id="cg-attr-delete-btn" onclick="ConvGameplay.deleteAttrFromModal()" style="padding:9px 12px;border-radius:8px;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));background:none;color:var(--danger);font-size:13px;cursor:pointer">删除</button>
+        <div style="display:flex;gap:8px">
+          <button onclick="ConvGameplay.closeAttrModal()" style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button onclick="ConvGameplay.saveAttrFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+  }
+
+  function openAttrModal(scope, charIdx, attrIdx) {
+    if (!_cgAttrGp) return;
+    const gp = _cgAttrGp;
+    const list = scope === 'global' ? (gp.globalAttrs || []) : (gp.characterAttrs[charIdx]?.attrs || []);
+    const isNew = attrIdx < 0;
+    const attr = isNew ? _defaultAttr() : list[attrIdx];
+    if (!attr) return;
+    _attrCtx = { scope, charIdx, attrIdx, isNew };
+    _ensureAttrModal();
+    const title = document.getElementById('cg-attr-modal-title');
+    if (title) title.textContent = isNew ? (scope === 'global' ? '新增全局属性' : '新增角色属性') : '编辑属性';
+    const delBtn = document.getElementById('cg-attr-delete-btn');
+    if (delBtn) delBtn.style.visibility = isNew ? 'hidden' : 'visible';
+    document.getElementById('cg-attr-name').value = attr.name || '';
+    document.getElementById('cg-attr-initial').value = attr.initial ?? 0;
+    document.getElementById('cg-attr-max').value = attr.max ?? '';
+    document.getElementById('cg-attr-desc').value = attr.desc || '';
+    document.getElementById('cg-attr-modal')?.classList.remove('hidden');
+    setTimeout(() => document.getElementById('cg-attr-name')?.focus(), 80);
+  }
+
+  function closeAttrModal() {
+    _attrCtx = null;
+    document.getElementById('cg-attr-modal')?.classList.add('hidden');
+  }
+
+  async function saveAttrFromModal() {
+    if (!_attrCtx || !_cgAttrGp) return;
+    const gp = _cgAttrGp;
+    const list = _attrCtx.scope === 'global' ? (gp.globalAttrs || []) : (gp.characterAttrs[_attrCtx.charIdx]?.attrs || []);
+    const name = (document.getElementById('cg-attr-name')?.value || '').trim();
+    if (!name) { UI.showToast('请填写属性名称', 1800); return; }
+    if (list.some((x, i) => i !== _attrCtx.attrIdx && String(x.name || '').trim() === name)) {
+      UI.showToast(_attrCtx.scope === 'global' ? '全局属性名称不能重复' : '同一角色的属性名称不能重复', 1800);
+      return;
+    }
+    const attr = _attrCtx.isNew ? _defaultAttr() : list[_attrCtx.attrIdx];
+    if (!attr) return;
+    attr.name = name;
+    attr.desc = document.getElementById('cg-attr-desc')?.value || '';
+    const maxVal = document.getElementById('cg-attr-max')?.value || '';
+    const initVal = document.getElementById('cg-attr-initial')?.value || '';
+    attr.max = maxVal === '' ? '' : Number(maxVal);
+    attr.initial = initVal === '' ? 0 : Number(initVal);
+    if (_attrCtx.isNew) list.push(attr);
+    await _saveConvGameplay(gp);
+    closeAttrModal();
+    _renderConvAttrs();
+    StatusBar.refreshFromConv();
+  }
+
+  async function deleteAttrFromModal() {
+    if (!_attrCtx || _attrCtx.isNew) return;
+    const gp = _cgAttrGp;
+    const list = _attrCtx.scope === 'global' ? (gp.globalAttrs || []) : (gp.characterAttrs[_attrCtx.charIdx]?.attrs || []);
+    list.splice(_attrCtx.attrIdx, 1);
+    await _saveConvGameplay(gp);
+    closeAttrModal();
+    _renderConvAttrs();
+    StatusBar.refreshFromConv();
+  }
+
+  // ----- 属性面板入口 -----
+  async function openAttrEditor() {
+    const conv = await _ensureConvGameplay();
+    if (!conv) return;
+    _cgAttrGp = conv.convGameplay;
+
+    document.getElementById('conv-settings-modal')?.classList.add('hidden');
+    document.getElementById('cg-attr-panel')?.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'cg-attr-panel';
+    panel.style.cssText = 'position:fixed;inset:0;z-index:180;background:var(--bg);display:flex;flex-direction:column;overflow:hidden';
+    panel.innerHTML = `
+      <div style="padding:16px 16px 0;flex-shrink:0">
+        <button onclick="ConvGameplay.closeAttrEditor()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;background:none;border:none;color:var(--text);cursor:pointer;margin-bottom:12px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div style="margin-bottom:16px">
+          <div style="font-size:18px;font-weight:700;color:var(--text)">属性配置（对话级）</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">修改只影响当前对话，不影响世界观原件</div>
+        </div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:0 16px 16px">
+        <div id="cg-global-attrs"></div>
+        <div id="cg-char-attrs" style="margin-top:16px"></div>
+      </div>
+    `;
+    document.body.appendChild(panel);
+    _renderConvAttrs();
+  }
+
+  function closeAttrEditor() {
+    _cgAttrGp = null;
+    document.getElementById('cg-attr-panel')?.remove();
+  }
+
   return {
     openEventEditor, closeEventEditor,
     editEvent, addEvent, saveEvent, deleteEvent, closeEventModal,
     _syncTriggerTypeUI: _syncTriggerTypeUI,
     addAttrCondition, updateAttrCondition, removeAttrCondition,
-    openAiGenerate, doAiGenerate
+    openAiGenerate, doAiGenerate,
+    openAttrEditor, closeAttrEditor,
+    openAttrModal, closeAttrModal, saveAttrFromModal, deleteAttrFromModal,
+    toggleCharPicker, renderCharPicker, selectChar, deleteCharCard
   };
 })();
