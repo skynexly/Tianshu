@@ -1541,7 +1541,8 @@ requestController.signal,
               const enabledDefs = allDefs.filter(d => {
                 const name = d.function?.name || '';
                 if (name.startsWith('query_worldview_')) return convSettings.toolsWorldview;
-                // 其余全归记忆类（小纸条/事件/关系/历史搜索）
+                if (name === 'search_messages') return convSettings.toolsHistory;
+                // 其余全归记忆类（小纸条/事件/关系）
                 return convSettings.toolsMemory;
               });
               return enabledDefs.length > 0 ? enabledDefs : undefined;
@@ -4463,6 +4464,7 @@ bgImage: conv?.convBgImage || '',
         imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
         toolsMemory: !!conv?.convToolsMemory,          // 默认关（记忆类工具）
         toolsWorldview: !!conv?.convToolsWorldview,    // 默认关（世界观查询工具）
+        toolsHistory: !!conv?.convToolsHistory,        // 默认关（历史搜索工具）
         autoExtract: conv?.convAutoExtract !== false,  // 默认开（自动记忆提取）
       replyWordCount: conv?.convReplyWordCount || 800,  // 默认800字
       directive: conv?.convDirective || '',              // 剧情引导内容
@@ -4575,6 +4577,8 @@ bgImage: conv?.convBgImage || '',
     if (toolsMemEl) toolsMemEl.checked = s.toolsMemory;
     const toolsWvEl = document.getElementById('cs-tools-worldview');
     if (toolsWvEl) toolsWvEl.checked = s.toolsWorldview;
+    const toolsHistEl = document.getElementById('cs-tools-history');
+    if (toolsHistEl) toolsHistEl.checked = s.toolsHistory;
     // 自动记忆提取
     const aeEl = document.getElementById('cs-auto-extract');
     if (aeEl) aeEl.checked = s.autoExtract;
@@ -4602,6 +4606,8 @@ bgImage: conv?.convBgImage || '',
     if (toolsMemSaveEl) conv.convToolsMemory = toolsMemSaveEl.checked;
     const toolsWvSaveEl = document.getElementById('cs-tools-worldview');
     if (toolsWvSaveEl) conv.convToolsWorldview = toolsWvSaveEl.checked;
+    const toolsHistSaveEl = document.getElementById('cs-tools-history');
+    if (toolsHistSaveEl) conv.convToolsHistory = toolsHistSaveEl.checked;
     const aeSaveEl = document.getElementById('cs-auto-extract');
     if (aeSaveEl) conv.convAutoExtract = aeSaveEl.checked;
     const evEl = document.getElementById('cs-events-enabled');

@@ -1483,6 +1483,13 @@
                 <span class="circle-check-ui"></span>
               </span>
             </label>
+            <label class="circle-check-label">
+              <span class="circle-check-text">历史搜索工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 按关键词搜被归档的旧消息（只读）</span></span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-tools-history" class="circle-check">
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
           </div>
 
         </div>
@@ -4023,6 +4030,14 @@ if ('serviceWorker' in navigator) {
 </span>
 </label>
 <span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 按名查地区/NPC，按词搜节日/常驻/动态条目（只读）。</span>
+<label class="circle-check-label" style="margin-top:16px">
+<span class="circle-check-text">主线记忆查询工具</span>
+<span style="position:relative;display:inline-flex">
+<input type="checkbox" id="backstage-tools-mainmemory" class="circle-check" checked>
+<span class="circle-check-ui"></span>
+</span>
+</label>
+<span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 查询主线已记录的事件/人际关系，按关键词搜归档历史消息（只读）。</span>
     <div class="modal-actions" style="margin-top:16px">
       <button onclick="Backstage.closePromptEdit()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
       <button onclick="Backstage.savePrompt()" style="flex:1;touch-action:manipulation;-webkit-tap-highlight-color:transparent">保存</button>
