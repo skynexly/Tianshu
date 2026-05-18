@@ -4759,7 +4759,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
   function _showJsonEditor(title, json) {
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:150;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
       overlay.onclick = (e) => { if (e.target === overlay) { overlay.remove(); resolve(null); } };
       const box = document.createElement('div');
       box.style.cssText = 'width:min(480px,95vw);max-height:80vh;display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;background:var(--bg-secondary);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.3)';
@@ -4825,7 +4825,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     document.getElementById('conv-attr-modal')?.remove();
     const modal = document.createElement('div');
     modal.id = 'conv-attr-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:150;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
     modal.innerHTML = `<div style="width:min(440px,95vw);max-height:80vh;display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;background:var(--bg-secondary);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.3)" onclick="event.stopPropagation()">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -4925,7 +4925,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     document.getElementById('conv-task-modal')?.remove();
     const modal = document.createElement('div');
     modal.id = 'conv-task-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:150;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
     modal.innerHTML = `<div style="width:min(440px,95vw);max-height:80vh;display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;background:var(--bg-secondary);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.3)" onclick="event.stopPropagation()">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -5017,7 +5017,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     document.getElementById('conv-event-modal')?.remove();
     const modal = document.createElement('div');
     modal.id = 'conv-event-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:150;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
     modal.innerHTML = `<div style="width:min(440px,95vw);max-height:80vh;display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;background:var(--bg-secondary);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.3)" onclick="event.stopPropagation()">
       <div style="display:flex;justify-content:space-between;align-items:center">
