@@ -590,7 +590,7 @@ ${_stepIntro('castle', '第 3 步 · 势力', '为地区生成势力组织' + (r
     items.forEach((name, i) => {
       const r = results[i] || { status: 'pending' };
       let icon = '○', color = 'var(--text-secondary)';
-      if (i === currentIdx && r.status === 'pending') { icon = '⏳'; color = 'var(--accent)'; }
+      if (i === currentIdx && r.status === 'pending') { icon = '◎'; color = 'var(--accent)'; }
       else if (r.status === 'done') { icon = '✓'; color = 'var(--accent)'; }
       else if (r.status === 'failed') { icon = '✗'; color = 'var(--danger,#e57373)'; }
       html += `<div class="wv-gen-batch-item" style="color:${color}">${icon} ${name}${r.status === 'done' ? `（${r.count}条）` : ''}${r.status === 'failed' ? `（${r.error || '失败'}）` : ''}</div>`;
