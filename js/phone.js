@@ -622,7 +622,8 @@ function _extractJsonArrayText(content) {
  camera: `<svg ${common}><rect x="4" y="7" width="16" height="12" rx="3"></rect><circle cx="12" cy="13" r="3"></circle><path d="M9 7l1.5-2h3L15 7"></path></svg>`,
  memo: `<svg ${common}><rect x="5" y="3" width="14" height="18" rx="2"></rect><line x1="8" y1="8" x2="16" y2="8"></line><line x1="8" y1="12" x2="16" y2="12"></line><line x1="8" y1="16" x2="13" y2="16"></line></svg>`,
  takeout: `<svg ${common}><path d="M5 9h14l-1 11H6L5 9z"></path><path d="M8 9V6a4 4 0 0 1 8 0v3"></path><line x1="9" y1="13" x2="9" y2="17"></line><line x1="15" y1="13" x2="15" y2="17"></line></svg>`,
- shop: `<svg ${common}><path d="M3 7h18l-2 13H5L3 7z"></path><path d="M8 7V5a4 4 0 0 1 8 0v2"></path></svg>`
+ shop: `<svg ${common}><path d="M3 7h18l-2 13H5L3 7z"></path><path d="M8 7V5a4 4 0 0 1 8 0v2"></path></svg>`,
+ polaroid: `<svg ${common}><rect x="3" y="5" width="18" height="16" rx="2.5"></rect><rect x="6" y="15" width="12" height="4" rx="0.5"></rect><circle cx="12" cy="10.5" r="3"></circle><circle cx="12" cy="10.5" r="1"></circle><circle cx="17.5" cy="7.8" r="0.6"></circle></svg>`
  };
  return `<span class="phone-icon-glyph phone-icon-${type}">${icons[type] || ''}</span>`;
 }
@@ -646,6 +647,13 @@ function _uiIcon(type, size = 16) {
  return icons[type] || '';
 }
 function _renderHomeIcon(a) {
+ // 占位图标：渲染成空白格子（无图标、无标签、不可点）
+ if (a.icon === 'placeholder') {
+   return `<div class="phone-app-icon phone-app-placeholder" aria-hidden="true">
+     <div class="phone-app-icon-circle phone-app-icon-circle-placeholder"></div>
+     <span class="phone-app-icon-label">&nbsp;</span>
+   </div>`;
+ }
  const action = a.id === 'minimize' ? 'Phone.minimize()' : `Phone.openApp('${a.id}')`;
  // 心动模拟 APP：用世界观图标 png 而非 SVG
  const iconHTML = a.icon === 'heartsim'
@@ -666,15 +674,17 @@ function _renderHomeIcon(a) {
  document.querySelector('#phone-modal .phone-shell')?.classList.add('phone-home-mode');
  document.getElementById('phone-title').textContent = '';
 
-    // 系统 App 放上方：饿了咪/桃宝 + 设置/收起手机
+    // 系统 App：饿了咪/桃宝 + 心动模拟（仅特定世界观）+ 占位
       const isHeartSim = document.body?.getAttribute('data-worldview') === '心动模拟';
-      // 心动模拟：独占一行放在系统应用栏上方
-      const heartsimApp = isHeartSim ? { id: 'heartsim_app', icon: 'heartsim', name: '心动模拟' } : null;
+      const slot3 = isHeartSim
+        ? { id: 'heartsim_app', icon: 'heartsim', name: '心动模拟' }
+        : { id: '__placeholder1__', icon: 'placeholder', name: '' };
+      const slot4 = { id: '__placeholder2__', icon: 'placeholder', name: '' };
       const systemApps = [
         { id: 'takeout', icon: 'takeout', name: (_shopMeta?.takeout?.name || '饿了咪') },
         { id: 'shop', icon: 'shop', name: (_shopMeta?.shop?.name || '桃宝') },
-        { id: 'settings', icon: 'gear', name: '设置' },
-        { id: 'minimize', icon: 'phone-down', name: '收起手机' },
+        slot3,
+        slot4,
       ];
       const apps = [
         { id: 'forum', icon: 'forum', name: _getForumName() },
@@ -682,6 +692,12 @@ function _renderHomeIcon(a) {
  { id: 'moments', icon: 'camera', name: '好友圈' },
  { id: 'memo', icon: 'memo', name: '备忘录' },
  ];
+      // 底部 dock：相机（占位）、设置、收起手机
+      const dockApps = [
+        { id: 'camera', icon: 'polaroid', name: '相机' },
+        { id: 'settings', icon: 'gear', name: '设置' },
+        { id: 'minimize', icon: 'phone-down', name: '收起手机' },
+      ];
 
  body.innerHTML = `
  <div class="phone-home">
@@ -693,12 +709,22 @@ function _renderHomeIcon(a) {
   </div>
 </div>
 <div class="phone-home-spacer"></div>
-${heartsimApp ? `<div class="phone-system-grid phone-heartsim-row">${_renderHomeIcon(heartsimApp)}</div>` : ''}
+<div class="phone-profile-card" onclick="UI.showToast('个人资料编辑功能开发中', 1500)">
+  <div class="phone-profile-text">
+    <div class="phone-profile-name">Polaris</div>
+    <div class="phone-profile-bio">The still point where all worlds turn.</div>
+  </div>
+  <div class="phone-profile-avatar"></div>
+</div>
 <div class="phone-system-grid">
 ${systemApps.map(a => _renderHomeIcon(a)).join('')}
 </div>
 <div class="phone-app-grid">
  ${apps.map(a => _renderHomeIcon(a)).join('')}
+ </div>
+ <div class="phone-home-bottom-spacer"></div>
+ <div class="phone-dock">
+   ${dockApps.map(a => _renderHomeIcon(a)).join('')}
  </div>
  </div>
  `;
@@ -777,6 +803,11 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
 
   // ===== App 路由 =====
 async function openApp(appId) {
+  // 相机：暂未实装，弹 toast 占位
+  if (appId === 'camera') {
+    UI.showToast('相机功能开发中', 1500);
+    return;
+  }
   // 心动模拟：被锁时拦截
   try {
     if (typeof StatusBar !== 'undefined' && StatusBar.isPhoneLocked && StatusBar.isPhoneLocked()) {
