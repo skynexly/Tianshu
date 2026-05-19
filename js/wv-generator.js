@@ -925,8 +925,8 @@ ${_stepIntro('message', '第 5 步 · 开场剧情', '生成开场时间、剧�
         }));
         // 如果没势力，建一个默认
         if (!regionFacs.length) {
-          regionFacs.push({ id: 'fac_' + Utils.uuid().slice(0,8), name: '默认势力', summary: '', detail: '', npcs: [] });
-        }
+        regionFacs.push({ id: 'fac_' + Utils.uuid().slice(0,8), name: (r.name || '默认') + '势力', summary: '', detail: '', npcs: [] });
+      }
         return {
           id: 'reg_' + Utils.uuid().slice(0,8),
           name: r.name || '',
@@ -1088,7 +1088,7 @@ for (const npc of npcs) {
               name: r.name || '',
               summary: r.description || '',
               detail: r.setting || '',
-              factions: [{ id: 'fac_' + Utils.uuid().slice(0,8), name: '默认势力', summary: '', detail: '', npcs: [] }]
+              factions: [{ id: 'fac_' + Utils.uuid().slice(0,8), name: (r.name || '默认') + '势力', summary: '', detail: '', npcs: [] }]
             });
           }
           await Worldview._saveEditingWV(w);

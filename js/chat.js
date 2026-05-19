@@ -1744,6 +1744,9 @@ GameLog.log('info', '[Memory] 开始自动提取...');
 const extractScope = Character.getCurrentId();
 const extractConvId = Conversations.getCurrent();
 const extractRound = roundCount;
+// 抓当前游戏内时间，写进小纸条 time 字段（提取期间冻结这个值，避免异步过程中时间变化）
+let extractGameTime = '';
+try { extractGameTime = Conversations.getStatusBar()?.time || ''; } catch(_) {}
 // 多选手动提取只应写入选中内容，不应推进“自动提取游标”，否则会跳过未选中的中间消息
 const updateLastExtracted = options.updateLastExtracted !== false;
 
@@ -1849,7 +1852,7 @@ for (let nAttempt = 1; nAttempt <= 2; nAttempt++) {
     if (notesData && notesData.notes) {
       for (const n of notesData.notes) {
         if (n.tag && n.detail) {
-          await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound });
+          await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound, time: extractGameTime });
           noteCount2++;
         }
       }
@@ -1873,7 +1876,7 @@ if (!notesSuccess) {
     if (notesData && notesData.notes) {
       for (const n of notesData.notes) {
         if (n.tag && n.detail) {
-          await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound });
+          await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound, time: extractGameTime });
           noteCount2++;
         }
       }
@@ -1933,7 +1936,7 @@ if (updateLastExtracted) {
         try { notesData2 = JSON.parse(notesCleaned2); } catch(pe) { notesData2 = _tryFixTruncatedJSON(notesCleaned2); }
         if (notesData2 && notesData2.notes) {
           for (const n of notesData2.notes) {
-            if (n.tag && n.detail) { await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound }); noteCount3++; }
+            if (n.tag && n.detail) { await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound, time: extractGameTime }); noteCount3++; }
           }
         }
       } catch(noteErr2) { GameLog.log('warn', `[Memory] 兜底小纸条提取失败: ${noteErr2.message}`); }
