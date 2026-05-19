@@ -335,12 +335,28 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     };
     if (model) body.model = model;
 
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify(body),
-      signal: options.signal
-    });
+    // 超时控制（90秒），避免中转站卡住时永远转圈不报错
+    const timeout = options.timeout || 90000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    const mergedSignal = options.signal
+      ? (() => { options.signal.addEventListener('abort', () => controller.abort()); return controller.signal; })()
+      : controller.signal;
+
+    let resp;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify(body),
+        signal: mergedSignal
+      });
+    } catch(e) {
+      clearTimeout(timer);
+      if (e.name === 'AbortError') throw new Error(`生图超时（${Math.round(timeout/1000)}秒无响应），可能是站点暂时不可用`);
+      throw e;
+    }
+    clearTimeout(timer);
 
     if (!resp.ok) {
       const errText = await resp.text().catch(() => resp.statusText);

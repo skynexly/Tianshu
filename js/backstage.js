@@ -75,6 +75,16 @@ return `<div class="backstage-msg-wrap ${isUser ? 'user' : 'assistant'}">
 </div>`;
 }).join('');
     container.scrollTop = container.scrollHeight;
+    // 解析"正在生成图片"占位符，替换为前台同款动画
+    try {
+      container.querySelectorAll('.md-content').forEach(el => {
+        if (!el.textContent || !el.textContent.includes('[正在生成图片')) return;
+        el.innerHTML = el.innerHTML.replace(
+          /\[正在生成图片[^…]*…\]/g,
+          '<div style="display:flex;align-items:center;gap:8px;padding:12px;margin:8px 0;border-radius:8px;background:var(--bg-tertiary);border:1px solid var(--border);font-size:13px;color:var(--text-secondary)"><div class="typing-indicator" style="flex-shrink:0"><span></span><span></span><span></span></div>正在生成图片…</div>'
+        );
+      });
+    } catch(_) {}
     // 解析图片占位符 [TSIMG:id|desc]
     try {
       if (container.textContent && container.textContent.includes('[TSIMG:') && typeof Chat !== 'undefined' && Chat.resolveDrawnImagesInHTML) {
@@ -1458,11 +1468,23 @@ return String(s == null ? '' : s).replace(/[&<>"']/g, c => map[c]);
     const regex = /\[IMG:\s*([^\]]+)\]/gi;
     const matches = [...aiMsg.content.matchAll(regex)];
     if (matches.length === 0) return;
-    for (const m of matches) {
+
+    // 先把所有 [IMG:] 替换为"正在生成…"占位，避免用户看到原始英文描述
+    let tempContent = aiMsg.content;
+    matches.forEach((m, i) => {
+      tempContent = tempContent.split(m[0]).join(`[正在生成图片${matches.length > 1 ? (i+1) : ''}…]`);
+    });
+    aiMsg.content = tempContent;
+    await DB.put('messages', aiMsg);
+    _renderMessages();
+
+    for (let i = 0; i < matches.length; i++) {
+      const m = matches[i];
+      const placeholder = `[正在生成图片${matches.length > 1 ? (i+1) : ''}…]`;
       const desc = m[1].trim();
       try {
         const images = await API.generateImage(desc, { n: 1, size: '1024x768' });
-if (images && images.length > 0) {
+        if (images && images.length > 0) {
           // 存到 drawnImages 表，content 只放占位符 [TSIMG:id|desc]
           const imgId = 'img_' + Utils.uuid();
           await DB.put('drawnImages', {
@@ -1472,16 +1494,16 @@ if (images && images.length > 0) {
             createdAt: Date.now()
           });
           const safeDesc = desc.substring(0, 60).replace(/[\[\]\|\n]/g, ' ');
-          aiMsg.content = aiMsg.content.split(m[0]).join(`[TSIMG:${imgId}|${safeDesc}]`);
+          aiMsg.content = aiMsg.content.split(placeholder).join(`[TSIMG:${imgId}|${safeDesc}]`);
           await DB.put('messages', aiMsg);
           _renderMessages();
         } else {
-          aiMsg.content = aiMsg.content.split(m[0]).join(`\n\n> ⚠ 图片生成失败：未返回数据\n\n`);
+          aiMsg.content = aiMsg.content.split(placeholder).join(`\n\n> ⚠ 图片生成失败：未返回数据\n\n`);
           await DB.put('messages', aiMsg);
           _renderMessages();
         }
       } catch(e) {
-        aiMsg.content = aiMsg.content.split(m[0]).join(`\n\n> ⚠ 图片生成失败：${e.message}\n\n`);
+        aiMsg.content = aiMsg.content.split(placeholder).join(`\n\n> ⚠ 图片生成失败：${e.message}\n\n`);
         await DB.put('messages', aiMsg);
         _renderMessages();
       }
