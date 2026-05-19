@@ -619,7 +619,12 @@ const Auth = (() => {
           </div>
         </div>
       `;
-      document.body.appendChild(modal);
+      // 华为 webview 兼容：如果个人主页 overlay 可见，把 modal 挂到它里面，
+      // 这样不论华为内核如何处理 stacking context，弹窗都和个人主页同级。
+      const profileOverlay = document.getElementById('auth-profile-overlay');
+      const host = (profileOverlay && profileOverlay.classList.contains('visible'))
+        ? profileOverlay : document.body;
+      host.appendChild(modal);
 
       const input = modal.querySelector('#auth-modal-input');
       if (input) {
@@ -781,7 +786,11 @@ const Auth = (() => {
         </div>
       </div>
     `;
-    document.body.appendChild(modal);
+    // 华为 webview 兼容：个人主页可见时，挂到 overlay 内部
+    const profileOverlay = document.getElementById('auth-profile-overlay');
+    const host = (profileOverlay && profileOverlay.classList.contains('visible'))
+      ? profileOverlay : document.body;
+    host.appendChild(modal);
 
     // 眼睛切换（三个独立）
     modal.querySelectorAll('.auth-pw-eye-modal').forEach(btn => {

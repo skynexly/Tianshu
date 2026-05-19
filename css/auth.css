@@ -802,6 +802,20 @@
   z-index: 99500 !important;
 }
 
+/* 华为 webview 修复：
+   半透明背景 + border-radius + filter 渲染合成时，会在卡片外缘渲染出
+   一圈白色弥散光晕（Edge/Chrome 没问题）。
+   解决：给个人主页里的卡片背景下面铺一层不透明的 var(--bg)，
+   这样实际可见背景=不透明色，圆角合成不再出现"光晕"。 */
+#auth-profile-overlay .auth-profile-hero,
+#auth-profile-overlay .auth-profile-list {
+  background:
+    linear-gradient(var(--bg-secondary), var(--bg-secondary)),
+    var(--bg);
+  /* 同时显式禁用 box-shadow，杜绝任何残留 */
+  box-shadow: none !important;
+}
+
 /* ========================================================
    用户协议 overlay（跟随主题色）
    - 启动首次进入：mode=agree（带"同意并继续"）
