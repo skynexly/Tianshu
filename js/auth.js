@@ -1,0 +1,945 @@
+/**
+ * 天枢城账号系统 - 前端
+ *
+ * 流程：
+ * 1. 启动时检查 localStorage 里是否有 token + device_id
+ * 2. 有 → POST /check 验证；通过则放行，失败/被踢 → 弹登录页
+ * 3. 没有 → 弹登录页
+ * 4. 登录成功 → 存 token/device_id/email/nickname 到 localStorage
+ * 5. 心跳：每 30 分钟 + 页面 visibilitychange 触发一次 check
+ */
+const Auth = (() => {
+  const API = 'https://tianshu-auth.2394171101.workers.dev';
+  const LS_KEY = 'tianshu_auth_v1';
+  const HEARTBEAT_INTERVAL = 30 * 60 * 1000; // 30 min
+
+  let _state = null;        // { token, device_id, email, nickname, devices }
+  let _heartbeatTimer = null;
+
+  // ===== localStorage =====
+  function _loadState() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch(_) { return null; }
+  }
+  function _saveState(s) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch(_) {}
+  }
+  function _clearState() {
+    try { localStorage.removeItem(LS_KEY); } catch(_) {}
+    _state = null;
+  }
+
+  // ===== 网络 =====
+  async function _post(path, body) {
+    const resp = await fetch(API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    let data;
+    try { data = await resp.json(); } catch(_) { data = null; }
+    return { status: resp.status, data };
+  }
+
+  // ===== 启动入口 =====
+  async function init() {
+    _state = _loadState();
+    if (!_state || !_state.token || !_state.device_id) {
+      _showLoginUI();
+      return;
+    }
+    // 有缓存 → 验证一次
+    try {
+      const { status, data } = await _post('/check', { token: _state.token, device_id: _state.device_id });
+      if (status === 200 && data?.ok) {
+        // 通过，把最新设备列表更新到 state
+        _state.devices = data.devices || [];
+        _saveState(_state);
+        _onLoginSuccess();
+        return;
+      }
+      // 没过 → 区分原因
+      const reason = data?.reason || 'unknown';
+      _clearState();
+      if (reason === 'kicked') {
+        _showLoginUI({ message: '你的账号已在另一台设备登录，本设备已被踢出。' });
+      } else if (reason === 'token_invalid' || reason === 'account_gone') {
+        _showLoginUI({ message: '登录已过期，请重新登录。' });
+      } else {
+        _showLoginUI();
+      }
+    } catch(e) {
+      // 网络错误：网都没有页面也加载不出来，所以这里几乎不会触发。但兜底一下
+      console.warn('[Auth] check failed', e);
+      _showLoginUI({ message: '无法连接验证服务，请检查网络后刷新。' });
+    }
+  }
+
+  function _onLoginSuccess() {
+    _hideLoginUI();
+    _startHeartbeat();
+    _refreshAccountCard();
+    // 派发自定义事件，让别处可以监听
+    try { window.dispatchEvent(new CustomEvent('auth:ready', { detail: _state })); } catch(_) {}
+  }
+
+  // 同步设置页顶部那张账号入口卡片
+  function _refreshAccountCard() {
+    const nameEl = document.getElementById('auth-account-name');
+    const emailEl = document.getElementById('auth-account-email');
+    const avatarEl = document.getElementById('auth-account-avatar');
+    if (!nameEl || !emailEl || !avatarEl) return;
+    if (!_state) {
+      nameEl.textContent = '未登录';
+      emailEl.textContent = '—';
+      avatarEl.textContent = '·';
+      return;
+    }
+    nameEl.textContent = _state.nickname || _deriveNickname(_state.email) || '幽灵';
+    emailEl.textContent = _state.email || '—';
+    // 头像：优先 avatar dataUrl → 否则邮箱首字母
+    if (_state.avatar) {
+      avatarEl.innerHTML = `<img src="${_state.avatar}" alt="" />`;
+    } else {
+      const ch = (_state.nickname || _state.email || '·').trim().charAt(0);
+      avatarEl.textContent = ch || '·';
+    }
+  }
+
+  function _startHeartbeat() {
+    if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+    _heartbeatTimer = setInterval(() => _heartbeat(), HEARTBEAT_INTERVAL);
+    // 页面切回前台时立刻 ping 一次
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') _heartbeat();
+    });
+  }
+
+  async function _heartbeat() {
+    if (!_state?.token) return;
+    try {
+      const { status, data } = await _post('/check', { token: _state.token, device_id: _state.device_id });
+      if (status === 200 && data?.ok) {
+        _state.devices = data.devices || [];
+        _saveState(_state);
+        return;
+      }
+      // 被踢
+      const reason = data?.reason || 'unknown';
+      _clearState();
+      if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+      const msg = reason === 'kicked'
+        ? '你的账号在另一台设备登录，本设备已被踢出。'
+        : '登录已过期，请重新登录。';
+      _showKickedOverlay(msg);
+    } catch(_) {}
+  }
+
+  // ===== UI =====
+  function _ensureUI() {
+    if (document.getElementById('auth-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'auth-overlay';
+    overlay.innerHTML = `
+      <div class="auth-bg"></div>
+      <div class="auth-card">
+        <div class="auth-logo">
+          <img src="logo.png" alt="The Skynex" />
+        </div>
+        <h1 class="auth-title">SKYNEX</h1>
+        <div class="auth-quote">The still point where all worlds turn.</div>
+
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab active" data-tab="login">登录</button>
+          <button type="button" class="auth-tab" data-tab="register">注册</button>
+        </div>
+
+        <div class="auth-error" id="auth-error"></div>
+
+        <div class="auth-form">
+          <input id="auth-email" class="auth-input" type="email" placeholder="邮箱" autocomplete="email" spellcheck="false" />
+          <div class="auth-input-wrap">
+            <input id="auth-password" class="auth-input" type="password" placeholder="密码（至少 6 位）" autocomplete="current-password" />
+            <button type="button" class="auth-pw-eye" id="auth-pw-eye" tabindex="-1" aria-label="显示/隐藏密码">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <input id="auth-nickname" class="auth-input auth-field-register" type="text" placeholder="昵称" maxlength="20" />
+          <input id="auth-invite" class="auth-input auth-field-register" type="text" placeholder="邀请码" maxlength="20" autocapitalize="characters" />
+          <input id="auth-device-name" class="auth-input" type="text" placeholder="本设备名称" maxlength="20" />
+        </div>
+
+        <button type="button" class="auth-submit" id="auth-submit">进入</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // 默认设备名
+    const ua = navigator.userAgent;
+    let devName = 'Unknown';
+    if (/iPhone/i.test(ua)) devName = 'iPhone';
+    else if (/iPad/i.test(ua)) devName = 'iPad';
+    else if (/Android/i.test(ua)) devName = 'Android';
+    else if (/Mac/i.test(ua)) devName = 'Mac';
+    else if (/Windows/i.test(ua)) devName = 'Windows';
+    document.getElementById('auth-device-name').value = devName;
+
+    // tab 切换
+    overlay.querySelectorAll('.auth-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        overlay.querySelectorAll('.auth-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        overlay.classList.toggle('mode-register', btn.dataset.tab === 'register');
+        _clearError();
+      });
+    });
+
+    // 密码可见性切换
+    const pwInput = document.getElementById('auth-password');
+    const pwEye = document.getElementById('auth-pw-eye');
+    const eyeOpen = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>';
+    const eyeClosed = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>';
+    pwEye.addEventListener('click', () => {
+      if (pwInput.type === 'password') {
+        pwInput.type = 'text';
+        pwEye.innerHTML = eyeClosed;
+        pwEye.classList.add('on');
+      } else {
+        pwInput.type = 'password';
+        pwEye.innerHTML = eyeOpen;
+        pwEye.classList.remove('on');
+      }
+    });
+
+    // 提交
+    document.getElementById('auth-submit').addEventListener('click', _onSubmit);
+
+    // 回车提交
+    overlay.querySelectorAll('.auth-input').forEach(el => {
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') _onSubmit(); });
+    });
+  }
+
+  function _showLoginUI(options) {
+    _ensureUI();
+    const overlay = document.getElementById('auth-overlay');
+    overlay.classList.add('visible');
+    if (options?.message) {
+      _showError(options.message);
+    } else {
+      _clearError();
+    }
+    // 锁住背景滚动
+    document.body.style.overflow = 'hidden';
+  }
+
+  function _hideLoginUI() {
+    const overlay = document.getElementById('auth-overlay');
+    if (!overlay) return;
+    overlay.classList.add('fading-out');
+    setTimeout(() => {
+      overlay.classList.remove('visible', 'fading-out');
+      document.body.style.overflow = '';
+    }, 400);
+  }
+
+  function _showError(msg) {
+    const el = document.getElementById('auth-error');
+    if (el) { el.textContent = msg; el.classList.add('visible'); }
+  }
+  function _clearError() {
+    const el = document.getElementById('auth-error');
+    if (el) { el.textContent = ''; el.classList.remove('visible'); }
+  }
+
+  async function _onSubmit() {
+    _clearError();
+    const overlay = document.getElementById('auth-overlay');
+    const isRegister = overlay.classList.contains('mode-register');
+    const email = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-password').value;
+    const device_name = document.getElementById('auth-device-name').value.trim() || 'Unknown';
+    const nickname = document.getElementById('auth-nickname').value.trim();
+    const invite_code = document.getElementById('auth-invite').value.trim().toUpperCase();
+
+    if (!email || !password) { _showError('请填写邮箱和密码'); return; }
+    if (password.length < 6) { _showError('密码至少 6 位'); return; }
+    if (isRegister) {
+      if (!nickname) { _showError('请填写昵称'); return; }
+      if (!invite_code) { _showError('请填写邀请码'); return; }
+    }
+
+    const btn = document.getElementById('auth-submit');
+    btn.disabled = true;
+    const oldText = btn.textContent;
+    btn.textContent = isRegister ? '正在注册…' : '正在登录…';
+
+    try {
+      const path = isRegister ? '/register' : '/login';
+      const body = isRegister
+        ? { invite_code, email, password, device_name }
+        : { email, password, device_name };
+      const { status, data } = await _post(path, body);
+
+      if (status === 200 && data?.ok) {
+        _state = {
+          token: data.token,
+          device_id: data.device_id,
+          email: data.email,
+          nickname: isRegister ? nickname : (_state?.nickname || nickname || _deriveNickname(data.email)),
+          devices: data.devices || [],
+        };
+        _saveState(_state);
+        _onLoginSuccess();
+        return;
+      }
+
+      // 409 → 需要踢人
+      if (status === 409 && data?.need_kick) {
+        _showKickPicker(data.devices, email, password, device_name);
+        return;
+      }
+
+      _showError(data?.error || `${isRegister ? '注册' : '登录'}失败（${status}）`);
+    } catch(e) {
+      _showError('网络错误：' + (e.message || '请稍后再试'));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = oldText;
+    }
+  }
+
+  function _deriveNickname(email) {
+    return (email || '').split('@')[0] || '用户';
+  }
+
+  // ===== 设备满了：让用户挑一台踢 =====
+  function _showKickPicker(devices, email, password, device_name) {
+    let picker = document.getElementById('auth-kick-picker');
+    if (picker) picker.remove();
+    picker = document.createElement('div');
+    picker.id = 'auth-kick-picker';
+    picker.className = 'auth-kick-picker';
+
+    const items = devices.map(d => {
+      const lastSeen = _formatTime(d.last_seen);
+      return `
+        <button type="button" class="auth-kick-item" data-id="${d.id}">
+          <div class="auth-kick-name">${_escape(d.name)}</div>
+          <div class="auth-kick-meta">${_escape(d.ua_short || '')} · 上次活跃 ${lastSeen}</div>
+        </button>
+      `;
+    }).join('');
+
+    picker.innerHTML = `
+      <div class="auth-kick-card">
+        <div class="auth-kick-title">已达到设备上限</div>
+        <div class="auth-kick-desc">每个账号最多在 2 台设备同时登录。请选择要踢出的设备：</div>
+        ${items}
+        <button type="button" class="auth-kick-cancel">取消</button>
+      </div>
+    `;
+    document.body.appendChild(picker);
+
+    picker.querySelectorAll('.auth-kick-item').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const kick_device_id = btn.dataset.id;
+        picker.remove();
+        // 重新登录，附带 kick_device_id
+        document.getElementById('auth-submit').disabled = true;
+        document.getElementById('auth-submit').textContent = '正在登录…';
+        try {
+          const { status, data } = await _post('/login', { email, password, device_name, kick_device_id });
+          if (status === 200 && data?.ok) {
+            _state = {
+              token: data.token,
+              device_id: data.device_id,
+              email: data.email,
+              nickname: _state?.nickname || _deriveNickname(data.email),
+              devices: data.devices || [],
+            };
+            _saveState(_state);
+            _onLoginSuccess();
+          } else {
+            _showError(data?.error || '登录失败');
+          }
+        } catch(e) {
+          _showError('网络错误：' + (e.message || '请稍后再试'));
+        } finally {
+          document.getElementById('auth-submit').disabled = false;
+          document.getElementById('auth-submit').textContent = '进入';
+        }
+      });
+    });
+    picker.querySelector('.auth-kick-cancel').addEventListener('click', () => picker.remove());
+  }
+
+  function _formatTime(ts) {
+    if (!ts) return '未知';
+    const d = new Date(ts);
+    const now = Date.now();
+    const diff = now - ts;
+    if (diff < 60_000) return '刚刚';
+    if (diff < 3600_000) return Math.floor(diff / 60_000) + ' 分钟前';
+    if (diff < 86400_000) return Math.floor(diff / 3600_000) + ' 小时前';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function _formatLastExport() {
+    const ts = (typeof DataMgr !== 'undefined' && DataMgr.getLastExportAt) ? DataMgr.getLastExportAt() : 0;
+    if (!ts) return '从未导出';
+    const diff = Date.now() - ts;
+    if (diff < 60_000) return '上次：刚刚';
+    if (diff < 3600_000) return '上次：' + Math.floor(diff / 60_000) + ' 分钟前';
+    if (diff < 86400_000) return '上次：' + Math.floor(diff / 3600_000) + ' 小时前';
+    if (diff < 30 * 86400_000) return '上次：' + Math.floor(diff / 86400_000) + ' 天前';
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    return '上次：' + `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
+  function _escape(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '"', "'": '&#39;'
+    }[c]));
+  }
+
+  // ===== 被踢的全屏蒙层 =====
+  function _showKickedOverlay(msg) {
+    let mask = document.getElementById('auth-kicked-mask');
+    if (mask) mask.remove();
+    mask = document.createElement('div');
+    mask.id = 'auth-kicked-mask';
+    mask.innerHTML = `
+      <div class="auth-kicked-card">
+        <div class="auth-kicked-icon">⌧</div>
+        <div class="auth-kicked-title">已断开</div>
+        <div class="auth-kicked-msg">${_escape(msg)}</div>
+        <button type="button" id="auth-kicked-relogin">重新登录</button>
+      </div>
+    `;
+    document.body.appendChild(mask);
+    document.getElementById('auth-kicked-relogin').addEventListener('click', () => {
+      mask.remove();
+      _showLoginUI();
+    });
+  }
+
+  // ===== 个人主页 =====
+  function openProfile() {
+    if (!_state) { _showLoginUI(); return; }
+    let overlay = document.getElementById('auth-profile-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'auth-profile-overlay';
+      overlay.innerHTML = `
+        <div class="auth-bg"></div>
+        <div class="auth-profile-scroll" id="auth-profile-scroll"></div>
+      `;
+      document.body.appendChild(overlay);
+    }
+    _renderProfile();
+    overlay.classList.add('visible');
+    document.body.style.overflow = 'hidden';
+    // 静默刷一次最新设备列表
+    _heartbeat();
+  }
+
+  function closeProfile() {
+    const overlay = document.getElementById('auth-profile-overlay');
+    if (!overlay) return;
+    overlay.classList.remove('visible');
+    document.body.style.overflow = '';
+  }
+
+  function _renderProfile() {
+    const root = document.getElementById('auth-profile-scroll');
+    if (!root || !_state) return;
+    const nick = _state.nickname || _deriveNickname(_state.email) || '幽灵';
+    const email = _state.email || '';
+    const initial = (nick || email || '·').trim().charAt(0);
+    const avatarInner = _state.avatar
+      ? `<img src="${_state.avatar}" alt="" />`
+      : _escape(initial);
+
+    const devices = _state.devices || [];
+    const thisId = _state.device_id;
+    const devicesHtml = devices.length === 0
+      ? `<div class="auth-profile-device"><div class="auth-profile-device-info"><div class="auth-profile-device-meta">无活跃设备</div></div></div>`
+      : devices.map(d => {
+          const isThis = d.id === thisId;
+          return `
+            <div class="auth-profile-device">
+              <div class="auth-profile-device-info">
+                <div class="auth-profile-device-name">
+                  ${_escape(d.name || '未知设备')}
+                  ${isThis ? '<span class="auth-profile-device-this">本机</span>' : ''}
+                </div>
+                <div class="auth-profile-device-meta">${_escape(d.ua_short || '')} · ${_formatTime(d.last_seen)}</div>
+              </div>
+              ${isThis ? '' : `<button class="auth-profile-device-kick" data-kick="${_escape(d.id)}">踢出</button>`}
+            </div>
+          `;
+        }).join('');
+
+    root.innerHTML = `
+      <div class="auth-profile-top">
+        <button class="auth-profile-back" id="auth-profile-back" aria-label="返回">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div class="auth-profile-brand">SKYNEX</div>
+      </div>
+
+      <div class="auth-profile-hero">
+        <div class="auth-profile-avatar" id="auth-profile-avatar" title="点击更换头像">${avatarInner}</div>
+        <div class="auth-profile-name-block">
+          <div class="auth-profile-name">
+            <span id="auth-profile-name-text">${_escape(nick)}</span>
+            <button class="auth-profile-name-edit" id="auth-profile-name-edit" aria-label="改昵称">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
+            </button>
+          </div>
+          <div class="auth-profile-email">${_escape(email)}</div>
+        </div>
+      </div>
+
+      <div class="auth-profile-section-title">设备（${devices.length}/2）</div>
+      <div class="auth-profile-list">
+        ${devicesHtml}
+      </div>
+
+      <div class="auth-profile-section-title">数据</div>
+      <div class="auth-profile-list">
+        <div class="auth-profile-item" id="auth-profile-export">
+          <div class="auth-profile-item-label">导出存档</div>
+          <div class="auth-profile-item-value" id="auth-profile-last-export">${_formatLastExport()}</div>
+          <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        </div>
+        <div class="auth-profile-item" id="auth-profile-import">
+          <div class="auth-profile-item-label">导入存档</div>
+          <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        </div>
+      </div>
+
+      <div class="auth-profile-section-title">账号</div>
+      <div class="auth-profile-list">
+        <div class="auth-profile-item" id="auth-profile-change-password">
+          <div class="auth-profile-item-label">修改密码</div>
+          <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+        <div class="auth-profile-item danger" id="auth-profile-logout">
+          <div class="auth-profile-item-label">退出登录</div>
+          <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+      </div>
+
+      <div class="auth-profile-about">
+        SKYNEX<br>
+        The still point where all worlds turn.
+      </div>
+    `;
+
+    // 事件绑定
+    document.getElementById('auth-profile-back').addEventListener('click', closeProfile);
+    document.getElementById('auth-profile-name-edit').addEventListener('click', _onEditNickname);
+    document.getElementById('auth-profile-avatar').addEventListener('click', _onPickAvatar);
+    document.getElementById('auth-profile-change-password').addEventListener('click', _onChangePassword);
+    document.getElementById('auth-profile-logout').addEventListener('click', _onLogoutConfirm);
+    document.getElementById('auth-profile-export').addEventListener('click', async () => {
+      try {
+        await DataMgr.exportAll();
+        const el = document.getElementById('auth-profile-last-export');
+        if (el) el.textContent = _formatLastExport();
+      } catch(_) {}
+    });
+    document.getElementById('auth-profile-import').addEventListener('click', () => DataMgr.importAll());
+    root.querySelectorAll('[data-kick]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.kick;
+        const dev = (devices || []).find(d => d.id === id);
+        const ok = await _modal({
+          title: '踢出设备',
+          desc: `确定踢出「${dev?.name || '该设备'}」吗？\n该设备会立刻被强制退出登录。`,
+          okText: '踢出',
+          danger: true,
+        });
+        if (!ok) return;
+        btn.disabled = true;
+        btn.textContent = '踢出中…';
+        const r = await kickDevice(id);
+        if (r.ok) {
+          _renderProfile();
+          _refreshAccountCard();
+        } else {
+          await _modal({ title: '踢出失败', desc: r.error || '未知错误', cancelText: false, okText: '好的' });
+          btn.disabled = false;
+          btn.textContent = '踢出';
+        }
+      });
+    });
+  }
+
+  // ===== 通用弹窗工具：confirm / prompt / alert（套用项目标准 .modal 样式）=====
+  // opts = { title, desc, input, defaultValue, placeholder, maxLength, validate,
+  //          okText, cancelText, danger }
+  // 返回 Promise：confirm/alert → resolve(true/false)；prompt → resolve(string|null)
+  function _modal(opts) {
+    return new Promise(resolve => {
+      const o = opts || {};
+      const isInput = !!o.input;
+      const okText = o.okText || '确认';
+      const cancelText = o.cancelText;
+      const showCancel = cancelText !== false;
+      const cancelLabel = (typeof cancelText === 'string') ? cancelText : '取消';
+
+      let modal = document.querySelector('.auth-modal-temp');
+      if (modal) modal.remove();
+      modal = document.createElement('div');
+      modal.className = 'modal auth-modal-temp';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width:420px">
+          ${o.title ? `<h3>${_escape(o.title)}</h3>` : ''}
+          ${o.desc ? `<p style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:0 0 12px">${_escape(o.desc)}</p>` : ''}
+          ${isInput ? `
+            <div class="form-group">
+              <input type="text" id="auth-modal-input"
+                     placeholder="${_escape(o.placeholder || '')}"
+                     value="${_escape(o.defaultValue || '')}"
+                     ${o.maxLength ? `maxlength="${o.maxLength}"` : ''} />
+            </div>
+            <div id="auth-modal-err" style="font-size:12px;color:var(--danger);margin:-8px 0 8px;min-height:0;display:none"></div>
+          ` : ''}
+          <div class="modal-actions" style="margin-top:12px">
+            ${showCancel ? `<button type="button" data-act="cancel" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">${_escape(cancelLabel)}</button>` : ''}
+            <button type="button" data-act="ok" style="flex:1;${o.danger ? 'background:var(--danger);color:#fff;border:none' : 'background:var(--accent);color:#111;border:none'}">${_escape(okText)}</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const input = modal.querySelector('#auth-modal-input');
+      if (input) {
+        setTimeout(() => { try { input.focus(); input.select(); } catch(_) {} }, 50);
+      }
+
+      const close = (val) => {
+        modal.remove();
+        resolve(val);
+      };
+      const ok = () => {
+        if (isInput) {
+          const v = (input?.value || '').trim();
+          if (o.validate) {
+            const err = o.validate(v);
+            if (err) {
+              const el = modal.querySelector('#auth-modal-err');
+              if (el) { el.textContent = err; el.style.display = 'block'; }
+              return;
+            }
+          }
+          close(v);
+        } else {
+          close(true);
+        }
+      };
+      const cancel = () => close(isInput ? null : false);
+
+      modal.querySelector('[data-act="ok"]').addEventListener('click', ok);
+      const cancelBtn = modal.querySelector('[data-act="cancel"]');
+      if (cancelBtn) cancelBtn.addEventListener('click', cancel);
+      modal.addEventListener('click', e => { if (e.target === modal) cancel(); });
+      const keyHandler = e => {
+        if (e.key === 'Enter') { e.preventDefault(); ok(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      };
+      modal.addEventListener('keydown', keyHandler);
+      if (input) input.addEventListener('keydown', keyHandler);
+    });
+  }
+
+  // ===== 改昵称 =====
+  async function _onEditNickname() {
+    const cur = _state?.nickname || '';
+    const v = await _modal({
+      title: '昵称',
+      input: true,
+      defaultValue: cur,
+      placeholder: '昵称',
+      maxLength: 30,
+      okText: '保存',
+      validate: s => {
+        if (!s) return '昵称不能为空';
+        if (s.length > 30) return '昵称最长 30 个字符';
+        return null;
+      },
+    });
+    if (v === null) return;
+    setNickname(v);
+    _renderProfile();
+    _refreshAccountCard();
+  }
+
+  // 选头像（本地，存 dataUrl）
+  function _onPickAvatar() {
+    let inp = document.getElementById('auth-avatar-file');
+    if (!inp) {
+      inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = 'image/*';
+      inp.id = 'auth-avatar-file';
+      inp.style.display = 'none';
+      document.body.appendChild(inp);
+    }
+    inp.value = '';
+    inp.onchange = async () => {
+      const f = inp.files?.[0];
+      if (!f) return;
+      try {
+        const dataUrl = await _readImageCompressed(f, 256);
+        if (!_state) return;
+        _state.avatar = dataUrl;
+        _saveState(_state);
+        _renderProfile();
+        _refreshAccountCard();
+      } catch(e) {
+        await _modal({ title: '头像处理失败', desc: e.message || '请换一张图片再试。', cancelText: false, okText: '好的' });
+      }
+    };
+    inp.click();
+  }
+
+  // 把图片压到 maxSize×maxSize 内的正方形 dataUrl
+  function _readImageCompressed(file, maxSize) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('读取失败'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('解码失败'));
+        img.onload = () => {
+          // 中心裁剪到正方形，再缩到 maxSize
+          const side = Math.min(img.width, img.height);
+          const sx = (img.width - side) / 2;
+          const sy = (img.height - side) / 2;
+          const canvas = document.createElement('canvas');
+          canvas.width = maxSize;
+          canvas.height = maxSize;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, maxSize, maxSize);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // 改密码
+  function _onChangePassword() {
+    if (!_state) return;
+    let modal = document.getElementById('auth-pw-modal');
+    if (modal) modal.remove();
+    modal = document.createElement('div');
+    modal.id = 'auth-pw-modal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width:420px">
+        <h3>修改密码</h3>
+        <p style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:0 0 12px">改密后将退出当前账号在其它设备的登录。</p>
+
+        <div class="form-group">
+          <span class="form-label">原密码</span>
+          <div class="auth-pw-field">
+            <input id="auth-pw-old" type="password" autocomplete="current-password" />
+            <button type="button" class="auth-pw-eye-modal" data-target="auth-pw-old" tabindex="-1">${_eyeOpenSvg()}</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <span class="form-label">新密码（至少 6 位）</span>
+          <div class="auth-pw-field">
+            <input id="auth-pw-new" type="password" autocomplete="new-password" />
+            <button type="button" class="auth-pw-eye-modal" data-target="auth-pw-new" tabindex="-1">${_eyeOpenSvg()}</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <span class="form-label">确认新密码</span>
+          <div class="auth-pw-field">
+            <input id="auth-pw-confirm" type="password" autocomplete="new-password" />
+            <button type="button" class="auth-pw-eye-modal" data-target="auth-pw-confirm" tabindex="-1">${_eyeOpenSvg()}</button>
+          </div>
+        </div>
+
+        <div id="auth-pw-error" style="font-size:12px;color:var(--danger);margin-bottom:8px;display:none"></div>
+
+        <div class="modal-actions" style="margin-top:12px">
+          <button type="button" id="auth-pw-cancel" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
+          <button type="button" id="auth-pw-submit" style="flex:1;background:var(--accent);color:#111;border:none">确认</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    // 眼睛切换（三个独立）
+    modal.querySelectorAll('.auth-pw-eye-modal').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const inp = document.getElementById(btn.dataset.target);
+        if (!inp) return;
+        if (inp.type === 'password') {
+          inp.type = 'text';
+          btn.innerHTML = _eyeClosedSvg();
+          btn.classList.add('on');
+        } else {
+          inp.type = 'password';
+          btn.innerHTML = _eyeOpenSvg();
+          btn.classList.remove('on');
+        }
+      });
+    });
+
+    const close = () => modal.remove();
+    document.getElementById('auth-pw-cancel').addEventListener('click', close);
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });
+
+    const showErr = m => {
+      const el = document.getElementById('auth-pw-error');
+      if (el) { el.textContent = m; el.style.display = 'block'; }
+    };
+    const clearErr = () => {
+      const el = document.getElementById('auth-pw-error');
+      if (el) { el.textContent = ''; el.style.display = 'none'; }
+    };
+
+    const submit = async () => {
+      clearErr();
+      const oldPw = document.getElementById('auth-pw-old').value;
+      const newPw = document.getElementById('auth-pw-new').value;
+      const cfm = document.getElementById('auth-pw-confirm').value;
+      if (!oldPw || !newPw || !cfm) { showErr('请填写所有字段'); return; }
+      if (newPw.length < 6) { showErr('新密码至少 6 位'); return; }
+      if (newPw === oldPw) { showErr('新密码不能与原密码相同'); return; }
+      if (newPw !== cfm) { showErr('两次输入的新密码不一致'); return; }
+
+      const btn = document.getElementById('auth-pw-submit');
+      btn.disabled = true;
+      btn.textContent = '提交中…';
+      try {
+        const { status, data } = await _post('/change-password', {
+          token: _state.token,
+          old_password: oldPw,
+          new_password: newPw,
+        });
+        if (status === 200 && data?.ok) {
+          if (data.devices) {
+            _state.devices = data.devices;
+            _saveState(_state);
+          }
+          close();
+          await _modal({
+            title: '密码已修改',
+            desc: '其它设备已被踢出登录。',
+            cancelText: false,
+            okText: '好的',
+          });
+          _renderProfile();
+          _refreshAccountCard();
+        } else {
+          showErr(data?.error || `修改失败（${status}）`);
+        }
+      } catch(e) {
+        showErr('网络错误：' + (e.message || '请稍后再试'));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '确认';
+      }
+    };
+    document.getElementById('auth-pw-submit').addEventListener('click', submit);
+    modal.querySelectorAll('input').forEach(el => {
+      el.addEventListener('keydown', e => {
+        if (e.key === 'Enter') submit();
+        else if (e.key === 'Escape') close();
+      });
+    });
+  }
+
+  // 眼睛 SVG（复用，方便其它地方调）
+  function _eyeOpenSvg() {
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>';
+  }
+  function _eyeClosedSvg() {
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>';
+  }
+
+  function _onLogoutConfirm() {
+    _modal({
+      title: '退出登录',
+      desc: '本地的对话/世界观/记忆等数据不会丢失，下次登录后还在。',
+      okText: '退出',
+      danger: true,
+    }).then(ok => { if (ok) logout(); });
+  }
+
+  // ===== 退出登录（公开 API）=====
+  async function logout() {
+    if (_state?.token && _state?.device_id) {
+      try {
+        await _post('/kick', { token: _state.token, kick_device_id: _state.device_id });
+      } catch(_) {}
+    }
+    _clearState();
+    if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+    location.reload();
+  }
+
+  // ===== 踢掉指定设备（设置页用） =====
+  async function kickDevice(deviceId) {
+    if (!_state?.token) return { ok: false, error: '未登录' };
+    try {
+      const { status, data } = await _post('/kick', { token: _state.token, kick_device_id: deviceId });
+      if (status === 200 && data?.ok) {
+        _state.devices = data.devices || [];
+        _saveState(_state);
+        return { ok: true, devices: _state.devices };
+      }
+      return { ok: false, error: data?.error || '操作失败' };
+    } catch(e) {
+      return { ok: false, error: e.message };
+    }
+  }
+
+  // ===== 公开访问器 =====
+  function getState() { return _state ? { ...(_state), devices: (_state.devices || []).slice() } : null; }
+  function getNickname() { return _state?.nickname || ''; }
+  function setNickname(n) {
+    if (!_state) return;
+    _state.nickname = String(n || '').trim().slice(0, 30);
+    _saveState(_state);
+  }
+  function getEmail() { return _state?.email || ''; }
+
+  return {
+    init,
+    getState, getNickname, setNickname, getEmail,
+    logout, kickDevice,
+    openProfile, closeProfile,
+  };
+})();
+
+// 自动启动：先用户协议，再 Auth.init()
+function _boot() {
+  try {
+    if (typeof Agreement !== 'undefined' && Agreement.ensureAgreed) {
+      Agreement.ensureAgreed().then(() => Auth.init());
+      return;
+    }
+  } catch(_) {}
+  Auth.init();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _boot);
+} else {
+  _boot();
+}

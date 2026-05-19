@@ -652,7 +652,7 @@ ${isEditing
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `天枢城主题_${names.length}个.json`;
+      a.download = `skynex-theme-${names.length}个.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -729,7 +729,7 @@ ${isEditing
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `天枢城主题_${names.length}个_${new Date().toLocaleDateString('zh-CN').replace(/\//g,'-')}.json`;
+    a.download = `skynex-theme-${names.length}个_${new Date().toLocaleDateString('zh-CN').replace(/\//g,'-')}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

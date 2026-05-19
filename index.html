@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/phone.css">
 <link rel="stylesheet" href="css/markdown.css">
+<link rel="stylesheet" href="css/auth.css">
 </head>
 <body>
 <!-- 开屏动画 -->
@@ -2129,6 +2130,18 @@
 
         <!-- 设置卡片分组 -->
         <div id="settings-overview" style="display:flex;flex-direction:column;gap:12px">
+          <!-- 账号卡片（最顶部，点击进入个人主页） -->
+          <div class="settings-card auth-account-card" onclick="Auth.openProfile()">
+            <div class="settings-card-item auth-account-row">
+              <div class="auth-account-avatar" id="auth-account-avatar">·</div>
+              <div class="auth-account-meta">
+                <div class="auth-account-name" id="auth-account-name">未登录</div>
+                <div class="auth-account-email" id="auth-account-email">—</div>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+          </div>
+
           <!-- 第一个卡片：模型配置 -->
           <div class="settings-card">
             <div class="settings-card-item" onclick="UI.switchSettingsTab('st-api')">
@@ -2153,18 +2166,18 @@
             </div>
           </div>
 
-          <!-- 第三个卡片：数据管理 -->
-          <div class="settings-card">
-            <div class="settings-card-item" onclick="UI.switchSettingsTab('st-data')">
-              <span>数据管理</span>
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
-            </div>
-          </div>
-
           <!-- 第四个卡片：界面主题 -->
           <div class="settings-card">
             <div class="settings-card-item" onclick="UI.switchSettingsTab('st-theme');Theme.populateForm()">
               <span>界面主题</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+          </div>
+
+          <!-- 第五个卡片：关于 -->
+          <div class="settings-card">
+            <div class="settings-card-item" onclick="Agreement.open()">
+              <span>用户协议</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
             </div>
           </div>
@@ -2356,14 +2369,8 @@
             </button>
           </div>
 
-          <!-- Tab: 数据管理 -->
-          <div id="st-data" class="settings-tab-content" style="display:none">
-            <h3 style="color:var(--accent);font-size:14px;margin-bottom:12px">数据管理</h3>
-            <div style="display:flex;flex-direction:column;gap:8px">
-              <button type="button" onclick="DataMgr.exportAll()" class="btn-full" style="display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg> 导出存档</button>
-<button type="button" onclick="DataMgr.importAll()" class="btn-full" style="display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 导入存档</button>
-            </div>
-          </div>
+          <!-- Tab: 数据管理 已迁移到个人主页（设置 → 账号卡 → 数据管理）-->
+          <div id="st-data" class="settings-tab-content" style="display:none"></div>
 
           <!-- Tab: 界面主题 -->
           <div id="st-theme" class="settings-tab-content" style="display:none">
@@ -3398,6 +3405,8 @@ const GameLog = (() => {
 <script src="data/builtin-heartsim.js"></script>
 <script src="js/tianshucheng-fx.js"></script>
 <script src="js/tianshucheng-region-fx.js"></script>
+<script src="js/agreement.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/app.js"></script>
 
 <!-- 全屏输入遮罩 -->

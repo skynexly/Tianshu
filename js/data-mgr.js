@@ -52,9 +52,10 @@ const DataMgr = (() => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `textgame-save-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `skynex-save-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
+      try { localStorage.setItem('tianshu_last_export_at', String(Date.now())); } catch(_) {}
       UI.showToast('已导出总存档', 2000);
     } catch (e) {
       console.error('[DataMgr.exportAll]', e);
@@ -121,5 +122,12 @@ const DataMgr = (() => {
     input.click();
   }
 
-  return { exportAll, importAll };
+  function getLastExportAt() {
+    try {
+      const v = localStorage.getItem('tianshu_last_export_at');
+      return v ? Number(v) : 0;
+    } catch(_) { return 0; }
+  }
+
+  return { exportAll, importAll, getLastExportAt };
 })();

@@ -1,0 +1,961 @@
+/* ========== 天枢城账号系统 - 登录/注册页 ========== */
+/* 配色基调：深黑 + 青绿主调 + 暗红点缀（呼应天枢城世界观 青/绿/红） */
+
+/* 登录主 overlay */
+#auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: #050708;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+  color: #e6efed;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  overflow: hidden;
+}
+#auth-overlay.visible {
+  display: flex;
+  opacity: 1;
+}
+#auth-overlay.fading-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 背景：青色弥散光（上方）+ 暗红弥散光（下方）+ 星点 */
+.auth-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    /* 星点：青绿和冷白混杂 */
+    radial-gradient(1px 1px at 12% 18%, rgba(0,220,200,0.55), transparent 60%),
+    radial-gradient(1px 1px at 28% 72%, rgba(220,240,235,0.4), transparent 60%),
+    radial-gradient(1.5px 1.5px at 65% 22%, rgba(0,205,180,0.6), transparent 60%),
+    radial-gradient(1px 1px at 82% 58%, rgba(240,200,200,0.32), transparent 60%),
+    radial-gradient(1px 1px at 50% 90%, rgba(220,240,235,0.3), transparent 60%),
+    radial-gradient(1.2px 1.2px at 38% 38%, rgba(0,200,180,0.42), transparent 60%),
+    radial-gradient(1px 1px at 92% 88%, rgba(240,200,200,0.35), transparent 60%),
+    radial-gradient(1.4px 1.4px at 15% 55%, rgba(180,230,220,0.5), transparent 60%),
+    radial-gradient(1px 1px at 72% 80%, rgba(255,220,220,0.32), transparent 60%),
+    /* 弥散光：青绿主光 + 暗红副光 */
+    radial-gradient(ellipse 70% 50% at 30% 15%, rgba(0,180,160,0.10), transparent 70%),
+    radial-gradient(ellipse 65% 50% at 85% 92%, rgba(180,40,55,0.09), transparent 70%),
+    radial-gradient(ellipse 100% 80% at 50% 50%, rgba(10,30,32,0.6), transparent 80%);
+  filter: blur(0.2px);
+  animation: auth-twinkle 8s ease-in-out infinite alternate;
+}
+@keyframes auth-twinkle {
+  from { opacity: 0.85; }
+  to   { opacity: 1; }
+}
+
+/* 卡片 */
+.auth-card {
+  position: relative;
+  z-index: 2;
+  width: min(380px, calc(100% - 40px));
+  padding: 38px 30px 26px;
+  border-radius: 22px;
+  background: linear-gradient(160deg, rgba(14,24,26,0.78), rgba(8,12,14,0.85));
+  border: 1px solid rgba(220,80,90,0.32);
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.6),
+    0 0 0 1px rgba(255,255,255,0.02) inset,
+    0 0 28px rgba(180,40,55,0.12),
+    0 0 40px rgba(0,180,160,0.06);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  text-align: center;
+  animation: auth-card-in 0.5s ease;
+}
+@keyframes auth-card-in {
+  from { transform: translateY(10px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+/* logo */
+.auth-logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+.auth-logo img {
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 0 26px rgba(0,205,180,0.42))
+    drop-shadow(0 0 18px rgba(200,50,60,0.28));
+}
+
+/* 标题：SKYNEX */
+.auth-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 300;
+  letter-spacing: 12px;
+  padding-left: 12px;
+  color: #e8f5f2;
+  text-shadow: 0 0 28px rgba(0,210,185,0.32);
+  font-family: 'Helvetica Neue', 'Avenir Next', -apple-system, sans-serif;
+}
+/* 标题下方装饰红线 */
+.auth-title-divider {
+  width: 32px;
+  height: 1.5px;
+  margin: 10px auto 0;
+  background: linear-gradient(90deg, transparent, rgba(220,80,90,0.85), transparent);
+  box-shadow: 0 0 8px rgba(220,80,90,0.5);
+}
+.auth-subtitle {
+  margin-top: 4px;
+  font-size: 11px;
+  letter-spacing: 4px;
+  padding-left: 4px;
+  color: rgba(180,220,215,0.55);
+  text-transform: uppercase;
+}
+.auth-quote {
+  margin: 18px auto 24px;
+  font-size: 11px;
+  font-style: italic;
+  letter-spacing: 0.3px;
+  color: rgba(180,210,205,0.42);
+  line-height: 1.55;
+  max-width: 260px;
+}
+
+/* tab 切换 */
+.auth-tabs {
+  display: flex;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(0,205,180,0.10);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 14px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 8px 0;
+  background: transparent;
+  border: none;
+  color: rgba(180,210,205,0.55);
+  font-size: 13px;
+  letter-spacing: 2px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.auth-tab.active {
+  background: linear-gradient(135deg, rgba(0,160,140,0.42), rgba(0,120,108,0.35));
+  color: #eaf8f5;
+  box-shadow: 0 2px 10px rgba(0,180,160,0.22);
+}
+
+/* 错误条：暗红 */
+.auth-error {
+  min-height: 0;
+  max-height: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: #e87080;
+  text-align: left;
+  padding: 0 4px;
+  transition: all 0.25s ease;
+  opacity: 0;
+}
+.auth-error.visible {
+  min-height: 18px;
+  max-height: 60px;
+  opacity: 1;
+  margin-bottom: 8px;
+}
+
+/* 表单 */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.auth-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(0,205,180,0.10);
+  border-radius: 10px;
+  color: #eaf5f3;
+  font-size: 14px;
+  outline: none;
+  caret-color: #e63a4a;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+.auth-input::placeholder {
+  color: rgba(180,210,205,0.32);
+  font-size: 13px;
+}
+.auth-input:focus {
+  background: rgba(0,205,180,0.04);
+  border-color: rgba(0,210,185,0.45);
+  box-shadow: 0 0 0 3px rgba(0,180,160,0.10);
+}
+
+/* 注册字段默认隐藏，切到 register tab 时显示 */
+.auth-field-register {
+  display: none;
+}
+#auth-overlay.mode-register .auth-field-register {
+  display: block;
+  animation: auth-field-in 0.3s ease;
+}
+
+/* 密码框 + 小红眼睛 */
+.auth-input-wrap {
+  position: relative;
+}
+.auth-input-wrap .auth-input {
+  padding-right: 42px; /* 给眼睛让位 */
+}
+.auth-pw-eye {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(220,80,90,0.55);
+  transition: all 0.2s ease;
+}
+.auth-pw-eye:hover {
+  color: rgba(230,60,75,0.95);
+  background: rgba(220,80,90,0.08);
+  text-shadow: 0 0 8px rgba(220,80,90,0.5);
+  filter: drop-shadow(0 0 6px rgba(220,80,90,0.45));
+}
+.auth-pw-eye.on {
+  color: #e63a4a;
+  filter: drop-shadow(0 0 6px rgba(220,80,90,0.5));
+}
+@keyframes auth-field-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 提交按钮：青绿主调 + 一抹暗红微光当强调 */
+.auth-submit {
+  width: 100%;
+  padding: 13px 0;
+  background: linear-gradient(135deg, #00b89d 0%, #008a7a 100%);
+  border: none;
+  border-radius: 10px;
+  color: #061214;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 8px;
+  padding-left: 8px;
+  cursor: pointer;
+  box-shadow:
+    0 6px 20px rgba(0,180,160,0.35),
+    0 0 0 1px rgba(0,205,180,0.18) inset;
+  transition: all 0.2s ease;
+}
+.auth-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    0 8px 24px rgba(0,180,160,0.45),
+    0 0 0 1px rgba(0,205,180,0.28) inset;
+}
+.auth-submit:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+/* ========== 设备满了：踢人选择器 ========== */
+.auth-kick-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 100001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(3,5,7,0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: auth-fade-in 0.25s ease;
+}
+@keyframes auth-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.auth-kick-card {
+  width: min(360px, calc(100% - 40px));
+  padding: 24px 22px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(14,24,26,0.96), rgba(8,12,14,0.97));
+  border: 1px solid rgba(0,205,180,0.18);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  color: #e6efed;
+}
+.auth-kick-title {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+  color: #eaf8f5;
+}
+.auth-kick-desc {
+  font-size: 12px;
+  color: rgba(180,210,205,0.55);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+.auth-kick-item {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(0,205,180,0.10);
+  border-radius: 10px;
+  color: #eaf5f3;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.auth-kick-item:hover {
+  background: rgba(180,40,55,0.14);
+  border-color: rgba(220,80,90,0.5);
+}
+.auth-kick-name {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+.auth-kick-meta {
+  font-size: 11px;
+  color: rgba(180,210,205,0.48);
+}
+.auth-kick-cancel {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 0;
+  background: transparent;
+  border: 1px solid rgba(0,205,180,0.10);
+  border-radius: 10px;
+  color: rgba(180,210,205,0.6);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.auth-kick-cancel:hover {
+  background: rgba(255,255,255,0.03);
+  color: #eaf8f5;
+}
+
+/* ========== 被踢的全屏蒙层：暗红主调 ========== */
+#auth-kicked-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 100002;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 50%, rgba(60,8,12,0.85), rgba(3,5,7,0.96) 80%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  color: #e6efed;
+  animation: auth-fade-in 0.4s ease;
+}
+.auth-kicked-card {
+  width: min(320px, calc(100% - 40px));
+  padding: 32px 24px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(40,12,16,0.92), rgba(16,6,8,0.94));
+  border: 1px solid rgba(220,80,90,0.22);
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 32px rgba(180,40,55,0.12);
+}
+.auth-kicked-icon {
+  font-size: 36px;
+  color: #e87080;
+  margin-bottom: 10px;
+  text-shadow: 0 0 26px rgba(220,80,90,0.45);
+}
+.auth-kicked-title {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 4px;
+  padding-left: 4px;
+  margin-bottom: 8px;
+  color: #f3e8ea;
+}
+.auth-kicked-msg {
+  font-size: 13px;
+  color: rgba(220,210,215,0.72);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+.auth-kicked-card button {
+  padding: 10px 28px;
+  background: linear-gradient(135deg, #00b89d 0%, #008a7a 100%);
+  border: none;
+  border-radius: 10px;
+  color: #061214;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 4px;
+  padding-left: 32px;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0,180,160,0.35);
+  transition: all 0.2s ease;
+}
+.auth-kicked-card button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(0,180,160,0.45);
+}
+
+/* 小屏适配 */
+@media (max-width: 380px) {
+  .auth-card {
+    padding: 30px 22px 22px;
+  }
+  .auth-title {
+    font-size: 22px;
+    letter-spacing: 10px;
+    padding-left: 10px;
+  }
+  .auth-logo img {
+    width: 108px;
+    height: 108px;
+  }
+}
+
+/* ========================================================
+   账号入口卡片（在设置页顶部）— 跟随主题色
+   ======================================================== */
+.auth-account-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.auth-account-card:hover {
+  transform: translateY(-1px);
+}
+.auth-account-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.auth-account-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 35%, var(--bg-tertiary)),
+    color-mix(in srgb, var(--decoration, var(--accent)) 28%, var(--bg-tertiary)));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text);
+  flex-shrink: 0;
+  text-transform: uppercase;
+  overflow: hidden;
+}
+.auth-account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.auth-account-meta {
+  flex: 1;
+  min-width: 0;
+}
+.auth-account-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.5px;
+}
+.auth-account-email {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.3px;
+}
+
+/* ========================================================
+   个人主页全屏 overlay — 跟随主题色
+   ======================================================== */
+#auth-profile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99000;
+  display: none;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+#auth-profile-overlay.visible {
+  display: block;
+  opacity: 1;
+}
+/* 个人主页里不要登录页那种星空背景，干净一些 */
+#auth-profile-overlay .auth-bg {
+  display: none;
+}
+.auth-profile-scroll {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px 22px 80px;
+  box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 顶部：返回 + 标题 */
+.auth-profile-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.auth-profile-back {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.auth-profile-back:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent);
+}
+.auth-profile-brand {
+  font-size: 13px;
+  letter-spacing: 6px;
+  color: var(--text-secondary);
+  font-weight: 300;
+  padding-left: 6px;
+}
+
+/* 头像 + 名片 */
+.auth-profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 8px 28px rgba(0,0,0,0.35),
+    0 0 24px color-mix(in srgb, var(--accent) 8%, transparent);
+  margin-bottom: 22px;
+}
+.auth-profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 38%, var(--bg-tertiary)),
+    color-mix(in srgb, var(--decoration, var(--accent)) 32%, var(--bg-tertiary)));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 500;
+  color: var(--text);
+  flex-shrink: 0;
+  text-transform: uppercase;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.auth-profile-avatar:hover {
+  opacity: 0.85;
+}
+.auth-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.auth-profile-name-block {
+  flex: 1;
+  min-width: 0;
+}
+.auth-profile-name {
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.5px;
+}
+.auth-profile-name-edit {
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+.auth-profile-name-edit:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.auth-profile-email {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  letter-spacing: 0.3px;
+  word-break: break-all;
+}
+
+/* 分区标题 */
+.auth-profile-section-title {
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: var(--text-secondary);
+  opacity: 0.65;
+  text-transform: uppercase;
+  margin: 24px 0 10px;
+  padding-left: 2px;
+}
+
+/* 列表卡片 */
+.auth-profile-list {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+.auth-profile-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+.auth-profile-item:hover {
+  background: var(--bg-tertiary);
+}
+}
+.auth-profile-item.danger:hover {
+  background: color-mix(in srgb, var(--danger) 14%, var(--bg-tertiary));
+}
+.auth-profile-item-label {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text);
+  letter-spacing: 0.3px;
+}
+.auth-profile-item-value {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-right: 10px;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auth-profile-item-arrow {
+  color: var(--text-secondary);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+.auth-profile-item.danger .auth-profile-item-label {
+  color: var(--danger);
+}
+
+/* 设备列表项 */
+.auth-profile-device {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+}
+.auth-profile-device-info {
+  flex: 1;
+  min-width: 0;
+}
+.auth-profile-device-name {
+  font-size: 14px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.auth-profile-device-this {
+  font-size: 10px;
+  letter-spacing: 1px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.auth-profile-device-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+.auth-profile-device-kick {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  color: var(--danger);
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.auth-profile-device-kick:hover {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  border-color: var(--danger);
+}
+
+/* 关于段 */
+.auth-profile-about {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.55;
+  letter-spacing: 2px;
+  margin-top: 28px;
+  line-height: 1.8;
+}
+
+/* ========================================================
+   改密码弹窗 / 通用弹窗里的密码眼睛
+   ======================================================== */
+/* 输入框 + 眼睛容器（在 .form-group 里） */
+.auth-pw-field {
+  position: relative;
+  width: 100%;
+}
+.auth-pw-field input {
+  padding-right: 42px;
+}
+.auth-pw-eye-modal {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+.auth-pw-eye-modal:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.auth-pw-eye-modal.on {
+  color: var(--accent);
+}
+
+/* ========================================================
+   用户协议 overlay（跟随主题色）
+   - 启动首次进入：mode=agree（带"同意并继续"）
+   - 设置页查看：mode=readonly（带"关闭"）
+   ======================================================== */
+#agreement-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10100; /* 高于 auth login（10000），保证首启时盖在登录页上 */
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  animation: agreement-fade-in 0.25s ease;
+}
+@keyframes agreement-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.agreement-card {
+  position: relative;
+  width: min(640px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  animation: agreement-card-in 0.32s ease;
+}
+@keyframes agreement-card-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.agreement-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.agreement-brand {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 4px;
+  color: var(--accent);
+}
+.agreement-version {
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 1px;
+}
+
+.agreement-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 18px 24px 22px;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--text);
+  -webkit-overflow-scrolling: touch;
+}
+/* md-content 内的元素稍微调一下间距，避免太松 */
+.agreement-scroll h1 {
+  font-size: 18px;
+  margin: 0 0 12px;
+  color: var(--text);
+}
+.agreement-scroll h2 {
+  font-size: 15px;
+  margin: 22px 0 10px;
+  color: var(--accent);
+}
+.agreement-scroll h3 {
+  font-size: 13.5px;
+  margin: 16px 0 6px;
+  color: var(--text);
+}
+.agreement-scroll p,
+.agreement-scroll ul,
+.agreement-scroll ol {
+  margin: 8px 0;
+}
+.agreement-scroll li {
+  margin: 4px 0;
+}
+.agreement-scroll blockquote {
+  margin: 10px 0;
+  padding: 8px 14px;
+  border-left: 2px solid var(--accent);
+  background: var(--bg-tertiary);
+  border-radius: 0 6px 6px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.agreement-scroll hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 18px 0;
+}
+.agreement-scroll strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.agreement-footer {
+  flex-shrink: 0;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.agreement-btn {
+  display: inline-block;
+  min-width: 160px;
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.agreement-btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.agreement-btn-primary:hover {
+  filter: brightness(1.08);
+}
+.agreement-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+.agreement-btn-ghost:hover {
+  color: var(--text);
+  border-color: var(--text-secondary);
+}
+.agreement-hint {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+/* 小屏适配 */
+@media (max-width: 480px) {
+  #agreement-overlay { padding: 12px 8px; }
+  .agreement-header { padding: 14px 18px 12px; }
+  .agreement-scroll { padding: 14px 18px 18px; font-size: 13px; }
+  .agreement-footer { padding: 12px 18px 16px; }
+  .agreement-btn { width: 100%; min-width: 0; }
+}

@@ -2515,7 +2515,7 @@ temp.appendChild(wrap);
 // 底部水印
 const watermark = document.createElement('div');
 watermark.style.cssText = 'text-align:center;font-size:11px;color:var(--text-secondary);opacity:0.6;margin-top:12px;padding-top:8px;border-top:1px dashed var(--border)';
-watermark.textContent = '— 天枢城 · 文游记录 —';
+watermark.textContent = '— SKYNEX —';
 temp.appendChild(watermark);
 
 document.body.appendChild(temp);
@@ -2531,7 +2531,7 @@ const dataUrl = canvas.toDataURL('image/png');
 // 下载
 const a = document.createElement('a');
 a.href = dataUrl;
-a.download = `对话截图_${Date.now()}.png`;
+a.download = `skynex-chat-${Date.now()}.png`;
 document.body.appendChild(a);
 a.click();
 document.body.removeChild(a);

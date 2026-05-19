@@ -488,7 +488,7 @@ const Prompts = (() => {
       order: prompts.map(p => ({ identifier: p.identifier, enabled: p.enabled }))
     }];
     const out = {
-      _exportedBy: '天枢城文游APP',
+      _exportedBy: 'SKYNEX',
       _exportedAt: new Date().toISOString(),
       _group: selectedGroup,
       prompts,

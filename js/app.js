@@ -149,26 +149,43 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
   console.log('[TextGame Engine] 初始化完成');
   GameLog.log('info', '引擎初始化完成');
 
-  // ===== 更新公告 =====
+  // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-      const APP_VERSION = 'v627';
-      const CHANGELOG = `· 新增事件系统
-· UI 调整
-· 手机功能优化
-· 内置世界观「天枢城」更新`;
+    const APP_VERSION = 'v631';
+    const CHANGELOG = `· 账号系统上线（邀请码注册 / 登录 / 设备管理）
+· 个人主页（设置顶部头像入口）
+· 数据导入导出迁移到个人主页
+· 截图水印、导出文件名统一为 SKYNEX
+· 后台 AI 自动识别你的昵称
+· 用户协议 v4.1（首次进入需阅读并同意）
+· 登录页 SKYNEX 开屏视觉`;
     const SEEN_KEY = 'changelog_seen_version';
-    const lastSeen = localStorage.getItem(SEEN_KEY);
-    if (lastSeen !== APP_VERSION) {
-      // 延迟弹出，等 splash 消失
+
+    function _showChangelog() {
+      try {
+        const lastSeen = localStorage.getItem(SEEN_KEY);
+        if (lastSeen === APP_VERSION) return;
+      } catch(_) {}
       setTimeout(() => {
+        // 已经存在就不重复弹
+        if (document.getElementById('changelog-overlay')) return;
+        let nickname = '';
+        try {
+          if (typeof Auth !== 'undefined' && Auth.getNickname) nickname = Auth.getNickname() || '';
+        } catch(_) {}
+        const safeName = String(nickname).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'"',"'":'&#39;' }[c]));
+        const greeting = safeName ? `欢迎回来，${safeName}` : '欢迎回来';
+
         const overlay = document.createElement('div');
+        overlay.id = 'changelog-overlay';
         overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px;animation:sbFadeIn .25s ease-out';
         overlay.innerHTML = `
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:22px 22px 18px;max-width:340px;width:100%;color:var(--text);font-size:13px;line-height:1.8;box-shadow:0 10px 28px rgba(0,0,0,0.22)">
-            <div style="font-size:16px;font-weight:650;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;gap:8px">
-              <span>更新公告</span><span style="font-size:11px;color:var(--text-secondary);font-weight:400;border:1px solid var(--border);border-radius:999px;padding:1px 8px;line-height:1.6">${APP_VERSION}</span>
+            <div style="font-size:16px;font-weight:650;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span>${greeting}</span><span style="font-size:11px;color:var(--text-secondary);font-weight:400;border:1px solid var(--border);border-radius:999px;padding:1px 8px;line-height:1.6">${APP_VERSION}</span>
             </div>
-            <div style="height:1px;background:var(--border);opacity:.7;margin:12px 0 14px"></div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;letter-spacing:0.5px">本次更新</div>
+            <div style="height:1px;background:var(--border);opacity:.7;margin:0 0 14px"></div>
             <div style="white-space:pre-line;margin-bottom:18px;color:var(--text-secondary);font-size:12px;line-height:1.9">${CHANGELOG}</div>
             <div style="display:flex;justify-content:flex-end">
               <button id="changelog-ok" style="padding:8px 24px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">已阅</button>
@@ -176,7 +193,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
           </div>`;
         document.body.appendChild(overlay);
         overlay.querySelector('#changelog-ok').onclick = () => {
-          localStorage.setItem(SEEN_KEY, APP_VERSION);
+          try { localStorage.setItem(SEEN_KEY, APP_VERSION); } catch(_) {}
           overlay.style.opacity = '0';
           overlay.style.transition = 'opacity .2s';
           setTimeout(() => overlay.remove(), 200);
@@ -185,7 +202,10 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
         overlay.addEventListener('click', (e) => {
           if (e.target === overlay) overlay.querySelector('#changelog-ok').click();
         });
-      }, 1200);
+      }, 800);
     }
+
+    // 监听登录成功事件（缓存登录 / 表单登录都会触发）
+    window.addEventListener('auth:ready', _showChangelog, { once: true });
   } catch(_) {}
 })();

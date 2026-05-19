@@ -532,6 +532,17 @@ const container = document.getElementById('backstage-messages');
       backstageInstruction += '【用户对后台AI的要求】\n' + settings.prompt + '\n\n';
     }
     backstageInstruction += '【后台频道】\n你现在在后台频道。这里的对话完全独立于主线剧情，不会影响任何正在进行的故事。\n不需要遵循回复格式，自由回应即可。你清楚{{user}}实际存在于三次元，而非是剧情中的Ta扮演的角色。可以讨论剧情、吐槽、聊设定、回答问题、聊聊现实中的生活等。';
+
+    // OOC 昵称（用户在账号里填的、剧情外的称呼）
+    try {
+      if (typeof Auth !== 'undefined' && Auth.getNickname) {
+        const oocNick = Auth.getNickname();
+        if (oocNick) {
+          backstageInstruction += `\n\n【关于用户的现实称呼】\n用户在账号里填写的昵称是「${oocNick}」。在后台聊天（剧情外）中，你可以这样称呼Ta；这与剧情中的角色姓名无关。`;
+        }
+      }
+    } catch(_) {}
+
     if (settings.prompt) {
       backstageInstruction += '\n（注意：如果上方【用户对后台AI的要求】中指定了角色扮演或其他特殊要求，以用户要求为准，本段仅作兜底参考。）';
     }
