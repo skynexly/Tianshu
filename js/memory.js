@@ -511,24 +511,24 @@ const Memory = (() => {
   }
 
   function _buildEventRelationPrompt(recentMessages, charName, charInfo, extractLimits, existingTitles) {
-const displayName = charName || '用户角色';
-const dialogue = recentMessages.map(m =>
-`[${m.role === 'user' ? displayName : 'AI'}] ${m.content}`
-).join('\n\n');
-const playerName = displayName;
+    const displayName = charName || '用户角色';
+    const dialogue = recentMessages.map(m =>
+        `[${m.role === 'user' ? displayName : 'AI'}] ${m.content}`
+    ).join('\n\n');
+    const playerName = displayName;
     const maxEvents = extractLimits?.maxEvents || 5;
     const maxRelations = extractLimits?.maxRelations || 5;
 
-    let charLine = '';
+    let charBlock = '';
     if (charInfo) {
-      const parts = [charInfo.name];
-      if (charInfo.gender) parts.push(charInfo.gender);
-      if (charInfo.background) parts.push(charInfo.background.substring(0, 100));
-      charLine = `\n用户角色：${parts.join('，')}\n`;
+        const lines = [`姓名：${charInfo.name || displayName}`];
+        if (charInfo.gender) lines.push(`性别：${charInfo.gender}`);
+        if (charInfo.background) lines.push(`设定：${charInfo.background}`);
+        charBlock = `\n【⚠ 玩家角色基本设定（必须严格遵守，所有涉及玩家性别/外貌/身份的提取都以此为准，不得因对话场景而扭曲或忽略）】\n${lines.join('\n')}\n`;
     }
 
-    return `请从以下对话中按时间顺序提取所有重要事件和关系变化，按JSON格式输出。只输出JSON，不要其他内容。
-${charLine}
+    return `${charBlock}请从以下对话中按时间顺序提取所有重要事件和关系变化，按JSON格式输出。只输出JSON，不要其他内容。
+
 对话内容：
 ${dialogue}
 
@@ -576,22 +576,23 @@ ${dialogue}
   }
 
   function _buildNotesPrompt(recentMessages, charName, charInfo) {
-const displayName = charName || '用户角色';
-const dialogue = recentMessages.map(m =>
-`[${m.role === 'user' ? displayName : 'AI'}] ${m.content}`
-).join('\n\n');
-const playerName = displayName;
+    const displayName = charName || '用户角色';
+    const dialogue = recentMessages.map(m =>
+        `[${m.role === 'user' ? displayName : 'AI'}] ${m.content}`
+    ).join('\n\n');
+    const playerName = displayName;
 
-    let charLine = '';
+    let charBlock = '';
     if (charInfo) {
-      const parts = [charInfo.name];
-      if (charInfo.gender) parts.push(charInfo.gender);
-      charLine = `\n用户角色：${parts.join('，')}\n`;
+        const lines = [`姓名：${charInfo.name || displayName}`];
+        if (charInfo.gender) lines.push(`性别：${charInfo.gender}`);
+        if (charInfo.background) lines.push(`设定：${charInfo.background}`);
+        charBlock = `\n【⚠ 玩家角色基本设定（必须严格遵守，所有涉及玩家性别/外貌/身份的提取都以此为准，不得因对话场景而扭曲或忽略）】\n${lines.join('\n')}\n`;
     }
 
-    return `小纸条的目的是为了建立起${playerName}的人格画像，只记录能够体现出其性格、偏好、兴趣等的信息。
+    return `${charBlock}小纸条的目的是为了建立起${playerName}的人格画像，只记录能够体现出其性格、偏好、兴趣等的信息。
 （注：${playerName}是真实角色名，请直接使用，不要写成 {PlayerName}、{{user}} 等占位符，也不要用"用户""玩家"这种泛称代替。）
-${charLine}
+
 对话内容：
 ${dialogue}
 

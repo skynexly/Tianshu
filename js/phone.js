@@ -143,6 +143,19 @@ function flushActionLogForBackstage() {
 wallpaperOverlay: false, // 壁纸遮罩（深色半透明层，适配深色壁纸）
 wallpaperOpacity: 75, // 卡片/底栏/顶栏不透明度（0-100，仅有壁纸时生效）
 sendActionLog: true, // v627：是否把本轮手机操作日志发送给 AI（默认开）
+profile: {                // 主屏个人资料卡：用户可改的"网名 + 个性签名 + 头像"
+  name: 'Polaris',
+  bio: 'The still point where all worlds turn.',
+  avatar: ''              // DataURL 或 URL
+},
+album: [],                // 相册：[{id, mode, text, imageId, location, time, createdAt}]
+                          // mode: 'shoot' 用户拍/手写 | 'ai_text' AI 生成的文字 | 'ai_image' AI 生成的图片
+                          // location: 拍照时地点快照（region·location 拼接）
+                          // time: 拍照时游戏内时间快照
+                          // imageId: 仅 ai_image 模式有，挂到 drawnImages 表
+cameraTab: 'shoot',       // 相机内 tab 记忆：'shoot' | 'album'
+cameraDraft: null,        // 拍摄页输入框草稿：{text, baseStatusText}
+                          // baseStatusText = 写草稿时的状态栏拼接结果（主线没推进就保持，推进了就丢）
  // 外卖
  takeoutCachedItems: [],   // 上一次刷新/搜索的商品列表
  takeoutLastQuery: '',     // 上一次搜索关键词
@@ -234,6 +247,103 @@ function _applyWallpaper(pd) {
     shell.classList.toggle('has-custom-wallpaper', !!wallpaper && useOverlay);
     // 壁纸存在 class：只要有壁纸就加（让底栏半透明）
     shell.classList.toggle('has-wallpaper', !!wallpaper);
+  }
+
+  // ===== 个人资料卡：渲染 + inline 编辑 + 头像 =====
+  const PROFILE_DEFAULT = { name: 'Polaris', bio: 'The still point where all worlds turn.', avatar: '' };
+
+  function _getProfile(pd) {
+    const p = pd?.profile || {};
+    return {
+      name: typeof p.name === 'string' ? p.name : PROFILE_DEFAULT.name,
+      bio: typeof p.bio === 'string' ? p.bio : PROFILE_DEFAULT.bio,
+      avatar: typeof p.avatar === 'string' ? p.avatar : ''
+    };
+  }
+
+  function _applyProfile(pd) {
+    const profile = _getProfile(pd);
+    const nameEl = document.getElementById('phone-profile-name');
+    const bioEl = document.getElementById('phone-profile-bio');
+    const avatarEl = document.getElementById('phone-profile-avatar');
+    // 只在不在编辑状态时刷新文字（避免打字时被覆盖）
+    if (nameEl && document.activeElement !== nameEl) nameEl.textContent = profile.name || '';
+    if (bioEl && document.activeElement !== bioEl) bioEl.textContent = profile.bio || '';
+    if (avatarEl) {
+      if (profile.avatar) {
+        avatarEl.style.backgroundImage = `url("${profile.avatar}")`;
+        avatarEl.classList.add('has-avatar');
+      } else {
+        avatarEl.style.backgroundImage = '';
+        avatarEl.classList.remove('has-avatar');
+      }
+    }
+  }
+
+  // 字数限制 —— input 时截断超出部分（保持光标在末尾）
+  function _onProfileInput(field, el, maxLen) {
+    const text = (el.textContent || '');
+    if (text.length > maxLen) {
+      el.textContent = text.slice(0, maxLen);
+      // 把光标放到末尾
+      try {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch(_) {}
+      UI.showToast(`已达字数上限（${maxLen}）`, 1200);
+    }
+  }
+
+  function _onProfileFocus(field, el) {
+    // 进入编辑：选中所有文字，方便整段替换
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch(_) {}
+  }
+
+  // 失焦保存
+  async function _onProfileBlur(field, el) {
+    const raw = (el.textContent || '').trim();
+    const value = raw || PROFILE_DEFAULT[field];   // 清空时回落到默认
+    if (raw !== value) el.textContent = value;     // 视觉同步
+    try {
+      const pd = await _getPhoneData();
+      if (!pd) return;
+      pd.profile = pd.profile || { ...PROFILE_DEFAULT };
+      if (pd.profile[field] === value) return;     // 没变化不写
+      pd.profile[field] = value;
+      await _savePhoneData();
+    } catch(e) { console.warn('[Profile] save failed', e); }
+  }
+
+  // 回车失焦（不允许换行）
+  function _onProfileKeydown(e, field, el) {
+    if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+  }
+
+  // 头像：调用通用图片输入弹窗（本地 + URL）
+  async function _pickProfileAvatar() {
+    if (typeof Utils === 'undefined' || !Utils.promptImageInput) {
+      UI.showToast('图片输入组件未就绪', 1500); return;
+    }
+    try {
+      const dataUrl = await Utils.promptImageInput({ maxSize: 256, quality: 0.85, outputFormat: 'jpeg' });
+      if (!dataUrl) return;
+      const pd = await _getPhoneData();
+      if (!pd) return;
+      pd.profile = pd.profile || { ...PROFILE_DEFAULT };
+      pd.profile.avatar = dataUrl;
+      await _savePhoneData();
+      _applyProfile(pd);
+    } catch(e) { console.warn('[Profile] avatar pick failed', e); UI.showToast('头像设置失败', 1500); }
   }
 
 function _compressWallpaper(file, opts = {}) {
@@ -401,9 +511,10 @@ function _isAppStillActive(appId) {
       const mask = await Character.get();
       if (mask && mask.name) {
         let maskStr = `名字：${mask.name}`;
-        if (mask.description) maskStr += `\n描述：${mask.description}`;
-        if (mask.personality) maskStr += `\n性格：${mask.personality}`;
-        parts.push('【用户角色（面具）】\n' + maskStr);
+        // 兼容历史字段名：实际数据字段是 background；老代码写的 description/personality 实际从未存在
+        const bg = mask.background || mask.description || '';
+        if (bg) maskStr += `\n设定：${bg}`;
+        parts.push('【⚠ 玩家角色基本设定（必须严格遵守，所有涉及玩家性别/外貌/身份的描写都以此为准）】\n' + maskStr);
       }
     } catch(_) {}
 
@@ -618,8 +729,9 @@ function _extractJsonArrayText(content) {
  gear: `<svg ${common}><circle cx="12" cy="12" r="3"></circle><circle cx="12" cy="12" r="7"></circle><line x1="12" y1="2" x2="12" y2="5"></line><line x1="12" y1="19" x2="12" y2="22"></line><line x1="2" y1="12" x2="5" y2="12"></line><line x1="19" y1="12" x2="22" y2="12"></line></svg>`,
  'phone-down': `<svg ${common}><rect x="7" y="2" width="10" height="20" rx="2"></rect><line x1="11" y1="18" x2="13" y2="18"></line><polyline points="8 11 12 15 16 11"></polyline><line x1="12" y1="6" x2="12" y2="15"></line></svg>`,
  forum: `<svg ${common}><rect x="4" y="5" width="16" height="12" rx="3"></rect><polyline points="8 17 8 21 12 17"></polyline><line x1="8" y1="9" x2="16" y2="9"></line><line x1="8" y1="13" x2="13" y2="13"></line></svg>`,
- map: `<svg ${common}><path d="M12 21s6-5 6-11a6 6 0 0 0-12 0c0 6 6 11 6 11z"></path><circle cx="12" cy="10" r="2"></circle></svg>`,
+ map: `<svg ${common}><path d="M18 8c0 3.613-3.869 7.429-5.393 8.795a1 1 0 0 1-1.214 0C9.87 15.429 6 11.613 6 8a6 6 0 0 1 12 0"/><circle cx="12" cy="8" r="2"/><path d="M8.714 14h-3.71a1 1 0 0 0-.948.683l-2.004 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .948-1.316l-2-6a1 1 0 0 0-.949-.684h-3.712"/></svg>`,
  camera: `<svg ${common}><rect x="4" y="7" width="16" height="12" rx="3"></rect><circle cx="12" cy="13" r="3"></circle><path d="M9 7l1.5-2h3L15 7"></path></svg>`,
+ aperture: `<svg ${common}><circle cx="12" cy="12" r="10"/><path d="m14.31 8 5.74 9.94"/><path d="M9.69 8h11.48"/><path d="m7.38 12 5.74-9.94"/><path d="M9.69 16 3.95 6.06"/><path d="M14.31 16H2.83"/><path d="m16.62 12-5.74 9.94"/></svg>`,
  memo: `<svg ${common}><rect x="5" y="3" width="14" height="18" rx="2"></rect><line x1="8" y1="8" x2="16" y2="8"></line><line x1="8" y1="12" x2="16" y2="12"></line><line x1="8" y1="16" x2="13" y2="16"></line></svg>`,
  takeout: `<svg ${common}><path d="M5 9h14l-1 11H6L5 9z"></path><path d="M8 9V6a4 4 0 0 1 8 0v3"></path><line x1="9" y1="13" x2="9" y2="17"></line><line x1="15" y1="13" x2="15" y2="17"></line></svg>`,
  shop: `<svg ${common}><path d="M3 7h18l-2 13H5L3 7z"></path><path d="M8 7V5a4 4 0 0 1 8 0v2"></path></svg>`,
@@ -689,7 +801,7 @@ function _renderHomeIcon(a) {
       const apps = [
         { id: 'forum', icon: 'forum', name: _getForumName() },
  { id: 'map', icon: 'map', name: '地图' },
- { id: 'moments', icon: 'camera', name: '好友圈' },
+ { id: 'moments', icon: 'aperture', name: '好友圈' },
  { id: 'memo', icon: 'memo', name: '备忘录' },
  ];
       // 底部 dock：相机（占位）、设置、收起手机
@@ -709,12 +821,24 @@ function _renderHomeIcon(a) {
   </div>
 </div>
 <div class="phone-home-spacer"></div>
-<div class="phone-profile-card" onclick="UI.showToast('个人资料编辑功能开发中', 1500)">
+<div class="phone-profile-card" id="phone-profile-card">
   <div class="phone-profile-text">
-    <div class="phone-profile-name">Polaris</div>
-    <div class="phone-profile-bio">The still point where all worlds turn.</div>
+    <div class="phone-profile-name" id="phone-profile-name"
+         contenteditable="true" spellcheck="false"
+         data-placeholder="Polaris"
+         onfocus="Phone._onProfileFocus('name', this)"
+         onblur="Phone._onProfileBlur('name', this)"
+         onkeydown="Phone._onProfileKeydown(event, 'name', this)"
+         oninput="Phone._onProfileInput('name', this, 20)">Polaris</div>
+    <div class="phone-profile-bio" id="phone-profile-bio"
+         contenteditable="true" spellcheck="false"
+         data-placeholder="The still point where all worlds turn."
+         onfocus="Phone._onProfileFocus('bio', this)"
+         onblur="Phone._onProfileBlur('bio', this)"
+         onkeydown="Phone._onProfileKeydown(event, 'bio', this)"
+         oninput="Phone._onProfileInput('bio', this, 60)">The still point where all worlds turn.</div>
   </div>
-  <div class="phone-profile-avatar"></div>
+  <div class="phone-profile-avatar" id="phone-profile-avatar" onclick="Phone._pickProfileAvatar()"></div>
 </div>
 <div class="phone-system-grid">
 ${systemApps.map(a => _renderHomeIcon(a)).join('')}
@@ -731,7 +855,7 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
 
  // 填充小组件数据（从 status 缓存拿）
  _refreshWidget();
- _getPhoneData().then(pd => _applyWallpaper(pd)).catch(() => {});
+ _getPhoneData().then(pd => { _applyWallpaper(pd); _applyProfile(pd); }).catch(() => {});
  _currentApp = null;
   }
 
@@ -803,11 +927,6 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
 
   // ===== App 路由 =====
 async function openApp(appId) {
-  // 相机：暂未实装，弹 toast 占位
-  if (appId === 'camera') {
-    UI.showToast('相机功能开发中', 1500);
-    return;
-  }
   // 心动模拟：被锁时拦截
   try {
     if (typeof StatusBar !== 'undefined' && StatusBar.isPhoneLocked && StatusBar.isPhoneLocked()) {
@@ -836,6 +955,7 @@ async function openApp(appId) {
  case 'memo': _renderMemo(phoneData); break;
  case 'takeout': _renderShopping(phoneData, 'takeout'); break;
  case 'shop': _renderShopping(phoneData, 'shop'); break;
+ case 'camera': _renderCamera(phoneData); break;
  case 'heartsim_app': _renderHeartSimApp(phoneData); break;
  }
  document.getElementById('phone-back-btn')?.classList.remove('hidden');
@@ -2035,7 +2155,7 @@ ${wvPrompt}` },
     _renderMomentVisibleLabel();
   }
 
-  async function _postMoment() {
+  async function _postMoment(prefill) {
     _momentVisibleOptions = await _collectMomentVisibleOptions();
     _momentVisibleSelected = new Set(['__all__']);
 
@@ -2043,14 +2163,21 @@ ${wvPrompt}` },
     let gameTime = '';
     try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
 
+    // 预填值（来自相册"发到朋友圈"等场景）
+    const prefillText = (prefill && prefill.text) || '';
+    const prefillImgDesc = (prefill && prefill.imageDesc) || '';
+
     const body = document.getElementById('phone-body');
     document.getElementById('phone-title').textContent = '发动态';
     body.innerHTML = `
 <div style="padding:12px;display:flex;flex-direction:column;gap:8px;height:100%">
-                <textarea id="phone-moment-text" placeholder="说点什么…" style="flex:1;min-height:80px;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px;resize:none"></textarea>
-                <div id="phone-moment-imgdesc-wrap">
-                  <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;display:flex;align-items:center;gap:4px">${_uiIcon('image', 12)} 描述配图（可选，AI 会根据描述生成评论）</div>
-                  <textarea id="phone-moment-imgdesc" placeholder="用文字描述你想配的图片，例如：一张窗外的雨景照片" style="width:100%;min-height:40px;border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--bg-tertiary);color:var(--text);font-size:12px;resize:none;box-sizing:border-box"></textarea>
+                <textarea id="phone-moment-text" placeholder="说点什么…" style="height:140px;min-height:140px;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px;resize:none">${Utils.escapeHtml(prefillText)}</textarea>
+                <div id="phone-moment-imgdesc-wrap" style="display:flex;flex-direction:column;min-height:0">
+                  <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;gap:4px">
+                    <span style="display:flex;align-items:center;gap:4px">${_uiIcon('image', 12)} 描述配图（可选，AI 会根据描述生成评论）</span>
+                    <button type="button" onclick="Phone._openAlbumPickerForMoment()" style="padding:3px 10px;font-size:11px;border-radius:10px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--accent);cursor:pointer">从相册选</button>
+                  </div>
+                  <textarea id="phone-moment-imgdesc" placeholder="用文字描述你想配的图片，例如：一张窗外的雨景照片" style="height:100px;min-height:100px;border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--bg-tertiary);color:var(--text);font-size:12px;resize:none;box-sizing:border-box">${Utils.escapeHtml(prefillImgDesc)}</textarea>
                 </div>
         <input id="phone-moment-time" value="${Utils.escapeHtml(gameTime)}" placeholder="时间" style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--bg-tertiary);color:var(--text);font-size:12px">
         <button type="button" onclick="Phone._openMomentVisibleModal()" class="phone-visible-trigger"><span>对谁可见</span><strong id="phone-moment-visible-label">全部可见</strong></button>
@@ -2346,10 +2473,875 @@ ${fullCtx}`;
     }
   }
 
-  function _renderMemo(pd) {
-    const body = document.getElementById('phone-body');
-    document.getElementById('phone-title').textContent = '备忘录';
-    const memos = pd.memos || [];
+  // ===== 相机 App =====
+let _cameraTab = 'shoot'; // 'shoot' | 'album'
+
+// 把当前状态栏拼成"基础描述"
+async function _composeShootText() {
+  let sb;
+  try { sb = Conversations.getStatusBar() || {}; } catch(_) { sb = {}; }
+  // 取玩家面具名，替换"你"为具名，避免发到朋友圈/分享给 AI 时产生歧义
+  let playerName = '';
+  try { const mask = await Character.get(); playerName = mask?.name || ''; } catch(_) {}
+  const youLabel = playerName || '我';
+  const lines = [];
+  // 场景
+  if (sb.scene && String(sb.scene).trim()) lines.push(String(sb.scene).trim());
+  // 你（玩家）—— 显示为面具名
+  const youParts = [];
+  if (sb.playerOutfit && String(sb.playerOutfit).trim()) youParts.push(String(sb.playerOutfit).trim());
+  if (sb.playerPosture && String(sb.playerPosture).trim()) youParts.push(String(sb.playerPosture).trim());
+  if (youParts.length) lines.push(youLabel + '：' + youParts.join('，'));
+  // NPC（全列）
+  const npcs = Array.isArray(sb.npcs) ? sb.npcs : [];
+  npcs.forEach(n => {
+    if (!n || !n.name) return;
+    const parts = [];
+    if (n.outfit && String(n.outfit).trim()) parts.push(String(n.outfit).trim());
+    if (n.posture && String(n.posture).trim()) parts.push(String(n.posture).trim());
+    if (parts.length) lines.push(String(n.name) + '：' + parts.join('，'));
+  });
+  return lines.join('\n');
+}
+
+function _renderCamera(pd) {
+  const body = document.getElementById('phone-body');
+  document.getElementById('phone-title').textContent = '相机';
+  _cameraTab = pd.cameraTab || 'shoot';
+
+  const shootHtml = _renderCameraShoot(pd);
+  const albumHtml = _renderCameraAlbum(pd);
+
+  body.innerHTML = `
+    <div class="phone-camera-shell">
+      <div id="phone-camera-shoot" class="phone-camera-page" style="display:${_cameraTab === 'shoot' ? 'flex' : 'none'}">${shootHtml}</div>
+      <div id="phone-camera-album" class="phone-camera-page" style="display:${_cameraTab === 'album' ? 'flex' : 'none'}">${albumHtml}</div>
+      <div class="phone-tabbar">
+        <div class="phone-tab ${_cameraTab === 'shoot' ? 'active' : ''}" onclick="Phone._switchCameraTab('shoot')">拍摄</div>
+        <div class="phone-tab ${_cameraTab === 'album' ? 'active' : ''}" onclick="Phone._switchCameraTab('album')">相册</div>
+      </div>
+    </div>
+  `;
+  // 拍摄 tab 渲染完后异步填充文本（要 await Character.get()）
+  if (_cameraTab === 'shoot') _hydrateCameraShoot(pd);
+  // 相册 tab 渲染完后异步加载真图
+  if (_cameraTab === 'album') _hydrateAlbumImages();
+}
+
+// 拍摄 tab —— 渲染时先放占位，再异步填充实际拼接结果（因为要 await Character.get()）
+function _renderCameraShoot(pd) {
+  // 草稿（如果有）：先用草稿的 text 占位，避免闪烁
+  const draft = pd.cameraDraft;
+  const initialText = draft ? draft.text : '';
+  return `
+    <div class="phone-camera-shoot-inner">
+      <div class="phone-camera-hint">即将拍下当前画面</div>
+      <textarea id="phone-camera-text" class="phone-camera-text" placeholder="（当前场景为空，可以自己写一段描述）" spellcheck="false" oninput="Phone._cameraOnTextInput()">${Utils.escapeHtml(initialText)}</textarea>
+      <div class="phone-camera-actions">
+        <button class="phone-camera-btn-secondary" onclick="Phone._cameraOpenAdjust()">调整镜头</button>
+        <button class="phone-camera-shutter" onclick="Phone._cameraShoot()" aria-label="拍摄">
+          <span class="phone-camera-shutter-inner"></span>
+        </button>
+        <button class="phone-camera-btn-secondary" onclick="Phone._cameraRefillFromStatus()">重置</button>
+      </div>
+    </div>
+  `;
+}
+
+// 渲染完 DOM 后调一次：根据状态栏拼接 + 草稿对比，填入正确的初始文字
+async function _hydrateCameraShoot(pd) {
+  const el = document.getElementById('phone-camera-text');
+  if (!el) return;
+  const fresh = await _composeShootText();
+  const draft = pd.cameraDraft;
+  // 草稿仍然有效（主线没推进）→ 用草稿；否则用最新状态栏
+  if (draft && draft.baseStatusText === fresh) {
+    el.value = draft.text;
+  } else {
+    el.value = fresh;
+    if (draft) { pd.cameraDraft = null; _savePhoneData(); }
+  }
+}
+
+// 相册 tab
+function _renderCameraAlbum(pd) {
+  const album = Array.isArray(pd.album) ? pd.album : [];
+  if (!album.length) {
+    return `
+      <div class="phone-camera-album-empty">
+        <div class="phone-camera-album-empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:60px;height:60px;opacity:.4">
+            <rect x="3" y="5" width="18" height="16" rx="2.5"></rect>
+            <rect x="6" y="15" width="12" height="4" rx="0.5"></rect>
+            <circle cx="12" cy="10.5" r="3"></circle>
+            <circle cx="12" cy="10.5" r="1"></circle>
+            <circle cx="17.5" cy="7.8" r="0.6"></circle>
+          </svg>
+        </div>
+        <div class="phone-camera-album-empty-text">还没有照片</div>
+        <div class="phone-camera-album-empty-sub">去拍摄第一张吧</div>
+      </div>
+    `;
+  }
+  // 倒序排列（新的在前）
+  const sorted = album.slice().reverse();
+  return `
+    <div class="phone-camera-album-grid">
+      ${sorted.map(p => _renderAlbumCard(p)).join('')}
+    </div>
+  `;
+}
+
+function _renderAlbumCard(p) {
+  const text = String(p.text || '').trim();
+  const preview = text.length > 60 ? text.slice(0, 60) + '…' : text;
+  const time = p.time || '';
+  const location = p.location || '';
+  const isImage = p.mode === 'ai_image' && p.imageId;
+  // 图片照片：内框放 <img>（src 异步从 drawnImages 表读，先放占位 data-img-id）
+  const innerHtml = isImage
+    ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(p.imageId)}" alt="生成的图片" />`
+    : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(preview || '(空)')}</div>`;
+  return `
+    <div class="phone-camera-polaroid" onclick="Phone._cameraOpenPhoto('${p.id}')">
+      <div class="phone-camera-polaroid-frame">
+        ${innerHtml}
+      </div>
+      ${location ? `<div class="phone-camera-polaroid-loc">${Utils.escapeHtml(location)}</div>` : ''}
+      ${time ? `<div class="phone-camera-polaroid-caption">${Utils.escapeHtml(time)}</div>` : ''}
+    </div>
+  `;
+}
+
+// 异步把相册里所有 img.data-img-id 加载真实 dataUrl
+async function _hydrateAlbumImages() {
+  const imgs = document.querySelectorAll('.phone-camera-polaroid-img[data-img-id]');
+  for (const el of imgs) {
+    const imgId = el.dataset.imgId;
+    if (!imgId) continue;
+    try {
+      const rec = await DB.get('drawnImages', imgId);
+      if (rec && rec.dataUrl) {
+        el.src = rec.dataUrl;
+      } else {
+        // 图丢了：把 img 换成"图片已丢失"占位
+        const placeholder = document.createElement('div');
+        placeholder.className = 'phone-camera-polaroid-content';
+        placeholder.style.cssText = 'opacity:0.5;font-style:italic';
+        placeholder.textContent = '(图片已丢失)';
+        el.replaceWith(placeholder);
+      }
+    } catch(_) {}
+    el.removeAttribute('data-img-id');
+  }
+}
+
+// tab 切换
+function _switchCameraTab(tab) {
+  if (_cameraTab === tab) return;
+  _cameraTab = tab;
+  _getPhoneData().then(pd => {
+    pd.cameraTab = tab;
+    _savePhoneData();
+    _renderCamera(pd);
+  });
+}
+
+// 重置：把状态栏内容重新拼回输入框（覆盖手动改的内容 + 丢弃草稿）
+async function _cameraRefillFromStatus() {
+  const el = document.getElementById('phone-camera-text');
+  if (!el) return;
+  el.value = await _composeShootText();
+  // 同步丢草稿
+  const pd = await _getPhoneData();
+  if (pd) { pd.cameraDraft = null; _savePhoneData(); }
+  UI.showToast('已根据当前画面重置', 1200);
+}
+
+// 输入时实时写入草稿（debounce 300ms，避免频繁 save）
+let _cameraTextSaveTimer = null;
+function _cameraOnTextInput() {
+  const el = document.getElementById('phone-camera-text');
+  if (!el) return;
+  if (_cameraTextSaveTimer) clearTimeout(_cameraTextSaveTimer);
+  _cameraTextSaveTimer = setTimeout(async () => {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const text = el.value || '';
+    const fresh = await _composeShootText();
+    if (text === fresh) {
+      // 内容和状态栏一致 → 不需要存草稿
+      pd.cameraDraft = null;
+    } else {
+      pd.cameraDraft = { text, baseStatusText: fresh };
+    }
+    _savePhoneData();
+  }, 300);
+}
+
+// 调整镜头：弹出二级菜单（输入用户额外要求 + 尺寸 + AI 写 / AI 画）
+async function _cameraOpenAdjust() {
+  // 移除已有 overlay
+  const old = document.getElementById('phone-camera-adjust-overlay');
+  if (old) old.remove();
+
+  // 读取上次的尺寸记忆（默认 1024x1024）
+  const pd = await _getPhoneData();
+  const lastSize = pd?.cameraLastSize || { w: 1024, h: 1024, ratio: '1:1' };
+
+  const overlay = document.createElement('div');
+  overlay.id = 'phone-camera-adjust-overlay';
+  overlay.className = 'phone-inner-modal';
+  overlay.innerHTML = `
+    <div class="modal-content phone-camera-adjust-card">
+      <div class="phone-camera-adjust-title">调整镜头</div>
+      <div class="phone-camera-adjust-desc">让 AI 帮你重新组织一下画面</div>
+      <textarea id="phone-camera-adjust-input" class="phone-camera-adjust-input" placeholder="想拍成什么感觉？（可选，例如：更暗一点 / 聚焦手部 / 黑白胶片）" spellcheck="false"></textarea>
+
+      <div class="phone-camera-adjust-size-label">尺寸（仅 AI 画用）</div>
+      <div class="phone-camera-adjust-ratios">
+        <button type="button" class="phone-camera-ratio-btn" data-ratio="1:1" data-w="1024" data-h="1024">1:1</button>
+        <button type="button" class="phone-camera-ratio-btn" data-ratio="3:4" data-w="768" data-h="1024">3:4</button>
+        <button type="button" class="phone-camera-ratio-btn" data-ratio="4:3" data-w="1024" data-h="768">4:3</button>
+        <button type="button" class="phone-camera-ratio-btn" data-ratio="9:16" data-w="720" data-h="1280">9:16</button>
+        <button type="button" class="phone-camera-ratio-btn" data-ratio="16:9" data-w="1280" data-h="720">16:9</button>
+      </div>
+      <div class="phone-camera-adjust-size-row">
+        <span class="phone-camera-adjust-size-prefix">自定义：</span>
+        <input id="phone-camera-size-w" type="number" min="64" max="2048" step="1" class="phone-camera-adjust-size-input" value="${lastSize.w}" />
+        <span class="phone-camera-adjust-size-x">×</span>
+        <input id="phone-camera-size-h" type="number" min="64" max="2048" step="1" class="phone-camera-adjust-size-input" value="${lastSize.h}" />
+      </div>
+
+      <button class="phone-camera-adjust-btn phone-camera-adjust-btn-write" type="button">
+        <div class="phone-camera-adjust-btn-name">AI 写</div>
+        <div class="phone-camera-adjust-btn-sub">把当前文字改写成更有镜头感的描述</div>
+      </button>
+      <button class="phone-camera-adjust-btn phone-camera-adjust-btn-draw" type="button">
+        <div class="phone-camera-adjust-btn-name">AI 画</div>
+        <div class="phone-camera-adjust-btn-sub">根据当前文字画一张真图</div>
+      </button>
+      <button class="phone-camera-adjust-cancel" type="button">取消</button>
+    </div>
+  `;
+  overlay.onclick = (e) => { if (e.target === overlay) _closeCameraAdjust(); };
+  const shell = document.querySelector('#phone-modal .phone-shell');
+  (shell || document.body).appendChild(overlay);
+
+  // 高亮上次选中的比例按钮
+  const initBtn = overlay.querySelector(`.phone-camera-ratio-btn[data-ratio="${lastSize.ratio}"]`);
+  if (initBtn) initBtn.classList.add('active');
+
+  // 比例按钮 → 填进输入框 + 高亮
+  overlay.querySelectorAll('.phone-camera-ratio-btn').forEach(btn => {
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      overlay.querySelectorAll('.phone-camera-ratio-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const w = btn.dataset.w, h = btn.dataset.h;
+      const wEl = overlay.querySelector('#phone-camera-size-w');
+      const hEl = overlay.querySelector('#phone-camera-size-h');
+      if (wEl) wEl.value = w;
+      if (hEl) hEl.value = h;
+    });
+  });
+
+  // 输入框被手动修改时，清除比例高亮
+  ['#phone-camera-size-w', '#phone-camera-size-h'].forEach(sel => {
+    const el = overlay.querySelector(sel);
+    if (el) el.addEventListener('input', () => {
+      overlay.querySelectorAll('.phone-camera-ratio-btn').forEach(b => b.classList.remove('active'));
+    });
+  });
+
+  // 关键:用 pointerdown 直接触发按钮（在 IME 收起、viewport 跳变之前就把动作落地）
+  // 否则在移动端会出现：点AI写 → IME收起 → viewport变高 → click 落在AI画的位置
+  const bindBtn = (sel, fn) => {
+    const btn = overlay.querySelector(sel);
+    if (!btn) return;
+    let fired = false;
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (fired) return;
+      fired = true;
+      try { fn(); } catch(err) { console.warn('[Camera Adjust] btn handler', err); }
+    });
+    // 兜底：如果 pointerdown 没支持（极少数老 webview），仍走 click
+    btn.addEventListener('click', (e) => {
+      if (fired) { e.preventDefault(); e.stopPropagation(); return; }
+      fired = true;
+      try { fn(); } catch(err) { console.warn('[Camera Adjust] btn handler', err); }
+    });
+  };
+  bindBtn('.phone-camera-adjust-btn-write', () => _cameraAIWrite());
+  bindBtn('.phone-camera-adjust-btn-draw', () => _cameraAIDraw());
+  bindBtn('.phone-camera-adjust-cancel', () => _closeCameraAdjust());
+}
+
+function _closeCameraAdjust() {
+  const overlay = document.getElementById('phone-camera-adjust-overlay');
+  if (overlay) overlay.remove();
+}
+
+// AI 写：调用 worldvoice 模型，把当前文字 + 最近剧情拼起来，让 AI 改写成更有镜头感的描述
+async function _cameraAIWrite() {
+  const el = document.getElementById('phone-camera-text');
+  if (!el) return;
+  const currentText = (el.value || '').trim();
+  if (!currentText) {
+    UI.showToast('画面是空的，先随便写点什么', 1500);
+    return;
+  }
+
+  // 抓用户的额外要求（关 overlay 前）
+  const extraEl = document.getElementById('phone-camera-adjust-input');
+  const extra = (extraEl?.value || '').trim();
+
+  // 取功能模型配置（用 worldvoice 配置，和论坛/朋友圈一致）
+  const funcConfig = (typeof Settings !== 'undefined' && Settings.getWorldvoiceConfig) ? Settings.getWorldvoiceConfig() : {};
+  const mainConfig = await API.getConfig();
+  const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+  const key = funcConfig.apiKey || mainConfig.apiKey;
+  const model = funcConfig.model || mainConfig.model;
+  if (!url || !key || !model) {
+    UI.showToast('请先在设置→功能模型中配置手机模型', 2200);
+    return;
+  }
+
+  // 关掉二级菜单 + 进入加载态
+  _closeCameraAdjust();
+  el.disabled = true;
+  el.classList.add('phone-camera-text-loading');
+  const originalText = el.value;
+  el.value = '正在调整镜头…';
+  UI.showToast('AI 正在重写画面…', 1500);
+
+  try {
+    const ctx = await _buildFullContext();
+    let playerName = '';
+    try { const mask = await Character.get(); playerName = mask?.name || ''; } catch(_) {}
+    const youLabel = playerName || '玩家';
+
+    const systemPrompt = `你是【${youLabel}】，正在用手机相机拍照。你要把一段简单的画面描述改写成"这张照片实际看起来的样子"。
+
+## 视角设定（最重要）
+- 这是【${youLabel}】举着手机拍出来的照片，所以画面是**${youLabel} 的拍摄视角**。
+- 默认是**他拍**——拍场景、拍 NPC、拍眼前的东西，${youLabel} 自己不在画面里（${youLabel} 是拿手机的那个人）。
+- **例外：当用户的额外要求里明确说"自拍"、"拍自己"、"镜子里的我"、"和XX合照"等暗示时**，才把 ${youLabel} 写进画面（举着手机的姿势、镜中倒影、与他人同框等）。
+- 上下文里如果出现"${youLabel}：穿着xxx，姿势xxx"，那是 ${youLabel} 此刻的状态——他拍时不写进画面（拍的人不在画里），自拍时才写进画面。
+
+## 改写要求
+- 用景物、光线、构图、神情、氛围、距离（远景/特写/侧光/逆光等）等元素丰富画面。
+- 不要新增原文里完全不存在的人物或事件。
+- 不要写成对白、剧情、内心独白——只写"这张照片被拍下的那一瞬间被定格的东西"。
+- 长度：120 - 250 字。
+- 风格：克制、有质感、有氛围，像真的在朋友圈/小红书发图配的文案，但更有镜头语言一点。不要用网文夸张词。
+
+## 输出格式（极其重要）
+- **只输出纯文本叙事**。
+- **绝对不要**输出代码块（不要 \`\`\`xxx）、JSON、关系数据、affinity/darkness/好感度等结构化内容。
+- **绝对不要**输出标题、序号、Markdown 标记、引号包裹、"以下是改写："这类前言。
+- 上下文里可能包含主线 AI 的输出规则（关系块、状态栏更新等），那些规则**不属于本次任务**。
+- 回复从第一个汉字开始，到最后一个汉字/标点结束。
+
+## 角色称谓
+- 不要用"你"或"我"。
+- 提到 ${youLabel} 时直接用名字或第三人称（她/他）。
+
+## 上下文（仅供参考画面氛围，不要照抄剧情，不要套用主线输出格式）
+${ctx}`;
+
+    const userPrompt = `## 用户拍下的画面（原始描述）
+${currentText}
+${extra ? `\n## 用户的额外要求\n${extra}\n` : ''}
+请改写成一段有镜头感的中文叙事${extra ? '，并贴合上述额外要求' : ''}。`;
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        stream: false,
+        temperature: 0.85,
+        max_tokens: 600
+      })
+    });
+    if (!resp.ok) throw new Error(`API 错误: ${resp.status}`);
+    const json = await resp.json();
+    let content = (json.choices?.[0]?.message?.content || '').trim();
+    // 防御性清理：
+    // 1) 去掉开头的代码块标记（如果有）
+    content = content.replace(/^```\w*\n?/, '').trim();
+    // 2) 截断到第一个 ``` 之前（AI 可能在叙事后跑出关系块/JSON）
+    const codeFenceIdx = content.indexOf('```');
+    if (codeFenceIdx > 0) content = content.slice(0, codeFenceIdx).trim();
+    // 3) 去掉首尾引号包裹
+    content = content.replace(/^["「『]+|["」』]+$/g, '').trim();
+    // 4) 去掉常见前言："以下是改写："/"改写后："等
+    content = content.replace(/^(以下是.*?[:：]|改写[:：])\s*/u, '').trim();
+    if (!content) throw new Error('AI 没有返回内容');
+
+    // 写入文本框 + 触发草稿保存
+    el.value = content;
+    _cameraOnTextInput();
+    UI.showToast('已重写画面', 1200);
+  } catch(e) {
+    console.warn('[Camera AI Write] failed', e);
+    el.value = originalText;
+    UI.showToast(`AI 写失败：${e.message || '未知错误'}`, 2400);
+  } finally {
+    el.disabled = false;
+    el.classList.remove('phone-camera-text-loading');
+  }
+}
+
+// AI 画：根据当前文字 + 用户额外要求 + 剧情上下文，调生图 API 出一张真图
+async function _cameraAIDraw() {
+  const el = document.getElementById('phone-camera-text');
+  if (!el) return;
+  const currentText = (el.value || '').trim();
+  if (!currentText) {
+    UI.showToast('画面是空的，先随便写点什么', 1500);
+    return;
+  }
+
+  // 抓用户的额外要求 + 尺寸（关 overlay 前）
+  const extraEl = document.getElementById('phone-camera-adjust-input');
+  const extra = (extraEl?.value || '').trim();
+  const wEl = document.getElementById('phone-camera-size-w');
+  const hEl = document.getElementById('phone-camera-size-h');
+  let w = parseInt(wEl?.value, 10);
+  let h = parseInt(hEl?.value, 10);
+  if (!Number.isFinite(w) || w < 64 || w > 2048) w = 1024;
+  if (!Number.isFinite(h) || h < 64 || h > 2048) h = 1024;
+  const activeRatioBtn = document.querySelector('.phone-camera-ratio-btn.active');
+  const ratioMark = activeRatioBtn?.dataset?.ratio || '';
+
+  // 拼最终发送给生图模型的 prompt
+  const drawPrompt = extra
+    ? `${currentText}\n\n额外要求：${extra}`
+    : currentText;
+
+  // ⚠ 提示用户检查 prompt——生图模型不知道角色性别/外貌，画错责任在用户
+  const previewMsg = `即将把以下内容发给生图模型（${w}×${h}）：\n\n${drawPrompt}\n\n———\n⚠ 注意：生图模型只看到这段文字，不知道角色性别/身材/外貌等信息。\n如有重要信息（性别、长相、关键服饰等），请取消后在"调整镜头"里补充。`;
+  const ok = (typeof UI.showConfirm === 'function')
+    ? await UI.showConfirm('确认生成', previewMsg)
+    : confirm(previewMsg);
+  if (!ok) return;
+
+  _closeCameraAdjust();
+
+  // 把当前状态栏快照保存下来
+  let gameTime = '', location = '';
+  try {
+    const sb = Conversations.getStatusBar() || {};
+    gameTime = sb.time || '';
+    location = [sb.region, sb.location].filter(Boolean).join('·');
+  } catch(_) {}
+
+  // 保存尺寸到 phoneData
+  try {
+    const pd0 = await _getPhoneData();
+    if (pd0) {
+      pd0.cameraLastSize = { w, h, ratio: ratioMark };
+      _savePhoneData();
+    }
+  } catch(_) {}
+
+  // 进入"生成中"态：禁用输入框，显示提示
+  el.disabled = true;
+  el.classList.add('phone-camera-text-loading');
+  const originalText = el.value;
+  el.value = `[拍摄中（${w}×${h}）…\n这可能需要 20-60 秒，请耐心等待]`;
+
+  try {
+    // 直接把中文叙事 + 额外要求拼起来作为 prompt，喂给生图模型
+    // 不做中转翻译——好的生图模型原生支持中文，多一道翻译反而丢信息
+    // prompt 已在确认弹窗前拼好（drawPrompt）
+
+    // 调生图 API
+    el.value = `[拍摄中（${w}×${h}）…]`;
+    const images = await API.generateImage(drawPrompt, { n: 1, size: `${w}x${h}` });
+    if (!images || !images.length) throw new Error('没有返回图片');
+    const dataUrl = images[0];
+
+    // 存到 drawnImages 表（同步进收藏图库）
+    const imageId = 'img_' + Utils.uuid();
+    await DB.put('drawnImages', {
+      id: imageId,
+      dataUrl,
+      prompt: drawPrompt,
+      createdAt: new Date().toISOString()
+    });
+
+    // 存进相册（mode='ai_image'）
+    const pd = await _getPhoneData();
+    if (!pd) throw new Error('找不到手机数据');
+    if (!Array.isArray(pd.album)) pd.album = [];
+    const photo = {
+      id: 'photo_' + Utils.uuid().slice(0, 8),
+      mode: 'ai_image',
+      text: currentText,   // 描述用 textarea 里那段（用户已经看过/编辑过）
+      imageId,
+      location,
+      time: gameTime,
+      createdAt: new Date().toISOString()
+    };
+    pd.album.push(photo);
+    pd.cameraDraft = null;   // 出图后清草稿
+    await _savePhoneData();
+
+    // 记录手机操作日志（AI 视角：用户拍了一张照片）
+    {
+      const summary = currentText.length > 60 ? currentText.slice(0, 60) + '…' : currentText;
+      const locPart = location ? `（${location}）` : '';
+      _log(`拍了一张照片：${summary}${locPart}`);
+    }
+
+    // 恢复输入框 + toast + 切到相册
+    el.value = currentText;
+    UI.showToast('已存入相册', 1500);
+    _cameraTab = 'album';
+    const ppd = await _getPhoneData();
+    if (ppd) { ppd.cameraTab = 'album'; _savePhoneData(); _renderCamera(ppd); }
+  } catch(e) {
+    console.warn('[Camera AI Draw] failed', e);
+    el.value = originalText;
+    UI.showToast(`拍摄失败：${e.message || '未知错误'}`, 2800);
+  } finally {
+    el.disabled = false;
+    el.classList.remove('phone-camera-text-loading');
+  }
+}
+
+// 快门：保存当前文本框内容到相册
+async function _cameraShoot() {
+  const el = document.getElementById('phone-camera-text');
+  if (!el) return;
+  const text = (el.value || '').trim();
+  if (!text) { UI.showToast('画面是空的，写点什么再拍', 1500); return; }
+
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  if (!Array.isArray(pd.album)) pd.album = [];
+
+  // 抓游戏内时间 + 地点作为快照
+  let gameTime = '', location = '';
+  try {
+    const sb = Conversations.getStatusBar() || {};
+    gameTime = sb.time || '';
+    location = [sb.region, sb.location].filter(Boolean).join('·');
+  } catch(_) {}
+
+  const photo = {
+    id: 'photo_' + Utils.uuid().slice(0, 8),
+    mode: 'shoot',
+    text,
+    imageId: '',
+    location,
+    time: gameTime,
+    createdAt: new Date().toISOString()
+  };
+  pd.album.push(photo);
+  pd.cameraDraft = null;  // 拍完清草稿，下次进来会重新读最新状态栏
+  await _savePhoneData();
+
+  // 记录手机操作日志（AI 视角：用户拍了一张照片）
+  {
+    const summary = text.length > 60 ? text.slice(0, 60) + '…' : text;
+    const locPart = location ? `（${location}）` : '';
+    _log(`拍了一张照片：${summary}${locPart}`);
+  }
+
+  UI.showToast('已存入相册', 1200);
+  // 闪一下快门动效（之后可以加）—— 这里轻量提示
+}
+
+// 点击相册中的某张照片：打开详情 overlay
+async function _cameraOpenPhoto(id) {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  const album = Array.isArray(pd.album) ? pd.album : [];
+  const photo = album.find(p => p.id === id);
+  if (!photo) { UI.showToast('照片已被删除', 1500); return; }
+  _showPhotoDetail(photo);
+}
+
+// 朋友圈"从相册选"：弹一个相册图选择器，选中后把照片文字填进 imageDesc 框
+async function _openAlbumPickerForMoment() {
+  const pd = await _getPhoneData();
+  const album = Array.isArray(pd?.album) ? pd.album : [];
+  if (!album.length) {
+    UI.showToast('相册还是空的，先去拍一张吧', 1800);
+    return;
+  }
+
+  // 移除旧的 overlay
+  const old = document.getElementById('phone-album-picker-overlay');
+  if (old) old.remove();
+
+  const sorted = album.slice().reverse();
+  const cardsHtml = sorted.map(p => {
+    const text = String(p.text || '').trim();
+    const preview = text.length > 50 ? text.slice(0, 50) + '…' : text;
+    const time = p.time || '';
+    const location = p.location || '';
+    return `
+      <div class="phone-camera-polaroid" onclick="Phone._pickAlbumForMoment('${p.id}')" style="opacity:1">
+        <div class="phone-camera-polaroid-frame">
+          <div class="phone-camera-polaroid-content">${Utils.escapeHtml(preview || '(空)')}</div>
+        </div>
+        ${location ? `<div class="phone-camera-polaroid-loc">${Utils.escapeHtml(location)}</div>` : ''}
+        ${time ? `<div class="phone-camera-polaroid-caption">${Utils.escapeHtml(time)}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'phone-album-picker-overlay';
+  overlay.className = 'phone-inner-modal';
+  overlay.innerHTML = `
+    <div class="modal-content phone-album-picker-card">
+      <div class="phone-album-picker-header">
+        <span style="font-size:14px;font-weight:600">从相册选一张</span>
+        <button type="button" onclick="Phone._closeAlbumPicker()" class="phone-album-picker-close" aria-label="关闭">×</button>
+      </div>
+      <div class="phone-album-picker-grid">${cardsHtml}</div>
+    </div>
+  `;
+  overlay.onclick = (e) => { if (e.target === overlay) _closeAlbumPicker(); };
+  const shell = document.querySelector('#phone-modal .phone-shell');
+  (shell || document.body).appendChild(overlay);
+}
+
+function _closeAlbumPicker() {
+  const overlay = document.getElementById('phone-album-picker-overlay');
+  if (overlay) overlay.remove();
+}
+
+async function _pickAlbumForMoment(id) {
+  const pd = await _getPhoneData();
+  const photo = pd?.album?.find(p => p.id === id);
+  if (!photo) { UI.showToast('照片已被删除', 1500); return; }
+  const el = document.getElementById('phone-moment-imgdesc');
+  if (el) {
+    el.value = photo.text || '';
+    el.focus();
+  }
+  _closeAlbumPicker();
+  UI.showToast('已填入', 1000);
+}
+
+function _showPhotoDetail(photo) {
+  // 移除已有 overlay
+  const old = document.getElementById('phone-photo-detail-overlay');
+  if (old) old.remove();
+
+  const isImage = photo.mode === 'ai_image';
+  const text = photo.text || '';
+  const location = photo.location || '';
+  const time = photo.time || '';
+
+  // 操作按钮：文字照片 vs 图片照片
+  const actionsHtml = isImage
+    ? `
+      <button class="phone-photo-action" onclick="Phone._photoEditText('${photo.id}')">编辑文字</button>
+      <button class="phone-photo-action" onclick="Phone._photoCopyText('${photo.id}')">复制描述</button>
+      <button class="phone-photo-action" onclick="Phone._photoDownloadImage('${photo.id}')">下载图片</button>
+      <button class="phone-photo-action" onclick="Phone._photoShareMoment('${photo.id}')">发到朋友圈</button>
+      <button class="phone-photo-action" onclick="Phone._photoShareMain('${photo.id}')">分享到主线</button>
+      <button class="phone-photo-action phone-photo-action-danger" onclick="Phone._photoDelete('${photo.id}')">删除</button>
+    `
+    : `
+      <button class="phone-photo-action" onclick="Phone._photoEditText('${photo.id}')">编辑文字</button>
+      <button class="phone-photo-action" onclick="Phone._photoCopyText('${photo.id}')">复制文字</button>
+      <button class="phone-photo-action" onclick="Phone._photoShareMoment('${photo.id}')">发到朋友圈</button>
+      <button class="phone-photo-action" onclick="Phone._photoShareMain('${photo.id}')">分享到主线</button>
+      <button class="phone-photo-action phone-photo-action-danger" onclick="Phone._photoDelete('${photo.id}')">删除</button>
+    `;
+
+  // 主体：图片或文字
+  const bodyHtml = isImage
+    ? `<div class="phone-photo-detail-image-wrap">
+         <img class="phone-photo-detail-image" data-img-id="${Utils.escapeHtml(photo.imageId || '')}" alt="生成的图片" />
+       </div>
+       ${text ? `<div class="phone-photo-detail-img-caption">${Utils.escapeHtml(text)}</div>` : ''}`
+    : `<div class="phone-photo-detail-text-immersive">${Utils.escapeHtml(text)}</div>`;
+
+  const metaHtml = (location || time) ? `
+    <div class="phone-photo-detail-meta">
+      ${location ? `<div class="phone-photo-detail-meta-loc">${Utils.escapeHtml(location)}</div>` : ''}
+      ${time ? `<div class="phone-photo-detail-meta-time">${Utils.escapeHtml(time)}</div>` : ''}
+    </div>
+  ` : '';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'phone-photo-detail-overlay';
+  overlay.className = 'phone-inner-modal';
+  overlay.innerHTML = `
+    <div class="modal-content phone-photo-detail-card">
+      <button class="phone-photo-detail-close" onclick="Phone._closePhotoDetail()" aria-label="关闭">×</button>
+      ${bodyHtml}
+      ${metaHtml}
+      <div class="phone-photo-detail-actions">
+        ${actionsHtml}
+      </div>
+    </div>
+  `;
+  // 点蒙层关闭
+  overlay.onclick = (e) => { if (e.target === overlay) _closePhotoDetail(); };
+
+  const shell = document.querySelector('#phone-modal .phone-shell');
+  (shell || document.body).appendChild(overlay);
+
+  // 异步加载真图
+  if (isImage && photo.imageId) {
+    (async () => {
+      try {
+        const rec = await DB.get('drawnImages', photo.imageId);
+        const imgEl = overlay.querySelector('.phone-photo-detail-image');
+        if (!imgEl) return;
+        if (rec && rec.dataUrl) {
+          imgEl.src = rec.dataUrl;
+        } else {
+          imgEl.replaceWith(Object.assign(document.createElement('div'), {
+            className: 'phone-photo-detail-img-missing',
+            textContent: '图片已丢失'
+          }));
+        }
+      } catch(_) {}
+    })();
+  }
+}
+
+function _closePhotoDetail() {
+  const overlay = document.getElementById('phone-photo-detail-overlay');
+  if (overlay) overlay.remove();
+}
+
+// 详情页操作 ——
+async function _photoDownloadImage(id) {
+  const pd = await _getPhoneData();
+  const photo = pd?.album?.find(p => p.id === id);
+  if (!photo || photo.mode !== 'ai_image' || !photo.imageId) {
+    UI.showToast('这不是一张图片照片', 1500);
+    return;
+  }
+  // 复用 chat.js 里现成的下载实现
+  if (typeof Chat?.downloadImage === 'function') {
+    Chat.downloadImage(photo.imageId);
+    return;
+  }
+  // 兜底：自己写一遍
+  try {
+    const rec = await DB.get('drawnImages', photo.imageId);
+    if (!rec || !rec.dataUrl) { UI.showToast('图片已丢失', 1500); return; }
+    const ts = new Date(rec.createdAt || Date.now());
+    const pad = n => String(n).padStart(2, '0');
+    const fname = `tianshu_${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.png`;
+    const a = document.createElement('a');
+    a.href = rec.dataUrl;
+    a.download = fname;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { try { document.body.removeChild(a); } catch(_) {} }, 100);
+    UI.showToast('已保存到下载目录', 1500);
+  } catch(e) {
+    UI.showToast('保存失败：' + e.message, 2000);
+  }
+}
+
+async function _photoEditText(id) {
+  const pd = await _getPhoneData();
+  const photo = pd?.album?.find(p => p.id === id);
+  if (!photo) { UI.showToast('照片不存在', 1500); return; }
+  const title = photo.mode === 'ai_image' ? '编辑图片描述' : '编辑照片文字';
+  const newText = await UI.showSimpleInput(title, photo.text || '', {
+    multiline: true,
+    rows: 8,
+    minHeight: '200px',
+    allowEmpty: true
+  });
+  // 用户取消（null）
+  if (newText === null) return;
+  const trimmed = String(newText).trim();
+  if (!trimmed) {
+    if (typeof UI.showConfirm === 'function') {
+      const ok = await UI.showConfirm('文字为空', '保存后这张照片将没有文字内容，确定要保存吗？');
+      if (!ok) return;
+    }
+  }
+  photo.text = trimmed;
+  await _savePhoneData();
+  // 重新渲染详情页 + 相册（如果在相册）
+  _closePhotoDetail();
+  _showPhotoDetail(photo);
+  if (_cameraTab === 'album') {
+    // 相册列表也要刷新 caption
+    const albumEl = document.getElementById('phone-camera-album');
+    if (albumEl) albumEl.innerHTML = _renderCameraAlbum(pd);
+  }
+  UI.showToast('已保存', 1000);
+}
+
+async function _photoCopyText(id) {
+  const pd = await _getPhoneData();
+  const photo = pd?.album?.find(p => p.id === id);
+  if (!photo) return;
+  try {
+    await navigator.clipboard.writeText(photo.text || '');
+    UI.showToast('已复制', 1000);
+  } catch(_) { UI.showToast('复制失败', 1500); }
+}
+
+async function _photoDelete(id) {
+  if (typeof UI.showConfirm === 'function') {
+    const ok = await UI.showConfirm('删除这张照片？', '删除后无法恢复');
+    if (!ok) return;
+  }
+  const pd = await _getPhoneData();
+  if (!pd?.album) return;
+  const photo = pd.album.find(p => p.id === id);
+  // 如果是 ai_image 照片，顺手把 drawnImages 表里的图也删掉（节省 DB 空间）
+  if (photo && photo.mode === 'ai_image' && photo.imageId) {
+    try { await DB.del('drawnImages', photo.imageId); } catch(_) {}
+  }
+  pd.album = pd.album.filter(p => p.id !== id);
+  await _savePhoneData();
+  _closePhotoDetail();
+  // 重新渲染相册页
+  if (_cameraTab === 'album') _renderCamera(pd);
+  UI.showToast('已删除', 1000);
+}
+
+// 发到朋友圈：跳转到 moments App + 调 _postMoment 预填
+async function _photoShareMoment(id) {
+  const pd = await _getPhoneData();
+  const photo = pd?.album?.find(p => p.id === id);
+  if (!photo) return;
+  // 不管文字照片还是图片照片，都把内容填进"描述配图"，正文留空让用户写感想
+  const prefill = { text: '', imageDesc: photo.text || '' };
+
+  _closePhotoDetail();
+  // 切到 moments App 并进入发动态页
+  _currentApp = 'moments';
+  document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-home-mode');
+  document.getElementById('phone-back-btn')?.classList.remove('hidden');
+  // 重置导航栈：以好友圈列表为底，发动态页推到栈上
+  _navStack = [() => _renderMoments(pd)];
+  await _postMoment(prefill);
+}
+function _photoShareMain(id) { UI.showToast('分享到主线功能开发中', 1500); }
+
+function _renderMemo(pd) {
+   const body = document.getElementById('phone-body');
+   document.getElementById('phone-title').textContent = '备忘录';
+   const memos = pd.memos || [];
     body.innerHTML = `
       <div style="padding:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -3845,6 +4837,13 @@ async function buildHeartsimServiceChatForBackstage() {
     flushActionLog, peekActionLog, pushLog, reloadActionLog,
     flushActionLogForBackstage,
     _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _onMomentsCoverPicked, _clearMomentsCover,
+    // 个人资料卡
+    _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
+    // 相机 App
+    _switchCameraTab, _cameraRefillFromStatus, _cameraOpenAdjust, _cameraShoot, _cameraOpenPhoto, _cameraOnTextInput,
+    _closePhotoDetail, _photoEditText, _photoCopyText, _photoDownloadImage, _photoDelete, _photoShareMoment, _photoShareMain,
+    _openAlbumPickerForMoment, _closeAlbumPicker, _pickAlbumForMoment,
+    _closeCameraAdjust, _cameraAIWrite, _cameraAIDraw,
     // 内部方法需要暴露给 onclick
     _addMemo, _editMemo, _saveMemo, _deleteMemo, _shareMemo, _collectMemo,
     _forumRefresh, _forumSearch, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,

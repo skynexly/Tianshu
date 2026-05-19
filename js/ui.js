@@ -771,6 +771,7 @@ if (contentArea) contentArea.style.display = 'none';
   function showSimpleInput(title, defaultValue, options) {
     const opts = options || {};
     const allowEmpty = !!opts.allowEmpty;
+    const multiline = !!opts.multiline;
     return new Promise((resolve) => {
       const modal = document.getElementById('simple-input-modal');
       const titleEl = document.getElementById('simple-input-title');
@@ -781,8 +782,28 @@ if (contentArea) contentArea.style.display = 'none';
       titleEl.textContent = title;
       inputEl.value = defaultValue || '';
       inputEl.dataset.resolve = '';
-      inputEl.rows = String((title || '').startsWith('AI ') ? 4 : 1);
-      inputEl.style.minHeight = (title || '').startsWith('AI ') ? '110px' : '';
+      // multiline=true 强制多行；否则保留旧的 "AI " 前缀魔法兼容
+      const useMultiline = multiline || (title || '').startsWith('AI ');
+      if (useMultiline) {
+        const rows = opts.rows || 8;
+        const minH = opts.minHeight || '200px';
+        inputEl.setAttribute('rows', String(rows));
+        // 同时清掉可能干扰的属性，再用最高优先级强制写高度
+        inputEl.style.removeProperty('height');
+        inputEl.style.setProperty('min-height', minH, 'important');
+        inputEl.style.setProperty('height', minH, 'important');
+        inputEl.style.setProperty('max-height', '50vh', 'important');
+        inputEl.style.setProperty('resize', 'vertical', 'important');
+        inputEl.style.setProperty('line-height', '1.6', 'important');
+        // 标记一下方便 CSS 兜底
+        inputEl.classList.add('simple-input-multiline');
+      } else {
+        inputEl.setAttribute('rows', '1');
+        inputEl.style.removeProperty('min-height');
+        inputEl.style.removeProperty('height');
+        inputEl.style.removeProperty('max-height');
+        inputEl.classList.remove('simple-input-multiline');
+      }
 
       // 确保弹窗挂在 body 最顶层，不被任何 transform/will-change 父级夹住
       if (modal.parentNode !== document.body) {
