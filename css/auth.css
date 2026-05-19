@@ -579,9 +579,6 @@
   border-radius: 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  box-shadow:
-    0 8px 28px rgba(0,0,0,0.35),
-    0 0 24px color-mix(in srgb, var(--accent) 8%, transparent);
   margin-bottom: 22px;
 }
 .auth-profile-avatar {
@@ -796,6 +793,13 @@
 }
 .auth-pw-eye-modal.on {
   color: var(--accent);
+}
+
+/* 个人主页内弹出的 modal 要盖在个人主页 overlay 上方
+   #auth-profile-overlay z-index 是 99000，.modal 默认才 200 */
+.auth-modal-temp,
+#auth-pw-modal {
+  z-index: 99500 !important;
 }
 
 /* ========================================================
