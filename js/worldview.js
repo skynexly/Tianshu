@@ -204,6 +204,9 @@ function _defaultRegion() {
     // v632：世界书状态下，⋯ 按钮本身也藏了（菜单里什么都没有）
     const moreBtn = document.getElementById('worldview-edit-more-btn');
     if (moreBtn) moreBtn.style.display = isHidden ? 'none' : '';
+    // v632.1：世界书显示"编辑描述"按钮（让用户能填写 AI 生成所需的设定背景）
+    const lbDescBtn = document.getElementById('worldview-edit-lb-desc-btn');
+    if (lbDescBtn) lbDescBtn.style.display = isHidden ? '' : 'none';
     // v632：世界书把"事件"子 tab 藏掉、显示"NPC"子 tab；世界观反之
     const eventSubBtn = document.querySelector('.wv-ext-subtab-btn[data-subtab="event"]');
     const npcSubBtn = document.getElementById('wv-ext-subtab-btn-npc');
@@ -1356,6 +1359,23 @@ if (_isLorebookEditing(editingWorldviewId)) {
 await DB.put('worldviews', w);
 // 立刻同步到运行时（仅当编辑的是当前激活世界观）
 await _syncRuntime(w);
+}
+
+// v632.1：世界书状态下，弹窗编辑描述（AI 生成时作为 setting 兜底）
+async function editLorebookDescription() {
+  if (!_isLorebookEditing(editingWorldviewId)) return;
+  const lbId = _lbIdOf(editingWorldviewId);
+  if (typeof Lorebook === 'undefined') return;
+  const lb = await Lorebook.get(lbId);
+  if (!lb) return;
+  const input = await UI.showSimpleInput('编辑描述', lb.description || '', {
+    placeholder: '描述这本世界书的背景设定。AI 生成 NPC 时会以此为背景。',
+    multiline: true,
+  });
+  if (input === null || input === undefined) return;
+  lb.description = String(input);
+  await Lorebook.save(lb);
+  UI.showToast('描述已保存', 1500);
 }
   
   // ---------- 详细设定Tab：地区卡片列表 ----------
@@ -4238,6 +4258,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     addTaskPhase, deleteTaskPhase, updateTaskPhase, addTaskType, deleteTaskType, updateTaskType, updateTaskPhaseReward,
     openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal, onTaskTypeRewardModeChange, openPhaseRewardModal,
     _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards,
+editLorebookDescription,
     addFestival, editFestival, saveFestivalFromModal, deleteFestivalFromModal, closeFestivalModal,
   addCustom, editCustom, saveCustomFromModal, deleteCustomFromModal, closeCustomModal,
 addKnowledge, editKnowledge, saveKnowledgeFromModal, deleteKnowledgeFromModal, closeKnowledgeModal,

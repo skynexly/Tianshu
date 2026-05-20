@@ -28,8 +28,8 @@ const LorebookUI = (() => {
     container.innerHTML = items.map(({ lb, ref }) => {
       const fc = lb.festivals?.length || 0;
       const kc = lb.knowledges?.length || 0;
-      const ec = lb.events?.length || 0;
-      const total = fc + kc + ec;
+      const nc = lb.globalNpcs?.length || 0;
+      const total = fc + kc + nc;
       const refText = ref.total > 0
         ? `<span style="color:var(--accent)">已挂载 ${ref.total}</span>`
         : `<span style="color:var(--text-secondary)">未挂载</span>`;
@@ -56,7 +56,7 @@ const LorebookUI = (() => {
             <span style="opacity:0.5">·</span>
             <span>节日 ${fc}</span>
             <span>常驻/动态 ${kc}</span>
-            <span>事件 ${ec}</span>
+            <span>NPC ${nc}</span>
             <span style="margin-left:auto">${refText}</span>
           </div>
         </div>
@@ -158,13 +158,13 @@ const LorebookUI = (() => {
           const safeName = Utils.escapeHtml(lb.name || '未命名');
           const fc = lb.festivals?.length || 0;
           const kc = lb.knowledges?.length || 0;
-          const ec = lb.events?.length || 0;
+          const nc = lb.globalNpcs?.length || 0;
           return `
             <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;cursor:pointer">
               <input type="checkbox" data-lb-id="${safeId}" ${checked ? 'checked' : ''} style="cursor:pointer;flex-shrink:0">
               <div style="flex:1;min-width:0">
                 <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safeName}</div>
-                <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">节日 ${fc} · 常驻/动态 ${kc} · 事件 ${ec}</div>
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">节日 ${fc} · 常驻/动态 ${kc} · NPC ${nc}</div>
               </div>
             </label>
           `;
@@ -218,12 +218,12 @@ const LorebookUI = (() => {
       const safeName = Utils.escapeHtml(lb.name || '未命名');
       const fc = lb.festivals?.length || 0;
       const kc = lb.knowledges?.length || 0;
-      const ec = lb.events?.length || 0;
+      const nc = lb.globalNpcs?.length || 0;
       return `
         <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
           <div style="flex:1;min-width:0">
             <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safeName}</div>
-            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">节日 ${fc} · 常驻/动态 ${kc} · 事件 ${ec}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">节日 ${fc} · 常驻/动态 ${kc} · NPC ${nc}</div>
           </div>
           <button type="button" data-unbind-lb="${safeId}" style="background:none;border:1px solid var(--border);color:var(--text-secondary);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px">解绑</button>
         </div>

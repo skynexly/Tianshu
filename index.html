@@ -507,7 +507,7 @@
               新建
             </button>
           </div>
-          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6">世界书是节日/常驻/动态/事件的集合。可以挂到单人卡、世界观或对话上，多处复用，可灵活换绑。</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6">世界书是节日/常驻/动态/NPC 的集合。可以挂到单人卡、世界观或对话上，多处复用，可灵活换绑。</div>
           <div id="lorebook-list" style="display:flex;flex-direction:column;gap:12px;"></div>
         </div>
       </div>
@@ -1912,7 +1912,7 @@
         </button>
       </div>
       <div id="sc-panel-lorebook-list" style="display:flex;flex-direction:column;gap:6px"></div>
-      <div style="font-size:11px;color:var(--text-secondary);margin-top:12px;line-height:1.5">世界书是节日 / 常驻 / 动态 / 事件的集合，可以一本挂多张卡。到「世界 → 世界书管理」可以新建和编辑。</div>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:12px;line-height:1.5">世界书是节日 / 常驻 / 动态 / NPC 的集合，可以一本挂多张卡。到「世界 → 世界书管理」可以新建和编辑。</div>
     </div>
   </div>
 </section>
@@ -2549,9 +2549,11 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <h2 id="worldview-edit-title" style="margin:0;font-size:24px;color:var(--text)">编辑世界观</h2>
-          <div style="display:flex;gap:8px;align-items:center;position:relative">
-            <button id="worldview-edit-more-btn" onclick="Worldview.toggleEditMoreMenu(event)" style="width:36px;height:36px;padding:0;font-size:18px;line-height:1;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer" title="更多操作">⋯</button>
+<h2 id="worldview-edit-title" style="margin:0;font-size:24px;color:var(--text)">编辑世界观</h2>
+<div style="display:flex;gap:8px;align-items:center;position:relative">
+<!-- v632：仅世界书显示，编辑描述（用作 AI 生成时的设定背景） -->
+<button id="worldview-edit-lb-desc-btn" onclick="Worldview.editLorebookDescription()" style="display:none;padding:7px 12px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:12px" title="编辑描述（AI 生成时作为背景）">编辑描述</button>
+<button id="worldview-edit-more-btn" onclick="Worldview.toggleEditMoreMenu(event)" style="width:36px;height:36px;padding:0;font-size:18px;line-height:1;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer" title="更多操作">⋯</button>
             <div id="worldview-edit-more-menu" class="hidden" style="position:absolute;right:74px;top:42px;min-width:148px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:30;padding:6px;display:flex;flex-direction:column;gap:2px">
               <button onclick="Worldview.closeEditMoreMenu();Worldview.exportCurrent()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">导出世界观</button>
               <button onclick="Worldview.closeEditMoreMenu();Worldview.importSingle()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">导入世界观</button>
