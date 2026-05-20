@@ -41,7 +41,6 @@ const SingleMode = (() => {
       enableFestival: false,
       enableCustom: false,
       enableKnowledge: false,
-      enableCardExtended: true
     };
     if (!convId && preset) {
       initial = {
@@ -56,7 +55,6 @@ const SingleMode = (() => {
         enableFestival: !!preset.enableFestival,
         enableCustom: !!preset.enableCustom,
         enableKnowledge: !!preset.enableKnowledge,
-        enableCardExtended: preset.enableCardExtended !== false
       };
     }
     if (convId) {
@@ -73,7 +71,6 @@ const SingleMode = (() => {
           enableFestival: !!conv.singleEnableFestival,
           enableCustom: !!conv.singleEnableCustom,
           enableKnowledge: !!conv.singleEnableKnowledge,
-          enableCardExtended: conv.singleEnableCardExtended !== false
         };
       }
     }
@@ -96,10 +93,6 @@ const SingleMode = (() => {
     // v599：扩展设定合并为单一总开关（任一旧字段为真即视为开启，向后兼容）
     document.getElementById('sm-enable-extended').checked =
       !!(initial.enableFestival || initial.enableCustom || initial.enableKnowledge);
-    // 单人卡扩展设定开关
-    const cardExtEl = document.getElementById('sm-enable-card-extended');
-    if (cardExtEl) cardExtEl.checked = initial.enableCardExtended;
-    _updateCardExtRowVisibility();
 
     // 标题
     document.getElementById('sm-modal-title').textContent = convId ? '单人对话设置' : '新建单人对话';
@@ -203,13 +196,9 @@ const SingleMode = (() => {
     });
   }
 
-  // 单人卡扩展设定开关行：选了单人卡时显示
+  // 单人卡扩展设定开关行：选了单人卡时显示（v632 废弃，保留空函数避免引用报错）
   function _updateCardExtRowVisibility() {
-    const row = document.getElementById('sm-card-ext-row');
-    if (!row) return;
-    const isCard = _state.charType === 'card' && !!_state.charId;
-    if (isCard) row.classList.remove('hidden');
-    else row.classList.add('hidden');
+    // no-op
   }
 
   // ===== 角色选择器 =====
@@ -340,9 +329,7 @@ const SingleMode = (() => {
     const enableFestival = enableExtended;
     const enableCustom = enableExtended;
     const enableKnowledge = enableExtended;
-    // 单人卡扩展设定开关（仅在选了单人卡时有意义；其他情况默认 true 不影响）
-    const cardExtEl = document.getElementById('sm-enable-card-extended');
-    const enableCardExtended = cardExtEl ? cardExtEl.checked : true;
+    // 单人卡扩展设定开关（v632 废弃，仅保留兼容字段读写）
 
     // 取角色名作为默认对话名
     let charName = '';
@@ -380,7 +367,6 @@ const SingleMode = (() => {
         conv.singleEnableFestival = enableFestival;
         conv.singleEnableCustom = enableCustom;
       conv.singleEnableKnowledge = enableKnowledge;
-        conv.singleEnableCardExtended = enableCardExtended;
         // 同步对话归属世界观（裸跑→默认世界观）
         const newWv = wvId || '__default_wv__';
         const oldWv = conv.worldviewId;
@@ -421,7 +407,6 @@ const SingleMode = (() => {
       singleEnableFestival: enableFestival,
       singleEnableCustom: enableCustom,
       singleEnableKnowledge: enableKnowledge,
-      singleEnableCardExtended: enableCardExtended
     };
     Conversations.getList().push(conv);
     await Conversations.saveList();
@@ -444,7 +429,6 @@ const SingleMode = (() => {
       enableFestival: !!conv.singleEnableFestival,
       enableCustom: !!conv.singleEnableCustom,
       enableKnowledge: !!conv.singleEnableKnowledge,
-      enableCardExtended: conv.singleEnableCardExtended !== false
     };
   }
 

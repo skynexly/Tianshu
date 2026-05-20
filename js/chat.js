@@ -899,7 +899,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           if (fIdx) systemParts.push(fIdx);
         }
         // 单人卡扩展设定的节日索引
-        if (isSingleConv && singleSettings.charId && singleSettings.enableCardExtended !== false) {
+        if (isSingleConv && singleSettings.charId) {
           try {
             const _card = await SingleCard.get(singleSettings.charId);
             if (_card && _card.extEnabled !== false) {
@@ -1207,7 +1207,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
         try {
           const _card = await SingleCard.get(singleSettings.charId);
-          if (_card && _card.extEnabled !== false && singleSettings.enableCardExtended !== false) {
+          if (_card && _card.extEnabled !== false) {
             const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
             if (_hiddenWv) {
               // 节日（depth=3）
@@ -4013,7 +4013,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           if (fIdx) systemParts.push(fIdx);
         }
         // 单人卡扩展设定的节日/知识索引
-        if (isSingleConv && singleSettings.charId && singleSettings.enableCardExtended !== false) {
+        if (isSingleConv && singleSettings.charId) {
           try {
             const _card = await SingleCard.get(singleSettings.charId);
             if (_card && _card.extEnabled !== false) {
@@ -4275,7 +4275,7 @@ try {
         if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
           try {
             const _card = await SingleCard.get(singleSettings.charId);
-            if (_card && _card.extEnabled !== false && singleSettings.enableCardExtended !== false) {
+            if (_card && _card.extEnabled !== false) {
               const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
               if (_hiddenWv) {
                 const _festText = _buildFestivalPrompt(_hiddenWv.festivals || [], messages);
