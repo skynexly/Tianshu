@@ -177,11 +177,14 @@ function _defaultRegion() {
   }
   // v596：根据"是否隐藏世界观"调整编辑面板 UI
   function _applyHiddenWvUI(isHidden) {
-  // 基础/详细 tab 按钮：隐藏时只显示扩展
-  const basicBtn = document.querySelector('.wv-edit-tab-btn[data-tab="basic"]');
-  const detailBtn = document.querySelector('.wv-edit-tab-btn[data-tab="detail"]');
-  if (basicBtn) basicBtn.style.display = isHidden ? 'none' : '';
-  if (detailBtn) detailBtn.style.display = isHidden ? 'none' : '';
+// 基础/详细 tab 按钮：隐藏时只显示扩展
+    const basicBtn = document.querySelector('.wv-edit-tab-btn[data-tab="basic"]');
+    const detailBtn = document.querySelector('.wv-edit-tab-btn[data-tab="detail"]');
+    if (basicBtn) basicBtn.style.display = isHidden ? 'none' : '';
+    if (detailBtn) detailBtn.style.display = isHidden ? 'none' : '';
+    // v632：世界书只剩 special 一个 tab，按钮本身也藏（没必要让用户看到"扩展"二字）
+    const specialBtn = document.querySelector('.wv-edit-tab-btn[data-tab="special"]');
+    if (specialBtn) specialBtn.style.display = isHidden ? 'none' : '';
 // 心动模拟世界观：禁止编辑玩法页（任务/属性/状态栏由内置机制管理）
     // v632：世界书也不该有玩法 tab（状态栏/手机/属性是世界观级，不能叠加）
     const gameplayBtn = document.querySelector('.wv-edit-tab-btn[data-tab="gameplay"]');
@@ -198,6 +201,9 @@ function _defaultRegion() {
     if (importBtn) importBtn.style.display = isHidden ? 'none' : '';
     if (delBtn) delBtn.style.display = isHidden ? 'none' : '';
     if (restoreBtn && isHidden) restoreBtn.classList.add('hidden');
+    // v632：世界书状态下，⋯ 按钮本身也藏了（菜单里什么都没有）
+    const moreBtn = document.getElementById('worldview-edit-more-btn');
+    if (moreBtn) moreBtn.style.display = isHidden ? 'none' : '';
   }
 
   async function load() {
@@ -848,7 +854,7 @@ function _syncBuiltinRestoreButton(w) {
 
     // v596：隐藏世界观（单人卡专属扩展设定容器）特殊处理
     const isHidden = isHiddenWv(w);
-    document.getElementById('worldview-edit-title').textContent = isHidden ? '编辑扩展设定' : '编辑世界观';
+    document.getElementById('worldview-edit-title').textContent = isHidden ? '编辑世界书' : '编辑世界观';
     _applyHiddenWvUI(isHidden);
     if (isHidden) {
       // 隐藏世界观只用扩展 tab

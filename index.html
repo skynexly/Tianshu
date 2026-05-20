@@ -1871,8 +1871,8 @@
       <!-- 总开关 -->
       <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
         <div>
-          <div style="font-size:14px;color:var(--text);margin-bottom:4px">启用扩展设定</div>
-          <div style="font-size:11px;color:var(--text-secondary);line-height:1.5">关闭后，本卡绑定的所有世界书都不会注入。只影响本张单人卡。</div>
+<div style="font-size:14px;color:var(--text);margin-bottom:4px">启用世界书</div>
+              <div style="font-size:11px;color:var(--text-secondary);line-height:1.5">关闭后，本卡绑定的所有世界书都不会注入。只影响本张单人卡。</div>
         </div>
         <label style="position:relative;display:inline-flex;cursor:pointer;flex-shrink:0">
           <input type="checkbox" id="sc-panel-ext-enabled" class="circle-check">
@@ -2527,7 +2527,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center">
           <h2 id="worldview-edit-title" style="margin:0;font-size:24px;color:var(--text)">编辑世界观</h2>
           <div style="display:flex;gap:8px;align-items:center;position:relative">
-            <button onclick="Worldview.toggleEditMoreMenu(event)" style="width:36px;height:36px;padding:0;font-size:18px;line-height:1;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer" title="更多操作">⋯</button>
+            <button id="worldview-edit-more-btn" onclick="Worldview.toggleEditMoreMenu(event)" style="width:36px;height:36px;padding:0;font-size:18px;line-height:1;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer" title="更多操作">⋯</button>
             <div id="worldview-edit-more-menu" class="hidden" style="position:absolute;right:74px;top:42px;min-width:148px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:30;padding:6px;display:flex;flex-direction:column;gap:2px">
               <button onclick="Worldview.closeEditMoreMenu();Worldview.exportCurrent()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">导出世界观</button>
               <button onclick="Worldview.closeEditMoreMenu();Worldview.importSingle()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">导入世界观</button>
