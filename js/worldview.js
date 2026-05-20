@@ -1346,13 +1346,13 @@ if (_isLorebookEditing(editingWorldviewId)) {
   const lbId = _lbIdOf(editingWorldviewId);
   const existing = await Lorebook.get(lbId);
   if (!existing) return;
-  // 只回写世界书认可的字段，其他忽略（避免污染 lorebook 数据结构）
-  existing.name = w.name || existing.name;
-  existing.description = w.description || existing.description || '';
-  existing.festivals = w.festivals || [];
-  existing.knowledges = w.knowledges || [];
-  existing.events = w.events || [];
+  // v632.1：只回写 globalNpcs（NPC 是直读直写架构）
+  // festivals/knowledges/events 由模块级缓存 + save() 按钮统一回写，
+  // 这里不能用入参 w 的旧值覆盖（w 是 _getEditingWV 从 lorebook 现读的，
+  // 不含用户在 UI 上未保存的修改）
   existing.globalNpcs = w.globalNpcs || [];
+  // name 仅在用户在面板顶部改名时生效（保留旧行为）
+  if (w.name && w.name !== existing.name) existing.name = w.name;
   await Lorebook.save(existing);
   return;
 }
@@ -3093,6 +3093,8 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
       if (typeof Lorebook === 'undefined') return;
       const lbId = _lbIdOf(editingWorldviewId);
       const lb = (await Lorebook.get(lbId)) || { id: lbId };
+      // v632.1：先保留 globalNpcs（防止 lb 是新对象时丢字段）
+      lb.globalNpcs = Array.isArray(lb.globalNpcs) ? lb.globalNpcs : [];
       lb.festivals = festivalsData.slice();
       lb.knowledges = customsData.concat(knowledgesData).map(k => ({
         id: k.id,
