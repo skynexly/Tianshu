@@ -875,6 +875,8 @@ function _syncBuiltinRestoreButton(w) {
     _renderCustoms((w.knowledges || []).filter(k => !k.keywordTrigger));
     _renderKnowledges((w.knowledges || []).filter(k => !!k.keywordTrigger));
     _renderEvents(w.events || []);
+    // v632.1：世界书也要渲染全图 NPC（加载时漏了）
+    _renderGlobalNpcs(w.globalNpcs || []);
     return;
     }
 
