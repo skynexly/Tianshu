@@ -1316,15 +1316,47 @@ switchEditTab('basic');
   let _editNPCIdx = -1;
   
   // 获取当前编辑中的worldview（从DB实时读取）
-  async function _getEditingWV() {
-    if (!editingWorldviewId) return null;
-    return await DB.get('worldviews', editingWorldviewId);
-  }
-  async function _saveEditingWV(w) {
-    await DB.put('worldviews', w);
-    // 立刻同步到运行时（仅当编辑的是当前激活世界观）
-    await _syncRuntime(w);
-  }
+// v632：editingWorldviewId 以 'lb:' 开头时走 lorebooks store，包装成 worldview 形状
+async function _getEditingWV() {
+if (!editingWorldviewId) return null;
+if (_isLorebookEditing(editingWorldviewId)) {
+  const lb = (typeof Lorebook !== 'undefined') ? await Lorebook.get(_lbIdOf(editingWorldviewId)) : null;
+  if (!lb) return null;
+  return {
+    id: editingWorldviewId,
+    _hidden: 'lb',
+    _lbId: lb.id,
+    name: lb.name || '未命名世界书',
+    description: lb.description || '',
+    festivals: lb.festivals || [],
+    knowledges: lb.knowledges || [],
+    events: lb.events || [],
+    globalNpcs: lb.globalNpcs || [],
+  };
+}
+return await DB.get('worldviews', editingWorldviewId);
+}
+async function _saveEditingWV(w) {
+// v632：世界书路径走 Lorebook.save，回写到 lorebooks store
+if (_isLorebookEditing(editingWorldviewId)) {
+  if (typeof Lorebook === 'undefined') return;
+  const lbId = _lbIdOf(editingWorldviewId);
+  const existing = await Lorebook.get(lbId);
+  if (!existing) return;
+  // 只回写世界书认可的字段，其他忽略（避免污染 lorebook 数据结构）
+  existing.name = w.name || existing.name;
+  existing.description = w.description || existing.description || '';
+  existing.festivals = w.festivals || [];
+  existing.knowledges = w.knowledges || [];
+  existing.events = w.events || [];
+  existing.globalNpcs = w.globalNpcs || [];
+  await Lorebook.save(existing);
+  return;
+}
+await DB.put('worldviews', w);
+// 立刻同步到运行时（仅当编辑的是当前激活世界观）
+await _syncRuntime(w);
+}
   
   // ---------- 详细设定Tab：地区卡片列表 ----------
   function _renderRegions(regions) {
