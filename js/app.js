@@ -157,7 +157,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v678';
+    const APP_VERSION = 'v679';
 const CHANGELOG = `【世界书系统】
 · 世界书从世界观解耦，可独立挂卡
 · 编辑面板节日 / 常驻 / 动态 / NPC 四类条目
@@ -165,6 +165,11 @@ const CHANGELOG = `【世界书系统】
 · 对话设置 → 功能 → 游戏系统加「世界书」入口
 · AI 可批量生成 NPC（顶部「编辑描述」填背景设定）
 · NPC 跨范围防撞名
+
+【玩法系统单人卡跑通】
+· 单人卡无世界观也能用自定义属性 / 事件 / 任务
+· 状态栏 single-default 皮肤识别角色属性卡
+· 对话级事件 (convEvents) 注入独立于世界观
 
 【修复】
 · 单人卡注入嵌套在 if (currentWv) 里导致没绑主世界观时不注入

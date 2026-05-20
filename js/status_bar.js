@@ -245,16 +245,18 @@ async function editCustomAttr(attrId) {
 }
 
 async function _renderCharacterAttrs(status) {
-  const wrap = _el('sb-character-attrs');
-  if (!wrap) return;
-  const wv = await _getCurrentWorldview();
-  const gp = await _getConvGameplay();
-  const skin = wv?.statusBarSkin || document.body?.getAttribute('data-sb-skin') || '';
-  const isNeumorph = skin === 'neumorph';
-  const isTerminal = skin === 'terminal';
-  const cards = (gp?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim()));
-  _characterAttrCards = cards;
-  if ((!isNeumorph && !isTerminal) || !status || !cards.length) {
+const wrap = _el('sb-character-attrs');
+if (!wrap) return;
+const wv = await _getCurrentWorldview();
+const gp = await _getConvGameplay();
+const skin = wv?.statusBarSkin || document.body?.getAttribute('data-sb-skin') || '';
+const isNeumorph = skin === 'neumorph';
+const isTerminal = skin === 'terminal';
+// v632.2：单人卡无世界观时走 single-default 皮肤
+const isSingleDefault = document.body?.getAttribute('data-skin') === 'single-default';
+const cards = (gp?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim()));
+_characterAttrCards = cards;
+if ((!isNeumorph && !isTerminal && !isSingleDefault) || !status || !cards.length) {
     wrap.classList.add('hidden');
     wrap.innerHTML = '';
     return;
@@ -302,7 +304,8 @@ async function _renderCharacterAttrs(status) {
 }
 async function _getCustomAttrPromptData() {
   const wv = await _getCurrentWorldview();
-  if (!wv || wv.id === 'wv_heartsim') return null;
+  // v632.2：心动模拟有内置机制不支持自定义属性；其余情况（含单人卡无世界观）放行
+  if (wv && wv.id === 'wv_heartsim') return null;
   const gp = await _getConvGameplay();
   const globalAttrs = (gp?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
   const charCards = (gp?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim()));
@@ -394,10 +397,11 @@ async function formatCustomAttrsForPrompt() {
 
 
 async function applyCustomAttrsDelta(deltaObj) {
-  if (!deltaObj || typeof deltaObj !== 'object') return false;
-  const wv = await _getCurrentWorldview();
-  if (!wv || wv.id === 'wv_heartsim') return false;
-  const gp = await _getConvGameplay();
+if (!deltaObj || typeof deltaObj !== 'object') return false;
+const wv = await _getCurrentWorldview();
+// v632.2：心动模拟禁用；其余（含无世界观）放行
+if (wv && wv.id === 'wv_heartsim') return false;
+const gp = await _getConvGameplay();
   const status = _currentStatus || Conversations.getStatusBar() || { time: '', weather: '', region: '', location: '', scene: '', playerOutfit: '', playerPosture: '', npcs: [] };
   status.customAttrs = status.customAttrs || {};
   status.customAttrs.global = status.customAttrs.global || {};
