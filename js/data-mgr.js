@@ -24,8 +24,9 @@ const DataMgr = (() => {
       const singleCards = await _safeGetAll('singleCards');
       const npcAvatars = await _safeGetAll('npcAvatars');
       const drawnImages = await _safeGetAll('drawnImages');
+      const lorebooks = await _safeGetAll('lorebooks');
       const data = {
-        version: 3,
+        version: 4,
         exportTime: new Date().toISOString(),
         messages: await _safeGetAll('messages'),
         memories: await _safeGetAll('memories'),
@@ -40,6 +41,7 @@ const DataMgr = (() => {
         singleCards,
         npcAvatars,
         drawnImages,
+        lorebooks,
         // 兼容别名：避免外部检查工具/旧脚本只认 snake_case 时误以为没打包
         single_cards: singleCards,
         npc_avatars: npcAvatars,
@@ -89,6 +91,7 @@ const DataMgr = (() => {
         await _safeClear('singleCards');
         await _safeClear('npcAvatars');
         await _safeClear('drawnImages');
+        await _safeClear('lorebooks');
 
         // 导入
         for (const m of (data.messages || [])) await _safePut('messages', m);
@@ -110,6 +113,8 @@ const DataMgr = (() => {
         for (const c of importedSingleCards) await _safePut('singleCards', c);
         for (const a of importedNpcAvatars) await _safePut('npcAvatars', a);
         for (const img of importedDrawnImages) await _safePut('drawnImages', img);
+        // v4：lorebooks（v3 之前没这个字段，老存档直接跳过）
+        for (const lb of (data.lorebooks || [])) await _safePut('lorebooks', lb);
         if (data.themeConfig) localStorage.setItem('themeConfig', data.themeConfig);
         if (data.themeCustomPresets) localStorage.setItem('themeCustomPresets', data.themeCustomPresets);
 
