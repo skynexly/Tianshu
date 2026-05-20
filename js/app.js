@@ -157,19 +157,19 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v681';
-const CHANGELOG = `【Hotfix】
-· 修复对话级自定义属性配置保存后丢失
-  （saveAttrFromModal 浅拷贝陷阱：globalAttrs / characterAttrs 字段缺失时，
-  新加的属性 push 进临时数组未持久化）
-· 进属性编辑器时保底初始化字段，旧对话也能恢复
-· 影响范围：单人卡无世界观 / 对话级属性
-  事件、任务不受影响（任务编辑器已有保底）
+    const APP_VERSION = 'v681.2';
+const CHANGELOG = `【v681.2 解耦修复】
+· 自定义属性注入从「回复格式」开关解绑
+· 关闭回复格式也能正常使用自定义属性
+· 原因：自定义属性已是独立的 custom-attrs 代码块，
+  不依赖 status 块，不应共享门控
+· custom-attrs 增量应用同步解耦
+· showContext 调试预览补上自定义属性段，与真实发送对齐
 
-【修复触发方式】
-· 进出 bug 的对话 → 对话设置 → 玩法 → 属性
-· 重新添加属性或编辑一次旧属性触发保存
-· AI 即可读到自定义属性提示词
+【v681 修复回顾（仍然有效）】
+· 修复对话级属性编辑器浅拷贝陷阱
+  （globalAttrs / characterAttrs 字段缺失时 push 丢失）
+· 进编辑器时保底字段，旧对话也能恢复
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

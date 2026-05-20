@@ -793,16 +793,20 @@ if (isSingleConv && isGameMode) {
     // 2. 输出格式 — 非文游模式或关闭回复格式时跳过
     if (isGameMode && convSettings.format) {
       systemParts.push(_getOutputFormatPrompt(convSettings.replyWordCount));
-      // 自定义属性：追加格式说明（仅当前世界观配置了属性时注入；当前值稍后跟随状态区注入）
+      // 线上消息气泡：用户开关开启 且 不是心动模拟（心动模拟世界观自带说明）
+      if (convSettings.onlineChat && document.body.getAttribute('data-worldview') !== '心动模拟') {
+        systemParts.push(ONLINE_CHAT_BLOCK_PROMPT);
+      }
+    }
+
+    // 2b. 自定义属性：独立于「回复格式」开关（v681.2 解耦）
+    // 自定义属性已是独立的 custom-attrs 代码块，不依赖 status 块，所以只看 isGameMode
+    if (isGameMode) {
       if (typeof StatusBar !== 'undefined' && StatusBar.formatCustomAttrsFormatPrompt) {
         try {
           const customAttrsFormatText = await StatusBar.formatCustomAttrsFormatPrompt();
           if (customAttrsFormatText) systemParts.push(customAttrsFormatText);
         } catch(e) { console.warn('[Chat] 自定义属性格式注入失败', e); }
-      }
-      // 线上消息气泡：用户开关开启 且 不是心动模拟（心动模拟世界观自带说明）
-      if (convSettings.onlineChat && document.body.getAttribute('data-worldview') !== '心动模拟') {
-        systemParts.push(ONLINE_CHAT_BLOCK_PROMPT);
       }
     }
 
@@ -815,6 +819,10 @@ if (isSingleConv && isGameMode) {
           systemParts.push('【上一轮状态面板】\n以下是当前场景的状态快照。你下一次回复的 `status` 代码块应基于此更新：未发生变化的字段请原样抄回；有变化则写新值。\n\n```status\n' + statusText + '\n```');
         }
       } catch(e) {}
+    }
+
+    // 2c. 自定义属性状态：独立于「回复格式」开关（v681.2 解耦）
+    if (isGameMode) {
       if (typeof StatusBar !== 'undefined' && StatusBar.formatCustomAttrsStatePrompt) {
         try {
           const customAttrsStateText = await StatusBar.formatCustomAttrsStatePrompt();
@@ -1480,7 +1488,8 @@ const _evtHiddenList = _evtHiddenWv?.events || [];
               }
 
               // 自定义属性：处理 custom-attrs 增量代码块（在基础状态栏已就位后应用）
-              if (isGameMode && convSettings.format && parsed.customAttrs && typeof StatusBar !== 'undefined' && StatusBar.applyCustomAttrsDelta) {
+              // v681.2：解耦于 format 开关——只要文游模式开就处理
+              if (isGameMode && parsed.customAttrs && typeof StatusBar !== 'undefined' && StatusBar.applyCustomAttrsDelta) {
                 try { await StatusBar.applyCustomAttrsDelta(parsed.customAttrs); } catch(e) { console.warn('[Chat] custom-attrs 更新失败:', e); }
               }
               
@@ -3968,6 +3977,22 @@ if (!gp) return null;
           systemParts.push('【上一轮状态面板】\n以下是当前场景的状态快照。你下一次回复的 `status` 代码块应基于此更新：未发生变化的字段请原样抄回；有变化则写新值。\n\n```status\n' + statusText + '\n```');
         }
       } catch(e) {}
+    }
+
+    // 2b/2c. 自定义属性：独立于 format 开关（v681.2 解耦，与真实发送路径对齐）
+    if (isGameMode) {
+      if (typeof StatusBar !== 'undefined' && StatusBar.formatCustomAttrsFormatPrompt) {
+        try {
+          const customAttrsFormatText = await StatusBar.formatCustomAttrsFormatPrompt();
+          if (customAttrsFormatText) systemParts.push(customAttrsFormatText);
+        } catch(e) {}
+      }
+      if (typeof StatusBar !== 'undefined' && StatusBar.formatCustomAttrsStatePrompt) {
+        try {
+          const customAttrsStateText = await StatusBar.formatCustomAttrsStatePrompt();
+          if (customAttrsStateText) systemParts.push(customAttrsStateText);
+        } catch(e) {}
+      }
     }
 
     // 2a. 首轮现实时间戳（兜底开场时间）
