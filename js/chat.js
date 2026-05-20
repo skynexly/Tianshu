@@ -949,6 +949,26 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           }
         }
         const gs = (_wvForGlobal && _wvForGlobal.globalNpcs) || [];
+        // v632.1：合并单人卡世界书的全图 NPC（独立于 currentWv，没绑主世界观也要跑）
+        if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
+          try {
+            const _card = await SingleCard.get(singleSettings.charId);
+            if (_card && _card.extEnabled !== false) {
+              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, Conversations.getList().find(c => c.id === Conversations.getCurrent()));
+              if (_hiddenWv && Array.isArray(_hiddenWv.globalNpcs) && _hiddenWv.globalNpcs.length > 0) {
+                // 按 id（兜底 name）去重，避免和世界观自带的重复
+                const seen = new Set(gs.map(n => n.id || n.name));
+                for (const n of _hiddenWv.globalNpcs) {
+                  const key = n.id || n.name;
+                  if (key && !seen.has(key)) {
+                    gs.push(n);
+                    seen.add(key);
+                  }
+                }
+              }
+            }
+          } catch(e) { console.warn('[Chat] 单人卡世界书 NPC 合并失败', e); }
+        }
         if (gs.length > 0) {
           const text = '【全图常驻 NPC】\n以下 NPC 不受地区限制，在本世界观下全程常驻，随时可以出现在任何场景中。\n\n' +
             gs.map(n => {
@@ -956,6 +976,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
               return n.detail ? `${head}\n${n.detail}` : head;
             }).join('\n\n---\n\n');
           systemParts.push(text);
+          try { GameLog.log('info', `[世界书] 注入 ${gs.length} 个常驻 NPC`); } catch(_) {}
         }
       } catch(e) { console.warn('[Chat] 全图NPC注入失败', e); }
     }
@@ -4063,6 +4084,22 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           }
         }
         const gs = (_wvForGlobal && _wvForGlobal.globalNpcs) || [];
+        // v632.1：showContext 同步合并单人卡世界书 NPC，保证调试可见
+        if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
+          try {
+            const _card = await SingleCard.get(singleSettings.charId);
+            if (_card && _card.extEnabled !== false) {
+              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, Conversations.getList().find(c => c.id === Conversations.getCurrent()));
+              if (_hiddenWv && Array.isArray(_hiddenWv.globalNpcs) && _hiddenWv.globalNpcs.length > 0) {
+                const seen = new Set(gs.map(n => n.id || n.name));
+                for (const n of _hiddenWv.globalNpcs) {
+                  const key = n.id || n.name;
+                  if (key && !seen.has(key)) { gs.push(n); seen.add(key); }
+                }
+              }
+            }
+          } catch(_) {}
+        }
         if (gs.length > 0) {
           const text = '【全图常驻 NPC】\n以下 NPC 不受地区限制，在本世界观下全程常驻，随时可以出现在任何场景中。\n\n' +
             gs.map(n => {
