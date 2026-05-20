@@ -1103,6 +1103,79 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     document.getElementById('cg-task-panel')?.remove();
   }
 
+  // ===== v681 调试：dump 当前对话的 convGameplay 全貌 =====
+  async function debugDump() {
+    try {
+      const conv = _getConv();
+      if (!conv) { alert('找不到当前对话'); return; }
+      const lines = [];
+      lines.push('=== 对话基础 ===');
+      lines.push('id: ' + conv.id);
+      lines.push('isSingle: ' + conv.isSingle);
+      lines.push('singleWorldviewId: ' + (conv.singleWorldviewId || '(空)'));
+      lines.push('worldviewId: ' + (conv.worldviewId || '(空)'));
+      lines.push('');
+      lines.push('=== convGameplay ===');
+      lines.push('存在: ' + (conv.convGameplay ? '是' : '否'));
+      if (conv.convGameplay) {
+        const gp = conv.convGameplay;
+        lines.push('globalAttrs 是数组: ' + Array.isArray(gp.globalAttrs));
+        lines.push('globalAttrs 数量: ' + (gp.globalAttrs?.length ?? 'undefined'));
+        lines.push('characterAttrs 是数组: ' + Array.isArray(gp.characterAttrs));
+        lines.push('characterAttrs 数量: ' + (gp.characterAttrs?.length ?? 'undefined'));
+        lines.push('taskSystem 存在: ' + !!gp.taskSystem);
+        lines.push('taskSystem.phases 数量: ' + (gp.taskSystem?.phases?.length ?? 'undefined'));
+      }
+      lines.push('');
+      lines.push('=== convEvents ===');
+      lines.push('数量: ' + (conv.convEvents?.length ?? '(无字段)'));
+      lines.push('');
+      lines.push('=== 完整 convGameplay JSON ===');
+      lines.push(JSON.stringify(conv.convGameplay, null, 2));
+      lines.push('');
+      lines.push('=== StatusBar 视角 ===');
+      try {
+        const fmt = await StatusBar.formatCustomAttrsFormatPrompt();
+        lines.push('formatPrompt 长度: ' + (fmt?.length ?? 0));
+        const sta = await StatusBar.formatCustomAttrsStatePrompt();
+        lines.push('statePrompt 长度: ' + (sta?.length ?? 0));
+        lines.push('');
+        lines.push('--- formatPrompt ---');
+        lines.push(fmt || '(空)');
+        lines.push('');
+        lines.push('--- statePrompt ---');
+        lines.push(sta || '(空)');
+      } catch(e) {
+        lines.push('StatusBar 调用出错: ' + e.message);
+      }
+      const text = lines.join('\n');
+      console.log(text);
+      // 弹窗显示 + 复制按钮
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:16px';
+      modal.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;max-width:560px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
+          <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+            <div style="font-weight:600;color:var(--text)">🔍 调试 Dump</div>
+            <button id="cg-dbg-close" style="background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:0;width:28px;height:28px">×</button>
+          </div>
+          <pre style="flex:1;overflow:auto;padding:14px;margin:0;font-size:11px;color:var(--text);white-space:pre-wrap;word-break:break-all;font-family:monospace"></pre>
+          <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0">
+            <button id="cg-dbg-copy" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">复制全部</button>
+          </div>
+        </div>`;
+      modal.querySelector('pre').textContent = text;
+      modal.querySelector('#cg-dbg-close').onclick = () => modal.remove();
+      modal.querySelector('#cg-dbg-copy').onclick = async () => {
+        try { await navigator.clipboard.writeText(text); UI.showToast('已复制', 1500); } catch(_) { UI.showToast('复制失败，请长按 pre 区域手动选', 2000); }
+      };
+      modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+      document.body.appendChild(modal);
+    } catch(e) {
+      alert('调试出错：' + (e.message || e));
+    }
+  }
+
   return {
     openEventEditor, closeEventEditor,
     editEvent, addEvent, saveEvent, deleteEvent, closeEventModal,
@@ -1113,6 +1186,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     openAttrModal, closeAttrModal, saveAttrFromModal, deleteAttrFromModal,
     toggleCharPicker, renderCharPicker, selectChar, deleteCharCard,
     openTaskEditor, closeTaskEditor,
+    debugDump,
     addTaskPhase, deleteTaskPhase, updateTaskPhase,
     openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal,
     openPhaseRewardModal, onTaskRewardModeChange
