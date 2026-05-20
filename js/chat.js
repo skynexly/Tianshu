@@ -1202,61 +1202,62 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
             }
           }
         }
-        // v596：单人卡的隐藏世界观（扩展设定）注入
-        if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
-          try {
-            const _card = await SingleCard.get(singleSettings.charId);
-            if (_card && _card.extEnabled !== false && singleSettings.enableCardExtended !== false) {
-              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
-              if (_hiddenWv) {
-                // 节日（depth=3）
-                const _festText = _buildFestivalPrompt(_hiddenWv.festivals || [], messages);
-                if (_festText) {
-                  const FESTIVAL_DEPTH = 3;
-                  let firstNonSys = 0;
-                  while (firstNonSys < apiMessages.length && apiMessages[firstNonSys].role === 'system') firstNonSys++;
-                  const insertIdx = Math.max(firstNonSys, apiMessages.length - FESTIVAL_DEPTH);
-                  if (insertIdx >= 0 && insertIdx <= apiMessages.length) {
-                    apiMessages.splice(insertIdx, 0, { role: 'system', content: _festText });
-                  }
-                }
-                // 扩展条目（卡级 + 对话级总开关都开才注入）
-                const _cardKnow = (_hiddenWv.knowledges || []).filter(k => k && k.enabled !== false);
-                const _cardEvents = (convSettings.eventsEnabled !== false) ? (_hiddenWv.events || []) : [];
-                const _cardConv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-                if (_cardConv && !_cardConv.eventStates) _cardConv.eventStates = {};
-                if (_cardKnow.length > 0 || _cardEvents.length > 0) {
-                  const _extInj = _buildExtendedInjections(_cardKnow, messages, _cardEvents, _cardConv ? _cardConv.eventStates : {}, { allowAttrEvents: false });
-                  if (_cardEvents.length > 0 && _cardConv) { try { await Conversations.saveList(); } catch(_) {} }
-                  if (_extInj.systemTop.length > 0) {
-                    let firstNonSysIdx = apiMessages.findIndex(m => m.role !== 'system');
-                    if (firstNonSysIdx === -1) firstNonSysIdx = apiMessages.length;
-                    for (const c of _extInj.systemTop.reverse()) {
-                      apiMessages.splice(firstNonSysIdx, 0, { role: 'system', content: c });
-                    }
-                  }
-                  if (_extInj.systemBottom.length > 0) {
-                    let firstNonSysIdx = apiMessages.findIndex(m => m.role !== 'system');
-                    if (firstNonSysIdx === -1) firstNonSysIdx = apiMessages.length;
-                    for (const c of _extInj.systemBottom) {
-                      apiMessages.splice(firstNonSysIdx, 0, { role: 'system', content: c });
-                      firstNonSysIdx++;
-                    }
-                  }
-                  for (const [depthStr, contents] of Object.entries(_extInj.depths)) {
-                    const depth = parseInt(depthStr) || 0;
-                    const insertIdx = apiMessages.length - depth;
-                    if (insertIdx > 0 && insertIdx <= apiMessages.length) {
-                      for (const c of contents.reverse()) {
-                        apiMessages.splice(insertIdx, 0, { role: 'system', content: c });
-                      }
-                    }
-                  }
+      }
+      // v632：单人卡的世界书注入（独立于 currentWv，没绑主世界观也要跑）
+      if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
+        try {
+          const _card = await SingleCard.get(singleSettings.charId);
+          if (_card && _card.extEnabled !== false && singleSettings.enableCardExtended !== false) {
+            const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
+            if (_hiddenWv) {
+              // 节日（depth=3）
+              const _festText = _buildFestivalPrompt(_hiddenWv.festivals || [], messages);
+              if (_festText) {
+                const FESTIVAL_DEPTH = 3;
+                let firstNonSys = 0;
+                while (firstNonSys < apiMessages.length && apiMessages[firstNonSys].role === 'system') firstNonSys++;
+                const insertIdx = Math.max(firstNonSys, apiMessages.length - FESTIVAL_DEPTH);
+                if (insertIdx >= 0 && insertIdx <= apiMessages.length) {
+                  apiMessages.splice(insertIdx, 0, { role: 'system', content: _festText });
                 }
               }
+              // 扩展条目（卡级 + 对话级总开关都开才注入）
+              const _cardKnow = (_hiddenWv.knowledges || []).filter(k => k && k.enabled !== false);
+              const _cardEvents = (convSettings.eventsEnabled !== false) ? (_hiddenWv.events || []) : [];
+              const _cardConv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+              if (_cardConv && !_cardConv.eventStates) _cardConv.eventStates = {};
+              if (_cardKnow.length > 0 || _cardEvents.length > 0) {
+                const _extInj = _buildExtendedInjections(_cardKnow, messages, _cardEvents, _cardConv ? _cardConv.eventStates : {}, { allowAttrEvents: false });
+                if (_cardEvents.length > 0 && _cardConv) { try { await Conversations.saveList(); } catch(_) {} }
+                if (_extInj.systemTop.length > 0) {
+                  let firstNonSysIdx = apiMessages.findIndex(m => m.role !== 'system');
+                  if (firstNonSysIdx === -1) firstNonSysIdx = apiMessages.length;
+                  for (const c of _extInj.systemTop.reverse()) {
+                    apiMessages.splice(firstNonSysIdx, 0, { role: 'system', content: c });
+                  }
+                }
+                if (_extInj.systemBottom.length > 0) {
+                  let firstNonSysIdx = apiMessages.findIndex(m => m.role !== 'system');
+                  if (firstNonSysIdx === -1) firstNonSysIdx = apiMessages.length;
+                  for (const c of _extInj.systemBottom) {
+                    apiMessages.splice(firstNonSysIdx, 0, { role: 'system', content: c });
+                    firstNonSysIdx++;
+                  }
+                }
+                for (const [depthStr, contents] of Object.entries(_extInj.depths)) {
+                  const depth = parseInt(depthStr) || 0;
+                  const insertIdx = apiMessages.length - depth;
+                  if (insertIdx > 0 && insertIdx <= apiMessages.length) {
+                    for (const c of contents.reverse()) {
+                      apiMessages.splice(insertIdx, 0, { role: 'system', content: c });
+                    }
+                  }
+                }
+                try { GameLog.log('info', `[世界书] 注入 ${_cardKnow.length} 条知识 / ${_cardEvents.length} 条事件`); } catch(_) {}
+              }
             }
-          } catch(e) { console.warn('[Chat] 单人卡扩展设定注入失败:', e); }
-        }
+          }
+        } catch(e) { console.warn('[Chat] 单人卡世界书注入失败:', e); }
       }
     } catch(e) { console.warn('[Chat] 扩展条目注入失败:', e); }
     } // isGameMode
