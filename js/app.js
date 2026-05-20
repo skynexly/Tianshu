@@ -157,8 +157,13 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v679';
-const CHANGELOG = `【世界书系统】
+    const APP_VERSION = 'v680';
+const CHANGELOG = `【后端域名迁移】
+· 登录服务从 *.workers.dev 迁到 auth.skynexyl.com
+· 国内裸网（不挂梯子）也能正常登录注册
+· DNS 走 Cloudflare 全球边缘节点，连接更快更稳
+
+【世界书系统】
 · 世界书从世界观解耦，可独立挂卡
 · 编辑面板节日 / 常驻 / 动态 / NPC 四类条目
 · 单人卡可绑定多本世界书，按本启用 / 禁用

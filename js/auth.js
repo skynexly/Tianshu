@@ -9,7 +9,7 @@
  * 5. 心跳：每 30 分钟 + 页面 visibilitychange 触发一次 check
  */
 const Auth = (() => {
-  const API = 'https://tianshu-auth.2394171101.workers.dev';
+  const API = 'https://auth.skynexyl.com';
   const LS_KEY = 'tianshu_auth_v1';
   const HEARTBEAT_INTERVAL = 30 * 60 * 1000; // 30 min
 
