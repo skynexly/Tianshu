@@ -157,19 +157,18 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v681.2';
-const CHANGELOG = `【v681.2 解耦修复】
-· 自定义属性注入从「回复格式」开关解绑
-· 关闭回复格式也能正常使用自定义属性
-· 原因：自定义属性已是独立的 custom-attrs 代码块，
-  不依赖 status 块，不应共享门控
-· custom-attrs 增量应用同步解耦
-· showContext 调试预览补上自定义属性段，与真实发送对齐
+    const APP_VERSION = 'v681.3';
+const CHANGELOG = `【v681.3 新功能】
+· 主题面板新增「正文字号」滑块（12-22px，默认 15）
+· 只影响消息正文与 Markdown 渲染区
+· 不影响状态栏 / 输入框 / 按钮等结构性 UI
 
-【v681 修复回顾（仍然有效）】
-· 修复对话级属性编辑器浅拷贝陷阱
-  （globalAttrs / characterAttrs 字段缺失时 push 丢失）
-· 进编辑器时保底字段，旧对话也能恢复
+【v681.2 解耦修复（回顾）】
+· 自定义属性注入从「回复格式」开关解绑
+· 关闭回复格式也能用自定义属性
+
+【v681 浅拷贝修复（回顾）】
+· 属性编辑器 globalAttrs / characterAttrs 字段缺失时保存丢失修复
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

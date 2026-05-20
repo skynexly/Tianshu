@@ -68,7 +68,8 @@ const Theme = (() => {
       glassEnabled: false,
       aiBubbleRender: true,
       fontMode: "default",
-      customFontData: null,
+customFontData: null,
+msgFontSize: 15,
     },
     '暖棕': {
       bg:                    '#120d08',
@@ -259,6 +260,10 @@ const Theme = (() => {
     } else {
       s.removeProperty('--font-family');
     }
+
+    // 正文字号（v681.3）
+    const fs = Number(cfg.msgFontSize);
+    s.setProperty('--msg-font-size', (Number.isFinite(fs) && fs > 0 ? fs : 15) + 'px');
   }
 
   // 对话级背景图覆盖（优先级高于主题级 chatBgImage；空字符串/undefined 表示走主题级）
@@ -402,13 +407,32 @@ apply(cfg);
   }
 
   // 字体设置
-  function setFontMode(mode) {
-    const cfg = load();
-    cfg.fontMode = mode;
-    save(cfg);
-    apply(cfg);
-    _syncFontUI(cfg);
-  }
+function setFontMode(mode) {
+const cfg = load();
+cfg.fontMode = mode;
+save(cfg);
+apply(cfg);
+_syncFontUI(cfg);
+}
+
+// 正文字号设置（v681.3）
+function setMsgFontSize(px) {
+const n = Number(px);
+if (!Number.isFinite(n) || n < 12 || n > 24) return;
+const cfg = load();
+cfg.msgFontSize = n;
+save(cfg);
+apply(cfg);
+_syncFontSizeUI(cfg);
+}
+
+function _syncFontSizeUI(cfg) {
+cfg = cfg || load();
+const slider = document.getElementById('th-msg-fontsize');
+if (slider) slider.value = cfg.msgFontSize || 15;
+const label = document.getElementById('th-msg-fontsize-val');
+if (label) label.textContent = (cfg.msgFontSize || 15) + 'px';
+}
 
   function handleFontUpload(input) {
     const file = input.files[0];
@@ -935,6 +959,8 @@ function toggleAiBubbleRender() {
     if (aiRenderBtn) aiRenderBtn.checked = (cfg.aiBubbleRender !== false);
       // 同步字体UI
       _syncFontUI(cfg);
+      // 同步字号UI（v681.3）
+      _syncFontSizeUI(cfg);
       // 标记当前激活的预设
       document.querySelectorAll('.th-preset-btn').forEach(btn => {
         const p = PRESETS[btn.dataset.preset];
@@ -950,6 +976,7 @@ function toggleAiBubbleRender() {
     openPicker, toggleGlass, toggleAiBubbleRender, isAiBubbleRenderEnabled,
 toggleLite, isLiteMode, applyLiteMode,
     setFontMode, handleFontUpload,
+setMsgFontSize,
     syncGlassPadding: () => _syncGlassPadding(load().glassEnabled),
     saveAsCustom, applyCustomPreset, activateCustomPreset, deleteCustomPreset, renderCustomList,
     saveCustomPresetNow,

@@ -1424,7 +1424,6 @@
                 <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-top:2px">编辑当前对话的全局属性和角色属性，不影响世界观原件。</div>
               </div>
               <button type="button" onclick="ConvGameplay.openAttrEditor()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">编辑属性</button>
-              <button type="button" onclick="ConvGameplay.debugDump()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--warning, #ff9800);border-radius:6px;color:var(--warning, #ff9800);font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">🔍调试</button>
             </div>
 
             <label class="circle-check-label">
@@ -2513,6 +2512,14 @@
                     <input type="file" accept=".ttf,.otf,.woff,.woff2" onchange="Theme.handleFontUpload(this)" style="display:none">
                   </label>
                   <span id="th-font-filename" style="font-size:11px;color:var(--text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">未选择文件</span>
+                </div>
+                <!-- 正文字号（v681.3） -->
+                <div style="display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px dashed var(--border)">
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <span style="font-size:12px;color:var(--text)">正文字号</span>
+                    <span id="th-msg-fontsize-val" style="font-size:11px;color:var(--text-secondary);font-variant-numeric:tabular-nums">15px</span>
+                  </div>
+                  <input type="range" id="th-msg-fontsize" min="12" max="22" step="1" value="15" oninput="Theme.setMsgFontSize(this.value)" style="width:100%;accent-color:var(--accent)">
                 </div>
               </div>
 
