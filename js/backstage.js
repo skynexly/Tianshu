@@ -364,12 +364,12 @@ const container = document.getElementById('backstage-messages');
                 const _lbs = await Lorebook.collectForChat({ conv: _conv, card: _card });
                 if (_lbs && _lbs.length > 0) {
                   const merged = { festivals: [], knowledges: [], events: [], globalNpcs: [] };
-                  for (const lb of _lbs) {
-                    if (Array.isArray(lb.festivals)) merged.festivals.push(...lb.festivals);
-                    if (Array.isArray(lb.knowledges)) merged.knowledges.push(...lb.knowledges);
-                    if (Array.isArray(lb.events)) merged.events.push(...lb.events);
-                    if (Array.isArray(lb.globalNpcs)) merged.globalNpcs.push(...lb.globalNpcs);
-                  }
+for (const lb of _lbs) {
+if (Array.isArray(lb.festivals)) merged.festivals.push(...lb.festivals);
+if (Array.isArray(lb.knowledges)) merged.knowledges.push(...lb.knowledges);
+// v632.1：events 不再合并，事件系统不走世界书层
+if (Array.isArray(lb.globalNpcs)) merged.globalNpcs.push(...lb.globalNpcs);
+}
                   _bsCardHiddenWv = merged;
                 }
               }

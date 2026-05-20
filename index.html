@@ -1455,6 +1455,15 @@
               </div>
             </div>
 
+            <!-- v632：世界书禁用（按本控制） -->
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
+              <div style="min-width:0;flex:1">
+                <div style="font-size:14px;color:var(--text);font-weight:600">世界书</div>
+                <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-top:2px">当前对话单人卡绑定的世界书，可按本禁用注入。</div>
+              </div>
+              <button type="button" onclick="Chat.openLorebookDisableModal()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">管理</button>
+            </div>
+
             <!-- 区域2：AI 能力 -->
             <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
               <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em;margin-bottom:12px">AI 能力</div>
@@ -1559,6 +1568,21 @@
         <div id="event-manager-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
         <div class="modal-actions" style="flex-shrink:0;margin-top:16px;padding-top:12px">
           <button onclick="Chat.closeEventManagerModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- v632：世界书禁用管理弹窗 -->
+    <div id="lorebook-disable-modal" class="modal hidden">
+      <div class="modal-content" style="max-height:85vh;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
+          <h3 style="margin:0">世界书禁用</h3>
+          <button onclick="Chat.closeLorebookDisableModal()" class="btn-icon modal-corner-btn close-btn" title="关闭">×</button>
+        </div>
+        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px">勾选 = 注入到本对话；取消 = 本对话不注入该世界书（数据不删除）。</p>
+        <div id="lorebook-disable-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+        <div class="modal-actions" style="flex-shrink:0;margin-top:16px;padding-top:12px">
+          <button onclick="Chat.closeLorebookDisableModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">关闭</button>
         </div>
       </div>
     </div>
@@ -2687,6 +2711,11 @@
       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
       事件 <span id="wv-ext-count-event" style="font-size:11px;opacity:0.7"></span>
     </button>
+    <!-- v632：世界书专用 NPC 子 tab（世界观不显示，由 _applyHiddenWvUI 切换） -->
+    <button class="wv-ext-subtab-btn" data-subtab="npc" onclick="Worldview.switchExtSubtab('npc')" id="wv-ext-subtab-btn-npc" style="display:none;flex:1;padding:8px 10px;font-size:12px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;align-items:center;justify-content:center;gap:4px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      NPC <span id="wv-ext-count-npc" style="font-size:11px;opacity:0.7"></span>
+    </button>
   </div>
 
   <!-- 节日设定 -->
@@ -2718,6 +2747,13 @@
 <button type="button" onclick="Worldview.addEvent()" style="flex:1;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px">+ 添加事件</button>
 <button type="button" onclick="Worldview.aiGenerateEvents()" style="flex:1;padding:10px;background:none;border:2px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成事件</button>
 </div>
+  </div>
+
+  <!-- v632：全图 NPC 设定（世界书专用） -->
+  <div class="wv-ext-subtab-content hidden" data-subtab="npc">
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">不受地区限制，绑卡后全程常驻，每轮注入 AI。多本世界书叠加时自动合并去重。</div>
+    <div id="wv-ext-global-npcs-container"></div>
+    <button type="button" onclick="Worldview.addGlobalNpc()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加 NPC</button>
   </div>
 </div>
         </div>

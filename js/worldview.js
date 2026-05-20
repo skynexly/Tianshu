@@ -204,6 +204,15 @@ function _defaultRegion() {
     // v632：世界书状态下，⋯ 按钮本身也藏了（菜单里什么都没有）
     const moreBtn = document.getElementById('worldview-edit-more-btn');
     if (moreBtn) moreBtn.style.display = isHidden ? 'none' : '';
+    // v632：世界书把"事件"子 tab 藏掉、显示"NPC"子 tab；世界观反之
+    const eventSubBtn = document.querySelector('.wv-ext-subtab-btn[data-subtab="event"]');
+    const npcSubBtn = document.getElementById('wv-ext-subtab-btn-npc');
+    if (eventSubBtn) eventSubBtn.style.display = isHidden ? 'none' : '';
+    if (npcSubBtn) npcSubBtn.style.display = isHidden ? 'flex' : 'none';
+    // 默认子 tab 落点：世界书进来就停在节日（事件不在世界书里），世界观无所谓
+    if (isHidden && _currentExtSubtab === 'event') {
+      try { switchExtSubtab('festival'); } catch(_) {}
+    }
   }
 
   async function load() {
@@ -2260,23 +2269,29 @@ async function selectGameplayCharacter(idx) {
 let _globalNpcsCache = [];   // 渲染缓存（只用于显示）
 
 function _renderGlobalNpcs(list) {
-    _globalNpcsCache = list || [];
-    const container = document.getElementById('wv-global-npcs-container');
-    if (!container) return;
-    if (_globalNpcsCache.length === 0) {
-      container.innerHTML = `<div style="text-align:center;color:var(--text-secondary);font-size:12px;padding:14px 0;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">还没有常驻角色</div>`;
-      return;
-    }
-    container.innerHTML = _globalNpcsCache.map((n, i) => `
-      <div onclick="Worldview.editGlobalNpc(${i})" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer">
-        <div style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text)">
-          <span style="font-weight:600">${Utils.escapeHtml(n.name || '未命名')}</span>
-          ${n.aliases ? `<span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(n.aliases)}</span>` : ''}
-        </div>
-        ${n.summary ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.summary)}</div>` : ''}
+_globalNpcsCache = list || [];
+// v632：basic tab 容器（世界观用）+ special tab 容器（世界书用），两者并存，填同一份数据
+const containers = [
+  document.getElementById('wv-global-npcs-container'),
+  document.getElementById('wv-ext-global-npcs-container'),
+].filter(Boolean);
+if (containers.length === 0) return;
+let html;
+if (_globalNpcsCache.length === 0) {
+  html = `<div style="text-align:center;color:var(--text-secondary);font-size:12px;padding:14px 0;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">还没有常驻角色</div>`;
+} else {
+  html = _globalNpcsCache.map((n, i) => `
+    <div onclick="Worldview.editGlobalNpc(${i})" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer">
+      <div style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text)">
+        <span style="font-weight:600">${Utils.escapeHtml(n.name || '未命名')}</span>
+        ${n.aliases ? `<span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(n.aliases)}</span>` : ''}
       </div>
-    `).join('');
-  }
+      ${n.summary ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.summary)}</div>` : ''}
+    </div>
+  `).join('');
+}
+containers.forEach(c => { c.innerHTML = html; });
+}
 
   async function addGlobalNpc() {
     const w = await _getEditingWV();
