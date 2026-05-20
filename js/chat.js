@@ -937,20 +937,25 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
 
     // 4c. 全图 NPC（不受地区限制，本世界观下每轮全量注入）
     // 单人模式必须遵守 enableNpc：未启用 NPC 时，连全图常驻 NPC 也不注入。
-    if (isGameMode && (!isSingleConv || singleSettings.enableNpc)) {
+    // v632.1：单人卡世界书的 NPC 独立——绑了世界书就注入，不受 enableNpc 限制
+    const _shouldInjectWvNpc = isGameMode && (!isSingleConv || singleSettings.enableNpc);
+    const _shouldInjectLbNpc = isGameMode && isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId;
+    if (_shouldInjectWvNpc || _shouldInjectLbNpc) {
       try {
         let _wvForGlobal = null;
-        if (isSingleConv && singleWv) {
-          _wvForGlobal = singleWv;
-        } else if (!isGaidenConv || gaidenSettings.inheritNpc) {
-          const curWvId = Worldview.getCurrentId && Worldview.getCurrentId();
-          if (curWvId && curWvId !== '__default_wv__') {
-            _wvForGlobal = await DB.get('worldviews', curWvId);
+        if (_shouldInjectWvNpc) {
+          if (isSingleConv && singleWv) {
+            _wvForGlobal = singleWv;
+          } else if (!isGaidenConv || gaidenSettings.inheritNpc) {
+            const curWvId = Worldview.getCurrentId && Worldview.getCurrentId();
+            if (curWvId && curWvId !== '__default_wv__') {
+              _wvForGlobal = await DB.get('worldviews', curWvId);
+            }
           }
         }
-        const gs = (_wvForGlobal && _wvForGlobal.globalNpcs) || [];
+        const gs = (_shouldInjectWvNpc && _wvForGlobal && _wvForGlobal.globalNpcs) ? _wvForGlobal.globalNpcs.slice() : [];
         // v632.1：合并单人卡世界书的全图 NPC（独立于 currentWv，没绑主世界观也要跑）
-        if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
+        if (_shouldInjectLbNpc) {
           try {
             const _card = await SingleCard.get(singleSettings.charId);
             if (_card && _card.extEnabled !== false) {
@@ -1274,7 +1279,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
                     }
                   }
                 }
-                try { GameLog.log('info', `[世界书] 注入 ${_cardKnow.length} 条知识 / ${_cardEvents.length} 条事件`); } catch(_) {}
+                try { GameLog.log('info', `[世界书] 注入 ${_cardKnow.length} 条知识`); } catch(_) {}
               }
             }
           }
@@ -4858,8 +4863,9 @@ async function openLorebookDisableModal() {
   // 收集当前对话能用到的世界书 id 列表（只看单人卡路径，世界观/对话级挂载是 Step 3）
   let lbIds = [];
   try {
-    if (conv.mode === 'single' && conv.singleSettings?.charType === 'card' && conv.singleSettings?.charId) {
-      const card = await SingleCard.get(conv.singleSettings.charId);
+    // v632.1：conv 数据是平铺的（singleCharType / singleCharId），不是 conv.singleSettings 对象
+    if (conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+      const card = await SingleCard.get(conv.singleCharId);
       lbIds = (card?.lorebookIds || []).slice();
     }
   } catch(_) {}

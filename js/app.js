@@ -157,7 +157,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v676';
+    const APP_VERSION = 'v677';
 const CHANGELOG = `【世界书系统】
 · 世界书从世界观解耦，可独立挂卡
 · 编辑面板节日 / 常驻 / 动态 / NPC 四类条目
