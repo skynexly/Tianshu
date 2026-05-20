@@ -69,7 +69,7 @@ const Theme = (() => {
       aiBubbleRender: true,
       fontMode: "default",
 customFontData: null,
-msgFontSize: 15,
+msgFontSize: 13.5,
     },
     '暖棕': {
       bg:                    '#120d08',
@@ -415,7 +415,7 @@ apply(cfg);
 _syncFontUI(cfg);
 }
 
-// 正文字号设置（v681.3）
+// 正文字号设置（v681.3.1）
 function setMsgFontSize(px) {
 const n = Number(px);
 if (!Number.isFinite(n) || n < 12 || n > 24) return;
@@ -429,9 +429,9 @@ _syncFontSizeUI(cfg);
 function _syncFontSizeUI(cfg) {
 cfg = cfg || load();
 const slider = document.getElementById('th-msg-fontsize');
-if (slider) slider.value = cfg.msgFontSize || 15;
+if (slider) slider.value = cfg.msgFontSize || 13.5;
 const label = document.getElementById('th-msg-fontsize-val');
-if (label) label.textContent = (cfg.msgFontSize || 15) + 'px';
+if (label) label.textContent = (cfg.msgFontSize || 13.5) + 'px';
 }
 
   function handleFontUpload(input) {

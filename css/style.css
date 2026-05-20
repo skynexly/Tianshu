@@ -402,7 +402,7 @@ body:has(#panel-chat.active) #panel-chat .chat-messages {
   word-break: break-word;
   animation: messageBubbleIn 0.22s ease-out;
   transform-origin: bottom center;
-  font-size: 13.5px;
+  font-size: var(--msg-font-size, 13.5px);
   letter-spacing: 0.03em;
   line-height: 1.7;
   /* 性能：每条消息隔离布局/绘制，滚动时只重绘进入视口的气泡。

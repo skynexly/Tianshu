@@ -157,7 +157,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v681.3';
+    const APP_VERSION = 'v681.3.1';
 const CHANGELOG = `【v681.3 新功能】
 · 主题面板新增「正文字号」滑块（12-22px，默认 15）
 · 只影响消息正文与 Markdown 渲染区
