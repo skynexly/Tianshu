@@ -157,14 +157,23 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v631';
-    const CHANGELOG = `· 账号系统上线（邀请码注册 / 登录 / 设备管理）
-· 个人主页（设置顶部头像入口）
-· 数据导入导出迁移到个人主页
-· 截图水印、导出文件名统一为 SKYNEX
-· 后台 AI 自动识别你的昵称
-· 用户协议 v4.1（首次进入需阅读并同意）
-· 登录页 SKYNEX 开屏视觉`;
+    const APP_VERSION = 'v676';
+const CHANGELOG = `【世界书系统】
+· 世界书从世界观解耦，可独立挂卡
+· 编辑面板节日 / 常驻 / 动态 / NPC 四类条目
+· 单人卡可绑定多本世界书，按本启用 / 禁用
+· 对话设置 → 功能 → 游戏系统加「世界书」入口
+· AI 可批量生成 NPC（顶部「编辑描述」填背景设定）
+· NPC 跨范围防撞名
+
+【修复】
+· 单人卡注入嵌套在 if (currentWv) 里导致没绑主世界观时不注入
+· 单人卡世界书 NPC 未注入到上下文
+· 全量导出 / 导入漏掉 lorebooks store
+· 世界书全图 NPC 增删改卡死
+
+【已知】
+· 强刷不更新请去浏览器设置注销 sw 后再刷`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog() {
