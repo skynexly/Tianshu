@@ -31,6 +31,12 @@
       await Worldview.migrateTianshuchengNpcNames();
     }
   } catch(e) { console.error('[Worldview.migrate]', e); }
+  // v632：老隐藏世界观迁移为 lorebook
+  try {
+    if (typeof Lorebook !== 'undefined' && Lorebook.migrateHiddenWorldviewsOnce) {
+      await Lorebook.migrateHiddenWorldviewsOnce();
+    }
+  } catch(e) { console.error('[Lorebook.migrate]', e); }
   // 世界观
   try { await Worldview.init(); } catch(e) { console.error('[Worldview.init]', e); }
     // 恢复当前世界观选择（必须在 Conversations.init 之前）

@@ -353,7 +353,28 @@ const container = document.getElementById('backstage-messages');
         const ss = SingleMode.getCurrentSingleSettings && SingleMode.getCurrentSingleSettings();
         if (ss && ss.worldviewId) _wvForGlobal = await DB.get('worldviews', ss.worldviewId);
         if (ss && ss.charType === 'card' && ss.charId) {
-          try { _bsCardHiddenWv = await DB.get('worldviews', '__sc_' + ss.charId + '__'); } catch(_) {}
+          // v632：从单人卡绑定的世界书聚合
+          try {
+            if (typeof Lorebook !== 'undefined') {
+              const _card = await SingleCard.get(ss.charId);
+              if (_card && (_card.lorebookIds || []).length > 0) {
+                const _conv = (typeof Conversations !== 'undefined' && Conversations.getList)
+                  ? Conversations.getList().find(c => c.id === Conversations.getCurrent())
+                  : null;
+                const _lbs = await Lorebook.collectForChat({ conv: _conv, card: _card });
+                if (_lbs && _lbs.length > 0) {
+                  const merged = { festivals: [], knowledges: [], events: [], globalNpcs: [] };
+                  for (const lb of _lbs) {
+                    if (Array.isArray(lb.festivals)) merged.festivals.push(...lb.festivals);
+                    if (Array.isArray(lb.knowledges)) merged.knowledges.push(...lb.knowledges);
+                    if (Array.isArray(lb.events)) merged.events.push(...lb.events);
+                    if (Array.isArray(lb.globalNpcs)) merged.globalNpcs.push(...lb.globalNpcs);
+                  }
+                  _bsCardHiddenWv = merged;
+                }
+              }
+            }
+          } catch(_) {}
         }
       }
       if (!_wvForGlobal && curWvId && curWvId !== '__default_wv__') {
@@ -1314,39 +1335,49 @@ await DB.del('messages', m.id);
         });
       });
     } catch(_) {}
-    // 单人卡隐藏世界观（__sc_*）
+    // 单人卡绑定的世界书（v632：原 __sc_* 已迁移为 lorebooks）
     try {
-      const wvs = await DB.getAll('worldviews');
-      const cards = await SingleCard.getAll();
-      const cardNameMap = {};
-      cards.forEach(c => { cardNameMap[c.id] = c.name || ''; });
-      wvs.forEach(wv => {
-        if (!wv || !wv.id || !wv.id.startsWith('__sc_')) return;
-        const cardId = wv.id.replace(/^__sc_(.+)__$/, '$1');
-        const cardName = cardNameMap[cardId] || '单人卡';
-        (wv.globalNpcs || []).forEach(n => {
-          if (n.id && n.name) {
-            options.push({
-              id: n.id, type: 'wv_npc', sourceWvId: wv.id,
-              name: n.name, aliases: n.aliases || '',
-              group: `${cardName} 卡 · 扩展NPC`
-            });
-          }
+      if (typeof Lorebook !== 'undefined') {
+        const lbs = await Lorebook.getAll();
+        const cards = await SingleCard.getAll();
+        // 反向索引：lbId -> 引用它的卡名列表
+        const refByLb = {};
+        cards.forEach(c => {
+          (c.lorebookIds || []).forEach(lbId => {
+            if (!refByLb[lbId]) refByLb[lbId] = [];
+            refByLb[lbId].push(c.name || '单人卡');
+          });
         });
-        (wv.regions || []).forEach(r => {
-          (r.factions || []).forEach(f => {
-            (f.npcs || []).forEach(n => {
-              if (n.id && n.name) {
-                options.push({
-                  id: n.id, type: 'wv_npc', sourceWvId: wv.id,
-                  name: n.name, aliases: n.aliases || '',
-                  group: `${cardName} 卡 · ${r.name || '?'} / ${f.name || '?'}`
-                });
-              }
+        lbs.forEach(wv => {
+          if (!wv || !wv.id) return;
+          const refCards = refByLb[wv.id] || [];
+          // 没卡引用的世界书不在角色选择器里出（避免污染）
+          if (refCards.length === 0) return;
+          const lbLabel = wv.name || '世界书';
+          (wv.globalNpcs || []).forEach(n => {
+            if (n.id && n.name) {
+              options.push({
+                id: n.id, type: 'wv_npc', sourceWvId: wv.id,
+                name: n.name, aliases: n.aliases || '',
+                group: `${lbLabel} · 全图NPC`
+              });
+            }
+          });
+          (wv.regions || []).forEach(r => {
+            (r.factions || []).forEach(f => {
+              (f.npcs || []).forEach(n => {
+                if (n.id && n.name) {
+                  options.push({
+                    id: n.id, type: 'wv_npc', sourceWvId: wv.id,
+                    name: n.name, aliases: n.aliases || '',
+                    group: `${lbLabel} · ${r.name || '?'} / ${f.name || '?'}`
+                  });
+                }
+              });
             });
           });
         });
-      });
+      }
     } catch(_) {}
     _roleOptionsCache = options;
     return options;

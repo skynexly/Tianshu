@@ -12,7 +12,7 @@ const Tools = (() => {
   const ERR = (msg) => JSON.stringify({ error: msg });
 
   // ===== 世界观查询 helper =====
-  // 返回当前对话能访问的所有世界观对象（主世界观 + 单人卡隐藏世界观）
+  // 返回当前对话能访问的所有世界观对象（主世界观 + 单人卡绑定的世界书）
   async function _getAccessibleWorldviews() {
     const result = [];
     try {
@@ -20,9 +20,29 @@ const Tools = (() => {
       if (singleSettings && singleSettings.worldviewId) {
         const wv = await DB.get('worldviews', singleSettings.worldviewId);
         if (wv) result.push({ wv, source: 'worldview' });
-        if (singleSettings.charType === 'card' && singleSettings.charId) {
-          const hidden = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
-          if (hidden) result.push({ wv: hidden, source: 'card' });
+        // v632：单人卡绑定的世界书们（合并展开）
+        if (singleSettings.charType === 'card' && singleSettings.charId && typeof Lorebook !== 'undefined') {
+          try {
+            const card = await DB.get('singleCards', singleSettings.charId);
+            const conv = (typeof Conversations !== 'undefined' && Conversations.getList)
+              ? Conversations.getList().find(c => c.id === Conversations.getCurrent())
+              : null;
+            const lbs = await Lorebook.collectForChat({ conv, card });
+            for (const lb of lbs) {
+              // 包装成世界观格式喂给 _findInWorldview / _searchExtended
+              result.push({
+                wv: {
+                  name: lb.name || '世界书',
+                  festivals: lb.festivals || [],
+                  knowledges: lb.knowledges || [],
+                  events: lb.events || [],
+                  globalNpcs: lb.globalNpcs || [],
+                  regions: []
+                },
+                source: 'card'
+              });
+            }
+          } catch(_) {}
         }
       } else if (typeof Worldview !== 'undefined' && Worldview.getCurrent) {
         const wv = await Worldview.getCurrent();

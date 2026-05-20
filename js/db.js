@@ -3,7 +3,7 @@
  */
 const DB = (() => {
   const DB_NAME = 'TextGameEngine';
-  const DB_VERSION = 9;
+  const DB_VERSION = 10;
   let db = null;
 
   const STORES = {
@@ -18,7 +18,8 @@ const DB = (() => {
     singleCards: { keyPath: 'id', indexes: ['updated'] },
     npcAvatars: { keyPath: 'id', indexes: ['updated'] },
     ttsCache:  { keyPath: 'key', indexes: ['accessedAt'] },
-    drawnImages: { keyPath: 'id', indexes: ['createdAt'] }  // v9：生图独立存储，消息只存引用
+    drawnImages: { keyPath: 'id', indexes: ['createdAt'] },  // v9：生图独立存储，消息只存引用
+    lorebooks: { keyPath: 'id', indexes: ['updated'] }  // v10：世界书（独立资源，可挂角色/世界观/对话）
   };
 
   function open() {

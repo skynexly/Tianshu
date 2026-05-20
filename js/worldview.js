@@ -788,12 +788,41 @@ function _syncBuiltinRestoreButton(w) {
   // ---------- 编辑面板 ----------
   // v596：标记从哪里进入编辑（用于返回时跳对地方）
   let _editReturnTo = null;
-  
+
+  // v632：复用本编辑器编辑世界书（Lorebook）。
+  // 约定：editingWorldviewId 以 'lb:' 开头时，从 lorebooks store 读写；
+  // 否则按 worldviews store 走。这样所有编辑 UI 逻辑零改动。
+  function _isLorebookEditing(id) {
+    return typeof id === 'string' && id.startsWith('lb:');
+  }
+  function _lbIdOf(id) { return id.replace(/^lb:/, ''); }
+  async function _loadEditingDoc(id) {
+    if (_isLorebookEditing(id)) {
+      const lb = (typeof Lorebook !== 'undefined') ? await Lorebook.get(_lbIdOf(id)) : null;
+      if (!lb) return null;
+      // 包装成"隐藏世界观"格式，复用现有编辑 UI
+      return {
+        id: id,
+        _hidden: 'lb',
+        _lbId: lb.id,
+        name: lb.name || '未命名世界书',
+        description: lb.description || '',
+        festivals: lb.festivals || [],
+        knowledges: lb.knowledges || [],
+        events: lb.events || [],
+        globalNpcs: lb.globalNpcs || [],
+      };
+    }
+    return await DB.get('worldviews', id);
+  }
+
   async function openEdit(id, opts) {
-    const w = await DB.get('worldviews', id);
+    const w = await _loadEditingDoc(id);
     window.__wvEditingCache = w;
     if (!w) return;
-    if (!await _confirmBuiltinWorldviewAccess('edit', w)) return;
+    if (!_isLorebookEditing(id)) {
+      if (!await _confirmBuiltinWorldviewAccess('edit', w)) return;
+    }
     editingWorldviewId = id;
     _editReturnTo = (opts && opts.returnTo) || null;
     closePreview(); // 关闭预览弹窗（如果有的话）
@@ -810,7 +839,7 @@ function _syncBuiltinRestoreButton(w) {
   }
   
   async function _loadEditForm(id) {
-    const w = await DB.get('worldviews', id);
+    const w = await _loadEditingDoc(id);
     if (!w) return;
     
     // 数据迁移（v581）：customs[] + knowledges[] → 统一 knowledges[]
@@ -2984,7 +3013,34 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
   // ---------- 保存 ----------
   async function save() {
     if (!editingWorldviewId) return;
-    
+
+    // v632：编辑的是世界书，直接回写 lorebooks store
+    if (_isLorebookEditing(editingWorldviewId)) {
+      if (typeof Lorebook === 'undefined') return;
+      const lbId = _lbIdOf(editingWorldviewId);
+      const lb = (await Lorebook.get(lbId)) || { id: lbId };
+      lb.festivals = festivalsData.slice();
+      lb.knowledges = customsData.concat(knowledgesData).map(k => ({
+        id: k.id,
+        name: k.name || '',
+        content: k.content || '',
+        enabled: (k.enabled === undefined || k.enabled === null) ? true : !!k.enabled,
+        keywordTrigger: !!k.keywordTrigger,
+        keys: k.keywordTrigger ? (k.keys || '') : '',
+        position: k.position || 'system_top',
+        depth: (typeof k.depth === 'number') ? k.depth : 0
+      }));
+      lb.events = eventsData.slice();
+      // name / description 从顶部表单读（如果用户填了）
+      const nameEl = document.getElementById('worldview-edit-name');
+      const descEl = document.getElementById('worldview-edit-desc');
+      if (nameEl && nameEl.value.trim()) lb.name = nameEl.value.trim();
+      if (descEl) lb.description = descEl.value;
+      await Lorebook.save(lb);
+      UI.showToast('已保存世界书');
+      return;
+    }
+
     const w = await DB.get('worldviews', editingWorldviewId) || _defaultWorldview(editingWorldviewId);
 
     // v596：隐藏世界观特殊保存（只存扩展数据，不改基础字段）
@@ -4144,39 +4200,39 @@ toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, sele
     ensureHiddenWvForCard, deleteHiddenWvForCard, isHiddenWv,
     getEditReturnTo, clearEditReturnTo,
     switchWorldTab(tab) {
-      const wvBtn = document.getElementById('world-tab-wv-btn');
-      const charBtn = document.getElementById('world-tab-char-btn');
-      const wvPane = document.getElementById('world-tab-wv');
-      const charPane = document.getElementById('world-tab-char');
-      if (!wvBtn || !charBtn || !wvPane || !charPane) return;
-      const _play = (el, dir) => {
-        el.classList.remove('tab-pane-enter-left', 'tab-pane-enter-right');
-        // 强制回流，确保动画重放
-        void el.offsetWidth;
-        el.classList.add(dir === 'left' ? 'tab-pane-enter-left' : 'tab-pane-enter-right');
-      };
-      if (tab === 'char') {
-        wvBtn.style.borderBottomColor = 'transparent';
-        wvBtn.style.color = 'var(--text-secondary)';
-        wvBtn.style.fontWeight = '400';
-        charBtn.style.borderBottomColor = 'var(--accent)';
-        charBtn.style.color = 'var(--accent)';
-        charBtn.style.fontWeight = '600';
-        wvPane.style.display = 'none';
-        charPane.style.display = '';
-        _play(charPane, 'right');
-        if (typeof SingleCard !== 'undefined') SingleCard.renderList();
-      } else {
-        wvBtn.style.borderBottomColor = 'var(--accent)';
-        wvBtn.style.color = 'var(--accent)';
-        wvBtn.style.fontWeight = '600';
-        charBtn.style.borderBottomColor = 'transparent';
-        charBtn.style.color = 'var(--text-secondary)';
-        charBtn.style.fontWeight = '400';
-        wvPane.style.display = '';
-        charPane.style.display = 'none';
-        _play(wvPane, 'left');
-      }
+    const wvBtn = document.getElementById('world-tab-wv-btn');
+    const charBtn = document.getElementById('world-tab-char-btn');
+    const lbBtn = document.getElementById('world-tab-lb-btn');
+    const wvPane = document.getElementById('world-tab-wv');
+    const charPane = document.getElementById('world-tab-char');
+    const lbPane = document.getElementById('world-tab-lb');
+    if (!wvBtn || !charBtn || !wvPane || !charPane) return;
+    const _play = (el, dir) => {
+      el.classList.remove('tab-pane-enter-left', 'tab-pane-enter-right');
+      void el.offsetWidth;
+      el.classList.add(dir === 'left' ? 'tab-pane-enter-left' : 'tab-pane-enter-right');
+    };
+    const _setActive = (btn, active) => {
+      if (!btn) return;
+      btn.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
+      btn.style.color = active ? 'var(--accent)' : 'var(--text-secondary)';
+      btn.style.fontWeight = active ? '600' : '400';
+    };
+    _setActive(wvBtn, tab === 'wv');
+    _setActive(charBtn, tab === 'char');
+    _setActive(lbBtn, tab === 'lb');
+    wvPane.style.display = (tab === 'wv') ? '' : 'none';
+    charPane.style.display = (tab === 'char') ? '' : 'none';
+    if (lbPane) lbPane.style.display = (tab === 'lb') ? '' : 'none';
+    if (tab === 'char') {
+      _play(charPane, 'right');
+      if (typeof SingleCard !== 'undefined') SingleCard.renderList();
+    } else if (tab === 'lb') {
+      if (lbPane) _play(lbPane, 'right');
+      if (typeof LorebookUI !== 'undefined') LorebookUI.renderList();
+    } else {
+      _play(wvPane, 'left');
     }
+  }
   };
   })();

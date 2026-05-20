@@ -392,6 +392,7 @@
         <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid var(--border)">
           <button type="button" id="world-tab-wv-btn" onclick="Worldview.switchWorldTab('wv')" style="flex:1;padding:10px 0;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent);font-size:14px;font-weight:600;cursor:pointer">世界观管理</button>
           <button type="button" id="world-tab-char-btn" onclick="Worldview.switchWorldTab('char')" style="flex:1;padding:10px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);font-size:14px;cursor:pointer">角色管理</button>
+          <button type="button" id="world-tab-lb-btn" onclick="Worldview.switchWorldTab('lb')" style="flex:1;padding:10px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);font-size:14px;cursor:pointer">世界书管理</button>
         </div>
 
         <!-- 世界观 Tab 内容 -->
@@ -492,6 +493,22 @@
             </div>
             <div id="npc-avatar-list" style="display:flex;flex-direction:column;gap:8px"></div>
           </div>
+        </div>
+
+        <!-- 世界书管理 Tab 内容 -->
+        <div id="world-tab-lb" style="display:none">
+          <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+            <div style="position:relative;flex:1">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--text-secondary);pointer-events:none"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+              <input type="text" id="lorebook-search" placeholder="搜索世界书..." oninput="LorebookUI.renderList(this.value)" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px 6px 32px;font-size:13px;outline:none">
+            </div>
+            <button type="button" onclick="LorebookUI.createNew()" style="padding:6px 12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:4px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+              新建
+            </button>
+          </div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6">世界书是节日/常驻/动态/事件的集合。可以挂到单人卡、世界观或对话上，多处复用，可灵活换绑。</div>
+          <div id="lorebook-list" style="display:flex;flex-direction:column;gap:12px;"></div>
         </div>
       </div>
     </section>
@@ -1865,22 +1882,23 @@
       <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
         <div>
           <div style="font-size:14px;color:var(--text);margin-bottom:4px">启用扩展设定</div>
-          <div style="font-size:11px;color:var(--text-secondary);line-height:1.5">关闭后，本卡的节日/常驻/动态/事件条目都不会注入。只影响本张单人卡，不影响世界观。</div>
+          <div style="font-size:11px;color:var(--text-secondary);line-height:1.5">关闭后，本卡绑定的所有世界书都不会注入。只影响本张单人卡。</div>
         </div>
         <label style="position:relative;display:inline-flex;cursor:pointer;flex-shrink:0">
           <input type="checkbox" id="sc-panel-ext-enabled" class="circle-check">
           <span class="circle-check-ui"></span>
         </label>
       </div>
-      <!-- 编辑入口（跳到隐藏世界观的编辑面板）-->
-      <button type="button" onclick="SingleCard.openCardExtEdit()" style="width:100%;padding:14px 16px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:14px">
-        <span style="display:flex;align-items:center;gap:10px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-          编辑扩展设定（节日 / 常驻 / 动态）
-        </span>
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
-      </button>
-      <div style="font-size:11px;color:var(--text-secondary);margin-top:8px;line-height:1.5">先点击右上角「保存」让角色有 ID 后，再编辑扩展设定。</div>
+      <!-- 已绑定的世界书列表 -->
+      <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:13px;color:var(--text);font-weight:500">已绑定的世界书</div>
+        <button type="button" onclick="SingleCard.openLorebookPicker()" style="padding:5px 12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+          添加 / 管理
+        </button>
+      </div>
+      <div id="sc-panel-lorebook-list" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:12px;line-height:1.5">世界书是节日 / 常驻 / 动态 / 事件的集合，可以一本挂多张卡。到「世界 → 世界书管理」可以新建和编辑。</div>
     </div>
   </div>
 </section>
@@ -3371,6 +3389,8 @@ const GameLog = (() => {
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
 <script src="js/worldview.js"></script>
+<script src="js/lorebook.js"></script>
+<script src="js/lorebook_ui.js"></script>
 <script src="js/conv_gameplay.js"></script>
 <script src="js/wv-generator.js"></script>
 <script src="js/single_card.js"></script>

@@ -903,7 +903,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           try {
             const _card = await SingleCard.get(singleSettings.charId);
             if (_card && _card.extEnabled !== false) {
-              const _hiddenWv = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
+              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
               if (_hiddenWv) {
                 const _cardFIdx = _buildFestivalIndex(_hiddenWv.festivals || []);
                 if (_cardFIdx) systemParts.push(_cardFIdx.replace('【世界观·节日索引】', '【单人卡·节日索引】'));
@@ -1207,7 +1207,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           try {
             const _card = await SingleCard.get(singleSettings.charId);
             if (_card && _card.extEnabled !== false && singleSettings.enableCardExtended !== false) {
-              const _hiddenWv = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
+              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
               if (_hiddenWv) {
                 // 节日（depth=3）
                 const _festText = _buildFestivalPrompt(_hiddenWv.festivals || [], messages);
@@ -1393,9 +1393,9 @@ messages.push(aiMsg);
                 }
 
                 // 单人卡隐藏世界观事件完成扫描
-                if (_evtConv && _evtConv.eventStates && isGameMode && convSettings.eventsEnabled !== false && isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
-                  const _evtHiddenWv = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
-                  const _evtHiddenList = _evtHiddenWv?.events || [];
+if (_evtConv && _evtConv.eventStates && isGameMode && convSettings.eventsEnabled !== false && isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
+const _evtHiddenWv = await _getCardLorebooksMerged(singleSettings.charId, _evtConv);
+const _evtHiddenList = _evtHiddenWv?.events || [];
                   let _evtHiddenChanged = false;
                   for (const ev of _evtHiddenList) {
                     if (!ev || !ev.id || !ev.completeKey) continue;
@@ -3564,7 +3564,32 @@ if (names.length === 0) return '';
 return `【世界观·知识条目索引】\n本世界包含以下知识条目（详情会在你或玩家提及时自动补充）：\n${names.map(n => `· ${n}`).join('\n')}\n请在剧情自然的前提下灵活引用。`;
 }
 
-// 构建节日索引（每轮发名字+日期，让 AI 能预知后续节日）
+// v632：聚合一张单人卡绑定的所有世界书数据（festivals/knowledges/events/globalNpcs）
+  // 返回合并后的虚拟世界观对象，用法和老的 _hiddenWv 一致，便于直接替换。
+  async function _getCardLorebooksMerged(cardId, conv) {
+    if (typeof Lorebook === 'undefined' || !cardId) return null;
+    try {
+      const card = await SingleCard.get(cardId);
+      if (!card) return null;
+      const ids = card.lorebookIds || [];
+      if (!ids.length) return null;
+      const lbs = await Lorebook.collectForChat({ conv, card });
+      if (!lbs.length) return null;
+      const merged = { festivals: [], knowledges: [], events: [], globalNpcs: [] };
+      for (const lb of lbs) {
+        if (Array.isArray(lb.festivals)) merged.festivals.push(...lb.festivals);
+        if (Array.isArray(lb.knowledges)) merged.knowledges.push(...lb.knowledges);
+        if (Array.isArray(lb.events)) merged.events.push(...lb.events);
+        if (Array.isArray(lb.globalNpcs)) merged.globalNpcs.push(...lb.globalNpcs);
+      }
+      return merged;
+    } catch(e) {
+      console.warn('[Chat] 聚合世界书失败:', e);
+      return null;
+    }
+  }
+
+  // 构建节日索引（每轮发名字+日期，让 AI 能预知后续节日）
 // 时间命中的节日已通过 _buildFestivalPrompt 单独发完整内容，索引里不去重（就那么点字）
 function _buildFestivalIndex(festivals) {
 if (!festivals || festivals.length === 0) return '';
@@ -3991,7 +4016,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           try {
             const _card = await SingleCard.get(singleSettings.charId);
             if (_card && _card.extEnabled !== false) {
-              const _hiddenWv = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
+              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
               if (_hiddenWv) {
                 const _cardFIdx = _buildFestivalIndex(_hiddenWv.festivals || []);
                 if (_cardFIdx) systemParts.push(_cardFIdx.replace('【世界观·节日索引】', '【单人卡·节日索引】'));
@@ -4250,7 +4275,7 @@ try {
           try {
             const _card = await SingleCard.get(singleSettings.charId);
             if (_card && _card.extEnabled !== false && singleSettings.enableCardExtended !== false) {
-              const _hiddenWv = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
+              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
               if (_hiddenWv) {
                 const _festText = _buildFestivalPrompt(_hiddenWv.festivals || [], messages);
                 if (_festText) {
@@ -4755,10 +4780,10 @@ bgImage: conv?.convBgImage || '',
     const events = (wv?.events || []).slice();
     try {
       const singleSettings = (typeof SingleMode !== 'undefined') ? SingleMode.getCurrentSingleSettings() : null;
-      if (singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
-        const hidden = await DB.get('worldviews', '__sc_' + singleSettings.charId + '__');
-        if (hidden?.events?.length) events.push(...hidden.events);
-      }
+if (singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
+const hidden = await _getCardLorebooksMerged(singleSettings.charId, conv);
+if (hidden?.events?.length) events.push(...hidden.events);
+}
     } catch(_) {}
     if (!conv) return;
     conv.eventStates = conv.eventStates || {};

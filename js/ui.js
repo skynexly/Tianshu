@@ -194,6 +194,17 @@ const UI = (() => {
             } else {
               showPanel('single-card-edit', 'back');
             }
+          } else if (rt === 'lorebook-list') {
+            // v632：从世界书列表跳进来，返回时回到世界 tab 的世界书 tab
+            if (Worldview.clearEditReturnTo) Worldview.clearEditReturnTo();
+            showPanel('worldview', 'back');
+            if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
+              Worldview.switchWorldTab('lb');
+            }
+            // 刷新列表
+            if (typeof LorebookUI !== 'undefined' && LorebookUI.renderList) {
+              setTimeout(() => LorebookUI.renderList(), 50);
+            }
           } else {
             showPanel('worldview', 'back');
           }

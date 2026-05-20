@@ -242,6 +242,8 @@ const SingleCard = (() => {
     // 扩展设定总开关（默认 true，旧卡没这字段视为开启）
     const extEnabled = card.extEnabled !== false;
     document.getElementById('sc-panel-ext-enabled').checked = extEnabled;
+    // 渲染已绑定的世界书列表
+    _refreshLorebookList(card);
     // 绑定自动保存
     requestAnimationFrame(_attachSCAutoSave);
     // 详情自适应高度
@@ -293,6 +295,41 @@ const SingleCard = (() => {
     if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
       Worldview.switchWorldTab('char');
     }
+  }
+
+  // v632：渲染卡的世界书绑定列表
+  async function _refreshLorebookList(card) {
+    const container = document.getElementById('sc-panel-lorebook-list');
+    if (!container || typeof LorebookUI === 'undefined') return;
+    const ids = (card && card.lorebookIds) || [];
+    await LorebookUI.renderBoundList(container, ids, async (next) => {
+      // 解绑回调：更新卡的 lorebookIds 并保存
+      if (!_editingId) return;
+      const c = await get(_editingId);
+      if (!c) return;
+      c.lorebookIds = next;
+      await save(c);
+      await _refreshLorebookList(c);
+    });
+  }
+
+  // v632：打开世界书选择器
+  async function openLorebookPicker() {
+    if (!_editingId) {
+      UI.showToast('请先保存角色，再绑定世界书', 2200);
+      return;
+    }
+    if (typeof LorebookUI === 'undefined') return;
+    const card = await get(_editingId);
+    if (!card) return;
+    await LorebookUI.openBindPicker(card.lorebookIds || [], async (next) => {
+      if (!_editingId) return;
+      const c = await get(_editingId);
+      if (!c) return;
+      c.lorebookIds = next;
+      await save(c);
+      await _refreshLorebookList(c);
+    });
   }
 
   // v596：从扩展设定面板返回时，重新打开单人卡编辑面板（恢复状态）
@@ -1134,7 +1171,9 @@ const SingleCard = (() => {
     // v594 新 panel 入口
     closeEditPanel, savePanelForm, switchEditTab, toggleEditMoreMenu, closeEditMoreMenu, pickAvatarPanel,
     // v596 扩展设定跳转
-    openCardExtEdit, restoreEditPanel,
+openCardExtEdit, restoreEditPanel,
+// v632 世界书绑定
+openLorebookPicker,
     formatForPrompt,
     importCard, exportCurrent,
     // v614 批量管理 / 排序 / 菜单（对齐记忆/世界观）
