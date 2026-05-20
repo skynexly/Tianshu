@@ -341,6 +341,7 @@ try { applyLiteMode(isLiteMode()); } catch(_) {}
       aiBubbleRender:        old.aiBubbleRender ?? true,
       fontMode:              old.fontMode || 'default',
       customFontData:        old.customFontData || null,
+      msgFontSize:           old.msgFontSize ?? 13.5,
     };
   }
 
@@ -353,6 +354,8 @@ try { applyLiteMode(isLiteMode()); } catch(_) {}
     cfg.customPresetName = '';
     // 保留字体设置
     cfg.fontMode = old.fontMode || 'default';
+    // 保留正文字号（v681.3.2）
+    cfg.msgFontSize = old.msgFontSize ?? 13.5;
     withThemeFade(() => {
 save(cfg);
 apply(cfg);
@@ -391,6 +394,8 @@ _syncAllTriggers(cfg);
     const cfg = Object.assign({}, PRESETS[DEFAULT_PRESET]);
     // 保留字体设置
     cfg.fontMode = old.fontMode || 'default';
+    // 保留正文字号（v681.3.2）
+    cfg.msgFontSize = old.msgFontSize ?? 13.5;
     withThemeFade(() => {
 save(cfg);
 apply(cfg);
@@ -576,6 +581,8 @@ async function applyCustomPreset(name) {
     cfg.customPresetName = name;
     // 保留字体设置
     if (!cfg.fontMode) cfg.fontMode = old.fontMode || 'default';
+    // 保留正文字号（v681.3.2）
+    if (cfg.msgFontSize == null) cfg.msgFontSize = old.msgFontSize ?? 13.5;
     const nameInput = document.getElementById('th-custom-name');
 if (nameInput) nameInput.value = name;
 withThemeFade(() => {
@@ -604,6 +611,8 @@ function activateCustomPreset(name, silent = false) {
     cfg.customPresetName = name;
     // 保留字体设置
     if (!cfg.fontMode) cfg.fontMode = old.fontMode || 'default';
+    // 保留正文字号（v681.3.2）
+    if (cfg.msgFontSize == null) cfg.msgFontSize = old.msgFontSize ?? 13.5;
     editingCustomName = null;
 const nameInput = document.getElementById('th-custom-name');
 if (nameInput) nameInput.value = name;
