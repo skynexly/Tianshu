@@ -174,6 +174,38 @@ detail 使用 Markdown 格式，包含：
     return parts.join(' · ');
   }
 
+  // v632.1：收集当前世界观/世界书里所有已有的 NPC 名字，用于生成时防撞名
+  // 返回格式：[{ name, source }]，source 形如 "常驻"/"地区A·势力B"
+  function _collectAllNpcNames(w) {
+    if (!w) return [];
+    const out = [];
+    (w.globalNpcs || []).forEach(n => {
+      if (n && n.name) out.push({ name: n.name, source: '常驻' });
+    });
+    (w.regions || []).forEach(r => {
+      (r.factions || []).forEach(f => {
+        (f.npcs || []).forEach(n => {
+          if (n && n.name) out.push({ name: n.name, source: `${r.name || '未命名地区'}·${f.name || '未命名势力'}` });
+        });
+      });
+    });
+    return out;
+  }
+
+  // 把名单格式化成给 AI 看的"避免重名"提示段
+  function _buildNpcDedupeHint(allNpcs, extraNames) {
+    const names = [];
+    (allNpcs || []).forEach(n => names.push(`${n.name}（${n.source}）`));
+    (extraNames || []).forEach(name => { if (name) names.push(name); });
+    if (names.length === 0) return '';
+    return `\n\n## 已有角色（不要重名，也不要近似名）\n${names.join('、')}`;
+  }
+
+  // v632.1：从 worldview 或 lorebook 取 setting；世界书没有 setting 字段时用 description 兜底
+  function _getEditingSetting(w) {
+    return (w?.setting || w?.description || '').trim();
+  }
+
   function _parseJSON(text) {
     _lastRawOutput = text || '';
     let cleaned = (text || '').trim();
@@ -764,11 +796,18 @@ ${_stepIntro('users', '第 4 步 · 角色', '为每个势力生成 NPC 角色')
         _renderBatchProgress(items, i, results);
         try {
           const facDetail = t.faction.setting || t.faction.detail || t.faction.description || '';
-          // 汇总前面批次已生成的角色名，防止跨势力重名
-          const existingNpcNames = allNpcs.map(n => `${n.name}（${n.faction || n.region || ''}）`);
-          const dedupeHint = existingNpcNames.length > 0
-            ? `\n\n## 已有角色（不要重名）\n${existingNpcNames.join('、')}`
-            : '';
+// 汇总前面批次已生成的角色名，防止跨势力重名
+const existingNpcNames = allNpcs.map(n => `${n.name}（${n.faction || n.region || ''}）`);
+// v632.1：再加上世界观里已存在的"常驻 NPC"和其他势力 NPC
+let existingFromWv = [];
+try {
+  const wNow = await Worldview._getEditingWV();
+  existingFromWv = _collectAllNpcNames(wNow).map(n => `${n.name}（${n.source}）`);
+} catch(_) {}
+const allExistingNames = [...new Set([...existingFromWv, ...existingNpcNames])];
+const dedupeHint = allExistingNames.length > 0
+? `\n\n## 已有角色（不要重名，也不要近似名）\n${allExistingNames.join('、')}`
+: '';
           const userMsg = `${userPrompt ? '用户要求：' + userPrompt + '\n\n' : ''}为势力「${t.faction.name}」（位于地区「${t.region}」）生成 ${count} 个角色。每个角色的 region 必须是「${t.region}」、faction 必须是「${t.faction.name}」。\n\n## 世界观设定\n${s1.setting || ''}\n\n## 当前势力\n### ${t.faction.name}（${t.region}）\n${facDetail}${dedupeHint}`;
           const raw = await API.generate(sysPrompt, userMsg, { signal: _abortCtrl.signal, maxTokens: Math.min(20000, count * wordCount * 4 + 2000) });
           const data = _parseJSON(raw);
@@ -1170,14 +1209,15 @@ for (const npc of npcs) {
 
   /** 全图NPC内联生成 */
   async function inlineGlobalNpcs() {
-    const settingEl = document.getElementById('wv-setting');
-    const setting = settingEl?.value?.trim() || '';
-    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+    // v632.1：优先从编辑中的 wv/lb 取设定；wv-setting input 只在世界观 basic tab 才存在
+    const w = await Worldview._getEditingWV();
+    const setting = _getEditingSetting(w) || (document.getElementById('wv-setting')?.value?.trim() || '');
+    if (!setting) { UI.showToast(w?._hidden ? '请先填写世界书描述' : '请先填写世界观设定', 1500); return; }
 
     await _openInlineGenModal({
       icon: 'users',
-      title: 'AI 追加常驻角色',
-      desc: '为当前世界观批量生成全图常驻角色',
+      title: w?._hidden ? 'AI 追加常驻角色（世界书）' : 'AI 追加常驻角色',
+      desc: w?._hidden ? '为当前世界书批量生成常驻角色' : '为当前世界观批量生成全图常驻角色',
       placeholder: '对角色有什么要求？留空则由 AI 自由发挥',
       countLabel: '生成角色数',
       defaults: { count: 5, wordCount: 500 },
@@ -1185,25 +1225,28 @@ for (const npc of npcs) {
       loadingMsg: '正在生成角色…'
     }, async ({ prompt, count, wordCount, signal }) => {
       const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
-      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + `生成 ${count} 个角色。所有角色都是常驻角色（不归属地区）。\n\n## 世界观设定\n` + setting;
+      const dedupeNpcs = _collectAllNpcNames(w);
+      const dedupeHint = _buildNpcDedupeHint(dedupeNpcs);
+      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + `生成 ${count} 个角色。所有角色都是常驻角色（不归属地区）。\n\n## 世界观设定\n` + setting + dedupeHint;
       const raw = await API.generate(sysPrompt, userMsg, { signal });
       const npcs = _parseJSON(raw);
       const arr = Array.isArray(npcs) ? npcs : (npcs.npcs || []);
       if (typeof Worldview !== 'undefined' && Worldview._getEditingWV) {
-        const w = await Worldview._getEditingWV();
-        if (w) {
-          if (!w.globalNpcs) w.globalNpcs = [];
-for (const npc of arr) {
-        w.globalNpcs.push({
-          name: npc.name || '',
-          aliases: _npcAliases(npc),
-          summary: _npcSummary(npc),
-          detail: npc.detail || '',
-          avatar: ''
-        });
+        const wFresh = await Worldview._getEditingWV();
+        if (wFresh) {
+          if (!wFresh.globalNpcs) wFresh.globalNpcs = [];
+          for (const npc of arr) {
+            wFresh.globalNpcs.push({
+              id: 'npc_' + Utils.uuid().slice(0, 8),
+              name: npc.name || '',
+              aliases: _npcAliases(npc),
+              summary: _npcSummary(npc),
+              detail: npc.detail || '',
+              avatar: ''
+            });
           }
-          await Worldview._saveEditingWV(w);
-          if (Worldview._renderGlobalNpcs) Worldview._renderGlobalNpcs(w.globalNpcs);
+          await Worldview._saveEditingWV(wFresh);
+          if (Worldview._renderGlobalNpcs) Worldview._renderGlobalNpcs(wFresh.globalNpcs);
         }
       }
       if (arr.length === 0) throw new Error("AI返回了空结构（看console原文）"); UI.showToast(`已生成 ${arr.length} 个常驻角色`, 2000);
@@ -1277,26 +1320,29 @@ for (const npc of arr) {
   }
 
   /** 单条NPC填充 */
-  async function inlineFillNpc() {
-    const name = document.getElementById('wv-npc-name')?.value?.trim();
-    if (!name) { UI.showToast('请先填写角色名称', 1500); return; }
-    const w = await Worldview._getEditingWV();
-    const setting = w?.setting || '';
-    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+async function inlineFillNpc() {
+const name = document.getElementById('wv-npc-name')?.value?.trim();
+if (!name) { UI.showToast('请先填写角色名称', 1500); return; }
+const w = await Worldview._getEditingWV();
+const setting = _getEditingSetting(w);
+if (!setting) { UI.showToast(w?._hidden ? '请先填写世界书描述' : '请先填写世界观设定', 1500); return; }
 
-    await _openInlineGenModal({
-      icon: 'users',
-      title: 'AI 填充本角色',
-      desc: `为角色「${name}」生成详细设定`,
-      placeholder: '对本角色有什么要求？留空则由 AI 自由发挥',
-      countLabel: '生成数量（固定 1）',
-      defaults: { count: 1, wordCount: 500 },
-      limits: { count: [1, 1], wordCount: [200, 1500] },
-      loadingMsg: `正在为「${name}」生成设定…`
-    }, async ({ prompt, wordCount, signal }) => {
-      const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
-      const identity = document.getElementById('wv-npc-summary')?.value?.trim() || '';
-      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}仅生成 1 个角色「${name}」${identity ? '（' + identity + '）' : ''}的详细设定。\n\n## 世界观设定\n${setting}`;
+await _openInlineGenModal({
+icon: 'users',
+title: 'AI 填充本角色',
+desc: `为角色「${name}」生成详细设定`,
+placeholder: '对本角色有什么要求？留空则由 AI 自由发挥',
+countLabel: '生成数量（固定 1）',
+defaults: { count: 1, wordCount: 500 },
+limits: { count: [1, 1], wordCount: [200, 1500] },
+loadingMsg: `正在为「${name}」生成设定…`
+}, async ({ prompt, wordCount, signal }) => {
+const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
+const identity = document.getElementById('wv-npc-summary')?.value?.trim() || '';
+// 防撞名：把当前 NPC 排除在外，其余全列
+const dedupeNpcs = _collectAllNpcNames(w).filter(n => n.name !== name);
+const dedupeHint = _buildNpcDedupeHint(dedupeNpcs);
+const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}仅生成 1 个角色「${name}」${identity ? '（' + identity + '）' : ''}的详细设定。\n\n## 世界观设定\n${setting}${dedupeHint}`;
       const raw = await API.generate(sysPrompt, userMsg, { signal });
       _lastRawOutput = raw;
       const arr = _parseJSON(raw);
@@ -1357,13 +1403,13 @@ if (aliases && !aliases.value.trim() && _npcAliases(n)) aliases.value = _npcAlia
   }
 
   /** 批量填充已有全图NPC（一次请求） */
-  async function inlineFillAllGlobalNpcs() {
-    const w = await Worldview._getEditingWV();
-    if (!w) return;
-    const setting = w.setting || '';
-    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
-    const empty = (w.globalNpcs || []).filter(n => !n.detail?.trim() && n.name?.trim());
-    if (!empty.length) { UI.showToast('没有需要填充的角色（所有角色都已有设定）', 2000); return; }
+async function inlineFillAllGlobalNpcs() {
+const w = await Worldview._getEditingWV();
+if (!w) return;
+const setting = _getEditingSetting(w);
+if (!setting) { UI.showToast(w?._hidden ? '请先填写世界书描述' : '请先填写世界观设定', 1500); return; }
+const empty = (w.globalNpcs || []).filter(n => !n.detail?.trim() && n.name?.trim());
+if (!empty.length) { UI.showToast('没有需要填充的角色（所有角色都已有设定）', 2000); return; }
 
     await _openInlineGenModal({
       icon: 'users',
