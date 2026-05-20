@@ -157,30 +157,19 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v680';
-const CHANGELOG = `【后端域名迁移】
-· 登录服务从 *.workers.dev 迁到 auth.skynexyl.com
-· 国内裸网（不挂梯子）也能正常登录注册
-· DNS 走 Cloudflare 全球边缘节点，连接更快更稳
+    const APP_VERSION = 'v681';
+const CHANGELOG = `【Hotfix】
+· 修复对话级自定义属性配置保存后丢失
+  （saveAttrFromModal 浅拷贝陷阱：globalAttrs / characterAttrs 字段缺失时，
+  新加的属性 push 进临时数组未持久化）
+· 进属性编辑器时保底初始化字段，旧对话也能恢复
+· 影响范围：单人卡无世界观 / 对话级属性
+  事件、任务不受影响（任务编辑器已有保底）
 
-【世界书系统】
-· 世界书从世界观解耦，可独立挂卡
-· 编辑面板节日 / 常驻 / 动态 / NPC 四类条目
-· 单人卡可绑定多本世界书，按本启用 / 禁用
-· 对话设置 → 功能 → 游戏系统加「世界书」入口
-· AI 可批量生成 NPC（顶部「编辑描述」填背景设定）
-· NPC 跨范围防撞名
-
-【玩法系统单人卡跑通】
-· 单人卡无世界观也能用自定义属性 / 事件 / 任务
-· 状态栏 single-default 皮肤识别角色属性卡
-· 对话级事件 (convEvents) 注入独立于世界观
-
-【修复】
-· 单人卡注入嵌套在 if (currentWv) 里导致没绑主世界观时不注入
-· 单人卡世界书 NPC 未注入到上下文
-· 全量导出 / 导入漏掉 lorebooks store
-· 世界书全图 NPC 增删改卡死
+【修复触发方式】
+· 进出 bug 的对话 → 对话设置 → 玩法 → 属性
+· 重新添加属性或编辑一次旧属性触发保存
+· AI 即可读到自定义属性提示词
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

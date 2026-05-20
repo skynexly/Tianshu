@@ -671,7 +671,15 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
   async function saveAttrFromModal() {
     if (!_attrCtx || !_cgAttrGp) return;
     const gp = _cgAttrGp;
-    const list = _attrCtx.scope === 'global' ? (gp.globalAttrs || []) : (gp.characterAttrs[_attrCtx.charIdx]?.attrs || []);
+    // v681 修复：保底初始化字段，避免 (gp.globalAttrs || []) 生成临时空数组导致 push 丢失
+    if (_attrCtx.scope === 'global') {
+      if (!Array.isArray(gp.globalAttrs)) gp.globalAttrs = [];
+    } else {
+      if (!Array.isArray(gp.characterAttrs)) gp.characterAttrs = [];
+      if (!gp.characterAttrs[_attrCtx.charIdx]) { UI.showToast('角色卡片不存在', 1800); return; }
+      if (!Array.isArray(gp.characterAttrs[_attrCtx.charIdx].attrs)) gp.characterAttrs[_attrCtx.charIdx].attrs = [];
+    }
+    const list = _attrCtx.scope === 'global' ? gp.globalAttrs : gp.characterAttrs[_attrCtx.charIdx].attrs;
     const name = (document.getElementById('cg-attr-name')?.value || '').trim();
     if (!name) { UI.showToast('请填写属性名称', 1800); return; }
     if (list.some((x, i) => i !== _attrCtx.attrIdx && String(x.name || '').trim() === name)) {
@@ -710,6 +718,9 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
       const conv = await _ensureConvGameplay();
       if (!conv) return;
       _cgAttrGp = conv.convGameplay;
+      // v681 修复：旧对话或异常路径创建的 convGameplay 可能缺字段，进编辑器就保底一次
+      if (!Array.isArray(_cgAttrGp.globalAttrs)) _cgAttrGp.globalAttrs = [];
+      if (!Array.isArray(_cgAttrGp.characterAttrs)) _cgAttrGp.characterAttrs = [];
 
       document.getElementById('conv-settings-modal')?.classList.add('hidden');
       document.getElementById('cg-attr-panel')?.remove();
