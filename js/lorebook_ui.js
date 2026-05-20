@@ -40,6 +40,12 @@ const LorebookUI = (() => {
         <div class="lorebook-card" data-id="${safeId}" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer" onclick="LorebookUI.openEdit('${safeId}')">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
             <div style="font-size:15px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${safeName}</div>
+            <button type="button" onclick="event.stopPropagation();LorebookUI.renameLorebook('${safeId}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;padding:4px;display:flex;align-items:center" title="重命名">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            </button>
+            <button type="button" onclick="event.stopPropagation();LorebookUI.editDescription('${safeId}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;padding:4px;display:flex;align-items:center" title="编辑描述">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+            </button>
             <button type="button" onclick="event.stopPropagation();LorebookUI.confirmDelete('${safeId}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;padding:4px;display:flex;align-items:center" title="删除">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
@@ -80,6 +86,38 @@ const LorebookUI = (() => {
   function openEdit(lbId) {
     if (typeof Worldview === 'undefined' || !Worldview.openEdit) return;
     Worldview.openEdit('lb:' + lbId, { returnTo: 'lorebook-list' });
+  }
+
+  // ========== 重命名 ==========
+  async function renameLorebook(lbId) {
+    const lb = await Lorebook.get(lbId);
+    if (!lb) return;
+    const name = await UI.showSimpleInput('重命名世界书', lb.name || '', { placeholder: '给世界书起个名字' });
+    if (name === null || name === undefined) return;
+    const trimmed = (name || '').trim();
+    if (!trimmed) {
+      UI.showToast('名字不能为空', 1500);
+      return;
+    }
+    lb.name = trimmed;
+    await Lorebook.save(lb);
+    UI.showToast('已重命名');
+    await renderList();
+  }
+
+  // ========== 编辑描述 ==========
+  async function editDescription(lbId) {
+    const lb = await Lorebook.get(lbId);
+    if (!lb) return;
+    const desc = await UI.showSimpleInput('编辑描述', lb.description || '', {
+      placeholder: '简单介绍一下这本世界书...',
+      multiline: true,
+    });
+    if (desc === null || desc === undefined) return;
+    lb.description = (desc || '').trim();
+    await Lorebook.save(lb);
+    UI.showToast('已保存');
+    await renderList();
   }
 
   // ========== 删除 ==========
@@ -204,6 +242,8 @@ const LorebookUI = (() => {
     renderList,
     createNew,
     openEdit,
+    renameLorebook,
+    editDescription,
     confirmDelete,
     openBindPicker,
     renderBoundList,
