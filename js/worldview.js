@@ -182,12 +182,13 @@ function _defaultRegion() {
   const detailBtn = document.querySelector('.wv-edit-tab-btn[data-tab="detail"]');
   if (basicBtn) basicBtn.style.display = isHidden ? 'none' : '';
   if (detailBtn) detailBtn.style.display = isHidden ? 'none' : '';
-  // 心动模拟世界观：禁止编辑玩法页（任务/属性/状态栏由内置机制管理）
-  const gameplayBtn = document.querySelector('.wv-edit-tab-btn[data-tab="gameplay"]');
-  if (gameplayBtn) {
-    const isHS = editingWorldviewId === 'wv_heartsim';
-    gameplayBtn.style.display = isHS ? 'none' : '';
-  }
+// 心动模拟世界观：禁止编辑玩法页（任务/属性/状态栏由内置机制管理）
+    // v632：世界书也不该有玩法 tab（状态栏/手机/属性是世界观级，不能叠加）
+    const gameplayBtn = document.querySelector('.wv-edit-tab-btn[data-tab="gameplay"]');
+    if (gameplayBtn) {
+      const isHS = editingWorldviewId === 'wv_heartsim';
+      gameplayBtn.style.display = (isHidden || isHS) ? 'none' : '';
+    }
     // ⋯ 菜单：隐藏世界观时不允许删除整个世界观、不允许导出（整包）；只保留"扩展设定导入导出"
     const exportBtn = document.querySelector('#worldview-edit-more-menu button[onclick*="exportCurrent"]');
     const importBtn = document.querySelector('#worldview-edit-more-menu button[onclick*="importSingle"]');
