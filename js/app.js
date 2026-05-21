@@ -157,17 +157,13 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v683.5';
-const CHANGELOG = `【v683.5 UI 统一】
-· 世界书 NPC 区域三按钮压缩防换行（+添加 / 导入 / AI 生成）
-· "AI 批量生成" → "AI 生成"
-· 全局复选框统一为圆形样式：
-  · NPC 批量导入弹窗
-  · AI 写卡助手"同时生成地区骨架"
-  · 世界书绑定选择器
+    const APP_VERSION = 'v683.6';
+const CHANGELOG = `【v683.6 强迫症补丁】
+· 心动模拟内容警告弹窗的"下次不再提醒"也改圆形复选框
 
-【v683.4 修复（回顾）】
-· 批量导入按钮 emoji → SVG
+【v683.5 UI 统一（回顾）】
+· NPC 区按钮压缩防换行 + AI 批量生成→AI 生成
+· 全局复选框统一为圆形（NPC 导入 / 写卡助手 / 世界书绑定）
 
 【v683 新功能（回顾）】
 · 批量导入 NPC + 模糊字段识别

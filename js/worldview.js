@@ -3481,7 +3481,10 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
                 是否继续？
               </div>
               <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:12px;color:var(--text-secondary);cursor:pointer;user-select:none">
-                <input type="checkbox" id="hs-warn-dismiss" style="width:16px;height:16px;accent-color:var(--accent);border-radius:50%;cursor:pointer">
+                <span style="position:relative;display:inline-flex;flex-shrink:0">
+                  <input type="checkbox" id="hs-warn-dismiss" class="circle-check">
+                  <span class="circle-check-ui"></span>
+                </span>
                 下次不再提醒
               </label>
               <div style="display:flex;gap:8px;justify-content:flex-end">
