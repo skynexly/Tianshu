@@ -135,7 +135,7 @@ const Tools = (() => {
     // --- 小纸条 ---
     { type:'function', function:{
       name:'query_notes',
-      description:'查询用户的小纸条（情绪记忆碎片）。当你隐约记得用户说过什么偏好/习惯/情绪但不确定细节时调用。',
+      description:'查询 {{user}} 的小纸条（情绪记忆碎片）。当你隐约记得 {{user}} 说过什么偏好/习惯/情绪但不确定细节时调用。',
       parameters:{ type:'object', properties:{
         tag:{ type:'string', enum:NOTE_TAGS, description:'按标签筛选' },
         keyword:{ type:'string', description:'模糊搜索 detail' },
@@ -144,16 +144,16 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'add_note',
-      description:'记录一条小纸条。当用户明确表达了偏好/情绪/习惯时调用。只记用户说的/做的，不揣测。可同时调用多次。',
+      description:'记录一条小纸条。当 {{user}} 明确表达了偏好/情绪/习惯时调用。只记 {{user}} 说的/做的，不揣测。可同时调用多次。',
       parameters:{ type:'object', properties:{
         tag:{ type:'string', enum:NOTE_TAGS, description:'标签' },
-        detail:{ type:'string', description:'以用户角色名为主语如实记录' },
+        detail:{ type:'string', description:'以 {{user}} 角色名为主语如实记录' },
         characters:{ type:'array', items:{type:'string'}, description:'在场角色' }
       }, required:['tag','detail'] }
     }},
     { type:'function', function:{
       name:'update_note',
-      description:'修改一条小纸条。仅在用户明确要求修改或记忆确认有误时使用。',
+      description:'修改一条小纸条。仅在 {{user}} 明确要求修改或记忆确认有误时使用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'要修改的小纸条 id' },
         tag:{ type:'string', enum:NOTE_TAGS, description:'新标签（不传则不改）' },
@@ -162,7 +162,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'delete_note',
-      description:'删除一条小纸条。仅在用户明确要求删除时使用。',
+      description:'删除一条小纸条。仅在 {{user}} 明确要求删除时使用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'要删除的小纸条 id' }
       }, required:['id'] }
@@ -192,7 +192,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'update_event',
-      description:'修改一条事件记忆。仅在用户明确要求或记忆确认有误时使用。',
+      description:'修改一条事件记忆。仅在 {{user}} 明确要求或记忆确认有误时使用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'事件 id' },
         title:{ type:'string' }, time:{ type:'string' }, location:{ type:'string' },
@@ -202,7 +202,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'delete_event',
-      description:'删除一条事件记忆。仅在用户明确要求删除时使用。',
+      description:'删除一条事件记忆。仅在 {{user}} 明确要求删除时使用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'事件 id' }
       }, required:['id'] }
@@ -221,14 +221,14 @@ const Tools = (() => {
       description:'记录或更新一条人际关系。按角色名匹配，已存在则更新，不存在则新建。',
       parameters:{ type:'object', properties:{
         title:{ type:'string', description:'角色姓名' },
-        relationship:{ type:'string', description:'与用户角色的当前关系' },
-        impression:{ type:'string', description:'该角色对用户角色的看法' },
+        relationship:{ type:'string', description:'与 {{user}} 的当前关系' },
+        impression:{ type:'string', description:'该角色对 {{user}} 的看法' },
         emotion:{ type:'string', description:'情感变化描述（追加到历程中）' }
       }, required:['title'] }
     }},
     { type:'function', function:{
       name:'delete_relation',
-      description:'删除一条人际关系记忆。仅在用户明确要求删除时使用。',
+      description:'删除一条人际关系记忆。仅在 {{user}} 明确要求删除时使用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'关系记忆 id' }
       }, required:['id'] }
@@ -265,7 +265,7 @@ const Tools = (() => {
   const backstageDefinitions = [
     { type:'function', function:{
       name:'query_backstage_notes',
-      description:'查询用户本人的记忆碎片（后台记忆库）。不是游戏角色的，是用户本人的。',
+      description:'查询 {{user}} 本人的记忆碎片（后台记忆库）。不是游戏角色的，是 {{user}} 本人的。',
       parameters:{ type:'object', properties:{
         tag:{ type:'string', enum:NOTE_TAGS, description:'按标签筛选' },
         keyword:{ type:'string', description:'模糊搜索' },
@@ -274,15 +274,15 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'add_backstage_note',
-      description:'记录一条值得留下的用户片段。聊天里如果用户表达了什么能反映 ta 是谁的东西（喜好、情绪、事件），就顺手记一条。不用每轮都记。',
+      description:'记录一条值得留下的 {{user}} 片段。聊天里如果 {{user}} 表达了什么能反映 ta 是谁的东西（喜好、情绪、事件），就顺手记一条。不用每轮都记。',
       parameters:{ type:'object', properties:{
         tag:{ type:'string', description:'标签。建议从三类里选最贴切的：偏好类（喜欢/讨厌/习惯）、情绪类（实际什么情绪就写什么，如开心/感动/悲伤/愤怒等）、事件类（有趣/伏笔/秘密）' },
-        detail:{ type:'string', description:'内容要带前因+用户的反应，引用原话时保留引号' }
+        detail:{ type:'string', description:'内容要带前因+{{user}}的反应，引用原话时保留引号' }
       }, required:['tag','detail'] }
     }},
     { type:'function', function:{
       name:'update_backstage_note',
-      description:'改一条已记下的片段。用户说"那条不对，应该是xxx"、主动让你订正时，或者那条现在已经不再适用时用。',
+      description:'改一条已记下的片段。{{user}} 说"那条不对，应该是xxx"、主动让你订正时，或者那条现在已经不再适用时用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'记忆 id' },
         tag:{ type:'string' },
@@ -291,7 +291,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'delete_backstage_note',
-      description:'删一条已记下的片段。用户明确说"忘掉这条"或类似意思时，或者你发现有重复的记忆时用。',
+      description:'删一条已记下的片段。{{user}} 明确说"忘掉这条"或类似意思时，或者你发现有重复的记忆时用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'记忆 id' }
       }, required:['id'] }
@@ -303,7 +303,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'set_directive',
-      description:'设置或修改主线的剧情引导。会覆盖当前已有内容。使用前必须向用户确认内容和轮数。',
+      description:'设置或修改主线的剧情引导。会覆盖当前已有内容。使用前必须向 {{user}} 确认内容和轮数。',
       parameters:{ type:'object', properties:{
         content:{ type:'string', description:'引导内容（希望剧情朝什么方向发展）' },
         rounds:{ type:'number', description:'持续轮数，默认3' }
@@ -311,7 +311,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'remove_directive',
-      description:'清空当前主线的剧情引导。仅在用户明确同意撤销时使用。',
+      description:'清空当前主线的剧情引导。仅在 {{user}} 明确同意撤销时使用。',
       parameters:{ type:'object', properties:{}, required:[] }
     }},
     // --- 世界观查询（后台也能查，方便闲聊时引用设定） ---
@@ -667,8 +667,73 @@ const Tools = (() => {
     try { return await handler(args); } catch(e) { return ERR(`工具执行失败: ${e.message}`); }
   }
 
-  function getDefinitions() { return definitions; }
-  function getBackstageDefinitions() { return backstageDefinitions; }
+  function getDefinitions() { return _withMacros(definitions); }
+function getBackstageDefinitions() { return _withMacros(backstageDefinitions); }
 
-  return { getDefinitions, getBackstageDefinitions, execute };
+// v685.1：tool description / parameter description 里把 {{user}} 替换成实际昵称
+// 因为 backstage.js 的宏替换只处理 message.content，不动 tools 数组
+async function _resolveUserName() {
+  let name = '';
+  try {
+    const _ooc = await DB.get('settings', 'oocNickname');
+    if (_ooc?.value && String(_ooc.value).trim()) name = String(_ooc.value).trim();
+  } catch(_) {}
+  if (!name) {
+    try {
+      const _mc = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+      if (_mc?.name) name = _mc.name;
+    } catch(_) {}
+  }
+  return name || '玩家';
+}
+
+let _cachedUserName = '玩家';
+let _cachedAt = 0;
+async function _refreshUserCache() {
+  // 缓存 30s，避免每次拿工具都跑 DB
+  if (Date.now() - _cachedAt < 30000) return _cachedUserName;
+  _cachedUserName = await _resolveUserName();
+  _cachedAt = Date.now();
+  return _cachedUserName;
+}
+// 启动时预热一次（异步，不阻塞）
+_refreshUserCache().catch(()=>{});
+
+function _withMacros(defs) {
+  const u = _cachedUserName;
+  if (!u || u === '{{user}}') return defs;
+  // 浅克隆 + 文本替换
+  return defs.map(d => {
+    if (!d || !d.function) return d;
+    const fn = d.function;
+    const newDesc = (typeof fn.description === 'string' && fn.description.includes('{{user}}'))
+      ? fn.description.replaceAll('{{user}}', u)
+      : fn.description;
+    let newProps = fn.parameters && fn.parameters.properties;
+    if (newProps) {
+      const out = {};
+      let touched = false;
+      for (const [k, v] of Object.entries(newProps)) {
+        if (v && typeof v.description === 'string' && v.description.includes('{{user}}')) {
+          out[k] = { ...v, description: v.description.replaceAll('{{user}}', u) };
+          touched = true;
+        } else {
+          out[k] = v;
+        }
+      }
+      if (touched) {
+        return { ...d, function: { ...fn, description: newDesc, parameters: { ...fn.parameters, properties: out } } };
+      }
+    }
+    if (newDesc !== fn.description) {
+      return { ...d, function: { ...fn, description: newDesc } };
+    }
+    return d;
+  });
+}
+
+// 暴露给外部触发缓存刷新（比如用户在账号面板改了 OOC 昵称后调用一下）
+function refreshMacroCache() { _cachedAt = 0; return _refreshUserCache(); }
+
+return { getDefinitions, getBackstageDefinitions, execute, refreshMacroCache };
 })();

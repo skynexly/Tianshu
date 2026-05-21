@@ -1996,9 +1996,39 @@ function _collectEmotionsForEdit() {
 
   // ===== UI - 搜索 =====
 
+  // v685.1：后台口令（默认 1001，可自定义）
+  const BACKSTAGE_PWD_KEY = 'backstage_pwd';
+  function _getBackstagePwd() {
+    try {
+      const v = localStorage.getItem(BACKSTAGE_PWD_KEY);
+      return (v && v.trim()) ? v.trim() : '1001';
+    } catch(_) { return '1001'; }
+  }
+  function _setBackstagePwd(v) {
+    try { localStorage.setItem(BACKSTAGE_PWD_KEY, String(v || '').trim()); } catch(_) {}
+  }
+  async function changeBackstagePwd() {
+    const cur = _getBackstagePwd();
+    const next = await UI.showSimpleInput('修改后台口令', cur === '1001' ? '' : '', {
+      placeholder: '输入新口令（区分大小写，建议字母+数字组合）',
+    });
+    if (next === null || next === undefined) return;
+    const trimmed = String(next).trim();
+    if (!trimmed) {
+      UI.showToast('口令不能为空', 1800);
+      return;
+    }
+    if (trimmed.length < 2) {
+      UI.showToast('口令至少 2 位', 1800);
+      return;
+    }
+    _setBackstagePwd(trimmed);
+    UI.showToast('口令已更新（请记好）', 2000);
+  }
+
   function search(query) {
-    // 彩蛋：输入 1001 进入/退出后台记忆库
-    if (query.trim() === '1001') {
+    // 后台入口：输入当前口令进入/退出后台记忆库（默认 1001）
+    if (query.trim() === _getBackstagePwd()) {
       _toggleBackstageView();
       // 清空搜索框
       const input = document.querySelector('#memory-panel input[type="search"], #memory-panel input[type="text"]');
@@ -2058,7 +2088,10 @@ function _collectEmotionsForEdit() {
 
     const header = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:8px 12px;background:color-mix(in srgb, var(--accent) 8%, transparent);border-radius:var(--radius)">
       <span style="font-size:13px;font-weight:700;color:var(--accent)">🔒 后台记忆库（${notes.length}条）</span>
-      <span style="font-size:11px;color:var(--text-secondary);cursor:pointer" onclick="Memory.search('')">退出</span>
+      <span style="display:flex;gap:10px;align-items:center">
+        <span style="font-size:11px;color:var(--text-secondary);cursor:pointer" onclick="Memory.changeBackstagePwd()" title="修改进入后台需要输入的口令">改口令</span>
+        <span style="font-size:11px;color:var(--text-secondary);cursor:pointer" onclick="Memory.search('')">退出</span>
+      </span>
     </div>` + switchTab;
 
     if (notes.length === 0) {
@@ -2353,6 +2386,7 @@ function _toggleEditScopeDropdown() { _toggleDropdown('mem-edit-scope-dropdown')
     buildExtractionPrompt, buildNotesPrompt: _buildNotesPrompt, formatForPrompt,
     showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove, deleteNoteConfirm, _deleteBackstageNote,
     _switchBackstageFilter, editBackstageNote, closeBsEdit, saveBsEdit, deleteBsFromEdit,
+    changeBackstagePwd,
     editNote, closeNoteEdit, saveNoteEdit, deleteNoteFromEdit,
     copyMemory, filterByScope, renderScopeSelector, onPanelShow,
     addManual,
