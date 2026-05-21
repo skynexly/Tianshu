@@ -1414,12 +1414,14 @@ const msgEl = appendMessage(aiMsg, true, true);
           // onChunk
         (chunk, fullContent) => {
           aiMsg.content = fullContent;
-          // 流式过滤：把心动模拟返航 marker 从渲染内容里抹掉，玩家不该看到
-          // 兼容流式不完整状态：对带尾 ``` 的完整代码块去除；对刚开头的 ```homecoming 也整体擦掉
-          let renderContent = fullContent;
-          renderContent = renderContent.replace(/```homecoming\s*[\s\S]*?```/gi, '');
-          renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
-          contentEl.innerHTML = Markdown.render(renderContent);
+            // 流式过滤：把心动模拟返航 marker 从渲染内容里抹掉，玩家不该看到
+            // 兼容流式不完整状态：对带尾 ``` 的完整代码块去除；对刚开头的 ```homecoming 也整体擦掉
+            let renderContent = fullContent;
+            renderContent = renderContent.replace(/```homecoming\s*[\s\S]*?```/gi, '');
+            renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
+            // v687.2：过滤 AI 幻觉生成的手机操作记录（该格式是纯系统注入，AI 不应输出）
+            renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
+            contentEl.innerHTML = Markdown.render(renderContent);
           if (convSettings.stream) contentEl.classList.add('streaming-cursor');
           scrollToBottomIfFollowing();
         },
@@ -1435,6 +1437,8 @@ const msgEl = appendMessage(aiMsg, true, true);
                   fullContent = fullContent.replace(re, rule.replacement ?? '');
                 } catch(e) {}
               }
+              // v687.2：从最终存储内容中也删除 AI 幻觉的手机操作记录
+              fullContent = fullContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
               aiMsg.content = fullContent;
 aiMsg.timestamp = Utils.timestamp();
 // 内容已最终确定，清掉可能的旧缓存（流式过程不写入缓存，但保险）
@@ -1646,10 +1650,12 @@ requestController.signal,
                   apiMessages,
                   (chunk, fullContent) => {
                     aiMsg.content = fullContent;
-                    let renderContent = fullContent;
-                    renderContent = renderContent.replace(/```homecoming\s*[\s\S]*?```/gi, '');
-                    renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
-                    contentEl.innerHTML = Markdown.render(renderContent);
+            let renderContent = fullContent;
+            renderContent = renderContent.replace(/```homecoming\s*[\s\S]*?```/gi, '');
+            renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
+            // v687.2：过滤 AI 幻觉生成的手机操作记录
+            renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
+            contentEl.innerHTML = Markdown.render(renderContent);
                     if (convSettings.stream) contentEl.classList.add('streaming-cursor');
                     scrollToBottomIfFollowing();
                   },
@@ -1660,6 +1666,8 @@ requestController.signal,
                       if (rule.enabled === false) continue;
                       try { fullContent = fullContent.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement ?? ''); } catch(e) {}
                     }
+                    // v687.2：从最终存储内容中也删除 AI 幻觉的手机操作记录
+                    fullContent = fullContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
                     aiMsg.content = fullContent;
                     aiMsg.timestamp = Utils.timestamp();
                     try { delete aiMsg._cachedFullHTML; delete aiMsg._cachedPlainHTML; } catch(_) {}
