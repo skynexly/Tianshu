@@ -157,13 +157,13 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v686.6';
-const CHANGELOG = `【v686.6 emoji 收尾】
-· ✅❌ → Lucide circle-check / circle-x SVG
-   - 成功 = accent 色（跟主题）
-   - 失败 = 次要文字色（淡灰，不刺眼）
-· 去掉气泡上的「待发送」橙色小标签
-   - 边框 + 浅底已经够区分待发送 vs 历史，标签多余
+    const APP_VERSION = 'v686.7';
+const CHANGELOG = `【v686.7 简约化】
+· 投骰面板结果区：去掉"目标 X · ≤"和"成功/失败"两行
+   - 现在只显示「大数字 + 旁边圈勾/圈叉」
+   - 规则信息上面属性卡片里有，不重复
+· 待发送/历史气泡：去掉「成功」「失败」两个字
+   - 圈勾圈叉已经够说明问题
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

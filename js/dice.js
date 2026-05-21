@@ -255,13 +255,15 @@ window.Dice = (() => {
     const histHtml = rolls.length > 1
       ? `<div style="margin-top:8px;font-size:11px;color:var(--text-secondary);line-height:1.6">历史：${rolls.slice(0,-1).map(r => `<span style="opacity:.65">${r.result}${r.success ? '✓' : '✗'}</span>`).join(' · ')}</div>`
       : '';
+    const resultIcon = last.success ? ICON_SUCCESS : ICON_FAIL;
+    // 把 SVG 尺寸放大到 24px，跟数字更协调
+    const bigIcon = resultIcon.replace('width:1em;height:1em', 'width:22px;height:22px').replace('vertical-align:-0.15em', 'vertical-align:middle');
     area.innerHTML = `
-      <div style="background:var(--bg-tertiary);border:1px solid ${last.success ? 'var(--accent)' : 'var(--border)'};border-radius:8px;padding:12px;text-align:center">
-        <div style="font-size:28px;font-weight:700;color:${last.success ? 'var(--accent)' : 'var(--text)'};line-height:1.2">${last.result}</div>
-        <div style="font-size:11px;color:var(--text-secondary);margin-top:3px">1d${last.diceMax} · 目标 ${last.attrValue} · ${RULE_LABELS[last.rule]}</div>
-        <div style="font-size:14px;font-weight:600;margin-top:6px;color:${last.success ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;gap:4px">${last.success ? ICON_SUCCESS + ' 成功' : ICON_FAIL + ' 失败'}</div>
-        ${histHtml}
-      </div>`;
+      <div style="background:var(--bg-tertiary);border:1px solid ${last.success ? 'var(--accent)' : 'var(--border)'};border-radius:8px;padding:14px;text-align:center;display:flex;align-items:center;justify-content:center;gap:10px">
+        <span style="font-size:32px;font-weight:700;color:${last.success ? 'var(--accent)' : 'var(--text)'};line-height:1">${last.result}</span>
+        ${bigIcon}
+      </div>
+      ${histHtml}`;
   }
 
   // 确认 = 把最后一次 roll 标 consumed=false 存进 conv.diceRolls，关闭弹窗
