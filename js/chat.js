@@ -1382,7 +1382,7 @@ try {
     renderAttachments();
 
     // 构建 API 上下文（v687 重构：共用 _buildApiContext）
-    const { apiMessages, char, relatedMemories, convSettings: _cs, isGameMode, isGaidenConv, isSingleConv } = await _buildApiContext(messages, { rewriteHint: _pendingRewriteHint });
+    const { apiMessages, char, relatedMemories, convSettings, isGameMode, isGaidenConv, isSingleConv } = await _buildApiContext(messages, { rewriteHint: _pendingRewriteHint });
     _pendingRewriteHint = ''; // 重写建议已消费
 
     // 创建AI消息占位
