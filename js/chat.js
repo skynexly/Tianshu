@@ -4883,29 +4883,78 @@ if (hidden?.events?.length) events.push(...hidden.events);
 document.getElementById('event-manager-modal')?.classList.add('hidden');
 }
 
-// ========== v632：世界书禁用管理 ==========
+// ========== v632 → v684：世界书管理（多来源） ==========
+// 来源标签：
+//   wv       — 世界观默认（wv.defaultLorebookIds），可禁用，不可解绑
+//   card     — 单人卡自带（card.lorebookIds），可禁用，不可解绑
+//   attached — 挂载角色（type=card 的 attachedChars 卡书），可禁用，不可解绑
+//   conv     — 对话自由挂载（conv.lorebookIds），可禁用，可解绑
 async function openLorebookDisableModal() {
   const listEl = document.getElementById('lorebook-disable-list');
   if (!listEl) return;
   const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-  if (!conv) return;
-  // 收集当前对话能用到的世界书 id 列表（只看单人卡路径，世界观/对话级挂载是 Step 3）
-  let lbIds = [];
-  try {
-    // v632.1：conv 数据是平铺的（singleCharType / singleCharId），不是 conv.singleSettings 对象
-    if (conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
-      const card = await SingleCard.get(conv.singleCharId);
-      lbIds = (card?.lorebookIds || []).slice();
-    }
-  } catch(_) {}
-  if (!lbIds.length) {
-    listEl.innerHTML = `<div style="text-align:center;color:var(--text-secondary);font-size:12px;padding:18px 0">当前对话没有绑定任何世界书。<br>请在单人卡设置中绑定世界书。</div>`;
+  if (!conv) {
     document.getElementById('lorebook-disable-modal')?.classList.remove('hidden');
     return;
   }
+
+  // 收集各来源的 lb id
+  const bySource = { wv: [], card: [], attached: [], conv: [] };
+
+  // 1) 世界观默认
+  try {
+    const wvId = conv.worldviewId;
+    if (wvId && wvId !== '__default_wv__') {
+      const wv = await DB.get('worldviews', wvId);
+      const ids = (wv && Array.isArray(wv.defaultLorebookIds)) ? wv.defaultLorebookIds : [];
+      bySource.wv.push(...ids);
+    }
+  } catch(_) {}
+
+  // 2) 单人卡自带
+  try {
+    if (conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+      const card = await SingleCard.get(conv.singleCharId);
+      if (card && Array.isArray(card.lorebookIds)) bySource.card.push(...card.lorebookIds);
+    }
+  } catch(_) {}
+
+  // 3) 挂载角色（type=card）自带
+  try {
+    const attachedList = Array.isArray(conv.attachedChars) ? conv.attachedChars : [];
+    for (const e of attachedList) {
+      if (!e || e.type !== 'card' || !e.id) continue;
+      try {
+        const ac = await SingleCard.get(e.id);
+        if (ac && Array.isArray(ac.lorebookIds)) bySource.attached.push(...ac.lorebookIds);
+      } catch(_) {}
+    }
+  } catch(_) {}
+
+  // 4) 对话自由挂载
+  if (Array.isArray(conv.lorebookIds)) bySource.conv.push(...conv.lorebookIds);
+
+  // 去重（按优先顺序：wv → card → attached → conv，先出现的保留）
+  const seen = new Set();
+  const ordered = []; // [{id, source}]
+  for (const src of ['wv', 'card', 'attached', 'conv']) {
+    for (const id of bySource[src]) {
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      ordered.push({ id, source: src });
+    }
+  }
+
   const disabled = new Set(conv.lorebookDisabled || []);
+  const sourceLabel = {
+    wv:       { text: '世界观默认', color: 'var(--accent)' },
+    card:     { text: '单人卡',     color: 'var(--text-secondary)' },
+    attached: { text: '挂载角色',   color: 'var(--text-secondary)' },
+    conv:     { text: '本对话挂载', color: 'var(--accent)' },
+  };
+
   const rows = [];
-  for (const id of lbIds) {
+  for (const { id, source } of ordered) {
     let lb = null;
     try { lb = await Lorebook.get(id); } catch(_) {}
     if (!lb) continue;
@@ -4913,20 +4962,31 @@ async function openLorebookDisableModal() {
     const safeId = Utils.escapeHtml(id);
     const safeName = Utils.escapeHtml(lb.name || '未命名世界书');
     const safeDesc = Utils.escapeHtml(lb.description || '');
+    const tag = sourceLabel[source];
+    const canUnbind = source === 'conv';
     rows.push(`
-      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;cursor:pointer">
-        <span style="position:relative;display:inline-flex;flex-shrink:0">
-          <input type="checkbox" class="circle-check" ${enabled ? 'checked' : ''} onchange="Chat.toggleLorebookDisable('${safeId}', this.checked)">
-          <span class="circle-check-ui"></span>
-        </span>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:14px;color:var(--text);font-weight:600">${safeName}</div>
-          ${safeDesc ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safeDesc}</div>` : ''}
-        </div>
-      </label>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
+        <label style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;margin:0">
+          <span style="position:relative;display:inline-flex;flex-shrink:0">
+            <input type="checkbox" class="circle-check" ${enabled ? 'checked' : ''} onchange="Chat.toggleLorebookDisable('${safeId}', this.checked)">
+            <span class="circle-check-ui"></span>
+          </span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-size:14px;color:var(--text);font-weight:600">${safeName}</span>
+              <span style="font-size:10px;color:${tag.color};border:1px solid ${tag.color};border-radius:4px;padding:1px 5px;line-height:1.4;white-space:nowrap">${tag.text}</span>
+            </div>
+            ${safeDesc ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safeDesc}</div>` : ''}
+          </div>
+        </label>
+        ${canUnbind ? `<button type="button" onclick="Chat.unbindConvLorebook('${safeId}')" title="从本对话移除（不影响单人卡）" style="background:none;border:1px solid var(--border);color:var(--text-secondary);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0;white-space:nowrap">移除</button>` : ''}
+      </div>
     `);
   }
-  listEl.innerHTML = rows.length ? rows.join('') : `<div style="text-align:center;color:var(--text-secondary);font-size:12px;padding:18px 0">绑定的世界书已被删除。</div>`;
+
+  listEl.innerHTML = rows.length
+    ? rows.join('')
+    : `<div style="text-align:center;color:var(--text-secondary);font-size:12px;padding:18px 0">当前对话还没有任何世界书。<br>点下方「+ 添加世界书」开始挂载。</div>`;
   document.getElementById('lorebook-disable-modal')?.classList.remove('hidden');
 }
 
@@ -4946,7 +5006,84 @@ async function toggleLorebookDisable(lbId, enabled) {
   conv.lorebookDisabled = Array.from(set);
   try { await Conversations.saveList(); } catch(_) {}
 }
-// ========== 世界书禁用管理 end ==========
+
+// v684：从对话自由挂载列表里移除
+async function unbindConvLorebook(lbId) {
+  const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+  if (!conv) return;
+  conv.lorebookIds = (conv.lorebookIds || []).filter(x => x !== lbId);
+  // 顺手把禁用记录也清掉（避免悬挂）
+  conv.lorebookDisabled = (conv.lorebookDisabled || []).filter(x => x !== lbId);
+  try { await Conversations.saveList(); } catch(_) {}
+  await openLorebookDisableModal();
+  UI.showToast('已从本对话移除', 1500);
+}
+
+// v684：弹出选择器，把勾选的 lb 加进 conv.lorebookIds（去重，不动来源是 wv/card/attached 的）
+async function addConvLorebooks() {
+  if (typeof LorebookUI === 'undefined' || !LorebookUI.openBindPicker) {
+    UI.showToast('世界书 UI 未就绪', 1800);
+    return;
+  }
+  const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+  if (!conv) return;
+  // 已生效（来源为 wv/card/attached 的）+ 已自由挂载，作为初始勾选
+  const ownedIds = new Set(conv.lorebookIds || []);
+  await LorebookUI.openBindPicker(Array.from(ownedIds), async (next) => {
+    conv.lorebookIds = Array.from(new Set(next || []));
+    try { await Conversations.saveList(); } catch(_) {}
+    await openLorebookDisableModal();
+    UI.showToast('已更新挂载', 1200);
+  });
+}
+
+// v684：把当前对话的"自由挂载列表"应用到本世界观全部对话
+//   - 写入 wv.defaultLorebookIds（新建对话自动继承）
+//   - 同步：把所有同 wv 的 conv.lorebookIds 重置为当前 conv 的 lorebookIds（粗暴覆盖）
+async function applyLorebooksToWorldview() {
+  const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+  if (!conv) return;
+  const wvId = conv.worldviewId;
+  if (!wvId || wvId === '__default_wv__') {
+    UI.showToast('当前对话未绑定世界观，无法批量应用', 2000);
+    return;
+  }
+  const myIds = (conv.lorebookIds || []).slice();
+  const myDisabled = (conv.lorebookDisabled || []).slice();
+  const wv = await DB.get('worldviews', wvId);
+  if (!wv) {
+    UI.showToast('找不到对应世界观', 1800);
+    return;
+  }
+  const allConvs = Conversations.getList().filter(c => c.worldviewId === wvId);
+  const otherCount = allConvs.length - 1;
+
+  let msg = `将把当前对话的世界书配置应用到本世界观下的全部对话。\n\n`;
+  msg += `· 自由挂载列表（${myIds.length} 本）将作为「新建对话默认」\n`;
+  msg += `· 现有 ${otherCount} 个其它对话的自由挂载列表会被覆盖\n`;
+  msg += `· 单人卡/挂载角色自带的世界书不受影响\n\n`;
+  msg += `确定继续？`;
+  const ok = await UI.showConfirm('应用到本世界观全部对话', msg);
+  if (!ok) return;
+
+  // 1) 写世界观默认
+  wv.defaultLorebookIds = myIds.slice();
+  wv.updated = Date.now();
+  await DB.put('worldviews', wv);
+
+  // 2) 同步所有同 wv 对话
+  let touched = 0;
+  for (const c of allConvs) {
+    c.lorebookIds = myIds.slice();
+    // 禁用记录也对齐（避免某本被禁但同步过去后没禁的不一致）
+    c.lorebookDisabled = myDisabled.slice();
+    touched++;
+  }
+  try { await Conversations.saveList(); } catch(_) {}
+  UI.showToast(`已应用到 ${touched} 个对话`, 2000);
+  await openLorebookDisableModal();
+}
+// ========== 世界书管理 end ==========
 
   async function resetEventState(eventId) {
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
@@ -5334,6 +5471,7 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     openDirectiveModal, closeDirectiveModal, saveDirective, clearDirective, _getConvSettings,
     openEventManagerModal, closeEventManagerModal, resetEventState,
 openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
+    unbindConvLorebook, addConvLorebooks, applyLorebooksToWorldview,
     resetConvGameplay,
     _onVoiceEnabledChange, _onVoiceScopeAllChange,
     _onConvBgPicked, _onConvBgClear,

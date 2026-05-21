@@ -1417,12 +1417,11 @@
             <!-- 区域1：游戏系统 -->
             <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em">游戏系统</div>
 
-            <!-- 自定义属性 -->
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
-              <div style="min-width:0">
-                <div style="font-size:14px;color:var(--text);font-weight:600">自定义属性</div>
-                <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-top:2px">编辑当前对话的全局属性和角色属性，不影响世界观原件。</div>
-              </div>
+            <!-- 数值系统（原"自定义属性"） -->
+            <div style="display:flex;align-items:center;padding:0 2px">
+              <span style="flex:1;min-width:0;font-size:14px;color:var(--text);font-weight:600;line-height:1.4">数值系统<br><span style="font-size:11px;color:var(--text-secondary);font-weight:400">编辑当前对话的全局属性和角色属性，不影响世界观原件</span></span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:-8px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
               <button type="button" onclick="ConvGameplay.openAttrEditor()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">编辑属性</button>
             </div>
 
@@ -1455,12 +1454,11 @@
               </div>
             </div>
 
-            <!-- v632：世界书禁用（按本控制） -->
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
-              <div style="min-width:0;flex:1">
-                <div style="font-size:14px;color:var(--text);font-weight:600">世界书</div>
-                <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-top:2px">当前对话单人卡绑定的世界书，可按本禁用注入。</div>
-              </div>
+            <!-- 知识系统（世界书挂载/禁用） -->
+            <div style="display:flex;align-items:center;padding:0 2px">
+              <span style="flex:1;min-width:0;font-size:14px;color:var(--text);font-weight:600;line-height:1.4">知识系统<br><span style="font-size:11px;color:var(--text-secondary);font-weight:400">挂载世界书到本对话，单人卡 / 挂载角色自带的书自动继承，可自由添加/禁用</span></span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:-8px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
               <button type="button" onclick="Chat.openLorebookDisableModal()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">管理</button>
             </div>
 
@@ -1572,16 +1570,20 @@
       </div>
     </div>
 
-    <!-- v632：世界书禁用管理弹窗 -->
+    <!-- v632 → v684：知识系统（世界书挂载/禁用）管理弹窗 -->
     <div id="lorebook-disable-modal" class="modal hidden">
       <div class="modal-content" style="max-height:85vh;display:flex;flex-direction:column">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
-          <h3 style="margin:0">世界书禁用</h3>
+          <h3 style="margin:0">知识系统</h3>
           <button onclick="Chat.closeLorebookDisableModal()" class="btn-icon modal-corner-btn close-btn" title="关闭">×</button>
         </div>
-        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px">勾选 = 注入到本对话；取消 = 本对话不注入该世界书（数据不删除）。</p>
+        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px;line-height:1.6">勾选 = 注入到本对话；取消 = 本对话不注入（数据不删除）。<br>来源标签：世界观默认 / 单人卡 / 挂载角色（不可解绑，仅可禁用）｜本对话挂载（可移除）。</p>
         <div id="lorebook-disable-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
-        <div class="modal-actions" style="flex-shrink:0;margin-top:16px;padding-top:12px">
+        <div style="flex-shrink:0;display:flex;gap:8px;margin-top:12px">
+          <button type="button" onclick="Chat.addConvLorebooks()" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--accent);color:var(--accent);border-radius:6px;font-size:13px;cursor:pointer">+ 添加世界书</button>
+          <button type="button" onclick="Chat.applyLorebooksToWorldview()" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:13px;cursor:pointer" title="把当前对话的自由挂载列表写入世界观默认，并覆盖到所有同世界观对话">应用到本世界观全部对话</button>
+        </div>
+        <div class="modal-actions" style="flex-shrink:0;margin-top:12px;padding-top:0">
           <button onclick="Chat.closeLorebookDisableModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">关闭</button>
         </div>
       </div>

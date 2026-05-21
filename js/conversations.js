@@ -231,14 +231,24 @@ async function init() {
   async function create(folderId) {
     const name = await UI.showSimpleInput('新建世界线', '新的世界线');
     if (!name) return;
+    const wvId = _activeWorldviewId();
     const conv = {
       id: 'conv_' + Utils.uuid().slice(0, 8),
       name: name.trim(),
       created: Date.now(),
       folder: folderId || null,
-      worldviewId: _activeWorldviewId(),
+      worldviewId: wvId,
       presetId: Settings.getCurrentId()
     };
+    // v684：从世界观默认世界书继承到新对话
+    try {
+      if (wvId && wvId !== '__default_wv__') {
+        const wv = await DB.get('worldviews', wvId);
+        if (wv && Array.isArray(wv.defaultLorebookIds) && wv.defaultLorebookIds.length) {
+          conv.lorebookIds = wv.defaultLorebookIds.slice();
+        }
+      }
+    } catch(_) {}
     list.push(conv);
     await saveList();
     await switchTo(conv.id);
@@ -265,6 +275,13 @@ async function init() {
       conv.singleEnableStartPlot = !!srcConv.singleEnableStartPlot;
       conv.singleEnableFestival = !!srcConv.singleEnableFestival;
       conv.singleEnableCustom = !!srcConv.singleEnableCustom;
+    }
+    // v684：分支继承源对话的世界书自由挂载列表（普通分支跟番外都继承，保持完整副本一致性）
+    if (Array.isArray(srcConv?.lorebookIds) && srcConv.lorebookIds.length) {
+      conv.lorebookIds = srcConv.lorebookIds.slice();
+    }
+    if (Array.isArray(srcConv?.lorebookDisabled) && srcConv.lorebookDisabled.length) {
+      conv.lorebookDisabled = srcConv.lorebookDisabled.slice();
     }
     // 普通分支（非番外）继承状态栏和手机数据，让分支真正是"完整副本"。
     // 番外是独立剧情线，不继承这些运行时状态，避免污染番外开头。

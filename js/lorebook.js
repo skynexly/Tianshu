@@ -86,7 +86,7 @@ const Lorebook = (() => {
   }
 
   // ========== 注入收集：合并 + 去重 + 临时禁用 ==========
-  // 收集顺序：世界观 → 卡 → 对话（同一本只算第一次出现的来源）
+  // 收集顺序：世界观 → 卡 → 挂载角色（type=card 的卡书）→ 对话（同一本只算第一次出现的来源）
   // 返回数组（按收集顺序，已展开为 lorebook 对象）
   async function collectForChat({ conv, card, wv } = {}) {
     const candidates = [];
@@ -95,6 +95,21 @@ const Lorebook = (() => {
     };
     push(wv?.lorebookIds, 'wv');
     push(card?.lorebookIds, 'card');
+
+    // v684：挂载角色（type=card）的 lorebookIds 也自动收集
+    try {
+      const attachedList = (conv && Array.isArray(conv.attachedChars)) ? conv.attachedChars : [];
+      const cardEntries = attachedList.filter(e => e && e.type === 'card' && e.id);
+      for (const e of cardEntries) {
+        try {
+          const ac = (typeof SingleCard !== 'undefined' && SingleCard.get) ? await SingleCard.get(e.id) : null;
+          if (ac && Array.isArray(ac.lorebookIds)) {
+            push(ac.lorebookIds, 'attached');
+          }
+        } catch(_) {}
+      }
+    } catch(_) {}
+
     push(conv?.lorebookIds, 'conv');
 
     const disabled = new Set(conv?.lorebookDisabled || []);
@@ -110,6 +125,7 @@ const Lorebook = (() => {
   }
 
   // 同步版（不读 DB，只返回 id 列表，用于 UI 列出候选）
+  // 注意：挂载角色的世界书需要异步读卡，同步版不包含 attached 来源
   function collectCandidateIds({ conv, card, wv } = {}) {
     const seen = new Set();
     const out = [];
@@ -122,6 +138,33 @@ const Lorebook = (() => {
     };
     push(wv?.lorebookIds, 'wv');
     push(card?.lorebookIds, 'card');
+    push(conv?.lorebookIds, 'conv');
+    return out;
+  }
+
+  // v684：异步候选列表（包含挂载角色的世界书来源）
+  async function collectCandidateIdsAsync({ conv, card, wv } = {}) {
+    const seen = new Set();
+    const out = [];
+    const push = (ids, source) => {
+      (ids || []).forEach(id => {
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        out.push({ id, source });
+      });
+    };
+    push(wv?.lorebookIds, 'wv');
+    push(card?.lorebookIds, 'card');
+    try {
+      const attachedList = (conv && Array.isArray(conv.attachedChars)) ? conv.attachedChars : [];
+      const cardEntries = attachedList.filter(e => e && e.type === 'card' && e.id);
+      for (const e of cardEntries) {
+        try {
+          const ac = (typeof SingleCard !== 'undefined' && SingleCard.get) ? await SingleCard.get(e.id) : null;
+          if (ac && Array.isArray(ac.lorebookIds)) push(ac.lorebookIds, 'attached');
+        } catch(_) {}
+      }
+    } catch(_) {}
     push(conv?.lorebookIds, 'conv');
     return out;
   }
@@ -187,6 +230,7 @@ const Lorebook = (() => {
     getRefCount,
     collectForChat,
     collectCandidateIds,
+    collectCandidateIdsAsync,
     migrateHiddenWorldviewsOnce,
   };
 })();
