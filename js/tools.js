@@ -667,73 +667,83 @@ const Tools = (() => {
     try { return await handler(args); } catch(e) { return ERR(`工具执行失败: ${e.message}`); }
   }
 
-  function getDefinitions() { return _withMacros(definitions); }
-function getBackstageDefinitions() { return _withMacros(backstageDefinitions); }
-
-// v685.1：tool description / parameter description 里把 {{user}} 替换成实际昵称
-// 因为 backstage.js 的宏替换只处理 message.content，不动 tools 数组
-async function _resolveUserName() {
-  let name = '';
-  try {
-    const _ooc = await DB.get('settings', 'oocNickname');
-    if (_ooc?.value && String(_ooc.value).trim()) name = String(_ooc.value).trim();
-  } catch(_) {}
-  if (!name) {
-    try {
-      const _mc = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
-      if (_mc?.name) name = _mc.name;
-    } catch(_) {}
+  // v685.1 → v685.2：主线和后台分别按各自语境拿 user 名
+  // - 主线：替换成当前面具角色名（和 chat.js 1320 行一致），保护代入感
+  // - 后台：替换成 OOC 昵称 → 主角名 → '玩家'（和 backstage.js 一致）
+  function getDefinitions() {
+    // 主线调用方需要传入当前 mask 名（不传时退化为通用占位）
+    return definitions; // 默认返回原始版（含 {{user}}），由调用方自己替换
   }
-  return name || '玩家';
-}
+  function getBackstageDefinitions() {
+    return _withMacros(backstageDefinitions, _cachedBackstageUser);
+  }
 
-let _cachedUserName = '玩家';
-let _cachedAt = 0;
-async function _refreshUserCache() {
-  // 缓存 30s，避免每次拿工具都跑 DB
-  if (Date.now() - _cachedAt < 30000) return _cachedUserName;
-  _cachedUserName = await _resolveUserName();
-  _cachedAt = Date.now();
-  return _cachedUserName;
-}
-// 启动时预热一次（异步，不阻塞）
-_refreshUserCache().catch(()=>{});
+  // 主线专用：调用方（chat.js）传入当前的 user 名（通常 = char?.name 或 '玩家'）
+  function getDefinitionsForChat(userName) {
+    const u = (userName && String(userName).trim()) || '玩家';
+    return _withMacros(definitions, u);
+  }
 
-function _withMacros(defs) {
-  const u = _cachedUserName;
-  if (!u || u === '{{user}}') return defs;
-  // 浅克隆 + 文本替换
-  return defs.map(d => {
-    if (!d || !d.function) return d;
-    const fn = d.function;
-    const newDesc = (typeof fn.description === 'string' && fn.description.includes('{{user}}'))
-      ? fn.description.replaceAll('{{user}}', u)
-      : fn.description;
-    let newProps = fn.parameters && fn.parameters.properties;
-    if (newProps) {
-      const out = {};
-      let touched = false;
-      for (const [k, v] of Object.entries(newProps)) {
-        if (v && typeof v.description === 'string' && v.description.includes('{{user}}')) {
-          out[k] = { ...v, description: v.description.replaceAll('{{user}}', u) };
-          touched = true;
-        } else {
-          out[k] = v;
+  // ===== 后台 user 名缓存（OOC 昵称） =====
+  async function _resolveBackstageUserName() {
+    let name = '';
+    try {
+      const _ooc = await DB.get('settings', 'oocNickname');
+      if (_ooc?.value && String(_ooc.value).trim()) name = String(_ooc.value).trim();
+    } catch(_) {}
+    if (!name) {
+      try {
+        const _mc = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+        if (_mc?.name) name = _mc.name;
+      } catch(_) {}
+    }
+    return name || '玩家';
+  }
+
+  let _cachedBackstageUser = '玩家';
+  let _cachedAt = 0;
+  async function _refreshBackstageCache() {
+    if (Date.now() - _cachedAt < 30000) return _cachedBackstageUser;
+    _cachedBackstageUser = await _resolveBackstageUserName();
+    _cachedAt = Date.now();
+    return _cachedBackstageUser;
+  }
+  _refreshBackstageCache().catch(()=>{});
+
+  function _withMacros(defs, userName) {
+    const u = userName;
+    if (!u || u === '{{user}}') return defs;
+    // 浅克隆 + 文本替换
+    return defs.map(d => {
+      if (!d || !d.function) return d;
+      const fn = d.function;
+      const newDesc = (typeof fn.description === 'string' && fn.description.includes('{{user}}'))
+        ? fn.description.replaceAll('{{user}}', u)
+        : fn.description;
+      let newProps = fn.parameters && fn.parameters.properties;
+      if (newProps) {
+        const out = {};
+        let touched = false;
+        for (const [k, v] of Object.entries(newProps)) {
+          if (v && typeof v.description === 'string' && v.description.includes('{{user}}')) {
+            out[k] = { ...v, description: v.description.replaceAll('{{user}}', u) };
+            touched = true;
+          } else {
+            out[k] = v;
+          }
+        }
+        if (touched) {
+          return { ...d, function: { ...fn, description: newDesc, parameters: { ...fn.parameters, properties: out } } };
         }
       }
-      if (touched) {
-        return { ...d, function: { ...fn, description: newDesc, parameters: { ...fn.parameters, properties: out } } };
+      if (newDesc !== fn.description) {
+        return { ...d, function: { ...fn, description: newDesc } };
       }
-    }
-    if (newDesc !== fn.description) {
-      return { ...d, function: { ...fn, description: newDesc } };
-    }
-    return d;
-  });
-}
+      return d;
+    });
+  }
 
-// 暴露给外部触发缓存刷新（比如用户在账号面板改了 OOC 昵称后调用一下）
-function refreshMacroCache() { _cachedAt = 0; return _refreshUserCache(); }
+  function refreshMacroCache() { _cachedAt = 0; return _refreshBackstageCache(); }
 
-return { getDefinitions, getBackstageDefinitions, execute, refreshMacroCache };
+  return { getDefinitions, getDefinitionsForChat, getBackstageDefinitions, execute, refreshMacroCache };
 })();
