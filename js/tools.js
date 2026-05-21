@@ -135,7 +135,7 @@ const Tools = (() => {
     // --- 小纸条 ---
     { type:'function', function:{
       name:'query_notes',
-      description:'查询 {{user}} 的小纸条（情绪记忆碎片）。当你隐约记得 {{user}} 说过什么偏好/习惯/情绪但不确定细节时调用。',
+      description:'查询用户的小纸条（情绪记忆碎片）。当你隐约记得用户说过什么偏好/习惯/情绪但不确定细节时调用。',
       parameters:{ type:'object', properties:{
         tag:{ type:'string', enum:NOTE_TAGS, description:'按标签筛选' },
         keyword:{ type:'string', description:'模糊搜索 detail' },
@@ -144,16 +144,16 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'add_note',
-      description:'记录一条小纸条。当 {{user}} 明确表达了偏好/情绪/习惯时调用。只记 {{user}} 说的/做的，不揣测。可同时调用多次。',
+      description:'记录一条小纸条。当用户明确表达了偏好/情绪/习惯时调用。只记用户说的/做的，不揣测。可同时调用多次。',
       parameters:{ type:'object', properties:{
         tag:{ type:'string', enum:NOTE_TAGS, description:'标签' },
-        detail:{ type:'string', description:'以 {{user}} 角色名为主语如实记录' },
+        detail:{ type:'string', description:'以用户角色名为主语如实记录' },
         characters:{ type:'array', items:{type:'string'}, description:'在场角色' }
       }, required:['tag','detail'] }
     }},
     { type:'function', function:{
       name:'update_note',
-      description:'修改一条小纸条。仅在 {{user}} 明确要求修改或记忆确认有误时使用。',
+      description:'修改一条小纸条。仅在用户明确要求修改或记忆确认有误时使用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'要修改的小纸条 id' },
         tag:{ type:'string', enum:NOTE_TAGS, description:'新标签（不传则不改）' },
@@ -162,7 +162,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'delete_note',
-      description:'删除一条小纸条。仅在 {{user}} 明确要求删除时使用。',
+      description:'删除一条小纸条。仅在用户明确要求删除时使用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'要删除的小纸条 id' }
       }, required:['id'] }
@@ -192,7 +192,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'update_event',
-      description:'修改一条事件记忆。仅在 {{user}} 明确要求或记忆确认有误时使用。',
+      description:'修改一条事件记忆。仅在用户明确要求或记忆确认有误时使用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'事件 id' },
         title:{ type:'string' }, time:{ type:'string' }, location:{ type:'string' },
@@ -202,7 +202,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'delete_event',
-      description:'删除一条事件记忆。仅在 {{user}} 明确要求删除时使用。',
+      description:'删除一条事件记忆。仅在用户明确要求删除时使用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'事件 id' }
       }, required:['id'] }
@@ -221,14 +221,14 @@ const Tools = (() => {
       description:'记录或更新一条人际关系。按角色名匹配，已存在则更新，不存在则新建。',
       parameters:{ type:'object', properties:{
         title:{ type:'string', description:'角色姓名' },
-        relationship:{ type:'string', description:'与 {{user}} 的当前关系' },
-        impression:{ type:'string', description:'该角色对 {{user}} 的看法' },
+        relationship:{ type:'string', description:'与用户角色的当前关系' },
+        impression:{ type:'string', description:'该角色对用户角色的看法' },
         emotion:{ type:'string', description:'情感变化描述（追加到历程中）' }
       }, required:['title'] }
     }},
     { type:'function', function:{
       name:'delete_relation',
-      description:'删除一条人际关系记忆。仅在 {{user}} 明确要求删除时使用。',
+      description:'删除一条人际关系记忆。仅在用户明确要求删除时使用。',
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'关系记忆 id' }
       }, required:['id'] }
@@ -303,7 +303,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'set_directive',
-      description:'设置或修改主线的剧情引导。会覆盖当前已有内容。使用前必须向 {{user}} 确认内容和轮数。',
+      description:'设置或修改主线的剧情引导。会覆盖当前已有内容。使用前必须向用户确认内容和轮数。',
       parameters:{ type:'object', properties:{
         content:{ type:'string', description:'引导内容（希望剧情朝什么方向发展）' },
         rounds:{ type:'number', description:'持续轮数，默认3' }
@@ -311,7 +311,7 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'remove_directive',
-      description:'清空当前主线的剧情引导。仅在 {{user}} 明确同意撤销时使用。',
+      description:'清空当前主线的剧情引导。仅在用户明确同意撤销时使用。',
       parameters:{ type:'object', properties:{}, required:[] }
     }},
     // --- 世界观查询（后台也能查，方便闲聊时引用设定） ---
@@ -667,21 +667,12 @@ const Tools = (() => {
     try { return await handler(args); } catch(e) { return ERR(`工具执行失败: ${e.message}`); }
   }
 
-  // v685.1 → v685.2：主线和后台分别按各自语境拿 user 名
-  // - 主线：替换成当前面具角色名（和 chat.js 1320 行一致），保护代入感
-  // - 后台：替换成 OOC 昵称 → 主角名 → '玩家'（和 backstage.js 一致）
-  function getDefinitions() {
-    // 主线调用方需要传入当前 mask 名（不传时退化为通用占位）
-    return definitions; // 默认返回原始版（含 {{user}}），由调用方自己替换
-  }
+  // v685.1 → v685.3：只有后台工具做 {{user}} 替换
+  // 主线工具不动——主线"用户"指向面具角色，不需要换昵称
+  // 后台池子可能跨用户共享，必须用 OOC 昵称避免被各种面具名整迷糊
+  function getDefinitions() { return definitions; }
   function getBackstageDefinitions() {
     return _withMacros(backstageDefinitions, _cachedBackstageUser);
-  }
-
-  // 主线专用：调用方（chat.js）传入当前的 user 名（通常 = char?.name 或 '玩家'）
-  function getDefinitionsForChat(userName) {
-    const u = (userName && String(userName).trim()) || '玩家';
-    return _withMacros(definitions, u);
   }
 
   // ===== 后台 user 名缓存（OOC 昵称） =====
@@ -713,7 +704,6 @@ const Tools = (() => {
   function _withMacros(defs, userName) {
     const u = userName;
     if (!u || u === '{{user}}') return defs;
-    // 浅克隆 + 文本替换
     return defs.map(d => {
       if (!d || !d.function) return d;
       const fn = d.function;
@@ -745,5 +735,5 @@ const Tools = (() => {
 
   function refreshMacroCache() { _cachedAt = 0; return _refreshBackstageCache(); }
 
-  return { getDefinitions, getDefinitionsForChat, getBackstageDefinitions, execute, refreshMacroCache };
+  return { getDefinitions, getBackstageDefinitions, execute, refreshMacroCache };
 })();

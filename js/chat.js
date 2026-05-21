@@ -1575,10 +1575,7 @@ requestController.signal,
             forceNoStream: !convSettings.stream,
             tools: (() => {
               if (typeof Tools === 'undefined') return undefined;
-              // v685.2：主线工具 {{user}} 替换成当前面具角色名（和 chat.js 1320 行 _macroUser 同源）
-              // 避免 OOC 真名（如"沈楚"）泄露到剧情扮演里破代入
-              const _maskName = (typeof char !== 'undefined' && char?.name) ? char.name : '玩家';
-              const allDefs = Tools.getDefinitionsForChat(_maskName) || [];
+              const allDefs = Tools.getDefinitions() || [];
               const enabledDefs = allDefs.filter(d => {
                 const name = d.function?.name || '';
                 if (name.startsWith('query_worldview_')) return convSettings.toolsWorldview;
