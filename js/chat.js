@@ -507,228 +507,10 @@ const Chat = (() => {
     }
   }
 
-  /**
-   * 发送消息
-   */
-  async function send() {
-    try { GameLog.log('info', `send()被调用, isStreaming=${isStreaming}`); } catch(e) {}
-    // 没有当前对话 → 拦截
-    if (!Conversations.getCurrent()) {
-      UI.showToast('请先选择对话或新建对话', 1800);
-      return;
-    }
-    // 心动模拟开场动画进行中 → 拦截
-    if (typeof HeartSimIntro !== 'undefined' && HeartSimIntro.isActive()) {
-      UI.showToast('请先完成开场流程', 1500);
-      return;
-    }
-    if (isStreaming) {
-      GameLog.log('warn', '上一次请求仍在进行中，如果卡住请刷新页面');
-      return;
-    }
-    const input = document.getElementById('chat-input');
-    const text = input.value.trim();
-    if (!text) return;
 
-    // 更新按钮状态为发送中
-    updateSendButton(true);
-
-    GameLog.log('info', `发送: ${text.substring(0, 50)}...`);
-
-    // 保存用户发送的内容，用于取消时恢复
-    lastUserContent = text;
-
-    // 创建中止控制器
-abortController = new AbortController();
-const requestController = abortController; // 本轮请求的稳定引用，避免全局 abortController 被置空后重试读 .signal 报错
-let wasCancelled = false;
-
-isStreaming = true;
-    _resetFollowBottom(); // 新一轮开始：重置跟随状态，无论上轮玩家滑到了哪里
-    const _streamConvId = Conversations.getCurrent();
-    try { Conversations.setStreaming && Conversations.setStreaming(_streamConvId, true); } catch(_) {}
-
-    try {
-    let userContent = text;
-    let userContentForAPI = text;
-
-    // 心动模拟：开场动画刚结束的第一条用户消息，追加开场剧情提示
-    try {
-      if (typeof HeartSimIntro !== 'undefined' && HeartSimIntro.onFirstUserMessage) {
-        const extra = await HeartSimIntro.onFirstUserMessage(text);
-        if (extra && typeof extra === 'string' && extra !== text) {
-          userContentForAPI = extra;
-        }
-      }
-    } catch(_) {}
-
-    // 手机操作日志快照：flush 出来存到本轮 userMsg 上（v566+ 方案B）
-// 仅为"最新一条 user 消息"持久化手机操作快照，重写最新一条时还能恢复。
-// 历史消息不会重复注入手机操作，AI 不会反复提。
-// v627：尊重用户在手机设置里的"发送本轮操作"开关，关闭时清空当轮日志，不写入快照
-let _pendingPhoneLog = null;
-try {
-  if (typeof Phone !== 'undefined' && Phone.flushActionLog) {
-    const phoneLog = Phone.flushActionLog();
-    let _allowSend = true;
-    try {
-      const _pd = (typeof Phone._getPhoneData === 'function') ? await Phone._getPhoneData() : null;
-      if (_pd && _pd.sendActionLog === false) _allowSend = false;
-    } catch(_) {}
-    if (_allowSend && phoneLog.length > 0) _pendingPhoneLog = phoneLog;
-  }
-} catch(_) {}
-
-    // 心动模拟·回家系统通知注入（一次性，注入后清空）
-    // 触发场景一：用户在客服那边发"回家"且通关条件达成 → 通知 AI 开始演绎传送倒计时
-    // 触发场景二：通关条件刚刚满足（但用户尚未操作） → 通知 AI 提醒用户去客服发"回家"
-    try {
-      if (typeof Phone !== 'undefined' && Phone.consumeHsHomeNotice) {
-        const hsNotice = await Phone.consumeHsHomeNotice();
-        if (hsNotice) {
-          const noticeText = '\n\n' + hsNotice;
-          if (typeof userContentForAPI === 'string') {
-            userContentForAPI = userContentForAPI + noticeText;
-          } else {
-            userContentForAPI[0].text += noticeText;
-          }
-        }
-      }
-    } catch(_) {}
-
-    // 如果有图片，构建multimodal content
-    if (pendingImages.length > 0) {
-      userContentForAPI = [
-        { type: 'text', text: text }
-      ];
-      pendingImages.forEach(img => {
-        userContentForAPI.push({
-          type: 'image_url',
-          image_url: { url: img.base64 }
-        });
-      });
-      userContent = text + `\n[附加了${pendingImages.length}张图片]`;
-    }
-    // 附加记忆
-    if (pendingMemories.length > 0) {
-      const memText = pendingMemories.map(m =>
-        `[手动附加记忆] ${m.title}: ${m.content}`
-      ).join('\n');
-      if (typeof userContentForAPI === 'string') {
-        userContentForAPI = userContentForAPI + '\n\n' + memText;
-      } else {
-        userContentForAPI[0].text += '\n\n' + memText;
-      }
-      userContent = (typeof userContent === 'string' ? userContent : text) +
-        `\n[附加了${pendingMemories.length}条记忆]`;
-    }
-    // 附加文件（纯文本）
-    if (pendingFiles.length > 0) {
-      const fileText = pendingFiles.map(f =>
-        `<file name="${f.name}">\n${f.content}\n</file>`
-      ).join('\n\n');
-      if (typeof userContentForAPI === 'string') {
-        userContentForAPI = userContentForAPI + '\n\n' + fileText;
-      } else {
-        userContentForAPI[0].text += '\n\n' + fileText;
-      }
-      userContent = (typeof userContent === 'string' ? userContent : text) +
-        `\n[附加了${pendingFiles.length}个文件：${pendingFiles.map(f=>f.name).join('、')}]`;
-    }
-
-    // 附加骰点检定结果 v686：把待消费的最后一次确认 roll 拼成 OOC 块
-    try {
-      if (typeof Dice !== 'undefined' && Dice.consumePendingForSend) {
-        const { ooc } = await Dice.consumePendingForSend();
-        if (ooc) {
-          if (typeof userContentForAPI === 'string') {
-            userContentForAPI = userContentForAPI + '\n\n' + ooc;
-          } else {
-            userContentForAPI[0].text += '\n\n' + ooc;
-          }
-          userContent = (typeof userContent === 'string' ? userContent : text) + '\n' + ooc;
-        }
-      }
-    } catch(e) { console.warn('[Chat] 骰点 OOC 拼接失败', e); }
-
-
-
-    // 附加风闻分享
-    if (pendingWorldVoice) {
-      const wv = pendingWorldVoice;
-      let shareText = `[用户正在浏览${wv.mediaType}，看到了以下内容并分享给你，请参考这条内容进行回复]\n\n`;
-      shareText += `【${wv.mediaType}·${wv.title}】\n${wv.content}`;
-      if (wv.comments?.length) {
-        shareText += '\n\n---评论区---\n' + wv.comments.map(c => `${c.username}：${c.content}`).join('\n');
-      }
-      if (typeof userContentForAPI === 'string') {
-        userContentForAPI = userContentForAPI + '\n\n' + shareText;
-      } else {
-        userContentForAPI[0].text += '\n\n' + shareText;
-      }
-      userContent = (typeof userContent === 'string' ? userContent : text) +
-        `\n[分享了一条${wv.mediaType}内容]`;
-    }
-
-    // 保存用户消息（显示用）
-    const userMsg = {
-      id: Utils.uuid(),
-      role: 'user',
-      content: userContent,
-      contentForAPI: userContentForAPI,
-      phoneLogSnapshot: _pendingPhoneLog || null, // 本轮手机操作快照（供最新一条消息的 AI 上下文/重写使用）
-      conversationId: Conversations.getCurrent(),
-      branchId: currentBranchId,
-      parentId: messages.length > 0 ? messages[messages.length - 1].id : null,
-      timestamp: Utils.timestamp(),
-      hidden: text === '<Continue the Chat/>'  // 隐藏继续指令的消息
-    };
-    await DB.put('messages', userMsg);
-    messages.push(userMsg);
-    if (!userMsg.hidden) {
-      appendMessage(userMsg, false, true);
-    }
-    // 骰点：发送后 pending 已经 consumed，重建气泡使其转为 history v686
-    try { _refreshDiceUI(); } catch(_) {}
-    input.value = '';
-    input.style.height = 'auto';
-    roundCount++;
-
-    // ===== 天枢城专属：入城黑屏动画（并行触发，不 await） =====
-    try {
-      if (window.TianshuFX && document.body.getAttribute('data-worldview') === '天枢城') {
-        // 仅在「本对话第一次用户消息」且关键词匹配时触发
-        const userMsgCount = messages.filter(m => m.role === 'user').length;
-        const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-        const alreadyShown = conv && conv._skynexIntroShown;
-        if (userMsgCount === 1 && !alreadyShown && TianshuFX.isEntryTrigger(text)) {
-          // 取当前世界观用于计算副标题
-          let _wvForFx = null;
-          try {
-            if (conv && conv.isSingle && conv.singleWorldviewId) {
-              _wvForFx = await DB.get('worldviews', conv.singleWorldviewId);
-            } else {
-              _wvForFx = await Worldview.getCurrent();
-            }
-          } catch(_) {}
-          // 并行播放，不 block AI 请求
-          TianshuFX.playEntryAnimation(_wvForFx).catch(() => {});
-          // 标记已触发，避免多次
-          if (conv) {
-            conv._skynexIntroShown = true;
-            try { await DB.put('conversations', conv); } catch(_) {}
-          }
-        }
-      }
-    } catch(e) { console.warn('[TianshuFX] entry animation failed', e); }
-
-    // 清空附件
-    pendingImages = [];
-    pendingMemories = [];
-    pendingFiles = [];
-    pendingWorldVoice = null;
-    renderAttachments();
-
+  // ===== 共用：构建 API 上下文（send + showContext 共享） =====
+  async function _buildApiContext(messages, opts = {}) {
+    const { rewriteHint = null } = opts;
     // 构建system prompt
     const systemParts = [];
     const gaidenSettings = Gaiden.getCurrentGaidenSettings();
@@ -1109,9 +891,9 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       } catch(_) {}
 
       // 重写建议（仅本轮重写生效，发送后立刻清空）
-      if (_pendingRewriteHint) {
-        systemParts.push(`[本轮重写建议]\n用户对上一次回复不满意，触发了重写。本轮请按下方建议调整方向，但仍然要遵守此前所有的格式与世界观规则：\n${_pendingRewriteHint}`);
-        _pendingRewriteHint = '';
+      if (rewriteHint) {
+        systemParts.push(`[本轮重写建议]\n用户对上一次回复不满意，触发了重写。本轮请按下方建议调整方向，但仍然要遵守此前所有的格式与世界观规则：\n${rewriteHint}`);
+    // rewriteHint 清空由 send() 负责
       }
 
 // 8b. 心动模拟：黑化阈值警告注入
@@ -1372,6 +1154,236 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         if (_macroChar && m.content.includes('{{char}}')) m.content = m.content.replaceAll('{{char}}', _macroChar);
       }
     }
+
+    return { apiMessages, char, relatedMemories: typeof relatedMemories !== "undefined" ? relatedMemories : [], convSettings, isGameMode, isGaidenConv, isSingleConv };
+  }
+
+
+  /**
+   * 发送消息
+   */
+  async function send() {
+    try { GameLog.log('info', `send()被调用, isStreaming=${isStreaming}`); } catch(e) {}
+    // 没有当前对话 → 拦截
+    if (!Conversations.getCurrent()) {
+      UI.showToast('请先选择对话或新建对话', 1800);
+      return;
+    }
+    // 心动模拟开场动画进行中 → 拦截
+    if (typeof HeartSimIntro !== 'undefined' && HeartSimIntro.isActive()) {
+      UI.showToast('请先完成开场流程', 1500);
+      return;
+    }
+    if (isStreaming) {
+      GameLog.log('warn', '上一次请求仍在进行中，如果卡住请刷新页面');
+      return;
+    }
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    // 更新按钮状态为发送中
+    updateSendButton(true);
+
+    GameLog.log('info', `发送: ${text.substring(0, 50)}...`);
+
+    // 保存用户发送的内容，用于取消时恢复
+    lastUserContent = text;
+
+    // 创建中止控制器
+abortController = new AbortController();
+const requestController = abortController; // 本轮请求的稳定引用，避免全局 abortController 被置空后重试读 .signal 报错
+let wasCancelled = false;
+
+isStreaming = true;
+    _resetFollowBottom(); // 新一轮开始：重置跟随状态，无论上轮玩家滑到了哪里
+    const _streamConvId = Conversations.getCurrent();
+    try { Conversations.setStreaming && Conversations.setStreaming(_streamConvId, true); } catch(_) {}
+
+    try {
+    let userContent = text;
+    let userContentForAPI = text;
+
+    // 心动模拟：开场动画刚结束的第一条用户消息，追加开场剧情提示
+    try {
+      if (typeof HeartSimIntro !== 'undefined' && HeartSimIntro.onFirstUserMessage) {
+        const extra = await HeartSimIntro.onFirstUserMessage(text);
+        if (extra && typeof extra === 'string' && extra !== text) {
+          userContentForAPI = extra;
+        }
+      }
+    } catch(_) {}
+
+    // 手机操作日志快照：flush 出来存到本轮 userMsg 上（v566+ 方案B）
+// 仅为"最新一条 user 消息"持久化手机操作快照，重写最新一条时还能恢复。
+// 历史消息不会重复注入手机操作，AI 不会反复提。
+// v627：尊重用户在手机设置里的"发送本轮操作"开关，关闭时清空当轮日志，不写入快照
+let _pendingPhoneLog = null;
+try {
+  if (typeof Phone !== 'undefined' && Phone.flushActionLog) {
+    const phoneLog = Phone.flushActionLog();
+    let _allowSend = true;
+    try {
+      const _pd = (typeof Phone._getPhoneData === 'function') ? await Phone._getPhoneData() : null;
+      if (_pd && _pd.sendActionLog === false) _allowSend = false;
+    } catch(_) {}
+    if (_allowSend && phoneLog.length > 0) _pendingPhoneLog = phoneLog;
+  }
+} catch(_) {}
+
+    // 心动模拟·回家系统通知注入（一次性，注入后清空）
+    // 触发场景一：用户在客服那边发"回家"且通关条件达成 → 通知 AI 开始演绎传送倒计时
+    // 触发场景二：通关条件刚刚满足（但用户尚未操作） → 通知 AI 提醒用户去客服发"回家"
+    try {
+      if (typeof Phone !== 'undefined' && Phone.consumeHsHomeNotice) {
+        const hsNotice = await Phone.consumeHsHomeNotice();
+        if (hsNotice) {
+          const noticeText = '\n\n' + hsNotice;
+          if (typeof userContentForAPI === 'string') {
+            userContentForAPI = userContentForAPI + noticeText;
+          } else {
+            userContentForAPI[0].text += noticeText;
+          }
+        }
+      }
+    } catch(_) {}
+
+    // 如果有图片，构建multimodal content
+    if (pendingImages.length > 0) {
+      userContentForAPI = [
+        { type: 'text', text: text }
+      ];
+      pendingImages.forEach(img => {
+        userContentForAPI.push({
+          type: 'image_url',
+          image_url: { url: img.base64 }
+        });
+      });
+      userContent = text + `\n[附加了${pendingImages.length}张图片]`;
+    }
+    // 附加记忆
+    if (pendingMemories.length > 0) {
+      const memText = pendingMemories.map(m =>
+        `[手动附加记忆] ${m.title}: ${m.content}`
+      ).join('\n');
+      if (typeof userContentForAPI === 'string') {
+        userContentForAPI = userContentForAPI + '\n\n' + memText;
+      } else {
+        userContentForAPI[0].text += '\n\n' + memText;
+      }
+      userContent = (typeof userContent === 'string' ? userContent : text) +
+        `\n[附加了${pendingMemories.length}条记忆]`;
+    }
+    // 附加文件（纯文本）
+    if (pendingFiles.length > 0) {
+      const fileText = pendingFiles.map(f =>
+        `<file name="${f.name}">\n${f.content}\n</file>`
+      ).join('\n\n');
+      if (typeof userContentForAPI === 'string') {
+        userContentForAPI = userContentForAPI + '\n\n' + fileText;
+      } else {
+        userContentForAPI[0].text += '\n\n' + fileText;
+      }
+      userContent = (typeof userContent === 'string' ? userContent : text) +
+        `\n[附加了${pendingFiles.length}个文件：${pendingFiles.map(f=>f.name).join('、')}]`;
+    }
+
+    // 附加骰点检定结果 v686：把待消费的最后一次确认 roll 拼成 OOC 块
+    try {
+      if (typeof Dice !== 'undefined' && Dice.consumePendingForSend) {
+        const { ooc } = await Dice.consumePendingForSend();
+        if (ooc) {
+          if (typeof userContentForAPI === 'string') {
+            userContentForAPI = userContentForAPI + '\n\n' + ooc;
+          } else {
+            userContentForAPI[0].text += '\n\n' + ooc;
+          }
+          userContent = (typeof userContent === 'string' ? userContent : text) + '\n' + ooc;
+        }
+      }
+    } catch(e) { console.warn('[Chat] 骰点 OOC 拼接失败', e); }
+
+
+
+    // 附加风闻分享
+    if (pendingWorldVoice) {
+      const wv = pendingWorldVoice;
+      let shareText = `[用户正在浏览${wv.mediaType}，看到了以下内容并分享给你，请参考这条内容进行回复]\n\n`;
+      shareText += `【${wv.mediaType}·${wv.title}】\n${wv.content}`;
+      if (wv.comments?.length) {
+        shareText += '\n\n---评论区---\n' + wv.comments.map(c => `${c.username}：${c.content}`).join('\n');
+      }
+      if (typeof userContentForAPI === 'string') {
+        userContentForAPI = userContentForAPI + '\n\n' + shareText;
+      } else {
+        userContentForAPI[0].text += '\n\n' + shareText;
+      }
+      userContent = (typeof userContent === 'string' ? userContent : text) +
+        `\n[分享了一条${wv.mediaType}内容]`;
+    }
+
+    // 保存用户消息（显示用）
+    const userMsg = {
+      id: Utils.uuid(),
+      role: 'user',
+      content: userContent,
+      contentForAPI: userContentForAPI,
+      phoneLogSnapshot: _pendingPhoneLog || null, // 本轮手机操作快照（供最新一条消息的 AI 上下文/重写使用）
+      conversationId: Conversations.getCurrent(),
+      branchId: currentBranchId,
+      parentId: messages.length > 0 ? messages[messages.length - 1].id : null,
+      timestamp: Utils.timestamp(),
+      hidden: text === '<Continue the Chat/>'  // 隐藏继续指令的消息
+    };
+    await DB.put('messages', userMsg);
+    messages.push(userMsg);
+    if (!userMsg.hidden) {
+      appendMessage(userMsg, false, true);
+    }
+    // 骰点：发送后 pending 已经 consumed，重建气泡使其转为 history v686
+    try { _refreshDiceUI(); } catch(_) {}
+    input.value = '';
+    input.style.height = 'auto';
+    roundCount++;
+
+    // ===== 天枢城专属：入城黑屏动画（并行触发，不 await） =====
+    try {
+      if (window.TianshuFX && document.body.getAttribute('data-worldview') === '天枢城') {
+        // 仅在「本对话第一次用户消息」且关键词匹配时触发
+        const userMsgCount = messages.filter(m => m.role === 'user').length;
+        const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+        const alreadyShown = conv && conv._skynexIntroShown;
+        if (userMsgCount === 1 && !alreadyShown && TianshuFX.isEntryTrigger(text)) {
+          // 取当前世界观用于计算副标题
+          let _wvForFx = null;
+          try {
+            if (conv && conv.isSingle && conv.singleWorldviewId) {
+              _wvForFx = await DB.get('worldviews', conv.singleWorldviewId);
+            } else {
+              _wvForFx = await Worldview.getCurrent();
+            }
+          } catch(_) {}
+          // 并行播放，不 block AI 请求
+          TianshuFX.playEntryAnimation(_wvForFx).catch(() => {});
+          // 标记已触发，避免多次
+          if (conv) {
+            conv._skynexIntroShown = true;
+            try { await DB.put('conversations', conv); } catch(_) {}
+          }
+        }
+      }
+    } catch(e) { console.warn('[TianshuFX] entry animation failed', e); }
+
+    // 清空附件
+    pendingImages = [];
+    pendingMemories = [];
+    pendingFiles = [];
+    pendingWorldVoice = null;
+    renderAttachments();
+
+    // 构建 API 上下文（v687 重构：共用 _buildApiContext）
+    const { apiMessages, char, relatedMemories, convSettings: _cs, isGameMode, isGaidenConv, isSingleConv } = await _buildApiContext(messages, { rewriteHint: _pendingRewriteHint });
+    _pendingRewriteHint = ''; // 重写建议已消费
 
     // 创建AI消息占位
     const aiMsg = {
@@ -3934,571 +3946,8 @@ if (!gp) return null;
    * 查看完整上下文（调试用）
    */
   async function showContext() {
-    const systemParts = [];
-    const gaidenSettings = Gaiden.getCurrentGaidenSettings();
-    const isGaidenConv = !!gaidenSettings;
-    const singleSettings = (typeof SingleMode !== 'undefined') ? SingleMode.getCurrentSingleSettings() : null;
-    const isSingleConv = !!singleSettings;
-    const convSettings = _getConvSettings();
-    const isGameMode = convSettings.gameMode;
-
-    // 单人模式：加载该 conv 绑定的世界观数据
-    let singleWv = null;
-    if (isSingleConv && singleSettings.worldviewId) {
-      try {
-        singleWv = await DB.get('worldviews', singleSettings.worldviewId);
-        if (singleWv) {
-          const flatNpcs = [], flatFacs = [], flatRegions = [];
-          (singleWv.regions || []).forEach(r => {
-            flatRegions.push({ id: r.id, name: r.name, summary: r.summary, detail: r.detail, aliases: r.aliases });
-            (r.factions || []).forEach(f => {
-              flatFacs.push({ ...f, regionName: r.name, regionId: r.id });
-              (f.npcs || []).forEach(n => {
-                flatNpcs.push({ ...n, faction: f.name, regions: [r.id || r.name] });
-              });
-            });
-          });
-          NPC.init({ npcs: flatNpcs, factions: flatFacs, regions: flatRegions });
-        }
-      } catch(e) {}
-    }
-
-    // 1. 世界观
-    if (isGameMode && !isSingleConv) {
-      if (!isGaidenConv) {
-        if (worldviewPrompt) systemParts.push(worldviewPrompt);
-      } else {
-        if (gaidenSettings.inheritWv && worldviewPrompt) {
-          systemParts.push(worldviewPrompt);
-        }
-        if (gaidenSettings.gaidenBg) {
-          let gaidenPrompt = `【番外世界线设定】\n本对话为番外世界线，以下是用户提供的番外背景设定。这是本对话的第一优先级，所有叙述和角色行为都以此为准。`;
-          if (gaidenSettings.inheritWv || gaidenSettings.inheritNpc) {
-            gaidenPrompt += `\n上面的原世界观设定和角色信息仅作为参考，请根据番外背景的需要自行调整、取舍或重新诠释，不要让原设定与番外背景产生矛盾。`;
-          }
-          gaidenPrompt += `\n\n${gaidenSettings.gaidenBg}`;
-          systemParts.push(gaidenPrompt);
-        }
-      }
-    } else if (isSingleConv && isGameMode && singleWv && singleWv.setting) {
-      systemParts.push(singleWv.setting);
-    }
-
-    // 1c. 单人模式：AI扮演角色资料
-    if (isSingleConv) {
-      const mainCharText = await SingleMode.getMainCharPrompt(singleSettings);
-      if (mainCharText) systemParts.push(mainCharText);
-    } else if (isGameMode && !isGaidenConv) {
-      // 1c'. 群像模式：叙事者元 prompt
-      systemParts.push(`【AI 扮演角色】
-本对话为群像模式（多角色剧情）。你是"叙事者 + 所有 NPC 的扮演者"，用户扮演"{{user}}"。
-你应该：
-1. 通过场景描写、NPC 对话和环境互动推进剧情，把"用户角色卡"作为玩家的身份资料理解，不要把用户角色卡本身当成需要你扮演的对象。
-2. 描写"{{user}}"时使用第二人称"你"或玩家姓名，保留代入感；描写 NPC 时使用第三人称（"他/她/Ta" 或名字）。
-3. 根据场景需要让 NPC 自然登场，不必所有 NPC 都登场。`);
-    }
-
-    // 1d. 常驻角色（对话级常驻）
-    try {
-      if (window.AttachedChars) {
-        const attachedPrompt = await AttachedChars.buildPrompt();
-        if (attachedPrompt) systemParts.push(attachedPrompt);
-      }
-    } catch(e) {}
-
-    // 1b. 剧情总结
-    const summaryText = await Summary.formatForPrompt(Conversations.getCurrent());
-    if (summaryText) systemParts.push(summaryText);
-    // 2. 输出格式
-    if (isGameMode && convSettings.format) {
-      systemParts.push(_getOutputFormatPrompt(convSettings.replyWordCount));
-      if (convSettings.onlineChat && document.body.getAttribute('data-worldview') !== '心动模拟') {
-        systemParts.push(ONLINE_CHAT_BLOCK_PROMPT);
-      }
-    }
-
-
-    // 2a. 上一轮状态面板
-    if (isGameMode && convSettings.format) {
-      try {
-        const curStatus = Conversations.getStatusBar();
-        const statusText = Utils.serializeStatus(curStatus);
-        if (statusText) {
-          systemParts.push('【上一轮状态面板】\n以下是当前场景的状态快照。你下一次回复的 `status` 代码块应基于此更新：未发生变化的字段请原样抄回；有变化则写新值。\n\n```status\n' + statusText + '\n```');
-        }
-      } catch(e) {}
-    }
-
-    // 2b/2c. 自定义属性：独立于 format 开关（v681.2 解耦，与真实发送路径对齐）
-    if (isGameMode) {
-      if (typeof StatusBar !== 'undefined' && StatusBar.formatCustomAttrsFormatPrompt) {
-        try {
-          const customAttrsFormatText = await StatusBar.formatCustomAttrsFormatPrompt();
-          if (customAttrsFormatText) systemParts.push(customAttrsFormatText);
-        } catch(e) {}
-      }
-      if (typeof StatusBar !== 'undefined' && StatusBar.formatCustomAttrsStatePrompt) {
-        try {
-          const customAttrsStateText = await StatusBar.formatCustomAttrsStatePrompt();
-          if (customAttrsStateText) systemParts.push(customAttrsStateText);
-        } catch(e) {}
-      }
-    }
-
-    // 2a. 首轮现实时间戳（兜底开场时间）
-    try {
-      const userMsgCount = messages.filter(m => m.role === 'user').length;
-      if (userMsgCount <= 1) {
-        const now = new Date();
-        const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-        const realTime = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        systemParts.push(`【开场时间参考】\n本对话开始于现实时间：${realTime}。\n规则：如果世界观/角色卡/单人卡设定中有明确的开场时间（如 startTime 字段、或在设定文本里写明的具体年代/时刻），优先使用那个时间作为剧情开场；如果都没有提及开场时间，再以上述现实时间作为开场时间。`);
-      }
-    } catch(e) {}
-
-    // 2b. 开场引导
-    if (isGameMode && !isGaidenConv && !isSingleConv) {
-      try {
-        const wv = await Worldview.getCurrent();
-        if (wv) {
-          const rounds = wv.startPlotRounds || 5;
-          const userMsgCount = messages.filter(m => m.role === 'user').length;
-          if (userMsgCount < rounds) {
-            let startParts = [];
-            if (wv.startTime) startParts.push(`开场时间：${wv.startTime}。第一轮的时间必须从此刻开始。`);
-            if (wv.startPlot) startParts.push(`开场剧情指令：${wv.startPlot}`);
-            if (startParts.length > 0) {
-              systemParts.push(`【开场引导（前${rounds}轮生效）】\n${startParts.join('\n')}`);
-            }
-          }
-        }
-      } catch(e) { console.warn('[showContext] startPlot失败', e); }
-    } else if (isSingleConv && isGameMode && singleWv && singleSettings.enableStartPlot) {
-      try {
-        const rounds = singleWv.startPlotRounds || 5;
-        const userMsgCount = messages.filter(m => m.role === 'user').length;
-        if (userMsgCount < rounds) {
-          let startParts = [];
-          if (singleWv.startTime) startParts.push(`开场时间：${singleWv.startTime}。第一轮的时间必须从此刻开始。`);
-          if (singleWv.startPlot) startParts.push(`开场剧情指令：${singleWv.startPlot}`);
-          if (startParts.length > 0) {
-            systemParts.push(`【开场引导（前${rounds}轮生效）】\n${startParts.join('\n')}`);
-          }
-        }
-      } catch(e) {}
-    }
-
-    // 3. 角色卡（面具）— 只要挂了面具就发
-const char = await Character.get();
-if (char) systemParts.push(Character.formatForPrompt(char));
-
-// 3b. 速查表
-if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc)) {
-      const quickRef = NPC.formatQuickRef();
-      if (quickRef) systemParts.push(quickRef);
-    } else if (isSingleConv && isGameMode && singleWv) {
-      const quickRef = NPC.formatQuickRef({ includeNpc: singleSettings.enableNpc });
-      if (quickRef) systemParts.push(quickRef);
-    }
-
-    // 3c. 知识条目索引
-    if (isGameMode) {
-    try {
-    const wvForIndex = isSingleConv ? singleWv : await Worldview.getCurrent();
-    const sendKnowledgeIdx2 = isSingleConv ? !!singleSettings.enableKnowledge : true;
-    if (wvForIndex && sendKnowledgeIdx2) {
-          const idx = _buildKnowledgeIndex(wvForIndex.knowledges || []);
-          if (idx) systemParts.push(idx);
-        }
-        // 节日索引
-        const sendFestivalIdx2 = isSingleConv ? !!singleSettings.enableFestival : true;
-        if (wvForIndex && sendFestivalIdx2) {
-          const fIdx = _buildFestivalIndex(wvForIndex.festivals || []);
-          if (fIdx) systemParts.push(fIdx);
-        }
-        // 单人卡扩展设定的节日/知识索引
-        if (isGameMode) { // v685：通用世界书索引
-          try {
-            const _card = isSingleConv && singleSettings.charId ? await SingleCard.get(singleSettings.charId) : null;
-            if (!isSingleConv || singleSettings?.charType !== "card" || (_card && _card.extEnabled !== false)) {
-              const _hiddenWv = await _getCardLorebooksMerged(singleSettings?.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
-              if (_hiddenWv) {
-                const _cardFIdx = _buildFestivalIndex(_hiddenWv.festivals || []);
-                if (_cardFIdx) systemParts.push(_cardFIdx.replace('【世界观·节日索引】', '【世界书·节日索引】'));
-                const _cardKIdx = _buildKnowledgeIndex(_hiddenWv.knowledges || []);
-                if (_cardKIdx) systemParts.push(_cardKIdx.replace('【世界观·知识条目索引】', '【世界书·知识条目索引】'));
-              }
-            }
-          } catch(_) {}
-        }
-      } catch (e) {}
-    }
-
-    // 4. 当前区域NPC detail
-    const region = NPC.getRegion();
-    if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc)) {
-      const npcPrompt = NPC.formatForPrompt(region);
-      if (npcPrompt) systemParts.push(npcPrompt);
-
-      // 4b. 在场NPC
-      const presentNPCPrompt = NPC.formatPresentForPrompt(region);
-      if (presentNPCPrompt) systemParts.push(presentNPCPrompt);
-    } else if (isSingleConv && isGameMode && singleWv && singleSettings.enableDetail) {
-      const npcPrompt = NPC.formatForPrompt(region, { includeNpc: singleSettings.enableNpc });
-      if (npcPrompt) systemParts.push(npcPrompt);
-      if (singleSettings.enableNpc) {
-        const presentNPCPrompt = NPC.formatPresentForPrompt(region);
-        if (presentNPCPrompt) systemParts.push(presentNPCPrompt);
-      }
-    }
-
-    // 4c. 全图 NPC
-    // 单人模式必须遵守 enableNpc：未启用 NPC 时，连全图常驻 NPC 也不注入。
-    if (isGameMode && (!isSingleConv || singleSettings.enableNpc)) {
-      try {
-        let _wvForGlobal = null;
-        if (isSingleConv && singleWv) {
-          _wvForGlobal = singleWv;
-        } else if (!isGaidenConv || (gaidenSettings && gaidenSettings.inheritNpc)) {
-          const curWvId = Worldview.getCurrentId && Worldview.getCurrentId();
-          if (curWvId && curWvId !== '__default_wv__') {
-            _wvForGlobal = await DB.get('worldviews', curWvId);
-          }
-        }
-        const gs = (_wvForGlobal && _wvForGlobal.globalNpcs) || [];
-        // v632.1：showContext 同步合并单人卡世界书 NPC，保证调试可见
-        if (isGameMode) { // v685：所有模式都聚合 conv/wv/card/常驻角色书
-          try {
-            const _card = await SingleCard.get(singleSettings.charId);
-            if (!isSingleConv || singleSettings?.charType !== "card" || (_card && _card.extEnabled !== false)) {
-              const _hiddenWv = await _getCardLorebooksMerged(singleSettings?.charId, Conversations.getList().find(c => c.id === Conversations.getCurrent()));
-              if (_hiddenWv && Array.isArray(_hiddenWv.globalNpcs) && _hiddenWv.globalNpcs.length > 0) {
-                const seen = new Set(gs.map(n => n.id || n.name));
-                for (const n of _hiddenWv.globalNpcs) {
-                  const key = n.id || n.name;
-                  if (key && !seen.has(key)) { gs.push(n); seen.add(key); }
-                }
-              }
-            }
-          } catch(_) {}
-        }
-        if (gs.length > 0) {
-          const text = '【全图常驻 NPC】\n以下 NPC 不受地区限制，在本世界观下全程常驻，随时可以出现在任何场景中。\n\n' +
-            gs.map(n => {
-              const head = n.aliases ? `${n.name}（${n.aliases}）` : (n.name || '未命名');
-              return n.detail ? `${head}\n${n.detail}` : head;
-            }).join('\n\n---\n\n');
-          systemParts.push(text);
-        }
-      } catch(e) {}
-    }
-
-    // 4d. 提及的地区（debug预览同样要展示，方便排查）
-    if (isGameMode) {
-      try {
-        const lastUser = [...messages].reverse().find(m => m.role === 'user');
-        const lastAI = [...messages].reverse().find(m => m.role === 'assistant');
-        const scanText = [lastUser?.content || '', lastAI?.content || ''].join('\n');
-        const mentionedPrompt = NPC.formatMentionedForPrompt(scanText, region);
-        if (mentionedPrompt) systemParts.push(mentionedPrompt);
-      } catch(e) {}
-    }
-
-    // 5. 记忆 — 仅文游模式
-    let relatedMemories = [];
-    if (isGameMode) {
-      const recentText = messages.slice(-4).map(m => m.content).join(' ');
-      const presentNPCs = NPC.getPresentNPCs();
-      const currentLoc = NPC.getRegion();
-      relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLoc);
-      const memoryPrompt = Memory.formatForPrompt(relatedMemories);
-      if (memoryPrompt) systemParts.push(memoryPrompt);
-
-      // 小纸条（情绪记忆碎片）
-try {
-  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-  const userInputText = lastUserMsg?.content || '';
-  const notes = await Memory.retrieveNotes(presentNPCs, userInputText);
-  const notesPrompt = Memory.formatNotesForPrompt(notes);
-  if (notesPrompt) systemParts.push(notesPrompt);
-} catch(_) {}
-    }
-
-    // 6. 提示词注入
-    const injections = await Prompts.buildInjections();
-    if (injections.systemTop.length > 0) systemParts.unshift(...injections.systemTop);
-    if (injections.systemBottom.length > 0) systemParts.push(...injections.systemBottom);
-
-    // 7. 现实时间感知
-    if (convSettings.timeAware && window.TimeAwareness) {
-      try {
-        const { lastAssistantTs, lastUserTs } = TimeAwareness.extractTimestamps(messages);
-        systemParts.push(TimeAwareness.buildPrompt(lastAssistantTs, lastUserTs));
-      } catch(e) {}
-    }
-
-    // 7a. 生图模式
-    if (convSettings.imgGen) {
-      systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念');
-    }
-
-// 8. 心动模拟：累计状态注入（调试预览与实际发送保持一致）
-      let _hsHomecomingDbg = false;
-      try {
-        if (typeof Phone !== 'undefined' && Phone.isHsHomecomingTriggered) {
-          _hsHomecomingDbg = await Phone.isHsHomecomingTriggered();
-        }
-      } catch(_) {}
-      if (_hsHomecomingDbg) {
-        systemParts.push('[心动模拟·已返航]\n玩家已结束心动模拟，从原本的世界醒来，回到了自己家中。后续剧情发生在玩家自己的家里：\n- 不再有任务系统、好感度系统、心动目标的概念；\n- 心动模拟APP仍在玩家手机里、客服历史也都还在，但服务已结束；\n- 玩家可能产生与心动模拟有关的回忆、错觉、梦境，请保持一种"刚结束的事其实没有完全结束"的微妙氛围，但不要主动制造惊吓，靠玩家追问或主动行为来推进；\n- 不要再在回复中输出 ```relation``` / ```task``` / ```chat``` / ```homecoming``` 等心动模拟专用代码块。');
-      } else if (typeof StatusBar !== 'undefined' && StatusBar.hsFormatForPrompt) {
-        try {
-          const hsStateText = StatusBar.hsFormatForPrompt();
-        if (hsStateText) systemParts.push(hsStateText);
-      } catch(e) { console.warn('[showContext] 心动模拟累计状态注入失败', e); }
-    }
-    // 通用任务系统 prompt 注入
-    try {
-      if (typeof StatusBar !== 'undefined' && StatusBar.taskFormatForPrompt) {
-        const taskText = await StatusBar.taskFormatForPrompt();
-        if (taskText) systemParts.push(taskText);
-      }
-    } catch(e) { console.warn('[showContext] 通用任务系统注入失败', e); }
-    try {
-        if (!_hsHomecomingDbg && typeof StatusBar !== 'undefined' && StatusBar.hsCheckClearCondition) {
-          const chk = StatusBar.hsCheckClearCondition();
-          if (chk && chk.passed) {
-            systemParts.push('[心动模拟·返航触发协议]\n玩家已达成回家条件。当玩家在剧情里真正回到自己原本的世界、彻底从心动模拟中醒来后，请在该轮回复的最末尾追加一个空的 ```homecoming``` 代码块作为信号——前端识别到该信号后会接管展示返航过场动画。该 marker 一旦输出过一次，前端会接管后续展示，不需要再重复输出。');
-          }
-        }
-      } catch(_) {}
-
-    // 8b. 心动模拟：黑化阈值警告注入（调试预览与实际发送保持一致）
-    if (typeof StatusBar !== 'undefined' && StatusBar.hsGetDarknessWarnings) {
-      try {
-        const warnings = StatusBar.hsGetDarknessWarnings(false);  // 预览：不动标记
-        if (warnings.length > 0) {
-          const warnText = warnings.map(w => w.text).join('\n');
-          systemParts.push(`【心动模拟·系统提醒】\n${warnText}`);
-          const phoneWarns = warnings.filter(w => w.level === 'phone');
-          if (phoneWarns.length > 0 && window.Phone && Phone.buildPhoneDataForAI) {
-            try {
-              const phoneData = await Promise.race([
-                Phone.buildPhoneDataForAI({ includeShopping: true }),
-                new Promise(resolve => setTimeout(() => resolve(''), 3000))
-              ]);
-              if (phoneData) systemParts.push(`【${phoneWarns[0].name}正在查看用户手机，以下是手机内容（包含饿了咪/桃宝的搜索与订单记录——这是平时不会暴露的隐私）】\n${phoneData}`);
-            } catch(e) {
-              console.warn('[showContext] 黑化查手机数据注入失败，已跳过', e);
-            }
-          }
-        }
-      } catch(_) {}
-    }
-
-    let historyForAPI = messages.filter(m => !m.hidden).map(m => ({
-      role: m.role,
-      content: m.contentForAPI || m.content
-    }));
-    if (convSettings.timeAware && window.TimeAwareness) {
-      try { historyForAPI = TimeAwareness.stampUserMessages(historyForAPI, messages); } catch(e) {}
-    }
-
-    // 心动模拟：每轮贴近最新用户消息的数值规则提醒（调试预览与实际发送保持一致）
-    try {
-      const conv = Conversations.getList()?.find(c => c.id === Conversations.getCurrent());
-      const isHeartSimConv = document.body?.getAttribute('data-worldview') === '心动模拟'
-        || conv?.worldviewId === 'wv_heartsim'
-        || conv?.singleWorldviewId === 'wv_heartsim';
-      if (isHeartSimConv) {
-        const idx = [...historyForAPI].map((m, i) => ({ m, i })).reverse().find(x => x.m.role === 'user')?.i;
-        if (idx !== undefined) {
-          const hsRule = `[心动模拟·本轮数值规则]\nrelation只记录本轮实际发生变化的心动目标，表示本轮增量，不是当前总值。\naffinity 与 darkness 每次单项变动必须在 -5 到5之间；没有在本轮直接互动、被明确影响或受到明确剧情刺激的目标，不要写入 relation。\n禁止为了推进进度而批量给所有心动目标加分。
-任务更新规则：tasks 只表示本轮任务变更，不是完整任务历史；当前仍有 active 任务时，本轮只能把现有任务标记为 active/done/skipped，禁止发布新的 active 任务；done/skipped 是结算事件，系统加减积分后会从任务栏移除，不需要下一轮继续输出；当任务栏没有 active 任务时，下一轮才允许发布新一批 active 任务，同一批最多3个。`;
-          historyForAPI[idx] = { ...historyForAPI[idx], content: `${hsRule}\n\n${historyForAPI[idx].content}` };
-        }
-      }
-    } catch(e) { console.warn('[showContext] 心动模拟数值规则注入失败', e); }
-
-    const apiMessages = await API.buildMessages(historyForAPI, systemParts);
-
-    // 深度注入
-    if (Object.keys(injections.depths).length > 0) {
-      for (const [depthStr, contents] of Object.entries(injections.depths)) {
-        const depth = parseInt(depthStr);
-        const insertIdx = apiMessages.length - depth;
-        if (insertIdx > 0 && insertIdx <= apiMessages.length) {
-          for (const c of contents.reverse()) {
-            apiMessages.splice(insertIdx, 0, { role: 'system', content: c });
-          }
-        }
-      }
-    }
-
-    // 节日 + 扩展条目（按 position 分流）注入（v587）
-    if (isGameMode) {
-      try {
-        const currentWv = isSingleConv ? singleWv : await Worldview.getCurrent();
-        // v632.2：事件注入独立于 currentWv（单人卡无世界观也能用 convEvents）
-        let wantSrc = [];
-        if (currentWv) {
-          const sendFestival = isSingleConv ? !!singleSettings.enableFestival : true;
-          const sendCustom = isSingleConv ? !!singleSettings.enableCustom : true;
-          const sendKnowledge = isSingleConv ? !!singleSettings.enableKnowledge : true;
-          // 节日：depth=3 注入（v588）
-          const festivalText = sendFestival ? _buildFestivalPrompt(currentWv.festivals || [], messages) : '';
-          if (festivalText) {
-            const FESTIVAL_DEPTH = 3;
-            let firstNonSys = 0;
-            while (firstNonSys < apiMessages.length && apiMessages[firstNonSys].role === 'system') firstNonSys++;
-            const insertIdx = Math.max(firstNonSys, apiMessages.length - FESTIVAL_DEPTH);
-            if (insertIdx >= 0 && insertIdx <= apiMessages.length) {
-              apiMessages.splice(insertIdx, 0, { role: 'system', content: festivalText });
-            }
-          }
-          wantSrc = (currentWv.knowledges || []).filter(k => {
-            if (!k || k.enabled === false) return false;
-            if (k.keywordTrigger) return sendKnowledge;
-            return sendCustom;
-          });
-        }
-        // v610 + v632.2：showContext 路径也传事件数据（只读，不改状态）
-        const _scConv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-        const _scEvtStates = _scConv?.eventStates ? { ..._scConv.eventStates } : {};
-        const _scEvents = (convSettings.eventsEnabled !== false) ? (_scConv?.convEvents || currentWv?.events || []) : [];
-        if (wantSrc.length > 0 || _scEvents.length > 0) {
-          const extInj = _buildExtendedInjections(wantSrc, messages, _scEvents, _scEvtStates, { wv: currentWv });
-          if (extInj.systemTop.length > 0) {
-            let firstNonSystemIdx = apiMessages.findIndex(m => m.role !== 'system');
-            if (firstNonSystemIdx === -1) firstNonSystemIdx = apiMessages.length;
-            for (const c of extInj.systemTop.reverse()) {
-              apiMessages.splice(firstNonSystemIdx, 0, { role: 'system', content: c });
-            }
-          }
-          if (extInj.systemBottom.length > 0) {
-            let firstNonSystemIdx = apiMessages.findIndex(m => m.role !== 'system');
-            if (firstNonSystemIdx === -1) firstNonSystemIdx = apiMessages.length;
-            for (const c of extInj.systemBottom) {
-              apiMessages.splice(firstNonSystemIdx, 0, { role: 'system', content: c });
-              firstNonSystemIdx++;
-            }
-          }
-          for (const [depthStr, contents] of Object.entries(extInj.depths)) {
-            const depth = parseInt(depthStr) || 0;
-            const insertIdx = apiMessages.length - depth;
-            if (insertIdx > 0 && insertIdx <= apiMessages.length) {
-              for (const c of contents.reverse()) {
-                apiMessages.splice(insertIdx, 0, { role: 'system', content: c });
-              }
-            }
-          }
-        }
-        // v596：单人卡的隐藏世界观（扩展设定）注入
-        if (isGameMode) { // v685：所有模式都聚合 conv/wv/card/常驻角色书
-          try {
-            const _card = await SingleCard.get(singleSettings.charId);
-            if (!isSingleConv || singleSettings?.charType !== "card" || (_card && _card.extEnabled !== false)) {
-              const _hiddenWv = await _getCardLorebooksMerged(singleSettings?.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
-              if (_hiddenWv) {
-                const _festText = _buildFestivalPrompt(_hiddenWv.festivals || [], messages);
-                if (_festText) {
-                  const FESTIVAL_DEPTH = 3;
-                  let firstNonSys = 0;
-                  while (firstNonSys < apiMessages.length && apiMessages[firstNonSys].role === 'system') firstNonSys++;
-                  const insertIdx = Math.max(firstNonSys, apiMessages.length - FESTIVAL_DEPTH);
-                  if (insertIdx >= 0 && insertIdx <= apiMessages.length) {
-                    apiMessages.splice(insertIdx, 0, { role: 'system', content: _festText });
-                  }
-                }
-                const _cardKnow = (_hiddenWv.knowledges || []).filter(k => k && k.enabled !== false);
-                const _cardEvents = (convSettings.eventsEnabled !== false) ? (_hiddenWv.events || []) : [];
-                const _cardConv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-                const _cardEvtStates = _cardConv?.eventStates ? { ..._cardConv.eventStates } : {};
-                if (_cardKnow.length > 0 || _cardEvents.length > 0) {
-                  const _extInj = _buildExtendedInjections(_cardKnow, messages, _cardEvents, _cardEvtStates, { allowAttrEvents: false });
-                  if (_extInj.systemTop.length > 0) {
-                    let firstNonSysIdx = apiMessages.findIndex(m => m.role !== 'system');
-                    if (firstNonSysIdx === -1) firstNonSysIdx = apiMessages.length;
-                    for (const c of _extInj.systemTop.reverse()) {
-                      apiMessages.splice(firstNonSysIdx, 0, { role: 'system', content: c });
-                    }
-                  }
-                  if (_extInj.systemBottom.length > 0) {
-                    let firstNonSysIdx = apiMessages.findIndex(m => m.role !== 'system');
-                    if (firstNonSysIdx === -1) firstNonSysIdx = apiMessages.length;
-                    for (const c of _extInj.systemBottom) {
-                      apiMessages.splice(firstNonSysIdx, 0, { role: 'system', content: c });
-                      firstNonSysIdx++;
-                    }
-                  }
-                  for (const [depthStr2, contents2] of Object.entries(_extInj.depths)) {
-                    const depth2 = parseInt(depthStr2) || 0;
-                    const idx2 = apiMessages.length - depth2;
-                    if (idx2 > 0 && idx2 <= apiMessages.length) {
-                      for (const c of contents2.reverse()) {
-                        apiMessages.splice(idx2, 0, { role: 'system', content: c });
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          } catch(e) { console.warn('[showContext] 单人卡扩展设定注入失败:', e); }
-        }
-      } catch(e) { console.warn('[showContext] 扩展条目注入失败:', e); }
-    }
-
-    // 手机操作日志：读最后一条 user 的 phoneLogSnapshot（与发送主流程对齐）
-    try {
-      const _lastUserMsg = [...messages].reverse().find(m => m.role === 'user' && !m.hidden);
-      const _snapshot = _lastUserMsg?.phoneLogSnapshot;
-      if (_snapshot && _snapshot.length > 0) {
-        const _phoneLogContent = '【玩家手机操作记录｜OOC】\n以下是"{{user}}"本轮在自己手机里的操作，由系统旁白记录，不是角色对白，也不是任何一方的剧情发言：\n\n' +
-          _snapshot.map(a => `- {{user}} ${a}`).join('\n') +
-          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。\n⑤ 【禁止】你的回复中不要输出或模仿【玩家手机操作记录｜OOC】这个格式。它是系统自动注入的元信息，你只需阅读理解并自然融入剧情描写，绝对不要在你的输出中复制、仿写或引用此格式块。\n⑥ 【不要扩充】这些日志是用户实际做的事，不是剧情提示。用户做了什么就是什么，原样接受即可。不要扩写任何照片、论坛、好友圈等内容，只需要以旁白或角色的反应回应用户操作了手机这一事实。';
-        const insertIdx = apiMessages.length - 1;
-        if (insertIdx >= 0) {
-          apiMessages.splice(insertIdx, 0, { role: 'system', content: _phoneLogContent });
-        }
-      }
-    } catch(_) {}
-
-    // 宏替换：{{user}} → 当前面具角色名；{{char}} → 单人卡角色名（如有）
-    {
-      const _mc = await Character.get();
-      const _mu = _mc?.name || '玩家';
-      let _mch = '';
-      try {
-        const _ss = (typeof SingleMode !== 'undefined' && SingleMode.getCurrentSingleSettings)
-          ? SingleMode.getCurrentSingleSettings() : null;
-        if (_ss && _ss.charId) {
-          if (_ss.charType === 'card') {
-            const _sc = await SingleCard.get(_ss.charId);
-            if (_sc && _sc.name) _mch = _sc.name;
-          } else if (_ss.charType === 'npc') {
-            const _wvId = _ss.charSourceWvId || _ss.worldviewId;
-            if (_wvId) {
-              const _wv = await DB.get('worldviews', _wvId);
-              if (_wv) {
-                outer: for (const r of (_wv.regions || [])) {
-                  for (const f of (r.factions || [])) {
-                    for (const n of (f.npcs || [])) {
-                      if (n.id === _ss.charId) { _mch = n.name; break outer; }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      } catch(_) {}
-      for (const m of apiMessages) {
-        if (m.content && typeof m.content === 'string') {
-          if (m.content.includes('{{user}}')) m.content = m.content.replaceAll('{{user}}', _mu);
-          if (_mch && m.content.includes('{{char}}')) m.content = m.content.replaceAll('{{char}}', _mch);
-        }
-      }
-    }
+    // v687 重构：复用 _buildApiContext
+    const { apiMessages, char, relatedMemories, convSettings, isGameMode, isGaidenConv, isSingleConv } = await _buildApiContext(messages);
 
     const totalTokens = apiMessages.reduce((sum, m) => sum + Utils.estimateTokens(m.content), 0);
 

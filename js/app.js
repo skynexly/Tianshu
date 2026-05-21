@@ -157,14 +157,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v686.9';
-const CHANGELOG = `【v686.9 数值/知识系统加启用开关】
-· 对话设置 → 游戏系统 多了两个开关：
-   - 数值系统启用（默认开）
-   - 知识系统启用（默认开）
-· 关掉后即使配了属性 / 挂了世界书，也不注入 prompt
-· 用途：临时关闭测试、切"裸聊模式"
-· 老对话不受影响（默认开）
+    const APP_VERSION = 'v687';
+const CHANGELOG = `【v687 上下文重构 + OOC 修复】
+· chat.js 重构：send() 与 showContext() 共享 _buildApiContext()
+· 删除 ~550 行重复代码，以后改提示词只需改一处
+· 删除群像/单人模式中 OOC 手机操作提示词（避免降智误判）
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;
