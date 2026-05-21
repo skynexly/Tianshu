@@ -13,6 +13,11 @@ window.Dice = (() => {
   const RULE_LABELS = { '<=': '≤', '<': '<', '>=': '≥', '>': '>' };
   const ALL_RULES = ['<=', '<', '>=', '>'];
 
+  // Lucide dices 双骰子 SVG，用 currentColor 自动适配主题
+  const ICON_DICES = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;display:inline-block;vertical-align:-0.15em;flex-shrink:0"><rect width="12" height="12" x="2" y="10" rx="2" ry="2"/><path d="m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6"/><path d="M6 18h.01"/><path d="M10 14h.01"/><path d="M15 6h.01"/><path d="M18 9h.01"/></svg>`;
+  // 模态标题专用：尺寸大一点 + 加 dice-icon-title class，便于 CSS 触发投掷动画
+  const ICON_DICES_TITLE = `<svg class="dice-icon-title" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex-shrink:0;transform-origin:50% 50%"><rect width="12" height="12" x="2" y="10" rx="2" ry="2"/><path d="m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6"/><path d="M6 18h.01"/><path d="M10 14h.01"/><path d="M15 6h.01"/><path d="M18 9h.01"/></svg>`;
+
   // ===== 当前对话快捷访问 =====
   function _curConv() {
     try {
@@ -101,7 +106,7 @@ window.Dice = (() => {
       <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;width:100%;max-width:380px;max-height:85vh;overflow:auto;padding:18px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div style="font-size:15px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px">
-            <span>🎲</span><span>骰点检定</span>
+            ${ICON_DICES_TITLE}<span>骰点检定</span>
           </div>
           <button type="button" onclick="Dice.closeModal()" style="background:transparent;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer;line-height:1">×</button>
         </div>
@@ -187,6 +192,16 @@ window.Dice = (() => {
     if (!a) { UI.showToast('请选择属性', 1500); return; }
     const cfg = getConfig();
     const val = _getAttrValue(a);
+    // 动效：标题骰子转一圈
+    try {
+      const ic = _modalEl.querySelector('.dice-icon-title');
+      if (ic) {
+        ic.classList.remove('rolling');
+        // 强制重绘以重启动画
+        void ic.offsetWidth;
+        ic.classList.add('rolling');
+      }
+    } catch(_) {}
     const result = _roll(cfg.max);
     const success = _judge(result, val, cfg.rule);
     _modalState.rolls.push({
@@ -278,7 +293,7 @@ window.Dice = (() => {
     return `
       <div class="dice-bubble-inner ${cls}">
         <div class="dice-bubble-row1">
-          <span class="dice-bubble-attr">🎲 ${Utils.escapeHtml(roll.attr)}检定</span>
+          <span class="dice-bubble-attr">${ICON_DICES} ${Utils.escapeHtml(roll.attr)}检定</span>
           ${tag}
         </div>
         <div class="dice-bubble-row2">1d${roll.diceMax} = <b>${roll.result}</b> / ${roll.attrValue} (${ruleLab}) · <b>${roll.success ? '成功 ✅' : '失败 ❌'}</b></div>
@@ -348,7 +363,7 @@ window.Dice = (() => {
     return html.replace(CHECK_PATTERN, (m, attrName) => {
       const safe = Utils.escapeHtml(String(attrName).trim());
       // 注意：html 已经过 Markdown 渲染，attrName 出现在文本节点里
-      return `<button type="button" class="dice-check-btn" onclick="event.stopPropagation();Dice.openModal('${safe.replace(/'/g, "&#39;")}')">🎲 请完成 ${safe} 检定</button>`;
+      return `<button type="button" class="dice-check-btn" onclick="event.stopPropagation();Dice.openModal('${safe.replace(/'/g, "&#39;")}')">${ICON_DICES} 请完成 ${safe} 检定</button>`;
     });
   }
 

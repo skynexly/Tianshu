@@ -157,10 +157,12 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v686.1';
-const CHANGELOG = `【v686.1 简化】
-· 去掉骰点历史气泡（OOC 块本来就在用户消息里，重复渲染没必要）
-· 只保留"已确认未发送"的待发送气泡，发完即消失
+    const APP_VERSION = 'v686.2';
+const CHANGELOG = `【v686.2 骰子换 SVG】
+· 🎲 emoji 全替换成 Lucide dices 双骰子 SVG
+   - 输入区按钮 / AI 检定标记按钮 / 投骰面板标题 / 待发送气泡
+· 投骰面板的骰子在每次"投掷"瞬间转一圈（旋转+轻微放大）
+· 顺手把检定按钮的 CSS 选择器从 .dice-check-btn 改成 button.dice-check-btn 提特异性
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

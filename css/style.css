@@ -5687,11 +5687,11 @@ letter-spacing: 0.15em;
 }
 
 /* ===== 骰点系统 v686 ===== */
-.dice-check-btn {
+button.dice-check-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
+  gap: 5px;
+  padding: 5px 12px;
   margin: 4px 2px;
   background: linear-gradient(135deg, var(--accent), var(--accent-dim, var(--accent)));
   border: none;
@@ -5702,13 +5702,32 @@ letter-spacing: 0.15em;
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0,0,0,.15);
   transition: transform .12s, box-shadow .12s;
+  line-height: 1.4;
 }
-.dice-check-btn:hover {
+button.dice-check-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(0,0,0,.2);
 }
-.dice-check-btn:active {
+button.dice-check-btn:active {
   transform: translateY(0);
+}
+button.dice-check-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 投骰面板标题图标·投掷动画 */
+.dice-icon-title {
+  transition: transform .15s ease;
+}
+.dice-icon-title.rolling {
+  animation: dice-roll .55s cubic-bezier(.4,1.4,.55,1);
+}
+@keyframes dice-roll {
+  0%   { transform: rotate(0)        scale(1); }
+  35%  { transform: rotate(180deg)   scale(1.25); }
+  70%  { transform: rotate(450deg)   scale(1.1); }
+  100% { transform: rotate(720deg)   scale(1); }
 }
 
 .dice-bubble {
