@@ -2348,14 +2348,69 @@ containers.forEach(c => { c.innerHTML = html; });
 }
 
   async function addGlobalNpc() {
-    const w = await _getEditingWV();
-    if (!w) return;
-    if (!w.globalNpcs) w.globalNpcs = [];
-    w.globalNpcs.push(_defaultNPC());
-    await _saveEditingWV(w);
-    _renderGlobalNpcs(w.globalNpcs);
-    editGlobalNpc(w.globalNpcs.length - 1);
+  const w = await _getEditingWV();
+  if (!w) return;
+  if (!w.globalNpcs) w.globalNpcs = [];
+  w.globalNpcs.push(_defaultNPC());
+  await _saveEditingWV(w);
+  _renderGlobalNpcs(w.globalNpcs);
+  editGlobalNpc(w.globalNpcs.length - 1);
+}
+
+// ---------- v682：批量导入 NPC ----------
+// 入口（HTML 按钮调用）：
+//   Worldview.openNpcImporter('global')  → 当前世界观/世界书的 globalNpcs
+//   Worldview.openNpcImporter('faction') → 当前编辑的势力 npcs（依赖 _editRegionIdx / _editFactionIdx）
+function openNpcImporter(target) {
+  if (typeof NpcImporter === 'undefined') {
+    UI.showToast('批量导入模块未加载', 2200);
+    return;
   }
+  // faction 模式必须已经选定地区/势力
+  if (target === 'faction' && (_editRegionIdx < 0 || _editFactionIdx < 0)) {
+    UI.showToast('请先打开一个势力的编辑界面', 2200);
+    return;
+  }
+  NpcImporter.openImporter({
+    target,
+    onDone: async () => {
+      const w = await _getEditingWV();
+      if (!w) return;
+      if (target === 'faction') {
+        const fac = w.regions?.[_editRegionIdx]?.factions?.[_editFactionIdx];
+        if (fac) _renderNPCCards(fac.npcs || []);
+      } else {
+        _renderGlobalNpcs(w.globalNpcs || []);
+      }
+    }
+  });
+}
+
+// 内部钩子（供 NpcImporter 用）
+async function _bulkImportNpcs(npcs, target) {
+  if (!Array.isArray(npcs) || npcs.length === 0) return 0;
+  const w = await _getEditingWV();
+  if (!w) throw new Error('当前没有编辑中的世界观/世界书');
+
+  if (target === 'faction') {
+    if (_editRegionIdx < 0 || _editFactionIdx < 0) {
+      throw new Error('请先打开势力编辑界面');
+    }
+    const fac = w.regions?.[_editRegionIdx]?.factions?.[_editFactionIdx];
+    if (!fac) throw new Error('找不到目标势力');
+    fac.npcs = fac.npcs || [];
+    npcs.forEach(n => fac.npcs.push(n));
+  } else {
+    w.globalNpcs = w.globalNpcs || [];
+    npcs.forEach(n => w.globalNpcs.push(n));
+  }
+  await _saveEditingWV(w);
+  return npcs.length;
+}
+
+function _getEditingWVForImporter() { return _getEditingWV(); }
+function _editingRegionIdxForImporter() { return _editRegionIdx; }
+function _editingFactionIdxForImporter() { return _editFactionIdx; }
 
   async function editGlobalNpc(idx) {
     const w = await _getEditingWV();
@@ -4258,6 +4313,11 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     openFactionEdit, saveFaction, deleteFaction,
     openNPCEdit, saveNPC, deleteNPC,
     addGlobalNpc, editGlobalNpc, backFromNpcEdit,
+    openNpcImporter,
+    _bulkImportNpcs,
+    _getEditingWVForImporter,
+    _editingRegionIdxForImporter,
+    _editingFactionIdxForImporter,
     addGameplayAttr, updateGameplayAttr, deleteGameplayAttr, openGameplayAttrModal, closeGameplayAttrModal, saveGameplayAttrFromModal, deleteGameplayAttrFromModal, deleteGameplayCharacter, toggleGameplayCharPicker, renderGameplayCharPicker, selectGameplayCharacter,
     addTaskPhase, deleteTaskPhase, updateTaskPhase, addTaskType, deleteTaskType, updateTaskType, updateTaskPhaseReward,
     openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal, onTaskTypeRewardModeChange, openPhaseRewardModal,

@@ -157,18 +157,19 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v681.3.2';
-const CHANGELOG = `【v681.3 新功能】
-· 主题面板新增「正文字号」滑块（12-22px，默认 15）
-· 只影响消息正文与 Markdown 渲染区
-· 不影响状态栏 / 输入框 / 按钮等结构性 UI
+    const APP_VERSION = 'v683';
+const CHANGELOG = `【v683 新功能】
+· 批量导入 NPC：常驻角色 / 势力角色 / 世界书 NPC 三处入口
+· 支持多文件同时选择、单文件多 NPC 拆包
+· 模糊字段识别（name/姓名/title 等中英文都吃）
+· 撞名直接追加，未知字段塞 detail 兜底不丢失
+
+【v681.3.2 字号修复（回顾）】
+· readForm 漏读 msgFontSize 导致保存归默认修复
+· 正文字号滑块 12-22px，默认 13.5
 
 【v681.2 解耦修复（回顾）】
 · 自定义属性注入从「回复格式」开关解绑
-· 关闭回复格式也能用自定义属性
-
-【v681 浅拷贝修复（回顾）】
-· 属性编辑器 globalAttrs / characterAttrs 字段缺失时保存丢失修复
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;
