@@ -161,7 +161,10 @@ const LorebookUI = (() => {
           const nc = lb.globalNpcs?.length || 0;
           return `
             <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;cursor:pointer">
-              <input type="checkbox" data-lb-id="${safeId}" ${checked ? 'checked' : ''} style="cursor:pointer;flex-shrink:0">
+              <span style="position:relative;display:inline-flex;flex-shrink:0">
+                <input type="checkbox" class="circle-check" data-lb-id="${safeId}" ${checked ? 'checked' : ''}>
+                <span class="circle-check-ui"></span>
+              </span>
               <div style="flex:1;min-width:0">
                 <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safeName}</div>
                 <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">节日 ${fc} · 常驻/动态 ${kc} · NPC ${nc}</div>

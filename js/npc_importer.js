@@ -214,7 +214,10 @@ const NpcImporter = (() => {
       const subtitle = [n.profession, n.summary].filter(Boolean).join(' · ') || '（无简介）';
       return `
         <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;cursor:pointer">
-          <input type="checkbox" class="npc-imp-check" data-idx="${i}" checked style="margin-top:4px;flex-shrink:0;cursor:pointer">
+          <span style="position:relative;display:inline-flex;flex-shrink:0;margin-top:2px">
+            <input type="checkbox" class="circle-check npc-imp-check" data-idx="${i}" checked>
+            <span class="circle-check-ui"></span>
+          </span>
           <div style="flex:1;min-width:0">
             <div style="font-size:14px;color:var(--text);font-weight:bold">${Utils.escapeHtml(n.name)}${dupBadge}</div>
             <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(subtitle)}</div>
