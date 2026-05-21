@@ -106,7 +106,7 @@ window.Dice = (() => {
       <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;width:100%;max-width:380px;max-height:85vh;overflow:auto;padding:18px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div style="font-size:15px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px">
-            ${ICON_DICES_TITLE}<span>骰点检定</span>
+            <span class="dice-icon-title-wrap" style="display:inline-flex;align-items:center;justify-content:center;transform-origin:50% 50%">${ICON_DICES_TITLE}</span><span>骰点检定</span>
           </div>
           <button type="button" onclick="Dice.closeModal()" style="background:transparent;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer;line-height:1">×</button>
         </div>
@@ -192,14 +192,19 @@ window.Dice = (() => {
     if (!a) { UI.showToast('请选择属性', 1500); return; }
     const cfg = getConfig();
     const val = _getAttrValue(a);
-    // 动效：标题骰子转一圈
+    // 动效：标题骰子转一圈（动画作用在外层 span 上，比直接动 SVG 稳）
     try {
-      const ic = _modalEl.querySelector('.dice-icon-title');
-      if (ic) {
-        ic.classList.remove('rolling');
-        // 强制重绘以重启动画
-        void ic.offsetWidth;
-        ic.classList.add('rolling');
+      const ic = _modalEl.querySelector('.dice-icon-title-wrap');
+      if (ic && typeof ic.animate === 'function') {
+        ic.animate([
+          { transform: 'rotate(0deg) scale(1)' },
+          { transform: 'rotate(360deg) scale(1.25)', offset: 0.5 },
+          { transform: 'rotate(720deg) scale(1)' },
+        ], {
+          duration: 550,
+          easing: 'cubic-bezier(.4,1.4,.55,1)',
+          iterations: 1,
+        });
       }
     } catch(_) {}
     const result = _roll(cfg.max);
