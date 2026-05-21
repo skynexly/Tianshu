@@ -57,6 +57,8 @@ const Auth = (() => {
       if (status === 200 && data?.ok) {
         // 通过，把最新设备列表更新到 state
         _state.devices = data.devices || [];
+        // v683.3：以后端的 nickname 为准（覆盖本地缓存的）
+        if (typeof data.nickname === 'string') _state.nickname = data.nickname;
         _saveState(_state);
         _onLoginSuccess();
         return;
@@ -124,6 +126,7 @@ const Auth = (() => {
       const { status, data } = await _post('/check', { token: _state.token, device_id: _state.device_id });
       if (status === 200 && data?.ok) {
         _state.devices = data.devices || [];
+        if (typeof data.nickname === 'string') _state.nickname = data.nickname;
         _saveState(_state);
         return;
       }
@@ -280,7 +283,7 @@ const Auth = (() => {
     try {
       const path = isRegister ? '/register' : '/login';
       const body = isRegister
-        ? { invite_code, email, password, device_name }
+        ? { invite_code, email, password, device_name, nickname }
         : { email, password, device_name };
       const { status, data } = await _post(path, body);
 
@@ -289,7 +292,8 @@ const Auth = (() => {
           token: data.token,
           device_id: data.device_id,
           email: data.email,
-          nickname: isRegister ? nickname : (_state?.nickname || nickname || _deriveNickname(data.email)),
+          // v683.3：优先用后端返回的 nickname，没有再用本地缓存或 derive
+          nickname: data.nickname || (isRegister ? nickname : (_state?.nickname || nickname || _deriveNickname(data.email))),
           devices: data.devices || [],
         };
         _saveState(_state);
@@ -313,7 +317,13 @@ const Auth = (() => {
   }
 
   function _deriveNickname(email) {
-    return (email || '').split('@')[0] || '用户';
+    // 仅当邮箱前缀是合理的"看起来像名字"时才用作昵称
+    // 纯数字（QQ邮箱）/ 过长 / 含特殊字符 → 返回空字符串，让上层回退到"欢迎回来"留空
+    const local = (email || '').split('@')[0] || '';
+    if (!local) return '';
+    if (/^\d+$/.test(local)) return '';
+    if (local.length > 12) return '';
+    return local;
   }
 
   // ===== 设备满了：让用户挑一台踢 =====
@@ -358,7 +368,7 @@ const Auth = (() => {
               token: data.token,
               device_id: data.device_id,
               email: data.email,
-              nickname: _state?.nickname || _deriveNickname(data.email),
+              nickname: data.nickname || _state?.nickname || _deriveNickname(data.email),
               devices: data.devices || [],
             };
             _saveState(_state);
@@ -683,10 +693,16 @@ const Auth = (() => {
       },
     });
     if (v === null) return;
-    setNickname(v);
-    _renderProfile();
-    _refreshAccountCard();
-  }
+  setNickname(v);
+  _renderProfile();
+  _refreshAccountCard();
+  // v683.3：异步同步到后端，让其它设备也能拿到
+  syncNicknameToServer(v).then(r => {
+    if (!r.ok) {
+      try { UI?.showToast?.('昵称已本地保存，但同步到云端失败：' + (r.error || ''), 3500); } catch(_) {}
+    }
+  });
+}
 
   // 选头像（本地，存 dataUrl）
   function _onPickAvatar() {
@@ -922,12 +938,30 @@ const Auth = (() => {
   // ===== 公开访问器 =====
   function getState() { return _state ? { ...(_state), devices: (_state.devices || []).slice() } : null; }
   function getNickname() { return _state?.nickname || ''; }
-  function setNickname(n) {
-    if (!_state) return;
-    _state.nickname = String(n || '').trim().slice(0, 30);
-    _saveState(_state);
-  }
   function getEmail() { return _state?.email || ''; }
+function setNickname(n) {
+  if (!_state) return;
+  _state.nickname = String(n || '').trim().slice(0, 30);
+  _saveState(_state);
+}
+// v683.3：异步上传昵称到后端，让别的设备也能拿到
+async function syncNicknameToServer(n) {
+  if (!_state?.token) return { ok: false, error: '未登录' };
+  try {
+    const { status, data } = await _post('/update-profile', {
+      token: _state.token,
+      nickname: String(n || '').trim().slice(0, 30),
+    });
+    if (status === 200 && data?.ok) {
+      _state.nickname = data.nickname || '';
+      _saveState(_state);
+      return { ok: true };
+    }
+    return { ok: false, error: data?.error || `HTTP ${status}` };
+  } catch (e) {
+    return { ok: false, error: e.message || '网络错误' };
+  }
+}
 
   return {
     init,
