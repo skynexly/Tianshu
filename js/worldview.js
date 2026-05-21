@@ -208,10 +208,15 @@ function _defaultRegion() {
     const lbDescBtn = document.getElementById('worldview-edit-lb-desc-btn');
     if (lbDescBtn) lbDescBtn.style.display = isHidden ? '' : 'none';
     // v632：世界书把"事件"子 tab 藏掉、显示"NPC"子 tab；世界观反之
-    const eventSubBtn = document.querySelector('.wv-ext-subtab-btn[data-subtab="event"]');
-    const npcSubBtn = document.getElementById('wv-ext-subtab-btn-npc');
-    if (eventSubBtn) eventSubBtn.style.display = isHidden ? 'none' : '';
-    if (npcSubBtn) npcSubBtn.style.display = isHidden ? 'flex' : 'none';
+const eventSubBtn = document.querySelector('.wv-ext-subtab-btn[data-subtab="event"]');
+const npcSubBtn = document.getElementById('wv-ext-subtab-btn-npc');
+if (eventSubBtn) eventSubBtn.style.display = isHidden ? 'none' : '';
+if (npcSubBtn) npcSubBtn.style.display = isHidden ? 'flex' : 'none';
+// v683.1：+菜单里事件/NPC 项也跟着切（世界书隐藏"事件"、显示"NPC"）
+const addMenuEvent = document.getElementById('wv-ext-add-menu-event');
+const addMenuNpc = document.getElementById('wv-ext-add-menu-npc');
+if (addMenuEvent) addMenuEvent.style.display = isHidden ? 'none' : 'flex';
+if (addMenuNpc) addMenuNpc.style.display = isHidden ? 'flex' : 'none';
     // 默认子 tab 落点：世界书进来就停在节日（事件不在世界书里），世界观无所谓
     if (isHidden && _currentExtSubtab === 'event') {
       try { switchExtSubtab('festival'); } catch(_) {}
@@ -1065,6 +1070,10 @@ switchEditTab('basic');
     } else if (type === 'event') {
       switchExtSubtab('event');
       addEvent();
+    } else if (type === 'npc') {
+      // 世界书专属：直接打开批量导入入口；想新增单个 NPC 还是走 NPC 子 tab 里的 + 按钮
+      switchExtSubtab('npc');
+      if (typeof addGlobalNpc === 'function') addGlobalNpc();
     }
   }
 
@@ -1091,21 +1100,25 @@ switchEditTab('basic');
     }
   }
 
-  // 导出扩展设定（节日 + 扩展条目）为 JSON
+  // 导出扩展设定（节日 + 扩展条目 + 事件 + 全图 NPC）为 JSON
   async function exportExtended() {
     const menu = document.getElementById('wv-ext-io-menu');
     if (menu) menu.classList.add('hidden');
     if (!editingWorldviewId) { UI.showToast('没有正在编辑的世界观'); return; }
-    const w = await DB.get('worldviews', editingWorldviewId);
+    const w = await _getEditingWV();
     const wvName = w?.name || '扩展设定';
+    const evts = Array.isArray(w?.events) ? w.events : [];
+    const npcs = Array.isArray(w?.globalNpcs) ? w.globalNpcs : [];
     // 注：导出当前内存中的数据（已编辑但未保存的也会一并导出）
     const exportData = {
       _format: 'tianshu-extended',
-      _version: 1,
+      _version: 2,
       _source: wvName,
       _exportedAt: new Date().toISOString(),
       festivals: JSON.parse(JSON.stringify(festivalsData || [])),
-      knowledges: JSON.parse(JSON.stringify(knowledgesData || []))
+      knowledges: JSON.parse(JSON.stringify(knowledgesData || [])),
+      events: JSON.parse(JSON.stringify(evts)),
+      globalNpcs: JSON.parse(JSON.stringify(npcs)),
     };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1114,7 +1127,7 @@ switchEditTab('basic');
     a.download = wvName + '-扩展设定.json';
     a.click();
     URL.revokeObjectURL(url);
-    const total = (festivalsData?.length || 0) + (knowledgesData?.length || 0);
+    const total = (festivalsData?.length || 0) + (knowledgesData?.length || 0) + evts.length + npcs.length;
     UI.showToast(`已导出 ${total} 条`);
   }
 
@@ -1154,11 +1167,16 @@ switchEditTab('basic');
   async function _importNativeFormat(data) {
     const fest = Array.isArray(data.festivals) ? data.festivals : [];
     const know = Array.isArray(data.knowledges) ? data.knowledges : [];
-    if (fest.length === 0 && know.length === 0) {
+    const evts = Array.isArray(data.events) ? data.events : [];
+    const npcs = Array.isArray(data.globalNpcs) ? data.globalNpcs : [];
+    if (fest.length === 0 && know.length === 0 && evts.length === 0 && npcs.length === 0) {
       UI.showToast('文件内没有扩展设定内容', 3000);
       return;
     }
-    const mode = await _askImportMode(fest.length, know.length);
+    // v683.1：检查当前是世界观还是世界书，决定哪些数据能落地
+    const w = await _getEditingWV();
+    const isLb = isHiddenWv(w);
+    const mode = await _askImportMode(fest.length, know.length, evts.length, npcs.length, isLb);
     if (!mode) return;
     if (mode === 'replace') {
       festivalsData = fest;
@@ -1175,10 +1193,55 @@ switchEditTab('basic');
       festivalsData = festivalsData.concat(fest);
       knowledgesData = knowledgesData.concat(know);
     }
+    // events：仅世界观接收，世界书无事件 tab（events 跳过并提示）
+    let evtMsg = '';
+    if (evts.length > 0) {
+      if (isLb) {
+        evtMsg = `（跳过 ${evts.length} 条事件：世界书无事件系统）`;
+      } else {
+        try {
+          if (!Array.isArray(w.events)) w.events = [];
+          for (const e of evts) {
+            if (!e.id) e.id = 'evt_' + Utils.uuid().slice(0, 8);
+            else if (w.events.some(x => x.id === e.id)) e.id = 'evt_' + Utils.uuid().slice(0, 8);
+          }
+          if (mode === 'replace') w.events = evts;
+          else w.events = w.events.concat(evts);
+          await _saveEditingWV(w);
+          _renderEvents(w.events);
+          evtMsg = `+ ${evts.length} 条事件`;
+        } catch(e) {
+          console.warn('[importExtended] 事件写入失败', e);
+          evtMsg = `（${evts.length} 条事件写入失败）`;
+        }
+      }
+    }
+    // globalNpcs：世界观/世界书都有 → 直接合并到 globalNpcs（追加，撞名不阻拦，保持 v683 风格）
+    let npcMsg = '';
+    if (npcs.length > 0) {
+      try {
+        const wv2 = await _getEditingWV();
+        if (wv2) {
+          wv2.globalNpcs = wv2.globalNpcs || [];
+          for (const n of npcs) {
+            if (!n.id) n.id = 'npc_' + Utils.uuid().slice(0, 8);
+            else if (wv2.globalNpcs.some(x => x.id === n.id)) n.id = 'npc_' + Utils.uuid().slice(0, 8);
+          }
+          if (mode === 'replace') wv2.globalNpcs = npcs;
+          else wv2.globalNpcs = wv2.globalNpcs.concat(npcs);
+          await _saveEditingWV(wv2);
+          _renderGlobalNpcs(wv2.globalNpcs);
+          npcMsg = `+ ${npcs.length} 个 NPC`;
+        }
+      } catch(e) {
+        console.warn('[importExtended] NPC 写入失败', e);
+        npcMsg = `（${npcs.length} 个 NPC 写入失败）`;
+      }
+    }
     _renderFestivals(festivalsData);
     _renderKnowledges(knowledgesData);
     _updateExtCounts();
-    UI.showToast(`已导入 ${fest.length + know.length} 条（记得保存）`, 3000);
+    UI.showToast(`已导入 ${fest.length + know.length} 条 ${evtMsg} ${npcMsg}（记得保存）`.replace(/\s+/g, ' ').trim(), 3500);
   }
 
   // 导入 entries 格式（兼容外部格式，静默处理）
@@ -1240,14 +1303,21 @@ switchEditTab('basic');
   }
 
   // 询问导入模式：替换 / 追加
-  async function _askImportMode(festCount, knowCount) {
+  async function _askImportMode(festCount, knowCount, evtCount, npcCount, isLb) {
+    const eventsNow = 0; // 不展示当前事件数（拿不到很麻烦）
     const hasData = (festivalsData?.length || 0) + (knowledgesData?.length || 0) > 0;
-    if (!hasData) return 'append'; // 当前为空，直接追加 = 等于替换
-    const msg = `当前已有 ${festivalsData?.length || 0} 个节日 + ${knowledgesData?.length || 0} 个条目。\n` +
-                `即将导入 ${festCount} 个节日 + ${knowCount} 个条目。\n\n` +
-                `选择「确定」=追加到现有条目\n选择「取消」=取消导入`;
-    // 简化：用 confirm，true=追加，false=问是否替换
-    const append = await UI.showConfirm('追加导入', msg);
+    if (!hasData && (evtCount || 0) === 0 && (npcCount || 0) === 0) return 'append';
+    const parts = [
+      `当前已有 ${festivalsData?.length || 0} 个节日 + ${knowledgesData?.length || 0} 个条目。`,
+      `即将导入 ${festCount} 个节日 + ${knowCount} 个条目`
+        + ((evtCount || 0) > 0 ? ` + ${evtCount} 条事件${isLb ? '（世界书会跳过）' : ''}` : '')
+        + ((npcCount || 0) > 0 ? ` + ${npcCount} 个 NPC` : '')
+        + '。',
+      '',
+      '选择「确定」=追加到现有条目',
+      '选择「取消」=取消导入',
+    ];
+    const append = await UI.showConfirm('追加导入', parts.join('\n'));
     if (append) return 'append';
     const replace = await UI.showConfirm('替换导入', '是否清空当前所有节日和扩展条目，用导入的内容替换？\n（此操作不可逆，但需点击保存后才会写入数据库）');
     return replace ? 'replace' : null;
