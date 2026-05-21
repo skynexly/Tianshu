@@ -5769,15 +5769,6 @@ button.dice-check-btn svg {
 .dice-bubble-row2 b {
   color: var(--text);
 }
-.dice-bubble-tag {
-  font-size: 10px;
-  background: var(--accent);
-  color: #111;
-  padding: 1px 6px;
-  border-radius: 8px;
-  font-weight: 700;
-  letter-spacing: .03em;
-}
 .dice-bubble-pending .dice-bubble-inner {
   border-color: var(--accent);
   border-style: solid;

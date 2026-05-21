@@ -157,11 +157,13 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v686.5';
-const CHANGELOG = `【v686.5 小修】
-· 更新公告按钮点不动 → 改成显式 window.App.showChangelogManually 调用
-· 骰子疯狂旋转 → 降到一圈，缓动从 easeOutBack 改 easeOutCubic（不回弹）
-   - 现在的观感是"轻轻转一下"，不是"飞速陀螺"
+    const APP_VERSION = 'v686.6';
+const CHANGELOG = `【v686.6 emoji 收尾】
+· ✅❌ → Lucide circle-check / circle-x SVG
+   - 成功 = accent 色（跟主题）
+   - 失败 = 次要文字色（淡灰，不刺眼）
+· 去掉气泡上的「待发送」橙色小标签
+   - 边框 + 浅底已经够区分待发送 vs 历史，标签多余
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

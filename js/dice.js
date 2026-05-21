@@ -17,6 +17,9 @@ window.Dice = (() => {
   const ICON_DICES = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;display:inline-block;vertical-align:-0.15em;flex-shrink:0"><rect width="12" height="12" x="2" y="10" rx="2" ry="2"/><path d="m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6"/><path d="M6 18h.01"/><path d="M10 14h.01"/><path d="M15 6h.01"/><path d="M18 9h.01"/></svg>`;
   // 模态标题专用：尺寸大一点 + 加 dice-icon-title class，便于 CSS 触发投掷动画
   const ICON_DICES_TITLE = `<svg class="dice-icon-title" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex-shrink:0;transform-origin:50% 50%"><rect width="12" height="12" x="2" y="10" rx="2" ry="2"/><path d="m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6"/><path d="M6 18h.01"/><path d="M10 14h.01"/><path d="M15 6h.01"/><path d="M18 9h.01"/></svg>`;
+  // 成功/失败 Lucide circle-check / circle-x
+  const ICON_SUCCESS = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;display:inline-block;vertical-align:-0.15em;flex-shrink:0;color:var(--accent)"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`;
+  const ICON_FAIL = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;display:inline-block;vertical-align:-0.15em;flex-shrink:0;color:var(--text-secondary)"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>`;
 
   // ===== 当前对话快捷访问 =====
   function _curConv() {
@@ -256,7 +259,7 @@ window.Dice = (() => {
       <div style="background:var(--bg-tertiary);border:1px solid ${last.success ? 'var(--accent)' : 'var(--border)'};border-radius:8px;padding:12px;text-align:center">
         <div style="font-size:28px;font-weight:700;color:${last.success ? 'var(--accent)' : 'var(--text)'};line-height:1.2">${last.result}</div>
         <div style="font-size:11px;color:var(--text-secondary);margin-top:3px">1d${last.diceMax} · 目标 ${last.attrValue} · ${RULE_LABELS[last.rule]}</div>
-        <div style="font-size:14px;font-weight:600;margin-top:6px;color:${last.success ? 'var(--accent)' : 'var(--danger,#c0524e)'}">${last.success ? '成功 ✅' : '失败 ❌'}</div>
+        <div style="font-size:14px;font-weight:600;margin-top:6px;color:${last.success ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;gap:4px">${last.success ? ICON_SUCCESS + ' 成功' : ICON_FAIL + ' 失败'}</div>
         ${histHtml}
       </div>`;
   }
@@ -313,14 +316,14 @@ window.Dice = (() => {
   function _bubbleHTML(roll, pending) {
     const ruleLab = RULE_LABELS[roll.rule] || roll.rule;
     const cls = roll.success ? 'dice-bubble-success' : 'dice-bubble-fail';
-    const tag = pending ? '<span class="dice-bubble-tag">待发送</span>' : '';
+    const resultIcon = roll.success ? ICON_SUCCESS : ICON_FAIL;
+    const resultText = roll.success ? '成功' : '失败';
     return `
       <div class="dice-bubble-inner ${cls}">
         <div class="dice-bubble-row1">
           <span class="dice-bubble-attr">${ICON_DICES} ${Utils.escapeHtml(roll.attr)}检定</span>
-          ${tag}
         </div>
-        <div class="dice-bubble-row2">1d${roll.diceMax} = <b>${roll.result}</b> / ${roll.attrValue} (${ruleLab}) · <b>${roll.success ? '成功 ✅' : '失败 ❌'}</b></div>
+        <div class="dice-bubble-row2">1d${roll.diceMax} = <b>${roll.result}</b> / ${roll.attrValue} (${ruleLab}) · ${resultIcon} <b>${resultText}</b></div>
       </div>`;
   }
 
