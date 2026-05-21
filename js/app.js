@@ -157,10 +157,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v686.4';
-const CHANGELOG = `【v686.4 更新公告入口 + 投骰动画再修】
-· 右上角 ⋮ 菜单加了「更新公告」入口，可以随时查看最新公告
-· 投骰动画改成 requestAnimationFrame 手动逐帧写 transform，绕开移动端 SVG/CSS 动画兼容坑
+    const APP_VERSION = 'v686.5';
+const CHANGELOG = `【v686.5 小修】
+· 更新公告按钮点不动 → 改成显式 window.App.showChangelogManually 调用
+· 骰子疯狂旋转 → 降到一圈，缓动从 easeOutBack 改 easeOutCubic（不回弹）
+   - 现在的观感是"轻轻转一下"，不是"飞速陀螺"
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

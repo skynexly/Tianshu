@@ -79,23 +79,20 @@ window.Dice = (() => {
 
   // ===== 投骰核心 =====
   // 投骰动画：用 requestAnimationFrame 手动写 transform，避开移动端 SVG/CSS 动画兼容坑
+  // 一圈温柔旋转 + 中途轻微放大上抬，落点用 easeOutCubic（不回弹，避免"疯转"观感）
   function _fallbackAnim(el) {
     if (!el) return;
     try {
       if (el._diceAnimRaf) cancelAnimationFrame(el._diceAnimRaf);
-      const duration = 620;
+      const duration = 520;
       const start = performance.now();
-      const easeOutBack = (t) => {
-        const c1 = 1.70158;
-        const c3 = c1 + 1;
-        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-      };
+      const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
       const step = (now) => {
         const t = Math.min(1, (now - start) / duration);
-        const e = easeOutBack(t);
-        const angle = 720 * e;
-        const scale = 1 + 0.28 * Math.sin(Math.PI * t);
-        const lift = -2 * Math.sin(Math.PI * t);
+        const e = easeOutCubic(t);
+        const angle = 360 * e;                       // 转一圈，不是两圈
+        const scale = 1 + 0.18 * Math.sin(Math.PI * t);   // 中途放大到 1.18×
+        const lift  = -3 * Math.sin(Math.PI * t);         // 中途轻微上抬
         el.style.transform = `translateY(${lift}px) rotate(${angle}deg) scale(${scale})`;
         el.style.willChange = 'transform';
         if (t < 1) {
