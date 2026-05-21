@@ -78,6 +78,38 @@ window.Dice = (() => {
   }
 
   // ===== 投骰核心 =====
+  // 投骰动画：用 requestAnimationFrame 手动写 transform，避开移动端 SVG/CSS 动画兼容坑
+  function _fallbackAnim(el) {
+    if (!el) return;
+    try {
+      if (el._diceAnimRaf) cancelAnimationFrame(el._diceAnimRaf);
+      const duration = 620;
+      const start = performance.now();
+      const easeOutBack = (t) => {
+        const c1 = 1.70158;
+        const c3 = c1 + 1;
+        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+      };
+      const step = (now) => {
+        const t = Math.min(1, (now - start) / duration);
+        const e = easeOutBack(t);
+        const angle = 720 * e;
+        const scale = 1 + 0.28 * Math.sin(Math.PI * t);
+        const lift = -2 * Math.sin(Math.PI * t);
+        el.style.transform = `translateY(${lift}px) rotate(${angle}deg) scale(${scale})`;
+        el.style.willChange = 'transform';
+        if (t < 1) {
+          el._diceAnimRaf = requestAnimationFrame(step);
+        } else {
+          el.style.transform = '';
+          el.style.willChange = '';
+          el._diceAnimRaf = null;
+        }
+      };
+      el._diceAnimRaf = requestAnimationFrame(step);
+    } catch(_) {}
+  }
+
   function _roll(max) {
     return Math.floor(Math.random() * max) + 1;
   }
@@ -192,21 +224,11 @@ window.Dice = (() => {
     if (!a) { UI.showToast('请选择属性', 1500); return; }
     const cfg = getConfig();
     const val = _getAttrValue(a);
-    // 动效：标题骰子转一圈（动画作用在外层 span 上，比直接动 SVG 稳）
+    // 动效：标题骰子转一圈（用最朴素的 transition + 内联 transform，最兼容）
     try {
       const ic = _modalEl.querySelector('.dice-icon-title-wrap');
-      if (ic && typeof ic.animate === 'function') {
-        ic.animate([
-          { transform: 'rotate(0deg) scale(1)' },
-          { transform: 'rotate(360deg) scale(1.25)', offset: 0.5 },
-          { transform: 'rotate(720deg) scale(1)' },
-        ], {
-          duration: 550,
-          easing: 'cubic-bezier(.4,1.4,.55,1)',
-          iterations: 1,
-        });
-      }
-    } catch(_) {}
+      if (ic) _fallbackAnim(ic);
+    } catch(e) { console.warn('[Dice] 动画异常:', e); }
     const result = _roll(cfg.max);
     const success = _judge(result, val, cfg.rule);
     _modalState.rolls.push({

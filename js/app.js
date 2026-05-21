@@ -157,20 +157,24 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v686.3';
-const CHANGELOG = `【v686.3 投骰动画修复】
-· 上一版动画没生效——SVG 直接吃 CSS transform 在某些浏览器渲染不稳
-· 改成：外包一层 span，用 Web Animations API 动 span，720° + 中途放大 1.25× + 回弹
+    const APP_VERSION = 'v686.4';
+const CHANGELOG = `【v686.4 更新公告入口 + 投骰动画再修】
+· 右上角 ⋮ 菜单加了「更新公告」入口，可以随时查看最新公告
+· 投骰动画改成 requestAnimationFrame 手动逐帧写 transform，绕开移动端 SVG/CSS 动画兼容坑
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;
     const SEEN_KEY = 'changelog_seen_version';
 
-    function _showChangelog() {
-      try {
-        const lastSeen = localStorage.getItem(SEEN_KEY);
-        if (lastSeen === APP_VERSION) return;
-      } catch(_) {}
+    function _showChangelog(opts) {
+      const force = !!(opts && opts.force);
+      if (!force) {
+        try {
+          const lastSeen = localStorage.getItem(SEEN_KEY);
+          if (lastSeen === APP_VERSION) return;
+        } catch(_) {}
+      }
+      const delay = force ? 0 : 800;
       setTimeout(() => {
         // 已经存在就不重复弹
         if (document.getElementById('changelog-overlay')) return;
@@ -180,6 +184,7 @@ const CHANGELOG = `【v686.3 投骰动画修复】
         } catch(_) {}
         const safeName = String(nickname).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'"',"'":'&#39;' }[c]));
         const greeting = safeName ? `欢迎回来，${safeName}` : '欢迎回来';
+        const titleText = force ? '更新公告' : greeting;
 
         const overlay = document.createElement('div');
         overlay.id = 'changelog-overlay';
@@ -187,13 +192,13 @@ const CHANGELOG = `【v686.3 投骰动画修复】
         overlay.innerHTML = `
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:22px 22px 18px;max-width:340px;width:100%;color:var(--text);font-size:13px;line-height:1.8;box-shadow:0 10px 28px rgba(0,0,0,0.22)">
             <div style="font-size:16px;font-weight:650;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px">
-              <span>${greeting}</span><span style="font-size:11px;color:var(--text-secondary);font-weight:400;border:1px solid var(--border);border-radius:999px;padding:1px 8px;line-height:1.6">${APP_VERSION}</span>
+              <span>${titleText}</span><span style="font-size:11px;color:var(--text-secondary);font-weight:400;border:1px solid var(--border);border-radius:999px;padding:1px 8px;line-height:1.6">${APP_VERSION}</span>
             </div>
             <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;letter-spacing:0.5px">本次更新</div>
             <div style="height:1px;background:var(--border);opacity:.7;margin:0 0 14px"></div>
             <div style="white-space:pre-line;margin-bottom:18px;color:var(--text-secondary);font-size:12px;line-height:1.9">${CHANGELOG}</div>
             <div style="display:flex;justify-content:flex-end">
-              <button id="changelog-ok" style="padding:8px 24px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">已阅</button>
+              <button id="changelog-ok" style="padding:8px 24px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">${force ? '关闭' : '已阅'}</button>
             </div>
           </div>`;
         document.body.appendChild(overlay);
@@ -207,10 +212,13 @@ const CHANGELOG = `【v686.3 投骰动画修复】
         overlay.addEventListener('click', (e) => {
           if (e.target === overlay) overlay.querySelector('#changelog-ok').click();
         });
-      }, 800);
+      }, delay);
     }
 
     // 监听登录成功事件（缓存登录 / 表单登录都会触发）
     window.addEventListener('auth:ready', _showChangelog, { once: true });
+    // 暴露手动调用接口（右上角菜单按钮用）
+    window.App = window.App || {};
+    window.App.showChangelogManually = function() { _showChangelog({ force: true }); };
   } catch(_) {}
 })();
