@@ -253,15 +253,17 @@ window.Dice = (() => {
     if (!rolls.length) { area.innerHTML = ''; return; }
     const last = rolls[rolls.length - 1];
     const histHtml = rolls.length > 1
-      ? `<div style="margin-top:8px;font-size:11px;color:var(--text-secondary);line-height:1.6">历史：${rolls.slice(0,-1).map(r => `<span style="opacity:.65">${r.result}${r.success ? '✓' : '✗'}</span>`).join(' · ')}</div>`
+      ? `<div style="margin-top:8px;font-size:11px;color:var(--text-secondary);line-height:1.6;text-align:center">历史：${rolls.slice(0,-1).map(r => `<span style="opacity:.65">${r.result}${r.success ? '✓' : '✗'}</span>`).join(' · ')}</div>`
       : '';
     const resultIcon = last.success ? ICON_SUCCESS : ICON_FAIL;
-    // 把 SVG 尺寸放大到 24px，跟数字更协调
-    const bigIcon = resultIcon.replace('width:1em;height:1em', 'width:22px;height:22px').replace('vertical-align:-0.15em', 'vertical-align:middle');
+    // 注解里的小图标：14px，跟下方"成功/失败"字号一致
+    const smallIcon = resultIcon.replace('width:1em;height:1em', 'width:14px;height:14px').replace('vertical-align:-0.15em', 'vertical-align:-2px');
+    const resultColor = last.success ? 'var(--accent)' : 'var(--text-secondary)';
+    const resultText = last.success ? '成功' : '失败';
     area.innerHTML = `
-      <div style="background:var(--bg-tertiary);border:1px solid ${last.success ? 'var(--accent)' : 'var(--border)'};border-radius:8px;padding:14px;text-align:center;display:flex;align-items:center;justify-content:center;gap:10px">
-        <span style="font-size:32px;font-weight:700;color:${last.success ? 'var(--accent)' : 'var(--text)'};line-height:1">${last.result}</span>
-        ${bigIcon}
+      <div style="background:var(--bg-tertiary);border:1px solid ${last.success ? 'var(--accent)' : 'var(--border)'};border-radius:8px;padding:14px;text-align:center">
+        <div style="font-size:32px;font-weight:700;color:${last.success ? 'var(--accent)' : 'var(--text)'};line-height:1.1">${last.result}</div>
+        <div style="margin-top:6px;font-size:12px;color:${resultColor};display:inline-flex;align-items:center;gap:4px">${smallIcon}<span>${resultText}</span></div>
       </div>
       ${histHtml}`;
   }
@@ -319,13 +321,12 @@ window.Dice = (() => {
     const ruleLab = RULE_LABELS[roll.rule] || roll.rule;
     const cls = roll.success ? 'dice-bubble-success' : 'dice-bubble-fail';
     const resultIcon = roll.success ? ICON_SUCCESS : ICON_FAIL;
-    const resultText = roll.success ? '成功' : '失败';
     return `
       <div class="dice-bubble-inner ${cls}">
         <div class="dice-bubble-row1">
           <span class="dice-bubble-attr">${ICON_DICES} ${Utils.escapeHtml(roll.attr)}检定</span>
         </div>
-        <div class="dice-bubble-row2">1d${roll.diceMax} = <b>${roll.result}</b> / ${roll.attrValue} (${ruleLab}) · ${resultIcon} <b>${resultText}</b></div>
+        <div class="dice-bubble-row2">1d${roll.diceMax} = <b>${roll.result}</b> / ${roll.attrValue} (${ruleLab}) · ${resultIcon}</div>
       </div>`;
   }
 
