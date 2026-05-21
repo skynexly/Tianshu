@@ -1,0 +1,18 @@
+{
+  "characters": [
+    {
+      "title": "Eldrin Frostward",
+      "alias": "The Frozen Sage",
+      "role": "Archmage",
+      "description": "An elven archmage who has lived for over 800 years. Specializes in cold and time magic.",
+      "personality": "Cold, distant, but deeply protective of his apprentices.",
+      "appearance": "Tall and gaunt, with silver hair that seems to give off mist.",
+      "secret_motive": "Searching for the lost relic of his fallen kingdom"
+    },
+    {
+      "title": "Mira Quickstep",
+      "role": "Rogue",
+      "description": "A halfling thief with a heart of gold and pockets to match."
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+[
+  { "name": "张三", "profession": "铁匠", "summary": "铸刀世家第七代" },
+  { "name": "李四", "profession": "镖师" },
+  { "name": "王五" },
+  { "name": "赵六", "profession": "茶馆掌柜", "detail": "整天蹲在柜台后听人说书" },
+  { "name": "钱七", "summary": "未知身份的过客" },
+  { "name": "孙八", "profession": "渔夫", "detail": "据说见过水鬼" },
+  { "name": "周九" },
+  { "name": "吴十", "profession": "捕快", "summary": "新上任的县衙捕快" },
+  { "profession": "无名氏", "detail": "这条没有 name 字段，应该被跳过 ←测试用例" },
+  { "name": "郑十一", "profession": "和尚", "detail": "云游至此" }
+]
