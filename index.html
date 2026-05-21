@@ -1421,10 +1421,14 @@
             <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em">游戏系统</div>
 
             <!-- 数值系统（原"自定义属性"） -->
-            <div style="display:flex;align-items:center;padding:0 2px">
-              <span style="flex:1;min-width:0;font-size:14px;color:var(--text);font-weight:600;line-height:1.4">数值系统<br><span style="font-size:11px;color:var(--text-secondary);font-weight:400">编辑当前对话的全局属性和角色属性，不影响世界观原件</span></span>
-            </div>
-            <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:-8px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
+            <label class="circle-check-label">
+              <span class="circle-check-text">数值系统<br><span style="font-size:11px;color:var(--text-secondary)">编辑当前对话的全局属性和角色属性，不影响世界观原件</span></span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-attrs-enabled" class="circle-check" checked>
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
               <button type="button" onclick="ConvGameplay.openAttrEditor()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">编辑属性</button>
             </div>
 
@@ -1483,10 +1487,14 @@
             </div>
 
             <!-- 知识系统（世界书挂载/禁用） -->
-            <div style="display:flex;align-items:center;padding:0 2px">
-              <span style="flex:1;min-width:0;font-size:14px;color:var(--text);font-weight:600;line-height:1.4">知识系统<br><span style="font-size:11px;color:var(--text-secondary);font-weight:400">注入到本对话的世界书；单人卡 / 常驻角色自带的会自动继承，可自由添加和禁用</span></span>
-            </div>
-            <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:-8px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
+            <label class="circle-check-label">
+              <span class="circle-check-text">知识系统<br><span style="font-size:11px;color:var(--text-secondary)">注入到本对话的世界书；单人卡 / 常驻角色自带的会自动继承，可自由添加和禁用</span></span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-knowledge-enabled" class="circle-check" checked>
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
               <button type="button" onclick="Chat.openLorebookDisableModal()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">管理</button>
             </div>
 
