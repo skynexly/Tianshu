@@ -285,29 +285,16 @@ window.Dice = (() => {
       </div>`;
   }
 
-  // 渲染历史气泡：在 renderAll 后调用，按消息时间穿插到对应位置（简化版：固定追加到底部按 time 排序）
-  // v686 简化：消息历史里凡是 consumed=true 的 roll，按 time 升序在聊天底部之上保留一行
+  // 渲染气泡：v686.1 简化
+  // 历史 roll 已经作为 OOC 块拼在 user 消息气泡里，不需要重复渲染
+  // 只保留"已确认但未发送"的 pending 气泡（让玩家在发送前看到结果）
   function renderHistoryBubbles() {
     try {
-      const conv = _curConv();
-      if (!conv) return;
       const container = document.getElementById('chat-messages');
       if (!container) return;
-      // 清旧
-      container.querySelectorAll('.dice-bubble-history').forEach(el => el.remove());
-      const rolls = (conv.diceRolls || []).slice().sort((a, b) => (a.time || 0) - (b.time || 0));
-      // v686：所有 roll（含已消费和未消费）都按时间穿插显示。先简化：显示在末尾。
-      // TODO：v687 按 timestamp 插到对应 user/ai 消息之间。
-      for (const r of rolls) {
-        if (!r.consumed) continue; // pending 由 _renderPendingBubble 单独管
-        const div = document.createElement('div');
-        div.className = 'dice-bubble dice-bubble-history';
-        div.dataset.rollId = r.id;
-        div.innerHTML = _bubbleHTML(r, false);
-        // 插入到最后一条 user/assistant 消息之前是过度设计——直接 append 到容器末尾
-        container.appendChild(div);
-      }
-      // 再补上 pending
+      // 清掉所有 dice 气泡（含旧版 history）
+      container.querySelectorAll('.dice-bubble').forEach(el => el.remove());
+      // 只渲染 pending
       _renderPendingBubble();
     } catch(_) {}
   }
