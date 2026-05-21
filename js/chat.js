@@ -778,7 +778,7 @@ if (isSingleConv && isGameMode) {
 4. 当你看到带【】框起来 + OOC 标记的系统注入信息（例如【玩家手机操作记录｜OOC】），请理解这些是"系统旁白"，主体是"{{user}}"（玩家本人），不是任何 NPC。`);
     }
 
-    // 1d. 挂载角色（对话级常驻，群像/单人都生效）
+    // 1d. 常驻角色（对话级常驻，群像/单人都生效）
     try {
       if (window.AttachedChars) {
         const attachedPrompt = await AttachedChars.buildPrompt();
@@ -907,16 +907,16 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           if (fIdx) systemParts.push(fIdx);
         }
         // 单人卡扩展设定的节日索引
-        if (isSingleConv && singleSettings.charId) {
+        if (isGameMode) { // v685：通用世界书索引
           try {
-            const _card = await SingleCard.get(singleSettings.charId);
-            if (_card && _card.extEnabled !== false) {
-              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
+            const _card = isSingleConv && singleSettings.charId ? await SingleCard.get(singleSettings.charId) : null;
+            if (!isSingleConv || singleSettings?.charType !== "card" || (_card && _card.extEnabled !== false)) {
+              const _hiddenWv = await _getCardLorebooksMerged(singleSettings?.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
               if (_hiddenWv) {
                 const _cardFIdx = _buildFestivalIndex(_hiddenWv.festivals || []);
-                if (_cardFIdx) systemParts.push(_cardFIdx.replace('【世界观·节日索引】', '【单人卡·节日索引】'));
+                if (_cardFIdx) systemParts.push(_cardFIdx.replace('【世界观·节日索引】', '【世界书·节日索引】'));
                 const _cardKIdx = _buildKnowledgeIndex(_hiddenWv.knowledges || []);
-                if (_cardKIdx) systemParts.push(_cardKIdx.replace('【世界观·知识条目索引】', '【单人卡·知识条目索引】'));
+                if (_cardKIdx) systemParts.push(_cardKIdx.replace('【世界观·知识条目索引】', '【世界书·知识条目索引】'));
               }
             }
           } catch(_) {}
@@ -947,7 +947,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     // 单人模式必须遵守 enableNpc：未启用 NPC 时，连全图常驻 NPC 也不注入。
     // v632.1：单人卡世界书的 NPC 独立——绑了世界书就注入，不受 enableNpc 限制
     const _shouldInjectWvNpc = isGameMode && (!isSingleConv || singleSettings.enableNpc);
-    const _shouldInjectLbNpc = isGameMode && isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId;
+    const _shouldInjectLbNpc = isGameMode; // v685：所有模式都尝试注入聚合世界书 NPC
     if (_shouldInjectWvNpc || _shouldInjectLbNpc) {
       try {
         let _wvForGlobal = null;
@@ -966,8 +966,8 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         if (_shouldInjectLbNpc) {
           try {
             const _card = await SingleCard.get(singleSettings.charId);
-            if (_card && _card.extEnabled !== false) {
-              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, Conversations.getList().find(c => c.id === Conversations.getCurrent()));
+            if (!isSingleConv || singleSettings?.charType !== "card" || (_card && _card.extEnabled !== false)) {
+              const _hiddenWv = await _getCardLorebooksMerged(singleSettings?.charId, Conversations.getList().find(c => c.id === Conversations.getCurrent()));
               if (_hiddenWv && Array.isArray(_hiddenWv.globalNpcs) && _hiddenWv.globalNpcs.length > 0) {
                 // 按 id（兜底 name）去重，避免和世界观自带的重复
                 const seen = new Set(gs.map(n => n.id || n.name));
@@ -1240,11 +1240,11 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         }
       }
       // v632：单人卡的世界书注入（独立于 currentWv，没绑主世界观也要跑）
-      if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
+      if (isGameMode) { // v685：所有模式都聚合 conv/wv/card/常驻角色书
         try {
           const _card = await SingleCard.get(singleSettings.charId);
-          if (_card && _card.extEnabled !== false) {
-            const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
+          if (!isSingleConv || singleSettings?.charType !== "card" || (_card && _card.extEnabled !== false)) {
+            const _hiddenWv = await _getCardLorebooksMerged(singleSettings?.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
             if (_hiddenWv) {
               // 节日（depth=3）
               const _festText = _buildFestivalPrompt(_hiddenWv.festivals || [], messages);
@@ -1430,8 +1430,8 @@ messages.push(aiMsg);
                 }
 
                 // 单人卡隐藏世界观事件完成扫描
-if (_evtConv && _evtConv.eventStates && isGameMode && convSettings.eventsEnabled !== false && isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
-const _evtHiddenWv = await _getCardLorebooksMerged(singleSettings.charId, _evtConv);
+if (_evtConv && _evtConv.eventStates && isGameMode && convSettings.eventsEnabled !== false) {
+const _evtHiddenWv = await _getMergedLorebooksForConv(_evtConv);
 const _evtHiddenList = _evtHiddenWv?.events || [];
                   let _evtHiddenChanged = false;
                   for (const ev of _evtHiddenList) {
@@ -3602,30 +3602,52 @@ if (names.length === 0) return '';
 return `【世界观·知识条目索引】\n本世界包含以下知识条目（详情会在你或玩家提及时自动补充）：\n${names.map(n => `· ${n}`).join('\n')}\n请在剧情自然的前提下灵活引用。`;
 }
 
-// v632：聚合一张单人卡绑定的所有世界书数据（festivals/knowledges/globalNpcs）
-  // 返回合并后的虚拟世界观对象，用法和老的 _hiddenWv 一致，便于直接替换。
+// v632 → v685：聚合当前对话能用到的所有世界书数据（festivals/knowledges/globalNpcs）
+  // 返回合并后的虚拟世界观对象，用法和老的 _hiddenWv 一致。
+  // v685：升级为模式无关——所有模式（单人卡/单人有世界观/群像）走同一条路径
+  //       数据来源：wv.defaultLorebookIds + wv.lorebookIds + card.lorebookIds + 常驻角色卡书 + conv.lorebookIds
   // v632.1：事件系统不进入世界书层（事件有运行时状态，不适合多本叠加），不再合并 events
-  async function _getCardLorebooksMerged(cardId, conv) {
-    if (typeof Lorebook === 'undefined' || !cardId) return null;
+  async function _getMergedLorebooksForConv(conv) {
+    if (typeof Lorebook === 'undefined') return null;
     try {
-      const card = await SingleCard.get(cardId);
-      if (!card) return null;
-      const ids = card.lorebookIds || [];
-      if (!ids.length) return null;
-      const lbs = await Lorebook.collectForChat({ conv, card });
-      if (!lbs.length) return null;
+      // 1) 拿当前对话能用到的 card
+      let card = null;
+      try {
+        if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+          card = await SingleCard.get(conv.singleCharId);
+          if (card && card.extEnabled === false) card = null; // 卡级扩展关掉的话不读卡书
+        }
+      } catch(_) {}
+      // 2) 拿对应的 wv
+      let wv = null;
+      try {
+        // 单人模式优先用 singleWorldviewId，否则用 conv.worldviewId
+        const wvId = (conv && (conv.singleWorldviewId || conv.worldviewId)) || null;
+        if (wvId && wvId !== '__default_wv__') {
+          wv = await DB.get('worldviews', wvId);
+        }
+      } catch(_) {}
+      // 3) 收集（collectForChat 内部已去重 + 处理 conv.lorebookDisabled）
+      const lbs = await Lorebook.collectForChat({ conv, card, wv });
+      if (!lbs || !lbs.length) return null;
       const merged = { festivals: [], knowledges: [], events: [], globalNpcs: [] };
       for (const lb of lbs) {
         if (Array.isArray(lb.festivals)) merged.festivals.push(...lb.festivals);
         if (Array.isArray(lb.knowledges)) merged.knowledges.push(...lb.knowledges);
-        // events 字段保留为空数组（向后兼容引用 _hiddenWv.events 的旧代码，但不再实际注入）
         if (Array.isArray(lb.globalNpcs)) merged.globalNpcs.push(...lb.globalNpcs);
+        // events 不合并（保持空数组，避免老代码崩）
       }
       return merged;
     } catch(e) {
-      console.warn('[Chat] 聚合世界书失败:', e);
+      try { console.warn('[Chat] _getMergedLorebooksForConv 失败', e); } catch(_) {}
       return null;
     }
+  }
+
+  // v632 兼容别名：老代码继续用 _getCardLorebooksMerged(cardId, conv)，转发到新函数
+  // 现在 cardId 不再用，全靠 conv 自己解析（更准确）
+  async function _getCardLorebooksMerged(cardId, conv) {
+    return _getMergedLorebooksForConv(conv);
   }
 
   // 构建节日索引（每轮发名字+日期，让 AI 能预知后续节日）
@@ -3948,7 +3970,7 @@ if (!gp) return null;
 4. 当你看到带【】框起来 + OOC 标记的系统注入信息（例如【玩家手机操作记录｜OOC】），请理解这些是"系统旁白"，主体是"{{user}}"（玩家本人），不是任何 NPC。`);
     }
 
-    // 1d. 挂载角色（对话级常驻）
+    // 1d. 常驻角色（对话级常驻）
     try {
       if (window.AttachedChars) {
         const attachedPrompt = await AttachedChars.buildPrompt();
@@ -4067,16 +4089,16 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           if (fIdx) systemParts.push(fIdx);
         }
         // 单人卡扩展设定的节日/知识索引
-        if (isSingleConv && singleSettings.charId) {
+        if (isGameMode) { // v685：通用世界书索引
           try {
-            const _card = await SingleCard.get(singleSettings.charId);
-            if (_card && _card.extEnabled !== false) {
-              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
+            const _card = isSingleConv && singleSettings.charId ? await SingleCard.get(singleSettings.charId) : null;
+            if (!isSingleConv || singleSettings?.charType !== "card" || (_card && _card.extEnabled !== false)) {
+              const _hiddenWv = await _getCardLorebooksMerged(singleSettings?.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
               if (_hiddenWv) {
                 const _cardFIdx = _buildFestivalIndex(_hiddenWv.festivals || []);
-                if (_cardFIdx) systemParts.push(_cardFIdx.replace('【世界观·节日索引】', '【单人卡·节日索引】'));
+                if (_cardFIdx) systemParts.push(_cardFIdx.replace('【世界观·节日索引】', '【世界书·节日索引】'));
                 const _cardKIdx = _buildKnowledgeIndex(_hiddenWv.knowledges || []);
-                if (_cardKIdx) systemParts.push(_cardKIdx.replace('【世界观·知识条目索引】', '【单人卡·知识条目索引】'));
+                if (_cardKIdx) systemParts.push(_cardKIdx.replace('【世界观·知识条目索引】', '【世界书·知识条目索引】'));
               }
             }
           } catch(_) {}
@@ -4117,11 +4139,11 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         }
         const gs = (_wvForGlobal && _wvForGlobal.globalNpcs) || [];
         // v632.1：showContext 同步合并单人卡世界书 NPC，保证调试可见
-        if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
+        if (isGameMode) { // v685：所有模式都聚合 conv/wv/card/常驻角色书
           try {
             const _card = await SingleCard.get(singleSettings.charId);
-            if (_card && _card.extEnabled !== false) {
-              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, Conversations.getList().find(c => c.id === Conversations.getCurrent()));
+            if (!isSingleConv || singleSettings?.charType !== "card" || (_card && _card.extEnabled !== false)) {
+              const _hiddenWv = await _getCardLorebooksMerged(singleSettings?.charId, Conversations.getList().find(c => c.id === Conversations.getCurrent()));
               if (_hiddenWv && Array.isArray(_hiddenWv.globalNpcs) && _hiddenWv.globalNpcs.length > 0) {
                 const seen = new Set(gs.map(n => n.id || n.name));
                 for (const n of _hiddenWv.globalNpcs) {
@@ -4344,11 +4366,11 @@ try {
           }
         }
         // v596：单人卡的隐藏世界观（扩展设定）注入
-        if (isSingleConv && singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
+        if (isGameMode) { // v685：所有模式都聚合 conv/wv/card/常驻角色书
           try {
             const _card = await SingleCard.get(singleSettings.charId);
-            if (_card && _card.extEnabled !== false) {
-              const _hiddenWv = await _getCardLorebooksMerged(singleSettings.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
+            if (!isSingleConv || singleSettings?.charType !== "card" || (_card && _card.extEnabled !== false)) {
+              const _hiddenWv = await _getCardLorebooksMerged(singleSettings?.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
               if (_hiddenWv) {
                 const _festText = _buildFestivalPrompt(_hiddenWv.festivals || [], messages);
                 if (_festText) {
@@ -4854,7 +4876,7 @@ bgImage: conv?.convBgImage || '',
     try {
       const singleSettings = (typeof SingleMode !== 'undefined') ? SingleMode.getCurrentSingleSettings() : null;
 if (singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
-const hidden = await _getCardLorebooksMerged(singleSettings.charId, conv);
+const hidden = await _getCardLorebooksMerged(singleSettings?.charId, conv);
 if (hidden?.events?.length) events.push(...hidden.events);
 }
     } catch(_) {}
@@ -4887,7 +4909,7 @@ document.getElementById('event-manager-modal')?.classList.add('hidden');
 // 来源标签：
 //   wv       — 世界观默认（wv.defaultLorebookIds），可禁用，不可解绑
 //   card     — 单人卡自带（card.lorebookIds），可禁用，不可解绑
-//   attached — 挂载角色（type=card 的 attachedChars 卡书），可禁用，不可解绑
+//   attached — 常驻角色（type=card 的 attachedChars 卡书），可禁用，不可解绑
 //   conv     — 对话自由挂载（conv.lorebookIds），可禁用，可解绑
 async function openLorebookDisableModal() {
   const listEl = document.getElementById('lorebook-disable-list');
@@ -4919,7 +4941,7 @@ async function openLorebookDisableModal() {
     }
   } catch(_) {}
 
-  // 3) 挂载角色（type=card）自带
+  // 3) 常驻角色（type=card）自带
   try {
     const attachedList = Array.isArray(conv.attachedChars) ? conv.attachedChars : [];
     for (const e of attachedList) {
@@ -4949,7 +4971,7 @@ async function openLorebookDisableModal() {
   const sourceLabel = {
     wv:       { text: '世界观默认', color: 'var(--accent)' },
     card:     { text: '单人卡',     color: 'var(--text-secondary)' },
-    attached: { text: '挂载角色',   color: 'var(--text-secondary)' },
+    attached: { text: '常驻角色',   color: 'var(--text-secondary)' },
     conv:     { text: '本对话挂载', color: 'var(--accent)' },
   };
 
@@ -5061,7 +5083,7 @@ async function applyLorebooksToWorldview() {
   let msg = `将把当前对话的世界书配置应用到本世界观下的全部对话。\n\n`;
   msg += `· 自由挂载列表（${myIds.length} 本）将作为「新建对话默认」\n`;
   msg += `· 现有 ${otherCount} 个其它对话的自由挂载列表会被覆盖\n`;
-  msg += `· 单人卡/挂载角色自带的世界书不受影响\n\n`;
+  msg += `· 单人卡/常驻角色自带的世界书不受影响\n\n`;
   msg += `确定继续？`;
   const ok = await UI.showConfirm('应用到本世界观全部对话', msg);
   if (!ok) return;
