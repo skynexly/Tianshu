@@ -2004,6 +2004,8 @@ function _collectEmotionsForEdit() {
       return (v && v.trim()) ? v.trim() : '1001';
     } catch(_) { return '1001'; }
   }
+  // v685.4：暴露给外部模块（如 backstage.js）读口令
+  function getBackstagePwd() { return _getBackstagePwd(); }
   function _setBackstagePwd(v) {
     try { localStorage.setItem(BACKSTAGE_PWD_KEY, String(v || '').trim()); } catch(_) {}
   }
@@ -2386,7 +2388,7 @@ function _toggleEditScopeDropdown() { _toggleDropdown('mem-edit-scope-dropdown')
     buildExtractionPrompt, buildNotesPrompt: _buildNotesPrompt, formatForPrompt,
     showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove, deleteNoteConfirm, _deleteBackstageNote,
     _switchBackstageFilter, editBackstageNote, closeBsEdit, saveBsEdit, deleteBsFromEdit,
-    changeBackstagePwd,
+    changeBackstagePwd, getBackstagePwd,
     editNote, closeNoteEdit, saveNoteEdit, deleteNoteFromEdit,
     copyMemory, filterByScope, renderScopeSelector, onPanelShow,
     addManual,
