@@ -157,17 +157,17 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v683.1';
-const CHANGELOG = `【v683.1 修复】
-· 世界书 + 菜单去掉"事件"项（世界书没有事件 tab）
-· 世界书 + 菜单新增"NPC"项
+    const APP_VERSION = 'v683.2';
+const CHANGELOG = `【v683.2 修复】
+· 世界观扩展页残留世界书的"NPC"子 tab 内容（按钮已隐藏但内容区漏掉）
+· 世界观扩展页若落点在 npc，自动切回"节日"
+
+【v683.1 修复（回顾）】
+· 世界书 +菜单去掉"事件"项、新增"NPC"项
 · 导入/导出扩展设定补全 events / globalNpcs 字段
-  · 之前导出再导入会丢事件和 NPC
-  · 世界书导入带事件的文件会跳过并提示
 
 【v683 新功能（回顾）】
 · 批量导入 NPC：常驻 / 势力 / 世界书三处入口
-· 多文件 + 单文件多 NPC 拆包
 · 模糊字段识别 + 撞名追加 + 未知字段塞 detail
 
 【已知】

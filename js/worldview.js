@@ -217,10 +217,18 @@ const addMenuEvent = document.getElementById('wv-ext-add-menu-event');
 const addMenuNpc = document.getElementById('wv-ext-add-menu-npc');
 if (addMenuEvent) addMenuEvent.style.display = isHidden ? 'none' : 'flex';
 if (addMenuNpc) addMenuNpc.style.display = isHidden ? 'flex' : 'none';
-    // 默认子 tab 落点：世界书进来就停在节日（事件不在世界书里），世界观无所谓
-    if (isHidden && _currentExtSubtab === 'event') {
-      try { switchExtSubtab('festival'); } catch(_) {}
-    }
+// v683.2：世界观下强制隐藏 NPC 子 tab 内容容器（按钮已隐藏，但内容会残留导致"扩展页一进来就看到 NPC 区"）
+const npcSubContent = document.querySelector('.wv-ext-subtab-content[data-subtab="npc"]');
+if (npcSubContent) npcSubContent.classList.toggle('hidden', !isHidden ? true : (_currentExtSubtab !== 'npc'));
+    // 默认子 tab 落点：
+// - 世界书进来停在节日（事件子 tab 不存在）
+// - 世界观进来若残留在 npc（来自上次编辑的世界书），切回节日
+if (isHidden && _currentExtSubtab === 'event') {
+  try { switchExtSubtab('festival'); } catch(_) {}
+}
+if (!isHidden && _currentExtSubtab === 'npc') {
+  try { switchExtSubtab('festival'); } catch(_) {}
+}
   }
 
   async function load() {
