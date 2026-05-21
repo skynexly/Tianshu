@@ -622,7 +622,6 @@ try {
       userContent = (typeof userContent === 'string' ? userContent : text) +
         `\n[附加了${pendingMemories.length}条记忆]`;
     }
-
     // 附加文件（纯文本）
     if (pendingFiles.length > 0) {
       const fileText = pendingFiles.map(f =>
@@ -636,6 +635,22 @@ try {
       userContent = (typeof userContent === 'string' ? userContent : text) +
         `\n[附加了${pendingFiles.length}个文件：${pendingFiles.map(f=>f.name).join('、')}]`;
     }
+
+    // 附加骰点检定结果 v686：把待消费的最后一次确认 roll 拼成 OOC 块
+    try {
+      if (typeof Dice !== 'undefined' && Dice.consumePendingForSend) {
+        const { ooc } = await Dice.consumePendingForSend();
+        if (ooc) {
+          if (typeof userContentForAPI === 'string') {
+            userContentForAPI = userContentForAPI + '\n\n' + ooc;
+          } else {
+            userContentForAPI[0].text += '\n\n' + ooc;
+          }
+          userContent = (typeof userContent === 'string' ? userContent : text) + '\n' + ooc;
+        }
+      }
+    } catch(e) { console.warn('[Chat] 骰点 OOC 拼接失败', e); }
+
 
 
     // 附加风闻分享
@@ -673,6 +688,8 @@ try {
     if (!userMsg.hidden) {
       appendMessage(userMsg, false, true);
     }
+    // 骰点：发送后 pending 已经 consumed，重建气泡使其转为 history v686
+    try { _refreshDiceUI(); } catch(_) {}
     input.value = '';
     input.style.height = 'auto';
     roundCount++;
@@ -808,6 +825,14 @@ if (isSingleConv && isGameMode) {
           if (customAttrsFormatText) systemParts.push(customAttrsFormatText);
         } catch(e) { console.warn('[Chat] 自定义属性格式注入失败', e); }
       }
+
+    // 2c. 骰点系统玩法 v686
+    try {
+      if (typeof Dice !== 'undefined' && Dice.buildPromptBlock) {
+        const dicePrompt = Dice.buildPromptBlock();
+        if (dicePrompt) systemParts.push(dicePrompt);
+      }
+    } catch(e) { console.warn('[Chat] 骰点系统注入失败', e); }
     }
 
     // 2a. 上一轮状态面板（让 AI 知道当前场景状态，照抄未变化字段）
@@ -2904,7 +2929,7 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
     }
 
     // 正文
-    html += `<div class="msg-body md-content">${Markdown.render(parsed.body)}</div>`;
+    html += `<div class="msg-body md-content">${Dice.replaceCheckMarkers(Markdown.render(parsed.body))}</div>`;
 
     // 线上聊天气泡（```chat 块）：心动模拟世界观自带，其他世界观需对话设置里手动开启
     const _isHs = document.body.getAttribute('data-worldview') === '心动模拟';
@@ -2996,6 +3021,8 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
     messages.forEach(msg => appendMessage(msg));
     updateScrollBtn();
     if (multiSelectMode) _applyMultiSelectUI();
+    // 骰点系统：刷新 🎲 按钮显隐 + 历史气泡 v686
+    try { _refreshDiceUI(); } catch(_) {}
   }
 
   function scrollToBottom() {
@@ -4595,12 +4622,39 @@ bgImage: conv?.convBgImage || '',
       directiveTotal: conv?.convDirectiveTotal || 0      // 原始设定轮数
     };
   }
-
   function _onVoiceEnabledChange() {
     const enabled = document.getElementById('cs-voice-enabled').checked;
     const opts = document.getElementById('cs-voice-options');
     if (opts) opts.style.display = enabled ? 'flex' : 'none';
   }
+
+  // 骰点系统开关 v686
+  async function _onDiceToggle(checkbox) {
+    const cfg = document.getElementById('cs-dice-config');
+    if (!checkbox.checked) {
+      if (cfg) cfg.style.display = 'none';
+      return;
+    }
+    // 启用前置检查
+    const ok = await Dice.ensurePrerequisite();
+    if (!ok) {
+      checkbox.checked = false;
+      if (cfg) cfg.style.display = 'none';
+      return;
+    }
+    if (cfg) cfg.style.display = 'flex';
+  }
+
+  // 刷新聊天输入区🎲按钮 + 历史气泡
+  function _refreshDiceUI() {
+    try {
+      const btn = document.getElementById('btn-dice');
+      const enabled = !!(Dice && Dice.isEnabled && Dice.isEnabled());
+      if (btn) btn.style.display = enabled ? 'inline-flex' : 'none';
+      if (enabled && Dice.renderHistoryBubbles) Dice.renderHistoryBubbles();
+    } catch(_) {}
+  }
+
 
   function _onVoiceScopeAllChange() {
     const all = document.getElementById('cs-voice-scope-all').checked;
@@ -4666,6 +4720,18 @@ bgImage: conv?.convBgImage || '',
     if (evEnabled) evEnabled.checked = s.eventsEnabled;
     const tsEnabled = document.getElementById('cs-tasks-enabled');
     if (tsEnabled) tsEnabled.checked = s.tasksEnabled;
+    // 骰点系统 v686
+    try {
+      const dEn = document.getElementById('cs-dice-enabled');
+      const dCfg = document.getElementById('cs-dice-config');
+      const dMax = document.getElementById('cs-dice-max');
+      const dRule = document.getElementById('cs-dice-rule');
+      const dconv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      if (dEn) dEn.checked = !!(dconv && dconv.diceEnabled);
+      if (dCfg) dCfg.style.display = (dconv && dconv.diceEnabled) ? 'flex' : 'none';
+      if (dMax) dMax.value = (dconv && Number.isFinite(+dconv.diceMax) && +dconv.diceMax > 0) ? +dconv.diceMax : 100;
+      if (dRule) dRule.value = (dconv && ['<','<=','>','>='].includes(dconv.diceRule)) ? dconv.diceRule : '<=';
+    } catch(_) {}
     // 语音
     const ve = document.getElementById('cs-voice-enabled');
     if (ve) {
@@ -4737,6 +4803,19 @@ bgImage: conv?.convBgImage || '',
     if (evEl) conv.convEventsEnabled = evEl.checked;
     const tsEl = document.getElementById('cs-tasks-enabled');
     if (tsEl) conv.convTasksEnabled = tsEl.checked;
+    // 骰点系统 v686
+    try {
+      const dEn = document.getElementById('cs-dice-enabled');
+      const dMax = document.getElementById('cs-dice-max');
+      const dRule = document.getElementById('cs-dice-rule');
+      if (dEn) conv.diceEnabled = !!dEn.checked;
+      if (dMax) {
+        const n = parseInt(dMax.value);
+        conv.diceMax = (Number.isFinite(n) && n >= 2) ? n : 100;
+      }
+      if (dRule && ['<','<=','>','>='].includes(dRule.value)) conv.diceRule = dRule.value;
+      if (!Array.isArray(conv.diceRolls)) conv.diceRolls = [];
+    } catch(_) {}
     // 正文字数
     const wcEl = document.getElementById('cs-reply-wordcount');
     if (wcEl) conv.convReplyWordCount = parseInt(wcEl.value) || 800;

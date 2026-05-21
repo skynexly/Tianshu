@@ -5685,3 +5685,83 @@ letter-spacing: 0.15em;
   font-size: 13px;
   line-height: 1.6;
 }
+
+/* ===== 骰点系统 v686 ===== */
+.dice-check-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  margin: 4px 2px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim, var(--accent)));
+  border: none;
+  border-radius: 14px;
+  color: #111;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,.15);
+  transition: transform .12s, box-shadow .12s;
+}
+.dice-check-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,.2);
+}
+.dice-check-btn:active {
+  transform: translateY(0);
+}
+
+.dice-bubble {
+  margin: 6px auto;
+  max-width: 95%;
+  align-self: center;
+  display: flex;
+  justify-content: center;
+}
+.dice-bubble-inner {
+  padding: 8px 14px;
+  background: var(--bg-tertiary);
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  text-align: center;
+  min-width: 220px;
+}
+.dice-bubble-success {
+  border-color: var(--accent);
+  border-style: solid;
+}
+.dice-bubble-fail {
+  border-color: var(--border);
+}
+.dice-bubble-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text);
+}
+.dice-bubble-row2 {
+  margin-top: 2px;
+}
+.dice-bubble-row2 b {
+  color: var(--text);
+}
+.dice-bubble-tag {
+  font-size: 10px;
+  background: var(--accent);
+  color: #111;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+.dice-bubble-pending .dice-bubble-inner {
+  border-color: var(--accent);
+  border-style: solid;
+  background: rgba(196,168,124,0.08);
+}
+
