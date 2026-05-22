@@ -1295,6 +1295,13 @@ background: transparent !important;
  transition: transform .15s;
 }
 #phone-fab:active { transform: scale(.9); }
+/* v687.27：FAB 拖动模式视觉反馈 */
+.floating-fab.fab-dragging {
+  transform: scale(1.18) !important;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45) !important;
+  transition: transform .1s, box-shadow .1s;
+  opacity: 0.92;
+}
 .phone-notif-dot { position: absolute; top: 2px; right: 2px; width:8px; height:8px; border-radius: 50%; background: #e5393 5; display: none; }
 /* 备忘录 */
 .phone-memo-preview-card {
