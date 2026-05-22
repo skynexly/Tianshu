@@ -57,7 +57,10 @@ window.EnvAwareness = (function() {
       // 优先中文地名，否则英文
       const areaName = (area.areaName && area.areaName[0] && area.areaName[0].value) || '';
       const region = (area.region && area.region[0] && area.region[0].value) || '';
-      let loc = areaName || region || '';
+      // v687.20：用户填了城市名就以用户填的为准
+      // wttr.in 的 nearest_area 会返回最近的气象站（如填"成都"返回"郫都区"），
+      // 信息无误但地名让用户困惑——直接用用户输入覆盖
+      let loc = city || areaName || region || '';
       // 兜底：过滤坐标格式（理论上 j1 不会返回坐标，但保险）
       if (/度|°|纬|经|N\d|S\d|E\d|W\d/.test(loc)) loc = '';
       const temp = cur.temp_C ? (cur.temp_C + '°C') : '';
