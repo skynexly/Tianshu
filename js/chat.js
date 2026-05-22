@@ -511,8 +511,12 @@ const Chat = (() => {
   // ===== 共用：构建 API 上下文（send + showContext 共享） =====
   async function _buildApiContext(messages, opts = {}) {
     const { rewriteHint = null } = opts;
-    // 构建system prompt
-    const systemParts = [];
+// 构建system prompt
+const systemParts = [];
+// v687.31：状态栏类高时效注入——这些段会在 apiMessages 构建完毕后
+// 统一插入到"最后 user 消息之前"，让 AI 在读用户输入前先看到最新状态。
+// 解决"状态栏写 14, AI 说 9"的注意力衰减问题。
+const _recentStatusParts = [];
     const gaidenSettings = Gaiden.getCurrentGaidenSettings();
     const isGaidenConv = !!gaidenSettings;
     const singleSettings = (typeof SingleMode !== 'undefined') ? SingleMode.getCurrentSingleSettings() : null;
@@ -623,7 +627,8 @@ if (isSingleConv && isGameMode) {
         const curStatus = Conversations.getStatusBar();
         const statusText = Utils.serializeStatus(curStatus);
         if (statusText) {
-          systemParts.push('【上一轮状态面板】\n以下是当前场景的状态快照。你下一次回复的 `status` 代码块应基于此更新：未发生变化的字段请原样抄回；有变化则写新值。\n\n```status\n' + statusText + '\n```');
+          // v687.31：状态栏改为最近上下文注入（从 systemParts 移到最后 user 前）
+          _recentStatusParts.push('【上一轮状态面板】\n以下是当前场景的状态快照。你下一次回复的 `status` 代码块应基于此更新：未发生变化的字段请原样抄回；有变化则写新值。\n\n```status\n' + statusText + '\n```');
         }
       } catch(e) {}
     }
@@ -633,7 +638,8 @@ if (isSingleConv && isGameMode) {
       if (typeof StatusBar !== 'undefined' && StatusBar.formatCustomAttrsStatePrompt) {
         try {
           const customAttrsStateText = await StatusBar.formatCustomAttrsStatePrompt();
-          if (customAttrsStateText) systemParts.push(customAttrsStateText);
+          // v687.31：状态栏改为最近上下文注入
+          if (customAttrsStateText) _recentStatusParts.push(customAttrsStateText);
         } catch(e) { console.warn('[Chat] 自定义属性状态注入失败', e); }
       }
     }
@@ -868,7 +874,8 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       } else if (typeof StatusBar !== 'undefined' && StatusBar.hsFormatForPrompt) {
         try {
           const hsStateText = StatusBar.hsFormatForPrompt();
-        if (hsStateText) systemParts.push(hsStateText);
+        // v687.31：心动模拟累计状态改为最近上下文注入
+        if (hsStateText) _recentStatusParts.push(hsStateText);
       } catch(e) { console.warn('[Chat] 心动模拟累计状态注入失败', e); }
     }
 
@@ -876,7 +883,8 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     try {
       if (typeof StatusBar !== 'undefined' && StatusBar.taskFormatForPrompt) {
         const taskText = await StatusBar.taskFormatForPrompt();
-        if (taskText) systemParts.push(taskText);
+        // v687.31：通用任务系统改为最近上下文注入
+        if (taskText) _recentStatusParts.push(taskText);
       }
     } catch(e) { console.warn('[Chat] 通用任务系统注入失败', e); }
 
@@ -902,7 +910,8 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         const warnings = StatusBar.hsGetDarknessWarnings(true);  // 实际发送：会打/清查手机标记
         if (warnings.length > 0) {
           const warnText = warnings.map(w => w.text).join('\n');
-          systemParts.push(`【心动模拟·系统提醒】\n${warnText}`);
+          // v687.31：黑化警告改为最近上下文注入
+          _recentStatusParts.push(`【心动模拟·系统提醒】\n${warnText}`);
           // 黑化≥80时注入手机数据
           const phoneWarns = warnings.filter(w => w.level === 'phone');
           if (phoneWarns.length > 0 && window.Phone && Phone.buildPhoneDataForAI) {
@@ -1167,6 +1176,24 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         }
       }
     } catch(_) {}
+
+    // v687.31：状态栏类信息合并注入到"最后 user 消息之前"
+    // 解决：状态栏写 14, AI 说 9 —— 系统段离用户输入太远，注意力衰减
+    if (_recentStatusParts.length > 0) {
+      const merged = '【当前状态（权威值，请优先使用此处数据，覆盖你之前对数值的任何记忆或推测）】\n\n' +
+        _recentStatusParts.join('\n\n---\n\n');
+      // 找到最后一条非 hidden 的 user 消息位置（apiMessages 已含完整对话）
+      let lastUserIdx = -1;
+      for (let i = apiMessages.length - 1; i >= 0; i--) {
+        if (apiMessages[i].role === 'user') { lastUserIdx = i; break; }
+      }
+      if (lastUserIdx >= 0) {
+        apiMessages.splice(lastUserIdx, 0, { role: 'system', content: merged });
+      } else {
+        apiMessages.push({ role: 'system', content: merged });
+      }
+    }
+
     for (const m of apiMessages) {
       if (m.content && typeof m.content === 'string') {
         if (m.content.includes('{{user}}')) m.content = m.content.replaceAll('{{user}}', _macroUser);
