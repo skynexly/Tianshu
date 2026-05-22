@@ -1466,13 +1466,14 @@
 
             <!-- 骰点系统 v686 -->
             <label class="circle-check-label">
-              <span class="circle-check-text">骰点系统<br><span style="font-size:11px;color:var(--text-secondary)">投骰检定，根据属性值判定成功/失败。需要先配置数值系统。</span></span>
+              <span class="circle-check-text">骰点系统<br><span style="font-size:11px;color:var(--text-secondary)">启用投骰检定，AI 在关键节点打标记，前端渲染成可点击的投骰按钮</span></span>
               <span style="position:relative;display:inline-flex">
                 <input type="checkbox" id="cs-dice-enabled" class="circle-check" onchange="Chat._onDiceToggle(this)">
                 <span class="circle-check-ui"></span>
               </span>
             </label>
             <div id="cs-dice-config" style="margin-top:-12px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;display:none;flex-direction:column;gap:8px">
+              <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">根据属性值判定成功/失败，需要先配置数值系统。</div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span style="font-size:12px;color:var(--text-secondary);min-width:60px">骰子上限</span>
                 <input type="number" id="cs-dice-max" min="2" max="9999" step="1" value="100" style="flex:1;min-width:80px;max-width:120px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;text-align:right">
