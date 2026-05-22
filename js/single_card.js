@@ -718,83 +718,7 @@ const SingleCard = (() => {
     });
   }
 
-  // ===== 世界观角色头像库 =====
-  function switchCharSubtab(tab) {
-    const cardBtn = document.getElementById('char-subtab-card-btn');
-    const npcBtn = document.getElementById('char-subtab-npc-btn');
-    const cardPane = document.getElementById('char-subtab-card');
-    const npcPane = document.getElementById('char-subtab-npc');
-    const _play = (el, dir) => {
-      el.classList.remove('tab-pane-enter-left', 'tab-pane-enter-right');
-      void el.offsetWidth;
-      el.classList.add(dir === 'left' ? 'tab-pane-enter-left' : 'tab-pane-enter-right');
-    };
-    if (tab === 'npc') {
-      cardBtn.style.background = 'none';
-      cardBtn.style.color = 'var(--text-secondary)';
-      cardBtn.style.border = '1px solid var(--border)';
-      npcBtn.style.background = 'var(--accent)';
-      npcBtn.style.color = '#111';
-      npcBtn.style.border = 'none';
-      cardPane.style.display = 'none';
-      npcPane.style.display = 'block';
-      _play(npcPane, 'right');
-      renderNpcAvatarList('');
-    } else {
-      npcBtn.style.background = 'none';
-      npcBtn.style.color = 'var(--text-secondary)';
-      npcBtn.style.border = '1px solid var(--border)';
-      cardBtn.style.background = 'var(--accent)';
-      cardBtn.style.color = '#111';
-      cardBtn.style.border = 'none';
-      cardPane.style.display = 'block';
-      npcPane.style.display = 'none';
-      _play(cardPane, 'left');
-    }
-  }
-
-  // 收集所有世界观下所有 NPC，附带头像缓存
-  async function _collectAllNpcs() {
-    const wvs = await DB.getAll('worldviews');
-    const list = [];
-    for (const wv of wvs) {
-      if (wv.id === '__default_wv__') continue;
-      if (wv._hidden) continue;
-      // 全图 NPC（不归属地区/势力）
-      (wv.globalNpcs || []).forEach(n => {
-        list.push({
-          id: n.id,
-          name: n.name || '未命名',
-          aliases: n.aliases || '',
-          wvId: wv.id,
-          wvName: wv.name || '',
-          regionName: '全图 NPC',
-          factionName: '—'
-        });
-      });
-      (wv.regions || []).forEach(r => {
-        (r.factions || []).forEach(f => {
-          (f.npcs || []).forEach(n => {
-            list.push({
-              id: n.id,
-              name: n.name || '未命名',
-              aliases: n.aliases || '',
-              wvId: wv.id,
-              wvName: wv.name || '',
-              regionName: r.name || '',
-              factionName: f.name || ''
-            });
-          });
-        });
-      });
-    }
-    // 拉取所有 npcAvatars
-    const avatars = await DB.getAll('npcAvatars');
-    const avatarMap = {};
-    avatars.forEach(a => { avatarMap[a.id] = a.avatar; });
-    list.forEach(n => { n.avatar = avatarMap[n.id] || ''; });
-    return list;
-  }
+  // ===== 世界观角色头像库（v687.5：UI 入口已迁入世界观词条编辑页，仅保留数据层 API） =====
 
   async function getNpcAvatar(npcId) {
     if (!npcId) return '';
@@ -830,54 +754,6 @@ const SingleCard = (() => {
         setTimeout(() => { try { HeartSimIntro.refreshNpcAvatars && HeartSimIntro.refreshNpcAvatars(); } catch(_) {} }, 0);
       }
     } catch(e) {}
-  }
-
-  async function renderNpcAvatarList(filter) {
-    const container = document.getElementById('npc-avatar-list');
-    if (!container) return;
-    const q = (filter || '').trim().toLowerCase();
-    const npcs = await _collectAllNpcs();
-    const filtered = q ? npcs.filter(n =>
-      (n.name).toLowerCase().includes(q) ||
-      (n.aliases).toLowerCase().includes(q) ||
-      (n.wvName).toLowerCase().includes(q) ||
-      (n.regionName).toLowerCase().includes(q) ||
-      (n.factionName).toLowerCase().includes(q)
-    ) : npcs;
-
-    if (filtered.length === 0) {
-      container.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px">${q ? '没有匹配的角色' : '没有角色，先到世界观管理添加'}</div>`;
-      return;
-    }
-    container.innerHTML = filtered.map(n => {
-      const subtitle = `${Utils.escapeHtml(n.wvName)} / ${Utils.escapeHtml(n.regionName)} / ${Utils.escapeHtml(n.factionName)}`;
-      const avatarHtml = n.avatar
-        ? `<img src="${Utils.escapeHtml(n.avatar)}" style="width:100%;height:100%;object-fit:cover">`
-        : `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-secondary)"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>`;
-      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary)">
-        <div onclick="SingleCard._pickNpcAvatar('${n.id}')" style="width:40px;height:40px;border-radius:50%;flex-shrink:0;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;cursor:pointer">${avatarHtml}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.name)}${n.aliases ? `<span style="color:var(--text-secondary);font-size:12px"> · ${Utils.escapeHtml(n.aliases)}</span>` : ''}</div>
-          <div style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${subtitle}</div>
-        </div>
-        ${n.avatar ? `<button type="button" onclick="SingleCard._removeNpcAvatar('${n.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;padding:4px" title="删除头像"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>` : ''}
-      </div>`;
-    }).join('');
-  }
-
-  async function _pickNpcAvatar(npcId) {
-    const dataUrl = await Utils.promptImageInput({ maxSize: 256, quality: 0.85 });
-    if (!dataUrl) return;
-    await setNpcAvatar(npcId, dataUrl);
-    renderNpcAvatarList(document.getElementById('npc-avatar-search')?.value || '');
-    UI.showToast('头像已更新');
-  }
-
-  async function _removeNpcAvatar(npcId) {
-    if (!await UI.showConfirm('确认删除', '删除该 NPC 的自定义头像？')) return;
-    await setNpcAvatar(npcId, '');
-    renderNpcAvatarList(document.getElementById('npc-avatar-search')?.value || '');
-    UI.showToast('已删除');
   }
   
   // ===== v614 菜单 / 批量 / 排序（对齐 Memory & Worldview） =====
@@ -1181,7 +1057,6 @@ openLorebookPicker,
     toggleManageMode, exitManageMode, toggleSelectAll, _onCardClick,
     exportSelected, batchClone, batchDelete,
     toggleSortMode, exitSortMode, saveSortOrder,
-    switchCharSubtab, renderNpcAvatarList, getNpcAvatar, setNpcAvatar,
-    _pickNpcAvatar, _removeNpcAvatar
+    getNpcAvatar, setNpcAvatar
   };
 })();

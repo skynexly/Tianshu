@@ -1035,6 +1035,7 @@ return bsSettings.toolsMemory; // 兜底归到记忆类
     const items = [];
     if (msg.role === 'user') {
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg> 编辑', action: () => editMessage(msgId) });
+      items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> 回溯到此处', action: () => rollbackAndRestore(msgId) });
       items.push({ sep: true });
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 删除', action: () => deleteMessage(msgId), danger: true });
     } else {
@@ -1085,6 +1086,32 @@ return bsSettings.toolsMemory; // 兜底归到记忆类
     if (idx < 0) return;
     try { await DB.del('messages', msgId); } catch(e) {}
     messages.splice(idx, 1);
+    _renderMessages();
+  }
+
+  // v687.6：回溯到此处（用户气泡），把内容塞回输入框，删除该消息及之后的所有消息
+  async function rollbackAndRestore(msgId) {
+    const idx = messages.findIndex(m => m.id === msgId);
+    if (idx < 0) return;
+    const msg = messages[idx];
+    const afterCount = messages.length - idx - 1;
+    if (afterCount > 0 && !await UI.showConfirm('确认回溯', `将删除此消息之后的 ${afterCount} 条消息并回溯，确定？`)) return;
+    // 内容回输入框
+    const input = document.getElementById('backstage-input');
+    if (input) {
+      input.value = msg.content || '';
+      try { input.focus(); } catch(_) {}
+      try {
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 200) + 'px';
+      } catch(_) {}
+    }
+    // 删除从该消息起的所有消息（包括它自己）
+    const toDelete = messages.slice(idx);
+    for (const m of toDelete) {
+      try { await DB.del('messages', m.id); } catch(_) {}
+    }
+    messages.splice(idx);
     _renderMessages();
   }
 

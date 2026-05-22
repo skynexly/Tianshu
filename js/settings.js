@@ -217,6 +217,19 @@ const bsData = await DB.get('settings', 'backstagePresets');
     renderFuncPresetList('backstage');
     renderFuncPresetList('tts');
     renderFuncPresetList('draw');
+    // v687.6：回填 Unsplash Access Key
+    try {
+      const uk = document.getElementById('unsplash-access-key');
+      if (uk) uk.value = getUnsplashKey();
+    } catch(_) {}
+  }
+
+  // v687.6：Unsplash 配图（独立 localStorage，不走 funcPreset 那套）
+  function saveUnsplashKey(key) {
+    try { localStorage.setItem('unsplash_key', (key || '').trim()); } catch(_) {}
+  }
+  function getUnsplashKey() {
+    try { return localStorage.getItem('unsplash_key') || ''; } catch(_) { return ''; }
   }
 
   function editPreset(id) {
@@ -1098,13 +1111,39 @@ async function cancelEdit() {
       const btn = dropdown.previousElementSibling;
       if (btn) {
         const rect = btn.getBoundingClientRect();
+        // 先把下拉显示出来量真实内容高度（用 visibility 隐藏，避免闪一下）
+        dropdown.style.visibility = 'hidden';
         dropdown.style.position = 'fixed';
         dropdown.style.left = rect.left + 'px';
-        dropdown.style.top = (rect.bottom + 4) + 'px';
+        dropdown.style.top = '0px';
         dropdown.style.width = rect.width + 'px';
+        dropdown.style.maxHeight = '';
         dropdown.style.zIndex = '9999';
+        dropdown.classList.remove('hidden');
+        const contentH = dropdown.scrollHeight;
+        // 视口空间
+        const vh = window.innerHeight;
+        const margin = 12;
+        const spaceBelow = vh - rect.bottom - margin;
+        const spaceAbove = rect.top - margin;
+        const desiredH = Math.min(contentH, 200);
+        let top, maxH;
+        if (spaceBelow >= desiredH || spaceBelow >= spaceAbove) {
+          // 向下展开
+          top = rect.bottom + 4;
+          maxH = Math.min(200, spaceBelow);
+        } else {
+          // 向上展开
+          maxH = Math.min(200, spaceAbove);
+          top = rect.top - maxH - 4;
+        }
+        dropdown.style.top = top + 'px';
+        dropdown.style.maxHeight = maxH + 'px';
+        dropdown.style.overflowY = 'auto';
+        dropdown.style.visibility = '';
+      } else {
+        dropdown.classList.remove('hidden');
       }
-      dropdown.classList.remove('hidden');
       // 点外面关闭
       setTimeout(() => {
         document.addEventListener('click', function _close(e) {
@@ -1147,6 +1186,7 @@ async function cancelEdit() {
     renderFuncPresetList, switchSummary, switchMemory, switchVision, switchGaiden, switchWorldvoice, switchBackstage, switchTts, switchDraw,
     editFuncPreset, saveFuncPreset, cancelFuncEdit, createFuncPreset,
     cloneFuncPreset, deleteFuncPreset, fetchFuncModels, fillFromMainPreset, toggleFillDropdown,
-    toggleFuncSelect, toggleFuncManageMode, batchDeleteFunc, batchCloneFunc
+    toggleFuncSelect, toggleFuncManageMode, batchDeleteFunc, batchCloneFunc,
+    saveUnsplashKey, getUnsplashKey
   };
 })();

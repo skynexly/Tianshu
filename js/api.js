@@ -372,6 +372,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     }).filter(Boolean);
 
     const images = [];
+    let fallbackFailures = 0;  // v687.6：统计图床 fallback 失败次数
     for (const item of rawList) {
       if (item.type === 'b64') {
         images.push(`data:image/png;base64,${item.value}`);
@@ -389,13 +390,42 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
           });
           images.push(dataUrl);
         } catch(e) {
-          console.warn('[generateImage] URL转base64失败，回退到原URL（可能很快过期）:', e);
+          fallbackFailures++;
+          console.warn('[generateImage] 图床下载失败:', item.value, e);
           images.push(item.value);
         }
       }
     }
+    // 全部走 URL 且全部失败：弹明确提示（而不是默默返回死链）
+    if (fallbackFailures > 0 && fallbackFailures === rawList.length) {
+      try { UI.showToast(`图片下载失败（${fallbackFailures}张）：可能是网络环境无法访问图床，建议切 WiFi 重试`, 3500); } catch(_) {}
+    }
     return images.filter(Boolean);
   }
 
-  return { getConfig, buildMessages, streamChat, summarize, extractMemory, fetchModelList, generate, generateImage };
+  /**
+   * v687.6：Unsplash 配图搜索
+   * @param {string} query 英文关键词（必须英文，中文返回空）
+   * @param {number} perPage 1~5，默认1
+   * @returns {Promise<string|null>} 图片URL（regular尺寸）或 null
+   */
+  async function searchUnsplash(query, perPage = 1) {
+    const key = (typeof Settings !== 'undefined' && Settings.getUnsplashKey) ? Settings.getUnsplashKey() : '';
+    if (!key || !query) return null;
+    try {
+      const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${perPage}&orientation=landscape&client_id=${encodeURIComponent(key)}`;
+      const r = await fetch(url, { method: 'GET' });
+      if (!r.ok) return null;
+      const json = await r.json();
+      const results = json.results || [];
+      if (!results.length) return null;
+      // 随机一张避免每次同 query 都一样
+      const pick = results[Math.floor(Math.random() * results.length)];
+      return pick.urls?.regular || pick.urls?.small || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  return { getConfig, buildMessages, streamChat, summarize, extractMemory, fetchModelList, generate, generateImage, searchUnsplash };
 })();

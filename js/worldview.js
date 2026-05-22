@@ -1648,6 +1648,90 @@ return;
   }
   
   // ---------- NPC编辑面板 ----------
+  // 当前编辑中的 NPC id（普通 / 全图都用同一个变量）
+  async function _currentEditNpcId() {
+    try {
+      const w = await _getEditingWV();
+      if (!w) return null;
+      if (_editGlobalNpcIdx >= 0) {
+        return (w.globalNpcs && w.globalNpcs[_editGlobalNpcIdx])?.id || null;
+      }
+      if (_editRegionIdx >= 0 && _editFactionIdx >= 0 && _editNPCIdx >= 0) {
+        return (w.regions[_editRegionIdx]?.factions[_editFactionIdx]?.npcs[_editNPCIdx])?.id || null;
+      }
+    } catch(_) {}
+    return null;
+  }
+
+  async function _refreshEditingNpcAvatar() {
+    const content = document.getElementById('wv-npc-avatar-content');
+    const btn = document.getElementById('wv-npc-avatar-btn');
+    if (!content || !btn) return;
+    const npcId = await _currentEditNpcId();
+    let url = '';
+    if (npcId) {
+      try {
+        const r = await DB.get('npcAvatars', npcId);
+        if (r && r.avatar) url = r.avatar;
+      } catch(_) {}
+    }
+    if (url) {
+      content.innerHTML = `<img src="${Utils.escapeHtml(url)}" style="width:100%;height:100%;object-fit:cover">`;
+    } else {
+      content.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-secondary)"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>`;
+    }
+    // 长按删除：重新绑定（每次刷新清掉旧的）
+    btn.ontouchstart = null;
+    btn.ontouchend = null;
+    btn.ontouchcancel = null;
+    btn.oncontextmenu = null;
+    let _lpTimer = null;
+    const _startLp = () => {
+      if (_lpTimer) clearTimeout(_lpTimer);
+      _lpTimer = setTimeout(() => { _lpTimer = null; _clearEditingNpcAvatar(); }, 600);
+    };
+    const _cancelLp = () => { if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; } };
+    btn.ontouchstart = (e) => { _startLp(); };
+    btn.ontouchend = _cancelLp;
+    btn.ontouchcancel = _cancelLp;
+    btn.oncontextmenu = (e) => { e.preventDefault(); _clearEditingNpcAvatar(); };
+  }
+
+  async function _pickEditingNpcAvatar() {
+    const npcId = await _currentEditNpcId();
+    if (!npcId) { UI.showToast('请先保存角色名称再上传头像', 1800); return; }
+    const dataUrl = await Utils.promptImageInput({ maxSize: 256, quality: 0.85 });
+    if (!dataUrl) return;
+    try {
+      if (typeof SingleCard !== 'undefined' && SingleCard.setNpcAvatar) {
+        await SingleCard.setNpcAvatar(npcId, dataUrl);
+      } else {
+        await DB.put('npcAvatars', { id: npcId, avatar: dataUrl, updated: Date.now() });
+      }
+    } catch(e) { console.warn('[wv-npc] 头像保存失败', e); UI.showToast('头像保存失败', 1500); return; }
+    await _refreshEditingNpcAvatar();
+    UI.showToast('头像已更新', 1500);
+  }
+
+  async function _clearEditingNpcAvatar() {
+    const npcId = await _currentEditNpcId();
+    if (!npcId) return;
+    try {
+      const r = await DB.get('npcAvatars', npcId);
+      if (!r || !r.avatar) return;  // 本来就没有，不弹确认
+    } catch(_) {}
+    if (!await UI.showConfirm('删除头像', '删除该角色的自定义头像？')) return;
+    try {
+      if (typeof SingleCard !== 'undefined' && SingleCard.setNpcAvatar) {
+        await SingleCard.setNpcAvatar(npcId, '');
+      } else {
+        await DB.delete('npcAvatars', npcId);
+      }
+    } catch(_) {}
+    await _refreshEditingNpcAvatar();
+    UI.showToast('已删除', 1200);
+  }
+
   async function openNPCEdit(ni) {
     const w = await _getEditingWV();
     if (!w) return;
@@ -1677,6 +1761,7 @@ return;
     
     UI.showPanel('wv-npc', 'forward');
     requestAnimationFrame(_attachWVNpcAutoSave);
+    _refreshEditingNpcAvatar();
     const resizeNPCEdit = () => {
       ['wv-npc-summary', 'wv-npc-detail'].forEach(id => {
         const ta = document.getElementById(id);
@@ -2512,6 +2597,7 @@ document.getElementById('wv-npc-aliases').value = npc.aliases || '';
 
     UI.showPanel('wv-npc', 'forward');
     requestAnimationFrame(_attachWVNpcAutoSave);
+    _refreshEditingNpcAvatar();
     const resize = () => {
       ['wv-npc-summary', 'wv-npc-detail'].forEach(id => {
         const ta = document.getElementById(id);
@@ -4394,6 +4480,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     openFactionEdit, saveFaction, deleteFaction,
     openNPCEdit, saveNPC, deleteNPC,
     addGlobalNpc, editGlobalNpc, backFromNpcEdit,
+    _pickEditingNpcAvatar, _clearEditingNpcAvatar,
     openNpcImporter,
     _bulkImportNpcs,
     _getEditingWVForImporter,

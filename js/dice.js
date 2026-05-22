@@ -142,9 +142,13 @@ window.Dice = (() => {
           </div>
           <button type="button" onclick="Dice.closeModal()" style="background:transparent;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer;line-height:1">×</button>
         </div>
-        <div>
+        <div style="position:relative">
           <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">选择检定属性</div>
-          <select id="dice-attr-select" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px"></select>
+          <button type="button" id="dice-attr-btn" class="custom-select-btn" style="font-size:13px;padding:8px 10px">
+            <span id="dice-attr-btn-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left">—</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.7"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="dice-attr-dropdown" class="custom-dropdown hidden" style="max-height:240px;overflow-y:auto"></div>
         </div>
         <div id="dice-attr-info" style="font-size:12px;color:var(--text-secondary);background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;padding:8px 10px;line-height:1.6"></div>
         <div id="dice-result-area" style="min-height:60px"></div>
@@ -155,11 +159,56 @@ window.Dice = (() => {
       </div>`;
     document.body.appendChild(m);
     _modalEl = m;
-    // 切换属性时刷新当前值
-    m.querySelector('#dice-attr-select').addEventListener('change', _refreshAttrInfo);
-    // 点遮罩关闭
-    m.addEventListener('click', e => { if (e.target === m) closeModal(); });
+    // 自定义下拉：按钮点击切换、点外面关闭
+    const btn = m.querySelector('#dice-attr-btn');
+    const dd = m.querySelector('#dice-attr-dropdown');
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (btn.disabled) return;
+      dd.classList.toggle('hidden');
+    });
+    m.addEventListener('click', e => {
+      // 点弹窗内非下拉区域时关掉下拉
+      if (!e.target.closest('#dice-attr-dropdown') && !e.target.closest('#dice-attr-btn')) {
+        dd.classList.add('hidden');
+      }
+      // 点遮罩关闭整个 modal
+      if (e.target === m) closeModal();
+    });
     return m;
+  }
+
+  function _renderAttrDropdown(attrs, currentId) {
+    if (!_modalEl) return;
+    const dd = _modalEl.querySelector('#dice-attr-dropdown');
+    dd.innerHTML = attrs.map(a => `
+      <div class="custom-dropdown-item${a.id === currentId ? ' active' : ''}" data-attr-id="${Utils.escapeHtml(a.id)}" style="font-size:13px">
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(a.name)}</span>
+      </div>
+    `).join('');
+    dd.querySelectorAll('.custom-dropdown-item').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = el.getAttribute('data-attr-id');
+        _selectAttr(id);
+        dd.classList.add('hidden');
+      });
+    });
+  }
+
+  function _selectAttr(id) {
+    if (!_modalEl || !_modalState) return;
+    _modalState.attrId = id;
+    // 更新按钮文字 + 高亮项
+    _listGlobalAttrs().then(attrs => {
+      const a = attrs.find(x => x.id === id);
+      const lbl = _modalEl.querySelector('#dice-attr-btn-label');
+      if (lbl) lbl.textContent = a ? a.name : '—';
+      _modalEl.querySelectorAll('#dice-attr-dropdown .custom-dropdown-item').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-attr-id') === id);
+      });
+      _refreshAttrInfo();
+    });
   }
 
   async function openModal(presetAttrName) {
@@ -174,22 +223,33 @@ window.Dice = (() => {
       return;
     }
     _ensureModal();
-    _modalState = { lockedAttrName: presetAttrName || null, rolls: [] };
-    // 填属性选项
-    const sel = _modalEl.querySelector('#dice-attr-select');
-    sel.innerHTML = attrs.map(a => `<option value="${Utils.escapeHtml(a.id)}" data-name="${Utils.escapeHtml(a.name)}">${Utils.escapeHtml(a.name)}</option>`).join('');
-    // 预选锁定
+    _modalState = { lockedAttrName: presetAttrName || null, rolls: [], attrId: null };
+    // 填属性下拉
+    const btn = _modalEl.querySelector('#dice-attr-btn');
+    const lbl = _modalEl.querySelector('#dice-attr-btn-label');
+    // 决定默认选中
+    let defaultAttr = attrs[0];
     if (presetAttrName) {
       const hit = attrs.find(a => (a.name || '').trim() === presetAttrName.trim());
       if (hit) {
-        sel.value = hit.id;
-        sel.disabled = true;
+        defaultAttr = hit;
+        btn.disabled = true;
+        btn.style.opacity = '.7';
+        btn.style.cursor = 'not-allowed';
       } else {
-        sel.disabled = false;
+        btn.disabled = false;
+        btn.style.opacity = '';
+        btn.style.cursor = 'pointer';
       }
     } else {
-      sel.disabled = false;
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.cursor = 'pointer';
     }
+    _modalState.attrId = defaultAttr.id;
+    lbl.textContent = defaultAttr.name;
+    _renderAttrDropdown(attrs, defaultAttr.id);
+    _modalEl.querySelector('#dice-attr-dropdown').classList.add('hidden');
     _modalEl.querySelector('#dice-result-area').innerHTML = '';
     _modalEl.querySelector('#dice-btn-confirm').style.display = 'none';
     _modalEl.querySelector('#dice-btn-reroll').textContent = '投掷';
@@ -203,10 +263,9 @@ window.Dice = (() => {
   }
 
   async function _refreshAttrInfo() {
-    if (!_modalEl) return;
-    const sel = _modalEl.querySelector('#dice-attr-select');
+    if (!_modalEl || !_modalState) return;
     const attrs = await _listGlobalAttrs();
-    const a = attrs.find(x => x.id === sel.value);
+    const a = attrs.find(x => x.id === _modalState.attrId);
     const cfg = getConfig();
     const info = _modalEl.querySelector('#dice-attr-info');
     if (!a) { info.innerHTML = ''; return; }
@@ -218,9 +277,8 @@ window.Dice = (() => {
 
   async function rollOnce() {
     if (!_modalEl || !_modalState) return;
-    const sel = _modalEl.querySelector('#dice-attr-select');
     const attrs = await _listGlobalAttrs();
-    const a = attrs.find(x => x.id === sel.value);
+    const a = attrs.find(x => x.id === _modalState.attrId);
     if (!a) { UI.showToast('请选择属性', 1500); return; }
     const cfg = getConfig();
     const val = _getAttrValue(a);

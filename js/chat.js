@@ -1449,6 +1449,9 @@ messages.push(aiMsg);
               // 剧情引导轮数递减
               try { await _decrementDirective(); } catch(_) {}
 
+              // v687.6：手机好友圈自动刷新计数器扣减（一问一答 = 一轮）
+              try { if (typeof Phone !== 'undefined' && Phone._tickMomentsAutoRefresh) Phone._tickMomentsAutoRefresh(); } catch(_) {}
+
               // v610：扫描 AI 回复中的事件结束关键词
               try {
                 const _evtConv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
@@ -1675,6 +1678,8 @@ requestController.signal,
                     messages.push(aiMsg);
                     // 剧情引导轮数递减
                     try { await _decrementDirective(); } catch(_) {}
+                    // v687.6：手机好友圈自动刷新计数器扣减
+                    try { if (typeof Phone !== 'undefined' && Phone._tickMomentsAutoRefresh) Phone._tickMomentsAutoRefresh(); } catch(_) {}
                     contentEl.classList.remove('streaming-cursor');
                     contentEl.innerHTML = Markdown.render(fullContent);
                     resolve();
@@ -4105,6 +4110,93 @@ bgImage: conv?.convBgImage || '',
     if (cfg) cfg.style.display = 'flex';
   }
 
+  // v687.6：骰点配置弹窗
+  const _DICE_RULE_OPTIONS = [
+    { value: '<=', label: '结果 ≤ 属性值 = 成功（默认）' },
+    { value: '<',  label: '结果 < 属性值 = 成功' },
+    { value: '>=', label: '结果 ≥ 属性值 = 成功' },
+    { value: '>',  label: '结果 > 属性值 = 成功' },
+  ];
+
+  function _renderDiceRuleDropdown(currentValue) {
+    const dd = document.getElementById('dice-cfg-rule-dropdown');
+    if (!dd) return;
+    dd.innerHTML = _DICE_RULE_OPTIONS.map(o => `
+      <div class="custom-dropdown-item${o.value === currentValue ? ' active' : ''}" data-rule="${o.value}" style="font-size:13px">
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.label}</span>
+      </div>
+    `).join('');
+    dd.querySelectorAll('.custom-dropdown-item').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const v = el.getAttribute('data-rule');
+        _selectDiceRule(v);
+        dd.classList.add('hidden');
+      });
+    });
+  }
+
+  function _selectDiceRule(value) {
+    const opt = _DICE_RULE_OPTIONS.find(o => o.value === value) || _DICE_RULE_OPTIONS[0];
+    const lbl = document.getElementById('dice-cfg-rule-label');
+    if (lbl) lbl.textContent = opt.label;
+    const btn = document.getElementById('dice-cfg-rule-btn');
+    if (btn) btn.dataset.value = opt.value;
+    // 同步高亮
+    document.querySelectorAll('#dice-cfg-rule-dropdown .custom-dropdown-item').forEach(el => {
+      el.classList.toggle('active', el.getAttribute('data-rule') === opt.value);
+    });
+  }
+
+  function _toggleDiceRuleDropdown() {
+    const dd = document.getElementById('dice-cfg-rule-dropdown');
+    if (!dd) return;
+    dd.classList.toggle('hidden');
+  }
+
+  function _openDiceConfigModal() {
+    const modal = document.getElementById('dice-config-modal');
+    if (!modal) return;
+    // 从隐藏 input 读当前值
+    const curMax = parseInt(document.getElementById('cs-dice-max')?.value) || 100;
+    const curRule = document.getElementById('cs-dice-rule')?.value || '<=';
+    const maxEl = document.getElementById('dice-cfg-max');
+    if (maxEl) maxEl.value = curMax;
+    _renderDiceRuleDropdown(curRule);
+    _selectDiceRule(curRule);
+    // 关下拉
+    document.getElementById('dice-cfg-rule-dropdown')?.classList.add('hidden');
+    modal.classList.remove('hidden');
+    // 点遮罩关闭
+    modal.onclick = (e) => {
+      if (e.target === modal) _closeDiceConfigModal();
+      // 点弹窗内非下拉区时关下拉
+      if (!e.target.closest('#dice-cfg-rule-dropdown') && !e.target.closest('#dice-cfg-rule-btn')) {
+        document.getElementById('dice-cfg-rule-dropdown')?.classList.add('hidden');
+      }
+    };
+  }
+
+  function _closeDiceConfigModal() {
+    const modal = document.getElementById('dice-config-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function _saveDiceConfigModal() {
+    const maxEl = document.getElementById('dice-cfg-max');
+    const ruleBtn = document.getElementById('dice-cfg-rule-btn');
+    const n = parseInt(maxEl?.value);
+    const newMax = (Number.isFinite(n) && n >= 2) ? n : 100;
+    const newRule = (ruleBtn?.dataset.value && ['<','<=','>','>='].includes(ruleBtn.dataset.value)) ? ruleBtn.dataset.value : '<=';
+    // 写回隐藏 input（saveConvSettings 会读这两个）
+    const hMax = document.getElementById('cs-dice-max');
+    const hRule = document.getElementById('cs-dice-rule');
+    if (hMax) hMax.value = newMax;
+    if (hRule) hRule.value = newRule;
+    _closeDiceConfigModal();
+    UI.showToast(`骰子配置：1d${newMax} · ${newRule}`, 1500);
+  }
+
   // 刷新聊天输入区🎲按钮 + 历史气泡
   function _refreshDiceUI() {
     try {
@@ -4313,6 +4405,8 @@ bgImage: conv?.convBgImage || '',
     closeConvSettingsModal();
     // 更新加号菜单里的生图按钮可见性
     _updateImgGenButtons();
+    // v687.6：保存后立刻刷新 🎲 按钮 + 历史气泡，无需切换对话
+    try { _refreshDiceUI(); } catch(_) {}
     // 更新后台悬浮按钮
     if (typeof Backstage !== 'undefined') Backstage.updateFab();
     // 如果刚开启后台，弹出要求编辑面板
@@ -5047,6 +5141,7 @@ openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
     playVoiceForMessage, stopVoice,
     buildAIMessageHTML, appendMessage,
     openImgGenModal, submitImgGen, _updateImgGenButtons,
-    resolveDrawnImagesInHTML, downloadImage, openImageLightbox
+    resolveDrawnImagesInHTML, downloadImage, openImageLightbox,
+    _onDiceToggle, _openDiceConfigModal, _closeDiceConfigModal, _saveDiceConfigModal, _toggleDiceRuleDropdown
   };
 })();

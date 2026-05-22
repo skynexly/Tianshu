@@ -462,49 +462,94 @@ function _isAppStillActive(appId) {
     // 2. 世界观详细数据（NPC、节日、自定义设定）
     try {
       const wv = await Worldview.getCurrent();
-      if (wv) {
-        // 全图 NPC + 详细资料
-        const allNpcs = [];
-        if (wv.globalNpcs && wv.globalNpcs.length > 0) {
-          for (const npc of wv.globalNpcs) {
-            let desc = `${npc.name || '未命名'}`;
-            if (npc.aliases) desc += `（别名：${npc.aliases}）`;
-            if (npc.detail) desc += `\n${npc.detail}`;
-            allNpcs.push(desc);
+
+      // v687.6：聚合所有绑定的世界书（按对话/卡/世界观/挂载角色）
+      let bookExtra = { globalNpcs: [], festivals: [], knowledges: [] };
+      try {
+        if (typeof Lorebook !== 'undefined' && Lorebook.collectForChat) {
+          const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+          let card = null;
+          if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+            try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
           }
+          const lbs = await Lorebook.collectForChat({ conv, card, wv });
+          for (const lb of (lbs || [])) {
+            if (Array.isArray(lb.globalNpcs)) bookExtra.globalNpcs.push(...lb.globalNpcs);
+            if (Array.isArray(lb.festivals)) bookExtra.festivals.push(...lb.festivals);
+            if (Array.isArray(lb.knowledges)) bookExtra.knowledges.push(...lb.knowledges);
+          }
+        }
+      } catch(_) {}
+
+      if (wv) {
+        // 全图 NPC + 详细资料（世界观 + 世界书合并）
+        const allNpcs = [];
+        const collectNpc = (npc, regionName) => {
+          let desc = `${npc.name || '未命名'}`;
+          if (regionName) desc += `（所属：${regionName}）`;
+          if (npc.aliases) desc += `（别名：${npc.aliases}）`;
+          if (npc.detail) desc += `\n${npc.detail}`;
+          allNpcs.push(desc);
+        };
+        if (wv.globalNpcs && wv.globalNpcs.length > 0) {
+          for (const npc of wv.globalNpcs) collectNpc(npc, '');
         }
         // 地区/势力挂载 NPC
         if (wv.regions && wv.regions.length > 0) {
           for (const r of wv.regions) {
             if (r.npcs && r.npcs.length > 0) {
-              for (const npc of r.npcs) {
-                let desc = `${npc.name || '未命名'}（所属：${r.name || '未知'}）`;
-                if (npc.aliases) desc += `（别名：${npc.aliases}）`;
-                if (npc.detail) desc += `\n${npc.detail}`;
-                allNpcs.push(desc);
-              }
+              for (const npc of r.npcs) collectNpc(npc, r.name || '未知');
             }
+          }
+        }
+        // v687.6：世界书 NPC（合并到列表，去重按 id）
+        if (bookExtra.globalNpcs.length > 0) {
+          const seenIds = new Set();
+          (wv.globalNpcs || []).forEach(n => { if (n.id) seenIds.add(n.id); });
+          (wv.regions || []).forEach(r => (r.npcs || []).forEach(n => { if (n.id) seenIds.add(n.id); }));
+          for (const npc of bookExtra.globalNpcs) {
+            if (npc.id && seenIds.has(npc.id)) continue;
+            collectNpc(npc, '');
           }
         }
         if (allNpcs.length > 0) parts.push('【NPC列表与详细资料】\n' + allNpcs.join('\n---\n'));
 
-        // 节日设定
-        if (wv.festivals && wv.festivals.length > 0) {
-          const festStr = wv.festivals.map(f => `${f.name || ''}（${f.date || ''}）：${f.desc || ''}`).join('\n');
+        // 节日设定（世界观 + 世界书合并）
+        const allFest = [...(wv.festivals || []), ...bookExtra.festivals];
+        if (allFest.length > 0) {
+          const festStr = allFest.map(f => `${f.name || ''}（${f.date || ''}）：${f.desc || ''}`).join('\n');
           parts.push('【节日设定】\n' + festStr);
         }
 
-        // 自定义设定（已开启的常驻条目，v581：从合并后的 knowledges 筛 keywordTrigger=false）
-        const allKnowledges = wv.knowledges || wv.customs || [];
+        // 知识设定（世界观 + 世界书合并）— v687.6：所有启用条目都进，不再区分关键词触发
+        const allKnowledges = [...(wv.knowledges || wv.customs || []), ...bookExtra.knowledges];
         if (allKnowledges.length > 0) {
-          const enabledCustoms = allKnowledges.filter(c => !c.keywordTrigger && c.enabled !== false);
-          if (enabledCustoms.length > 0) {
-            const custStr = enabledCustoms.map(c => `${c.name || ''}：${c.content || ''}`).join('\n');
-            parts.push('【自定义设定】\n' + custStr);
+          const enabledAll = allKnowledges.filter(c => c.enabled !== false);
+          if (enabledAll.length > 0) {
+            const custStr = enabledAll.map(c => `${c.name || ''}：${c.content || ''}`).join('\n');
+            parts.push('【知识设定】\n' + custStr);
           }
         }
+      } else if (bookExtra.globalNpcs.length || bookExtra.festivals.length || bookExtra.knowledges.length) {
+        // 没世界观但有世界书（单人卡 + 世界书的场景）
+        if (bookExtra.globalNpcs.length > 0) {
+          const lines = bookExtra.globalNpcs.map(npc => {
+            let d = npc.name || '未命名';
+            if (npc.aliases) d += `（别名：${npc.aliases}）`;
+            if (npc.detail) d += `\n${npc.detail}`;
+            return d;
+          });
+          parts.push('【NPC列表与详细资料】\n' + lines.join('\n---\n'));
+        }
+        if (bookExtra.festivals.length > 0) {
+          parts.push('【节日设定】\n' + bookExtra.festivals.map(f => `${f.name || ''}（${f.date || ''}）：${f.desc || ''}`).join('\n'));
+        }
+        const enabledAll = bookExtra.knowledges.filter(c => c.enabled !== false);
+        if (enabledAll.length > 0) {
+          parts.push('【知识设定】\n' + enabledAll.map(c => `${c.name || ''}：${c.content || ''}`).join('\n'));
+        }
       }
-    } catch(e) { console.warn('[Phone] 世界观数据获取失败', e); }
+    } catch(e) { console.warn('[Phone] 世界观/世界书数据获取失败', e); }
 
     // 3. 用户面具信息
     try {
@@ -754,7 +799,8 @@ function _uiIcon(type, size = 16) {
  image: `<svg ${common}><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="8.5" cy="10" r="1.5"></circle><path d="m21 15-5-5L5 21"></path></svg>`,
  camera: `<svg ${common}><rect x="4" y="7" width="16" height="12" rx="3"></rect><circle cx="12" cy="13" r="3"></circle><path d="M9 7l1.5-2h3L15 7"></path></svg>`,
  heart: `<svg ${common}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 6.67l-1.06-2.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78Z"></path></svg>`,
- comment: `<svg ${common}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"></path></svg>`
+ comment: `<svg ${common}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"></path></svg>`,
+ settings: `<svg ${common}><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path></svg>`
  };
  return icons[type] || '';
 }
@@ -1803,6 +1849,7 @@ ${wvPrompt}` },
                 <div class="phone-moment-time">${Utils.escapeHtml(_formatPhoneTime(m.time || '未知时间'))}</div>
               </div>
               <div class="phone-moment-text">${Utils.escapeHtml(m.text || '')}</div>
+              ${m.image ? `<div class="phone-moment-image-wrap" style="margin-top:8px;border-radius:8px;overflow:hidden;max-width:100%"><img src="${Utils.escapeHtml(m.image)}" style="width:100%;display:block;object-fit:cover;max-height:200px" loading="lazy" onerror="this.parentElement.style.display='none'"></div>` : ''}
             </div>
           </div>
           <div class="phone-moment-actions">
@@ -1819,23 +1866,25 @@ ${wvPrompt}` },
     body.innerHTML = `
       <div style="display:flex;flex-direction:column;height:100%">
         <div class="phone-moments-cover" onclick="Phone._onMomentsCoverPicked()" style="${pd.momentsCover ? `background-image:linear-gradient(180deg,rgba(0,0,0,0.10),rgba(0,0,0,0.46)),url('${pd.momentsCover}')` : ''}">
-          <button type="button" class="phone-moments-cover-action" onclick="event.stopPropagation();${_momentsTab === 'mine' ? 'Phone._postMoment()' : 'Phone._refreshNpcMoments()'}" title="${_momentsTab === 'mine' ? '发动态' : '刷新好友动态'}">
+          ${_momentsTab !== 'config' ? `<button type="button" class="phone-moments-cover-action" onclick="event.stopPropagation();${_momentsTab === 'mine' ? 'Phone._postMoment()' : 'Phone._refreshNpcMoments()'}" title="${_momentsTab === 'mine' ? '发动态' : '刷新好友动态'}">
             ${_momentsTab === 'mine' ? _uiIcon('camera', 15) : _uiIcon('refresh', 15)}
-          </button>
+          </button>` : ''}
           <div class="phone-moments-cover-hint">点击更换封面</div>
           <div class="phone-moments-profile">
             ${avatarHtml(maskName, maskAvatar, 'cover')}
             <div class="phone-moments-profile-text">
               <div class="phone-moments-profile-name">${Utils.escapeHtml(maskName)}</div>
-              <div class="phone-moments-profile-sub">${_momentsTab === 'mine' ? '我的动态' : '好友动态'}</div>
+              <div class="phone-moments-profile-sub">${_momentsTab === 'mine' ? '我的动态' : (_momentsTab === 'friends' ? '好友动态' : '设置')}</div>
             </div>
           </div>
         </div>
         <div id="phone-moments-mine-list" class="phone-moments-list" style="display:${_momentsTab === 'mine' ? 'block' : 'none'}">${myHtml}</div>
         <div id="phone-moments-npc-list" class="phone-moments-list" style="display:${_momentsTab === 'friends' ? 'block' : 'none'}">${friendsHtml}</div>
+        <div id="phone-moments-config-list" class="phone-moments-list" style="display:${_momentsTab === 'config' ? 'block' : 'none'}">${_renderMomentsConfigPanel(pd)}</div>
         <div class="phone-tabbar">
           <div class="phone-tab ${_momentsTab === 'mine' ? 'active' : ''}" onclick="Phone._switchMomentsTab('mine')">我的动态</div>
           <div class="phone-tab ${_momentsTab === 'friends' ? 'active' : ''}" onclick="Phone._switchMomentsTab('friends')">好友动态</div>
+          <div class="phone-tab ${_momentsTab === 'config' ? 'active' : ''}" onclick="Phone._switchMomentsTab('config')">设置</div>
         </div>
       </div>
     `;
@@ -2356,6 +2405,12 @@ ${wvPrompt}` },
     const pd = await _getPhoneData();
     if (!pd) return;
 
+    // v687.6：读取好友圈配置
+    const cfg = pd.momentsConfig || {};
+    const wantCount = Math.max(1, Math.min(8, parseInt(cfg.count, 10) || 4));
+    const imageLimit = Math.max(0, Math.min(wantCount, parseInt(cfg.imageLimit, 10) ?? wantCount));
+    const storageMax = Math.max(20, Math.min(100, parseInt(cfg.storageMax, 10) || 30));
+
     // 自动切到"好友动态" tab
     _momentsTab = 'friends';
     _renderMoments(pd);
@@ -2365,7 +2420,7 @@ ${wvPrompt}` },
     const setLoading = (attempt = 1, maxRetries = 3) => {
       const cur = document.getElementById('phone-moments-npc-list');
       if (!cur) return;
-      cur.innerHTML = Array.from({ length: 4 }).map((_, idx) => `
+      cur.innerHTML = Array.from({ length: wantCount }).map((_, idx) => `
         <div class="phone-moment-skeleton-card phone-moment-generating-card">
           ${idx === 0 ? `<div class="phone-generation-inline-label">正在生成好友动态… ${attempt}/${maxRetries}</div>` : ''}
           <div class="phone-moment-skeleton-row"><div class="phone-moment-skeleton-avatar"></div><div class="phone-moment-skeleton-line user"></div><div class="phone-moment-skeleton-line time"></div></div>
@@ -2396,6 +2451,22 @@ ${wvPrompt}` },
           })));
         }
       }
+      // v687.6：世界书 globalNpcs 也加入候选
+      try {
+        if (typeof Lorebook !== 'undefined' && Lorebook.collectForChat) {
+          let card = null;
+          if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+            try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
+          }
+          const wv2 = wvId ? await DB.get('worldviews', wvId) : null;
+          const lbs = await Lorebook.collectForChat({ conv, card, wv: wv2 });
+          for (const lb of (lbs || [])) {
+            (lb.globalNpcs || []).forEach(n => {
+              if (n.name && !npcNames.includes(n.name)) npcNames.push(n.name);
+            });
+          }
+        }
+      } catch(_) {}
       // v617：挂载角色加入 NPC 候选
       try {
         if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
@@ -2426,6 +2497,12 @@ ${wvPrompt}` },
 
       const fullCtx = await _buildFullContext();
 
+      // v687.6：取最近 8 条历史动态作为"避免重复"参考
+      const recentHist = (pd.npcMoments || []).slice(0, 8);
+      const histRef = recentHist.length > 0
+        ? `\n\n【最近的历史动态（仅供参考，避免重复同样的主题/场景/心情）】\n${recentHist.map(m => `- ${m.npc || '?'}（${m.time || '?'}）：${(m.text || '').slice(0, 50)}`).join('\n')}\n请生成不同的话题/场景/角度，避免和上面这些重复。`
+        : '';
+
       const nameConstraint = npcNames.length > 0
       ? `\n\n【严格约束】动态发布者必须从以下NPC列表中选：${npcNames.join('、')}。评论者可以是列表中的NPC，也可以是虚构的路人账号（但路人名字要符合世界观风格）。禁止编造列表外的NPC。`
       : '';
@@ -2434,13 +2511,15 @@ ${wvPrompt}` },
       ? `\n\n【禁止冒充玩家】玩家角色"${userName}"绝对不能作为动态发布者出现，也不能作为任何评论者出现（包括路人评论）。评论者 name 字段不允许是"${userName}"，也不允许任何评论以"我"（指代玩家）的口吻发布。玩家会自己评论，不需要 AI 代劳。`
       : '\n\n【禁止冒充玩家】不要让玩家角色作为动态发布者或评论者，也不要让任何角色冒充用户/玩家发言。';
     
-    const systemPrompt = `根据以下世界观、NPC资料和剧情，生成4条NPC的社交媒体动态。从NPC列表中随机挑选（不重复），内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。每条带1-3条路人或者与该NPC有关的其他NPC的评论，若NPC相互不认识或没有交集，可以仅路人评论。${nameConstraint}${userBan}
+    const systemPrompt = `根据以下世界观、NPC资料和剧情，生成${wantCount}条NPC的社交媒体动态。从NPC列表中随机挑选，内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。允许同一NPC发多条动态，但发布时间必须不同（互相错开至少几十分钟）。每条带1-3条路人或者与该NPC有关的其他NPC的评论，若NPC相互不认识或没有交集，可以仅路人评论。${nameConstraint}${userBan}
 
 时间要求：每条动态必须带发布时间 time，格式为“YYYY.MM.DD 星期X HH:mm”。发布时间必须在当前/截止剧情最新时间之前，且不早于该时间前7天；禁止生成未来时间。若能从上下文中的【当前游戏时间】读取到时间，就以它为基准生成；如果无法确定具体剧情日期，也要使用世界观/状态栏中能推断出的最新时间附近的过去7天内时间。
 
-返回纯JSON数组，不要任何额外文字：
-[{"npc":"NPC名","time":"YYYY.MM.DD 星期X HH:mm","text":"动态内容","comments":[{"name":"评论者","text":"评论"}]}]
+配图要求：每条动态可选填 imageQuery 字段（英文摄影关键词，1~3 个词），用于自动配图。仅当动态内容明显适合配图时填写（如美食、风景、宠物、天气、咖啡、夜景等具象意象），抽象情绪或对话类动态请省略该字段。imageQuery 必须是英文，禁止中文。例如：餐厅吃饭→"ramen bowl"、看星空→"starry night sky"、咖啡店→"coffee shop interior"。
 
+返回纯JSON数组，不要任何额外文字：
+[{"npc":"NPC名","time":"YYYY.MM.DD 星期X HH:mm","text":"动态内容","imageQuery":"english keywords (可选)","comments":[{"name":"评论者","text":"评论"}]}]
+${histRef}
 ${fullCtx}`;
 
       const arr = await _phoneJsonArrayWithRetry({
@@ -2451,10 +2530,37 @@ ${fullCtx}`;
         onAttempt: setLoading,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: '请生成4条NPC动态，严格使用NPC列表中的名字，并为每条动态填写符合要求的发布时间 time。' }
+          { role: 'user', content: `请生成${wantCount}条NPC动态，严格使用NPC列表中的名字，并为每条动态填写符合要求的发布时间 time。` }
         ]
       });
-      pd.npcMoments = arr.slice(0, 4);
+      // v687.6：追加在顶部 + 储存上限截断（旧的从尾巴砍）
+      const fresh = arr.slice(0, wantCount);
+      pd.npcMoments = [...fresh, ...(pd.npcMoments || [])].slice(0, storageMax);
+
+      // v687.6：并行拉 Unsplash 配图（仅对本批次 fresh 拉图，按 imageLimit 截断；填几张拉几张）
+      try {
+        const hasKey = (typeof Settings !== 'undefined' && Settings.getUnsplashKey && Settings.getUnsplashKey());
+        if (hasKey && imageLimit > 0) {
+          // 仅扫描本批次新增的（在 pd.npcMoments 顶部 fresh.length 条），收集有效 imageQuery
+          const candidates = [];
+          for (let idx = 0; idx < fresh.length; idx++) {
+            const m = pd.npcMoments[idx];
+            const q = (m.imageQuery || '').trim();
+            if (!q) continue;
+            if (!/^[\x00-\x7F]+$/.test(q)) continue;
+            candidates.push(idx);
+          }
+          const targets = candidates.slice(0, imageLimit);
+          await Promise.all(targets.map(async (idx) => {
+            const m = pd.npcMoments[idx];
+            try {
+              const imgUrl = await API.searchUnsplash(m.imageQuery.trim(), 3);
+              if (imgUrl) m.image = imgUrl;
+            } catch(_) {}
+          }));
+        }
+      } catch(_) {}
+
       await _savePhoneData();
       _log(`刷新了好友动态；返回摘要：${_summarizeListForLog(pd.npcMoments, m => `${_clipLogText(m.npc || '未知', 12)}${m.time ? '（' + _clipLogText(m.time, 22) + '）' : ''}：${_clipLogText(m.text, 42)}`)}`);
       if (_isAppStillActive('moments')) {
@@ -2471,6 +2577,299 @@ ${fullCtx}`;
     } finally {
       _setFabGenerating(false);
     }
+  }
+
+  // ===== v687.6：跟随剧情自动刷新好友圈（静默） =====
+  function _rollAutoRefreshInterval() {
+    return 10 + Math.floor(Math.random() * 11); // 10~20
+  }
+  function _rollAutoRefreshCount() {
+    return 3 + Math.floor(Math.random() * 3); // 3~5
+  }
+
+  // 给 chat.js 在 onDone 调用——每"一问一答"完成后扣一次
+  async function _tickMomentsAutoRefresh() {
+    try {
+      const pd = await _getPhoneData();
+      if (!pd) return;
+      if (!pd.momentsConfig || pd.momentsConfig.autoRefresh !== true) return;
+
+      if (!pd.npcMomentsAuto || typeof pd.npcMomentsAuto.remaining !== 'number') {
+        pd.npcMomentsAuto = { remaining: _rollAutoRefreshInterval() };
+        await _savePhoneData();
+        return;
+      }
+      pd.npcMomentsAuto.remaining = Math.max(0, pd.npcMomentsAuto.remaining - 1);
+
+      if (pd.npcMomentsAuto.remaining > 0) {
+        await _savePhoneData();
+        return;
+      }
+
+      // remaining = 0，触发刷新并重 roll
+      pd.npcMomentsAuto.remaining = _rollAutoRefreshInterval();
+      await _savePhoneData();
+
+      // 不 await，让对话流程不被阻塞
+      _doSilentMomentsRefresh().catch(e => {
+        console.warn('[Phone] 自动刷新好友圈失败（已用尽重试）:', e?.message || e);
+      });
+    } catch (e) {
+      console.warn('[Phone] _tickMomentsAutoRefresh error:', e);
+    }
+  }
+
+  // 静默刷新：无 UI、无 toast、无骨架屏、固定 3-5 条
+  async function _doSilentMomentsRefresh() {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+
+    const cfg = pd.momentsConfig || {};
+    const wantCount = _rollAutoRefreshCount();
+    const imageLimit = Math.max(0, Math.min(wantCount, parseInt(cfg.imageLimit, 10) ?? wantCount));
+    const storageMax = Math.max(20, Math.min(100, parseInt(cfg.storageMax, 10) || 30));
+
+    // 收集 NPC 名字（同 _refreshNpcMoments）
+    let npcNames = [];
+    let userName = '';
+    try {
+      const convId = Conversations.getCurrent();
+      const conv = Conversations.getList().find(c => c.id === convId);
+      const wvId = conv?.worldviewId || conv?.singleWorldviewId;
+      if (wvId) {
+        const wv = await DB.get('worldviews', wvId);
+        if (wv) {
+          (wv.globalNpcs || []).forEach(n => { if (n.name) npcNames.push(n.name); });
+          (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => {
+            if (n.name && !npcNames.includes(n.name)) npcNames.push(n.name);
+          })));
+        }
+      }
+      try {
+        if (typeof Lorebook !== 'undefined' && Lorebook.collectForChat) {
+          let card = null;
+          if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+            try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
+          }
+          const wv2 = wvId ? await DB.get('worldviews', wvId) : null;
+          const lbs = await Lorebook.collectForChat({ conv, card, wv: wv2 });
+          for (const lb of (lbs || [])) {
+            (lb.globalNpcs || []).forEach(n => {
+              if (n.name && !npcNames.includes(n.name)) npcNames.push(n.name);
+            });
+          }
+        }
+      } catch(_) {}
+      try {
+        if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+          const attached = await AttachedChars.resolveAll();
+          attached.forEach(c => {
+            if (c.name && !npcNames.includes(c.name)) npcNames.push(c.name);
+          });
+        }
+      } catch(_) {}
+      try {
+        const mask = await Character.get();
+        if (mask?.name) userName = mask.name;
+      } catch(_) {}
+    } catch(_) {}
+
+    if (npcNames.length === 0) {
+      console.log('[Phone] 自动刷新跳过：无可用 NPC');
+      return;
+    }
+
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) {
+      console.log('[Phone] 自动刷新跳过：未配置功能模型');
+      return;
+    }
+
+    const fullCtx = await _buildFullContext();
+
+    const recentHist = (pd.npcMoments || []).slice(0, 8);
+    const histRef = recentHist.length > 0
+      ? `\n\n【最近的历史动态（仅供参考，避免重复同样的主题/场景/心情）】\n${recentHist.map(m => `- ${m.npc || '?'}（${m.time || '?'}）：${(m.text || '').slice(0, 50)}`).join('\n')}\n请生成不同的话题/场景/角度，避免和上面这些重复。`
+      : '';
+
+    const nameConstraint = `\n\n【严格约束】动态发布者必须从以下NPC列表中选：${npcNames.join('、')}。评论者可以是列表中的NPC，也可以是虚构的路人账号（但路人名字要符合世界观风格）。禁止编造列表外的NPC。`;
+    const userBan = userName
+      ? `\n\n【禁止冒充玩家】玩家角色"${userName}"绝对不能作为动态发布者出现，也不能作为任何评论者出现。`
+      : '\n\n【禁止冒充玩家】不要让玩家角色作为动态发布者或评论者。';
+
+    const systemPrompt = `根据以下世界观、NPC资料和剧情，生成${wantCount}条NPC的社交媒体动态。从NPC列表中随机挑选，内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。允许同一NPC发多条动态，但发布时间必须不同（互相错开至少几十分钟）。每条带1-3条路人或者与该NPC有关的其他NPC的评论。${nameConstraint}${userBan}
+
+时间要求：每条动态必须带发布时间 time，格式为"YYYY.MM.DD 星期X HH:mm"。发布时间必须在当前/截止剧情最新时间之前，且不早于该时间前7天；禁止生成未来时间。
+
+配图要求：每条动态可选填 imageQuery 字段（英文摄影关键词，1~3 个词），用于自动配图。仅当动态内容明显适合配图时填写。imageQuery 必须是英文。
+
+返回纯JSON数组，不要任何额外文字：
+[{"npc":"NPC名","time":"YYYY.MM.DD 星期X HH:mm","text":"动态内容","imageQuery":"english keywords (可选)","comments":[{"name":"评论者","text":"评论"}]}]
+${histRef}
+${fullCtx}`;
+
+    const arr = await _phoneJsonArrayWithRetry({
+      label: '自动刷新好友动态', url, key, model,
+      temperature: 0.9,
+      max_tokens: 2500,
+      maxRetries: 3,
+      onAttempt: null,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `请生成${wantCount}条NPC动态。` }
+      ]
+    });
+
+    const pd2 = await _getPhoneData();
+    if (!pd2) return;
+    const fresh = arr.slice(0, wantCount);
+    pd2.npcMoments = [...fresh, ...(pd2.npcMoments || [])].slice(0, storageMax);
+
+    try {
+      const hasKey = (typeof Settings !== 'undefined' && Settings.getUnsplashKey && Settings.getUnsplashKey());
+      if (hasKey && imageLimit > 0) {
+        const candidates = [];
+        for (let idx = 0; idx < fresh.length; idx++) {
+          const m = pd2.npcMoments[idx];
+          const q = (m.imageQuery || '').trim();
+          if (!q) continue;
+          if (!/^[\x00-\x7F]+$/.test(q)) continue;
+          candidates.push(idx);
+        }
+        const targets = candidates.slice(0, imageLimit);
+        await Promise.all(targets.map(async (idx) => {
+          const m = pd2.npcMoments[idx];
+          try {
+            const imgUrl = await API.searchUnsplash(m.imageQuery.trim(), 3);
+            if (imgUrl) m.image = imgUrl;
+          } catch(_) {}
+        }));
+      }
+    } catch(_) {}
+
+    await _savePhoneData();
+    _log(`[自动刷新] 新增 ${fresh.length} 条好友动态`);
+
+    // 若用户当前正在好友圈页 → 静默重渲（不切 tab）
+    if (_currentApp === 'moments') {
+      try { _renderMoments(pd2); } catch(_) {}
+    }
+  }
+
+  // v687.6：好友圈动态配置面板（设置 tab 一屏直出，输入即保存）
+  function _renderMomentsConfigPanel(pd) {
+    const cfg = (pd && pd.momentsConfig) || {};
+    const curCount = Math.max(1, Math.min(8, parseInt(cfg.count, 10) || 4));
+    const curImgLimit = Math.max(0, Math.min(curCount, parseInt(cfg.imageLimit, 10) ?? curCount));
+    const curStorage = Math.max(20, Math.min(100, parseInt(cfg.storageMax, 10) || 30));
+    const autoOn = cfg.autoRefresh === true;
+    const hasKey = (typeof Settings !== 'undefined' && Settings.getUnsplashKey && Settings.getUnsplashKey());
+    const curStored = (pd && pd.npcMoments && pd.npcMoments.length) || 0;
+
+    return `
+      <div style="padding:16px 14px;display:flex;flex-direction:column;gap:20px">
+        <div>
+          <label class="circle-check-label" style="margin:0;padding:0">
+            <span class="circle-check-text" style="font-size:13px">跟随剧情自动刷新</span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" class="circle-check" ${autoOn ? 'checked' : ''} onchange="Phone._toggleMomentsAutoRefresh(this.checked)">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <p style="font-size:11px;color:var(--text-secondary);margin:6px 0 0;line-height:1.5">开启后每隔约 10-20 轮对话自动生成 3-5 条新动态，静默后台运行。会消耗 API 额度。</p>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-size:13px;color:var(--text)">单次生成条数</span>
+            <strong id="mc-count-val" style="font-size:14px;color:var(--accent)">${curCount} 条</strong>
+          </div>
+          <input id="mc-count" type="range" min="1" max="8" step="1" value="${curCount}" oninput="Phone._onMomentsConfigCountChange(this.value)" style="width:100%">
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-size:13px;color:var(--text)">配图张数上限</span>
+            <strong id="mc-img-val" style="font-size:14px;color:var(--accent)">${curImgLimit} 张</strong>
+          </div>
+          <input id="mc-img-limit" type="range" min="0" max="${curCount}" step="1" value="${curImgLimit}" oninput="Phone._onMomentsConfigImgChange(this.value)" style="width:100%">
+          <p style="font-size:11px;color:var(--text-secondary);margin:6px 0 0;line-height:1.5">${hasKey ? 'AI 标记需配图的动态里，按顺序取前 N 张拉 Unsplash。设 0 = 关闭配图。' : '<span style="color:#e0a050">⚠ 未配置 Unsplash Access Key（在 设置→功能模型 末尾填写）</span>'}</p>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-size:13px;color:var(--text)">动态储存上限</span>
+            <strong id="mc-storage-val" style="font-size:14px;color:var(--accent)">${curStorage} 条</strong>
+          </div>
+          <input id="mc-storage-max" type="range" min="20" max="100" step="10" value="${curStorage}" oninput="Phone._onMomentsConfigStorageChange(this.value)" style="width:100%">
+          <p style="font-size:11px;color:var(--text-secondary);margin:6px 0 0;line-height:1.5">新刷的动态追加在顶部，超出上限时旧动态从尾部自动清理。当前已存 ${curStored} 条。</p>
+        </div>
+      </div>`;
+  }
+
+  async function _toggleMomentsAutoRefresh(checked) {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    if (!pd.momentsConfig) pd.momentsConfig = {};
+    pd.momentsConfig.autoRefresh = !!checked;
+    // 开启时重 roll 一个新计数（避免直接命中触发）
+    if (checked) {
+      pd.npcMomentsAuto = { remaining: _rollAutoRefreshInterval() };
+    }
+    await _savePhoneData();
+  }
+
+  // 拖动条值变化：实时落库（一屏直出风格，没有"取消"按钮）
+  async function _onMomentsConfigCountChange(val) {
+    const n = Math.max(1, Math.min(8, parseInt(val, 10) || 1));
+    const lbl = document.getElementById('mc-count-val');
+    if (lbl) lbl.textContent = n + ' 条';
+    // 配图上限不能超过动态数
+    const imgInput = document.getElementById('mc-img-limit');
+    const imgLbl = document.getElementById('mc-img-val');
+    if (imgInput) {
+      imgInput.max = String(n);
+      if (parseInt(imgInput.value, 10) > n) {
+        imgInput.value = String(n);
+        if (imgLbl) imgLbl.textContent = n + ' 张';
+      }
+    }
+    await _persistMomentsConfig();
+  }
+
+  async function _onMomentsConfigImgChange(val) {
+    const n = Math.max(0, parseInt(val, 10) || 0);
+    const lbl = document.getElementById('mc-img-val');
+    if (lbl) lbl.textContent = n + ' 张';
+    await _persistMomentsConfig();
+  }
+
+  async function _onMomentsConfigStorageChange(val) {
+    const n = Math.max(20, Math.min(100, parseInt(val, 10) || 30));
+    const lbl = document.getElementById('mc-storage-val');
+    if (lbl) lbl.textContent = n + ' 条';
+    await _persistMomentsConfig();
+    // 调小上限时立即裁剪（防止旧动态卡在尾部）
+    const pd = await _getPhoneData();
+    if (pd && Array.isArray(pd.npcMoments) && pd.npcMoments.length > n) {
+      pd.npcMoments = pd.npcMoments.slice(0, n);
+      await _savePhoneData();
+    }
+  }
+
+  async function _persistMomentsConfig() {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const c = Math.max(1, Math.min(8, parseInt(document.getElementById('mc-count')?.value, 10) || 4));
+    const ilRaw = parseInt(document.getElementById('mc-img-limit')?.value, 10);
+    const smRaw = parseInt(document.getElementById('mc-storage-max')?.value, 10);
+    pd.momentsConfig = {
+      count: c,
+      imageLimit: Math.max(0, Math.min(c, isNaN(ilRaw) ? c : ilRaw)),
+      storageMax: Math.max(20, Math.min(100, isNaN(smRaw) ? 30 : smRaw))
+    };
+    await _savePhoneData();
   }
 
   // ===== 相机 App =====
@@ -4849,7 +5248,9 @@ async function buildHeartsimServiceChatForBackstage() {
     _forumRefresh, _forumSearch, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,
     _switchForumTab, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
     _postMoment, _onMomentImagePicked, _toggleImageDesc, _submitMoment, _shareMoment, _collectMyMoment, _deleteMyMoment, _shareNpcMoment, _refreshMomentComments, _refreshNpcMoments,
-    _openMomentVisibleModal, _closeMomentVisibleModal, _filterMomentVisibleOptions, _toggleMomentVisibleOption, _setMomentVisibleAll,
+_openMomentVisibleModal, _closeMomentVisibleModal, _filterMomentVisibleOptions, _toggleMomentVisibleOption, _setMomentVisibleAll,
+_onMomentsConfigCountChange, _onMomentsConfigImgChange, _onMomentsConfigStorageChange,
+_toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
     _switchMomentsTab, _collectNpcMoment, _likeNpcMoment, _commentNpcMoment,
     _mapSearch, _shareMapResult, _collectMapResult, _switchMapTab, _renderMapResultsHtml,
     _shareMapSearch, _shareAllMapSearches, _deleteMapSearch, _deleteLocationHistory,
