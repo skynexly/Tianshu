@@ -4378,6 +4378,8 @@ bgImage: conv?.convBgImage || '',
     if (ba) ba.checked = s.batteryAware;
     const wa = document.getElementById('cs-weather-aware');
     if (wa) wa.checked = s.weatherAware;
+    const wc = document.getElementById('cs-weather-city');
+    if (wc && window.EnvAwareness) wc.value = EnvAwareness.getCity();
     const oc = document.getElementById('cs-online-chat');
     if (oc) oc.checked = s.onlineChat;
     const evEnabled = document.getElementById('cs-events-enabled');
@@ -4460,6 +4462,8 @@ const taEl = document.getElementById('cs-time-aware');
       if (baEl) conv.convBatteryAware = baEl.checked;
       const waEl = document.getElementById('cs-weather-aware');
       if (waEl) conv.convWeatherAware = waEl.checked;
+      const wcityEl = document.getElementById('cs-weather-city');
+if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     const ocEl = document.getElementById('cs-online-chat');
     if (ocEl) conv.convOnlineChat = ocEl.checked;
     const igSaveEl = document.getElementById('cs-imggen');

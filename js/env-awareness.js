@@ -20,31 +20,54 @@ window.EnvAwareness = (function() {
   // === 天气（30 分钟缓存，IP 定位无授权） ===
   let _weatherCache = null;
   let _weatherCacheTs = 0;
+  let _weatherCacheCity = '';
   const WEATHER_TTL_MS = 30 * 60 * 1000;
+
+  // 用户设的城市（localStorage），不设走 IP 定位（开梯子会拿到代理出口城市）
+  function getCity() {
+    try { return localStorage.getItem('env_weather_city') || ''; } catch(_) { return ''; }
+  }
+  function setCity(city) {
+    try {
+      localStorage.setItem('env_weather_city', (city || '').trim());
+      // 清缓存让下次重新拉
+      _weatherCache = null;
+      _weatherCacheTs = 0;
+      _weatherCacheCity = '';
+    } catch(_) {}
+  }
 
   async function getWeatherInfo() {
     const now = Date.now();
-    if (_weatherCache && (now - _weatherCacheTs) < WEATHER_TTL_MS) {
+    const city = getCity();
+    // 城市变了缓存失效
+    if (_weatherCache && (now - _weatherCacheTs) < WEATHER_TTL_MS && city === _weatherCacheCity) {
       return _weatherCache;
     }
     try {
       // wttr.in 简洁格式：城市|温度|描述
       // %l=location %t=temp %C=condition %h=humidity
-      const resp = await fetch('https://wttr.in/?format=%l|%t|%C|%h&lang=zh');
+      // 城市为空走 IP 定位，否则按 city 查
+      const cityPath = city ? '/' + encodeURIComponent(city) : '';
+      const resp = await fetch(`https://wttr.in${cityPath}?format=%l|%t|%C|%h&lang=zh`);
       if (!resp.ok) throw new Error('wttr.in ' + resp.status);
       const raw = (await resp.text()).trim();
       const parts = raw.split('|').map(s => s.trim());
       if (parts.length < 3) throw new Error('wttr.in format unexpected: ' + raw);
       const [loc, temp, cond, hum] = parts;
+      // v687.16：过滤 wttr.in 返回的"北纬 X 度，东经 Y 度"坐标格式，避免 AI 误以为是地名
+      const isCoord = /度|°|纬|经|N\d|S\d|E\d|W\d/.test(loc);
+      const cleanLoc = isCoord ? '' : loc;
       const info = {
-        location: loc,
+        location: cleanLoc,
         temp: temp,
         condition: cond,
         humidity: hum || '',
-        text: `${loc} · ${temp} · ${cond}${hum ? ' · 湿度' + hum : ''}`
+        text: `${cleanLoc ? cleanLoc + ' · ' : ''}${temp} · ${cond}${hum ? ' · 湿度' + hum : ''}`
       };
       _weatherCache = info;
       _weatherCacheTs = now;
+      _weatherCacheCity = city;
       return info;
     } catch(e) {
       console.warn('[EnvAwareness] 天气获取失败', e);
@@ -105,7 +128,10 @@ window.EnvAwareness = (function() {
         tagParts.push(`电量${snap.battery.pct}%${snap.battery.charging ? '充' : ''}`);
       }
       if (opts.weather && snap.weather) {
-        tagParts.push(`${snap.weather.location || ''}${snap.weather.temp || ''} ${snap.weather.condition || ''}`.trim());
+        const w = snap.weather;
+        const locPart = (w.location && !/度|°|纬|经/.test(w.location)) ? w.location : '';
+        const wxText = `${locPart}${locPart ? ' ' : ''}${w.temp || ''} ${w.condition || ''}`.trim();
+        if (wxText) tagParts.push(wxText);
       }
       if (tagParts.length === 0) return m;
       const tag = `[${tagParts.join(' · ')}] `;
@@ -120,5 +146,5 @@ window.EnvAwareness = (function() {
     });
   }
 
-  return { getBatteryInfo, getWeatherInfo, buildEnvBlock, captureSnapshot, stampUserMessages };
+  return { getBatteryInfo, getWeatherInfo, buildEnvBlock, captureSnapshot, stampUserMessages, getCity, setCity };
 })();
