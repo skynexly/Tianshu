@@ -45,25 +45,34 @@ window.EnvAwareness = (function() {
       return _weatherCache;
     }
     try {
-      // wttr.in 简洁格式：城市|温度|描述
-      // %l=location %t=temp %C=condition %h=humidity
-      // 城市为空走 IP 定位，否则按 city 查
+      // v687.18：wttr.in 文本格式 (format=%l|%t|...) 在浏览器请求下被忽略
+      // 因为 wttr.in 看 Accept header，浏览器拿到的是整页 HTML/CSS（term-fgx16 等）
+      // 浏览器 fetch 不能伪 User-Agent，改走 JSON 端点 format=j1（强制 JSON）
       const cityPath = city ? '/' + encodeURIComponent(city) : '';
-      const resp = await fetch(`https://wttr.in${cityPath}?format=%l|%t|%C|%h&lang=zh`);
+      const resp = await fetch(`https://wttr.in${cityPath}?format=j1&lang=zh`);
       if (!resp.ok) throw new Error('wttr.in ' + resp.status);
-      const raw = (await resp.text()).trim();
-      const parts = raw.split('|').map(s => s.trim());
-      if (parts.length < 3) throw new Error('wttr.in format unexpected: ' + raw);
-      const [loc, temp, cond, hum] = parts;
-      // v687.16：过滤 wttr.in 返回的"北纬 X 度，东经 Y 度"坐标格式，避免 AI 误以为是地名
-      const isCoord = /度|°|纬|经|N\d|S\d|E\d|W\d/.test(loc);
-      const cleanLoc = isCoord ? '' : loc;
+      const data = await resp.json();
+      const cur = (data.current_condition && data.current_condition[0]) || {};
+      const area = (data.nearest_area && data.nearest_area[0]) || {};
+      // 优先中文地名，否则英文
+      const areaName = (area.areaName && area.areaName[0] && area.areaName[0].value) || '';
+      const region = (area.region && area.region[0] && area.region[0].value) || '';
+      let loc = areaName || region || '';
+      // 兜底：过滤坐标格式（理论上 j1 不会返回坐标，但保险）
+      if (/度|°|纬|经|N\d|S\d|E\d|W\d/.test(loc)) loc = '';
+      const temp = cur.temp_C ? (cur.temp_C + '°C') : '';
+      // weather 描述：优先中文 lang_zh
+      const cond = (cur.lang_zh && cur.lang_zh[0] && cur.lang_zh[0].value)
+        || (cur.weatherDesc && cur.weatherDesc[0] && cur.weatherDesc[0].value)
+        || '';
+      const hum = cur.humidity ? (cur.humidity + '%') : '';
+      if (!temp && !cond) throw new Error('wttr.in j1 empty');
       const info = {
-        location: cleanLoc,
+        location: loc,
         temp: temp,
         condition: cond,
-        humidity: hum || '',
-        text: `${cleanLoc ? cleanLoc + ' · ' : ''}${temp} · ${cond}${hum ? ' · 湿度' + hum : ''}`
+        humidity: hum,
+        text: `${loc ? loc + ' · ' : ''}${temp}${cond ? ' · ' + cond : ''}${hum ? ' · 湿度' + hum : ''}`
       };
       _weatherCache = info;
       _weatherCacheTs = now;
