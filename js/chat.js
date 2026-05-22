@@ -1448,17 +1448,26 @@ const msgEl = appendMessage(aiMsg, true, true);
         // v687.11：累积"工具调用前 AI 已说过的话"（fullContent 每轮 streamChat 会重置，这里跨轮拼接）
         let _priorContent = '';
 
-        // 工具集闭包：根据对话设置过滤启用项
+        // 工具集闭包：根据对话设置过滤启用项 + MCP 外置工具（v687.23）
         const _enabledTools = (() => {
-          if (typeof Tools === 'undefined') return undefined;
-          const allDefs = Tools.getDefinitions() || [];
-          const enabledDefs = allDefs.filter(d => {
-            const name = d.function?.name || '';
-            if (name.startsWith('query_worldview_')) return convSettings.toolsWorldview;
-            if (name === 'search_messages') return convSettings.toolsHistory;
-            return convSettings.toolsMemory;
-          });
-          return enabledDefs.length > 0 ? enabledDefs : undefined;
+          let merged = [];
+          if (typeof Tools !== 'undefined') {
+            const allDefs = Tools.getDefinitions() || [];
+            merged = allDefs.filter(d => {
+              const name = d.function?.name || '';
+              if (name.startsWith('query_worldview_')) return convSettings.toolsWorldview;
+              if (name === 'search_messages') return convSettings.toolsHistory;
+              return convSettings.toolsMemory;
+            });
+          }
+          // v687.23：追加 MCP 工具（不受对话级开关限制，由 server.enabled 控制）
+          try {
+            if (typeof MCPClient !== 'undefined') {
+              const mcpDefs = MCPClient.getEnabledToolDefs() || [];
+              if (mcpDefs.length) merged = merged.concat(mcpDefs);
+            }
+          } catch(_) {}
+          return merged.length > 0 ? merged : undefined;
         })();
 
         // === 闭包式回调：onChunk / onDone / onError 复用，工具循环里也走这套 ===
@@ -1672,10 +1681,16 @@ const msgEl = appendMessage(aiMsg, true, true);
             });
 
             // 执行所有工具，结果以 tool role 加入
-            for (const tc of toolCalls) {
+              for (const tc of toolCalls) {
               let result;
               try {
-                result = await Tools.execute(tc);
+                // v687.23：MCP 工具路由
+                const tcName = tc.function?.name || '';
+                if (typeof MCPClient !== 'undefined' && MCPClient.isMCPToolCall(tcName)) {
+                  result = await MCPClient.executeToolCall(tc);
+                } else {
+                  result = await Tools.execute(tc);
+                }
               } catch(e) {
                 result = `工具执行异常：${e?.message || e}`;
               }
@@ -4289,6 +4304,179 @@ bgImage: conv?.convBgImage || '',
     if (modal) modal.classList.add('hidden');
   }
 
+  // ===== v687.23：MCP 服务器 UI 管理 =====
+  let _editingMcpId = null;
+
+  function _renderMcpList() {
+    const wrap = document.getElementById('cs-mcp-list');
+    if (!wrap) return;
+    if (typeof MCPClient === 'undefined') {
+      wrap.innerHTML = '<div style="font-size:11px;color:var(--text-secondary);padding:8px">MCP 客户端未加载</div>';
+      return;
+    }
+    const servers = MCPClient.getServers();
+    if (!servers.length) {
+      wrap.innerHTML = '<div style="font-size:11px;color:var(--text-secondary);padding:10px;text-align:center;background:var(--bg);border:1px dashed var(--border);border-radius:6px">还没有 MCP 服务器，点 + 添加</div>';
+      return;
+    }
+    wrap.innerHTML = servers.map(s => {
+      const toolCount = Array.isArray(s.tools) ? s.tools.length : 0;
+      const enabled = !!s.enabled;
+      const safeName = Utils.escapeHtml(s.name || s.url || '未命名');
+      const safeUrl = Utils.escapeHtml(s.url || '');
+      const transportLabel = (s.transport || 'http').toUpperCase();
+      return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safeName}</div>
+            <div style="font-size:10px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${transportLabel} · ${safeUrl}</div>
+          </div>
+          <label style="position:relative;display:inline-flex;flex-shrink:0">
+            <input type="checkbox" class="circle-check" ${enabled ? 'checked' : ''} onchange="Chat._toggleMcpServer('${s.id}', this.checked)">
+            <span class="circle-check-ui"></span>
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+          <div style="font-size:11px;color:var(--text-secondary)">${toolCount} 个工具</div>
+          <div style="display:flex;gap:6px">
+            <button type="button" onclick="Chat._rediscoverMcpServer('${s.id}')" style="padding:3px 8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:4px;font-size:11px;cursor:pointer">刷新</button>
+            <button type="button" onclick="Chat._removeMcpServer('${s.id}')" style="padding:3px 8px;background:none;border:1px solid var(--border);color:var(--danger);border-radius:4px;font-size:11px;cursor:pointer">删除</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function _openMcpAddModal(id) {
+    _editingMcpId = id || null;
+    const modal = document.getElementById('mcp-server-modal');
+    const titleEl = document.getElementById('mcp-modal-title');
+    const nameEl = document.getElementById('mcp-server-name');
+    const urlEl = document.getElementById('mcp-server-url');
+    const authTypeEl = document.getElementById('mcp-server-auth-type');
+    const authHeaderEl = document.getElementById('mcp-server-auth-header');
+    const authTokenEl = document.getElementById('mcp-server-auth-token');
+    const errEl = document.getElementById('mcp-modal-error');
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    if (id) {
+      const s = MCPClient.getServers().find(x => x.id === id);
+      if (s) {
+        titleEl.textContent = '编辑 MCP 服务器';
+        nameEl.value = s.name || '';
+        urlEl.value = s.url || '';
+        const at = s.auth?.type || 'none';
+        authTypeEl.value = at;
+        authHeaderEl.value = s.auth?.headerName || '';
+        authTokenEl.value = s.auth?.token || '';
+      }
+    } else {
+      titleEl.textContent = '添加 MCP 服务器';
+      nameEl.value = '';
+      urlEl.value = '';
+      authTypeEl.value = 'none';
+      authHeaderEl.value = '';
+      authTokenEl.value = '';
+    }
+    _onMcpAuthTypeChange();
+    modal.classList.remove('hidden');
+  }
+
+  function _closeMcpAddModal() {
+    document.getElementById('mcp-server-modal')?.classList.add('hidden');
+    _editingMcpId = null;
+  }
+
+  function _onMcpAuthTypeChange() {
+    const t = document.getElementById('mcp-server-auth-type')?.value || 'none';
+    const headerEl = document.getElementById('mcp-server-auth-header');
+    const tokenEl = document.getElementById('mcp-server-auth-token');
+    if (!headerEl || !tokenEl) return;
+    if (t === 'none') {
+      headerEl.style.display = 'none';
+      tokenEl.style.display = 'none';
+    } else if (t === 'bearer') {
+      headerEl.style.display = 'none';
+      tokenEl.style.display = 'block';
+      tokenEl.placeholder = 'Bearer Token';
+    } else if (t === 'header') {
+      headerEl.style.display = 'block';
+      tokenEl.style.display = 'block';
+      tokenEl.placeholder = 'Token / API Key';
+    }
+  }
+
+  async function _saveMcpServer() {
+    const name = document.getElementById('mcp-server-name').value.trim();
+    const url = document.getElementById('mcp-server-url').value.trim();
+    const authType = document.getElementById('mcp-server-auth-type').value;
+    const authHeader = document.getElementById('mcp-server-auth-header').value.trim();
+    const authToken = document.getElementById('mcp-server-auth-token').value.trim();
+    const errEl = document.getElementById('mcp-modal-error');
+    const saveBtn = document.getElementById('mcp-modal-save-btn');
+    const showErr = (msg) => {
+      if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+    };
+    if (!name) { showErr('请填写显示名称'); return; }
+    if (!url || !/^https?:\/\//i.test(url)) { showErr('请填写合法的 HTTP/HTTPS URL'); return; }
+    if (authType === 'bearer' && !authToken) { showErr('Bearer 模式需要填写 Token'); return; }
+    if (authType === 'header' && (!authHeader || !authToken)) { showErr('自定义 Header 模式需要 Header 名 和 Token'); return; }
+
+    // transport 自动判断：URL 含 /sse 视为 SSE，否则 HTTP（实际两者请求方式相同，差别只在响应解析）
+    const transport = /\/sse(\?|\/|$)|\.sse(\?|\/|$)/i.test(url) ? 'sse' : 'http';
+    const auth = authType === 'none' ? null : { type: authType, token: authToken, headerName: authHeader };
+
+    const isEdit = !!_editingMcpId;
+    const id = _editingMcpId || ('mcp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+    const server = { id, name, url, transport, enabled: true, auth, tools: [] };
+
+    // 保存先（即使 discover 失败，配置也留下）
+    if (isEdit) {
+      MCPClient.updateServer(id, { name, url, transport, auth });
+    } else {
+      MCPClient.addServer(server);
+    }
+
+    // 拉一次工具列表
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '连接中...'; }
+    try {
+      const cur = MCPClient.getServers().find(s => s.id === id);
+      const tools = await MCPClient.discoverTools(cur);
+      UI.showToast(`已连接 · 发现 ${tools.length} 个工具`, 1800);
+      _closeMcpAddModal();
+      _renderMcpList();
+    } catch(e) {
+      showErr('连接失败：' + (e?.message || e));
+    } finally {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '连接并保存'; }
+    }
+  }
+
+  function _toggleMcpServer(id, enabled) {
+    MCPClient.updateServer(id, { enabled: !!enabled });
+  }
+
+  function _removeMcpServer(id) {
+    const s = MCPClient.getServers().find(x => x.id === id);
+    if (!s) return;
+    if (!confirm(`删除 MCP 服务器「${s.name || s.url}」？`)) return;
+    MCPClient.removeServer(id);
+    _renderMcpList();
+  }
+
+  async function _rediscoverMcpServer(id) {
+    const s = MCPClient.getServers().find(x => x.id === id);
+    if (!s) return;
+    UI.showToast('刷新中...', 1200);
+    try {
+      const tools = await MCPClient.discoverTools(s);
+      UI.showToast(`已刷新 · ${tools.length} 个工具`, 1800);
+      _renderMcpList();
+    } catch(e) {
+      UI.showToast('刷新失败：' + (e?.message || e), 2500);
+    }
+  }
+
   function _saveDiceConfigModal() {
     const maxEl = document.getElementById('dice-cfg-max');
     const ruleBtn = document.getElementById('dice-cfg-rule-btn');
@@ -4370,6 +4558,8 @@ bgImage: conv?.convBgImage || '',
     // v687.17：从 modal 改为 panel 全屏
     UI.showPanel('conv-settings');
     _switchCsTab('output'); // 默认显示输出 tab
+    // v687.23：渲染 MCP 列表
+    try { _renderMcpList(); } catch(_) {}
     const s = _getConvSettings();
     document.getElementById('cs-stream').checked = s.stream;
     document.getElementById('cs-gamemode').checked = s.gameMode;
@@ -5268,6 +5458,9 @@ openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
     buildAIMessageHTML, appendMessage,
     openImgGenModal, submitImgGen, _updateImgGenButtons,
     resolveDrawnImagesInHTML, downloadImage, openImageLightbox,
-    _onDiceToggle, _openDiceConfigModal, _closeDiceConfigModal, _saveDiceConfigModal, _toggleDiceRuleDropdown
+    _onDiceToggle, _openDiceConfigModal, _closeDiceConfigModal, _saveDiceConfigModal, _toggleDiceRuleDropdown,
+    // v687.23：MCP
+    _renderMcpList, _openMcpAddModal, _closeMcpAddModal, _onMcpAuthTypeChange, _saveMcpServer,
+    _toggleMcpServer, _removeMcpServer, _rediscoverMcpServer
   };
 })();

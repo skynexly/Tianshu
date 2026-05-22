@@ -815,17 +815,26 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
 
         // 工具集闭包
         const _enabledTools = (() => {
-          if (typeof Tools === 'undefined') return undefined;
-          const allDefs = Tools.getBackstageDefinitions() || [];
-          const enabledDefs = allDefs.filter(d => {
-            const name = d.function?.name || '';
-            if (name.includes('backstage_note')) return bsSettings.toolsMemory;
-            if (name.includes('directive')) return bsSettings.toolsDirective;
-            if (name.startsWith('query_worldview_')) return bsSettings.toolsWorldview;
-            if (name === 'search_messages' || name === 'query_events' || name === 'query_relations') return bsSettings.toolsMainMemory;
-            return bsSettings.toolsMemory;
-          });
-          return enabledDefs.length > 0 ? enabledDefs : undefined;
+          let merged = [];
+          if (typeof Tools !== 'undefined') {
+            const allDefs = Tools.getBackstageDefinitions() || [];
+            merged = allDefs.filter(d => {
+              const name = d.function?.name || '';
+              if (name.includes('backstage_note')) return bsSettings.toolsMemory;
+              if (name.includes('directive')) return bsSettings.toolsDirective;
+              if (name.startsWith('query_worldview_')) return bsSettings.toolsWorldview;
+              if (name === 'search_messages' || name === 'query_events' || name === 'query_relations') return bsSettings.toolsMainMemory;
+              return bsSettings.toolsMemory;
+            });
+          }
+          // v687.23：追加 MCP 工具
+          try {
+            if (typeof MCPClient !== 'undefined') {
+              const mcpDefs = MCPClient.getEnabledToolDefs() || [];
+              if (mcpDefs.length) merged = merged.concat(mcpDefs);
+            }
+          } catch(_) {}
+          return merged.length > 0 ? merged : undefined;
         })();
 
         // === 闭包式回调 ===

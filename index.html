@@ -1551,10 +1551,14 @@
             </span>
           </label>
 
-          <!-- MCP 占位（v687.17 预留，下一版接入实现） -->
+          <!-- MCP 服务器（v687.23 上线） -->
           <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em;margin-bottom:6px">MCP 服务器</div>
-            <div style="padding:14px 12px;background:var(--bg-tertiary);border:1px dashed var(--border);border-radius:8px;color:var(--text-secondary);font-size:12px;line-height:1.6">即将上线 — 用于接入外置 HTTP/SSE MCP 工具（外置记忆库、地图、搜索…）。</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em">MCP 服务器</div>
+              <button type="button" onclick="Chat._openMcpAddModal()" style="padding:4px 10px;background:var(--bg);border:1px solid var(--accent);color:var(--accent);border-radius:6px;font-size:12px;cursor:pointer">+ 添加</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:8px">外置 HTTP/SSE MCP 工具（外置记忆库、地图、搜索…）。配置全局共享。</div>
+            <div id="cs-mcp-list" style="display:flex;flex-direction:column;gap:8px"></div>
           </div>
         </div>
 
@@ -1591,6 +1595,41 @@
         <div class="modal-actions" style="padding-top:8px;display:flex;gap:8px">
           <button type="button" onclick="Chat._closeDiceConfigModal()" style="flex:1;padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:13px">取消</button>
           <button type="button" onclick="Chat._saveDiceConfigModal()" style="flex:1;padding:8px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;font-size:13px">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MCP 添加/编辑 服务器 弹窗（v687.23） -->
+    <div id="mcp-server-modal" class="modal hidden" style="z-index:9100">
+      <div class="modal-content" style="max-width:420px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <h3 style="margin:0;font-size:15px;color:var(--text)" id="mcp-modal-title">添加 MCP 服务器</h3>
+          <button type="button" onclick="Chat._closeMcpAddModal()" class="btn-icon modal-corner-btn close-btn" title="关闭" style="background:transparent;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer;line-height:1">×</button>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">显示名称</div>
+          <input type="text" id="mcp-server-name" placeholder="如：高德地图 / 外置记忆库" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">URL（HTTP / SSE 端点）</div>
+          <input type="text" id="mcp-server-url" placeholder="https://example.com/mcp" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">鉴权（可选）</div>
+          <div style="display:flex;gap:6px;margin-bottom:6px">
+            <select id="mcp-server-auth-type" onchange="Chat._onMcpAuthTypeChange()" style="flex:0 0 90px;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
+              <option value="none">无</option>
+              <option value="bearer">Bearer</option>
+              <option value="header">自定义 Header</option>
+            </select>
+            <input type="text" id="mcp-server-auth-header" placeholder="Header 名" style="flex:1;padding:8px 10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box;display:none">
+          </div>
+          <input type="text" id="mcp-server-auth-token" placeholder="Token / API Key" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box;display:none">
+        </div>
+        <div id="mcp-modal-error" style="display:none;padding:8px 10px;background:rgba(255,80,80,0.1);border:1px solid var(--danger);border-radius:6px;color:var(--danger);font-size:12px"></div>
+        <div class="modal-actions" style="padding-top:8px;display:flex;gap:8px">
+          <button type="button" onclick="Chat._closeMcpAddModal()" style="flex:1;padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:13px">取消</button>
+          <button type="button" id="mcp-modal-save-btn" onclick="Chat._saveMcpServer()" style="flex:1;padding:8px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">连接并保存</button>
         </div>
       </div>
     </div>
@@ -3524,6 +3563,7 @@ const GameLog = (() => {
 <script src="js/api.js"></script>
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
+<script src="js/mcp-client.js"></script>
 <script src="js/memory.js"></script>
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
