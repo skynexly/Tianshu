@@ -69,8 +69,9 @@ container.innerHTML = messages.map(m => {
           ? Markdown.render(m.content)
           : '<div class="typing-indicator"><span></span><span></span><span></span></div>');
       // v687.7：工具使用尾巴（仅 AI 消息）
+      const hasLog = !isUser && m.toolsLog && m.toolsLog.length > 0;
       const toolsTail = (!isUser && m.toolsUsed > 0)
-        ? `<div class="msg-tools-used" title="本轮 AI 调用了 ${m.toolsUsed} 个工具">⚙ 使用了 ${m.toolsUsed} 个工具</div>`
+        ? `<div class="msg-tools-used" ${hasLog ? `onclick="event.stopPropagation();Backstage._showToolsLog('${m.id}')" style="cursor:pointer"` : ''} title="本轮 AI 调用了 ${m.toolsUsed} 个工具${hasLog ? '（点击查看详情）' : ''}">⚙ 使用了 ${m.toolsUsed} 个工具${hasLog ? '（点击查看详情）' : ''}</div>`
         : '';
       return `<div class="backstage-msg-wrap ${isUser ? 'user' : 'assistant'}">
         <div class="chat-msg ${isUser ? 'user' : 'assistant'}" data-id="${m.id}">
@@ -793,6 +794,8 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
         const _MAX_TOOL_ITER = 5;
         // v687.7：工具调用累计计数
         let _toolsUsedCount = 0;
+        // v687.8：工具日志
+        const _toolsLog = [];
         const bsSettings = _getSettings();
 
         // 工具集闭包
@@ -838,6 +841,8 @@ aiMsg.content = baseContent + fullContent;
             aiMsg.timestamp = Date.now();
             // v687.7：工具使用数
             if (_toolsUsedCount > 0) aiMsg.toolsUsed = _toolsUsedCount;
+            // v687.8：工具日志
+            if (_toolsLog.length > 0) aiMsg.toolsLog = _toolsLog.slice();
             await DB.put('messages', aiMsg);
           _renderMessages();
 
@@ -893,6 +898,18 @@ aiMsg.content = baseContent + fullContent;
                 result = `工具执行异常：${e?.message || e}`;
               }
               apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: result || '' });
+              // v687.8：记录工具日志
+              try {
+                let parsedArgs = tc.function?.arguments;
+                try { parsedArgs = JSON.parse(parsedArgs); } catch(_) {}
+                _toolsLog.push({
+                  name: tc.function?.name || '?',
+                  args: parsedArgs,
+                  result: String(result || ''),
+                  iter: _toolIter,
+                  ts: Date.now()
+                });
+              } catch(_) {}
             }
 
             const reachLimit = _toolIter >= _MAX_TOOL_ITER;
@@ -1634,6 +1651,46 @@ return String(s == null ? '' : s).replace(/[&<>"']/g, c => map[c]);
     }
   }
 
+  // v687.8：查看本条 AI 消息的工具调用日志（复用 Chat 的实现思路）
+  function _showToolsLog(msgId) {
+    const msg = messages.find(m => m.id === msgId);
+    if (!msg || !msg.toolsLog || msg.toolsLog.length === 0) {
+      if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('该消息没有工具调用记录', 1500);
+      return;
+    }
+    const fmtTs = (ts) => {
+      try {
+        const d = new Date(ts);
+        const pad = n => String(n).padStart(2, '0');
+        return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      } catch(_) { return ''; }
+    };
+    const lines = [];
+    lines.push(`=== 后台 · 工具调用日志 ===`);
+    lines.push(`消息 ID: ${msgId}`);
+    lines.push(`共调用 ${msg.toolsLog.length} 个工具（${msg.toolsUsed || msg.toolsLog.length} 次）`);
+    lines.push('');
+    msg.toolsLog.forEach((log, i) => {
+      lines.push('='.repeat(60));
+      lines.push(`[${i + 1}/${msg.toolsLog.length}] ${log.name}  (第${log.iter}轮 · ${fmtTs(log.ts)})`);
+      lines.push('-'.repeat(60));
+      lines.push('参数:');
+      try { lines.push(JSON.stringify(log.args, null, 2)); }
+      catch(_) { lines.push(String(log.args)); }
+      lines.push('');
+      lines.push('返回:');
+      lines.push(String(log.result || '(空)'));
+      lines.push('');
+    });
+    const ta = document.getElementById('edit-content');
+    if (ta) {
+      ta.value = lines.join('\n');
+      document.getElementById('edit-modal').classList.remove('hidden');
+      document.getElementById('edit-modal').dataset.editId = '__debug__';
+      if (typeof UI !== 'undefined' && UI.switchDebugTab) UI.switchDebugTab('debug-context');
+    }
+  }
+
   return {
     toggle, minimize, send, cancel, restart,
     editMessage, saveMsgEdit, closeMsgEdit, deleteMessage, regenerate, continueGenerate,
@@ -1644,6 +1701,7 @@ return String(s == null ? '' : s).replace(/[&<>"']/g, c => map[c]);
     openPromptEdit, savePrompt, closePromptEdit,
 toggleRolePicker, filterRolePicker, selectRole,
     updateFab,
+    _showToolsLog,
     // 给手动生图弹窗用：把指定消息追加进后台消息列表并刷新渲染
     appendExternalMessage: async (msg) => {
       try {

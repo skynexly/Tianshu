@@ -1422,6 +1422,8 @@ const msgEl = appendMessage(aiMsg, true, true);
         const _MAX_TOOL_ITER = 5;
         // v687.7：工具调用累计计数（用于 UI 尾巴 + 下一轮 AI 自知）
         let _toolsUsedCount = 0;
+        // v687.8：工具调用日志（args/result 存档，UI 可点开看）
+        const _toolsLog = [];
 
         // 工具集闭包：根据对话设置过滤启用项
         const _enabledTools = (() => {
@@ -1464,6 +1466,8 @@ const msgEl = appendMessage(aiMsg, true, true);
             aiMsg.timestamp = Utils.timestamp();
             // v687.7：本轮工具使用数写入消息（用于 UI 尾巴 + 下一轮 AI 自知）
             if (_toolsUsedCount > 0) aiMsg.toolsUsed = _toolsUsedCount;
+            // v687.8：工具调用日志写入消息（用户可点开查看 args/result）
+            if (_toolsLog.length > 0) aiMsg.toolsLog = _toolsLog.slice();
             try { delete aiMsg._cachedFullHTML; delete aiMsg._cachedPlainHTML; } catch(_) {}
             await DB.put('messages', aiMsg);
             messages.push(aiMsg);
@@ -1646,6 +1650,18 @@ const msgEl = appendMessage(aiMsg, true, true);
                 tool_call_id: tc.id,
                 content: result || ''
               });
+              // v687.8：记录工具日志
+              try {
+                let parsedArgs = tc.function?.arguments;
+                try { parsedArgs = JSON.parse(parsedArgs); } catch(_) {}
+                _toolsLog.push({
+                  name: tc.function?.name || '?',
+                  args: parsedArgs,
+                  result: String(result || ''),
+                  iter: _toolIter,
+                  ts: Date.now()
+                });
+              } catch(_) {}
               GameLog.log('info', `[Chat] 工具 ${tc.function?.name} 返回: ${String(result).substring(0, 200)}`);
             }
 
@@ -3016,7 +3032,11 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
 
     // v687.7：工具使用尾巴
     if (msg && msg.toolsUsed > 0) {
-      html += `<div class="msg-tools-used" title="本轮 AI 调用了 ${msg.toolsUsed} 个工具">⚙ 使用了 ${msg.toolsUsed} 个工具</div>`;
+      const clickable = (msg.toolsLog && msg.toolsLog.length > 0)
+        ? `onclick="event.stopPropagation();Chat._showToolsLog('${msg.id}')" style="cursor:pointer"`
+        : '';
+      const hint = (msg.toolsLog && msg.toolsLog.length > 0) ? '（点击查看详情）' : '';
+      html += `<div class="msg-tools-used" ${clickable} title="本轮 AI 调用了 ${msg.toolsUsed} 个工具${hint}">⚙ 使用了 ${msg.toolsUsed} 个工具${hint}</div>`;
     }
 
     return html;
@@ -3971,6 +3991,54 @@ if (!gp) return null;
     document.getElementById('edit-modal').dataset.editId = '__debug__';
     if (typeof UI !== 'undefined' && UI.switchDebugTab) {
       UI.switchDebugTab('debug-context');
+    }
+  }
+
+  /**
+   * v687.8：查看本条 AI 消息的工具调用日志
+   */
+  function _showToolsLog(msgId) {
+    const msg = messages.find(m => m.id === msgId);
+    if (!msg || !msg.toolsLog || msg.toolsLog.length === 0) {
+      if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('该消息没有工具调用记录', 1500);
+      return;
+    }
+    const fmtTs = (ts) => {
+      try {
+        const d = new Date(ts);
+        const pad = n => String(n).padStart(2, '0');
+        return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      } catch(_) { return ''; }
+    };
+    const lines = [];
+    lines.push(`=== 工具调用日志 ===`);
+    lines.push(`消息 ID: ${msgId}`);
+    lines.push(`共调用 ${msg.toolsLog.length} 个工具（${msg.toolsUsed || msg.toolsLog.length} 次）`);
+    lines.push('');
+    msg.toolsLog.forEach((log, i) => {
+      lines.push('='.repeat(60));
+      lines.push(`[${i + 1}/${msg.toolsLog.length}] ${log.name}  (第${log.iter}轮 · ${fmtTs(log.ts)})`);
+      lines.push('-'.repeat(60));
+      lines.push('参数:');
+      try {
+        lines.push(JSON.stringify(log.args, null, 2));
+      } catch(_) {
+        lines.push(String(log.args));
+      }
+      lines.push('');
+      lines.push('返回:');
+      lines.push(String(log.result || '(空)'));
+      lines.push('');
+    });
+
+    const ta = document.getElementById('edit-content');
+    if (ta) {
+      ta.value = lines.join('\n');
+      document.getElementById('edit-modal').classList.remove('hidden');
+      document.getElementById('edit-modal').dataset.editId = '__debug__';
+      if (typeof UI !== 'undefined' && UI.switchDebugTab) {
+        UI.switchDebugTab('debug-context');
+      }
     }
   }
 
@@ -5113,7 +5181,7 @@ async function applyLorebooksToWorldview() {
     refreshOnlineChatAvatars,
     deleteMessage, rollbackTo, rollbackAndRestore,
     continueGenerate, retractAI,
-    initLongPress, showContext,
+    initLongPress, showContext, _showToolsLog,
     togglePlusMenu, toggleFullscreenInput, attachImage, onImagePicked,
     attachFile, onFilePicked, previewFile, _openFilePreview,
     pickMemories, filterPickMemories, _togglePickMem,
