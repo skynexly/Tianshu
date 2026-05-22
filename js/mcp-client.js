@@ -52,7 +52,10 @@ window.MCPClient = (function() {
   function _nextId() { return _reqId++; }
 
   function _buildHeaders(server) {
-    const h = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
+    // v687.24：故意不带 Accept header
+    // 含逗号的 Accept 值会触发 CORS 预检（非 safelisted），而很多 server（比如智谱 broker）
+    // 的 Access-Control-Allow-Headers 只放行 content-type，会导致 Failed to fetch
+    const h = { 'Content-Type': 'application/json' };
     if (server.auth) {
       // 支持 Bearer token / 自定义 header
       if (server.auth.type === 'bearer' && server.auth.token) {
