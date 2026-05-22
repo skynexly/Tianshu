@@ -1633,7 +1633,7 @@ const msgEl = appendMessage(aiMsg, true, true);
             // push assistant 的 tool_calls 消息
             apiMessages.push({
               role: 'assistant',
-              content: assistantMessage.content || null,
+              content: assistantMessage.content || '',
               tool_calls: toolCalls
             });
 

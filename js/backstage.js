@@ -886,7 +886,7 @@ aiMsg.content = baseContent + fullContent;
 
             apiMessages.push({
               role: 'assistant',
-              content: assistantMessage.content || null,
+              content: assistantMessage.content || '',
               tool_calls: toolCalls
             });
 
