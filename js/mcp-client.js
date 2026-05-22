@@ -52,10 +52,12 @@ window.MCPClient = (function() {
   function _nextId() { return _reqId++; }
 
   function _buildHeaders(server) {
-    // v687.24：故意不带 Accept header
-    // 含逗号的 Accept 值会触发 CORS 预检（非 safelisted），而很多 server（比如智谱 broker）
-    // 的 Access-Control-Allow-Headers 只放行 content-type，会导致 Failed to fetch
-    const h = { 'Content-Type': 'application/json' };
+    // v687.25：Accept 必须明确带两种 MIME（MCP Streamable HTTP spec 要求）
+    // 服务器会反射 OPTIONS 预检的 Access-Control-Request-Headers，所以 accept 是允许的
+    const h = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json, text/event-stream'
+    };
     if (server.auth) {
       // 支持 Bearer token / 自定义 header
       if (server.auth.type === 'bearer' && server.auth.token) {
@@ -74,12 +76,22 @@ window.MCPClient = (function() {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), REQ_TIMEOUT_MS);
     try {
-      const resp = await fetch(server.url, {
-        method: 'POST',
-        headers: _buildHeaders(server),
-        body: JSON.stringify(body),
-        signal: ctrl.signal
-      });
+      console.log('[MCP] →', method, server.url);
+      let resp;
+      try {
+        resp = await fetch(server.url, {
+          method: 'POST',
+          headers: _buildHeaders(server),
+          body: JSON.stringify(body),
+          signal: ctrl.signal,
+          mode: 'cors'
+        });
+      } catch(netErr) {
+        // 网络层失败（CORS / DNS / SSL / 离线）
+        console.error('[MCP] fetch 失败:', netErr);
+        throw new Error(`网络/CORS 失败：${netErr?.message || netErr}（按 F12 看 Network 标签的具体原因）`);
+      }
+      console.log('[MCP] ←', resp.status, resp.headers.get('content-type'));
       if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text().catch(()=>'')}`);
       const ct = resp.headers.get('content-type') || '';
       let data;
