@@ -1700,7 +1700,7 @@ return String(s == null ? '' : s).replace(/[&<>"']/g, c => map[c]);
       ta.value = lines.join('\n');
       const editModal = document.getElementById('edit-modal');
       // v687.11：后台模式下要盖在 backstage-modal (z-index:250) 上面
-      editModal.style.zIndex = '500';
+      editModal.style.zIndex = '99999';
       editModal.classList.remove('hidden');
       editModal.dataset.editId = '__debug__';
       if (typeof UI !== 'undefined' && UI.switchDebugTab) UI.switchDebugTab('debug-context');

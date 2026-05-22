@@ -4048,8 +4048,11 @@ if (!gp) return null;
     const ta = document.getElementById('edit-content');
     if (ta) {
       ta.value = lines.join('\n');
-      document.getElementById('edit-modal').classList.remove('hidden');
-      document.getElementById('edit-modal').dataset.editId = '__debug__';
+      const editModal = document.getElementById('edit-modal');
+      // v687.12：压过 backstage-modal (z:250)，保险起见用 99999（仅次于 confirm/alert）
+      editModal.style.zIndex = '99999';
+      editModal.classList.remove('hidden');
+      editModal.dataset.editId = '__debug__';
       if (typeof UI !== 'undefined' && UI.switchDebugTab) {
         UI.switchDebugTab('debug-context');
       }
