@@ -74,7 +74,7 @@ container.innerHTML = messages.map(m => {
       // v687.7：工具使用尾巴（仅 AI 消息）
       const hasLog = !isUser && m.toolsLog && m.toolsLog.length > 0;
       const toolsTail = (!isUser && m.toolsUsed > 0)
-        ? `<div class="msg-tools-used" ${hasLog ? `onclick="event.stopPropagation();Backstage._showToolsLog('${m.id}')" style="cursor:pointer"` : ''} title="本轮 AI 调用了 ${m.toolsUsed} 个工具${hasLog ? '（点击查看详情）' : ''}">⚙ 使用了 ${m.toolsUsed} 个工具${hasLog ? '（点击查看详情）' : ''}</div>`
+        ? `<div class="msg-tools-used" ${hasLog ? `onclick="event.stopPropagation();Backstage._showToolsLog('${m.id}')" style="cursor:pointer"` : ''} title="本轮 AI 调用了 ${m.toolsUsed} 个工具${hasLog ? '（点击查看详情）' : ''}"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;opacity:.85"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>使用了 ${m.toolsUsed} 个工具${hasLog ? '（点击查看详情）' : ''}</div>`
         : '';
       return `<div class="backstage-msg-wrap ${isUser ? 'user' : 'assistant'}">
         <div class="chat-msg ${isUser ? 'user' : 'assistant'}" data-id="${m.id}">
