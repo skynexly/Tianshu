@@ -1424,6 +1424,8 @@ const msgEl = appendMessage(aiMsg, true, true);
         let _toolsUsedCount = 0;
         // v687.8：工具调用日志（args/result 存档，UI 可点开看）
         const _toolsLog = [];
+        // v687.11：累积"工具调用前 AI 已说过的话"（fullContent 每轮 streamChat 会重置，这里跨轮拼接）
+        let _priorContent = '';
 
         // 工具集闭包：根据对话设置过滤启用项
         const _enabledTools = (() => {
@@ -1440,8 +1442,10 @@ const msgEl = appendMessage(aiMsg, true, true);
 
         // === 闭包式回调：onChunk / onDone / onError 复用，工具循环里也走这套 ===
         const _onChunk = (chunk, fullContent) => {
-          aiMsg.content = fullContent;
-          let renderContent = fullContent;
+          // v687.11：拼接工具调用前的历史内容
+          const merged = _priorContent ? (_priorContent + fullContent) : fullContent;
+          aiMsg.content = merged;
+          let renderContent = merged;
           renderContent = renderContent.replace(/```homecoming\s*[\s\S]*?```/gi, '');
           renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
           renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
@@ -1451,6 +1455,8 @@ const msgEl = appendMessage(aiMsg, true, true);
         };
 
         const _onDone = async (fullContent) => {
+          // v687.11：onDone 时也拼接历史内容
+          fullContent = _priorContent ? (_priorContent + fullContent) : fullContent;
           try {
             // 正则替换规则
             const regexRules = await Settings.getRegexRules();
@@ -1628,6 +1634,13 @@ const msgEl = appendMessage(aiMsg, true, true);
           try {
             _toolIter++;
             _toolsUsedCount += (toolCalls?.length || 0);
+            // v687.11：保留本轮在调工具前 AI 已经吐的文字（不让它消失）
+            try {
+              const partial = assistantMessage?.content || '';
+              if (partial) {
+                _priorContent = (_priorContent ? _priorContent + '\n\n' : '') + partial;
+              }
+            } catch(_) {}
             GameLog.log('info', `[Chat] AI 调用工具（第 ${_toolIter}/${_MAX_TOOL_ITER} 轮，本轮${toolCalls?.length||0}个，累计${_toolsUsedCount}个）: ${toolCalls.map(t => t.function?.name).join(', ')}`);
 
             // push assistant 的 tool_calls 消息

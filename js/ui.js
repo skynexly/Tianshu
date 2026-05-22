@@ -602,6 +602,8 @@ if (contentArea) contentArea.style.display = 'none';
     modal.classList.remove('closing');
     if (content) content.classList.remove('closing');
     modal.classList.add('hidden');
+    // v687.11：清掉 _showToolsLog 临时设的 zIndex
+    try { modal.style.zIndex = ''; } catch(_) {}
   }
 
   async function closeMsgEditModal() {

@@ -157,7 +157,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v687.10';
+    const APP_VERSION = 'v687.11';
 const CHANGELOG = `【v687 上下文重构 + OOC 修复】
 · chat.js 重构：send() 与 showContext() 共享 _buildApiContext()
 · 删除 ~550 行重复代码，以后改提示词只需改一处

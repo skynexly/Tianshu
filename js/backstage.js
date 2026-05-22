@@ -796,6 +796,8 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
         let _toolsUsedCount = 0;
         // v687.8：工具日志
         const _toolsLog = [];
+        // v687.11：累积工具调用前的内容
+        let _priorContent = '';
         const bsSettings = _getSettings();
 
         // 工具集闭包
@@ -815,7 +817,9 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
 
         // === 闭包式回调 ===
         const _onChunk = (chunk, fullContent) => {
-          aiMsg.content = baseContent + fullContent;
+          // v687.11：拼接工具调用前的内容
+          const merged = _priorContent ? (_priorContent + fullContent) : fullContent;
+          aiMsg.content = baseContent + merged;
           const container = document.getElementById('backstage-messages');
           if (container) {
             const target = container.querySelector(`[data-id="${aiMsg.id}"] .md-content`);
@@ -829,6 +833,8 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
         };
 
         const _onDone = async (fullContent) => {
+          // v687.11：拼接工具调用前的内容
+          fullContent = _priorContent ? (_priorContent + fullContent) : fullContent;
           // 正则替换规则
           try {
             const regexRules = await Settings.getRegexRules();
@@ -882,6 +888,13 @@ aiMsg.content = baseContent + fullContent;
           try {
             _toolIter++;
             _toolsUsedCount += (toolCalls?.length || 0);
+            // v687.11：保留本轮调工具前 AI 已经吐的文字
+            try {
+              const partial = assistantMessage?.content || '';
+              if (partial) {
+                _priorContent = (_priorContent ? _priorContent + '\n\n' : '') + partial;
+              }
+            } catch(_) {}
             console.log(`[Backstage] AI 调用工具（第 ${_toolIter}/${_MAX_TOOL_ITER} 轮，本轮${toolCalls?.length||0}个，累计${_toolsUsedCount}个）:`, toolCalls.map(t => t.function?.name).join(', '));
 
             apiMessages.push({
@@ -1685,8 +1698,11 @@ return String(s == null ? '' : s).replace(/[&<>"']/g, c => map[c]);
     const ta = document.getElementById('edit-content');
     if (ta) {
       ta.value = lines.join('\n');
-      document.getElementById('edit-modal').classList.remove('hidden');
-      document.getElementById('edit-modal').dataset.editId = '__debug__';
+      const editModal = document.getElementById('edit-modal');
+      // v687.11：后台模式下要盖在 backstage-modal (z-index:250) 上面
+      editModal.style.zIndex = '500';
+      editModal.classList.remove('hidden');
+      editModal.dataset.editId = '__debug__';
       if (typeof UI !== 'undefined' && UI.switchDebugTab) UI.switchDebugTab('debug-context');
     }
   }
