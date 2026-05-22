@@ -897,7 +897,7 @@ aiMsg.content = baseContent + fullContent;
               } catch(e) {
                 result = `工具执行异常：${e?.message || e}`;
               }
-              apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: result || '' });
+              apiMessages.push({ role: 'tool', tool_call_id: tc.id, name: tc.function?.name, content: result || '' });
               // v687.8：记录工具日志
               try {
                 let parsedArgs = tc.function?.arguments;

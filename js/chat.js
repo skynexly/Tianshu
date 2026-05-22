@@ -1648,6 +1648,7 @@ const msgEl = appendMessage(aiMsg, true, true);
               apiMessages.push({
                 role: 'tool',
                 tool_call_id: tc.id,
+                name: tc.function?.name,
                 content: result || ''
               });
               // v687.8：记录工具日志
