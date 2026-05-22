@@ -1699,7 +1699,8 @@ return String(s == null ? '' : s).replace(/[&<>"']/g, c => map[c]);
     if (ta) {
       ta.value = lines.join('\n');
       const editModal = document.getElementById('edit-modal');
-      // v687.11：后台模式下要盖在 backstage-modal (z-index:250) 上面
+      // v687.13：重挂 body 末尾避免被 backstage-modal transform stacking context 夹住
+      try { document.body.appendChild(editModal); } catch(_) {}
       editModal.style.zIndex = '99999';
       editModal.classList.remove('hidden');
       editModal.dataset.editId = '__debug__';

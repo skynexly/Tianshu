@@ -4049,7 +4049,9 @@ if (!gp) return null;
     if (ta) {
       ta.value = lines.join('\n');
       const editModal = document.getElementById('edit-modal');
-      // v687.12：压过 backstage-modal (z:250)，保险起见用 99999（仅次于 confirm/alert）
+      // v687.13：强制把 edit-modal 重挂到 body 末尾 + 高 z-index，避免被 backstage-modal 的
+      // floating-modal animation transform 残留创建的 stacking context 夹住
+      try { document.body.appendChild(editModal); } catch(_) {}
       editModal.style.zIndex = '99999';
       editModal.classList.remove('hidden');
       editModal.dataset.editId = '__debug__';
