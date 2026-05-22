@@ -962,6 +962,14 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       }
     } catch(e) { console.warn('[Chat] 剧情引导注入失败', e); }
 
+    // v687.7：上一轮工具使用提示（让 AI 知道自己上一轮调了几个工具）
+    try {
+      const lastAi = [...messages].reverse().find(m => m.role === 'assistant');
+      if (lastAi && lastAi.toolsUsed > 0) {
+        systemParts.push(`【上一轮工具使用情况】\n你在上一轮回复中调用了 ${lastAi.toolsUsed} 个工具。这是给你的参考——如果上一轮已经查过相关信息，本轮可以直接基于结果回复，不必重复调用相同工具。`);
+      }
+    } catch(e) { console.warn('[Chat] 工具使用提示注入失败', e); }
+
     const apiMessages = await API.buildMessages(historyForAPI, systemParts);
   try { GameLog.log('info', `[Chat] API消息构建完成: history=${historyForAPI.length}, systemParts=${systemParts.length}, apiMessages=${apiMessages.length}`); } catch(_) {}
 
@@ -1412,6 +1420,8 @@ const msgEl = appendMessage(aiMsg, true, true);
         // v687.6：工具调用迭代计数（最高 5 次）
         let _toolIter = 0;
         const _MAX_TOOL_ITER = 5;
+        // v687.7：工具调用累计计数（用于 UI 尾巴 + 下一轮 AI 自知）
+        let _toolsUsedCount = 0;
 
         // 工具集闭包：根据对话设置过滤启用项
         const _enabledTools = (() => {
@@ -1452,6 +1462,8 @@ const msgEl = appendMessage(aiMsg, true, true);
             fullContent = fullContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
             aiMsg.content = fullContent;
             aiMsg.timestamp = Utils.timestamp();
+            // v687.7：本轮工具使用数写入消息（用于 UI 尾巴 + 下一轮 AI 自知）
+            if (_toolsUsedCount > 0) aiMsg.toolsUsed = _toolsUsedCount;
             try { delete aiMsg._cachedFullHTML; delete aiMsg._cachedPlainHTML; } catch(_) {}
             await DB.put('messages', aiMsg);
             messages.push(aiMsg);
@@ -1611,7 +1623,8 @@ const msgEl = appendMessage(aiMsg, true, true);
         const _onToolCallsHandler = async (toolCalls, assistantMessage) => {
           try {
             _toolIter++;
-            GameLog.log('info', `[Chat] AI 调用工具（第 ${_toolIter}/${_MAX_TOOL_ITER} 轮）: ${toolCalls.map(t => t.function?.name).join(', ')}`);
+            _toolsUsedCount += (toolCalls?.length || 0);
+            GameLog.log('info', `[Chat] AI 调用工具（第 ${_toolIter}/${_MAX_TOOL_ITER} 轮，本轮${toolCalls?.length||0}个，累计${_toolsUsedCount}个）: ${toolCalls.map(t => t.function?.name).join(', ')}`);
 
             // push assistant 的 tool_calls 消息
             apiMessages.push({
@@ -2999,6 +3012,11 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
         html += `<span class="npc-tag">${Utils.escapeHtml(name)}</span>`;
       });
       html += '</div>';
+    }
+
+    // v687.7：工具使用尾巴
+    if (msg && msg.toolsUsed > 0) {
+      html += `<div class="msg-tools-used" title="本轮 AI 调用了 ${msg.toolsUsed} 个工具">⚙ 使用了 ${msg.toolsUsed} 个工具</div>`;
     }
 
     return html;
