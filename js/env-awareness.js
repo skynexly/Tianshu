@@ -66,5 +66,59 @@ window.EnvAwareness = (function() {
     return '[当前环境]\n' + lines.join('\n');
   }
 
-  return { getBatteryInfo, getWeatherInfo, buildEnvBlock };
+  // === 拍当前环境快照（用于存到 user message 上，下一轮回放） ===
+  // opts: { battery: bool, weather: bool }
+  async function captureSnapshot(opts) {
+    const out = { ts: Date.now() };
+    const tasks = [];
+    if (opts?.battery) tasks.push(getBatteryInfo().then(b => { if (b) out.battery = { pct: b.pct, charging: b.charging }; }));
+    if (opts?.weather) tasks.push(getWeatherInfo().then(w => { if (w) out.weather = { temp: w.temp, condition: w.condition, location: w.location }; }));
+    if (tasks.length === 0) return null;
+    await Promise.all(tasks);
+    if (!out.battery && !out.weather) return null;
+    return out;
+  }
+
+  // === 给最近 N 条带 envSnapshot 的 user 消息拼前缀（仿 TimeAwareness.stampUserMessages） ===
+  // 返回新数组，不修改原数据
+  function stampUserMessages(historyForAPI, messages, opts) {
+    const want = (opts?.battery || opts?.weather);
+    if (!want) return historyForAPI;
+    const maxStamps = opts?.maxStamps ?? 2;
+    const withTs = messages.filter(m => !m.hidden);
+    if (withTs.length !== historyForAPI.length) return historyForAPI;
+    // 倒序找最近 N 条带 envSnapshot 的 user 索引
+    const targetIndices = new Set();
+    let collected = 0;
+    for (let i = withTs.length - 1; i >= 0 && collected < maxStamps; i--) {
+      const m = withTs[i];
+      if (m.role !== 'user' || !m.envSnapshot) continue;
+      targetIndices.add(i);
+      collected++;
+    }
+    if (targetIndices.size === 0) return historyForAPI;
+    return historyForAPI.map((m, i) => {
+      if (!targetIndices.has(i)) return m;
+      const snap = withTs[i].envSnapshot;
+      const tagParts = [];
+      if (opts.battery && snap.battery) {
+        tagParts.push(`电量${snap.battery.pct}%${snap.battery.charging ? '充' : ''}`);
+      }
+      if (opts.weather && snap.weather) {
+        tagParts.push(`${snap.weather.location || ''}${snap.weather.temp || ''} ${snap.weather.condition || ''}`.trim());
+      }
+      if (tagParts.length === 0) return m;
+      const tag = `[${tagParts.join(' · ')}] `;
+      if (Array.isArray(m.content)) {
+        const stamped = m.content.map((part, pi) => {
+          if (pi === 0 && part.type === 'text') return { ...part, text: tag + (part.text || '') };
+          return part;
+        });
+        return { ...m, content: stamped };
+      }
+      return { ...m, content: tag + (m.content || '') };
+    });
+  }
+
+  return { getBatteryInfo, getWeatherInfo, buildEnvBlock, captureSnapshot, stampUserMessages };
 })();

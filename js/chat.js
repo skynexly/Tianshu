@@ -970,19 +970,14 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       }
     } catch(e) { console.warn('[Chat] 工具使用提示注入失败', e); }
 
-    // v687.14：现实环境感知（电量/天气）注入到最后一条 user message 末尾
+    // v687.15：现实环境感知（电量/天气）拼到最近 2 条 user message 前缀
     try {
       if ((convSettings.batteryAware || convSettings.weatherAware) && window.EnvAwareness) {
-        const envBlock = await EnvAwareness.buildEnvBlock({
+        historyForAPI = EnvAwareness.stampUserMessages(historyForAPI, messages, {
           battery: convSettings.batteryAware,
-          weather: convSettings.weatherAware
+          weather: convSettings.weatherAware,
+          maxStamps: 2
         });
-        if (envBlock) {
-          const lastUserIdx = [...historyForAPI].map((m, i) => ({ m, i })).reverse().find(x => x.m.role === 'user')?.i;
-          if (lastUserIdx !== undefined) {
-            historyForAPI[lastUserIdx] = { ...historyForAPI[lastUserIdx], content: `${historyForAPI[lastUserIdx].content}\n\n${envBlock}` };
-          }
-        }
       }
     } catch(e) { console.warn('[Chat] 环境感知注入失败', e); }
 
@@ -1359,6 +1354,16 @@ try {
       timestamp: Utils.timestamp(),
       hidden: text === '<Continue the Chat/>'  // 隐藏继续指令的消息
     };
+    // v687.15：环境快照（电量/天气），存到消息上，下一轮拼前缀回放
+    try {
+      if ((convSettings.batteryAware || convSettings.weatherAware) && window.EnvAwareness) {
+        const snap = await EnvAwareness.captureSnapshot({
+          battery: convSettings.batteryAware,
+          weather: convSettings.weatherAware
+        });
+        if (snap) userMsg.envSnapshot = snap;
+      }
+    } catch(_) {}
     await DB.put('messages', userMsg);
     messages.push(userMsg);
     if (!userMsg.hidden) {

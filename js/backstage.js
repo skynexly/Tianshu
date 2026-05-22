@@ -695,20 +695,14 @@ let stampedHistory = historyForAPI;
 if (settings.timeAware && window.TimeAwareness) {
 try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsgs); } catch(e) {}
       }
-      // v687.14：现实环境感知（电量/天气）注入到最后一条 user message 末尾
+      // v687.15：现实环境感知（电量/天气）拼到最近 2 条 user message 前缀
       try {
         if ((settings.batteryAware || settings.weatherAware) && window.EnvAwareness) {
-          const envBlock = await EnvAwareness.buildEnvBlock({
+          stampedHistory = EnvAwareness.stampUserMessages(stampedHistory, historyMsgs, {
             battery: settings.batteryAware,
-            weather: settings.weatherAware
+            weather: settings.weatherAware,
+            maxStamps: 2
           });
-          if (envBlock) {
-            const lastUserIdx = [...stampedHistory].map((m, i) => ({ m, i })).reverse().find(x => x.m.role === 'user')?.i;
-            if (lastUserIdx !== undefined) {
-              stampedHistory = stampedHistory.slice();
-              stampedHistory[lastUserIdx] = { ...stampedHistory[lastUserIdx], content: `${stampedHistory[lastUserIdx].content}\n\n${envBlock}` };
-            }
-          }
         }
       } catch(e) { console.warn('[Backstage] 环境感知注入失败', e); }
       // v687.7：上一轮工具使用提示
@@ -1037,6 +1031,17 @@ aiMsg.content = baseContent + fullContent;
       branchId: 'backstage',
       timestamp: Date.now()
     };
+    // v687.15：环境快照
+    try {
+      const _bs = _getSettings();
+      if ((_bs.batteryAware || _bs.weatherAware) && window.EnvAwareness) {
+        const snap = await EnvAwareness.captureSnapshot({
+          battery: _bs.batteryAware,
+          weather: _bs.weatherAware
+        });
+        if (snap) userMsg.envSnapshot = snap;
+      }
+    } catch(_) {}
     await DB.put('messages', userMsg);
     messages.push(userMsg);
     input.value = '';
