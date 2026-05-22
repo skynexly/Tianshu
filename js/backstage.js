@@ -21,6 +21,8 @@ let pendingImages = [];   // [{base64, name, type}]
     maxTokens: conv?.backstageMaxTokens ?? 8000,
     convId: conv?.backstageConvId || null,
     timeAware: conv?.backstageTimeAware !== false,  // 默认开
+    batteryAware: !!conv?.backstageBatteryAware,    // v687.14：默认关
+    weatherAware: !!conv?.backstageWeatherAware,    // v687.14：默认关
     toolsMemory: conv?.backstageToolsMemory !== false,     // 默认开
     toolsDirective: conv?.backstageToolsDirective !== false, // 默认开
     toolsWorldview: conv?.backstageToolsWorldview !== false, // 默认开（只读）
@@ -689,10 +691,26 @@ systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要�
 
     const historyForAPI = historyMsgs.map(m => ({ role: m.role, content: m.content }));
     // 用户消息拼时间戳（后台默认开）
-    let stampedHistory = historyForAPI;
-    if (settings.timeAware && window.TimeAwareness) {
+let stampedHistory = historyForAPI;
+if (settings.timeAware && window.TimeAwareness) {
 try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsgs); } catch(e) {}
       }
+      // v687.14：现实环境感知（电量/天气）注入到最后一条 user message 末尾
+      try {
+        if ((settings.batteryAware || settings.weatherAware) && window.EnvAwareness) {
+          const envBlock = await EnvAwareness.buildEnvBlock({
+            battery: settings.batteryAware,
+            weather: settings.weatherAware
+          });
+          if (envBlock) {
+            const lastUserIdx = [...stampedHistory].map((m, i) => ({ m, i })).reverse().find(x => x.m.role === 'user')?.i;
+            if (lastUserIdx !== undefined) {
+              stampedHistory = stampedHistory.slice();
+              stampedHistory[lastUserIdx] = { ...stampedHistory[lastUserIdx], content: `${stampedHistory[lastUserIdx].content}\n\n${envBlock}` };
+            }
+          }
+        }
+      } catch(e) { console.warn('[Backstage] 环境感知注入失败', e); }
       // v687.7：上一轮工具使用提示
       try {
         const lastAi = [...historyMsgs].reverse().find(m => m.role === 'assistant');
@@ -1363,6 +1381,11 @@ await DB.del('messages', m.id);
     document.getElementById('backstage-max-tokens').value = settings.maxTokens || 8000;
     const taEl = document.getElementById('backstage-time-aware');
     if (taEl) taEl.checked = settings.timeAware;
+    // v687.14：电量/天气
+    const baEl = document.getElementById('backstage-battery-aware');
+    if (baEl) baEl.checked = settings.batteryAware;
+    const waEl = document.getElementById('backstage-weather-aware');
+    if (waEl) waEl.checked = settings.weatherAware;
     const toolsMemEl = document.getElementById('backstage-tools-memory');
     if (toolsMemEl) toolsMemEl.checked = settings.toolsMemory;
     const toolsDirEl = document.getElementById('backstage-tools-directive');
@@ -1567,6 +1590,11 @@ return String(s == null ? '' : s).replace(/[&<>"']/g, c => map[c]);
     conv.backstageMaxTokens = parseInt(document.getElementById('backstage-max-tokens').value) || 8000;
     const taEl = document.getElementById('backstage-time-aware');
     if (taEl) conv.backstageTimeAware = taEl.checked;
+    // v687.14：电量/天气
+    const baEl = document.getElementById('backstage-battery-aware');
+    if (baEl) conv.backstageBatteryAware = baEl.checked;
+    const waEl = document.getElementById('backstage-weather-aware');
+    if (waEl) conv.backstageWeatherAware = waEl.checked;
     const toolsMemEl = document.getElementById('backstage-tools-memory');
     if (toolsMemEl) conv.backstageToolsMemory = toolsMemEl.checked;
     const toolsDirEl = document.getElementById('backstage-tools-directive');

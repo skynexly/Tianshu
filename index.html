@@ -1524,6 +1524,22 @@
             </label>
             <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">让 AI 感知现实时间流逝，文游剧情模式建议关闭</span>
             <label class="circle-check-label">
+              <span class="circle-check-text">电量感知</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-battery-aware" class="circle-check">
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">让 AI 知道你当前的电量与充电状态</span>
+            <label class="circle-check-label">
+              <span class="circle-check-text">天气感知</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="cs-weather-aware" class="circle-check">
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">让 AI 知道你所在城市的天气（IP 定位，30 分钟刷新）</span>
+            <label class="circle-check-label">
               <span class="circle-check-text">后台频道</span>
               <span style="position:relative;display:inline-flex">
                 <input type="checkbox" id="cs-backstage" class="circle-check">
@@ -3501,6 +3517,7 @@ const GameLog = (() => {
 <script src="js/markdown.js"></script>
 <script src="js/api.js"></script>
 <script src="js/time-awareness.js"></script>
+<script src="js/env-awareness.js"></script>
 <script src="js/memory.js"></script>
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
@@ -4145,6 +4162,22 @@ if ('serviceWorker' in navigator) {
       </span>
     </label>
     <span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">让后台 AI 感知现实世界的时间流逝（用户消息会带时间戳，并告诉 AI 距离上次回复多久）</span>
+    <label class="circle-check-label" style="margin-top:16px">
+      <span class="circle-check-text">电量感知</span>
+      <span style="position:relative;display:inline-flex">
+        <input type="checkbox" id="backstage-battery-aware" class="circle-check">
+        <span class="circle-check-ui"></span>
+      </span>
+    </label>
+    <span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">让后台 AI 知道你当前的电量与充电状态</span>
+    <label class="circle-check-label" style="margin-top:16px">
+      <span class="circle-check-text">天气感知</span>
+      <span style="position:relative;display:inline-flex">
+        <input type="checkbox" id="backstage-weather-aware" class="circle-check">
+        <span class="circle-check-ui"></span>
+      </span>
+    </label>
+    <span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">让后台 AI 知道你所在城市的天气（IP 定位，30 分钟刷新）</span>
 <label class="circle-check-label" style="margin-top:16px">
 <span class="circle-check-text">后台记忆工具</span>
 <span style="position:relative;display:inline-flex">

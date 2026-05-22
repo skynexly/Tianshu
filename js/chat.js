@@ -970,6 +970,22 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
       }
     } catch(e) { console.warn('[Chat] 工具使用提示注入失败', e); }
 
+    // v687.14：现实环境感知（电量/天气）注入到最后一条 user message 末尾
+    try {
+      if ((convSettings.batteryAware || convSettings.weatherAware) && window.EnvAwareness) {
+        const envBlock = await EnvAwareness.buildEnvBlock({
+          battery: convSettings.batteryAware,
+          weather: convSettings.weatherAware
+        });
+        if (envBlock) {
+          const lastUserIdx = [...historyForAPI].map((m, i) => ({ m, i })).reverse().find(x => x.m.role === 'user')?.i;
+          if (lastUserIdx !== undefined) {
+            historyForAPI[lastUserIdx] = { ...historyForAPI[lastUserIdx], content: `${historyForAPI[lastUserIdx].content}\n\n${envBlock}` };
+          }
+        }
+      }
+    } catch(e) { console.warn('[Chat] 环境感知注入失败', e); }
+
     const apiMessages = await API.buildMessages(historyForAPI, systemParts);
   try { GameLog.log('info', `[Chat] API消息构建完成: history=${historyForAPI.length}, systemParts=${systemParts.length}, apiMessages=${apiMessages.length}`); } catch(_) {}
 
@@ -4148,6 +4164,8 @@ if (!gp) return null;
       format: conv?.convFormat !== false,       // 默认开
       backstage: !!conv?.backstageEnabled,      // 默认关
       timeAware: !!conv?.convTimeAware,         // 默认关
+      batteryAware: !!conv?.convBatteryAware,   // v687.14：默认关
+      weatherAware: !!conv?.convWeatherAware,   // v687.14：默认关
       onlineChat: !!conv?.convOnlineChat,       // 默认关（线上消息气泡）
       eventsEnabled: conv?.convEventsEnabled !== false, // 默认开（世界观事件系统）
       tasksEnabled: conv?.convTasksEnabled !== false,   // 默认开（通用任务系统）
@@ -4350,6 +4368,11 @@ bgImage: conv?.convBgImage || '',
     document.getElementById('cs-backstage').checked = s.backstage;
     const ta = document.getElementById('cs-time-aware');
     if (ta) ta.checked = s.timeAware;
+    // v687.14：电量/天气感知
+    const ba = document.getElementById('cs-battery-aware');
+    if (ba) ba.checked = s.batteryAware;
+    const wa = document.getElementById('cs-weather-aware');
+    if (wa) wa.checked = s.weatherAware;
     const oc = document.getElementById('cs-online-chat');
     if (oc) oc.checked = s.onlineChat;
     const evEnabled = document.getElementById('cs-events-enabled');
@@ -4425,8 +4448,13 @@ bgImage: conv?.convBgImage || '',
     conv.convFormat = document.getElementById('cs-format').checked;
     const wasBackstage = !!conv.backstageEnabled;
     conv.backstageEnabled = document.getElementById('cs-backstage').checked;
-    const taEl = document.getElementById('cs-time-aware');
-    if (taEl) conv.convTimeAware = taEl.checked;
+const taEl = document.getElementById('cs-time-aware');
+      if (taEl) conv.convTimeAware = taEl.checked;
+      // v687.14：电量/天气感知
+      const baEl = document.getElementById('cs-battery-aware');
+      if (baEl) conv.convBatteryAware = baEl.checked;
+      const waEl = document.getElementById('cs-weather-aware');
+      if (waEl) conv.convWeatherAware = waEl.checked;
     const ocEl = document.getElementById('cs-online-chat');
     if (ocEl) conv.convOnlineChat = ocEl.checked;
     const igSaveEl = document.getElementById('cs-imggen');
