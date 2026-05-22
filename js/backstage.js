@@ -3,8 +3,9 @@
  */
 const Backstage = (() => {
 let isOpen = false;
-let messages = [];
-let isStreaming = false;
+  let messages = [];
+  let isStreaming = false;
+  let _sendLock = false; // v687.19：防重入锁（覆盖 captureSnapshot 等异步窗口）
 let abortCtrl = null;
 let pendingImages = [];   // [{base64, name, type}]
   let pendingMemories = []; // [{id, title, content}]
@@ -995,9 +996,14 @@ aiMsg.content = baseContent + fullContent;
     const input = document.getElementById('backstage-input');
     const text = input?.value.trim();
     if ((!text && pendingImages.length === 0 && pendingMemories.length === 0 && pendingFiles.length === 0) || isStreaming) return;
+    // v687.19：立刻上锁防重入。isStreaming 要等 _runGeneration 才置位；
+    //         开了天气感知时 captureSnapshot 要等 wttr.in 1-2s，期间用户重复点击会触发重入
+    if (_sendLock) return;
+    _sendLock = true;
+    try {
 
     const convId = await _ensureConvId();
-    if (!convId) return;
+    if (!convId) { _sendLock = false; return; }
 
     // 显示文本（带附件标记）
     let displayText = text;
@@ -1057,6 +1063,9 @@ aiMsg.content = baseContent + fullContent;
     // 这一轮发给 API 的 history：把最后一条 user 替换成 multimodal/带记忆文本版本
     const historyForApi = messages.slice(0, -1).concat([{ ...userMsg, content: apiContent }]);
     await _runGeneration(historyForApi, null, false);
+    } finally {
+      _sendLock = false;
+    }
   }
 
   // ===== 长按菜单 =====
