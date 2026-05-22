@@ -4353,10 +4353,12 @@ bgImage: conv?.convBgImage || '',
   }
 
   function _switchCsTab(tab) {
-    const outputPanel = document.getElementById('cs-tab-output');
-    const funcPanel = document.getElementById('cs-tab-function');
-    if (outputPanel) outputPanel.style.display = tab === 'output' ? 'flex' : 'none';
-    if (funcPanel) funcPanel.style.display = tab === 'function' ? 'flex' : 'none';
+    // v687.17：4 tab — output / gameplay / aware / tools
+    const TABS = ['output', 'gameplay', 'aware', 'tools'];
+    TABS.forEach(t => {
+      const panel = document.getElementById('cs-tab-' + t);
+      if (panel) panel.style.display = (t === tab) ? 'flex' : 'none';
+    });
     document.querySelectorAll('.cs-tab').forEach(btn => {
       const isActive = btn.dataset.csTab === tab;
       btn.style.borderBottomColor = isActive ? 'var(--accent)' : 'transparent';
@@ -4365,6 +4367,8 @@ bgImage: conv?.convBgImage || '',
   }
 
   function openConvSettingsModal() {
+    // v687.17：从 modal 改为 panel 全屏
+    UI.showPanel('conv-settings');
     _switchCsTab('output'); // 默认显示输出 tab
     const s = _getConvSettings();
     document.getElementById('cs-stream').checked = s.stream;
@@ -4538,7 +4542,8 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
   }
 
   function closeConvSettingsModal() {
-    document.getElementById('conv-settings-modal')?.classList.add('hidden');
+    // v687.17：从 modal 改为 panel —— 退回聊天
+    UI.showPanel('chat', 'back');
   }
 
   // ===== 剧情引导 =====
