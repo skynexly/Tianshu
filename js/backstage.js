@@ -776,132 +776,145 @@ systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要�
 
     const _doStream = () => {
       return new Promise((resolve) => {
-        API.streamChat(
-          apiMessages,
-          (chunk, fullContent) => {
-            aiMsg.content = baseContent + fullContent;
-            const container = document.getElementById('backstage-messages');
-            if (container) {
-              const target = container.querySelector(`[data-id="${aiMsg.id}"] .md-content`);
-              if (target) {
-                target.innerHTML = aiMsg.content ? Markdown.render(aiMsg.content) : '<div class="typing-indicator"><span></span><span></span><span></span></div>';
-              } else {
-                _renderMessages();
-              }
-              container.scrollTop = container.scrollHeight;
-            }
-          },
-          async (fullContent) => {
-            // 正则替换规则
-            try {
-              const regexRules = await Settings.getRegexRules();
-              for (const rule of regexRules) {
-                if (rule.enabled === false) continue;
-                try { fullContent = fullContent.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement ?? ''); } catch(e) {}
-              }
-            } catch(_) {}
-            aiMsg.content = baseContent + fullContent;
-            aiMsg.timestamp = Date.now();
-            await DB.put('messages', aiMsg);
-            _renderMessages();
+        // v687.6：工具调用迭代计数
+        let _toolIter = 0;
+        const _MAX_TOOL_ITER = 5;
+        const bsSettings = _getSettings();
 
-            // 生图：解析 [IMG:] 标记
-            try {
-              const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-              if (conv && conv.convImgGen && /\[IMG:\s*[^\]]+\]/i.test(aiMsg.content)) {
-                _processImgTagsBackstage(aiMsg).catch(e => console.warn('[Backstage] 生图标记处理失败', e));
-              }
-            } catch(_) {}
-
-            resolve('done');
-          },
-          async (error) => {
-            if (error === 'AbortError') {
-              // 保存已经生成的部分
-              if (aiMsg.content) {
-                try { await DB.put('messages', aiMsg); } catch(e) {}
-              }
-              resolve('abort');
-              return;
-            }
-            retryCount++;
-            if (retryCount < maxRetries) {
-              console.warn(`[Backstage] 重试 ${retryCount}/${maxRetries}: ${error}`);
-              await new Promise(r => setTimeout(r, 1000));
-              _doStream().then(resolve);
-            } else {
-              aiMsg.content = baseContent + `*生成失败（已重试${maxRetries}次）: ${error}*`;
-              _renderMessages();
-              resolve('error');
-            }
-          },
-          abortCtrl.signal,
-          (() => {
-            const opts = overrideConfig ? { overrideConfig } : {};
-            const bsSettings = _getSettings();
-        if (typeof Tools !== 'undefined') {
+        // 工具集闭包
+        const _enabledTools = (() => {
+          if (typeof Tools === 'undefined') return undefined;
           const allDefs = Tools.getBackstageDefinitions() || [];
           const enabledDefs = allDefs.filter(d => {
-const name = d.function?.name || '';
-if (name.includes('backstage_note')) return bsSettings.toolsMemory;
-if (name.includes('directive')) return bsSettings.toolsDirective;
-if (name.startsWith('query_worldview_')) return bsSettings.toolsWorldview;
-if (name === 'search_messages' || name === 'query_events' || name === 'query_relations') return bsSettings.toolsMainMemory;
-return bsSettings.toolsMemory; // 兜底归到记忆类
-});
-          if (enabledDefs.length > 0) opts.tools = enabledDefs;
-        }
-            opts.onToolCalls = async (toolCalls, assistantMessage) => {
+            const name = d.function?.name || '';
+            if (name.includes('backstage_note')) return bsSettings.toolsMemory;
+            if (name.includes('directive')) return bsSettings.toolsDirective;
+            if (name.startsWith('query_worldview_')) return bsSettings.toolsWorldview;
+            if (name === 'search_messages' || name === 'query_events' || name === 'query_relations') return bsSettings.toolsMainMemory;
+            return bsSettings.toolsMemory;
+          });
+          return enabledDefs.length > 0 ? enabledDefs : undefined;
+        })();
+
+        // === 闭包式回调 ===
+        const _onChunk = (chunk, fullContent) => {
+          aiMsg.content = baseContent + fullContent;
+          const container = document.getElementById('backstage-messages');
+          if (container) {
+            const target = container.querySelector(`[data-id="${aiMsg.id}"] .md-content`);
+            if (target) {
+              target.innerHTML = aiMsg.content ? Markdown.render(aiMsg.content) : '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+            } else {
+              _renderMessages();
+            }
+            container.scrollTop = container.scrollHeight;
+          }
+        };
+
+        const _onDone = async (fullContent) => {
+          // 正则替换规则
+          try {
+            const regexRules = await Settings.getRegexRules();
+            for (const rule of regexRules) {
+              if (rule.enabled === false) continue;
+              try { fullContent = fullContent.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement ?? ''); } catch(e) {}
+            }
+          } catch(_) {}
+          aiMsg.content = baseContent + fullContent;
+          aiMsg.timestamp = Date.now();
+          await DB.put('messages', aiMsg);
+          _renderMessages();
+
+          // 生图：解析 [IMG:] 标记
+          try {
+            const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+            if (conv && conv.convImgGen && /\[IMG:\s*[^\]]+\]/i.test(aiMsg.content)) {
+              _processImgTagsBackstage(aiMsg).catch(e => console.warn('[Backstage] 生图标记处理失败', e));
+            }
+          } catch(_) {}
+
+          resolve('done');
+        };
+
+        const _onError = async (error) => {
+          if (error === 'AbortError') {
+            if (aiMsg.content) {
+              try { await DB.put('messages', aiMsg); } catch(e) {}
+            }
+            resolve('abort');
+            return;
+          }
+          retryCount++;
+          if (retryCount < maxRetries) {
+            console.warn(`[Backstage] 重试 ${retryCount}/${maxRetries}: ${error}`);
+            await new Promise(r => setTimeout(r, 1000));
+            _doStream().then(resolve);
+          } else {
+            aiMsg.content = baseContent + `*生成失败（已重试${maxRetries}次）: ${error}*`;
+            _renderMessages();
+            resolve('error');
+          }
+        };
+
+        // 工具调用循环
+        const _onToolCallsHandler = async (toolCalls, assistantMessage) => {
+          try {
+            _toolIter++;
+            console.log(`[Backstage] AI 调用工具（第 ${_toolIter}/${_MAX_TOOL_ITER} 轮）:`, toolCalls.map(t => t.function?.name).join(', '));
+
+            apiMessages.push({
+              role: 'assistant',
+              content: assistantMessage.content || null,
+              tool_calls: toolCalls
+            });
+
+            for (const tc of toolCalls) {
+              let result;
               try {
-                // 把 assistant tool_calls 加入消息链
-                apiMessages.push({
-                  role: 'assistant',
-                  content: assistantMessage.content || null,
-                  tool_calls: toolCalls
-                });
-                // 执行工具
-                for (const tc of toolCalls) {
-                  const result = await Tools.execute(tc);
-                  apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: result });
-                }
-                // 再次请求
-                API.streamChat(
-                  apiMessages,
-                  (chunk, fullContent) => {
-                    aiMsg.content = baseContent + fullContent;
-                    const container = document.getElementById('backstage-messages');
-                    if (container) {
-                      const target = container.querySelector(`[data-id="${aiMsg.id}"] .md-content`);
-                      if (target) target.innerHTML = Markdown.render(aiMsg.content);
-                      else _renderMessages();
-                    }
-                  },
-                  async (fullContent) => {
-                    // 正则替换规则
-                    try {
-                      const regexRules = await Settings.getRegexRules();
-                      for (const rule of regexRules) {
-                        if (rule.enabled === false) continue;
-                        try { fullContent = fullContent.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement ?? ''); } catch(e) {}
-                      }
-                    } catch(_) {}
-                    aiMsg.content = baseContent + fullContent;
-                    aiMsg.timestamp = Date.now();
-                    await DB.put('messages', aiMsg);
-                    _renderMessages();
-                    resolve('done');
-                  },
-                  async (error) => { resolve('error'); },
-                  abortCtrl.signal,
-                  overrideConfig ? { overrideConfig } : undefined
-                ).catch(() => resolve('error'));
+                result = await Tools.execute(tc);
               } catch(e) {
-                console.error('[Backstage] tool calling 失败:', e);
-                resolve('error');
+                result = `工具执行异常：${e?.message || e}`;
               }
-            };
-            return opts;
-          })()
+              apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: result || '' });
+            }
+
+            const reachLimit = _toolIter >= _MAX_TOOL_ITER;
+            if (reachLimit) {
+              console.warn(`[Backstage] 工具调用达到 ${_MAX_TOOL_ITER} 次上限，强制收尾`);
+            }
+
+            const followOpts = overrideConfig ? { overrideConfig } : {};
+            if (!reachLimit) {
+              if (_enabledTools) followOpts.tools = _enabledTools;
+              followOpts.onToolCalls = _onToolCallsHandler;
+            }
+
+            API.streamChat(
+              apiMessages,
+              _onChunk,
+              _onDone,
+              _onError,
+              abortCtrl.signal,
+              followOpts
+            ).catch(() => resolve('error'));
+          } catch(e) {
+            console.error('[Backstage] tool calling 失败:', e);
+            resolve('error');
+          }
+        };
+
+        // 首次请求
+        const opts = overrideConfig ? { overrideConfig } : {};
+        if (_enabledTools) opts.tools = _enabledTools;
+        opts.onToolCalls = _onToolCallsHandler;
+
+        API.streamChat(
+          apiMessages,
+          _onChunk,
+          _onDone,
+          _onError,
+          abortCtrl.signal,
+          opts
         );
       });
     };

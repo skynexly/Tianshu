@@ -1409,294 +1409,273 @@ const msgEl = appendMessage(aiMsg, true, true);
     async function _doStream() {
       try { GameLog.log('info', '[Chat] 开始调用 API.streamChat'); } catch(_) {}
       return new Promise((resolve, reject) => {
-        API.streamChat(
-          apiMessages,
-          // onChunk
-        (chunk, fullContent) => {
+        // v687.6：工具调用迭代计数（最高 5 次）
+        let _toolIter = 0;
+        const _MAX_TOOL_ITER = 5;
+
+        // 工具集闭包：根据对话设置过滤启用项
+        const _enabledTools = (() => {
+          if (typeof Tools === 'undefined') return undefined;
+          const allDefs = Tools.getDefinitions() || [];
+          const enabledDefs = allDefs.filter(d => {
+            const name = d.function?.name || '';
+            if (name.startsWith('query_worldview_')) return convSettings.toolsWorldview;
+            if (name === 'search_messages') return convSettings.toolsHistory;
+            return convSettings.toolsMemory;
+          });
+          return enabledDefs.length > 0 ? enabledDefs : undefined;
+        })();
+
+        // === 闭包式回调：onChunk / onDone / onError 复用，工具循环里也走这套 ===
+        const _onChunk = (chunk, fullContent) => {
           aiMsg.content = fullContent;
-            // 流式过滤：把心动模拟返航 marker 从渲染内容里抹掉，玩家不该看到
-            // 兼容流式不完整状态：对带尾 ``` 的完整代码块去除；对刚开头的 ```homecoming 也整体擦掉
-            let renderContent = fullContent;
-            renderContent = renderContent.replace(/```homecoming\s*[\s\S]*?```/gi, '');
-            renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
-            // v687.2：过滤 AI 幻觉生成的手机操作记录（该格式是纯系统注入，AI 不应输出）
-            renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
-            contentEl.innerHTML = Markdown.render(renderContent);
+          let renderContent = fullContent;
+          renderContent = renderContent.replace(/```homecoming\s*[\s\S]*?```/gi, '');
+          renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
+          renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
+          contentEl.innerHTML = Markdown.render(renderContent);
           if (convSettings.stream) contentEl.classList.add('streaming-cursor');
           scrollToBottomIfFollowing();
-        },
-          // onDone
-          async (fullContent) => {
-            try {
-              // 正则替换规则
-              const regexRules = await Settings.getRegexRules();
-              for (const rule of regexRules) {
-                if (rule.enabled === false) continue;
-                try {
-                  const re = new RegExp(rule.pattern, rule.flags || 'g');
-                  fullContent = fullContent.replace(re, rule.replacement ?? '');
-                } catch(e) {}
-              }
-              // v687.2：从最终存储内容中也删除 AI 幻觉的手机操作记录
-              fullContent = fullContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
-              aiMsg.content = fullContent;
-aiMsg.timestamp = Utils.timestamp();
-// 内容已最终确定，清掉可能的旧缓存（流式过程不写入缓存，但保险）
-try { delete aiMsg._cachedFullHTML; delete aiMsg._cachedPlainHTML; } catch(_) {}
-await DB.put('messages', aiMsg);
-messages.push(aiMsg);
+        };
 
-              // 剧情引导轮数递减
-              try { await _decrementDirective(); } catch(_) {}
-
-              // v687.6：手机好友圈自动刷新计数器扣减（一问一答 = 一轮）
-              try { if (typeof Phone !== 'undefined' && Phone._tickMomentsAutoRefresh) Phone._tickMomentsAutoRefresh(); } catch(_) {}
-
-              // v610：扫描 AI 回复中的事件结束关键词
+        const _onDone = async (fullContent) => {
+          try {
+            // 正则替换规则
+            const regexRules = await Settings.getRegexRules();
+            for (const rule of regexRules) {
+              if (rule.enabled === false) continue;
               try {
-                const _evtConv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-                if (_evtConv && _evtConv.eventStates && isGameMode && convSettings.eventsEnabled !== false) {
-                  const _evtWv = isSingleConv ? singleWv : await Worldview.getCurrent();
-                  const _evtList = _evtConv?.convEvents || _evtWv?.events || [];
-                  let _evtChanged = false;
-                  for (const ev of _evtList) {
-                    if (!ev || !ev.id || !ev.completeKey) continue;
-                    if (_evtConv.eventStates[ev.id] !== 'active') continue;
-                    if (fullContent.includes(ev.completeKey)) {
-                      _evtConv.eventStates[ev.id] = 'done';
-                      _evtChanged = true;
-                      try { GameLog.log('info', `[Event] 事件「${ev.name}」检测到结束关键词，已标记完成`); } catch(_) {}
-                    }
-                  }
-                  if (_evtChanged) {
-                    try { await Conversations.saveList(); } catch(_) {}
-                  }
-                }
-
-                // 单人卡隐藏世界观事件完成扫描
-if (_evtConv && _evtConv.eventStates && isGameMode && convSettings.eventsEnabled !== false) {
-const _evtHiddenWv = await _getMergedLorebooksForConv(_evtConv);
-const _evtHiddenList = _evtHiddenWv?.events || [];
-                  let _evtHiddenChanged = false;
-                  for (const ev of _evtHiddenList) {
-                    if (!ev || !ev.id || !ev.completeKey) continue;
-                    if (_evtConv.eventStates[ev.id] !== 'active') continue;
-                    if (fullContent.includes(ev.completeKey)) {
-                      _evtConv.eventStates[ev.id] = 'done';
-                      _evtHiddenChanged = true;
-                      try { GameLog.log('info', `[Event] 单人卡事件「${ev.name}」检测到结束关键词，已标记完成`); } catch(_) {}
-                    }
-                  }
-                  if (_evtHiddenChanged) {
-                    try { await Conversations.saveList(); } catch(_) {}
-                  }
-                }
-              } catch(_) {}
-
-              const parsed = Utils.parseAIOutput(fullContent);
-          if (isGameMode && convSettings.format) {
-                renderParsedMessage(msgEl, parsed);
-                // updateTopbar 移到状态栏更新之后，避免 heartSim 被覆盖
-              } else {
-                // 非文游模式或关闭回复格式：纯Markdown渲染
-                contentEl.innerHTML = Markdown.render(fullContent);
-              }
-
-              // 更新状态栏（状态栏在所有模式下都尝试更新，不依赖 format 开关；
-              // 但只有文游模式才有 status 代码块，其他场景 parsed.status 为 null）
-              if (isGameMode) {
-                try {
-                  const oldStatus = Conversations.getStatusBar();
-                  // 老格式兼容：若 parsed.status 为空但有 header（地点/时间/天气），合成一个最小 status
-                  let newStatus = parsed.status;
-                  const statusBlockPresent = !!parsed.status;
-                  if (!newStatus && (parsed.header.region || parsed.header.time || parsed.header.weather)) {
-                    newStatus = {
-                      region: parsed.header.region || '',
-                      location: parsed.header.location || '',
-                      time: parsed.header.time || '',
-                      weather: parsed.header.weather || '',
-                      scene: '', playerOutfit: '', playerPosture: '', npcs: []
-                    };
-                  }
-                  const merged = Utils.mergeStatus(oldStatus, newStatus, statusBlockPresent);
-                  if (merged) {
-                    // 保留旧的 heartSim / customAttrs 字段（基础状态栏不包含它们）
-                    if (oldStatus?.heartSim) merged.heartSim = oldStatus.heartSim;
-                    if (oldStatus?.customAttrs) merged.customAttrs = oldStatus.customAttrs;
-                    if (oldStatus?.taskSystem) merged.taskSystem = oldStatus.taskSystem;
-                    await Conversations.setStatusBar(merged);
-                    if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(merged);
-                  }
-                } catch(e) { console.warn('[Chat] status 更新失败:', e); }
-              }
-
-              // 自定义属性：处理 custom-attrs 增量代码块（在基础状态栏已就位后应用）
-              // v681.2：解耦于 format 开关——只要文游模式开就处理
-              if (isGameMode && parsed.customAttrs && typeof StatusBar !== 'undefined' && StatusBar.applyCustomAttrsDelta) {
-                try { await StatusBar.applyCustomAttrsDelta(parsed.customAttrs); } catch(e) { console.warn('[Chat] custom-attrs 更新失败:', e); }
-              }
-              
-              // 心动模拟：处理 relation/task 代码块（在状态栏已就位后应用增量）
-              if (isGameMode && convSettings.format) {
-                updateTopbar(parsed);
-              }
-
-              // 心动模拟：返航动画触发（marker 命中 + 未触发过）
-              try {
-                if (parsed.homecoming && typeof Phone !== 'undefined' && typeof HeartSimHomecoming !== 'undefined') {
-                  const triggered = await Phone.isHsHomecomingTriggered();
-                  if (!triggered) {
-                    // 1.5s 后触发，让玩家先读完正文
-                    setTimeout(() => {
-                      try { HeartSimHomecoming.play(); } catch(e) { console.warn('[HSHomecoming] play failed', e); }
-                    }, 1500);
-                  }
-                }
-              } catch(e) { console.warn('[Chat] homecoming 触发检测失败', e); }
-
-              // 把"完整状态"（含 heartSim 累计）快照到这条 AI 消息上，回溯时回滚整套
-              try {
-                const finalStatus = Conversations.getStatusBar();
-                if (finalStatus) {
-                  aiMsg.statusSnapshot = JSON.parse(JSON.stringify(finalStatus));
-                  await DB.put('messages', aiMsg);
-                }
-              } catch(_) {}
-              
-              // region和NPC解析在文游模式下始终执行（不管format开关）
-              if (isGameMode) {
-                const newRegion = NPC.parseRegionFromOutput(parsed);
-                if (newRegion !== NPC.getRegion()) NPC.setRegion(newRegion);
-
-                // 更新在场NPC缓存
-                if (parsed.presentNPCs && parsed.presentNPCs.length > 0) {
-                  NPC.setPresentNPCs(parsed.presentNPCs);
-                  GameLog.log('info', `相关NPC: ${parsed.presentNPCs.join(', ')}`);
-                }
-              }
-
-              updateTokenCount();
-
-              GameLog.log('info', `当前轮数: ${roundCount}`);
-              // 记忆提取间隔从配置读取
-              const extractInterval = parseInt((await API.getConfig()).extractInterval) || 20;
-              const shouldExtract = convSettings.autoExtract && ((roundCount > 0 && roundCount % extractInterval === 0) || _extractPending);
-              if (shouldExtract) {
-                GameLog.log('info', `触发记忆提取 (第${roundCount}轮, 间隔${extractInterval}, pending=${_extractPending})`);
-                UI.showToast(_extractPending ? '正在重试记忆提取…' : '正在进行记忆提取，请稍候…', 4000);
-                await autoExtractMemory();
-              }
-              // 总结：正常检查 + 失败重试
-              if (_summaryPending) {
-                GameLog.log('info', '[Summary] 上轮失败，重试总结');
-                UI.showToast('正在重试剧情总结…', 4000);
-              }
-              await checkAutoSummary();
-
-              // 生图模式：异步解析 [IMG:] 标记（不阻塞resolve）
-              if (convSettings.imgGen && /\[IMG:\s*[^\]]+\]/i.test(fullContent)) {
-                _processImgTags(aiMsg.id, fullContent).catch(e => console.warn('[Chat] 生图标记处理失败', e));
-              }
-
-              resolve();
-            } catch(e) {
-              GameLog.log('error', `onDone处理错误: ${e.message}`);
-              resolve(); // onDone里的处理错误不算生成失败
-            } finally {
-              contentEl.classList.remove('streaming-cursor');
+                const re = new RegExp(rule.pattern, rule.flags || 'g');
+                fullContent = fullContent.replace(re, rule.replacement ?? '');
+              } catch(e) {}
             }
-          },
-          // onError
-          (err) => {
+            fullContent = fullContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
+            aiMsg.content = fullContent;
+            aiMsg.timestamp = Utils.timestamp();
+            try { delete aiMsg._cachedFullHTML; delete aiMsg._cachedPlainHTML; } catch(_) {}
+            await DB.put('messages', aiMsg);
+            messages.push(aiMsg);
+
+            // 剧情引导轮数递减
+            try { await _decrementDirective(); } catch(_) {}
+
+            // v687.6：手机好友圈自动刷新计数器扣减（一问一答 = 一轮）
+            try { if (typeof Phone !== 'undefined' && Phone._tickMomentsAutoRefresh) Phone._tickMomentsAutoRefresh(); } catch(_) {}
+
+            // v610：扫描 AI 回复中的事件结束关键词
+            try {
+              const _evtConv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+              if (_evtConv && _evtConv.eventStates && isGameMode && convSettings.eventsEnabled !== false) {
+                const _evtWv = isSingleConv ? singleWv : await Worldview.getCurrent();
+                const _evtList = _evtConv?.convEvents || _evtWv?.events || [];
+                let _evtChanged = false;
+                for (const ev of _evtList) {
+                  if (!ev || !ev.id || !ev.completeKey) continue;
+                  if (_evtConv.eventStates[ev.id] !== 'active') continue;
+                  if (fullContent.includes(ev.completeKey)) {
+                    _evtConv.eventStates[ev.id] = 'done';
+                    _evtChanged = true;
+                    try { GameLog.log('info', `[Event] 事件「${ev.name}」检测到结束关键词，已标记完成`); } catch(_) {}
+                  }
+                }
+                if (_evtChanged) {
+                  try { await Conversations.saveList(); } catch(_) {}
+                }
+              }
+
+              // 单人卡隐藏世界观事件完成扫描
+              if (_evtConv && _evtConv.eventStates && isGameMode && convSettings.eventsEnabled !== false) {
+                const _evtHiddenWv = await _getMergedLorebooksForConv(_evtConv);
+                const _evtHiddenList = _evtHiddenWv?.events || [];
+                let _evtHiddenChanged = false;
+                for (const ev of _evtHiddenList) {
+                  if (!ev || !ev.id || !ev.completeKey) continue;
+                  if (_evtConv.eventStates[ev.id] !== 'active') continue;
+                  if (fullContent.includes(ev.completeKey)) {
+                    _evtConv.eventStates[ev.id] = 'done';
+                    _evtHiddenChanged = true;
+                    try { GameLog.log('info', `[Event] 单人卡事件「${ev.name}」检测到结束关键词，已标记完成`); } catch(_) {}
+                  }
+                }
+                if (_evtHiddenChanged) {
+                  try { await Conversations.saveList(); } catch(_) {}
+                }
+              }
+            } catch(_) {}
+
+            const parsed = Utils.parseAIOutput(fullContent);
+            if (isGameMode && convSettings.format) {
+              renderParsedMessage(msgEl, parsed);
+            } else {
+              contentEl.innerHTML = Markdown.render(fullContent);
+            }
+
+            // 状态栏
+            if (isGameMode) {
+              try {
+                const oldStatus = Conversations.getStatusBar();
+                let newStatus = parsed.status;
+                const statusBlockPresent = !!parsed.status;
+                if (!newStatus && (parsed.header.region || parsed.header.time || parsed.header.weather)) {
+                  newStatus = {
+                    region: parsed.header.region || '',
+                    location: parsed.header.location || '',
+                    time: parsed.header.time || '',
+                    weather: parsed.header.weather || '',
+                    scene: '', playerOutfit: '', playerPosture: '', npcs: []
+                  };
+                }
+                const merged = Utils.mergeStatus(oldStatus, newStatus, statusBlockPresent);
+                if (merged) {
+                  if (oldStatus?.heartSim) merged.heartSim = oldStatus.heartSim;
+                  if (oldStatus?.customAttrs) merged.customAttrs = oldStatus.customAttrs;
+                  if (oldStatus?.taskSystem) merged.taskSystem = oldStatus.taskSystem;
+                  await Conversations.setStatusBar(merged);
+                  if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(merged);
+                }
+              } catch(e) { console.warn('[Chat] status 更新失败:', e); }
+            }
+
+            if (isGameMode && parsed.customAttrs && typeof StatusBar !== 'undefined' && StatusBar.applyCustomAttrsDelta) {
+              try { await StatusBar.applyCustomAttrsDelta(parsed.customAttrs); } catch(e) { console.warn('[Chat] custom-attrs 更新失败:', e); }
+            }
+
+            if (isGameMode && convSettings.format) {
+              updateTopbar(parsed);
+            }
+
+            try {
+              if (parsed.homecoming && typeof Phone !== 'undefined' && typeof HeartSimHomecoming !== 'undefined') {
+                const triggered = await Phone.isHsHomecomingTriggered();
+                if (!triggered) {
+                  setTimeout(() => {
+                    try { HeartSimHomecoming.play(); } catch(e) { console.warn('[HSHomecoming] play failed', e); }
+                  }, 1500);
+                }
+              }
+            } catch(e) { console.warn('[Chat] homecoming 触发检测失败', e); }
+
+            try {
+              const finalStatus = Conversations.getStatusBar();
+              if (finalStatus) {
+                aiMsg.statusSnapshot = JSON.parse(JSON.stringify(finalStatus));
+                await DB.put('messages', aiMsg);
+              }
+            } catch(_) {}
+
+            if (isGameMode) {
+              const newRegion = NPC.parseRegionFromOutput(parsed);
+              if (newRegion !== NPC.getRegion()) NPC.setRegion(newRegion);
+
+              if (parsed.presentNPCs && parsed.presentNPCs.length > 0) {
+                NPC.setPresentNPCs(parsed.presentNPCs);
+                GameLog.log('info', `相关NPC: ${parsed.presentNPCs.join(', ')}`);
+              }
+            }
+
+            updateTokenCount();
+
+            GameLog.log('info', `当前轮数: ${roundCount}`);
+            const extractInterval = parseInt((await API.getConfig()).extractInterval) || 20;
+            const shouldExtract = convSettings.autoExtract && ((roundCount > 0 && roundCount % extractInterval === 0) || _extractPending);
+            if (shouldExtract) {
+              GameLog.log('info', `触发记忆提取 (第${roundCount}轮, 间隔${extractInterval}, pending=${_extractPending})`);
+              UI.showToast(_extractPending ? '正在重试记忆提取…' : '正在进行记忆提取，请稍候…', 4000);
+              await autoExtractMemory();
+            }
+            if (_summaryPending) {
+              GameLog.log('info', '[Summary] 上轮失败，重试总结');
+              UI.showToast('正在重试剧情总结…', 4000);
+            }
+            await checkAutoSummary();
+
+            if (convSettings.imgGen && /\[IMG:\s*[^\]]+\]/i.test(fullContent)) {
+              _processImgTags(aiMsg.id, fullContent).catch(e => console.warn('[Chat] 生图标记处理失败', e));
+            }
+
+            resolve();
+          } catch(e) {
+            GameLog.log('error', `onDone处理错误: ${e.message}`);
+            resolve();
+          } finally {
             contentEl.classList.remove('streaming-cursor');
-            reject(new Error(err));
-          },
-          // abortSignal
-requestController.signal,
-// options
+          }
+        };
+
+        const _onError = (err) => {
+          contentEl.classList.remove('streaming-cursor');
+          reject(new Error(err));
+        };
+
+        // v687.6：工具调用处理函数（循环式）
+        const _onToolCallsHandler = async (toolCalls, assistantMessage) => {
+          try {
+            _toolIter++;
+            GameLog.log('info', `[Chat] AI 调用工具（第 ${_toolIter}/${_MAX_TOOL_ITER} 轮）: ${toolCalls.map(t => t.function?.name).join(', ')}`);
+
+            // push assistant 的 tool_calls 消息
+            apiMessages.push({
+              role: 'assistant',
+              content: assistantMessage.content || null,
+              tool_calls: toolCalls
+            });
+
+            // 执行所有工具，结果以 tool role 加入
+            for (const tc of toolCalls) {
+              let result;
+              try {
+                result = await Tools.execute(tc);
+              } catch(e) {
+                result = `工具执行异常：${e?.message || e}`;
+              }
+              apiMessages.push({
+                role: 'tool',
+                tool_call_id: tc.id,
+                content: result || ''
+              });
+              GameLog.log('info', `[Chat] 工具 ${tc.function?.name} 返回: ${String(result).substring(0, 200)}`);
+            }
+
+            // 再次请求：复用同一套回调
+            // 达到上限时：不再带 tools（强制 AI 给文本收尾，避免死循环）
+            const reachLimit = _toolIter >= _MAX_TOOL_ITER;
+            if (reachLimit) {
+              GameLog.log('warn', `[Chat] 工具调用达到 ${_MAX_TOOL_ITER} 次上限，强制收尾（不再带 tools）`);
+            }
+
+            API.streamChat(
+              apiMessages,
+              _onChunk,
+              _onDone,
+              _onError,
+              requestController.signal,
+              {
+                forceNoStream: !convSettings.stream,
+                tools: reachLimit ? undefined : _enabledTools,
+                onToolCalls: reachLimit ? undefined : _onToolCallsHandler
+              }
+            ).catch(e => { if (e.name === 'AbortError') resolve(); else reject(e); });
+          } catch(e) {
+            GameLog.log('error', `[Chat] tool calling 处理失败: ${e.message}`);
+            reject(e);
+          }
+        };
+
+        // 首次请求
+        API.streamChat(
+          apiMessages,
+          _onChunk,
+          _onDone,
+          _onError,
+          requestController.signal,
           {
             forceNoStream: !convSettings.stream,
-            tools: (() => {
-              if (typeof Tools === 'undefined') return undefined;
-              const allDefs = Tools.getDefinitions() || [];
-              const enabledDefs = allDefs.filter(d => {
-                const name = d.function?.name || '';
-                if (name.startsWith('query_worldview_')) return convSettings.toolsWorldview;
-                if (name === 'search_messages') return convSettings.toolsHistory;
-                // 其余全归记忆类（小纸条/事件/关系）
-                return convSettings.toolsMemory;
-              });
-              return enabledDefs.length > 0 ? enabledDefs : undefined;
-            })(),
-            onToolCalls: async (toolCalls, assistantMessage) => {
-              try {
-                GameLog.log('info', `[Chat] AI 调用工具: ${toolCalls.map(t => t.function?.name).join(', ')}`);
-                // 1. 把 assistant 的 tool_calls 消息加入 apiMessages
-                apiMessages.push({
-                  role: 'assistant',
-                  content: assistantMessage.content || null,
-                  tool_calls: toolCalls
-                });
-                // 2. 执行每个工具，把结果以 tool role 加入
-                for (const tc of toolCalls) {
-                  const result = await Tools.execute(tc);
-                  apiMessages.push({
-                    role: 'tool',
-                    tool_call_id: tc.id,
-                    content: result
-                  });
-                  GameLog.log('info', `[Chat] 工具 ${tc.function?.name} 返回: ${result.substring(0, 200)}`);
-                }
-                // 3. 再次请求（不带 tools，让模型基于工具结果正常回复）
-                API.streamChat(
-                  apiMessages,
-                  (chunk, fullContent) => {
-                    aiMsg.content = fullContent;
-            let renderContent = fullContent;
-            renderContent = renderContent.replace(/```homecoming\s*[\s\S]*?```/gi, '');
-            renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
-            // v687.2：过滤 AI 幻觉生成的手机操作记录
-            renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
-            contentEl.innerHTML = Markdown.render(renderContent);
-                    if (convSettings.stream) contentEl.classList.add('streaming-cursor');
-                    scrollToBottomIfFollowing();
-                  },
-                  async (fullContent) => {
-                    // 走和普通 onDone 一样的后处理
-                    const regexRules = await Settings.getRegexRules();
-                    for (const rule of regexRules) {
-                      if (rule.enabled === false) continue;
-                      try { fullContent = fullContent.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement ?? ''); } catch(e) {}
-                    }
-                    // v687.2：从最终存储内容中也删除 AI 幻觉的手机操作记录
-                    fullContent = fullContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
-                    aiMsg.content = fullContent;
-                    aiMsg.timestamp = Utils.timestamp();
-                    try { delete aiMsg._cachedFullHTML; delete aiMsg._cachedPlainHTML; } catch(_) {}
-                    await DB.put('messages', aiMsg);
-                    messages.push(aiMsg);
-                    // 剧情引导轮数递减
-                    try { await _decrementDirective(); } catch(_) {}
-                    // v687.6：手机好友圈自动刷新计数器扣减
-                    try { if (typeof Phone !== 'undefined' && Phone._tickMomentsAutoRefresh) Phone._tickMomentsAutoRefresh(); } catch(_) {}
-                    contentEl.classList.remove('streaming-cursor');
-                    contentEl.innerHTML = Markdown.render(fullContent);
-                    resolve();
-                  },
-                  (err) => { reject(new Error(err)); },
-                  requestController.signal,
-                  { forceNoStream: !convSettings.stream }
-                ).catch(e => { if (e.name === 'AbortError') resolve(); else reject(e); });
-              } catch(e) {
-                GameLog.log('error', `[Chat] tool calling 处理失败: ${e.message}`);
-                reject(e);
-              }
-            }
+            tools: _enabledTools,
+            onToolCalls: _onToolCallsHandler
           }
         ).catch(e => {
           if (e.name === 'AbortError') {
-            resolve(); // 用户主动取消不重试
+            resolve();
           } else {
             reject(e);
           }

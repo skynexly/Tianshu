@@ -197,6 +197,101 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
 }
 
   /**
+   * v687.6：带工具循环的流式聊天（最高 maxIter 轮工具调用）
+   * 行为：
+   *   - 模型返回 tool_calls → 执行工具 → 把结果塞回 messages → 再请求（仍带 tools）
+   *   - 模型返回文本 content → 走 onChunk / onDone 正常完成
+   *   - 达到 maxIter 仍在调工具 → 走 onError 报错
+   * 调用方传 messages 数组，会被本函数修改（push assistant tool_calls + tool 结果）
+   */
+  async function streamChatWithTools(messages, onChunk, onDone, onError, abortSignal, options) {
+    const maxIter = options?.maxToolIterations || 5;
+
+    for (let iter = 0; iter < maxIter; iter++) {
+      let toolCallsReceived = null;
+      let assistantMsgFromTools = null;
+      let errorOccurred = null;
+
+      // 用 Promise 把回调式 streamChat 包装一下，方便外层 await
+      await new Promise((resolve) => {
+        let settled = false;
+        const settle = () => { if (!settled) { settled = true; resolve(); } };
+
+        streamChat(
+          messages,
+          // onChunk：原样转发
+          (chunk, fullContent) => {
+            try { onChunk(chunk, fullContent); } catch(_) {}
+          },
+          // onDone：文本回复完成 → 上抛
+          (fullContent) => {
+            try { onDone(fullContent); } catch(_) {}
+            settle();
+          },
+          // onError：上抛
+          (err) => {
+            errorOccurred = err;
+            settle();
+          },
+          abortSignal,
+          {
+            ...options,
+            // 接管 tool_calls：不在回调里执行，把控制权交回循环
+            onToolCalls: (toolCalls, message) => {
+              toolCallsReceived = toolCalls;
+              assistantMsgFromTools = message;
+              settle();
+            }
+          }
+        ).catch(e => {
+          if (e?.name === 'AbortError') { settle(); return; }
+          errorOccurred = e?.message || String(e);
+          settle();
+        });
+      });
+
+      if (abortSignal?.aborted) {
+        return;
+      }
+      if (errorOccurred) {
+        try { onError(errorOccurred); } catch(_) {}
+        return;
+      }
+      if (!toolCallsReceived) {
+        // 已 onDone，正常结束
+        return;
+      }
+
+      // 有工具调用 → 执行所有，把结果塞回 messages
+      messages.push({
+        role: 'assistant',
+        content: assistantMsgFromTools?.content || null,
+        tool_calls: toolCallsReceived
+      });
+
+      for (const tc of toolCallsReceived) {
+        let result;
+        try {
+          result = await Tools.execute(tc);
+        } catch (e) {
+          result = `工具执行异常：${e?.message || e}`;
+        }
+        messages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: result || ''
+        });
+        try { GameLog.log('info', `[API] 工具 ${tc.function?.name} 返回: ${String(result).substring(0, 200)}`); } catch(_) {}
+      }
+      // 继续下一轮（仍带 tools，让 AI 决定是再调工具还是给最终回复）
+    }
+
+    // 达到 maxIter 上限
+    try { GameLog.log('error', `[API] 工具调用迭代超过 ${maxIter} 次，强制中断`); } catch(_) {}
+    try { onError(`AI 工具调用次数超过 ${maxIter} 次上限，对话中断（避免无限循环）`); } catch(_) {}
+  }
+
+  /**
    * 非流式调用（总结等）
    */
   async function summarize(content, summaryPrompt, options) {
@@ -427,5 +522,5 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     }
   }
 
-  return { getConfig, buildMessages, streamChat, summarize, extractMemory, fetchModelList, generate, generateImage, searchUnsplash };
+  return { getConfig, buildMessages, streamChat, streamChatWithTools, summarize, extractMemory, fetchModelList, generate, generateImage, searchUnsplash };
 })();
