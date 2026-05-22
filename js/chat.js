@@ -3613,25 +3613,25 @@ menu.classList.add('hidden');
       html += `<div class="attach-item">
         <img src="${img.base64}">
         <span>${Utils.escapeHtml(img.name)}</span>
-        <button class="remove-attach" onclick="Chat.removeAttach('image',${i})">✕</button>
+        <button class="remove-attach" onclick="Chat.removeAttach('image',${i})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>`;
     });
     pendingMemories.forEach((m, i) => {
       html += `<div class="attach-item">
         <span style="display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px"><path fill-rule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 11.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 0 1-1.085.67L12 18.089l-7.165 3.583A.75.75 0 0 1 3.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93Z" clip-rule="evenodd" /></svg>${Utils.escapeHtml(m.title || '记忆')}</span>
-        <button class="remove-attach" onclick="Chat.removeAttach('memory',${i})">✕</button>
+        <button class="remove-attach" onclick="Chat.removeAttach('memory',${i})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>`;
     });
     pendingFiles.forEach((f, i) => {
       html += `<div class="attach-item" style="cursor:pointer" onclick="Chat.previewFile(${i})" title="点击预览">
         <span style="display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px"><path fill-rule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0 0 16.5 9h-1.875a1.875 1.875 0 0 1-1.875-1.875V5.25A3.75 3.75 0 0 0 9 1.5H5.625Z" clip-rule="evenodd" /></svg>${Utils.escapeHtml(f.name)}</span>
-        <button class="remove-attach" onclick="event.stopPropagation();Chat.removeAttach('file',${i})">✕</button>
+        <button class="remove-attach" onclick="event.stopPropagation();Chat.removeAttach('file',${i})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>`;
     });
     if (pendingWorldVoice) {
       html += `<div class="attach-item">
         <span style="display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>${Utils.escapeHtml(pendingWorldVoice.mediaType + '·' + pendingWorldVoice.title)}</span>
-        <button class="remove-attach" onclick="Chat.removeAttach('worldvoice',0)">✕</button>
+        <button class="remove-attach" onclick="Chat.removeAttach('worldvoice',0)"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>`;
     }
     bar.innerHTML = html;
