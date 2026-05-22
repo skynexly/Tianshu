@@ -580,13 +580,15 @@ if (isSingleConv && isGameMode) {
 3. 根据场景需要让 NPC 自然登场，不必所有 NPC 都登场。`);
     }
 
-    // 1d. 常驻角色（对话级常驻，群像/单人都生效）
-    try {
-      if (window.AttachedChars) {
-        const attachedPrompt = await AttachedChars.buildPrompt();
-        if (attachedPrompt) systemParts.push(attachedPrompt);
-      }
-    } catch(_) {}
+    // 1d. 常驻角色（对话级常驻，群像/单人都生效）— 非文游模式跳过（属于剧情资源，纯聊不发）
+    if (isGameMode) {
+      try {
+        if (window.AttachedChars) {
+          const attachedPrompt = await AttachedChars.buildPrompt();
+          if (attachedPrompt) systemParts.push(attachedPrompt);
+        }
+      } catch(_) {}
+    }
 
     // 1b. 剧情总结（如有）
     const summaryText = await Summary.formatForPrompt(Conversations.getCurrent());
