@@ -508,11 +508,62 @@ const Chat = (() => {
   }
 
 
+  // v687.33：剥离 assistant 历史消息中的格式代码块（省 token + 降噪）
+  // 保留正文 + 头部信息（场景连续性），去掉系统已处理的数据块和思考链
+  function _stripFormatBlocks(raw) {
+    if (!raw) return raw;
+    let s = raw;
+    // 1. 剥离 <think>/<thinking> 思考链
+    s = s.replace(/<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi, '');
+    // 2. 剥离所有系统格式代码块（status/relation/task/tasks/custom-attrs/chat/phone-lock/homecoming）
+    s = s.replace(/```(?:status|relation|tasks?|custom-attrs|chat|phone-lock|homecoming)\s*\n?[\s\S]*?```/gi, '');
+    // 3. 剥离"第X部分 — XXX："格式标签行
+    s = s.replace(/^[ \t]*第[一二三四五六七八九十]+部分\s*[—\-－]\s*[^\n]*$/gm, '');
+    // 4. 清理残留的孤儿分隔符和多余空行
+    s = s.replace(/\n---\s*$/gm, '').replace(/^---\s*\n/gm, '');
+    s = s.replace(/\n{3,}/g, '\n\n');
+    return s.trim();
+  }
+
+  // v687.33：心动模拟返航后"继续日常"模式的世界观设定（硬编码，仅心动模拟有此机制）
+  const _HS_HOMECOMING_WORLD_SETTING = `【返航后·世界观设定】
+
+这是一个与现实世界几乎完全一致的当代世界。科技水平、社会制度、文化背景、地理格局均与当今现实相同。没有超自然现象，没有异世界，没有任何违反常识的事物存在。
+
+人们正常地生活、工作、社交。城市有便利店和地铁，手机能刷短视频和点外卖，天气预报偶尔不准，快递偶尔送错地址。一切都按照普通的现代社会运转。
+
+{{user}}的身份、职业、居住地、社交关系等信息由{{user}}自行在对话中建立。AI不应预设{{user}}的任何个人背景——{{user}}说自己是什么就是什么，没说过的就留白。
+
+日期和时间与现实同步。天气、季节、节假日按正常日历走。
+
+【特殊备注（仅AI可见，不得向{{user}}主动提起）】
+{{user}}刚从一段漫长的、异常逼真的沉浸式体验中醒来。那段经历的细节正在快速褪色，像一场过于漫长的梦——越想抓住就消散得越快。
+
+这段经历可能在{{user}}身上留下了一些不易察觉的痕迹：偶尔觉得某个陌生人的侧脸莫名熟悉，偶尔在安全的环境里毫无来由地警觉，偶尔对某种气味或音乐产生说不清的情绪。这些反应很轻微，不影响正常生活，{{user}}自己也未必意识到。
+
+【严格禁止】那段经历中出现过的任何角色——无论以什么形式——都不得出现在这个世界里。不能以路人、同事、邻居、新闻人物、网名、谐音、暗示等任何方式让他们存在于当前现实中。他们的名字不要主动提起。他们和这个世界没有任何关系，从未存在过。这条规则没有例外。
+
+如果{{user}}主动提起那段经历——提到某些名字、某个城市、某种感觉——不要否认{{user}}的感受，也不要主动追问。只在叙述中自然地、克制地让那些微小的痕迹偶尔浮现。像余震，不是地震。
+
+这个世界没有任何不对劲的地方。一切都很正常。`;
+
   // ===== 共用：构建 API 上下文（send + showContext 共享） =====
   async function _buildApiContext(messages, opts = {}) {
     const { rewriteHint = null } = opts;
 // 构建system prompt
 const systemParts = [];
+// v687.33：提前检测心动模拟返航状态（后续多处需要用）
+let _hsHomecoming = false;
+let _hsPostHomeMode = null; // 'continue' | 'end' | null
+try {
+  if (typeof Phone !== 'undefined' && Phone.isHsHomecomingTriggered) {
+    _hsHomecoming = await Phone.isHsHomecomingTriggered();
+    if (_hsHomecoming) {
+      const _pd = await Phone._getPhoneData();
+      _hsPostHomeMode = _pd?.hsPostHomeMode || null;
+    }
+  }
+} catch(_) {}
 // v687.31：状态栏类高时效注入——这些段会在 apiMessages 构建完毕后
 // 统一插入到"最后 user 消息之前"，让 AI 在读用户输入前先看到最新状态。
 // 解决"状态栏写 14, AI 说 9"的注意力衰减问题。
@@ -545,8 +596,16 @@ const _recentStatusParts = [];
       } catch(e) { console.warn('[Chat] 单人模式加载世界观失败', e); }
     }
 
+    // v687.33：返航"继续日常"模式下屏蔽所有 NPC 相关注入（那些角色在这个世界不存在）
+// epilogue 模式（第二部钩子触发后）也屏蔽所有 NPC——剧情已彻底结束
+const _skipNpcInjection = _hsHomecoming && (_hsPostHomeMode === 'continue' || _hsPostHomeMode === 'epilogue');
+
     // 1. 世界观（每轮发）— 番外模式下看 inheritWv 开关 — 单人模式用自己的世界观 — 非文游模式跳过
-    if (isGameMode && !isSingleConv) {
+    // v687.33：心动模拟返航"继续日常"模式下替换为返航世界设定
+    // "到此结束"模式保留原世界观（方便复盘）
+    if (_hsHomecoming && _hsPostHomeMode === 'continue' && isGameMode) {
+      systemParts.push(_HS_HOMECOMING_WORLD_SETTING);
+    } else if (isGameMode && !isSingleConv) {
       if (!isGaidenConv) {
         if (worldviewPrompt) systemParts.push(worldviewPrompt);
       } else {
@@ -562,16 +621,18 @@ const _recentStatusParts = [];
           systemParts.push(gaidenPrompt);
         }
       }
-    } else if (isSingleConv && isGameMode && singleWv && singleWv.setting) {
+    } else if (isSingleConv && isGameMode && singleWv && singleWv.setting && !_skipNpcInjection) {
+      // v687.33：返航"继续日常"/epilogue 模式下不发心动模拟单人世界观
       systemParts.push(singleWv.setting);
     }
 
     // 1c. 单人模式：主角资料（仅文游模式发送）
-if (isSingleConv && isGameMode) {
+    // v687.33：返航"继续日常"/epilogue 模式下跳过（单人卡主角不属于返航后的现实世界）
+if (isSingleConv && isGameMode && !_skipNpcInjection) {
   const mainCharText = await SingleMode.getMainCharPrompt(singleSettings);
   if (mainCharText) systemParts.push(mainCharText);
-} else if (isGameMode && !isGaidenConv) {
-      // 1c'. 群像模式：叙事者元 prompt（让 AI 知道自己是旁白+所有 NPC 的化身，用户才是{{user}}）
+} else if (isGameMode && !isGaidenConv && !_skipNpcInjection) {
+    // 1c'. 群像模式：叙事者元 prompt（让 AI 知道自己是旁白+所有 NPC 的化身，用户才是{{user}}）
       systemParts.push(`【AI 扮演角色】
 本对话为群像模式（多角色剧情）。你是"叙事者 + 所有 NPC 的扮演者"，用户扮演"{{user}}"。
 你应该：
@@ -581,7 +642,8 @@ if (isSingleConv && isGameMode) {
     }
 
     // 1d. 常驻角色（对话级常驻，群像/单人都生效）— 非文游模式跳过（属于剧情资源，纯聊不发）
-    if (isGameMode) {
+    // v687.33：返航"继续日常"模式下也跳过
+    if (isGameMode && !_skipNpcInjection) {
       try {
         if (window.AttachedChars) {
           const attachedPrompt = await AttachedChars.buildPrompt();
@@ -696,11 +758,13 @@ const char = await Character.get();
 if (char) systemParts.push(Character.formatForPrompt(char));
 
 // 3b. 世界观速查表（每轮发，所有地区/势力/NPC概要）— 番外模式下看 inheritNpc 开关 — 非文游模式跳过
-if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc)) {
+    // v687.33：返航"继续日常"模式下全部跳过
+    if (!_skipNpcInjection && isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc)) {
       const quickRef = NPC.formatQuickRef();
       if (quickRef) systemParts.push(quickRef);
-    } else if (isSingleConv && isGameMode && singleWv) {
+    } else if (isSingleConv && isGameMode && singleWv && !_skipNpcInjection) {
       // 单人模式：地区/势力速查永远发，NPC行受 enableNpc 控制
+      // v687.33：返航 continue/epilogue 模式下跳过
       try { GameLog.log('info', `[Single] 速查表 enableNpc=${singleSettings.enableNpc} enableDetail=${singleSettings.enableDetail}`); } catch(e) {}
       const quickRef = NPC.formatQuickRef({ includeNpc: singleSettings.enableNpc });
       if (quickRef) systemParts.push(quickRef);
@@ -740,16 +804,18 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     }
 
     // 4. 当前区域NPC（detail，地区命中时发）— 番外看 inheritNpc — 单人看 enableDetail
+    // v687.33：返航"继续日常"模式下全部跳过
     const region = NPC.getRegion();
-    if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc)) {
+    if (!_skipNpcInjection && isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc)) {
       const npcPrompt = NPC.formatForPrompt(region);
       if (npcPrompt) systemParts.push(npcPrompt);
 
       // 4b. 在场NPC（跨区域跟随，排除已在地区NPC里的）
       const presentNPCPrompt = NPC.formatPresentForPrompt(region);
       if (presentNPCPrompt) systemParts.push(presentNPCPrompt);
-    } else if (isSingleConv && isGameMode && singleWv && singleSettings.enableDetail) {
+    } else if (isSingleConv && isGameMode && singleWv && singleSettings.enableDetail && !_skipNpcInjection) {
       // 单人模式：detail受 enableDetail 控制，NPC详细需要 enableNpc 也开
+      // v687.33：返航 continue/epilogue 模式下跳过
       const npcPrompt = NPC.formatForPrompt(region, { includeNpc: singleSettings.enableNpc });
       if (npcPrompt) systemParts.push(npcPrompt);
       if (singleSettings.enableNpc) {
@@ -761,8 +827,9 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     // 4c. 全图 NPC（不受地区限制，本世界观下每轮全量注入）
     // 单人模式必须遵守 enableNpc：未启用 NPC 时，连全图常驻 NPC 也不注入。
     // v632.1：单人卡世界书的 NPC 独立——绑了世界书就注入，不受 enableNpc 限制
-    const _shouldInjectWvNpc = isGameMode && (!isSingleConv || singleSettings.enableNpc);
-    const _shouldInjectLbNpc = isGameMode; // v685：所有模式都尝试注入聚合世界书 NPC
+    // v687.33：返航 continue/epilogue 模式下全部跳过
+    const _shouldInjectWvNpc = !_skipNpcInjection && isGameMode && (!isSingleConv || singleSettings.enableNpc);
+    const _shouldInjectLbNpc = !_skipNpcInjection && isGameMode; // v685：所有模式都尝试注入聚合世界书 NPC
     if (_shouldInjectWvNpc || _shouldInjectLbNpc) {
       try {
         let _wvForGlobal = null;
@@ -806,11 +873,12 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
           systemParts.push(text);
           try { GameLog.log('info', `[世界书] 注入 ${gs.length} 个常驻 NPC`); } catch(_) {}
         }
-      } catch(e) { console.warn('[Chat] 全图NPC注入失败', e); }
+      } catch(e) { console.warn('[Chat] 常驻角色注入失败', e); }
     }
 
     // 4d. 提及的地区（扫玩家最新消息 + AI最近一条消息正文，命中地区全名 → 附该地区 detail）
-    if (isGameMode) {
+    // v687.33：返航"继续日常"模式下跳过
+    if (isGameMode && !_skipNpcInjection) {
       try {
         const lastUser = [...messages].reverse().find(m => m.role === 'user');
         const lastAI = [...messages].reverse().find(m => m.role === 'assistant');
@@ -864,15 +932,34 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
 
       // 8. 心动模拟：累计状态注入
       // 已返航后，停止注入心动模拟的状态/任务/好感数据，改为注入"已回家"提示
-      let _hsHomecoming = false;
-      try {
-        if (typeof Phone !== 'undefined' && Phone.isHsHomecomingTriggered) {
-          _hsHomecoming = await Phone.isHsHomecomingTriggered();
-        }
-      } catch(_) {}
+      // v687.33：_hsHomecoming 和 _hsPostHomeMode 已在函数开头提前检测
 
       if (_hsHomecoming) {
-        systemParts.push('[心动模拟·已返航]\n玩家已结束心动模拟，从原本的世界醒来，回到了自己家中。后续剧情发生在玩家自己的家里：\n- 不再有任务系统、好感度系统、心动目标的概念；\n- 心动模拟APP仍在玩家手机里、客服历史也都还在，但服务已结束；\n- 玩家可能产生与心动模拟有关的回忆、错觉、梦境，请保持一种"刚结束的事其实没有完全结束"的微妙氛围，但不要主动制造惊吓，靠玩家追问或主动行为来推进；\n- 不要再在回复中输出 ```relation``` / ```task``` / ```chat``` / ```homecoming``` 等心动模拟专用代码块。');
+        // v687.33：根据用户选择分流
+        if (_hsPostHomeMode === 'continue') {
+          // "继续日常"模式：不再注入旧的 [已返航] 提示词，
+          // 世界观已在 step 1 被替换为 HS_HOMECOMING_WORLD_SETTING
+          systemParts.push('[心动模拟·已返航（继续日常模式）]\n不要再在回复中输出 ```relation``` / ```task``` / ```chat``` / ```homecoming``` 等心动模拟专用代码块。\n不再有任务系统、好感度系统的概念。当前世界观已切换为返航后的现实世界。');
+} else if (_hsPostHomeMode === 'end') {
+                // "到此结束"模式：世界观保留（方便复盘），但 AI 停止扮演，切 OOC 复盘
+                systemParts.push('[心动模拟·到此结束（复盘模式）]\n剧情已正式结束。你现在不再扮演任何角色，不再推进剧情。\n{{user}}可以和你自由聊天：复盘剧情、讨论角色设定、分享感受、吐槽。\n你的语气就像后台频道一样自然——作为创作者或观众和{{user}}平等对话。\n不需要输出 status / relation / task / chat / homecoming 等任何格式代码块。\n回复中不需要遵循回复格式。自由回应即可。');
+              } else if (_hsPostHomeMode === 'epilogue') {
+                // 第二部钩子已触发：剧情彻底结束，AI 切 OOC 复盘（与 end 模式效果一致）
+                // 注意：不要向{{user}}主动提起刚才发生的钩子动画——AI 完全不知情
+                systemParts.push('[心动模拟·剧情终结（复盘模式）]\n第一部剧情已经彻底结束。你现在不再扮演任何角色，不再推进剧情。\n{{user}}可以和你自由聊天：复盘剧情、讨论角色设定、分享感受、吐槽。\n你的语气就像后台频道一样自然——作为创作者或观众和{{user}}平等对话。\n不需要输出 status / relation / task / chat / homecoming 等任何格式代码块。\n回复中不需要遵循回复格式。自由回应即可。');
+              } else if (_hsPostHomeMode === 'companion') {
+                // 共同返航结局：带着心动目标回到了用户原本的世界
+                // 不替换世界观、不停止扮演、不屏蔽被带回的角色，只告诉 AI 发生了什么
+                let companionName = '';
+                try { const _cpd = await Phone._getPhoneData(); companionName = _cpd?.hsCompanion || ''; } catch(_) {}
+                const cn = companionName || '心动目标';
+                const cn2 = companionName || '被带回的那个人';
+                const cn3 = companionName || '该角色';
+                systemParts.push('[心动模拟·共同返航]\n{{user}}已经和' + cn + '一起离开了心逸市，回到了{{user}}原本的世界。\n心动模拟APP的服务已结束，心逸市不复存在，其他心动目标也不复存在——只有' + cn2 + '陪在{{user}}身边。\n后续剧情发生在{{user}}自己的世界里：没有任务系统、没有好感度/黑化值、没有心动模拟的任何机制。\n请继续扮演' + cn3 + '，自然推进两人在现实世界中的生活。\n不要再输出 relation / task / chat / homecoming 等心动模拟专用代码块。');
+        } else {
+          // 未选择 / 旧数据兼容 / end 模式（end 模式下 gameMode 已关，理论上不走这段）
+          systemParts.push('[心动模拟·已返航]\n玩家已结束心动模拟，从原本的世界醒来，回到了自己家中。后续剧情发生在玩家自己的家里：\n- 不再有任务系统、好感度系统、心动目标的概念；\n- 心动模拟APP仍在玩家手机里、客服历史也都还在，但服务已结束；\n- 玩家可能产生与心动模拟有关的回忆、错觉、梦境，请保持一种"刚结束的事其实没有完全结束"的微妙氛围，但不要主动制造惊吓，靠玩家追问或主动行为来推进；\n- 不要再在回复中输出 ```relation``` / ```task``` / ```chat``` / ```homecoming``` 等心动模拟专用代码块。');
+        }
       } else if (typeof StatusBar !== 'undefined' && StatusBar.hsFormatForPrompt) {
         try {
           const hsStateText = StatusBar.hsFormatForPrompt();
@@ -895,7 +982,7 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
         if (!_hsHomecoming && typeof StatusBar !== 'undefined' && StatusBar.hsCheckClearCondition) {
           const check = StatusBar.hsCheckClearCondition();
           if (check && check.passed) {
-            systemParts.push('[心动模拟·返航触发协议]\n玩家已达成回家条件。当玩家在剧情里真正回到自己原本的世界、彻底从心动模拟中醒来后，请在该轮回复的最末尾追加一个空的 ```homecoming``` 代码块作为信号——前端识别到该信号后会接管展示返航过场动画。在那一轮之前请正常推进剧情，玩家可能还有未完成的事情想交代；不要在尚未真正"回到家中醒来"之前提前输出该 marker。该 marker 一旦输出过一次，前端会接管后续展示，不需要再重复输出。');
+            systemParts.push('[心动模拟·返航触发协议]\n玩家已达成回家条件。当玩家在剧情里真正回到自己原本的世界、彻底从心动模拟中醒来后，请在该轮回复的最末尾追加一个 ```homecoming``` 代码块作为信号——前端识别到该信号后会接管展示返航过场动画。在那一轮之前请正常推进剧情，玩家可能还有未完成的事情想交代；不要在尚未真正"回到家中醒来"之前提前输出该 marker。该 marker 一旦输出过一次，前端会接管后续展示，不需要再重复输出。\n\n特殊情况：如果玩家带着某位心动目标一起返航（通过心跳悦动059协助签署认领协议），则 homecoming 代码块内写 JSON：```homecoming\n{"companion":"角色名"}\n```\n这样前端会识别为"共同返航"，不触发返航动画，直接进入两人在现实世界的生活。');
           }
         }
       } catch(_) {}
@@ -934,10 +1021,26 @@ if (isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc))
     }
 
     // 构建对话历史（当前窗口全部消息，隐藏消息除外）
+    // v687.33：assistant 历史消息剥离格式代码块（省 token + 降噪），但保留最近 3 轮的原文
+    // 避免 AI 看到"之前都没输出格式"就认为本轮也不需要
     const config = await API.getConfig();
-    let historyForAPI = messages.filter(m => !m.hidden).map(m => ({
+    const _visibleMsgs = messages.filter(m => !m.hidden);
+    // 找到最近 3 条 assistant 消息的索引（保留原文不剥离）
+    const _recentAiIndices = new Set();
+    {
+      let _aiCount = 0;
+      for (let i = _visibleMsgs.length - 1; i >= 0 && _aiCount < 3; i--) {
+        if (_visibleMsgs[i].role === 'assistant') {
+          _recentAiIndices.add(i);
+          _aiCount++;
+        }
+      }
+    }
+    let historyForAPI = _visibleMsgs.map((m, idx) => ({
       role: m.role,
-      content: m.contentForAPI || m.content
+      content: m.role === 'assistant' && !_recentAiIndices.has(idx)
+        ? _stripFormatBlocks(m.content)
+        : (m.contentForAPI || m.content)
     }));
     // 时间感知开启时，给用户消息拼时间戳前缀
     if (convSettings.timeAware && window.TimeAwareness) {
@@ -1557,6 +1660,14 @@ const msgEl = appendMessage(aiMsg, true, true);
                     _evtConv.eventStates[ev.id] = 'done';
                     _evtChanged = true;
                     try { GameLog.log('info', `[Event] 事件「${ev.name}」检测到结束关键词，已标记完成`); } catch(_) {}
+                    // v687.33：心动模拟第二部钩子动画触发（关键词命中"触发TE动画"时）
+                    if (ev.completeKey === '触发TE动画' || (ev.completeKey || '').includes('触发TE动画')) {
+                      try {
+                        if (window.HeartSimEpilogue && !window.HeartSimEpilogue.isPlaying()) {
+                          setTimeout(() => { try { window.HeartSimEpilogue.play(); } catch(_) {} }, 800);
+                        }
+                      } catch(_) {}
+                    }
                   }
                 }
                 if (_evtChanged) {
@@ -1576,6 +1687,14 @@ const msgEl = appendMessage(aiMsg, true, true);
                     _evtConv.eventStates[ev.id] = 'done';
                     _evtHiddenChanged = true;
                     try { GameLog.log('info', `[Event] 单人卡事件「${ev.name}」检测到结束关键词，已标记完成`); } catch(_) {}
+                    // v687.33：心动模拟第二部钩子动画触发（单人卡事件路径）
+                    if (ev.completeKey === '触发TE动画' || (ev.completeKey || '').includes('触发TE动画')) {
+                      try {
+                        if (window.HeartSimEpilogue && !window.HeartSimEpilogue.isPlaying()) {
+                          setTimeout(() => { try { window.HeartSimEpilogue.play(); } catch(_) {} }, 800);
+                        }
+                      } catch(_) {}
+                    }
                   }
                 }
                 if (_evtHiddenChanged) {
@@ -1626,12 +1745,26 @@ const msgEl = appendMessage(aiMsg, true, true);
             }
 
             try {
-              if (parsed.homecoming && typeof Phone !== 'undefined' && typeof HeartSimHomecoming !== 'undefined') {
+              if (parsed.homecoming && typeof Phone !== 'undefined') {
                 const triggered = await Phone.isHsHomecomingTriggered();
                 if (!triggered) {
-                  setTimeout(() => {
-                    try { HeartSimHomecoming.play(); } catch(e) { console.warn('[HSHomecoming] play failed', e); }
-                  }, 1500);
+                  if (parsed.homecomingCompanion) {
+                    // v687.33：共同返航结局——静默标记，不播动画，不弹按钮
+                    try {
+                      await Phone.markHsHomecomingTriggered([]);
+                      const pd = (typeof Phone._getPhoneData === 'function') ? await Phone._getPhoneData() : null;
+                      if (pd) {
+                        pd.hsPostHomeMode = 'companion';
+                        pd.hsCompanion = parsed.homecomingCompanion; // 记录带了谁回来
+                        await Conversations.saveList();
+                      }
+                    } catch(_) {}
+                  } else if (typeof HeartSimHomecoming !== 'undefined') {
+                    // 独自返航——播返航动画
+                    setTimeout(() => {
+                      try { HeartSimHomecoming.play(); } catch(e) { console.warn('[HSHomecoming] play failed', e); }
+                    }, 1500);
+                  }
                 }
               }
             } catch(e) { console.warn('[Chat] homecoming 触发检测失败', e); }
@@ -1640,8 +1773,13 @@ const msgEl = appendMessage(aiMsg, true, true);
               const finalStatus = Conversations.getStatusBar();
               if (finalStatus) {
                 aiMsg.statusSnapshot = JSON.parse(JSON.stringify(finalStatus));
-                await DB.put('messages', aiMsg);
               }
+              // v687.33：手机数据快照（剥离图片字段，只保留文字数据）
+              if (typeof Phone !== 'undefined' && Phone.getSnapshotForRollback) {
+                const phoneSnap = await Phone.getSnapshotForRollback();
+                if (phoneSnap) aiMsg.phoneSnapshot = phoneSnap;
+              }
+              await DB.put('messages', aiMsg);
             } catch(_) {}
 
             if (isGameMode) {
@@ -2752,18 +2890,21 @@ exitMultiSelect();
     updateTokenCount();
   }
 
-  // ===== 状态栏快照恢复（供回溯/撤回调用）=====
+  // ===== 状态栏+手机快照恢复（供回溯/撤回调用）=====
   // 从 messages 末尾往前找第一条带 statusSnapshot 的 AI 消息，
   // 把当前对话的 statusBar 整体回滚到那个快照（含 heartSim 任务/好感）；
   // 找不到则清空状态栏（说明回到了对话开头）。
+  // v687.33：同时恢复 phoneSnapshot（手机数据）
   async function _restoreStatusFromMessages() {
     try {
       let snap = null;
+      let phoneSnap = null;
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
-        if (m && m.role === 'assistant' && m.statusSnapshot) {
-          snap = m.statusSnapshot;
-          break;
+        if (m && m.role === 'assistant') {
+          if (!snap && m.statusSnapshot) snap = m.statusSnapshot;
+          if (!phoneSnap && m.phoneSnapshot) phoneSnap = m.phoneSnapshot;
+          if (snap && phoneSnap) break; // 两个都找到了
         }
       }
       const restored = snap ? JSON.parse(JSON.stringify(snap)) : null;
@@ -2782,6 +2923,12 @@ exitMultiSelect();
           if (NPC.setPresentNPCs) NPC.setPresentNPCs(Array.isArray(restored?.npcs) ? restored.npcs.map(n => n.name).filter(Boolean) : []);
         }
       } catch(_) {}
+      // v687.33：手机数据恢复
+      try {
+        if (typeof Phone !== 'undefined' && Phone.restoreFromSnapshot && phoneSnap) {
+          await Phone.restoreFromSnapshot(phoneSnap);
+        }
+      } catch(e) { console.warn('[Chat] 回溯手机数据失败', e); }
     } catch(e) { console.warn('[Chat] 回溯状态栏失败', e); }
   }
 
@@ -3348,6 +3495,19 @@ renderAll();
     const oldMaskId = Character.getCurrentId();
     const newMaskId = 'mask_' + Utils.uuid().slice(0, 8);
 
+    // v687.33：从分支点往前找最近的 statusSnapshot / phoneSnapshot
+    // 而非使用 srcConv 最新值（分支点可能在 20 轮以前，状态栏和手机都已经变了）
+    let branchStatusSnap = null;
+    let branchPhoneSnap = null;
+    for (let i = idx; i >= 0; i--) {
+      const m = messages[i];
+      if (m && m.role === 'assistant') {
+        if (!branchStatusSnap && m.statusSnapshot) branchStatusSnap = m.statusSnapshot;
+        if (!branchPhoneSnap && m.phoneSnapshot) branchPhoneSnap = m.phoneSnapshot;
+        if (branchStatusSnap && branchPhoneSnap) break;
+      }
+    }
+
     // 1. 复制消息（含分支点那条，即 0..idx 包含）到新 convId，重置 branchId=main
     for (let i = 0; i <= idx; i++) {
       const copy = { ...messages[i], id: Utils.uuid(), branchId: 'main', conversationId: newConvId };
@@ -3374,8 +3534,11 @@ renderAll();
       await DB.put('archives', newArch);
     }
 
-    // 6. 注册新对话到列表
-    await Conversations.addBranch(newConvId, branchName.trim(), newMaskId);
+    // 6. 注册新对话到列表（传入分支点时刻的快照，而非 srcConv 最新值）
+    await Conversations.addBranch(newConvId, branchName.trim(), newMaskId, {
+      statusOverride: branchStatusSnap ? JSON.parse(JSON.stringify(branchStatusSnap)) : undefined,
+      phoneOverride: branchPhoneSnap ? JSON.parse(JSON.stringify(branchPhoneSnap)) : undefined
+    });
   }
 
   // switchBranch 已废弃（分支现在是独立对话），保留接口避免旧引用报错
@@ -3971,6 +4134,9 @@ if (!gp) return null;
     worldviewPrompt = text;
   }
   function getWorldviewPrompt() { return worldviewPrompt; }
+
+  // v687.33：暴露返航世界设定常量（供 phone.js 在返航 continue/epilogue 模式下替换世界观）
+  function getHsHomecomingWorldSetting() { return _HS_HOMECOMING_WORLD_SETTING; }
 
   /**
    * 取消当前请求
@@ -5465,7 +5631,7 @@ async function applyLorebooksToWorldview() {
     attachFile, onFilePicked, previewFile, _openFilePreview,
     pickMemories, filterPickMemories, _togglePickMem,
     confirmPickMemories, removeAttach,
-    setWorldview, getWorldviewPrompt, getMessages, getBranchId, autoExtractMemory,
+    setWorldview, getWorldviewPrompt, getHsHomecomingWorldSetting, getMessages, getBranchId, autoExtractMemory,
     isStreamingNow: () => isStreaming,
 manualExtractMemory, manualSummary,
 enterMultiSelect, exitMultiSelect, toggleMultiSelect, selectAllMulti,

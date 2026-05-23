@@ -216,18 +216,94 @@ window.BUILTIN_HEARTSIM_WORLDVIEW = {
     }
   ],
   "festivals": [],
-  "customs": [],
   "knowledges": [
     {
       "id": "know_xtyd",
       "name": "心动模拟",
+      "content": "心动模拟APP是心跳悦动公司的产品，他们对心动模拟APP的描述是“大型线下跨世界交友平台”。心跳悦动公司无法通过任何途径被搜索到，所有NPC/路人理应不清楚其存在，如果{{user}}提起，都会被不经意忽略，或者不论如何都找不到心跳悦动公司和心动模拟APP的痕迹。但如果{{user}}已经达成了通关条件，并且试图将任何一位心动目标带回自己的世界时，可以安排心跳悦动的员工提供帮助。\n心跳悦动员工代号：059",
+      "enabled": true,
+      "keywordTrigger": true,
       "keys": "心跳悦动",
-      "content": "心动模拟APP是心跳悦动公司的产品，他们对心动模拟APP的描述是“大型线下跨世界交友平台”。心跳悦动公司无法通过任何途径被搜索到，所有NPC/路人理应不清楚其存在，如果{{user}}提起，都会被不经意忽略，或者不论如何都找不到心跳悦动公司和心动模拟APP的痕迹。但如果{{user}}已经达成了通关条件，并且试图将任何一位心动目标带回自己的世界时，可以安排心跳悦动的员工提供帮助。"
+      "position": "system_bottom",
+      "depth": 0
+    },
+    {
+      "id": "know_b47ef2f3",
+      "name": "员工",
+      "content": "如果059出现，可以提供帮助，让{{user}}带着心动目标返回原本的世界，没有其他要求，只需要签下认领心动目标的协议就可以。\n协议名：心动目标认领协议",
+      "enabled": true,
+      "keywordTrigger": true,
+      "keys": "059",
+      "position": "system_bottom",
+      "depth": 0
+    },
+    {
+      "id": "know_f1a4aaea",
+      "name": "协议",
+      "content": "签署心动目标认领协议后，{{user}}可以带着对应的心动目标返回，触发“共同返航”结局。",
+      "enabled": true,
+      "keywordTrigger": true,
+      "keys": "心动目标认领协议",
+      "position": "system_bottom",
+      "depth": 0
     }
   ],
   "mediaType": "论坛",
   "themeName": "builtin:心动模拟",
-  "_builtinVersion": 15
+  "_builtinVersion": 16,
+  "events": [
+    {
+      "id": "evt_c0976c80",
+      "name": "鬼屋传闻阶段1",
+      "keys": "阶段1开始",
+      "triggerType": "keyword",
+      "attrConditions": [],
+      "completeKey": "阶段1结束",
+      "finishRule": "从听到鬼屋传闻开始后第三天",
+      "content": "在日常剧情中加入少量的鬼屋传闻。\n传闻：某个非常偏僻的郊区有一座大洋房，废弃已久，没有人住也没有人打理，不知道是谁的方便，但偶尔会听到里面传来女人的哭声，或者莫名其妙的灯光闪烁。有人听说这个传闻后前去调查，却根本没有找到任何洋房，这个鬼屋传闻被当做谣言，理论来说，会很快消失在互联网。\n\n不需要每轮都提，只需要隐约在路人口中，或者互联网上听到鬼屋的消息，存在感禁止太高，像普通的八卦，一闪而过。更多时间用以描述{{user}}的日常生活。",
+      "triggerMode": "event"
+    },
+    {
+      "id": "evt_f315e99c",
+      "name": "鬼屋传闻阶段2",
+      "keys": "阶段1结束",
+      "triggerType": "keyword",
+      "attrConditions": [],
+      "completeKey": "阶段2结束",
+      "finishRule": "{{user}}开始对鬼屋传闻感到好奇、想要调查、甚至亲自前往查看时。",
+      "content": "鬼屋传闻似乎并没有像普通的谣言那样消失，反而愈演愈烈，演变成了怪谈，有了不少二次创作和瞎编的版本，例如这是哪个海归富家女的房子，她被穷小子男友杀死了，或者这是民国时期的建筑，充满了怨气等等，版本一个比一个离谱。不过所有版本在描述那栋洋房是都说那是哥特风格的洋房。\n网络上也有很多编造的照片，还有声称进入了洋房的帖子，真假难辨。\n\n在这个阶段依旧保持在日常中偶尔提及的状态，直到用户真正开始感兴趣。",
+      "triggerMode": "event"
+    },
+    {
+      "id": "evt_47a5dacc",
+      "name": "鬼屋传闻阶段3",
+      "keys": "阶段2结束",
+      "triggerType": "keyword",
+      "attrConditions": [],
+      "completeKey": "触发TE动画",
+      "finishRule": "{{user}}试着调查鬼屋传闻的第二天，{{user}}起床后。",
+      "content": "当{{user}}尝试调查鬼屋事件后，提供更多似是而非的线索，任何离谱的描述和传闻都可以，唯一的认知是鬼屋是一座处在某个郊区无人搭理的哥特式洋房。可以给{{user}}提供很多搞笑的、轻松的、离谱荒谬的线索。营造出这个怪谈完全不靠谱，只是网友狂欢的气氛。",
+      "triggerMode": "event"
+    }
+  ],
+  "currency": {
+    "name": "",
+    "desc": ""
+  },
+  "phoneApps": {
+    "takeout": {
+      "name": "",
+      "desc": ""
+    },
+    "shop": {
+      "name": "",
+      "desc": ""
+    },
+    "forum": {
+      "name": "",
+      "desc": ""
+    }
+  }
 };
 // 注册到全局内置世界观数组，让 _loadBuiltinWorldviews 能扫到并按 _builtinVersion 自动更新
 window.__BUILTIN_WORLDVIEWS__ = (window.__BUILTIN_WORLDVIEWS__ || []).concat([window.BUILTIN_HEARTSIM_WORLDVIEW]);

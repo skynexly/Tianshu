@@ -52,7 +52,7 @@ const Tools = (() => {
     return result;
   }
 
-  // 在世界观里找某个名字（地区/势力/地点/全图NPC/角色NPC）
+  // 在世界观里找某个名字（地区/势力/地点/常驻角色/角色NPC）
   // kind: 'region' | 'faction' | 'npc' | undefined（不传则全找）
   function _findInWorldview(wv, name, kind) {
     if (!wv || !name) return [];

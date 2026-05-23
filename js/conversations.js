@@ -285,11 +285,17 @@ async function init() {
     }
     // 普通分支（非番外）继承状态栏和手机数据，让分支真正是"完整副本"。
     // 番外是独立剧情线，不继承这些运行时状态，避免污染番外开头。
+    // v687.33：支持 statusOverride / phoneOverride（从分支点快照传入），
+    // 解决"从第 10 轮分支却拿到第 20 轮的状态栏/手机"的问题。
     if (!options?.isGaiden) {
-      if (srcConv?.statusBar) {
+      if (options?.statusOverride) {
+        conv.statusBar = options.statusOverride;
+      } else if (srcConv?.statusBar) {
         try { conv.statusBar = JSON.parse(JSON.stringify(srcConv.statusBar)); } catch(e) {}
       }
-      if (srcConv?.phoneData) {
+      if (options?.phoneOverride) {
+        conv.phoneData = options.phoneOverride;
+      } else if (srcConv?.phoneData) {
         try { conv.phoneData = JSON.parse(JSON.stringify(srcConv.phoneData)); } catch(e) {}
       }
     }

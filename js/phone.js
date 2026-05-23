@@ -449,9 +449,31 @@ function _isAppStillActive(appId) {
   async function _buildFullContext() {
     const parts = [];
 
+    // v687.33：心动模拟返航后，根据 hsPostHomeMode 决定如何构建世界观/NPC 数据
+    //   - continue（继续日常）：完全替换为返航世界设定，屏蔽所有 NPC/节日，保留知识（钩子通道）
+    //   - epilogue（第二部钩子已触发）：与 continue 一致——屏蔽所有 NPC，剧情已彻底结束
+    //   - end（到此结束）/ 未选择：保留原版，方便复盘
+    let _hsHomecomingActive = false;
+    let _hsPostHomeMode = null;
+    try {
+      const pd = await _getPhoneData();
+      _hsHomecomingActive = !!(pd && pd.hsHomecomingTriggered);
+      _hsPostHomeMode = pd?.hsPostHomeMode || null;
+    } catch(_) {}
+    const _hsSkipNpc = _hsHomecomingActive && (_hsPostHomeMode === 'continue' || _hsPostHomeMode === 'epilogue');
+
     // 1. 世界观基础设定
-    const wvPrompt = Chat.getWorldviewPrompt() || '';
-    if (wvPrompt) parts.push('【世界观设定】\n' + wvPrompt);
+    if (_hsSkipNpc) {
+      // 返航 continue/epilogue 模式：替换为返航现实世界设定
+      try {
+        const replaceSetting = (typeof Chat !== 'undefined' && Chat.getHsHomecomingWorldSetting)
+          ? Chat.getHsHomecomingWorldSetting() : '';
+        if (replaceSetting) parts.push(replaceSetting);
+      } catch(_) {}
+    } else {
+      const wvPrompt = Chat.getWorldviewPrompt() || '';
+      if (wvPrompt) parts.push('【世界观设定】\n' + wvPrompt);
+    }
 
     // 1.5 当前游戏时间（统一给论坛 / 好友圈 / 地图等 AI 生成内容使用）
     try {
@@ -482,6 +504,18 @@ function _isAppStillActive(appId) {
       } catch(_) {}
 
       if (wv) {
+        // v687.33：返航 continue/epilogue 模式下屏蔽所有 NPC 和节日（那些角色和事件在这个世界不存在）
+        if (_hsSkipNpc) {
+          // 知识设定保留——是钩子通道
+          const allKnowledges = [...(wv.knowledges || wv.customs || []), ...bookExtra.knowledges];
+          if (allKnowledges.length > 0) {
+            const enabledAll = allKnowledges.filter(c => c.enabled !== false);
+            if (enabledAll.length > 0) {
+              const custStr = enabledAll.map(c => `${c.name || ''}：${c.content || ''}`).join('\n');
+              parts.push('【知识设定】\n' + custStr);
+            }
+          }
+        } else {
         // 全图 NPC + 详细资料（世界观 + 世界书合并）
         const allNpcs = [];
         const collectNpc = (npc, regionName) => {
@@ -530,6 +564,7 @@ function _isAppStillActive(appId) {
             parts.push('【知识设定】\n' + custStr);
           }
         }
+        } // v687.33: end of !_hsSkipNpc 分支
       } else if (bookExtra.globalNpcs.length || bookExtra.festivals.length || bookExtra.knowledges.length) {
         // 没世界观但有世界书（单人卡 + 世界书的场景）
         if (bookExtra.globalNpcs.length > 0) {
@@ -564,7 +599,8 @@ function _isAppStillActive(appId) {
     } catch(_) {}
 
     // 3.5 v617：当前对话绑定的单人卡主角（AI 扮演角色）
-    try {
+    // v687.33：返航 continue/epilogue 模式下跳过（单人卡主角不属于返航后的现实世界）
+    if (!_hsSkipNpc) try {
       const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
       if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
         const card = await DB.get('singleCards', conv.singleCharId);
@@ -596,7 +632,8 @@ function _isAppStillActive(appId) {
     } catch(_) {}
 
     // 3.6 v617：对话级挂载角色（拉郎 / 客串 / 常驻）
-    try {
+    // v687.33：返航 continue/epilogue 模式下跳过（挂载角色也不属于返航后的现实世界）
+    if (!_hsSkipNpc) try {
       if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
         const attached = await AttachedChars.resolveAll();
         if (attached && attached.length > 0) {
@@ -2089,7 +2126,7 @@ ${wvPrompt}` },
     } catch(_) {}
     const addNpcFromWv = (wv, sourcePrefix = '世界观') => {
       if (!wv) return;
-      (wv.globalNpcs || []).forEach(n => add(n.name, '全图NPC', avatarById[n.id] || n.avatar || ''));
+      (wv.globalNpcs || []).forEach(n => add(n.name, '常驻角色', avatarById[n.id] || n.avatar || ''));
       (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => add(n.name, sourcePrefix, avatarById[n.id] || n.avatar || ''))));
     };
     try {
@@ -4614,6 +4651,18 @@ async function _renderHeartSimApp(pd) {
   const body = document.getElementById('phone-body');
   if (!body) return;
 
+  // v687.33：返航后心动模拟 APP 进入"已结束"状态——保留 APP 入口但内容只剩一句话
+  if (pd && pd.hsHomecomingTriggered) {
+    body.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:32px;text-align:center">
+        <div style="color:var(--text-secondary);font-size:14px;letter-spacing:2px;line-height:1.8;opacity:0.75">
+          本次服务已结束。
+        </div>
+      </div>
+    `;
+    return;
+  }
+
   const targets = await _ensureHsAppTargets(pd);
 
   // 客服头像（来自世界观 iconImage）
@@ -5226,6 +5275,51 @@ async function buildHeartsimServiceChatForBackstage() {
   return lines.join('\n');
 }
 
+// v687.33：手机快照（供回滚/分支用，剥离图片字段减小体积）
+  async function getSnapshotForRollback() {
+    try {
+      const pd = await _getPhoneData();
+      if (!pd) return null;
+      const snap = JSON.parse(JSON.stringify(pd));
+      // 剥离图片 dataURL 字段（图片已进图库，不需要随快照存储）
+      if (snap.profile) snap.profile.avatar = '';
+      snap.momentsCover = '';
+      snap.wallpaper = '';
+      if (Array.isArray(snap.moments)) {
+        snap.moments.forEach(m => { if (m) m.image = ''; });
+      }
+      if (Array.isArray(snap.hsAppTargets)) {
+        snap.hsAppTargets.forEach(t => { if (t) t.avatar = ''; });
+      }
+      return snap;
+    } catch(e) { console.warn('[Phone] getSnapshotForRollback failed', e); return null; }
+  }
+
+  // v687.33：从快照恢复手机数据（回滚/分支用）
+  async function restoreFromSnapshot(snap) {
+    try {
+      const convId = Conversations.getCurrent && Conversations.getCurrent();
+      if (!convId) return;
+      const conv = Conversations.getList().find(c => c.id === convId);
+      if (!conv) return;
+      // 保留当前的图片字段（快照里被清空了），其余全部覆盖
+      const currentPd = conv.phoneData || {};
+      const restored = JSON.parse(JSON.stringify(snap));
+      // 恢复图片：用当前值回填（图片是用户上传的，不会因为剧情回退而改变）
+      if (currentPd.profile?.avatar) {
+        restored.profile = restored.profile || {};
+        restored.profile.avatar = currentPd.profile.avatar;
+      }
+      if (currentPd.momentsCover) restored.momentsCover = currentPd.momentsCover;
+      if (currentPd.wallpaper) restored.wallpaper = currentPd.wallpaper;
+      // moments 和 hsAppTargets 的图片不回填——因为回滚后可能那些 moment 还没发过
+      conv.phoneData = restored;
+      await Conversations.saveList();
+      // 刷新内存中的 actionLog
+      reloadActionLog();
+    } catch(e) { console.warn('[Phone] restoreFromSnapshot failed', e); }
+  }
+
 // ===== 对外接口 =====
   return {
     open, close, minimize, goHome, goBack, openApp, isOpen,
@@ -5235,6 +5329,7 @@ async function buildHeartsimServiceChatForBackstage() {
     buildHeartsimServiceChatForBackstage,
     flushActionLog, peekActionLog, pushLog, reloadActionLog,
     flushActionLogForBackstage,
+    getSnapshotForRollback, restoreFromSnapshot,
     _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _onMomentsCoverPicked, _clearMomentsCover,
     // 个人资料卡
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,

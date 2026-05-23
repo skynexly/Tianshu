@@ -175,17 +175,24 @@ const ConvGameplay = (() => {
   function editEvent(i) {
     _editEventIdx = i;
     const ev = _eventsData[i] || {};
+    // v687.33：先显示弹窗，再赋值（某些浏览器 hidden 状态下 select 赋值不生效）
+    document.getElementById('cg-event-modal').classList.remove('hidden');
     document.getElementById('cg-event-modal-title').textContent = ev.name ? '编辑事件' : '新建事件';
     document.getElementById('cg-event-name').value = ev.name || '';
     document.getElementById('cg-event-keys').value = ev.keys || '';
     const typeEl = document.getElementById('cg-event-trigger-type');
-    if (typeEl) typeEl.value = ev.triggerType || 'keyword';
+    if (typeEl) {
+      typeEl.value = ev.triggerType || 'keyword';
+      // 双保险：强制 selectedIndex 对齐
+      if (typeEl.value !== (ev.triggerType || 'keyword')) {
+        typeEl.selectedIndex = 0; // keyword 是第一个 option
+      }
+    }
     _attrCondDraft = Array.isArray(ev.attrConditions) ? JSON.parse(JSON.stringify(ev.attrConditions)) : [];
     document.getElementById('cg-event-complete-key').value = ev.completeKey || '';
     document.getElementById('cg-event-finish-rule').value = ev.finishRule || '';
     document.getElementById('cg-event-content').value = ev.content || '';
     _syncTriggerTypeUI();
-    document.getElementById('cg-event-modal').classList.remove('hidden');
   }
 
   function addEvent() {

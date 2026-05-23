@@ -218,12 +218,26 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
     }
  
  // 心动模拟：返航触发 marker（空代码块即可）
-    // 形如 ```homecoming\n``` 或 ```homecoming``` 或 ```homecoming\n任何内容\n```
-    const homecomingMatch = raw.match(/```homecoming\s*([\s\S]*?)```/i);
-    if (homecomingMatch) {
-      result.homecoming = true;
-      raw = raw.replace(homecomingMatch[0], '').trim();
-    }
+  // 形如 ```homecoming\n``` 或 ```homecoming``` 或 ```homecoming\n任何内容\n```
+  // v687.33：如果内容是 JSON 且含 companion 字段，表示共同返航结局
+  const homecomingMatch = raw.match(/```homecoming\s*([\s\S]*?)```/i);
+  if (homecomingMatch) {
+    result.homecoming = true;
+    // 尝试解析共同返航信息
+    try {
+      const hcContent = (homecomingMatch[1] || '').trim();
+      if (hcContent && hcContent.startsWith('{')) {
+        const hcData = JSON.parse(hcContent);
+        if (hcData.companion) {
+          // 支持 string 或 array
+          result.homecomingCompanion = Array.isArray(hcData.companion)
+            ? hcData.companion.join('、')
+            : String(hcData.companion);
+        }
+      }
+    } catch(_) {}
+    raw = raw.replace(homecomingMatch[0], '').trim();
+  }
 
     // 清理「第X部分 — XXX：」「第X部分 — XXX（...）：」这类格式标签行
     // 第二部分被尾部切割顺带去掉了，但 status 等代码块被提前替换后会留下「第三部分 — 状态面板：」孤儿，统一过滤

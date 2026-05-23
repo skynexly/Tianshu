@@ -11,7 +11,6 @@
 // ==========================================================
 (function () {
   let _playing = false;
-  let _allowDismiss = false;
 
   // 动画消息序列（节奏从 600ms 一路拉到 5000ms，靠间隔放大死寂感）
   const MESSAGES = [
@@ -26,7 +25,6 @@
   async function play() {
     if (_playing) return;
     _playing = true;
-    _allowDismiss = false;
 
     try {
       // 拿世界观 iconImage 当客服头像
@@ -54,9 +52,10 @@
         _appendNotif(notifsEl, m, serviceAvatar);
       }
 
-      // 全部播完，允许用户点击/上滑关闭
-      _allowDismiss = true;
-      _bindDismissHandlers();
+      // v687.33：全部播完，停留片刻后在 overlay 内显示选择按钮
+      //（叙事与交互合一——最后一条问"你想去哪"，玩家直接选答案）
+      await new Promise(r => setTimeout(r, 1500));
+      _showChoiceButtons();
 
       // 标记已触发 + 把全部消息塞进客服历史
       try {
@@ -88,17 +87,16 @@
         <span class="hs-homecoming-time">${_currentClock()}</span>
         <span class="hs-homecoming-icons">··· 📶 🔋</span>
       </div>
-      <div class="hs-homecoming-notifs" id="hs-homecoming-notifs"></div>
-      <div class="hs-homecoming-hint" id="hs-homecoming-hint" style="display:none">点击或上滑关闭</div>
+        <div class="hs-homecoming-notifs" id="hs-homecoming-notifs"></div>
     `;
     document.body.appendChild(overlay);
 
     // 阻止任何冒泡到底层的点击/触摸：动画期间用户什么也做不了
+    // 但放过选择按钮（.hs-homecoming-choice）
     const blockEvent = (e) => {
-      if (!_allowDismiss) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
+      if (e.target.closest && e.target.closest('.hs-homecoming-choice')) return;
+      e.stopPropagation();
+      e.preventDefault();
     };
     overlay.addEventListener('click', blockEvent, true);
     overlay.addEventListener('touchstart', blockEvent, true);
@@ -129,38 +127,66 @@
     notifsEl.appendChild(node);
   }
 
-  function _bindDismissHandlers() {
-    const overlay = document.getElementById('hs-homecoming-overlay');
-    if (!overlay) return;
-    const hint = document.getElementById('hs-homecoming-hint');
-    if (hint) hint.style.display = '';
-
-    let touchStartY = null;
-    const onClick = () => _dismiss();
-    const onTouchStart = (e) => {
-      touchStartY = e.touches?.[0]?.clientY ?? null;
-    };
-    const onTouchEnd = (e) => {
-      if (touchStartY === null) return;
-      const endY = e.changedTouches?.[0]?.clientY ?? touchStartY;
-      // 上滑 60px 以上视为关闭
-      if (touchStartY - endY > 60) _dismiss();
-      touchStartY = null;
-    };
-    overlay.addEventListener('click', onClick);
-    overlay.addEventListener('touchstart', onTouchStart);
-    overlay.addEventListener('touchend', onTouchEnd);
-  }
-
-  function _dismiss() {
-    if (!_allowDismiss) return;
+  // v687.33：在动画 overlay 内直接显示两个选择按钮
+  function _showChoiceButtons() {
     const overlay = document.getElementById('hs-homecoming-overlay');
     if (!overlay) { _playing = false; return; }
-    overlay.classList.add('hs-homecoming-leaving');
-    setTimeout(() => {
-      overlay.remove();
-      _playing = false;
-    }, 500);
+
+    const btnWrap = document.createElement('div');
+    btnWrap.className = 'hs-homecoming-choice';
+    btnWrap.innerHTML = `
+      <button class="hs-homecoming-choice-btn" data-choice="continue">继续日常</button>
+      <button class="hs-homecoming-choice-btn" data-choice="end">到此结束</button>
+    `;
+    overlay.appendChild(btnWrap);
+
+    const handler = async (e) => {
+      const btn = e.target.closest('.hs-homecoming-choice-btn');
+      if (!btn) return;
+      e.stopPropagation();
+      const choice = btn.dataset.choice;
+      // 防重复点击
+      btnWrap.querySelectorAll('button').forEach(b => b.disabled = true);
+      try {
+        await _commitChoice(choice);
+      } finally {
+        // 滑出 overlay
+        overlay.classList.add('hs-homecoming-leaving');
+        setTimeout(() => {
+          overlay.remove();
+          _playing = false;
+        }, 500);
+      }
+    };
+    btnWrap.addEventListener('click', handler, true);
+  }
+
+  // 把玩家选择写入 phoneData
+  async function _commitChoice(choice) {
+    try {
+      const pd = (typeof Phone !== 'undefined' && Phone._getPhoneData) ? await Phone._getPhoneData() : null;
+      if (pd) {
+        pd.hsPostHomeMode = choice || 'continue';
+        await Conversations.saveList();
+      }
+      // v687.33：选择"继续日常"时，直接激活鬼屋传闻阶段1事件
+      // 方案B：代码层标记 active，跳过关键词扫描，下一轮 AI 就能读到事件 content
+      if (choice === 'continue') {
+        try {
+          const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+          if (conv) {
+            if (!conv.eventStates) conv.eventStates = {};
+            // 找到鬼屋传闻阶段1的事件 id（evt_c0976c80）
+            const stage1Id = 'evt_c0976c80';
+            if (!conv.eventStates[stage1Id] || conv.eventStates[stage1Id] === 'idle') {
+              conv.eventStates[stage1Id] = 'active';
+              await Conversations.saveList();
+              console.log('[HSHomecoming] 鬼屋传闻阶段1已激活');
+            }
+          }
+        } catch (e) { console.warn('[HSHomecoming] activate stage1 failed', e); }
+      }
+    } catch (e) { console.warn('[HSHomecoming] commit choice failed', e); }
   }
 
   // 写一条 hidden 系统消息，让 AI 知道玩家刚看到了什么

@@ -157,11 +157,16 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v687.31';
-const CHANGELOG = `【v687 上下文重构 + OOC 修复】
-· chat.js 重构：send() 与 showContext() 共享 _buildApiContext()
-· 删除 ~550 行重复代码，以后改提示词只需改一处
-· 删除群像/单人模式中 OOC 手机操作提示词（避免降智误判）
+    const APP_VERSION = 'v687.33';
+const CHANGELOG = `【v687.33 心动模拟剧情扩展 + 上下文优化】
+· 心动模拟世界观更新（v16）：心动目标资料完善、新增隐藏剧情线
+· 返航后玩法扩展：达成回家条件后会出现新的选项分支
+· 上下文优化：assistant 历史消息自动剥离格式代码块，省 token + 降噪
+· 回溯/分支机制完善：手机数据 + 状态栏现在会一起回滚
+· 创建分支时从分支点取状态，不再继承最新值
+· 心动模拟"全图NPC"用语统一为"常驻角色"
+· 事件弹窗新建默认触发方式修复
+· 多处 bug 修复
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

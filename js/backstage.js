@@ -1505,7 +1505,7 @@ await DB.del('messages', m.id);
               options.push({
                 id: n.id, type: 'wv_npc', sourceWvId: wv.id,
                 name: n.name, aliases: n.aliases || '',
-                group: `${lbLabel} · 全图NPC`
+                group: `${lbLabel} · 常驻角色`
               });
             }
           });
