@@ -258,6 +258,19 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
       if (lastSep > -1) {
         bottomSection = raw.substring(lastSep + 5);
         mainContent = raw.substring(0, lastSep);
+      } else {
+        // v687.37：AI偶发漏写分隔符的兜底——
+        // 向上扫所有代码块，找到第一个"已知底部代码块"（新获得物品/当前相关角色/角色变化）
+        // 把它及之后所有内容当作底部区域
+        const allBlocks = [...raw.matchAll(/```[\s\S]*?```/g)];
+        for (const m of allBlocks) {
+          const firstLine = m[0].replace(/```\n?/, '').split('\n')[0].trim();
+          if (/^(当前)?相关(?:NPC|角色)|^(当前)?在场(?:NPC|角色)|^新?获得?物品|^角色变化|^变化/i.test(firstLine)) {
+            bottomSection = raw.substring(m.index);
+            mainContent = raw.substring(0, m.index).trim();
+            break;
+          }
+        }
       }
     }
 
