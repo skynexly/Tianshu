@@ -940,42 +940,66 @@ if (char) systemParts.push(Character.formatForPrompt(char));
     }
 
     // v687.34：防八股（自动触发，无需手动开关）
-    // 条件：最近6条AI回复中，同一个角色名出现≥3次且总角色种类≤2
+    // 条件：最近6条AI回复中，同一个角色名出现≥3次
+    // v687.35：改为从AI回复的"当前相关角色"代码块提取角色名，不依赖NPC列表
     if (isGameMode) {
       try {
         const recentAI = messages.filter(m => m.role === 'assistant').slice(-6);
         if (recentAI.length >= 3) {
-          // 收集所有已知 NPC 名字
-          const allNpcNames = [];
-          try {
-            const npcList = NPC.getByRegion('all') || [];
-            npcList.forEach(n => { if (n.name) allNpcNames.push(n.name); });
-          } catch(_) {}
-          // 从挂载角色也取
-          try {
-            if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
-              const attached = await AttachedChars.resolveAll();
-              attached.forEach(c => { if (c.name && !allNpcNames.includes(c.name)) allNpcNames.push(c.name); });
-            }
-          } catch(_) {}
+          // 从每条AI回复的"当前相关角色"代码块提取角色名
+          const charPerMsg = recentAI.map(m => {
+            const text = m.content || '';
+            // 匹配 ```当前相关角色\n...\n``` 或 ```\n当前相关角色\n...\n```
+            const match = text.match(/```\s*\n?\s*当前相关角色\s*\n([\s\S]*?)```/);
+            if (!match) return [];
+            return match[1].split('\n')
+              .map(l => l.trim())
+              .filter(l => l.length >= 2 && l !== '无' && !l.startsWith('（') && !l.startsWith('('));
+          });
 
-          if (allNpcNames.length > 0) {
-            // 统计每条AI回复中出现了哪些角色
-            const charPerMsg = recentAI.map(m => {
-              const text = m.content || '';
-              return allNpcNames.filter(name => name.length >= 2 && text.includes(name));
-            });
-            // 扁平化计数
-            const counter = {};
-            charPerMsg.forEach(names => {
-              const unique = [...new Set(names)];
-              unique.forEach(n => { counter[n] = (counter[n] || 0) + 1; });
-            });
-            // 判断：某角色出现≥3条（不限群像/单人，和同一个人待久了就触发）
-            const dominantChar = Object.entries(counter).find(([_, count]) => count >= 3);
-            if (dominantChar) {
-              _constraintDepth3.push(`检查前几轮回复，避免重复。具体注意以下维度：①段落结构——不要每轮都用相同的段落排列模式，变换节奏和结构；②感官描写——如果前几轮已经提到过气味、嗓音质感、外貌特征，这一轮跳过或换一个全新的感官细节，不要每轮都重复同一组；③肢体动作——不要反复使用同类小动作，换用不同的身体语言或干脆让角色安静不动；④情绪状态——不要让角色锁死在单一极端情绪中（持续虔诚/狂喜/黏稠的欲望），让情绪随剧情自然流动、被打断或转移；⑤描写角度——尝试切换到环境、对话节奏、角色内心独白、安静留白等不同切入点。`);
+          // 如果提取到的角色名太少（可能格式没开或AI没写），fallback到NPC列表匹配
+          const hasFormatChars = charPerMsg.some(arr => arr.length > 0);
+          let finalCharPerMsg = charPerMsg;
+
+          if (!hasFormatChars) {
+            // fallback：用NPC列表 + 挂载角色 + 单人卡主角名做文本匹配
+            const allNpcNames = [];
+            try {
+              const npcList = NPC.getByRegion('all') || [];
+              npcList.forEach(n => { if (n.name) allNpcNames.push(n.name); });
+            } catch(_) {}
+            try {
+              if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+                const attached = await AttachedChars.resolveAll();
+                attached.forEach(c => { if (c.name && !allNpcNames.includes(c.name)) allNpcNames.push(c.name); });
+              }
+            } catch(_) {}
+            // 单人卡主角名
+            try {
+              if (typeof SingleMode !== 'undefined' && SingleMode.getMainCharName) {
+                const scName = SingleMode.getMainCharName();
+                if (scName && !allNpcNames.includes(scName)) allNpcNames.push(scName);
+              }
+            } catch(_) {}
+
+            if (allNpcNames.length > 0) {
+              finalCharPerMsg = recentAI.map(m => {
+                const text = m.content || '';
+                return allNpcNames.filter(name => name.length >= 2 && text.includes(name));
+              });
             }
+          }
+
+          // 扁平化计数
+          const counter = {};
+          finalCharPerMsg.forEach(names => {
+            const unique = [...new Set(names)];
+            unique.forEach(n => { counter[n] = (counter[n] || 0) + 1; });
+          });
+          // 判断：某角色出现≥3条（不限群像/单人，和同一个人待久了就触发）
+          const dominantChar = Object.entries(counter).find(([_, count]) => count >= 3);
+          if (dominantChar) {
+            _constraintDepth3.push(`检查前几轮回复，避免重复。具体注意以下维度：①段落结构——不要每轮都用相同的段落排列模式，变换节奏和结构；②感官描写——如果前几轮已经提到过气味、嗓音质感、外貌特征，这一轮跳过或换一个全新的感官细节，不要每轮都重复同一组；③肢体动作——不要反复使用同类小动作，换用不同的身体语言或干脆让角色安静不动；④情绪状态——不要让角色锁死在单一极端情绪中（持续虔诚/狂喜/黏稠的欲望），让情绪随剧情自然流动、被打断或转移；⑤描写角度——尝试切换到环境、对话节奏、角色内心独白、安静留白等不同切入点。`);
           }
         }
       } catch(e) { console.warn('[Chat] 防八股检测失败', e); }
