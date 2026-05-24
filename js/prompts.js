@@ -269,8 +269,8 @@ const Prompts = (() => {
               <span style="width:22px;height:22px;border-radius:50%;border:2px solid ${isSelected ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);' : ''}" onclick="event.stopPropagation();Prompts.togglePromptSelect('${p.id}')">
                 ${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
               </span>` : `
-              <span style="position:relative;display:inline-flex;flex-shrink:0">
-<input type="checkbox" class="circle-check" ${p.enabled ? 'checked' : ''} onchange="Prompts.toggle('${p.id}')" onclick="event.stopPropagation()">
+              <span style="position:relative;display:inline-flex;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();Prompts.toggle('${p.id}')">
+<input type="checkbox" class="circle-check" ${p.enabled ? 'checked' : ''}>
 <span class="circle-check-ui"></span>
 </span>`}
               <h3 style="flex:1;margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(p.name)}</h3>
@@ -295,12 +295,15 @@ const Prompts = (() => {
     promptSelectedIds.clear();
     const bar = document.getElementById('prompt-manage-bar');
     const btn = document.getElementById('prompt-manage-btn');
+    const list = document.getElementById('prompts-list');
     if (promptManageMode) {
       if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
       if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> 退出'; btn.style.background = 'var(--accent)'; btn.style.color = '#111'; btn.style.borderColor = 'var(--accent)'; }
+      if (list) list.style.paddingBottom = '64px';
     } else {
       if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
       if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 管理'; btn.style.background = 'none'; btn.style.color = 'var(--text-secondary)'; btn.style.borderColor = 'var(--border)'; }
+      if (list) list.style.paddingBottom = '';
     }
     render();
   }
@@ -311,8 +314,10 @@ const Prompts = (() => {
     promptSelectedIds.clear();
     const bar = document.getElementById('prompt-manage-bar');
     const btn = document.getElementById('prompt-manage-btn');
+    const list = document.getElementById('prompts-list');
     if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
     if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 管理'; btn.style.background = 'none'; btn.style.color = 'var(--text-secondary)'; btn.style.borderColor = 'var(--border)'; }
+    if (list) list.style.paddingBottom = '';
     render();
   }
 

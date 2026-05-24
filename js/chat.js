@@ -917,6 +917,70 @@ if (char) systemParts.push(Character.formatForPrompt(char));
       systemParts.push(...injections.systemBottom);
     }
 
+    // 6.5 v687.34：AI行为约束（分层注入：深度0/深度3/system_bottom）
+    const _constraintDepth0 = [];
+    const _constraintDepth3 = [];
+    if (convSettings.constraintEcho) {
+      _constraintDepth0.push('【禁止】不要代替{{user}}说话、行动或做决定。不要转述、复述、引用或加工{{user}}上一条消息的内容。{{user}}说了什么由{{user}}自己表达，你只需要描写{{user}}行为带来的影响，如NPC的反应、环境变化等等，请根据{{user}}的行动继续向后推动情节。禁止通过描写"{{user}}沉默/没有回应"来跳过{{user}}的行动，需要{{user}}做出反应的部分必须等待回复。如果{{user}}的回复中仅动作无语言，视作其并未说话。若仅语言无动作，也无需扩展{{user}}的动作，忽略这个部分即可。');
+    }
+    if (convSettings.constraintSublime) {
+      systemParts.push('回复结尾禁止进行主题升华、情感总结、哲理收束或抽象抒情。不要用"夜还很长""一切似乎刚刚开始""仿佛……""某种无法言说的……"之类的文学套话收尾。场景在哪里就停在哪里——以角色的具体动作、对白或环境的即时状态结束，保持叙事在当下，为{{user}}的下一步行动留出空间。');
+    }
+    if (convSettings.constraintGodView) {
+      systemParts.push('信息传递遵守现实规则，以合理的速度传播，禁止角色的上帝视角，角色并非全知。{{user}}行动时，不在场的角色无法快速了解{{user}}的所作所为。不能随意让角色得知{{user}}的隐私行为和内心活动，不能让角色对{{user}}的行动路线了如指掌。若有必要，不在场角色可以通过合理途径了解{{user}}行动，但必须延迟反应时间，在{{user}}行动后立刻知晓是不合理的。同样的规则适用于所有信息传播——媒体、路人、组织等任何第三方也不能在第一时间得知远处发生的事。消息传播存在延迟，且需考虑是否有势力会封锁或压制该信息；隐秘事件的传播范围应被缩小，而非自动扩散为公共知识。');
+    }
+    if (convSettings.constraintAbility) {
+      systemParts.push('角色并非无所不能，任何角色都存在不擅长的领域。在角色设定没有特别说明的情况下，一位医生通常不会擅长赌博，一位富二代通常不会电器维修，一位C级异能者无法打败A级异能者。在遭遇以角色的身份、能力无法处理的情况下，需要自然描写出角色自身对其无能为力、或寻求他人/外物的帮助的情况。且同样需要注意角色的社交圈范围是否符合角色身份，例如街头混混认识大学教授的概率很低，但可能认识酒吧驻唱。');
+    }
+    if (convSettings.constraintGender) {
+      systemParts.push('全程性别平等。不使用冠夫姓称呼（如"X太太""X夫人"），直接用本名或平等昵称。不默认性别分工（家务归女性、决策归男性），不使用"大姨妈""你那个"等羞耻化表达，直接说月经/生理期。角色的能力、地位、选择不受性别限制。');
+    }
+    if (convSettings.constraintTimeFlow) {
+      _constraintDepth3.push('【注意】时间会自然流逝。不要把所有事情压缩在同一个时间段内发生。每个场景转换或事务完成后应体现合理的时间流逝——移动需要根据距离推算（步行/交通，通常10分钟到几小时），用餐20-60分钟，工作和学习以小时起步，烹饪至少半小时以上。不要过短估计任何事务完成的时间，也不要压缩娱乐和休闲——没有人到达景点看一眼就走。状态栏的时间应跟随剧情节奏同步推进。');
+    }
+
+    // v687.34：防八股（自动触发，无需手动开关）
+    // 条件：最近6条AI回复中，同一个角色名出现≥3次且总角色种类≤2
+    if (isGameMode) {
+      try {
+        const recentAI = messages.filter(m => m.role === 'assistant').slice(-6);
+        if (recentAI.length >= 3) {
+          // 收集所有已知 NPC 名字
+          const allNpcNames = [];
+          try {
+            const npcList = NPC.getByRegion('all') || [];
+            npcList.forEach(n => { if (n.name) allNpcNames.push(n.name); });
+          } catch(_) {}
+          // 从挂载角色也取
+          try {
+            if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+              const attached = await AttachedChars.resolveAll();
+              attached.forEach(c => { if (c.name && !allNpcNames.includes(c.name)) allNpcNames.push(c.name); });
+            }
+          } catch(_) {}
+
+          if (allNpcNames.length > 0) {
+            // 统计每条AI回复中出现了哪些角色
+            const charPerMsg = recentAI.map(m => {
+              const text = m.content || '';
+              return allNpcNames.filter(name => name.length >= 2 && text.includes(name));
+            });
+            // 扁平化计数
+            const counter = {};
+            charPerMsg.forEach(names => {
+              const unique = [...new Set(names)];
+              unique.forEach(n => { counter[n] = (counter[n] || 0) + 1; });
+            });
+            // 判断：某角色出现≥3条（不限群像/单人，和同一个人待久了就触发）
+            const dominantChar = Object.entries(counter).find(([_, count]) => count >= 3);
+            if (dominantChar) {
+              _constraintDepth3.push(`检查前几轮回复，避免重复。具体注意以下维度：①段落结构——不要每轮都用相同的段落排列模式，变换节奏和结构；②感官描写——如果前几轮已经提到过气味、嗓音质感、外貌特征，这一轮跳过或换一个全新的感官细节，不要每轮都重复同一组；③肢体动作——不要反复使用同类小动作，换用不同的身体语言或干脆让角色安静不动；④情绪状态——不要让角色锁死在单一极端情绪中（持续虔诚/狂喜/黏稠的欲望），让情绪随剧情自然流动、被打断或转移；⑤描写角度——尝试切换到环境、对话节奏、角色内心独白、安静留白等不同切入点。`);
+            }
+          }
+        }
+      } catch(e) { console.warn('[Chat] 防八股检测失败', e); }
+    }
+
     // 7. 现实时间感知（对话设置里开关控制）
     if (convSettings.timeAware && window.TimeAwareness) {
       try {
@@ -1108,6 +1172,27 @@ if (char) systemParts.push(Character.formatForPrompt(char));
           for (const c of contents.reverse()) {
             apiMessages.splice(insertIdx, 0, { role: 'system', content: c });
           }
+        }
+      }
+    }
+
+    // v687.34：AI行为约束 — 深度0注入（最后一条消息之后，最靠近AI回复）
+    if (_constraintDepth0.length > 0) {
+      for (const c of _constraintDepth0) {
+        apiMessages.push({ role: 'system', content: c });
+      }
+    }
+    // v687.34：AI行为约束 — 深度3注入（倒数第3条消息前）
+    if (_constraintDepth3.length > 0) {
+      const d3Idx = apiMessages.length - 3;
+      if (d3Idx > 0) {
+        for (const c of _constraintDepth3.reverse()) {
+          apiMessages.splice(d3Idx, 0, { role: 'system', content: c });
+        }
+      } else {
+        // 消息不足3条时退化为末尾追加
+        for (const c of _constraintDepth3) {
+          apiMessages.push({ role: 'system', content: c });
         }
       }
     }
@@ -4400,7 +4485,14 @@ bgImage: conv?.convBgImage || '',
       replyWordCount: conv?.convReplyWordCount || 800,  // 默认800字
       directive: conv?.convDirective || '',              // 剧情引导内容
       directiveRemaining: conv?.convDirectiveRemaining || 0, // 剩余轮数
-      directiveTotal: conv?.convDirectiveTotal || 0      // 原始设定轮数
+      directiveTotal: conv?.convDirectiveTotal || 0,      // 原始设定轮数
+      // v687.34：AI行为约束
+      constraintEcho: !!conv?.convConstraintEcho,         // 防止抢话和转述（默认关）
+      constraintSublime: !!conv?.convConstraintSublime,   // 防止升华收束（默认关）
+      constraintGodView: !!conv?.convConstraintGodView,   // 信息传播规则（默认关）
+      constraintAbility: !!conv?.convConstraintAbility,   // 角色能力边界（默认关）
+      constraintTimeFlow: !!conv?.convConstraintTimeFlow,  // 时间流逝提醒（默认关）
+      constraintGender: !!conv?.convConstraintGender,      // 去刻板表达（默认关）
     };
   }
   function _onVoiceEnabledChange() {
@@ -4832,6 +4924,19 @@ bgImage: conv?.convBgImage || '',
     // 正文字数
     const wcOpenEl = document.getElementById('cs-reply-wordcount');
     if (wcOpenEl) wcOpenEl.value = s.replyWordCount || 800;
+    // v687.34：AI行为约束
+    const ceEl = document.getElementById('cs-constraint-echo');
+    if (ceEl) ceEl.checked = s.constraintEcho;
+    const csEl = document.getElementById('cs-constraint-sublime');
+    if (csEl) csEl.checked = s.constraintSublime;
+    const cgEl = document.getElementById('cs-constraint-godview');
+    if (cgEl) cgEl.checked = s.constraintGodView;
+    const caEl = document.getElementById('cs-constraint-ability');
+    if (caEl) caEl.checked = s.constraintAbility;
+    const ctEl = document.getElementById('cs-constraint-timeflow');
+    if (ctEl) ctEl.checked = s.constraintTimeFlow;
+    const cgenEl = document.getElementById('cs-constraint-gender');
+    if (cgenEl) cgenEl.checked = s.constraintGender;
     document.getElementById('conv-settings-modal').classList.remove('hidden');
   }
 
@@ -4888,6 +4993,19 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     // 正文字数
     const wcEl = document.getElementById('cs-reply-wordcount');
     if (wcEl) conv.convReplyWordCount = parseInt(wcEl.value) || 800;
+    // v687.34：AI行为约束
+    const ceSaveEl = document.getElementById('cs-constraint-echo');
+    if (ceSaveEl) conv.convConstraintEcho = ceSaveEl.checked;
+    const csSaveEl = document.getElementById('cs-constraint-sublime');
+    if (csSaveEl) conv.convConstraintSublime = csSaveEl.checked;
+    const cgSaveEl = document.getElementById('cs-constraint-godview');
+    if (cgSaveEl) conv.convConstraintGodView = cgSaveEl.checked;
+    const caSaveEl = document.getElementById('cs-constraint-ability');
+    if (caSaveEl) conv.convConstraintAbility = caSaveEl.checked;
+    const ctSaveEl = document.getElementById('cs-constraint-timeflow');
+    if (ctSaveEl) conv.convConstraintTimeFlow = ctSaveEl.checked;
+    const cgenSaveEl = document.getElementById('cs-constraint-gender');
+    if (cgenSaveEl) conv.convConstraintGender = cgenSaveEl.checked;
     // 语音
     const ve = document.getElementById('cs-voice-enabled');
     if (ve) {

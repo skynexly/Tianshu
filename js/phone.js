@@ -1865,6 +1865,7 @@ ${wvPrompt}` },
             ${visibleHtml(m.visibleNpcs)}
           </div>
           <div class="phone-moment-actions">
+            <button type="button" onclick="Phone._editMyMoment(${i})" class="phone-moment-action-btn">${_uiIcon('edit', 12)} 编辑</button>
             <button type="button" onclick="Phone._collectMyMoment(${i})" class="phone-moment-action-btn">${_uiIcon('star', 12)} 收藏</button>
             <button type="button" onclick="Phone._shareMoment(${i})" class="phone-moment-action-btn">${_uiIcon('share', 12)} 分享</button>
             <button type="button" onclick="Phone._deleteMyMoment(${i})" class="phone-moment-action-btn danger">${_uiIcon('trash', 12)} 删除</button>
@@ -1892,8 +1893,10 @@ ${wvPrompt}` },
           <div class="phone-moment-actions">
             <button type="button" onclick="Phone._likeNpcMoment(${i})" class="phone-moment-action-btn ${m.likedByUser ? 'active-collect' : ''}">${_uiIcon('heart', 12)} ${m.likedByUser ? '已赞' : '点赞'}${m.userLikeCount ? ` ${m.userLikeCount}` : ''}</button>
             <button type="button" onclick="Phone._commentNpcMoment(${i})" class="phone-moment-action-btn">${_uiIcon('comment', 12)} 评论</button>
+            <button type="button" onclick="Phone._editNpcMoment(${i})" class="phone-moment-action-btn">${_uiIcon('edit', 12)} 编辑</button>
             <button type="button" onclick="Phone._collectNpcMoment(${i})" class="phone-moment-action-btn">${_uiIcon('star', 12)} 收藏</button>
             <button type="button" onclick="Phone._shareNpcMoment(${i})" class="phone-moment-action-btn">${_uiIcon('share', 12)} 分享</button>
+            <button type="button" onclick="Phone._deleteNpcMoment(${i})" class="phone-moment-action-btn danger">${_uiIcon('trash', 12)} 删除</button>
           </div>
           ${commentsHtml(m.comments)}
         </div>
@@ -2061,6 +2064,47 @@ ${wvPrompt}` },
     pd.moments.splice(index, 1);
     await _savePhoneData();
     _log('删除了一条好友圈动态');
+    UI.showToast('已删除', 1000);
+    _renderMoments(pd);
+  }
+
+  // v687.34：编辑我的动态
+  async function _editMyMoment(index) {
+    const pd = await _getPhoneData();
+    const m = pd?.moments?.[index];
+    if (!m) return;
+    const newText = await UI.showSimpleInput('编辑动态', m.text || '', { multiline: true, rows: 5, minHeight: '120px' });
+    if (newText === null || newText === undefined) return; // 取消
+    if (!newText.trim()) { UI.showToast('内容不能为空', 1200); return; }
+    m.text = newText.trim();
+    await _savePhoneData();
+    _log('编辑了一条好友圈动态');
+    UI.showToast('已保存', 900);
+    _renderMoments(pd);
+  }
+
+  // v687.34：编辑好友动态（NPC）
+  async function _editNpcMoment(index) {
+    const pd = await _getPhoneData();
+    const m = pd?.npcMoments?.[index];
+    if (!m) return;
+    const newText = await UI.showSimpleInput(`编辑 ${m.npc || 'NPC'} 的动态`, m.text || '', { multiline: true, rows: 5, minHeight: '120px' });
+    if (newText === null || newText === undefined) return;
+    if (!newText.trim()) { UI.showToast('内容不能为空', 1200); return; }
+    m.text = newText.trim();
+    await _savePhoneData();
+    UI.showToast('已保存', 900);
+    _renderMoments(pd);
+  }
+
+  // v687.34：删除好友动态（NPC）
+  async function _deleteNpcMoment(index) {
+    const pd = await _getPhoneData();
+    const m = pd?.npcMoments?.[index];
+    if (!m) return;
+    if (!await UI.showConfirm('删除动态', `确定删除 ${m.npc || 'NPC'} 的这条动态？`)) return;
+    pd.npcMoments.splice(index, 1);
+    await _savePhoneData();
     UI.showToast('已删除', 1000);
     _renderMoments(pd);
   }
@@ -2548,7 +2592,15 @@ ${wvPrompt}` },
       ? `\n\n【禁止冒充玩家】玩家角色"${userName}"绝对不能作为动态发布者出现，也不能作为任何评论者出现（包括路人评论）。评论者 name 字段不允许是"${userName}"，也不允许任何评论以"我"（指代玩家）的口吻发布。玩家会自己评论，不需要 AI 代劳。`
       : '\n\n【禁止冒充玩家】不要让玩家角色作为动态发布者或评论者，也不要让任何角色冒充用户/玩家发言。';
     
-    const systemPrompt = `根据以下世界观、NPC资料和剧情，生成${wantCount}条NPC的社交媒体动态。从NPC列表中随机挑选，内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。允许同一NPC发多条动态，但发布时间必须不同（互相错开至少几十分钟）。每条带1-3条路人或者与该NPC有关的其他NPC的评论，若NPC相互不认识或没有交集，可以仅路人评论。${nameConstraint}${userBan}
+    const systemPrompt = `根据以下世界观、NPC资料和剧情，生成${wantCount}条NPC的社交媒体动态。从NPC列表中随机挑选，内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。允许同一NPC发多条动态，但发布时间必须不同（互相错开至少几十分钟）。每条带1-3条路人或者与该NPC有关的其他NPC的评论，若NPC相互不认识或没有交集，可以仅路人评论。
+
+【角色个性化要求】
+发布内容必须符合该角色的人物个性、说话习惯和措辞风格。每条动态都要站在角色的角度考虑用词——好友圈是公开的社交空间，角色会展示愿意展示的一面，回避不愿意公开的部分。注意区分：
+- 外向/话痨型角色可能发长段感想、分享日常细节
+- 内敛/高冷型角色可能只发简短一句话、或只发图不说话
+- 有秘密的角色会刻意回避某些话题、用暧昧的措辞一笔带过
+- 角色之间的评论互动也要体现关系亲疏和各自的说话风格
+不要让所有角色的语气都一样。${nameConstraint}${userBan}
 
 时间要求：每条动态必须带发布时间 time，格式为“YYYY.MM.DD 星期X HH:mm”。发布时间必须在当前/截止剧情最新时间之前，且不早于该时间前7天；禁止生成未来时间。若能从上下文中的【当前游戏时间】读取到时间，就以它为基准生成；如果无法确定具体剧情日期，也要使用世界观/状态栏中能推断出的最新时间附近的过去7天内时间。
 
@@ -2738,7 +2790,10 @@ ${fullCtx}`;
       ? `\n\n【禁止冒充玩家】玩家角色"${userName}"绝对不能作为动态发布者出现，也不能作为任何评论者出现。`
       : '\n\n【禁止冒充玩家】不要让玩家角色作为动态发布者或评论者。';
 
-    const systemPrompt = `根据以下世界观、NPC资料和剧情，生成${wantCount}条NPC的社交媒体动态。从NPC列表中随机挑选，内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。允许同一NPC发多条动态，但发布时间必须不同（互相错开至少几十分钟）。每条带1-3条路人或者与该NPC有关的其他NPC的评论。${nameConstraint}${userBan}
+    const systemPrompt = `根据以下世界观、NPC资料和剧情，生成${wantCount}条NPC的社交媒体动态。从NPC列表中随机挑选，内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。允许同一NPC发多条动态，但发布时间必须不同（互相错开至少几十分钟）。每条带1-3条路人或者与该NPC有关的其他NPC的评论。
+
+【角色个性化要求】
+发布内容必须符合该角色的人物个性、说话习惯和措辞风格。好友圈是公开的社交空间，角色会展示愿意展示的一面，回避不愿意公开的部分。内敛角色可能只发一句话，话痨角色可能长篇大论，有秘密的角色会刻意回避。评论互动也要体现关系亲疏和各自说话风格。不要让所有角色语气一样。${nameConstraint}${userBan}
 
 时间要求：每条动态必须带发布时间 time，格式为"YYYY.MM.DD 星期X HH:mm"。发布时间必须在当前/截止剧情最新时间之前，且不早于该时间前7天；禁止生成未来时间。
 
@@ -5342,7 +5397,7 @@ async function buildHeartsimServiceChatForBackstage() {
     _addMemo, _editMemo, _saveMemo, _deleteMemo, _shareMemo, _collectMemo,
     _forumRefresh, _forumSearch, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,
     _switchForumTab, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
-    _postMoment, _onMomentImagePicked, _toggleImageDesc, _submitMoment, _shareMoment, _collectMyMoment, _deleteMyMoment, _shareNpcMoment, _refreshMomentComments, _refreshNpcMoments,
+    _postMoment, _onMomentImagePicked, _toggleImageDesc, _submitMoment, _shareMoment, _collectMyMoment, _editMyMoment, _deleteMyMoment, _shareNpcMoment, _refreshMomentComments, _refreshNpcMoments, _editNpcMoment, _deleteNpcMoment,
 _openMomentVisibleModal, _closeMomentVisibleModal, _filterMomentVisibleOptions, _toggleMomentVisibleOption, _setMomentVisibleAll,
 _onMomentsConfigCountChange, _onMomentsConfigImgChange, _onMomentsConfigStorageChange,
 _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
