@@ -421,14 +421,9 @@ async function init() {
     const allArchives = await DB.getAll('archives');
     for (const arch of allArchives) { if (arch.conversationId === id) await DB.del('archives', arch.id); }
 
-    if (conv?.branchMaskId) {
-      try { await DB.del('characters', conv.branchMaskId); } catch(e) {}
-      const maskData = await DB.get('gameState', 'maskList');
-      const masks = maskData?.value || [];
-      await DB.put('gameState', { key: 'maskList', value: masks.filter(m => m.id !== conv.branchMaskId) });
-      const allMems = await DB.getAll('memories');
-      for (const mem of allMems) { if (mem.scope === conv.branchMaskId) await DB.del('memories', mem.id); }
-    }
+    // v687.38：删除分支对话时不再自动删除对应的分支面具
+    // 用户可能想保留面具继续使用
+    // if (conv?.branchMaskId) { ... }
 
     list = list.filter(c => c.id !== id);
     if (currentId === id) {

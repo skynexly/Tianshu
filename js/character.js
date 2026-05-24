@@ -2,7 +2,7 @@
  * 面具（角色卡）管理 — 多面具支持
  */
 const Character = (() => {
-  const BASIC_FIELDS = ['name', 'background'];
+  const BASIC_FIELDS = ['name', 'background', 'note'];
   let currentMaskId = 'default';
   let editingMaskId = null; // 当前在弹窗中编辑的面具
 
@@ -136,8 +136,9 @@ async function _getMasksForCurrentWv() {
     const renderCard = async (m) => {
       const data = await DB.get('characters', m.id);
       const avatarSrc = data?.avatar || '';
+      const note = data?.note || m.note || '';
       const background = data?.background || '';
-      const preview = background ? (background.length > 80 ? background.slice(0, 80) + '...' : background) : '暂无设定';
+      const preview = note || (background ? (background.length > 80 ? background.slice(0, 80) + '...' : background) : '暂无设定');
       const checked = selectedIds.has(m.id);
       return `
         <div class="card mask-card-item" data-id="${m.id}" onclick="Character._onCardClick('${m.id}')" style="display:flex;gap:12px;padding:12px;align-items:center;background:var(--bg-tertiary);cursor:pointer;">
@@ -395,6 +396,12 @@ async function _getMasksForCurrentWv() {
             entry.name = data.name.trim();
             dirty = true;
           }
+          // 同步备注
+          const newNote = (data.note || '').trim();
+          if ((entry.note || '') !== newNote) {
+            entry.note = newNote;
+            dirty = true;
+          }
           // 同步"所属世界观"下拉到 maskList 上
           const wvSel = document.getElementById('char-worldview');
           const wvVal = wvSel ? String(wvSel.value || '') : '';
@@ -638,6 +645,8 @@ if (placeholder) placeholder.style.display = '';
     const entry = list.find(m => m.id === editingMaskId);
     if (entry) {
       if (data.name) entry.name = data.name;
+      // 同步备注
+      entry.note = data.note || '';
       // 同步"所属世界观"下拉
       const wvSel = document.getElementById('char-worldview');
       const wvVal = wvSel ? String(wvSel.value || '') : '';
@@ -1083,8 +1092,13 @@ async function closeItemModal() {
     const srcName = srcEntry?.name || src.name || '面具';
     const rootName = _stripBranchSuffix(srcName) || '面具';
     const cloneName = _nextBranchName(rootName, list);
-    list.push({ id: newMaskId, name: cloneName });
+    // 提取分支编号作为默认备注
+    const branchMatch = cloneName.match(/分支(\d+)/);
+    const defaultNote = branchMatch ? `分支${branchMatch[1]}` : '';
+    list.push({ id: newMaskId, name: cloneName, note: defaultNote });
     await saveMaskList(list);
+    // 同步备注到角色数据
+    if (defaultNote) { cloned.note = defaultNote; await DB.put('characters', cloned); }
     return cloned;
   }
 

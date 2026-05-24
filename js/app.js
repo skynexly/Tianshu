@@ -78,6 +78,21 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
   // 快速切换栏
   try { await Chat.renderQuickSwitches(); } catch(e) { console.error('[QuickSwitch]', e); }
 
+  // v687.37：iOS PWA 锁屏恢复后面具同步
+  // iOS Safari 会在锁屏/切后台时杀 PWA 进程，恢复时页面完全重载走 init；
+  // 但某些情况下 JS 上下文保留但内存变量丢失（soft kill），此时走 visibilitychange 恢复
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible') return;
+    try {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      const expectedMaskId = conv?.maskId || conv?.branchMaskId;
+      if (expectedMaskId && expectedMaskId !== Character.getCurrentId()) {
+        console.log('[App] visibilitychange: 面具漂移修复', Character.getCurrentId(), '->', expectedMaskId);
+        await Character.switchMask(expectedMaskId, false);
+      }
+    } catch(e) { console.warn('[App] visibilitychange mask sync failed', e); }
+  });
+
   // 输入框高度自适应
   try {
     const input = document.getElementById('chat-input');
@@ -157,10 +172,14 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v687.37';
-const CHANGELOG = `【v687.37 解析兜底 + 防转述加强】
-· 气泡渲染：AI漏写分隔符时自动识别底部代码块（新获得物品/当前相关角色/角色变化）
-· 防转述加强：禁止角色"在口中过了一遍"式回显 + 禁止擅自描写玩家未设定的习惯/神态/情绪
+    const APP_VERSION = 'v687.38';
+    const CHANGELOG = `【v687.38 面具备注 + iOS恢复 + 后台修复】
+· 面具编辑新增"备注"栏（分支时自动写入"分支1""分支2"等，可自行修改）
+· 面具卡片优先显示备注内容
+· 删除分支对话不再自动删除对应面具
+· iOS锁屏恢复后自动同步回正确面具（visibilitychange）
+· 后台频道：cancel强制清理所有锁状态（修复发送按钮锁死）
+· 后台频道：think/thinking标签内容折叠渲染
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

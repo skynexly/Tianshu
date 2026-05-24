@@ -66,11 +66,25 @@ return;
 }
 container.innerHTML = messages.map(m => {
       const isUser = m.role === 'user';
+      // v687.37：提取 <think>/<thinking> 内容，做折叠栏
+      let displayContent = m.content || '';
+      let thinkingHtml = '';
+      if (!isUser && displayContent) {
+        const thinkParts = [];
+        displayContent = displayContent.replace(/<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi, (_, inner) => {
+          if (inner.trim()) thinkParts.push(inner.trim());
+          return '';
+        });
+        if (thinkParts.length > 0) {
+          const thinkText = Utils.escapeHtml(thinkParts.join('\n\n'));
+          thinkingHtml = `<details class="thinking-block" style="margin-bottom:8px"><summary style="cursor:pointer;font-size:12px;color:var(--text-secondary);user-select:none">💭 思考过程</summary><pre style="white-space:pre-wrap;font-size:12px;color:var(--text-secondary);margin:6px 0 0;max-height:200px;overflow-y:auto">${thinkText}</pre></details>`;
+        }
+      }
       const contentHtml = isUser
         ? Utils.escapeHtml(m.content)
-        : (m.content
-          ? Markdown.render(m.content)
-          : '<div class="typing-indicator"><span></span><span></span><span></span></div>');
+        : (displayContent.trim()
+          ? thinkingHtml + Markdown.render(displayContent)
+          : (thinkingHtml || '<div class="typing-indicator"><span></span><span></span><span></span></div>'));
       // v687.7：工具使用尾巴（仅 AI 消息）
       const hasLog = !isUser && m.toolsLog && m.toolsLog.length > 0;
       const toolsTail = (!isUser && m.toolsUsed > 0)
@@ -153,10 +167,12 @@ const container = document.getElementById('backstage-messages');
 
   // 终止当前生成
   function cancel() {
-    if (abortCtrl && isStreaming) {
+    if (abortCtrl) {
       try { abortCtrl.abort(); } catch(e) {}
     }
+    // v687.37：强制清理所有锁状态（防止 API 未响应时 abort 被吞导致锁死）
     isStreaming = false;
+    _sendLock = false;
     abortCtrl = null;
     document.getElementById('backstage-fab')?.classList.remove('generating');
     _updateSendButton();
