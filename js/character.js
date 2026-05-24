@@ -787,9 +787,10 @@ if (placeholder) placeholder.style.display = '';
     return displayList.map(m => {
       const isActive = m.id === currentMaskId;
       const foreignMark = m._foreign ? '<span style="opacity:0.6;margin-right:4px" title="非当前世界观面具">✻</span>' : '';
-      let btn = `<button onclick="Character.switchMask('${m.id}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};background:${isActive ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isActive ? '#111' : 'var(--text-secondary)'};cursor:pointer;font-size:12px;display:inline-flex;align-items:center">${foreignMark}${Utils.escapeHtml(m.name)}`;
+      const noteText = m.note ? `<span style="display:block;font-size:10px;opacity:0.65;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px">${Utils.escapeHtml(m.note)}</span>` : '';
+      let btn = `<button onclick="Character.switchMask('${m.id}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};background:${isActive ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isActive ? '#111' : 'var(--text-secondary)'};cursor:pointer;font-size:12px;display:inline-flex;align-items:center;flex-direction:column">${foreignMark}<span>${Utils.escapeHtml(m.name)}</span>${noteText}`;
       if (isActive) {
-        btn += `<span onclick="event.stopPropagation();Character.openEdit('${m.id}')" style="cursor:pointer;opacity:0.7;margin-left:2px" title="编辑面具">${editSvg}</span>`;
+        btn += `<span onclick="event.stopPropagation();Character.openEdit('${m.id}')" style="cursor:pointer;opacity:0.7;margin-left:2px;position:absolute;top:2px;right:2px" title="编辑面具">${editSvg}</span>`;
       }
       btn += `</button>`;
       return btn;
