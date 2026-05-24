@@ -921,7 +921,7 @@ if (char) systemParts.push(Character.formatForPrompt(char));
     const _constraintDepth0 = [];
     const _constraintDepth3 = [];
     if (convSettings.constraintEcho) {
-      _constraintDepth0.push('【禁止】不要代替{{user}}说话、行动或做决定。不要转述、复述、引用或加工{{user}}上一条消息的内容。{{user}}说了什么由{{user}}自己表达，你只需要描写{{user}}行为带来的影响，如NPC的反应、环境变化等等，请根据{{user}}的行动继续向后推动情节。禁止通过描写"{{user}}沉默/没有回应"来跳过{{user}}的行动，需要{{user}}做出反应的部分必须等待回复。如果{{user}}的回复中仅动作无语言，视作其并未说话。若仅语言无动作，也无需扩展{{user}}的动作，忽略这个部分即可。');
+    _constraintDepth0.push('【禁止】不要代替{{user}}说话、行动或做决定。不要转述、复述、引用或加工{{user}}上一条消息的内容，不要通过旁白，如"你的那句…"、"你的那声…"等类似表达重复{{user}}说过的话，更不要通过角色重复或反问任何{{user}}的语言。{{user}}说了什么由{{user}}自己表达，你只需要描写{{user}}行为带来的影响，如NPC的反应、环境变化等等，请根据{{user}}的行动继续向后推动情节。禁止通过描写"{{user}}沉默/没有回应"来跳过{{user}}的行动，需要{{user}}做出反应的部分必须等待回复。如果{{user}}的回复中仅动作无语言，视作其并未说话。若仅语言无动作，也无需扩展{{user}}的动作，忽略这个部分即可。');
     }
     if (convSettings.constraintSublime) {
       systemParts.push('回复结尾禁止进行主题升华、情感总结、哲理收束或抽象抒情。不要用"夜还很长""一切似乎刚刚开始""仿佛……""某种无法言说的……"之类的文学套话收尾。场景在哪里就停在哪里——以角色的具体动作、对白或环境的即时状态结束，保持叙事在当下，为{{user}}的下一步行动留出空间。');
@@ -1005,12 +1005,12 @@ if (char) systemParts.push(Character.formatForPrompt(char));
           // 世界观已在 step 1 被替换为 HS_HOMECOMING_WORLD_SETTING
           systemParts.push('[心动模拟·已返航（继续日常模式）]\n不要再在回复中输出 ```relation``` / ```task``` / ```chat``` / ```homecoming``` 等心动模拟专用代码块。\n不再有任务系统、好感度系统的概念。当前世界观已切换为返航后的现实世界。');
 } else if (_hsPostHomeMode === 'end') {
-                // "到此结束"模式：世界观保留（方便复盘），但 AI 停止扮演，切 OOC 复盘
-                systemParts.push('[心动模拟·到此结束（复盘模式）]\n剧情已正式结束。你现在不再扮演任何角色，不再推进剧情。\n{{user}}可以和你自由聊天：复盘剧情、讨论角色设定、分享感受、吐槽。\n你的语气就像后台频道一样自然——作为创作者或观众和{{user}}平等对话。\n不需要输出 status / relation / task / chat / homecoming 等任何格式代码块。\n回复中不需要遵循回复格式。自由回应即可。');
+    // "到此结束"模式：世界观保留（方便复盘），但 AI 停止扮演
+    systemParts.push('[心动模拟·已结束]\n心动模拟的剧情已正式结束，{{user}}选择了到此结束。不需要继续扮演角色或推进剧情。\n如果{{user}}想聊这段剧情里发生过的事、或者随便聊什么，自然回应就好。\n不需要输出 status / relation / task / chat / homecoming 等格式代码块，不需要遵循回复格式。');
               } else if (_hsPostHomeMode === 'epilogue') {
-                // 第二部钩子已触发：剧情彻底结束，AI 切 OOC 复盘（与 end 模式效果一致）
-                // 注意：不要向{{user}}主动提起刚才发生的钩子动画——AI 完全不知情
-                systemParts.push('[心动模拟·剧情终结（复盘模式）]\n第一部剧情已经彻底结束。你现在不再扮演任何角色，不再推进剧情。\n{{user}}可以和你自由聊天：复盘剧情、讨论角色设定、分享感受、吐槽。\n你的语气就像后台频道一样自然——作为创作者或观众和{{user}}平等对话。\n不需要输出 status / relation / task / chat / homecoming 等任何格式代码块。\n回复中不需要遵循回复格式。自由回应即可。');
+    // 第二部钩子已触发：剧情彻底结束
+    // 注意：不要向{{user}}主动提起刚才发生的钩子动画——AI 完全不知情
+    systemParts.push('[心动模拟·已结束]\n心动模拟的剧情已彻底结束。不需要继续扮演角色或推进剧情。\n如果{{user}}想聊这段剧情里发生过的事、或者随便聊什么，自然回应就好。\n不需要输出 status / relation / task / chat / homecoming 等格式代码块，不需要遵循回复格式。');
               } else if (_hsPostHomeMode === 'companion') {
                 // 共同返航结局：带着心动目标回到了用户原本的世界
                 // 不替换世界观、不停止扮演、不屏蔽被带回的角色，只告诉 AI 发生了什么
@@ -1046,7 +1046,7 @@ if (char) systemParts.push(Character.formatForPrompt(char));
         if (!_hsHomecoming && typeof StatusBar !== 'undefined' && StatusBar.hsCheckClearCondition) {
           const check = StatusBar.hsCheckClearCondition();
           if (check && check.passed) {
-            systemParts.push('[心动模拟·返航触发协议]\n玩家已达成回家条件。当玩家在剧情里真正回到自己原本的世界、彻底从心动模拟中醒来后，请在该轮回复的最末尾追加一个 ```homecoming``` 代码块作为信号——前端识别到该信号后会接管展示返航过场动画。在那一轮之前请正常推进剧情，玩家可能还有未完成的事情想交代；不要在尚未真正"回到家中醒来"之前提前输出该 marker。该 marker 一旦输出过一次，前端会接管后续展示，不需要再重复输出。\n\n特殊情况：如果玩家带着某位心动目标一起返航（通过心跳悦动059协助签署认领协议），则 homecoming 代码块内写 JSON：```homecoming\n{"companion":"角色名"}\n```\n这样前端会识别为"共同返航"，不触发返航动画，直接进入两人在现实世界的生活。');
+            systemParts.push('[心动模拟·返航触发协议]\n玩家已达成回家条件。当玩家在剧情里真正回到自己原本的世界、彻底从心动模拟中醒来后，请在该轮回复的最末尾追加一个 ```homecoming``` 代码块作为信号——前端识别到该信号后会接管展示返航过场动画。在那一轮之前请正常推进剧情，玩家可能还有未完成的事情想交代；不要在尚未真正"回到家中醒来"之前提前输出该 marker。如果上下文中存在过返航相关的剧情描写，但你没有找到实际输出过的 ```homecoming``` 代码块，说明玩家回溯了剧情，返航流程需要重新走一次——请当作之前的返航从未发生过，重新推进。\n\n特殊情况：如果玩家带着某位心动目标一起返航（通过心跳悦动059协助签署认领协议），则 homecoming 代码块内写 JSON：```homecoming\n{"companion":"角色名"}\n```\n这样前端会识别为"共同返航"，不触发返航动画，直接进入两人在现实世界的生活。');
           }
         }
       } catch(_) {}

@@ -145,6 +145,11 @@
       if (!btn) return;
       e.stopPropagation();
       const choice = btn.dataset.choice;
+      // 二次确认
+      const confirmMsg = choice === 'continue'
+        ? '将继续演绎回到家后的日常生活，剧情继续推进。确定选择？'
+        : '将终止扮演模式，但窗口保留，可以继续自由交流。确定选择？';
+      if (!await UI.showConfirm(choice === 'continue' ? '继续日常' : '到此结束', confirmMsg)) return;
       // 防重复点击
       btnWrap.querySelectorAll('button').forEach(b => b.disabled = true);
       try {

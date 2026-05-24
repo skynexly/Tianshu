@@ -5369,6 +5369,15 @@ async function buildHeartsimServiceChatForBackstage() {
       if (currentPd.wallpaper) restored.wallpaper = currentPd.wallpaper;
       // moments 和 hsAppTargets 的图片不回填——因为回滚后可能那些 moment 还没发过
       conv.phoneData = restored;
+      // v687.35：回溯后如果返航动画尚未触发，重置整个返航流程的 flag
+      // 让通关提醒 → 客服回家指令 → AI输出marker → 动画 可以完整重走
+      if (!restored.hsHomecomingTriggered) {
+        restored.hsHomeReadyNotified = false;
+        restored.hsHomeRequestSent = false;
+        restored.hsPostHomeMode = null;
+        restored.hsCompanion = '';
+        restored.hsPendingHomeNotice = '';
+      }
       await Conversations.saveList();
       // 刷新内存中的 actionLog
       reloadActionLog();
