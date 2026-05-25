@@ -921,7 +921,7 @@ if (char) systemParts.push(Character.formatForPrompt(char));
     const _constraintDepth0 = [];
     const _constraintDepth3 = [];
     if (convSettings.constraintEcho) {
-    _constraintDepth0.push('<rules:叙述协议>\n\n【对{{user}}的描写】\n\n- **严禁事项**\n  - 生成剧情时，明确{{user}}为用户控制的角色，一切{{user}}的主动行为只能由用户本人输入，你不可代替用户描写{{user}}。\n  - 禁止描写{{user}}任何主动行为，包括但不限动作、神态、语言、情绪、内心活动、决策等。禁止生成以"你"、"{{user}}"、其他代指{{user}}的词汇作为主语的句子，例如"你点了点头"、"{{user}}接过了水"、"你表情呆滞"。也禁止省略主语，但依旧属于{{user}}主动行为的句子，如"走向玄关"、"打开包装"。\n  - 禁止描写或猜测{{user}}未在设定中写明的习惯和喜好（如口味、装修、音乐品味、财力等）。\n  - 禁止通过描写"{{user}}沉默/没有回应"来跳过{{user}}的行动，需要{{user}}做出反应的部分必须等待回复。\n\n- **允许事项**\n  - 你可以描写{{user}}行为带来的影响，如其他角色的反应、外部环境、行为后果等不属于{{user}}可以主观控制的内容。例如"门被推开了"、"NPC被吓了一跳"、"室内只有一把椅子"\n  - 用第三方视角描写其他角色对{{user}}的动作和观察，或环境对{{user}}造成的影响。例如"他看向{{user}}"、"狂风吹飞了帽子"、"阳光落在{{user}}的脸颊"\n\n- **补充说明**\n  - 如果{{user}}的回复中仅动作无语言，视作其并未说话；若仅语言无动作，也无需扩展{{user}}的动作，忽略即可。\n\n\n【对{{user}}的回应】\n\n- 回复时，严禁转述、复述、引用、扩写或加工{{user}}上一条消息的内容，不要通过旁白如"你的那句…""你的那声…"等类似表达重复{{user}}说过的话，更不要通过角色重复或反问任何{{user}}的语言，如"……在口中过了一遍""……重复了一遍"等。\n- 不得在正文中重复描述{{user}}已提及的行为，而是根据{{user}}的回复描写外部反应。\n- 严禁抬高、神化{{user}}任何的行为举止，严禁任何角色无端对{{user}}产生崇拜、痴迷、虔诚等情绪。\n- 不得以"等你回应"、"等待指令"等生硬描述作为结尾，应通过角色已完成的行为动作、语言、环境描写、情节转折等形成可以自然承接的结尾。\n\n</rules:叙述协议>');
+    _constraintDepth0.push('<rules:叙述协议>\n\n【对{{user}}的描写】\n\n- **严禁事项**\n  - 生成剧情时，明确{{user}}为用户控制的角色，一切{{user}}的主动行为只能由用户本人输入，你不可代替用户描写{{user}}。\n  - 禁止描写{{user}}任何主动行为，包括但不限动作、神态、语言、情绪、内心活动、决策等。禁止生成以"你"、"{{user}}"、其他代指{{user}}的词汇作为主语的句子，例如"你点了点头"、"{{user}}接过了水"、"你表情呆滞"。也禁止省略主语，但依旧属于{{user}}主动行为的句子，如"走向玄关"、"打开包装"。\n  - 禁止描写或猜测{{user}}未在设定中写明的习惯和喜好（如口味、装修、音乐品味、财力等）。\n  - 禁止通过描写"{{user}}沉默/没有回应"来跳过{{user}}的行动，需要{{user}}做出反应的部分必须等待回复。\n\n- **允许事项**\n  - 你可以描写{{user}}行为带来的影响，如其他角色的反应、外部环境、行为后果等不属于{{user}}可以主观控制的内容。例如"门被推开了"、"NPC被吓了一跳"、"室内只有一把椅子"\n  - 用第三方视角描写其他角色对{{user}}的动作和观察，或环境对{{user}}造成的影响。例如"他看向{{user}}"、"狂风吹飞了帽子"、"阳光落在{{user}}的脸颊"\n\n- **补充说明**\n  - 如果{{user}}的回复中仅动作无语言，视作其并未说话；若仅语言无动作，也无需扩展{{user}}的动作，忽略即可。\n\n\n【对{{user}}的回应】\n\n- 回复时，严禁转述、复述、引用、扩写或加工{{user}}上一条消息的内容，不要通过旁白如"你的那句…""你的那声…"等类似表达重复{{user}}说过的话，更不要通过角色重复或反问任何{{user}}的语言，如"……在口中过了一遍""……重复了一遍"等。\n- 不得在正文中重复描述{{user}}已提及的行为，而是根据{{user}}的回复描写外部反应。\n- 严禁抬高、神化{{user}}的行为举止，角色对{{user}}的情绪反应必须有合理的剧情动机，不得无端产生过度的情绪反应。\n- 不得以"等你回应"、"等待指令"等生硬描述作为结尾，应通过角色已完成的行为动作、语言、环境描写、情节转折等形成可以自然承接的结尾。\n\n</rules:叙述协议>');
   }
     if (convSettings.constraintSublime) {
       systemParts.push('回复结尾禁止进行主题升华、情感总结、哲理收束或抽象抒情。不要用"夜还很长""一切似乎刚刚开始""仿佛……""某种无法言说的……"之类的文学套话收尾。场景在哪里就停在哪里——以角色的具体动作、对白或环境的即时状态结束，保持叙事在当下，为{{user}}的下一步行动留出空间。');
@@ -1005,7 +1005,7 @@ if (char) systemParts.push(Character.formatForPrompt(char));
             const lastTriggered = _conv?.lastAntiClicheAt ?? -10;
             const cooldownPassed = (aiMsgCount - lastTriggered) >= 4;
             if (cooldownPassed) {
-              _constraintDepth3.push('<rules:创新回复要求>\n接下来，请用更创新的方式进行回复，回顾历史消息，在新回复时注意以下部分。\n①段落结构——不要每轮都用相同的段落排列模式，变换节奏和结构；\n②感官描写——如果前几轮已经提到过气味、嗓音质感、外貌特征，这一轮跳过或换一个全新的感官细节，不要每轮都重复同一组；\n③肢体动作——不要反复使用同类小动作，换用不同的身体语言或干脆让角色安静不动；\n④情绪状态——不要让角色锁死在单一极端情绪中，让情绪随剧情自然流动、被打断或转移；\n⑤描写角度——尝试切换到环境、对话节奏、情绪状态、安静留白等不同切入点。\n⑥语言描写——不用重复使用一样的句式和语癖。\n</rules:创新回复要求>');
+              _constraintDepth3.push('<rules:创新回复要求>\n接下来，请用更创新的方式进行回复，回顾历史消息，在新回复时注意以下部分。\n①段落结构——不要每轮都用相同的段落排列模式，变换节奏和结构；\n②感官描写——如果前几轮已经提到过气味、嗓音质感、外貌特征，这一轮跳过或换一个全新的感官细节，不要每轮都重复同一组；\n③肢体动作——不要反复使用同类小动作，换用不同的身体语言或干脆让角色安静不动；\n④情绪状态——不要让角色锁死在单一极端情绪中，让情绪随剧情自然流动、被打断或转移；\n⑤描写角度——尝试切换到环境、对话节奏、情绪状态、安静留白等不同切入点。\n⑥语言描写——不要重复使用一样的句式和语癖。\n</rules:创新回复要求>');
               if (_conv) {
                 _conv.lastAntiClicheAt = aiMsgCount;
                 try { Conversations.saveList(); } catch(_) {}
@@ -1081,7 +1081,7 @@ if (char) systemParts.push(Character.formatForPrompt(char));
         if (!_hsHomecoming && typeof StatusBar !== 'undefined' && StatusBar.hsCheckClearCondition) {
           const check = StatusBar.hsCheckClearCondition();
           if (check && check.passed) {
-            systemParts.push('[心动模拟·返航触发协议]\n玩家已达成回家条件。当玩家在剧情里真正回到自己原本的世界、彻底从心动模拟中醒来后，请在该轮回复的最末尾追加一个 ```homecoming``` 代码块作为信号——前端识别到该信号后会接管展示返航过场动画。在那一轮之前请正常推进剧情，玩家可能还有未完成的事情想交代；不要在尚未真正"回到家中醒来"之前提前输出该 marker。如果上下文中存在过返航相关的剧情描写，但你没有找到实际输出过的 ```homecoming``` 代码块，说明玩家回溯了剧情，返航流程需要重新走一次——请当作之前的返航从未发生过，重新推进。\n\n特殊情况：如果玩家带着某位心动目标一起返航（通过心跳悦动059协助签署认领协议），则 homecoming 代码块内写 JSON：```homecoming\n{"companion":"角色名"}\n```\n这样前端会识别为"共同返航"，不触发返航动画，直接进入两人在现实世界的生活。');
+            systemParts.push('[心动模拟·返航触发协议]\n玩家已达成回家条件。返航分为两种情况：\n\n**独自返航**：当玩家在剧情里真正回到自己原本的世界、彻底从心动模拟中醒来后，请在该轮回复的最末尾追加一个空的 ```homecoming``` 代码块作为信号——前端识别到该信号后会接管展示返航过场动画。在那一轮之前请正常推进剧情，玩家可能还有未完成的事情想交代；不要在尚未真正"回到家中醒来"之前提前输出该 marker。\n\n**共同返航**：如果玩家通过心跳悦动059协助签署了心动目标认领协议，要带着某位心动目标一起离开，则在签署协议完成的那一轮回复末尾立即输出带 companion 的 homecoming 代码块：```homecoming\n{"companion":"角色名"}\n```\n前端会识别为"共同返航"，不触发返航动画，直接进入两人在现实世界的生活。不需要等到"回到家醒来"——签完协议就是触发点。\n\n如果上下文中存在过返航相关的剧情描写，但你没有找到实际输出过的 ```homecoming``` 代码块，说明玩家回溯了剧情，返航流程需要重新走一次——请当作之前的返航从未发生过，重新推进。');
           }
         }
       } catch(_) {}
@@ -1687,7 +1687,7 @@ const msgEl = appendMessage(aiMsg, true, true);
     let retryCount = 0;
     const maxRetries = 3;
 
-    async function _doStream() {
+    async function _doStream(prefixContent) {
       try { GameLog.log('info', '[Chat] 开始调用 API.streamChat'); } catch(_) {}
       return new Promise((resolve, reject) => {
         // v687.6：工具调用迭代计数（最高 5 次）
@@ -1698,7 +1698,8 @@ const msgEl = appendMessage(aiMsg, true, true);
         // v687.8：工具调用日志（args/result 存档，UI 可点开看）
         const _toolsLog = [];
         // v687.11：累积"工具调用前 AI 已说过的话"（fullContent 每轮 streamChat 会重置，这里跨轮拼接）
-        let _priorContent = '';
+        // v687.41：断点续传时接收前缀
+        let _priorContent = prefixContent || '';
 
         // 工具集闭包：根据对话设置过滤启用项 + MCP 外置工具（v687.23）
         const _enabledTools = (() => {
@@ -1869,14 +1870,12 @@ const msgEl = appendMessage(aiMsg, true, true);
                 const triggered = await Phone.isHsHomecomingTriggered();
                 if (!triggered) {
                   if (parsed.homecomingCompanion) {
-                    // v687.33：共同返航结局——静默标记，不播动画，不弹按钮
+                    // v687.41：共同返航结局——播穿越动画
                     try {
-                      await Phone.markHsHomecomingTriggered([]);
-                      const pd = (typeof Phone._getPhoneData === 'function') ? await Phone._getPhoneData() : null;
-                      if (pd) {
-                        pd.hsPostHomeMode = 'companion';
-                        pd.hsCompanion = parsed.homecomingCompanion; // 记录带了谁回来
-                        await Conversations.saveList();
+                      if (typeof HeartSimCompanion !== 'undefined') {
+                        setTimeout(() => {
+                          try { HeartSimCompanion.play(parsed.homecomingCompanion); } catch(e) { console.warn('[HSCompanion] play failed', e); }
+                        }, 1500);
                       }
                     } catch(_) {}
                   } else if (typeof HeartSimHomecoming !== 'undefined') {
@@ -2050,24 +2049,43 @@ const msgEl = appendMessage(aiMsg, true, true);
     }
 
     // 重试循环
+    let _retryPrefix = ''; // v687.41：断点续传前缀
     while (retryCount < maxRetries) {
       try {
-        await _doStream();
+        await _doStream(_retryPrefix);
         break; // 成功，退出循环
       } catch(err) {
         retryCount++;
+        const partialContent = aiMsg.content || '';
         if (retryCount >= maxRetries) {
           // 三次都失败
-          contentEl.innerHTML = `<p style="color:var(--danger)">生成失败（已重试${maxRetries}次）：${Utils.escapeHtml(err.message)}</p>`;
+          if (partialContent) {
+            // 保留已输出的半截内容，不清空
+            contentEl.innerHTML = Markdown.render(partialContent) +
+              `<p style="color:var(--danger);font-size:12px;margin-top:8px">⚠ 网络中断，已保留已输出内容（可点击"继续生成"接续）</p>`;
+          } else {
+            contentEl.innerHTML = `<p style="color:var(--danger)">生成失败（已重试${maxRetries}次）：${Utils.escapeHtml(err.message)}</p>`;
+          }
           GameLog.log('error', `streamChat失败（${maxRetries}次）: ${err.message}`);
-          UI.showToast(`生成失败，已重试${maxRetries}次`, 4000);
+          UI.showToast(partialContent ? '网络中断，已保留已输出内容' : `生成失败，已重试${maxRetries}次`, 4000);
         } else {
           // 还有重试机会
-          UI.showToast(`生成失败，正在重试（${retryCount}/${maxRetries}）…`, 3000);
-          GameLog.log('warn', `streamChat失败第${retryCount}次: ${err.message}，重试中…`);
-          aiMsg.content = '';
-          contentEl.innerHTML = `<p style="color:var(--text-secondary);font-size:12px">生成失败，正在重试（${retryCount}/${maxRetries}）…</p>`;
-          await new Promise(r => setTimeout(r, 1500)); // 等1.5秒再重试
+          if (partialContent) {
+            // v687.41：断点续传——保留已输出内容，把半截回复当 assistant 前缀
+            GameLog.log('info', `[Chat] 断点续传：已有 ${partialContent.length} 字，作为前缀重试`);
+            UI.showToast(`网络波动，正在接续生成（${retryCount}/${maxRetries}）…`, 3000);
+            _retryPrefix = partialContent;
+            // 在 apiMessages 末尾追加半截 assistant 消息，让 AI 从断点接着写
+            apiMessages.push({ role: 'assistant', content: partialContent });
+            await new Promise(r => setTimeout(r, 2000)); // 等2秒让网络切换完成
+          } else {
+            // 还没开始流就挂了，正常重试
+            UI.showToast(`生成失败，正在重试（${retryCount}/${maxRetries}）…`, 3000);
+            GameLog.log('warn', `streamChat失败第${retryCount}次: ${err.message}，重试中…`);
+            aiMsg.content = '';
+            contentEl.innerHTML = `<p style="color:var(--text-secondary);font-size:12px">生成失败，正在重试（${retryCount}/${maxRetries}）…</p>`;
+            await new Promise(r => setTimeout(r, 1500)); // 等1.5秒再重试
+          }
         }
       }
     }
@@ -3080,10 +3098,10 @@ exitMultiSelect();
     const afterCount = messages.length - idx - 1;
     if (afterCount > 0 && !await UI.showConfirm('确认回溯', `将删除此消息之后的 ${afterCount} 条消息并回溯，确定？`)) return;
 
-    // 把该消息内容放回发送框
+    // 把该消息内容放回发送框（用 content 而非 contentForAPI，避免系统注入内容暴露）
     const input = document.getElementById('chat-input');
     if (input) {
-      input.value = msg.contentForAPI || msg.content;
+      input.value = msg.content;
       input.style.height = 'auto';
       input.style.height = Math.min(input.scrollHeight, 120) + 'px';
     }
@@ -3133,15 +3151,15 @@ async function retractAI(msgId) {
     if (messages[i].role === 'user') { userMsg = messages[i]; break; }
   }
 
-  // 把用户消息内容放回发送框
-  if (userMsg) {
-    const input = document.getElementById('chat-input');
-    if (input) {
-      input.value = userMsg.contentForAPI || userMsg.content;
-      input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+// 把用户消息内容放回发送框（用 content 而非 contentForAPI，避免系统注入内容暴露）
+    if (userMsg) {
+      const input = document.getElementById('chat-input');
+      if (input) {
+        input.value = userMsg.content;
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+      }
     }
-  }
 
   // 仅删除AI本条消息
   await DB.del('messages', msgId);

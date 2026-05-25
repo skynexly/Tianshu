@@ -1905,7 +1905,7 @@ if (Array.isArray(hs.tasks)) {
       lines.push(`- 当前处于囚禁/失控剧情中，用户已经无法查看手机和心动模拟面板。`);
       lines.push(`- 不再向 AI 暴露好感度/黑化值/任务等数值，本轮也不要继续输出 relation/tasks 代码块。`);
       lines.push(`- 请围绕「${hs.phoneLock.lockedBy}」的占有/控制/独占来推进剧情。`);
-      lines.push(`- 仅当剧情发生重大转折（极少见，如${hs.phoneLock.lockedBy}主动归还、用户成功逃脱等），才在该轮回复末尾输出：\n\`\`\`phone-lock\nstatus: unlocked\n\`\`\`\n以解锁面板。`);
+      lines.push(`- 仅当「${hs.phoneLock.lockedBy}」主动将手机归还给{{user}}，或{{user}}通过自己的行动成功拿回手机时，才在该轮回复末尾输出：\n\`\`\`phone-lock\nstatus: unlocked\n\`\`\`\n以解锁面板。不要因为场景切换、时间跳跃、气氛缓和等原因自动解锁——只有上述两种情况才可以。`);
       return lines.join('\n');
     }
 

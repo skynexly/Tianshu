@@ -816,17 +816,18 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
     const maxRetries = 3;
     let retryCount = 0;
 
-    const _doStream = () => {
-      return new Promise((resolve) => {
-        // v687.6：工具调用迭代计数
-        let _toolIter = 0;
-        const _MAX_TOOL_ITER = 5;
-        // v687.7：工具调用累计计数
-        let _toolsUsedCount = 0;
-        // v687.8：工具日志
-        const _toolsLog = [];
-        // v687.11：累积工具调用前的内容
-        let _priorContent = '';
+    const _doStream = (prefixContent) => {
+    return new Promise((resolve) => {
+      // v687.6：工具调用迭代计数
+      let _toolIter = 0;
+      const _MAX_TOOL_ITER = 5;
+      // v687.7：工具调用累计计数
+      let _toolsUsedCount = 0;
+      // v687.8：工具日志
+      const _toolsLog = [];
+      // v687.11：累积工具调用前的内容
+      // v687.41：断点续传时接收前缀
+      let _priorContent = prefixContent || '';
         const bsSettings = _getSettings();
 
         // 工具集闭包
@@ -902,24 +903,39 @@ aiMsg.content = baseContent + fullContent;
         };
 
         const _onError = async (error) => {
-          if (error === 'AbortError') {
-            if (aiMsg.content) {
-              try { await DB.put('messages', aiMsg); } catch(e) {}
-            }
-            resolve('abort');
-            return;
+        if (error === 'AbortError') {
+          if (aiMsg.content) {
+            try { await DB.put('messages', aiMsg); } catch(e) {}
           }
-          retryCount++;
-          if (retryCount < maxRetries) {
+          resolve('abort');
+          return;
+        }
+        retryCount++;
+        if (retryCount < maxRetries) {
+          const partialContent = aiMsg.content || '';
+          if (partialContent) {
+            // v687.41：断点续传——保留已输出内容，作为前缀重试
+            console.warn(`[Backstage] 断点续传重试 ${retryCount}/${maxRetries}: 已有 ${partialContent.length} 字`);
+            apiMessages.push({ role: 'assistant', content: partialContent });
+            await new Promise(r => setTimeout(r, 2000));
+            _doStream(partialContent).then(resolve);
+          } else {
             console.warn(`[Backstage] 重试 ${retryCount}/${maxRetries}: ${error}`);
             await new Promise(r => setTimeout(r, 1000));
             _doStream().then(resolve);
+          }
+        } else {
+          const partialContent = aiMsg.content || '';
+          if (partialContent) {
+            aiMsg.content = partialContent;
+            try { await DB.put('messages', aiMsg); } catch(e) {}
           } else {
             aiMsg.content = baseContent + `*生成失败（已重试${maxRetries}次）: ${error}*`;
-            _renderMessages();
-            resolve('error');
           }
-        };
+          _renderMessages();
+          resolve('error');
+        }
+      };
 
         // 工具调用循环
         const _onToolCallsHandler = async (toolCalls, assistantMessage) => {

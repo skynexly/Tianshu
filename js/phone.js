@@ -1865,11 +1865,11 @@ ${wvPrompt}` },
             ${visibleHtml(m.visibleNpcs)}
           </div>
           <div class="phone-moment-actions">
-            <button type="button" onclick="Phone._editMyMoment(${i})" class="phone-moment-action-btn">${_uiIcon('edit', 12)} 编辑</button>
-            <button type="button" onclick="Phone._collectMyMoment(${i})" class="phone-moment-action-btn">${_uiIcon('star', 12)} 收藏</button>
-            <button type="button" onclick="Phone._shareMoment(${i})" class="phone-moment-action-btn">${_uiIcon('share', 12)} 分享</button>
-            <button type="button" onclick="Phone._deleteMyMoment(${i})" class="phone-moment-action-btn danger">${_uiIcon('trash', 12)} 删除</button>
-            ${!(m.comments && m.comments.length) ? `<button type="button" onclick="Phone._refreshMomentComments(${i})" class="phone-moment-action-btn">${_uiIcon('refresh', 12)} 刷新评论</button>` : ''}
+  <button type="button" onclick="Phone._editMyMoment(${i})" class="phone-moment-action-btn" title="编辑">${_uiIcon('edit', 13)}</button>
+  <button type="button" onclick="Phone._collectMyMoment(${i})" class="phone-moment-action-btn" title="收藏">${_uiIcon('star', 13)}</button>
+  <button type="button" onclick="Phone._shareMoment(${i})" class="phone-moment-action-btn" title="分享">${_uiIcon('share', 13)}</button>
+  <button type="button" onclick="Phone._deleteMyMoment(${i})" class="phone-moment-action-btn danger" title="删除">${_uiIcon('trash', 13)}</button>
+  ${!(m.comments && m.comments.length) ? `<button type="button" onclick="Phone._refreshMomentComments(${i})" class="phone-moment-action-btn" title="刷新评论">${_uiIcon('refresh', 13)}</button>` : ''}
           </div>
           ${(m.comments && m.comments.length) ? commentsHtml(m.comments) : ''}
         </div>
@@ -1891,12 +1891,12 @@ ${wvPrompt}` },
             </div>
           </div>
           <div class="phone-moment-actions">
-            <button type="button" onclick="Phone._likeNpcMoment(${i})" class="phone-moment-action-btn ${m.likedByUser ? 'active-collect' : ''}">${_uiIcon('heart', 12)} ${m.likedByUser ? '已赞' : '点赞'}${m.userLikeCount ? ` ${m.userLikeCount}` : ''}</button>
-            <button type="button" onclick="Phone._commentNpcMoment(${i})" class="phone-moment-action-btn">${_uiIcon('comment', 12)} 评论</button>
-            <button type="button" onclick="Phone._editNpcMoment(${i})" class="phone-moment-action-btn">${_uiIcon('edit', 12)} 编辑</button>
-            <button type="button" onclick="Phone._collectNpcMoment(${i})" class="phone-moment-action-btn">${_uiIcon('star', 12)} 收藏</button>
-            <button type="button" onclick="Phone._shareNpcMoment(${i})" class="phone-moment-action-btn">${_uiIcon('share', 12)} 分享</button>
-            <button type="button" onclick="Phone._deleteNpcMoment(${i})" class="phone-moment-action-btn danger">${_uiIcon('trash', 12)} 删除</button>
+            <button type="button" onclick="Phone._likeNpcMoment(${i})" class="phone-moment-action-btn ${m.likedByUser ? 'active-collect' : ''}" title="${m.likedByUser ? '已赞' : '点赞'}">${_uiIcon('heart', 13)}${m.userLikeCount ? `<span class="phone-moment-action-count">${m.userLikeCount}</span>` : ''}</button>
+            <button type="button" onclick="Phone._commentNpcMoment(${i})" class="phone-moment-action-btn" title="评论">${_uiIcon('comment', 13)}</button>
+            <button type="button" onclick="Phone._editNpcMoment(${i})" class="phone-moment-action-btn" title="编辑">${_uiIcon('edit', 13)}</button>
+            <button type="button" onclick="Phone._collectNpcMoment(${i})" class="phone-moment-action-btn" title="收藏">${_uiIcon('star', 13)}</button>
+            <button type="button" onclick="Phone._shareNpcMoment(${i})" class="phone-moment-action-btn" title="分享">${_uiIcon('share', 13)}</button>
+            <button type="button" onclick="Phone._deleteNpcMoment(${i})" class="phone-moment-action-btn danger" title="删除">${_uiIcon('trash', 13)}</button>
           </div>
           ${commentsHtml(m.comments)}
         </div>
@@ -1922,10 +1922,10 @@ ${wvPrompt}` },
         <div id="phone-moments-npc-list" class="phone-moments-list" style="display:${_momentsTab === 'friends' ? 'block' : 'none'}">${friendsHtml}</div>
         <div id="phone-moments-config-list" class="phone-moments-list" style="display:${_momentsTab === 'config' ? 'block' : 'none'}">${_renderMomentsConfigPanel(pd)}</div>
         <div class="phone-tabbar">
-          <div class="phone-tab ${_momentsTab === 'mine' ? 'active' : ''}" onclick="Phone._switchMomentsTab('mine')">我的动态</div>
-          <div class="phone-tab ${_momentsTab === 'friends' ? 'active' : ''}" onclick="Phone._switchMomentsTab('friends')">好友动态</div>
-          <div class="phone-tab ${_momentsTab === 'config' ? 'active' : ''}" onclick="Phone._switchMomentsTab('config')">设置</div>
-        </div>
+  <div class="phone-tab ${_momentsTab === 'mine' ? 'active' : ''}" onclick="Phone._switchMomentsTab('mine')">我的动态</div>
+  <div class="phone-tab ${_momentsTab === 'friends' ? 'active' : ''}" onclick="Phone._switchMomentsTab('friends')">好友动态</div>
+  <div class="phone-tab ${_momentsTab === 'config' ? 'active' : ''}" onclick="Phone._switchMomentsTab('config')">设置</div>
+</div>
       </div>
     `;
 

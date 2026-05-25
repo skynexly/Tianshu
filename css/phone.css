@@ -1604,6 +1604,11 @@ background: transparent !important;
  border-color: color-mix(in srgb, var(--danger, #e57373) 50%, var(--border));
 }
 .phone-moment-refresh-btn { margin-top: 2px; }
+.phone-moment-action-count {
+  font-size: 10px;
+  margin-left: 2px;
+  opacity: 0.8;
+}
 .phone-moment-comments {
  margin-top: 8px;
  padding-top: 8px;
