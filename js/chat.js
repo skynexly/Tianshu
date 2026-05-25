@@ -1005,7 +1005,7 @@ if (char) systemParts.push(Character.formatForPrompt(char));
             const lastTriggered = _conv?.lastAntiClicheAt ?? -10;
             const cooldownPassed = (aiMsgCount - lastTriggered) >= 4;
             if (cooldownPassed) {
-              _constraintDepth3.push(`检查前几轮回复，避免重复。具体注意以下维度：①段落结构——不要每轮都用相同的段落排列模式，变换节奏和结构；②感官描写——如果前几轮已经提到过气味、嗓音质感、外貌特征，这一轮跳过或换一个全新的感官细节，不要每轮都重复同一组；③肢体动作——不要反复使用同类小动作，换用不同的身体语言或干脆让角色安静不动；④情绪状态——不要让角色锁死在单一极端情绪中（持续虔诚/狂喜/黏稠的欲望），让情绪随剧情自然流动、被打断或转移；⑤描写角度——尝试切换到环境、对话节奏、角色内心独白、安静留白等不同切入点。`);
+              _constraintDepth3.push('<rules:创新回复要求>\n接下来，请用更创新的方式进行回复，回顾历史消息，在新回复时注意以下部分。\n①段落结构——不要每轮都用相同的段落排列模式，变换节奏和结构；\n②感官描写——如果前几轮已经提到过气味、嗓音质感、外貌特征，这一轮跳过或换一个全新的感官细节，不要每轮都重复同一组；\n③肢体动作——不要反复使用同类小动作，换用不同的身体语言或干脆让角色安静不动；\n④情绪状态——不要让角色锁死在单一极端情绪中，让情绪随剧情自然流动、被打断或转移；\n⑤描写角度——尝试切换到环境、对话节奏、情绪状态、安静留白等不同切入点。\n⑥语言描写——不用重复使用一样的句式和语癖。\n</rules:创新回复要求>');
               if (_conv) {
                 _conv.lastAntiClicheAt = aiMsgCount;
                 try { Conversations.saveList(); } catch(_) {}
