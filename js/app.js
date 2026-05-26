@@ -172,10 +172,10 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v687.41h';
-const CHANGELOG = `【v687.41h 面具快捷选择栏显示备注】
-· 底栏点面具弹出的列表里，名字下方加一行小字显示备注
-· 没备注的面具保持原样
+    const APP_VERSION = 'v687.41i';
+const CHANGELOG = `【v687.41i 鬼屋事件真·简化】
+· builtin-heartsim.js 鬼屋三阶段→两阶段（之前只改了 heartsim.json，没改真正被加载的 builtin）
+· _builtinVersion 17，旧对话刷新后会自动同步
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;
