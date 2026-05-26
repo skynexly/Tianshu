@@ -460,16 +460,12 @@ function _isAppStillActive(appId) {
       _hsHomecomingActive = !!(pd && pd.hsHomecomingTriggered);
       _hsPostHomeMode = pd?.hsPostHomeMode || null;
     } catch(_) {}
-    const _hsSkipNpc = _hsHomecomingActive && (_hsPostHomeMode === 'continue' || _hsPostHomeMode === 'epilogue');
+    const _hsSkipNpc = _hsHomecomingActive && (_hsPostHomeMode === 'continue' || _hsPostHomeMode === 'epilogue' || _hsPostHomeMode === 'companion');
 
     // 1. 世界观基础设定
     if (_hsSkipNpc) {
-      // 返航 continue/epilogue 模式：替换为返航现实世界设定
-      try {
-        const replaceSetting = (typeof Chat !== 'undefined' && Chat.getHsHomecomingWorldSetting)
-          ? Chat.getHsHomecomingWorldSetting() : '';
-        if (replaceSetting) parts.push(replaceSetting);
-      } catch(_) {}
+      // 返航 continue/epilogue/companion 模式：替换为现实世界设定
+      parts.push('【返航后·世界观设定】\n这是一个与现实世界几乎完全一致的当代世界。科技水平、社会制度、文化背景、地理格局均与当今现实相同。没有超自然现象，没有异世界，没有任何违反常识的事物存在。\n人们正常地生活、工作、社交。城市有便利店和地铁，手机能刷短视频和点外卖，天气预报偶尔不准，快递偶尔送错地址。一切都按照普通的现代社会运转。');
     } else {
       const wvPrompt = Chat.getWorldviewPrompt() || '';
       if (wvPrompt) parts.push('【世界观设定】\n' + wvPrompt);

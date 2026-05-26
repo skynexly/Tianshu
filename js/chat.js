@@ -992,8 +992,10 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
     // 注意：不要向{{user}}主动提起刚才发生的钩子动画——AI 完全不知情
     systemParts.push('[心动模拟·已结束]\n心动模拟的剧情已彻底结束。不需要继续扮演角色或推进剧情。\n如果{{user}}想聊这段剧情里发生过的事、或者随便聊什么，自然回应就好。\n不需要输出 status / relation / task / chat / homecoming 等格式代码块，不需要遵循回复格式。');
               } else if (_hsPostHomeMode === 'companion') {
-                // 共同返航结局：带着心动目标回到了用户原本的世界
-                // 不替换世界观、不停止扮演、不屏蔽被带回的角色，只告诉 AI 发生了什么
+      // 共同返航结局：带着心动目标回到了用户原本的世界
+      // 追加现实世界描述（不覆盖原世界观，原设定保留给AI参考角色性格）
+      systemParts.push('【返航后·世界观补充】\n{{user}}已离开心逸市回到现实世界。当前世界是一个与现实完全一致的当代世界——科技水平、社会制度、文化背景、地理格局均与当今现实相同。没有超自然现象，没有异世界，没有任何违反常识的事物存在。人们正常地生活、工作、社交，一切按照普通的现代社会运转。\n心逸市、心动模拟APP、以及此前世界观中的所有游戏机制（任务、好感度、黑化值等）均已不复存在。上面的世界观设定仅供参考角色性格和人物关系，不再作为当前世界的规则。');
+      // 不替换世界观、不停止扮演、不屏蔽被带回的角色，只告诉 AI 发生了什么
                 let companionName = '';
                 try { const _cpd = await Phone._getPhoneData(); companionName = _cpd?.hsCompanion || ''; } catch(_) {}
                 const cn = companionName || '心动目标';
