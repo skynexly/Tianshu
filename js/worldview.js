@@ -83,7 +83,7 @@ function _defaultRegion() {
     return { id: 'fac_' + Utils.uuid().slice(0,8), name: '', summary: '', detail: '', npcs: [] };
   }
   function _defaultNPC() {
-  return { id: 'npc_' + Utils.uuid().slice(0,8), name: '', aliases: '', profession: '', summary: '', detail: '' };
+  return { id: 'npc_' + Utils.uuid().slice(0,8), name: '', aliases: '', summary: '', detail: '' };
 }
   function _defaultFestival() {
     return { id: 'fest_' + Utils.uuid().slice(0,8), name: '', date: '', yearly: true, content: '', enabled: true };
@@ -811,7 +811,7 @@ function _syncBuiltinRestoreButton(w) {
     });
   }
   function _attachWVNpcAutoSave() {
-    ['wv-npc-name','wv-npc-aliases','wv-npc-profession','wv-npc-summary','wv-npc-detail'].forEach(id => {
+    ['wv-npc-name','wv-npc-aliases','wv-npc-summary','wv-npc-detail'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.removeEventListener('input', _wvNpcAutoSave); el.addEventListener('input', _wvNpcAutoSave); }
     });
@@ -1750,15 +1750,24 @@ return;
     if (sumLbl) sumLbl.style.display = '';
     const npc = fac.npcs[ni];
     if (!npc) return;
-    
+
+    // v687.41j：老数据迁移——profession 字段合进 detail 头部
+    if (npc.profession && npc.profession.trim()) {
+      const prof = npc.profession.trim();
+      const cur = (npc.detail || '').trim();
+      const profLine = `**职业**：${prof}`;
+      if (!cur.includes(profLine)) {
+        npc.detail = cur ? profLine + '\n\n' + cur : profLine;
+      }
+      delete npc.profession;
+    }
+
     document.getElementById('wv-npc-title').textContent = npc.name || '编辑角色';
     document.getElementById('wv-npc-name').value = npc.name || '';
     document.getElementById('wv-npc-aliases').value = npc.aliases || '';
     document.getElementById('wv-npc-summary').value = npc.summary || '';
     document.getElementById('wv-npc-detail').value = npc.detail || '';
-    const profEl1 = document.getElementById('wv-npc-profession');
-    if (profEl1) profEl1.value = npc.profession || '';
-    
+
     UI.showPanel('wv-npc', 'forward');
     requestAnimationFrame(_attachWVNpcAutoSave);
     _refreshEditingNpcAvatar();
@@ -1787,8 +1796,6 @@ return;
       npc.aliases = document.getElementById('wv-npc-aliases').value.trim();
       npc.summary = document.getElementById('wv-npc-summary').value.trim();
       npc.detail = document.getElementById('wv-npc-detail').value.trim();
-      const profSaveG = document.getElementById('wv-npc-profession');
-      if (profSaveG) npc.profession = profSaveG.value.trim();
       await _saveEditingWV(w);
       if (!silent) UI.showToast('常驻角色已保存');
       _renderGlobalNpcs(w.globalNpcs);
@@ -1802,8 +1809,6 @@ return;
     npc.aliases = document.getElementById('wv-npc-aliases').value.trim();
     npc.summary = document.getElementById('wv-npc-summary').value.trim();
     npc.detail = document.getElementById('wv-npc-detail').value.trim();
-    const profSave = document.getElementById('wv-npc-profession');
-    if (profSave) npc.profession = profSave.value.trim();
 
     await _saveEditingWV(w);
     if (!silent) UI.showToast('角色已保存');
@@ -2586,12 +2591,20 @@ function _editingFactionIdxForImporter() { return _editFactionIdx; }
     _editNPCIdx = -1;
 
     document.getElementById('wv-npc-title').textContent = (npc.name || '编辑角色') + ' · 全图';
+    // v687.41j：老数据迁移——profession 字段合进 detail 头部
+    if (npc.profession && npc.profession.trim()) {
+      const prof = npc.profession.trim();
+      const cur = (npc.detail || '').trim();
+      const profLine = `**职业**：${prof}`;
+      if (!cur.includes(profLine)) {
+        npc.detail = cur ? profLine + '\n\n' + cur : profLine;
+      }
+      delete npc.profession;
+    }
     document.getElementById('wv-npc-name').value = npc.name || '';
-document.getElementById('wv-npc-aliases').value = npc.aliases || '';
-      document.getElementById('wv-npc-summary').value = npc.summary || '';
-      document.getElementById('wv-npc-detail').value = npc.detail || '';
-      const profEl2 = document.getElementById('wv-npc-profession');
-      if (profEl2) profEl2.value = npc.profession || '';
+    document.getElementById('wv-npc-aliases').value = npc.aliases || '';
+    document.getElementById('wv-npc-summary').value = npc.summary || '';
+    document.getElementById('wv-npc-detail').value = npc.detail || '';
     const sumLbl = document.getElementById('wv-npc-summary-label');
     if (sumLbl) sumLbl.style.display = 'none';
 

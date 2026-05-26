@@ -172,10 +172,12 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v687.41i';
-const CHANGELOG = `【v687.41i 鬼屋事件真·简化】
-· builtin-heartsim.js 鬼屋三阶段→两阶段（之前只改了 heartsim.json，没改真正被加载的 builtin）
-· _builtinVersion 17，旧对话刷新后会自动同步
+    const APP_VERSION = 'v687.41j';
+const CHANGELOG = `【v687.41j 世界观角色字段合并】
+· 删除"职业"独立输入框，AI 生成时拼进完整设定头部
+· AI 仍输出 age/gender/profession/identity 独立字段（生成时结构化）
+· 落数据时拼成 markdown 段落写到 detail 头部，不再写 summary
+· 老数据打开角色编辑时自动迁移 profession→detail
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

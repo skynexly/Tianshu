@@ -3125,8 +3125,7 @@ NPC
           </div>
           <label>角色名称<input type="text" id="wv-npc-name" placeholder="角色名"></label>
 <label>代号/别名<input type="text" id="wv-npc-aliases" placeholder="多个用逗号或顿号分隔，如：影、Agent-7"></label>
-<label>职业<input type="text" id="wv-npc-profession" placeholder="ta 实际在做什么，如：咖啡店店员、第三舰队副官、高中二年级学生"></label>
-          <label id="wv-npc-summary-label">简介（速查表用）<textarea id="wv-npc-summary" class="auto-resize-textarea" rows="3" placeholder="一句话简介"></textarea></label>
+<label id="wv-npc-summary-label">简介（速查表用）<textarea id="wv-npc-summary" class="auto-resize-textarea" rows="3" placeholder="一句话简介"></textarea></label>
           <label>完整设定<div style="position:relative;width:100%"><textarea id="wv-npc-detail" class="auto-resize-textarea" rows="10" placeholder="角色详细设定..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-npc-detail','完整设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
 <button type="button" onclick="WvGenerator.inlineFillNpc()" class="ai-action-btn" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>AI 填充本角色</button>
         </form>
