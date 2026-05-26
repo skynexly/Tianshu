@@ -1865,7 +1865,7 @@ ${wvPrompt}` },
             ${visibleHtml(m.visibleNpcs)}
           </div>
           <div class="phone-moment-actions">
-  <button type="button" onclick="Phone._editMyMoment(${i})" class="phone-moment-action-btn" title="编辑">${_uiIcon('edit', 13)}</button>
+  <button type="button" onclick="Phone._editMyMoment(${i})" class="phone-moment-action-btn" title="编辑">${_uiIcon('pen', 13)}</button>
   <button type="button" onclick="Phone._collectMyMoment(${i})" class="phone-moment-action-btn" title="收藏">${_uiIcon('star', 13)}</button>
   <button type="button" onclick="Phone._shareMoment(${i})" class="phone-moment-action-btn" title="分享">${_uiIcon('share', 13)}</button>
   <button type="button" onclick="Phone._deleteMyMoment(${i})" class="phone-moment-action-btn danger" title="删除">${_uiIcon('trash', 13)}</button>
@@ -1893,7 +1893,7 @@ ${wvPrompt}` },
           <div class="phone-moment-actions">
             <button type="button" onclick="Phone._likeNpcMoment(${i})" class="phone-moment-action-btn ${m.likedByUser ? 'active-collect' : ''}" title="${m.likedByUser ? '已赞' : '点赞'}">${_uiIcon('heart', 13)}${m.userLikeCount ? `<span class="phone-moment-action-count">${m.userLikeCount}</span>` : ''}</button>
             <button type="button" onclick="Phone._commentNpcMoment(${i})" class="phone-moment-action-btn" title="评论">${_uiIcon('comment', 13)}</button>
-            <button type="button" onclick="Phone._editNpcMoment(${i})" class="phone-moment-action-btn" title="编辑">${_uiIcon('edit', 13)}</button>
+            <button type="button" onclick="Phone._editNpcMoment(${i})" class="phone-moment-action-btn" title="编辑">${_uiIcon('pen', 13)}</button>
             <button type="button" onclick="Phone._collectNpcMoment(${i})" class="phone-moment-action-btn" title="收藏">${_uiIcon('star', 13)}</button>
             <button type="button" onclick="Phone._shareNpcMoment(${i})" class="phone-moment-action-btn" title="分享">${_uiIcon('share', 13)}</button>
             <button type="button" onclick="Phone._deleteNpcMoment(${i})" class="phone-moment-action-btn danger" title="删除">${_uiIcon('trash', 13)}</button>

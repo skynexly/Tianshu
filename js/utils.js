@@ -94,6 +94,7 @@ const Utils = (() => {
     relation: null,    // 心动模拟：好感度/黑化值增量
     tasks: null,       // 心动模拟：任务列表
     phoneLock: null,   // 心动模拟：char 锁/解锁手机指令 { status, by, reason }
+    prisonAll: false,  // 心动模拟：多人囚禁结局 marker
     chat: null,        // 心动模拟：线上消息
     customAttrs: null, // 自定义世界观：属性增量 { global, characters }
     raw: raw
@@ -237,6 +238,14 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
       }
     } catch(_) {}
     raw = raw.replace(homecomingMatch[0], '').trim();
+  }
+
+  // 心动模拟：多人囚禁结局 marker
+  // AI 演绎多人囚禁结局时输出 ```prison-all```，前端直接全员黑化拉满 + 锁手机 + 崩坏演出
+  const prisonAllMatch = raw.match(/```prison-all\s*([\s\S]*?)```/i);
+  if (prisonAllMatch) {
+    result.prisonAll = true;
+    raw = raw.replace(prisonAllMatch[0], '').trim();
   }
 
     // 清理「第X部分 — XXX：」「第X部分 — XXX（...）：」这类格式标签行

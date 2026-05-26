@@ -515,8 +515,8 @@ const Chat = (() => {
     let s = raw;
     // 1. 剥离 <think>/<thinking> 思考链
     s = s.replace(/<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi, '');
-    // 2. 剥离所有系统格式代码块（status/relation/task/tasks/custom-attrs/chat/phone-lock/homecoming）
-    s = s.replace(/```(?:status|relation|tasks?|custom-attrs|chat|phone-lock|homecoming)\s*\n?[\s\S]*?```/gi, '');
+    // 2. 剥离所有系统格式代码块（status/relation/task/tasks/custom-attrs/chat/phone-lock/homecoming/prison-all）
+  s = s.replace(/```(?:status|relation|tasks?|custom-attrs|chat|phone-lock|homecoming|prison-all)\s*\n?[\s\S]*?```/gi, '');
     // 3. 剥离"第X部分 — XXX："格式标签行
     s = s.replace(/^[ \t]*第[一二三四五六七八九十]+部分\s*[—\-－]\s*[^\n]*$/gm, '');
     // 4. 清理残留的孤儿分隔符和多余空行
@@ -3481,9 +3481,11 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
 
   function updateTopbar(parsed) {
   try {
-    if (parsed.relation && typeof StatusBar !== 'undefined') {
-      StatusBar.hsApplyRelation(parsed.relation);
-    }
+if (parsed.relation && typeof StatusBar !== 'undefined') {
+        StatusBar.hsApplyRelation(parsed.relation);
+        // v687.41b：全员黑化检测 → 世界崩坏演出
+        try { if (typeof HeartSimCollapse !== 'undefined') HeartSimCollapse.checkAndPlay(); } catch(_) {}
+      }
     if (parsed.tasks && typeof StatusBar !== 'undefined') {
       StatusBar.hsApplyTasks(parsed.tasks);
       // 通用任务系统（非心动模拟世界观时生效，心动模拟走自己的 hsApplyTasks）
@@ -3491,6 +3493,16 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
     }
     if (parsed.phoneLock && typeof StatusBar !== 'undefined' && StatusBar.hsApplyPhoneLock) {
       StatusBar.hsApplyPhoneLock(parsed.phoneLock);
+    }
+    // v687.41b：多人囚禁结局 marker — 全员黑化拉满 + 锁手机 + 崩坏演出
+    if (parsed.prisonAll && typeof StatusBar !== 'undefined' && StatusBar.hsPrisonAll) {
+      StatusBar.hsPrisonAll();
+      // 自动锁手机（如果还没锁）
+      if (StatusBar.hsApplyPhoneLock && !StatusBar.isPhoneLocked?.()) {
+        StatusBar.hsApplyPhoneLock({ status: 'locked', by: '心动目标', reason: '多人囚禁结局' });
+      }
+      // 触发世界崩坏演出
+      try { if (typeof HeartSimCollapse !== 'undefined') HeartSimCollapse.play(); } catch(_) {}
     }
   } catch(e) { console.error('[updateTopbar]', e); }
 }

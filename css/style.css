@@ -1289,6 +1289,84 @@ font-size: var(--msg-font-size, 15px);
   from { opacity: 0; letter-spacing: 12px; }
   to   { opacity: 1; letter-spacing: 4px; }
 }
+.hsc-tap-hint {
+  position: absolute;
+  bottom: 20%;
+  font-size: 13px;
+  color: rgba(80, 80, 80, 0.6);
+  letter-spacing: 2px;
+  animation: hscTapBlink 1.8s ease-in-out infinite;
+  z-index: 5;
+}
+@keyframes hscTapBlink {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+/* ===== 心动模拟·世界崩坏演出 ===== */
+.hsc-collapse-overlay {
+  position: fixed; inset: 0; z-index: 8500;
+  pointer-events: none;
+  overflow: hidden;
+  animation: hscCollapseIn 0.8s ease-out;
+}
+@keyframes hscCollapseIn { from { opacity: 0; } to { opacity: 1; } }
+.hsc-collapse-overlay.hsc-collapse-fade {
+  animation: hscCollapseFade 1s ease-in forwards;
+}
+@keyframes hscCollapseFade { to { opacity: 0; } }
+
+/* 裂纹 */
+.hsc-collapse-cracks {
+  position: absolute; inset: 0;
+}
+.hsc-collapse-crack {
+  position: absolute; top: 0;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(180, 20, 20, 0.9), rgba(60, 0, 0, 0.6), transparent);
+  box-shadow: 0 0 8px rgba(200, 40, 40, 0.6), 0 0 20px rgba(180, 20, 20, 0.3);
+  animation: hscCrackGrow 2.5s ease-out both;
+  transform-origin: top center;
+}
+@keyframes hscCrackGrow {
+  from { height: 0%; opacity: 0; }
+  30%  { opacity: 1; }
+  to   { height: var(--h, 60%); opacity: 0.8; }
+}
+
+/* 暗红光晕 */
+.hsc-collapse-glow {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, rgba(120, 0, 0, 0.25) 0%, transparent 70%);
+  animation: hscGlowPulse 1.5s ease-in-out infinite;
+}
+@keyframes hscGlowPulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 0.9; }
+}
+
+/* 熔岩滴落 */
+.hsc-collapse-drip {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 30%;
+  background: linear-gradient(0deg, rgba(80, 0, 0, 0.7) 0%, rgba(40, 0, 0, 0.3) 50%, transparent 100%);
+  animation: hscDripUp 3s ease-in 1.5s both;
+}
+@keyframes hscDripUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* body 抖动 */
+.hsc-collapse-shake {
+  animation: hscShake 0.15s linear infinite;
+}
+@keyframes hscShake {
+  0%, 100% { transform: translate(0, 0); }
+  25%  { transform: translate(-1px, 1px); }
+  50%  { transform: translate(1px, -1px); }
+  75%  { transform: translate(-1px, -1px); }
+}
 /* v687.33：第二部钩子动画（epilogue） */
 @keyframes hsEpFlash {
   0%   { opacity: 0; }

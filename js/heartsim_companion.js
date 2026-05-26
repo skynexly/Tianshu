@@ -66,6 +66,7 @@
     el.addEventListener('click', block, true);
     el.addEventListener('touchstart', block, true);
     el.addEventListener('touchmove', block, true);
+    el._blockHandlers = { block }; // 保存引用，供后续移除
     return el;
   }
 
@@ -165,7 +166,28 @@
     txt.textContent = '欢迎回家。';
     overlay.appendChild(txt);
 
-    await _wait(2500);
+    await _wait(2000);
+
+    // 点击确认才消失
+    await new Promise((resolve) => {
+      // 先移除阻止所有点击的 handler
+      if (overlay._blockHandlers) {
+        overlay.removeEventListener('click', overlay._blockHandlers.block, true);
+        overlay.removeEventListener('touchstart', overlay._blockHandlers.block, true);
+      }
+      const hint = document.createElement('div');
+      hint.className = 'hsc-tap-hint';
+      hint.textContent = '点击继续';
+      overlay.appendChild(hint);
+      const handler = (e) => {
+        e.stopPropagation();
+        overlay.removeEventListener('click', handler, true);
+        overlay.removeEventListener('touchstart', handler, true);
+        resolve();
+      };
+      overlay.addEventListener('click', handler, true);
+      overlay.addEventListener('touchstart', handler, true);
+    });
   }
 
   // ── hidden 系统消息 ──
