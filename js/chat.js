@@ -939,79 +939,13 @@ if (char) systemParts.push(Character.formatForPrompt(char));
       _constraintDepth3.push('【注意】时间会自然流逝。不要把所有事情压缩在同一个时间段内发生。每个场景转换或事务完成后应体现合理的时间流逝——移动需要根据距离推算（步行/交通，通常10分钟到几小时），用餐20-60分钟，工作和学习以小时起步，烹饪至少半小时以上。不要过短估计任何事务完成的时间，也不要压缩娱乐和休闲——没有人到达景点看一眼就走。状态栏的时间应跟随剧情节奏同步推进。');
     }
 
-    // v687.34：防八股（自动触发，无需手动开关）
-    // 条件：最近6条AI回复中，同一个角色名出现≥3次
-    // v687.35：改为从AI回复的"当前相关角色"代码块提取角色名，不依赖NPC列表
+    // v687.41b：防八股（全局每5轮自动触发，不依赖角色名检测）
+    // 改版原因：心动模拟等多人情感向卡里走单角色线也需要防八股，按角色名检测反而漏触发
     if (isGameMode) {
       try {
-        const recentAI = messages.filter(m => m.role === 'assistant').slice(-6);
-        if (recentAI.length >= 3) {
-          // 从每条AI回复的"当前相关角色"代码块提取角色名
-          const charPerMsg = recentAI.map(m => {
-            const text = m.content || '';
-            // 匹配 ```当前相关角色\n...\n``` 或 ```\n当前相关角色\n...\n```
-            const match = text.match(/```\s*\n?\s*当前相关角色\s*\n([\s\S]*?)```/);
-            if (!match) return [];
-            return match[1].split('\n')
-              .map(l => l.trim())
-              .filter(l => l.length >= 2 && l !== '无' && !l.startsWith('（') && !l.startsWith('('));
-          });
-
-          // 如果提取到的角色名太少（可能格式没开或AI没写），fallback到NPC列表匹配
-          const hasFormatChars = charPerMsg.some(arr => arr.length > 0);
-          let finalCharPerMsg = charPerMsg;
-
-          if (!hasFormatChars) {
-            // fallback：用NPC列表 + 挂载角色 + 单人卡主角名做文本匹配
-            const allNpcNames = [];
-            try {
-              const npcList = NPC.getByRegion('all') || [];
-              npcList.forEach(n => { if (n.name) allNpcNames.push(n.name); });
-            } catch(_) {}
-            try {
-              if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
-                const attached = await AttachedChars.resolveAll();
-                attached.forEach(c => { if (c.name && !allNpcNames.includes(c.name)) allNpcNames.push(c.name); });
-              }
-            } catch(_) {}
-            // 单人卡主角名
-            try {
-              if (typeof SingleMode !== 'undefined' && SingleMode.getMainCharName) {
-                const scName = SingleMode.getMainCharName();
-                if (scName && !allNpcNames.includes(scName)) allNpcNames.push(scName);
-              }
-            } catch(_) {}
-
-            if (allNpcNames.length > 0) {
-              finalCharPerMsg = recentAI.map(m => {
-                const text = m.content || '';
-                return allNpcNames.filter(name => name.length >= 2 && text.includes(name));
-              });
-            }
-          }
-
-          // 扁平化计数
-          const counter = {};
-          finalCharPerMsg.forEach(names => {
-            const unique = [...new Set(names)];
-            unique.forEach(n => { counter[n] = (counter[n] || 0) + 1; });
-          });
-          // 判断：某角色出现≥3条（不限群像/单人，和同一个人待久了就触发）
-          const dominantChar = Object.entries(counter).find(([_, count]) => count >= 3);
-          if (dominantChar) {
-            // v687.39：冷却机制——触发后接下来3轮不再注入，避免长期单角色场景被持续催换写法
-            const aiMsgCount = messages.filter(m => m.role === 'assistant').length;
-            const _conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
-            const lastTriggered = _conv?.lastAntiClicheAt ?? -10;
-            const cooldownPassed = (aiMsgCount - lastTriggered) >= 4;
-            if (cooldownPassed) {
-              _constraintDepth3.push('<rules:创新回复要求>\n接下来，请用更创新的方式进行回复，回顾历史消息，在新回复时注意以下部分。\n①段落结构——不要每轮都用相同的段落排列模式，变换节奏和结构；\n②感官描写——如果前几轮已经提到过气味、嗓音质感、外貌特征，这一轮跳过或换一个全新的感官细节，不要每轮都重复同一组；\n③肢体动作——不要反复使用同类小动作，换用不同的身体语言或干脆让角色安静不动；\n④情绪状态——不要让角色锁死在单一极端情绪中，让情绪随剧情自然流动、被打断或转移；\n⑤描写角度——尝试切换到环境、对话节奏、情绪状态、安静留白等不同切入点。\n⑥语言描写——不要重复使用一样的句式和语癖。\n</rules:创新回复要求>');
-              if (_conv) {
-                _conv.lastAntiClicheAt = aiMsgCount;
-                try { Conversations.saveList(); } catch(_) {}
-              }
-            }
-          }
+        const aiMsgCount = messages.filter(m => m.role === 'assistant').length;
+        if (aiMsgCount > 0 && aiMsgCount % 5 === 0) {
+          _constraintDepth3.push('【紧急通知：创新回复】\n当你看到这条通知时，请回顾前几轮的历史记录，分析你固化的回复模式，在本轮输出时打破它们，使用更加创新的回复方式。\n检查以下内容：\n1. 段落结构：你是否时常在开头前三段重复{{user}}说过的话？是否持续使用固定或相似的词汇和句式作为开头？是否每次都用了同样的段落结构？若有，请调整更换词汇、句式、结构。\n2. 感官描写：你是否在前几轮反复提起角色的气味、嗓音质感、身材体型、眼神变化或重复使用的环境描写（例如阳光下飞舞的尘埃）？若有，更换本轮描写的侧重点，尝试描写其他微表情、着装、饰品、其他身体部位、气氛、环境中其他细节。\n3. 肢体动作：你是否多次使用了同一类型的肢体动作，例如笑声、触碰嘴唇、挑起下巴、亲吻、拥抱、啃咬、蹭动等等。若有，更换其他类型的肢体动作，或干脆不描写肢体动作。\n4. 情绪状态：前几轮中角色是否持续保持同一种过度高亢或低落的情绪中？例如狂热、阴郁、愤怒、恐惧、病态、麻木、兴奋等等。若有，在本轮以自然的方式让情绪回落，可以被安抚、被转移注意力、自然消退等等。\n5. 语言描写：你是否多次让角色使用同一种句式或口癖？若有，在保持设定的前提下，换成新的表达方式。');
         }
       } catch(e) { console.warn('[Chat] 防八股检测失败', e); }
     }
