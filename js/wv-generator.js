@@ -169,8 +169,13 @@ detail 使用 Markdown 格式，包含：
   function _npcAliases(n) {
     return (n.aliases || n.alias || '').trim();
   }
-  // v687.41j：把 gender/age/profession/identity 拼成 markdown 段落，写到 detail 头部
-  // 不再单独写 summary（summary 留给用户手填）
+  // summary：速查表，一行简短信息（gender·age·profession·identity 拼接）
+  function _npcSummary(n) {
+    const parts = [n.gender, n.age, n.profession, n.identity || n.description].filter(Boolean);
+    return parts.join(' · ');
+  }
+  // v687.41j：detail 头部追加 markdown 元信息块（性别/年龄/职业/身份）
+  // 让世界书（无 summary）也能直接看到角色基础信息
   function _npcMetaBlock(n) {
     const parts = [];
     if (n.gender) parts.push(`**性别**：${n.gender}`);
@@ -187,8 +192,6 @@ detail 使用 Markdown 格式，包含：
     if (!detail) return meta;
     return meta + '\n\n' + detail;
   }
-  // 兼容旧调用：_npcSummary 现在仍可被调用但返回空字符串（不再写入 summary）
-  function _npcSummary(n) { return ''; }
 
   // v632.1：收集当前世界观/世界书里所有已有的 NPC 名字，用于生成时防撞名
   // 返回格式：[{ name, source }]，source 形如 "常驻"/"地区A·势力B"
@@ -1454,6 +1457,10 @@ if (!empty.length) { UI.showToast('没有需要填充的角色（所有角色都
           const merged = _mergeMetaToDetail(n);
           if (merged) { target.detail = merged; filled++; }
           if (_npcAliases(n) && !target.aliases?.trim()) target.aliases = _npcAliases(n);
+          if (!target.summary?.trim()) {
+            const sumStr = _npcSummary(n);
+            if (sumStr) target.summary = sumStr;
+          }
         }
       }
       await Worldview._saveEditingWV(w);

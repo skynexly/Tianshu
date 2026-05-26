@@ -172,12 +172,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v687.41j';
-const CHANGELOG = `【v687.41j 世界观角色字段合并】
-· 删除"职业"独立输入框，AI 生成时拼进完整设定头部
-· AI 仍输出 age/gender/profession/identity 独立字段（生成时结构化）
-· 落数据时拼成 markdown 段落写到 detail 头部，不再写 summary
-· 老数据打开角色编辑时自动迁移 profession→detail
+    const APP_VERSION = 'v687.41k';
+const CHANGELOG = `【v687.41k 修复 summary 速查表丢失】
+· summary 速查表恢复 AI 自动填充
+· detail 头部继续保留 markdown 元信息块（让世界书也能看到）
+· 现在 summary 和 detail 都有，世界观速查 + 世界书完整两不误
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;
