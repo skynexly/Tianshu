@@ -700,9 +700,17 @@ if (contentArea) contentArea.style.display = 'none';
           ? `<div style="width:24px;height:24px;border-radius:50%;background:var(--bg-secondary) url(${m.avatar}) center/cover;border:1px solid var(--border);flex-shrink:0"></div>`
           : `<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="font-size:14px;color:rgba(255,255,255,0.85);line-height:1">✦</span></div>`;
         const foreignMark = m._foreign ? '<span style="opacity:0.6;margin-right:2px" title="非当前世界观面具">✻</span>' : '';
+        // v687.41h：备注小字（如有）
+        const noteRaw = (m.note || '').trim();
+        const noteHtml = noteRaw
+          ? `<span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2;display:block">${Utils.escapeHtml(noteRaw)}</span>`
+          : '';
+        const nameBlock = noteHtml
+          ? `<span style="display:flex;flex-direction:column;min-width:0;flex:1;gap:1px;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${foreignMark}${Utils.escapeHtml(m.name)}</span>${noteHtml}</span>`
+          : `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${foreignMark}${Utils.escapeHtml(m.name)}</span>`;
         return `
         <button class="${m.id === cur ? 'active' : ''}" style="display:flex;align-items:center;justify-content:space-between;gap:8px" onclick="Character.switchMask('${m.id}');UI.closeAllPopups()">
-          <span style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">${avatarHtml}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${foreignMark}${Utils.escapeHtml(m.name)}</span></span>
+          <span style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">${avatarHtml}${nameBlock}</span>
           ${m.id === cur ? `<span onclick="event.stopPropagation();UI.closeAllPopups();UI.setMaskEditFrom('chat');Character.openEdit('${m.id}')" style="cursor:pointer;opacity:0.6;padding:2px 4px;line-height:0;flex-shrink:0" title="编辑面具">${editSvg}</span>` : ''}
         </button>`;
       }).join('');
