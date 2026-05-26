@@ -1133,11 +1133,16 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
     // v687.15：现实环境感知（电量/天气）拼到最近 2 条 user message 前缀
     try {
       if ((convSettings.batteryAware || convSettings.weatherAware) && window.EnvAwareness) {
+        const _beforeLen = historyForAPI.length;
         historyForAPI = EnvAwareness.stampUserMessages(historyForAPI, messages, {
           battery: convSettings.batteryAware,
           weather: convSettings.weatherAware,
           maxStamps: 2
         });
+        const _envMsgs = messages.filter(m => !m.hidden && m.role === 'user' && m.envSnapshot);
+        GameLog.log('info', `[环境感知] battery=${!!convSettings.batteryAware}, weather=${!!convSettings.weatherAware}, 带快照的user消息=${_envMsgs.length}条, history长度=${_beforeLen}, messages(非hidden)=${messages.filter(m=>!m.hidden).length}`);
+      } else {
+        GameLog.log('info', `[环境感知] 未启用 (battery=${!!convSettings.batteryAware}, weather=${!!convSettings.weatherAware}, EnvAwareness=${!!window.EnvAwareness})`);
       }
     } catch(e) { console.warn('[Chat] 环境感知注入失败', e); }
 
@@ -1557,14 +1562,20 @@ try {
     };
     // v687.15：环境快照（电量/天气），存到消息上，下一轮拼前缀回放
     try {
-      if ((convSettings.batteryAware || convSettings.weatherAware) && window.EnvAwareness) {
+      const _csForEnv = _getConvSettings();
+      if ((_csForEnv.batteryAware || _csForEnv.weatherAware) && window.EnvAwareness) {
         const snap = await EnvAwareness.captureSnapshot({
-          battery: convSettings.batteryAware,
-          weather: convSettings.weatherAware
+          battery: _csForEnv.batteryAware,
+          weather: _csForEnv.weatherAware
         });
-        if (snap) userMsg.envSnapshot = snap;
+        if (snap) {
+          userMsg.envSnapshot = snap;
+          GameLog.log('info', `[环境快照] 已捕获: battery=${snap.battery ? snap.battery.pct + '%' : '无'}, weather=${snap.weather ? snap.weather.temp : '无'}`);
+        } else {
+          GameLog.log('warn', `[环境快照] captureSnapshot 返回 null（电量API或天气API不可用）`);
+        }
       }
-    } catch(_) {}
+    } catch(e) { GameLog.log('warn', `[环境快照] 捕获失败: ${e.message}`); }
     await DB.put('messages', userMsg);
     messages.push(userMsg);
     if (!userMsg.hidden) {
@@ -1865,7 +1876,11 @@ const msgEl = appendMessage(aiMsg, true, true);
             GameLog.log('info', `当前轮数: ${roundCount}`);
     const extractInterval = parseInt((await API.getConfig()).extractInterval) || 20;
     const shouldExtract = convSettings.autoExtract && ((roundCount > 0 && roundCount % extractInterval === 0) || _extractPending);
-    GameLog.log('info', `[自动提取] 轮数=${roundCount}, 间隔=${extractInterval}, pending=${_extractPending}, 本轮${shouldExtract ? '✓触发' : '×未触发'}, 距下次触发还剩${extractInterval - (roundCount % extractInterval)}轮`);
+    if (convSettings.autoExtract) {
+      GameLog.log('info', `[自动提取] 轮数=${roundCount}, 间隔=${extractInterval}, pending=${_extractPending}, 本轮${shouldExtract ? '✓触发' : '×未触发'}, 距下次触发还剩${extractInterval - (roundCount % extractInterval)}轮`);
+    } else {
+      GameLog.log('info', `[自动提取] 已关闭`);
+    }
     if (shouldExtract) {
               GameLog.log('info', `触发记忆提取 (第${roundCount}轮, 间隔${extractInterval}, pending=${_extractPending})`);
               UI.showToast(_extractPending ? '正在重试记忆提取…' : '正在进行记忆提取，请稍候…', 4000);
