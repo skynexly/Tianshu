@@ -172,11 +172,17 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v687.41k';
-const CHANGELOG = `【v687.41k 修复 summary 速查表丢失】
-· summary 速查表恢复 AI 自动填充
-· detail 头部继续保留 markdown 元信息块（让世界书也能看到）
-· 现在 summary 和 detail 都有，世界观速查 + 世界书完整两不误
+    const APP_VERSION = 'v687.42';
+const CHANGELOG = `【v687.42 叙述协议重写+心动模拟微调+角色字段合并】
+· 叙述协议拆成"边界声明"+"防止回声"两块，加概述、正面引导
+· 心动模拟 setting 注意事项顺序调整
+· 易寻：深层动机补全+极端手段逻辑链+内心迷茫
+· 奎恩：保护欲与施虐欲并存+背景补具体经历
+· 世界观角色"职业"字段合并进完整设定（UI删除，AI生成时拼入detail）
+· 面具快捷选择栏显示备注小字
+· 华为浏览器长按气泡选词修复
+· 鬼屋事件 builtin 真·简化（三阶段→两阶段）
+· 调试日志优化（自动提取关闭时显示"已关闭"）
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;
