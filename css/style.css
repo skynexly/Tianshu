@@ -405,6 +405,13 @@ body:has(#panel-chat.active) #panel-chat .chat-messages {
   font-size: var(--msg-font-size, 13.5px);
   letter-spacing: 0.03em;
   line-height: 1.7;
+  /* v687.41g：华为浏览器长按气泡选词复制问题——CSS 用通配符 * 选中性低，
+     被 markdown 渲染出来的 <p>/<strong>/<em> 等浏览器默认行为覆盖。
+     这里对 .chat-msg 整个子树用 !important 强压，断掉长按选词的入口。 */
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-tap-highlight-color: transparent !important;
   /* 性能：每条消息隔离布局/绘制，滚动时只重绘进入视口的气泡。
      注意：曾经在这里加 content-visibility:auto + contain-intrinsic-size:auto 120px
      做"屏外消息折叠成占位"的省渲染优化，但在华为浏览器上引发严重的滚动抖动——
@@ -412,6 +419,24 @@ body:has(#panel-chat.active) #panel-chat .chat-messages {
      scrollHeight 跳变，浏览器修正 scrollTop 算错位置，表现为滚动时屏幕乱跳。
      权衡：放弃屏外折叠这一项，仅保留 contain（布局/绘制隔离已经够省了）。 */
   contain: layout paint style;
+}
+
+/* v687.41g：气泡子树（markdown 渲染的 p/span/strong/em/li/blockquote 等）也禁选 */
+.chat-msg *,
+.chat-msg *::before,
+.chat-msg *::after {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+/* 例外：气泡内部如有真的输入框/可编辑区（编辑剧情时）保留可选 */
+.chat-msg input,
+.chat-msg textarea,
+.chat-msg [contenteditable="true"],
+.chat-msg [contenteditable=""] {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default !important;
 }
 
 /* 截图导出容器：禁用滚动性能优化，避免 html2canvas 把 content-visibility:auto 的消息截成错位/挤压 */

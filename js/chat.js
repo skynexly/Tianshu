@@ -2586,6 +2586,18 @@ if (multiSelectMode) return;
 
     container.addEventListener('touchend', (e) => {
       cancelPress();
+      // v687.41g：华为浏览器即使 CSS user-select:none 也会偶发弹出选词菜单——
+      // 触摸结束时主动清一次选区，断掉"长按选词→复制"的入口
+      try {
+        const sel = window.getSelection && window.getSelection();
+        if (sel && !sel.isCollapsed) {
+          const node = sel.anchorNode;
+          const el = node && (node.nodeType === 1 ? node : node.parentElement);
+          if (el && el.closest('.chat-msg') && !el.closest('input, textarea, [contenteditable="true"], [contenteditable=""]')) {
+            sel.removeAllRanges();
+          }
+        }
+      } catch(_) {}
     });
     container.addEventListener('touchmove', cancelPress);
 

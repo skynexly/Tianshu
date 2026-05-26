@@ -172,10 +172,10 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v687.41f';
-const CHANGELOG = `【v687.41f 环境感知调试+返航世界观】
-· 环境感知注入加调试日志（排查电量/天气不生效）
-· 共同返航世界观修复（前台追加/手机覆盖/后台追加）
+    const APP_VERSION = 'v687.41g';
+const CHANGELOG = `【v687.41g 修复华为浏览器长按气泡选词】
+· .chat-msg 子树用 !important 强压 user-select:none
+· touchend 主动清选区兜底（CSS 漏过时收回选词菜单）
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;
