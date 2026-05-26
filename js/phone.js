@@ -2690,7 +2690,9 @@ ${fullCtx}`;
       }
       pd.npcMomentsAuto.remaining = Math.max(0, pd.npcMomentsAuto.remaining - 1);
 
-      if (pd.npcMomentsAuto.remaining > 0) {
+    GameLog.log('info', `[好友圈] 自动刷新倒计时=${pd.npcMomentsAuto.remaining}, ${pd.npcMomentsAuto.remaining === 0 ? '✓本轮触发' : `还剩${pd.npcMomentsAuto.remaining}轮`}`);
+
+    if (pd.npcMomentsAuto.remaining > 0) {
         await _savePhoneData();
         return;
       }

@@ -1,5 +1,5 @@
 // Service Worker - 天枢城 PWA v2
-const CACHE_NAME = 'tianshu-v687.41c';
+const CACHE_NAME = 'tianshu-v687.41d';
 const PRE_CACHE = [
   './',
   './index.html',

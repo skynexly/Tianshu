@@ -894,18 +894,26 @@ if (char) systemParts.push(Character.formatForPrompt(char));
   const recentText = messages.slice(-4).map(m => m.content).join(' ');
   const presentNPCs = NPC.getPresentNPCs();
   const currentLoc = NPC.getRegion();
-  const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLoc);
-  const memoryPrompt = Memory.formatForPrompt(relatedMemories);
-  if (memoryPrompt) systemParts.push(memoryPrompt);
+const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLoc);
+    const memoryPrompt = Memory.formatForPrompt(relatedMemories);
+    if (memoryPrompt) systemParts.push(memoryPrompt);
 
-  // 5b. 小纸条（情绪记忆碎片）
-  try {
-    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-    const userInputText = lastUserMsg?.content || '';
-    const notes = await Memory.retrieveNotes(presentNPCs, userInputText);
-    const notesPrompt = Memory.formatNotesForPrompt(notes);
-    if (notesPrompt) systemParts.push(notesPrompt);
-  } catch(_) {}
+    // 5b. 小纸条（情绪记忆碎片）
+    let _noteCount = 0;
+    try {
+      const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+      const userInputText = lastUserMsg?.content || '';
+      const notes = await Memory.retrieveNotes(presentNPCs, userInputText);
+      const notesPrompt = Memory.formatNotesForPrompt(notes);
+      if (notesPrompt) systemParts.push(notesPrompt);
+      _noteCount = notes ? notes.length : 0;
+    } catch(_) {}
+
+    // 记忆注入日志
+    const _eventCount = relatedMemories.filter(m => m.type === 'event').length;
+    const _relCount = relatedMemories.filter(m => m.type === 'relation').length;
+    const _pinnedCount = relatedMemories.filter(m => m.pinned).length;
+    GameLog.log('info', `[记忆注入] 事件=${_eventCount}, 关系=${_relCount}, 固定=${_pinnedCount}, 小纸条=${_noteCount}, 共${relatedMemories.length + _noteCount}条`);
 }
 
     // 6. 自定义提示词注入（system_top和system_bottom）
@@ -944,7 +952,10 @@ if (char) systemParts.push(Character.formatForPrompt(char));
     if (isGameMode) {
       try {
         const aiMsgCount = messages.filter(m => m.role === 'assistant').length;
-        if (aiMsgCount > 0 && aiMsgCount % 5 === 0) {
+        const antiClicheTriggered = aiMsgCount > 0 && aiMsgCount % 5 === 0;
+        const nextAntiCliche = 5 - (aiMsgCount % 5);
+        GameLog.log('info', `[防八股] AI消息数=${aiMsgCount}, 本轮${antiClicheTriggered ? '✓触发' : '×未触发'}, 距下次触发还剩${antiClicheTriggered ? 5 : nextAntiCliche}条`);
+        if (antiClicheTriggered) {
           _constraintDepth3.push('【紧急通知：创新回复】\n当你看到这条通知时，请回顾前几轮的历史记录，分析你固化的回复模式，在本轮输出时打破它们，使用更加创新的回复方式。\n检查以下内容：\n1. 段落结构：你是否时常在开头前三段重复{{user}}说过的话？是否持续使用固定或相似的词汇和句式作为开头？是否每次都用了同样的段落结构？若有，请调整更换词汇、句式、结构。\n2. 感官描写：你是否在前几轮反复提起角色的气味、嗓音质感、身材体型、眼神变化或重复使用的环境描写（例如阳光下飞舞的尘埃）？若有，更换本轮描写的侧重点，尝试描写其他微表情、着装、饰品、其他身体部位、气氛、环境中其他细节。\n3. 肢体动作：你是否多次使用了同一类型的肢体动作，例如笑声、触碰嘴唇、挑起下巴、亲吻、拥抱、啃咬、蹭动等等。若有，更换其他类型的肢体动作，或干脆不描写肢体动作。\n4. 情绪状态：前几轮中角色是否持续保持同一种过度高亢或低落的情绪中？例如狂热、阴郁、愤怒、恐惧、病态、麻木、兴奋等等。若有，在本轮以自然的方式让情绪回落，可以被安抚、被转移注意力、自然消退等等。\n5. 语言描写：你是否多次让角色使用同一种句式或口癖？若有，在保持设定的前提下，换成新的表达方式。');
         }
       } catch(e) { console.warn('[Chat] 防八股检测失败', e); }
@@ -1188,6 +1199,7 @@ if (char) systemParts.push(Character.formatForPrompt(char));
           if (insertIdx >= 0 && insertIdx <= apiMessages.length) {
             apiMessages.splice(insertIdx, 0, { role: 'system', content: festivalText });
           }
+          try { GameLog.log('info', `[节日注入] 世界观节日命中，已注入`); } catch(_) {}
         }
         // 扩展条目：按 position 分流（v587）
         // 启用条件：常驻=sendCustom，动态=sendKnowledge；如有任一开启，把对应条目纳入
@@ -1250,6 +1262,7 @@ if (char) systemParts.push(Character.formatForPrompt(char));
                 if (insertIdx >= 0 && insertIdx <= apiMessages.length) {
                   apiMessages.splice(insertIdx, 0, { role: 'system', content: _festText });
                 }
+                try { GameLog.log('info', `[节日注入] 世界书节日命中，已注入`); } catch(_) {}
               }
               // 扩展条目（卡级 + 对话级总开关都开才注入）
               const _cardKnow = (_hiddenWv.knowledges || []).filter(k => k && k.enabled !== false);
@@ -1848,9 +1861,10 @@ const msgEl = appendMessage(aiMsg, true, true);
             updateTokenCount();
 
             GameLog.log('info', `当前轮数: ${roundCount}`);
-            const extractInterval = parseInt((await API.getConfig()).extractInterval) || 20;
-            const shouldExtract = convSettings.autoExtract && ((roundCount > 0 && roundCount % extractInterval === 0) || _extractPending);
-            if (shouldExtract) {
+    const extractInterval = parseInt((await API.getConfig()).extractInterval) || 20;
+    const shouldExtract = convSettings.autoExtract && ((roundCount > 0 && roundCount % extractInterval === 0) || _extractPending);
+    GameLog.log('info', `[自动提取] 轮数=${roundCount}, 间隔=${extractInterval}, pending=${_extractPending}, 本轮${shouldExtract ? '✓触发' : '×未触发'}, 距下次触发还剩${extractInterval - (roundCount % extractInterval)}轮`);
+    if (shouldExtract) {
               GameLog.log('info', `触发记忆提取 (第${roundCount}轮, 间隔${extractInterval}, pending=${_extractPending})`);
               UI.showToast(_extractPending ? '正在重试记忆提取…' : '正在进行记忆提取，请稍候…', 4000);
               await autoExtractMemory();
@@ -4189,6 +4203,7 @@ if (!gp) return null;
         if (state === 'active') {
           // 进行中：每轮注入
           out.systemTop.push(_formatEventInjection(ev, 'active'));
+          out._activeEvents = (out._activeEvents || 0) + 1;
         } else {
           // locked：检查关键词或数值条件是否命中
           const triggerType = ev.triggerType || 'keyword';
@@ -4206,10 +4221,16 @@ if (!gp) return null;
             // 命中！标记为 active（调用方负责持久化）
             convEventStates[ev.id] = 'active';
             out.systemTop.push(_formatEventInjection(ev, 'trigger'));
+            out._triggeredEvents = (out._triggeredEvents || 0) + 1;
           }
         }
       }
     }
+
+    // 统计日志
+    const _staticCount = enabled.filter(k => !k.keywordTrigger).length;
+    const _dynamicHit = (out.systemTop.length + out.systemBottom.length + Object.values(out.depths).reduce((s, a) => s + a.length, 0)) - _staticCount - (out._activeEvents || 0) - (out._triggeredEvents || 0);
+    try { GameLog.log('info', `[世界观注入] 常驻=${_staticCount}, 动态命中=${Math.max(0, _dynamicHit)}, 事件进行中=${out._activeEvents || 0}, 事件新触发=${out._triggeredEvents || 0}`); } catch(_) {}
 
     return out;
   }
