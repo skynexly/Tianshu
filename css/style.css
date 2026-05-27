@@ -3966,21 +3966,23 @@ body[data-sb-skin="terminal"] .sb-custom-attr-val {
   font-weight: 800;
   color: var(--text);
   order: 2;
-}
-body[data-sb-skin="neumorph"] #sb-character-attrs {
+body[data-sb-skin="neumorph"] #sb-character-attrs,
+body[data-skin="single-default"] #sb-character-attrs {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 #sb-character-attrs.hidden { display: none !important; }
-body[data-sb-skin="neumorph"] .sb-character-attrs-title {
+body[data-sb-skin="neumorph"] .sb-character-attrs-title,
+body[data-skin="single-default"] .sb-character-attrs-title {
   font-size: 11px;
   line-height: 1;
   font-weight: 800;
   color: var(--accent);
   letter-spacing: .06em;
 }
-body[data-sb-skin="neumorph"] .sb-character-attrs-list {
+body[data-sb-skin="neumorph"] .sb-character-attrs-list,
+body[data-skin="single-default"] .sb-character-attrs-list {
   display: flex;
   flex-direction: row;
   gap: 12px;
@@ -3990,8 +3992,10 @@ body[data-sb-skin="neumorph"] .sb-character-attrs-list {
   scroll-snap-type: x proximity;
   padding: 0 2px 2px;
 }
-body[data-sb-skin="neumorph"] .sb-character-attrs-list::-webkit-scrollbar { display: none; }
-body[data-sb-skin="neumorph"] .sb-character-attr-card {
+body[data-sb-skin="neumorph"] .sb-character-attrs-list::-webkit-scrollbar,
+body[data-skin="single-default"] .sb-character-attrs-list::-webkit-scrollbar { display: none; }
+body[data-sb-skin="neumorph"] .sb-character-attr-card,
+body[data-skin="single-default"] .sb-character-attr-card {
   flex: 0 0 82%;
   min-width: 230px;
   max-width: 300px;
@@ -4003,13 +4007,16 @@ body[data-sb-skin="neumorph"] .sb-character-attr-card {
   scroll-snap-align: start;
   box-sizing: border-box;
 }
-body[data-sb-skin="neumorph"] .sb-character-attr-card:nth-child(odd) {
+body[data-sb-skin="neumorph"] .sb-character-attr-card:nth-child(odd),
+body[data-skin="single-default"] .sb-character-attr-card:nth-child(odd) {
   background: var(--status-bg, var(--bg-secondary));
 }
-body[data-sb-skin="neumorph"] .sb-character-attr-card:nth-child(even) {
+body[data-sb-skin="neumorph"] .sb-character-attr-card:nth-child(even),
+body[data-skin="single-default"] .sb-character-attr-card:nth-child(even) {
   background: var(--status-card, var(--bg-tertiary));
 }
-body[data-sb-skin="neumorph"] .sb-character-attr-name {
+body[data-sb-skin="neumorph"] .sb-character-attr-name,
+body[data-skin="single-default"] .sb-character-attr-name {
   font-size: 15px;
   line-height: 1.2;
   font-weight: 850;
@@ -4020,15 +4027,18 @@ body[data-sb-skin="neumorph"] .sb-character-attr-name {
   white-space: nowrap;
   margin-bottom: 12px;
 }
-body[data-sb-skin="neumorph"] .sb-character-attr-lines {
+body[data-sb-skin="neumorph"] .sb-character-attr-lines,
+body[data-skin="single-default"] .sb-character-attr-lines {
   display: flex;
   flex-direction: column;
   gap: 11px;
 }
-body[data-sb-skin="neumorph"] .sb-character-attr-line {
+body[data-sb-skin="neumorph"] .sb-character-attr-line,
+body[data-skin="single-default"] .sb-character-attr-line {
   cursor: pointer;
 }
-body[data-sb-skin="neumorph"] .sb-character-attr-row {
+body[data-sb-skin="neumorph"] .sb-character-attr-row,
+body[data-skin="single-default"] .sb-character-attr-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4039,25 +4049,29 @@ body[data-sb-skin="neumorph"] .sb-character-attr-row {
   font-weight: 800;
   color: var(--text-secondary);
 }
-body[data-sb-skin="neumorph"] .sb-character-attr-row span {
+body[data-sb-skin="neumorph"] .sb-character-attr-row span,
+body[data-skin="single-default"] .sb-character-attr-row span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-body[data-sb-skin="neumorph"] .sb-character-attr-row b {
+body[data-sb-skin="neumorph"] .sb-character-attr-row b,
+body[data-skin="single-default"] .sb-character-attr-row b {
   color: var(--text);
   font-size: 11px;
   font-weight: 850;
   white-space: nowrap;
 }
-body[data-sb-skin="neumorph"] .sb-character-attr-bar {
+body[data-sb-skin="neumorph"] .sb-character-attr-bar,
+body[data-skin="single-default"] .sb-character-attr-bar {
   height: 5px;
   border-radius: 999px;
   overflow: hidden;
   background: var(--bg-tertiary);
   box-shadow: inset 3px 3px 7px rgba(0,0,0,0.12), inset -2px -2px 6px rgba(255,255,255,0.34);
 }
-body[data-sb-skin="neumorph"] .sb-character-attr-bar i {
+body[data-sb-skin="neumorph"] .sb-character-attr-bar i,
+body[data-skin="single-default"] .sb-character-attr-bar i {
   display: block;
   height: 100%;
   border-radius: inherit;
