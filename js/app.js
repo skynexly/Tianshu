@@ -172,8 +172,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v687.42';
-const CHANGELOG = `【v687.42 叙述协议重写+心动模拟微调+角色字段合并】
+    const APP_VERSION = 'v687.44';
+const CHANGELOG = `【v687.44 强制升级 sw 缓存（v687.43 失败回滚后清理）】
+· revert v687.43 错误改动（CSS 大括号位置错误导致整段崩塌）
+· 推 cache name 触发 sw 自动清理本地旧缓存
+· 同时合入 summary.js 剧情总结 timeline 重复修复
 · 叙述协议拆成"边界声明"+"防止回声"两块，加概述、正面引导
 · 心动模拟 setting 注意事项顺序调整
 · 易寻：深层动机补全+极端手段逻辑链+内心迷茫
