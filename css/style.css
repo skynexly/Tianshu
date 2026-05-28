@@ -6095,3 +6095,104 @@ button.dice-check-btn svg {
   background: rgba(196,168,124,0.08);
 }
 
+
+/* ===== 单人卡无世界观（data-skin="single-default"）：复用拟态风的角色属性 + 任务面板卡片 ===== */
+/* 角色属性面板：横排卡 + 阴影 + 进度条，整体克隆 neumorph */
+body[data-skin="single-default"] #sb-character-attrs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+body[data-skin="single-default"] .sb-character-attrs-title {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: .06em;
+}
+body[data-skin="single-default"] .sb-character-attrs-list {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  padding: 0 2px 2px;
+}
+body[data-skin="single-default"] .sb-character-attrs-list::-webkit-scrollbar { display: none; }
+body[data-skin="single-default"] .sb-character-attr-card {
+  flex: 0 0 82%;
+  min-width: 230px;
+  max-width: 300px;
+  border-radius: 18px;
+  background: var(--status-bg, var(--bg-secondary));
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: inset 4px 4px 9px rgba(0,0,0,0.13), inset -3px -3px 8px rgba(255,255,255,0.36);
+  padding: 13px 14px 14px;
+  scroll-snap-align: start;
+  box-sizing: border-box;
+}
+body[data-skin="single-default"] .sb-character-attr-card:nth-child(odd) {
+  background: var(--status-bg, var(--bg-secondary));
+}
+body[data-skin="single-default"] .sb-character-attr-card:nth-child(even) {
+  background: var(--status-card, var(--bg-tertiary));
+}
+body[data-skin="single-default"] .sb-character-attr-name {
+  font-size: 15px;
+  line-height: 1.2;
+  font-weight: 850;
+  color: var(--text);
+  letter-spacing: .02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 12px;
+}
+body[data-skin="single-default"] .sb-character-attr-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+body[data-skin="single-default"] .sb-character-attr-line {
+  cursor: pointer;
+}
+body[data-skin="single-default"] .sb-character-attr-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--text-secondary);
+}
+body[data-skin="single-default"] .sb-character-attr-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body[data-skin="single-default"] .sb-character-attr-row b {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+body[data-skin="single-default"] .sb-character-attr-bar {
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  box-shadow: inset 3px 3px 7px rgba(0,0,0,0.12), inset -2px -2px 6px rgba(255,255,255,0.34);
+}
+body[data-skin="single-default"] .sb-character-attr-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width .3s ease;
+}
+/* 任务面板：sb-task-system 沿用心动模拟默认样式即可（hs-mission-* 通用类已经有 base 样式），
+   single-default 下不再覆盖任何东西，让它跟拟态风一样的视觉。 */

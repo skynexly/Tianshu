@@ -172,11 +172,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v687.44';
-const CHANGELOG = `【v687.44 强制升级 sw 缓存（v687.43 失败回滚后清理）】
-· revert v687.43 错误改动（CSS 大括号位置错误导致整段崩塌）
-· 推 cache name 触发 sw 自动清理本地旧缓存
-· 同时合入 summary.js 剧情总结 timeline 重复修复
+    const APP_VERSION = 'v687.45';
+const CHANGELOG = `【v687.45 单人卡无世界观状态栏：补全角色属性卡片样式】
+· 单人卡无世界观皮（single-default）补 character-attrs 系列 CSS
+· 复用拟态风（neumorph）卡片视觉：横向滚动+阴影+进度条
+· 任务面板沿用 hs-mission-* base 样式，与拟态风一致
 · 叙述协议拆成"边界声明"+"防止回声"两块，加概述、正面引导
 · 心动模拟 setting 注意事项顺序调整
 · 易寻：深层动机补全+极端手段逻辑链+内心迷茫
