@@ -133,10 +133,9 @@ ${dialogue}
 === 各字段详细要求 ===
 
 **1. timeline（时间流）**
-- 只列出本段对话中新发生的重要事件——即对剧情有明显推动作用，或者与其他角色的互动明显导致关系变化的事件
-- 已有时间流中已经记录过的事件不要重复输出，只输出新增的条目
+- 列出从故事开始直到现在所有的重要事件——即对剧情有明显推动作用，或者与其他角色的互动明显导致关系变化的事件
 - 格式：时间（年月日 星期，无明确时间写"未知时间"）+ 一句话总结（高度概括起因经过结果）
-- 如果本段对话没有新的重要事件，timeline 输出空数组 []
+- 在已有的时间流后追加，不重复已有条目
 
 **2. metNPCs（已相遇角色）**
 - 列出从故事开始直到现在所有结识的重要角色（路人龙套不算，只要有名字且与剧情/关系有关）
@@ -168,8 +167,7 @@ ${dialogue}
 - 覆盖原有的
 
 === 关键规则 ===
-- timeline 是追加模式：只输出新条目，代码会自动追加到已有记录后面，不要重复已有条目
-- metNPCs 是追加/更新模式：已有角色覆盖更新关系，新角色追加
+- timeline 和 metNPCs 是追加/更新模式
 - majorEvents/emotionTurns/playerState/pending 是覆盖模式：输出内容直接替换旧记录，所以必须包含旧记录中仍然有效的内容+新内容
 - 务必全面，不要偷懒只写一两条。宁可多写也不要遗漏
 - 所有字段如确实无内容则留空字符串""
@@ -194,16 +192,9 @@ ${dialogue}
       GameLog.log('info', '[Summary] 截断JSON修复成功');
     }
 
-    // ① 追加内容合并（去重：用 date+event前10字 判断是否已存在）
+    // ① 追加内容合并
     if (data.timeline?.length) {
-      const existingKeys = new Set(existing.timeline.map(t => `${t.date}|${(t.event || '').slice(0, 10)}`));
-      for (const t of data.timeline) {
-        const key = `${t.date}|${(t.event || '').slice(0, 10)}`;
-        if (!existingKeys.has(key)) {
-          existing.timeline.push(t);
-          existingKeys.add(key);
-        }
-      }
+      existing.timeline = [...existing.timeline, ...data.timeline];
     }
     if (data.metNPCs?.length) {
       for (const npc of data.metNPCs) {

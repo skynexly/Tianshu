@@ -172,7 +172,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v687.43';
+    const APP_VERSION = 'v687.42';
 const CHANGELOG = `【v687.42 叙述协议重写+心动模拟微调+角色字段合并】
 · 叙述协议拆成"边界声明"+"防止回声"两块，加概述、正面引导
 · 心动模拟 setting 注意事项顺序调整
