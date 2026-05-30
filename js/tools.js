@@ -144,11 +144,12 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'add_note',
-      description:'记录一条小纸条。当用户明确表达了偏好/情绪/习惯时调用。只记用户说的/做的，不揣测。可同时调用多次。',
-      parameters:{ type:'object', properties:{
-        tag:{ type:'string', enum:NOTE_TAGS, description:'标签' },
-        detail:{ type:'string', description:'以用户角色名为主语如实记录' },
-        characters:{ type:'array', items:{type:'string'}, description:'在场角色' }
+description:'记录一条小纸条。当用户明确表达了偏好/情绪/习惯时调用。只记用户说的/做的，不揣测。可同时调用多次。priority 字段：能稳定体现长期性格（习惯/喜好/厌恶）标 important，单次情绪/偶然事件标 normal。每轮最多 1 条 important。',
+parameters:{ type:'object', properties:{
+tag:{ type:'string', enum:NOTE_TAGS, description:'标签' },
+detail:{ type:'string', description:'以用户角色名为主语如实记录' },
+priority:{ type:'string', enum:['important','normal'], description:'重要程度：important=长期性格画像，normal=单次事件。默认normal' },
+characters:{ type:'array', items:{type:'string'}, description:'在场角色' }
       }, required:['tag','detail'] }
     }},
     { type:'function', function:{
@@ -250,15 +251,23 @@ const Tools = (() => {
         kind:{ type:'string', enum:['festival','resident','dynamic'], description:'限定类型；不传则三类都搜' }
       }, required:['keyword'] }
     }},
-    // --- 历史消息搜索 ---
-    { type:'function', function:{
-      name:'search_messages',
-      description:'按关键词搜当前对话被归档的历史消息。归档消息是被总结剥离掉、当前已经看不到的旧对话；搜不到通常说明这部分对话还在上下文里能直接看到。每条命中会带上前后各 1 条作为上下文。',
-      parameters:{ type:'object', properties:{
-        keyword:{ type:'string', description:'搜索关键词' },
-        limit:{ type:'number', description:'返回的命中段落数，默认 3，最大 5' }
-      }, required:['keyword'] }
-    }}
+// --- 历史消息搜索 ---
+  { type:'function', function:{
+    name:'search_messages',
+    description:'按关键词搜当前对话被归档的历史消息。归档消息是被总结剥离掉、当前已经看不到的旧对话；搜不到通常说明这部分对话还在上下文里能直接看到。每条命中会带上前后各 1 条作为上下文。',
+    parameters:{ type:'object', properties:{
+      keyword:{ type:'string', description:'搜索关键词' },
+      limit:{ type:'number', description:'返回的命中段落数，默认 3，最大 5' }
+    }, required:['keyword'] }
+  }},
+  // --- 使用说明查询 ---
+  { type:'function', function:{
+    name:'query_guide',
+    description:'查询应用使用说明。不传 keyword 返回全文目录（各章节标题列表），传 keyword 返回包含该关键词的章节内容。用来回答用户关于"这个功能在哪""怎么用"等问题。',
+    parameters:{ type:'object', properties:{
+      keyword:{ type:'string', description:'搜索关键词，不传则返回目录' }
+    }, required:[] }
+  }},
   ];
 
   // ===== 后台工具定义 =====
@@ -274,11 +283,12 @@ const Tools = (() => {
     }},
     { type:'function', function:{
       name:'add_backstage_note',
-      description:'记录一条值得留下的 {{user}} 片段。聊天里如果 {{user}} 表达了什么能反映 ta 是谁的东西（喜好、情绪、事件），就顺手记一条。不用每轮都记。',
-      parameters:{ type:'object', properties:{
-        tag:{ type:'string', description:'标签。建议从三类里选最贴切的：偏好类（喜欢/讨厌/习惯）、情绪类（实际什么情绪就写什么，如开心/感动/悲伤/愤怒等）、事件类（有趣/伏笔/秘密）' },
-        detail:{ type:'string', description:'内容要带前因+{{user}}的反应，引用原话时保留引号' }
-      }, required:['tag','detail'] }
+description:'记录一条值得留下的 {{user}} 片段。聊天里如果 {{user}} 表达了什么能反映 ta 是谁的东西（喜好、情绪、事件），就顺手记一条。不用每轮都记。priority 字段：长期性格画像标 important，单次情绪/偶然事件标 normal。每轮最多 1 条 important。',
+parameters:{ type:'object', properties:{
+tag:{ type:'string', description:'标签。建议从三类里选最贴切的：偏好类（喜欢/讨厌/习惯）、情绪类（实际什么情绪就写什么，如开心/感动/悲伤/愤怒等）、事件类（有趣/伏笔/秘密）' },
+detail:{ type:'string', description:'内容要带前因+{{user}}的反应，引用原话时保留引号' },
+priority:{ type:'string', enum:['important','normal'], description:'重要程度：important=长期性格画像，normal=单次事件。默认normal' }
+}, required:['tag','detail'] }
     }},
     { type:'function', function:{
       name:'update_backstage_note',
@@ -332,14 +342,22 @@ const Tools = (() => {
       }, required:['keyword'] }
     }},
     // --- 历史消息搜索（后台搜的是主线归档，方便回顾旧剧情） ---
-    { type:'function', function:{
-      name:'search_messages',
-      description:'按关键词搜主线对话被归档的历史消息。归档是被总结剥离掉、当前已经看不到的旧对话内容。每条命中会带前后各 1 条作为上下文。',
-      parameters:{ type:'object', properties:{
-        keyword:{ type:'string', description:'搜索关键词' },
-        limit:{ type:'number', description:'返回的命中段落数，默认 3，最大 5' }
-      }, required:['keyword'] }
-    }},
+  { type:'function', function:{
+    name:'search_messages',
+    description:'按关键词搜主线对话被归档的历史消息。归档是被总结剥离掉、当前已经看不到的旧对话内容。每条命中会带前后各 1 条作为上下文。',
+    parameters:{ type:'object', properties:{
+      keyword:{ type:'string', description:'搜索关键词' },
+      limit:{ type:'number', description:'返回的命中段落数，默认 3，最大 5' }
+    }, required:['keyword'] }
+  }},
+  // --- 使用说明查询 ---
+  { type:'function', function:{
+    name:'query_guide',
+    description:'查询应用使用说明。不传 keyword 返回全文目录（各章节标题列表），传 keyword 返回包含该关键词的章节内容。用来回答用户关于"这个功能在哪""怎么用"等问题。',
+    parameters:{ type:'object', properties:{
+      keyword:{ type:'string', description:'搜索关键词，不传则返回目录' }
+    }, required:[] }
+  }},
     // --- 复用前台的事件 / 关系查询 ---
     { type:'function', function:{
       name:'query_events',
@@ -375,10 +393,10 @@ const Tools = (() => {
       return OK({ result: notes.map(n => ({ id:n.id, tag:n.tag, detail:n.detail, characters:n.characters||[], time:n.time||'' })) });
     },
     async add_note(args) {
-      if (!args.tag || !args.detail) return ERR('缺少 tag 或 detail');
-      const note = await Memory.addNote({ tag:args.tag, detail:args.detail, characters:args.characters||[], scope:_scope() });
-      return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ success:false, message:'重复记录，已跳过。' });
-    },
+if (!args.tag || !args.detail) return ERR('缺少 tag 或 detail');
+const note = await Memory.addNote({ tag:args.tag, detail:args.detail, priority:args.priority||'normal', characters:args.characters||[], scope:_scope() });
+return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ success:false, message:'重复记录，已跳过。' });
+},
     async update_note(args) {
       if (!args.id) return ERR('缺少 id');
       const m = await DB.get('memories', args.id);
@@ -506,6 +524,7 @@ const Tools = (() => {
       const note = await Memory.addBackstageNote({
         tag: args.tag,
         detail: args.detail,
+        priority: args.priority || 'normal',
         convId,
         convName,
         worldviewId: wvId,
@@ -654,6 +673,51 @@ const Tools = (() => {
         return { archivedAt: hit.archivedAt, context: lines.join('\n') };
       });
       return OK({ items: segments });
+    },
+
+    // --- 使用说明查询 ---
+    async query_guide(args) {
+      let md;
+      try {
+        const resp = await fetch('guide.md?_=' + Date.now());
+        if (!resp.ok) throw new Error(resp.status);
+        md = await resp.text();
+      } catch(_) {
+        return ERR('无法加载 guide.md');
+      }
+      const keyword = args && args.keyword ? String(args.keyword).trim() : '';
+      if (!keyword) {
+        // 返回目录（所有标题行）
+        const headings = md.split('\n')
+          .filter(l => /^#{1,5}\s/.test(l))
+          .map(l => l.replace(/^#+\s*/, '').trim());
+        return OK({ type: 'toc', headings });
+      }
+      // 按章节过滤
+      const kw = keyword.toLowerCase();
+      const lines = md.split('\n');
+      const sections = [];
+      let cur = { heading: '', body: [] };
+      for (const line of lines) {
+        if (/^#{1,5}\s/.test(line)) {
+          if (cur.heading || cur.body.length) sections.push(cur);
+          cur = { heading: line, body: [] };
+        } else {
+          cur.body.push(line);
+        }
+      }
+      if (cur.heading || cur.body.length) sections.push(cur);
+      const matched = sections.filter(s => {
+        return (s.heading + '\n' + s.body.join('\n')).toLowerCase().includes(kw);
+      });
+      if (matched.length === 0) {
+        return OK({ result: '使用说明中没有找到包含「' + keyword + '」的内容。' });
+      }
+      const items = matched.map(s => ({
+        section: s.heading.replace(/^#+\s*/, '').trim(),
+        content: (s.heading + '\n' + s.body.join('\n')).trim()
+      }));
+      return OK({ type: 'sections', items });
     }
   };
 

@@ -407,8 +407,8 @@ const Chat = (() => {
         if (typeof StatusBar !== 'undefined' && StatusBar._clearNpcAvatarCache) {
           StatusBar._clearNpcAvatarCache();
         }
-        // 单人卡皮下：强制 render 一次（即使 status 为 null，render 内部会兜底成空壳显示占位）
-        if (_isSingle && _isDefaultWv && typeof StatusBar !== 'undefined' && StatusBar.refreshFromConv) {
+        // 强制 render 一次状态栏（无论有无世界观，确保切换后 DOM 刷新）
+        if (typeof StatusBar !== 'undefined' && StatusBar.refreshFromConv) {
           StatusBar.refreshFromConv();
         }
       } catch(_) {}
@@ -898,8 +898,19 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
     const memoryPrompt = Memory.formatForPrompt(relatedMemories);
     if (memoryPrompt) systemParts.push(memoryPrompt);
 
-    // 5b. 小纸条（情绪记忆碎片）
+    // 5a2. 永久小纸条（每轮必发，紧跟记忆池之后）
+    let _pinnedCount = 0;
+    try {
+      const pinnedNotes = await Memory.getPinnedNotes();
+      const pinnedPrompt = Memory.formatPinnedNotesForPrompt(pinnedNotes);
+      if (pinnedPrompt) systemParts.push(pinnedPrompt);
+      _pinnedCount = pinnedNotes ? pinnedNotes.length : 0;
+    } catch(_) {}
+
+    // 5b. 小纸条（情绪记忆碎片）——随机池（重要+普通，永久已排除）
     let _noteCount = 0;
+    let _importantNoteCount = 0;
+    let _normalNoteCount = 0;
     try {
       const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
       const userInputText = lastUserMsg?.content || '';
@@ -907,13 +918,15 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
       const notesPrompt = Memory.formatNotesForPrompt(notes);
       if (notesPrompt) systemParts.push(notesPrompt);
       _noteCount = notes ? notes.length : 0;
+      _importantNoteCount = notes ? notes.filter(n => n.priority === 'important').length : 0;
+      _normalNoteCount = _noteCount - _importantNoteCount;
     } catch(_) {}
 
     // 记忆注入日志
     const _eventCount = relatedMemories.filter(m => m.type === 'event').length;
     const _relCount = relatedMemories.filter(m => m.type === 'relation').length;
-    const _pinnedCount = relatedMemories.filter(m => m.pinned).length;
-    GameLog.log('info', `[记忆注入] 事件=${_eventCount}, 关系=${_relCount}, 固定=${_pinnedCount}, 小纸条=${_noteCount}, 共${relatedMemories.length + _noteCount}条`);
+    const _memPinnedCount = relatedMemories.filter(m => m.pinned).length;
+    GameLog.log('info', `[记忆注入] 事件=${_eventCount}, 关系=${_relCount}, 固定=${_memPinnedCount}, 永久纸条=${_pinnedCount}, 重要纸条=${_importantNoteCount}, 普通纸条=${_normalNoteCount}, 共${relatedMemories.length + _pinnedCount + _noteCount}条`);
 }
 
     // 6. 自定义提示词注入（system_top和system_bottom）
@@ -2268,12 +2281,12 @@ for (let nAttempt = 1; nAttempt <= 2; nAttempt++) {
     if (notesData && notesData.notes) {
       for (const n of notesData.notes) {
         if (n.tag && n.detail) {
-          await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound, time: extractGameTime });
-          noteCount2++;
-        }
-      }
-    }
-    GameLog.log('info', `[Memory] 小纸条提取完成: ${noteCount2}条`);
+          await Memory.addNote({ tag: n.tag, detail: n.detail, priority: n.priority, characters: n.characters || [], scope: extractScope, roundCreated: extractRound, time: extractGameTime });
+noteCount2++;
+}
+}
+}
+GameLog.log('info', `[Memory] 小纸条提取完成: ${noteCount2}条`);
     notesSuccess = true;
     break;
   } catch(noteErr) {
@@ -2291,13 +2304,13 @@ if (!notesSuccess) {
     try { notesData = JSON.parse(notesCleaned); } catch(pe) { notesData = _tryFixTruncatedJSON(notesCleaned); }
     if (notesData && notesData.notes) {
       for (const n of notesData.notes) {
-        if (n.tag && n.detail) {
-          await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound, time: extractGameTime });
-          noteCount2++;
-        }
-      }
-    }
-    GameLog.log('info', `[Memory] 小纸条主模型兜底成功: ${noteCount2}条`);
+if (n.tag && n.detail) {
+           await Memory.addNote({ tag: n.tag, detail: n.detail, priority: n.priority, characters: n.characters || [], scope: extractScope, roundCreated: extractRound, time: extractGameTime });
+           noteCount2++;
+         }
+       }
+     }
+     GameLog.log('info', `[Memory] 小纸条主模型兜底成功: ${noteCount2}条`);
   } catch(noteErr2) {
     GameLog.log('warn', `[Memory] 小纸条提取全部失败(不影响事件/关系): ${noteErr2.message}`);
   }
@@ -2352,7 +2365,7 @@ if (updateLastExtracted) {
         try { notesData2 = JSON.parse(notesCleaned2); } catch(pe) { notesData2 = _tryFixTruncatedJSON(notesCleaned2); }
         if (notesData2 && notesData2.notes) {
           for (const n of notesData2.notes) {
-            if (n.tag && n.detail) { await Memory.addNote({ tag: n.tag, detail: n.detail, characters: n.characters || [], scope: extractScope, roundCreated: extractRound, time: extractGameTime }); noteCount3++; }
+            if (n.tag && n.detail) { await Memory.addNote({ tag: n.tag, detail: n.detail, priority: n.priority, characters: n.characters || [], scope: extractScope, roundCreated: extractRound, time: extractGameTime }); noteCount3++; }
           }
         }
       } catch(noteErr2) { GameLog.log('warn', `[Memory] 兜底小纸条提取失败: ${noteErr2.message}`); }
@@ -2666,7 +2679,6 @@ showContextMenu(msgEl.dataset.id, e.clientX, e.clientY);
       if (_isLatest) {
         items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> 重写剧情', action: () => openRewriteHint(msgId) });
         items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M10.029 4.285A2 2 0 0 0 7 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/><path d="M3 4v16"/></svg> 继续剧情', action: () => continueGenerate(msgId) });
-        items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg> 回退一步', action: () => retractAI(msgId) });
       }
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg> 从此分支', action: () => createBranch(msgId) });
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="m12 3.5 2.78 5.63 6.22.9-4.5 4.39 1.06 6.2L12 17.7l-5.56 2.92 1.06-6.2L3 10.03l6.22-.9L12 3.5z"/></svg> 收藏剧情', action: () => collectMessage(msgId) });
@@ -3106,45 +3118,6 @@ exitMultiSelect();
   if (input) input.value = '<Continue the Chat/>';
   await send();
   // send() 会清空输入框，不需要恢复
-}
-
-  // ===== 撤回AI回复（仅删除AI本条消息，用户输入返回发送框） =====
-
-async function retractAI(msgId) {
-  const idx = messages.findIndex(m => m.id === msgId);
-  if (idx < 0 || messages[idx].role !== 'assistant') return;
-
-  // 获取消息元素，添加撤回动画
-  const msgEl = document.querySelector(`.chat-msg[data-id="${msgId}"]`);
-  if (msgEl) {
-    msgEl.classList.add('retract-anim');
-    // 等待动画完成
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
-
-  // 找到前面的用户消息
-  let userMsg = null;
-  for (let i = idx - 1; i >= 0; i--) {
-    if (messages[i].role === 'user') { userMsg = messages[i]; break; }
-  }
-
-// 把用户消息内容放回发送框（用 content 而非 contentForAPI，避免系统注入内容暴露）
-    if (userMsg) {
-      const input = document.getElementById('chat-input');
-      if (input) {
-        input.value = userMsg.content;
-        input.style.height = 'auto';
-        input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-      }
-    }
-
-  // 仅删除AI本条消息
-  await DB.del('messages', msgId);
-  messages = messages.filter(m => m.id !== msgId);
-  roundCount = messages.filter(m => m.role === 'user').length;
-  await _restoreStatusFromMessages();
-  renderAll();
-  updateTokenCount();
 }
 
   // ===== 渲染 =====
@@ -5792,7 +5765,7 @@ async function applyLorebooksToWorldview() {
     refreshAiAvatar,
     refreshOnlineChatAvatars,
     deleteMessage, rollbackTo, rollbackAndRestore,
-    continueGenerate, retractAI,
+    continueGenerate,
     initLongPress, showContext, _showToolsLog,
     togglePlusMenu, toggleFullscreenInput, attachImage, onImagePicked,
     attachFile, onFilePicked, previewFile, _openFilePreview,

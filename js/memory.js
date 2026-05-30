@@ -138,22 +138,34 @@ const Memory = (() => {
   const NOTE_TAGS = ['喜欢','讨厌','期待','恐惧','愤怒','有趣','习惯','秘密','悲伤','迷茫','痛苦'];
   const NOTE_MAX = 1000;
 
+  const NOTE_PRIORITIES = ['pinned', 'important', 'normal'];
+
   async function addNote(data) {
     const scope = data.scope || Character.getCurrentId();
     const tag = NOTE_TAGS.includes(data.tag) ? data.tag : '有趣';
     const detail = String(data.detail || '').trim();
     if (!detail) return null;
+    const priority = NOTE_PRIORITIES.includes(data.priority) ? data.priority : 'normal';
 
     // 去重：同 scope + 同 tag + 同 detail
     const all = await DB.getAll('memories');
     const dup = all.find(m => m.type === 'note' && m.scope === scope && m.tag === tag && m.detail === detail);
     if (dup) return dup;
 
+    // 永久纸条软限额提醒（10 条）
+    if (priority === 'pinned') {
+      const pinnedCount = all.filter(m => m.type === 'note' && m.scope === scope && m.priority === 'pinned').length;
+      if (pinnedCount >= 10) {
+        try { UI.showToast(`永久小纸条已有 ${pinnedCount} 条，建议精简`, 2500); } catch(_) {}
+      }
+    }
+
     const memory = {
       id: Utils.uuid(),
       type: 'note',
       tag,
       detail,
+      priority,
       time: data.time || '',
       characters: data.characters || [],
       scope,
@@ -162,12 +174,14 @@ const Memory = (() => {
     };
     await DB.put('memories', memory);
 
-    // FIFO：超出上限时删最早的
+    // FIFO：超出上限时只删 normal（永久和重要不删）
     const notes = all.filter(m => m.type === 'note' && m.scope === scope);
     notes.push(memory);
     if (notes.length > NOTE_MAX) {
-      notes.sort((a, b) => a.timestamp - b.timestamp);
-      const toRemove = notes.slice(0, notes.length - NOTE_MAX);
+      const normals = notes.filter(n => (!n.priority || n.priority === 'normal'));
+      normals.sort((a, b) => a.timestamp - b.timestamp);
+      const excess = notes.length - NOTE_MAX;
+      const toRemove = normals.slice(0, Math.min(excess, normals.length));
       for (const old of toRemove) { try { await DB.delete('memories', old.id); } catch(_){} }
     }
     return memory;
@@ -184,6 +198,27 @@ const Memory = (() => {
     '没有','现在','以后','以前','刚才','刚刚','上次','下次','可以','需要',
     '今天','明天','昨天','后来','后面','前面','里面','外面','上面','下面'
   ]);
+
+  // 标签触发词库：用户输入命中某标签的触发词时，该标签的小纸条加权
+  const NOTE_TAG_TRIGGERS = {
+    '喜欢': ['喜欢','想吃','想要','爱吃','爱喝','馋','好吃','好看','心动','满意','偏爱','钟爱','愉悦','美味','迷恋','享受','不错'],
+    '讨厌': ['讨厌','不喜欢','烦','受不了','恶心','不想','不要','反感','难吃','难看','难听','厌恶','抵触','拒绝','嫌弃','避开','离我远点'],
+    '习惯': ['习惯','经常','总是','每次','下意识','忍不住','不自觉','惯例','照常','老样子','本能','熟练','顺手','自然而然'],
+    '开心': ['开心','高兴','快乐','兴奋','笑','激动','喜悦','爽','笑容','嘴角上扬','满足','欢呼','眉飞色舞'],
+    '感动': ['感动','破防','心软','温暖','鼻酸','泪目','触动','动容','欣慰','眼眶一热','想哭','暖意'],
+    '安心': ['安心','放心','松口气','踏实','平静','宁静','安全','依靠','舒心','放松','卸下防备','喘息'],
+    '期待': ['期待','想见','盼着','下次','希望','等待','向往','憧憬','跃跃欲试','迫不及待','祈祷'],
+    '骄傲': ['骄傲','自豪','得意','哼','夸我','厉害','挺起胸膛','自信','底气','扬眉吐气','炫耀','成就感'],
+    '悲伤': ['难过','伤心','哭','失落','委屈','悲伤','痛哭','哽咽','流泪','抽泣','沉重','心碎','黯然'],
+    '愤怒': ['生气','愤怒','气死','火大','恼火','不爽','怒','咬牙','瞪','握拳','发脾气','发火','暴怒'],
+    '恐惧': ['害怕','恐惧','怕','吓','不安','危险','紧张','发抖','颤抖','恐慌','惊恐','退缩','畏惧','寒意'],
+    '痛苦': ['痛苦','崩溃','绝望','心疼','疼','痛','煎熬','折磨','挣扎','窒息','难以忍受'],
+    '迷茫': ['迷茫','不知所措','茫然','懵','疑惑','为什么','怎么办','乱','迟疑','犹豫','找不着北','困惑','发呆'],
+    '不悦': ['不悦','皱眉','撇嘴','沉下脸','冷脸','不满','抱怨','啧','切','烦躁','扫兴','郁结'],
+    '秘密': ['秘密','别告诉','瞒着','偷偷','保密','不让知道','隐藏','掩饰','私下','悄悄','嘘','隐瞒'],
+    '伏笔': ['以后','总有一天','迟早','线索','调查','真相','约定','怀疑','到底','背后','预感','探究','谜团'],
+    '有趣': ['好笑','离谱','有趣','奇怪','莫名其妙','搞笑','逗','乐子','奇葩','幽默','打趣','恶作剧']
+  };
 
   function _extractDetailTokens(detail) {
     if (!detail) return [];
@@ -206,12 +241,23 @@ const Memory = (() => {
   async function retrieveNotes(presentNPCNames = [], userInputText = '') {
     const allMemories = await DB.getAll('memories');
     const currentScope = Character.getCurrentId();
-    const notes = allMemories.filter(m => m.type === 'note' && m.scope === currentScope);
+    // 排除永久纸条（永久走单独注入通道）
+    const notes = allMemories.filter(m => m.type === 'note' && m.scope === currentScope && m.priority !== 'pinned');
     if (notes.length === 0) return [];
 
     const userText = String(userInputText || '');
+    const importantNotes = notes.filter(n => n.priority === 'important');
+    const normalNotes = notes.filter(n => !n.priority || n.priority === 'normal');
 
-    // 计算匹配分（双路）
+    // 预计算：用户输入命中了哪些标签的触发词
+    const triggeredTags = new Set();
+    if (userText) {
+      for (const [tag, words] of Object.entries(NOTE_TAG_TRIGGERS)) {
+        if (words.some(w => userText.includes(w))) triggeredTags.add(tag);
+      }
+    }
+
+    // 计算匹配分（三路）
     const scored = notes.map(n => {
       let score = 0;
       // 路1：角色命中
@@ -225,6 +271,8 @@ const Memory = (() => {
         const anyHit = tokens.some(t => userText.includes(t));
         if (anyHit) score += 3;
       }
+      // 路3：标签触发词命中（用户输入的情绪/行为词 → 对应标签纸条加权）
+      if (triggeredTags.has(n.tag)) score += 1;
       return { note: n, score };
     });
 
@@ -236,15 +284,33 @@ const Memory = (() => {
 
     let result;
     if (matched.length >= targetCount) {
-      // 命中够多 → 全部从命中里随机抽
       const shuffled = matched.slice().sort(() => Math.random() - 0.5);
       result = shuffled.slice(0, targetCount);
     } else {
-      // 命中不够 → 命中的全要 + 剩下从未命中里随机补
       const others = notes.filter(n => !matchedIds.has(n.id));
       const shuffledOthers = others.slice().sort(() => Math.random() - 0.5);
       result = matched.concat(shuffledOthers.slice(0, targetCount - matched.length));
     }
+
+    // 重要纸条保底：确保至少 2 条 important 在结果里（如果 important 总数 ≥2）
+    const resultIds = new Set(result.map(n => n.id));
+    const importantInResult = result.filter(n => n.priority === 'important').length;
+    const IMPORTANT_FLOOR = 2;
+    if (importantInResult < IMPORTANT_FLOOR && importantNotes.length >= IMPORTANT_FLOOR) {
+      const missingImportant = importantNotes.filter(n => !resultIds.has(n.id))
+        .sort(() => Math.random() - 0.5)
+        .slice(0, IMPORTANT_FLOOR - importantInResult);
+      // 替换结果尾部的 normal 纸条（如果有的话）
+      for (const imp of missingImportant) {
+        const normalIdx = result.findLastIndex(n => !n.priority || n.priority === 'normal');
+        if (normalIdx >= 0) {
+          result[normalIdx] = imp;
+        } else {
+          result.push(imp); // 全是 important 了就追加
+        }
+      }
+    }
+
     return result;
   }
 
@@ -252,6 +318,25 @@ const Memory = (() => {
     if (!notes || notes.length === 0) return '';
     let text = '【小纸条】这是 {{user}} 之前在剧情里流露过的碎片，有的可能过时了，有的可能很新鲜。它们不是全部，这只是系统给你塞了一把，可能和当前剧情有关，也可能无关，让你每次回应都会随机想起点什么。\n你可以让角色在合适的时机自然呼应，如果情景不贴合，也可以无视它们。\n\n';
     notes.forEach(n => {
+      text += `- [${n.tag}] ${n.detail}`;
+      if (n.characters?.length) text += `（在场：${n.characters.join('、')}）`;
+      text += '\n';
+    });
+    return text;
+  }
+
+  // ===== 永久小纸条（pinned）=====
+
+  async function getPinnedNotes() {
+    const allMemories = await DB.getAll('memories');
+    const currentScope = Character.getCurrentId();
+    return allMemories.filter(m => m.type === 'note' && m.scope === currentScope && m.priority === 'pinned');
+  }
+
+  function formatPinnedNotesForPrompt(pinnedNotes) {
+    if (!pinnedNotes || pinnedNotes.length === 0) return '';
+    let text = '【永久记忆】以下是关于 {{user}} 的核心记忆碎片，每一条都很重要，请始终记住并在合适的时机体现。\n\n';
+    pinnedNotes.forEach(n => {
       text += `- [${n.tag}] ${n.detail}`;
       if (n.characters?.length) text += `（在场：${n.characters.join('、')}）`;
       text += '\n';
@@ -267,6 +352,7 @@ const Memory = (() => {
     const tag = String(data.tag || '').trim() || '有趣';
     const detail = String(data.detail || '').trim();
     if (!detail) return null;
+    const priority = NOTE_PRIORITIES.includes(data.priority) ? data.priority : 'normal';
 
     // 来源信息（convId 为空标记为 legacy）
     const convId = data.convId || '__legacy__';
@@ -279,6 +365,14 @@ const Memory = (() => {
     const dup = all.find(m => m.type === 'backstage_note' && m.tag === tag && m.detail === detail && (m.convId || '__legacy__') === convId);
     if (dup) return dup;
 
+    // 永久纸条软限额提醒
+    if (priority === 'pinned') {
+      const pinnedCount = all.filter(m => m.type === 'backstage_note' && m.priority === 'pinned').length;
+      if (pinnedCount >= 10) {
+        try { UI.showToast(`后台永久小纸条已有 ${pinnedCount} 条，建议精简`, 2500); } catch(_) {}
+      }
+    }
+
     const now = new Date();
     const timeStr = `${now.getFullYear()}.${now.getMonth()+1}.${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
@@ -287,6 +381,7 @@ const Memory = (() => {
       type: 'backstage_note',
       tag,
       detail,
+      priority,
       time: data.time || timeStr,
       scope: BACKSTAGE_SCOPE,
       convId,
@@ -298,12 +393,14 @@ const Memory = (() => {
     };
     await DB.put('memories', memory);
 
-    // FIFO
+    // FIFO：只删 normal
     const notes = all.filter(m => m.type === 'backstage_note');
     notes.push(memory);
     if (notes.length > BACKSTAGE_NOTE_MAX) {
-      notes.sort((a, b) => a.timestamp - b.timestamp);
-      const toRemove = notes.slice(0, notes.length - BACKSTAGE_NOTE_MAX);
+      const normals = notes.filter(n => (!n.priority || n.priority === 'normal'));
+      normals.sort((a, b) => a.timestamp - b.timestamp);
+      const excess = notes.length - BACKSTAGE_NOTE_MAX;
+      const toRemove = normals.slice(0, Math.min(excess, normals.length));
       for (const old of toRemove) { try { await DB.delete('memories', old.id); } catch(_){} }
     }
     return memory;
@@ -339,7 +436,15 @@ const Memory = (() => {
 
     if (notes.length === 0) return [];
 
-    // 路2：用户输入命中 detail 关键词（+1，比主线轻）
+    // 预计算：用户输入命中了哪些标签的触发词
+    const triggeredTags = new Set();
+    if (userInputText) {
+      for (const [tag, words] of Object.entries(NOTE_TAG_TRIGGERS)) {
+        if (words.some(w => userInputText.includes(w))) triggeredTags.add(tag);
+      }
+    }
+
+    // 路2：用户输入命中 detail 关键词（+1，比主线轻）+ 路3：标签触发词命中
     const scored = notes.map(n => {
       let score = 0;
       if (userInputText && n.detail) {
@@ -347,6 +452,8 @@ const Memory = (() => {
         const anyHit = tokens.some(t => userInputText.includes(t));
         if (anyHit) score += 1;
       }
+      // 标签触发词命中
+      if (triggeredTags.has(n.tag)) score += 1;
       return { note: n, score };
     });
 
@@ -478,10 +585,12 @@ const Memory = (() => {
           }
         }
 
-        // 事件标题在对话中被提到（≥2字）
+        // 事件标题 token 在对话中被提到（拆成 2-4 字滑窗，轻量加分）
         const title = (m.title || '').trim();
-        if (title.length >= 2 && recentText.includes(title)) {
-          score += 0.3;
+        if (title.length >= 2) {
+          const titleTokens = _extractDetailTokens(title);
+          const titleHits = titleTokens.filter(t => recentText.includes(t)).length;
+          if (titleHits > 0) score += Math.min(titleHits * 0.15, 0.45); // 单个 token +0.15，封顶 0.45
         }
 
         return { memory: m, score };
@@ -623,12 +732,20 @@ ${dialogue}
   - 只提取能够体现${playerName}性格的信息，不记录日常陈述。例如Ta说"我去吃饭了"、"我回来了"这类不体现性格画像，跳过；但若Ta说"我又点了同一家烧烤"——这是稳定偏好，记。
   - 每次最多提取6条，优先记录偏好类和强烈的情绪波动（如愤怒、幸福等）。
 
+- 优先级标记（priority）
+  - 每条纸条需标记 priority 字段，取值为 "important" 或 "normal"。
+  - "important"：能够稳定体现${playerName}长期性格画像的信息，例如习惯、喜好、厌恶、核心恐惧、反复出现的行为模式。
+  - "normal"：单次情绪波动、偶然事件、一次性的有趣行为等。
+  - 每次提取最多标记 1 条为 "important"，其余都是 "normal"。优先将习惯/喜好/厌恶标为 important。
+  - 如果本次提取的内容全是一次性事件，那就全部标 "normal"，不要硬凑 important。
+
 输出格式：
 {
   "notes": [
     {
       "tag": "从上述标签中选最贴切的一个",
       "detail": "包含前因+${playerName}的反应，按上述规则书写",
+      "priority": "important 或 normal",
       "time": "游戏内时间（能从上下文推断就填，推断不出留空字符串）",
       "characters": ["当时在场的角色姓名"]
     }
@@ -840,10 +957,16 @@ ${dialogue}
         const isSelected = selectedIds.has(m.id);
         // 小纸条独立渲染
         if (m.type === 'note') {
+          const pIcon = m.priority === 'pinned'
+            ? `<span style="position:absolute;top:6px;right:8px;color:var(--accent);display:flex;align-items:center" title="永久"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:14px;height:14px"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"/></svg></span>`
+            : m.priority === 'important'
+            ? `<span style="position:absolute;top:6px;right:8px;color:var(--accent);display:flex;align-items:center" title="重要"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg></span>`
+            : '';
           return `
-          <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;cursor:pointer" class="card" data-id="${m.id}" onclick="${manageMode ? `Memory.toggleSelect('${m.id}')` : `Memory.editNote('${m.id}')`}">
+          <div style="position:relative;display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;cursor:pointer" class="card" data-id="${m.id}" onclick="${manageMode ? `Memory.toggleSelect('${m.id}')` : `Memory.editNote('${m.id}')`}">
             ${manageMode ? `<span class="memory-select-checkbox" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);border-color:var(--accent);' : ''}" onclick="event.stopPropagation();Memory.toggleSelect('${m.id}')">${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>` : ''}
-            <div style="flex:1;overflow:hidden">
+            ${pIcon}
+            <div style="flex:1;overflow:hidden;${pIcon ? 'padding-right:20px' : ''}">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
                 <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);font-weight:700;flex-shrink:0">${Utils.escapeHtml(m.tag)}</span>
                 ${m.characters?.length ? `<span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.characters.join('、')}</span>` : ''}
@@ -1880,9 +2003,82 @@ function _collectEmotionsForEdit() {
 
   // ===== UI - 手动添加 =====
 
+  // ===== 手动新建小纸条 =====
+  async function addNoteManual() {
+    _editingNoteId = '__new__';
+    const m = { tag: '有趣', detail: '', characters: [], priority: 'normal' };
+
+    const curTag = m.tag;
+    const tagGroups = [
+      { title: '偏好', tags: ['喜欢', '讨厌', '习惯'] },
+      { title: '情绪', tags: ['开心', '感动', '安心', '期待', '骄傲', '悲伤', '愤怒', '恐惧', '痛苦', '迷茫', '不悦'] },
+      { title: '事件', tags: ['有趣', '伏笔', '秘密'] }
+    ];
+    let tagDropdownHtml = '';
+    for (const g of tagGroups) {
+      tagDropdownHtml += `<div style="padding:4px 10px 2px;font-size:10px;color:var(--text-secondary);font-weight:700;text-transform:uppercase;letter-spacing:0.5px">${g.title}</div>`;
+      tagDropdownHtml += `<div style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px">`;
+      for (const t of g.tags) {
+        const isCur = t === curTag;
+        tagDropdownHtml += `<div onclick="event.stopPropagation();Memory._selectTag('${t}')" style="padding:4px 10px;cursor:pointer;font-size:13px;border-radius:20px;${isCur ? 'background:var(--accent);color:#fff;font-weight:600' : 'background:color-mix(in srgb, var(--accent) 10%, transparent);color:var(--text)'}">${t}</div>`;
+      }
+      tagDropdownHtml += `</div>`;
+    }
+
+    const curPriority = 'normal';
+    const curLabel = '普通';
+    const priorityChoices = ['pinned', 'important', 'normal'];
+    const dropdownItems = priorityChoices.map(v => {
+      const icon = _PRIORITY_SVG[v] || '';
+      const label = _PRIORITY_LABEL[v] || v;
+      const isCur = v === curPriority;
+      return `<div onclick="event.stopPropagation();Memory._selectPriority('${v}')" style="padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);border-radius:var(--radius);${isCur ? 'background:color-mix(in srgb, var(--accent) 12%, transparent);font-weight:600' : ''}">${icon ? '<span style="display:inline-flex;color:var(--accent)">' + icon + '</span>' : ''}<span>${label}</span></div>`;
+    }).join('');
+
+    // 面具/后台选择器（默认当前面具）
+    const defaultScope = Character.getCurrentId();
+    const maskData = await DB.get('gameState', 'maskList');
+    const masks = maskData?.value || [];
+    const foundMask = masks.find(x => x.id === defaultScope);
+    const scopeDisplayLabel = foundMask ? foundMask.name : defaultScope;
+    const scopeOptionsHtml = await _buildScopeOptionsHtml(defaultScope);
+
+    const html = `
+    <div id="note-edit-overlay" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)Memory.closeNoteEdit()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:400px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 16px 0;font-size:16px;color:var(--text)">新建小纸条</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">标签</label>
+        <input type="hidden" id="note-edit-tag" value="${curTag}" />
+        <div style="position:relative;margin-bottom:12px">
+          <div id="note-tag-display" onclick="Memory._toggleTagDropdown(event)" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px;box-sizing:border-box;user-select:none"><span>${curTag}</span><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div id="note-tag-dropdown" class="hidden" style="position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10;overflow:hidden;padding:4px 0;max-height:240px;overflow-y:auto">${tagDropdownHtml}</div>
+        </div>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">优先级</label>
+        <input type="hidden" id="note-edit-priority" value="${curPriority}" />
+        <div style="position:relative;margin-bottom:12px">
+          <div id="note-priority-display" onclick="Memory._togglePriorityDropdown(event)" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px;box-sizing:border-box;user-select:none"><span>${curLabel}</span><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div id="note-priority-dropdown" class="hidden" style="position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10;overflow:hidden;padding:4px">${dropdownItems}</div>
+        </div>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">内容</label>
+        <textarea id="note-edit-detail" style="width:100%;min-height:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:14px;line-height:1.4" placeholder="写点什么..."></textarea>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px 0">在场角色（逗号分隔）</label>
+        <input id="note-edit-characters" type="text" value="" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px" />
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px 0">所属</label>
+        <input type="hidden" id="note-edit-scope" value="${defaultScope}" />
+        <div style="position:relative;margin-bottom:12px">
+          <div id="note-scope-display" onclick="Memory._toggleNoteScopeDropdown(event)" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px;box-sizing:border-box;user-select:none"><span>${scopeDisplayLabel}</span><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div id="note-scope-dropdown" class="hidden" style="position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10;overflow:hidden;padding:4px;max-height:200px;overflow-y:auto">${scopeOptionsHtml}</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="Memory.closeNoteEdit()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button onclick="Memory.saveNoteEdit()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#fff;font-size:13px;cursor:pointer">保存</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
   function addManual() {
-    editingId = null;
-    const type = currentTab === 'events' ? 'event' : 'relation';
     document.getElementById('mem-edit-type').value = type;
     // 更新类型下拉label
     const editTypeLabel = document.getElementById('mem-edit-type-label');
@@ -1938,17 +2134,77 @@ function _collectEmotionsForEdit() {
     _editingNoteId = id;
 
     // 构建弹窗
-    const tagOptions = NOTE_TAGS.map(t => `<option value="${t}" ${t === m.tag ? 'selected' : ''}>${t}</option>`).join('');
+    const curTag = m.tag || '有趣';
+    const tagGroups = [
+      { title: '偏好', tags: ['喜欢', '讨厌', '习惯'] },
+      { title: '情绪', tags: ['开心', '感动', '安心', '期待', '骄傲', '悲伤', '愤怒', '恐惧', '痛苦', '迷茫', '不悦'] },
+      { title: '事件', tags: ['有趣', '伏笔', '秘密'] }
+    ];
+    let tagDropdownHtml = '';
+    for (const g of tagGroups) {
+      tagDropdownHtml += `<div style="padding:4px 10px 2px;font-size:10px;color:var(--text-secondary);font-weight:700;text-transform:uppercase;letter-spacing:0.5px">${g.title}</div>`;
+      tagDropdownHtml += `<div style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px">`;
+      for (const t of g.tags) {
+        const isCur = t === curTag;
+        tagDropdownHtml += `<div onclick="event.stopPropagation();Memory._selectTag('${t}')" style="padding:4px 10px;cursor:pointer;font-size:13px;border-radius:20px;${isCur ? 'background:var(--accent);color:#fff;font-weight:600' : 'background:color-mix(in srgb, var(--accent) 10%, transparent);color:var(--text)'}">${t}</div>`;
+      }
+      tagDropdownHtml += `</div>`;
+    }
+    // 标签不在 NOTE_TAGS 分组里时，追加到末尾
+    const allGroupedTags = tagGroups.flatMap(g => g.tags);
+    if (!allGroupedTags.includes(curTag)) {
+      tagDropdownHtml += `<div style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px"><div onclick="event.stopPropagation();Memory._selectTag('${curTag}')" style="padding:4px 10px;cursor:pointer;font-size:13px;border-radius:20px;background:var(--accent);color:#fff;font-weight:600">${curTag}</div></div>`;
+    }
+
+    const curPriority = m.priority || 'normal';
+    const curIcon = _PRIORITY_SVG[curPriority] || '';
+    const curLabel = _PRIORITY_LABEL[curPriority] || '普通';
+
+    // 面具/后台选择器
+    const curScope = m.scope || Character.getCurrentId();
+    const isBackstage = m.type === 'backstage_note' || curScope === BACKSTAGE_SCOPE;
+    let scopeDisplayLabel = '后台';
+    if (!isBackstage) {
+      const maskData = await DB.get('gameState', 'maskList');
+      const masks = maskData?.value || [];
+      const found = masks.find(x => x.id === curScope);
+      scopeDisplayLabel = found ? found.name : curScope;
+    }
+    const scopeOptionsHtml = await _buildScopeOptionsHtml(curScope);
+
+    const priorityChoices = ['pinned', 'important', 'normal'];
+    const dropdownItems = priorityChoices.map(v => {
+      const icon = _PRIORITY_SVG[v] || '';
+      const label = _PRIORITY_LABEL[v] || v;
+      const isCur = v === curPriority;
+      return `<div onclick="event.stopPropagation();Memory._selectPriority('${v}')" style="padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);border-radius:var(--radius);${isCur ? 'background:color-mix(in srgb, var(--accent) 12%, transparent);font-weight:600' : ''}">${icon ? '<span style="display:inline-flex;color:var(--accent)">' + icon + '</span>' : ''}<span>${label}</span></div>`;
+    }).join('');
     const html = `
     <div id="note-edit-overlay" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)Memory.closeNoteEdit()">
       <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:400px;max-height:80vh;overflow-y:auto">
         <h3 style="margin:0 0 16px 0;font-size:16px;color:var(--text)">编辑小纸条</h3>
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">标签</label>
-        <select id="note-edit-tag" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px">${tagOptions}</select>
+        <input type="hidden" id="note-edit-tag" value="${curTag}" />
+        <div style="position:relative;margin-bottom:12px">
+          <div id="note-tag-display" onclick="Memory._toggleTagDropdown(event)" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px;box-sizing:border-box;user-select:none"><span>${curTag}</span><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div id="note-tag-dropdown" class="hidden" style="position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10;overflow:hidden;padding:4px 0;max-height:240px;overflow-y:auto">${tagDropdownHtml}</div>
+        </div>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">优先级</label>
+        <input type="hidden" id="note-edit-priority" value="${curPriority}" />
+        <div style="position:relative;margin-bottom:12px">
+          <div id="note-priority-display" onclick="Memory._togglePriorityDropdown(event)" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px;box-sizing:border-box;user-select:none">${curIcon ? '<span style="display:inline-flex;color:var(--accent)">' + curIcon + '</span>' : ''}<span>${curLabel}</span><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div id="note-priority-dropdown" class="hidden" style="position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10;overflow:hidden;padding:4px">${dropdownItems}</div>
+        </div>
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">内容</label>
         <textarea id="note-edit-detail" style="width:100%;min-height:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:14px;line-height:1.4">${Utils.escapeHtml(m.detail || '')}</textarea>
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px 0">在场角色（逗号分隔）</label>
         <input id="note-edit-characters" type="text" value="${Utils.escapeHtml((m.characters || []).join('、'))}" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px" />
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px 0">所属</label>
+        <input type="hidden" id="note-edit-scope" value="${m.scope || ''}" />
+        <div style="position:relative;margin-bottom:12px">
+          <div id="note-scope-display" onclick="Memory._toggleNoteScopeDropdown(event)" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px;box-sizing:border-box;user-select:none"><span>${scopeDisplayLabel}</span><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div id="note-scope-dropdown" class="hidden" style="position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10;overflow:hidden;padding:4px;max-height:200px;overflow-y:auto">${scopeOptionsHtml}</div>
+        </div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="Memory.deleteNoteFromEdit()" style="padding:8px 14px;border:1px solid var(--danger, #e53935);border-radius:var(--radius);background:transparent;color:var(--danger, #e53935);font-size:13px;cursor:pointer">删除</button>
           <button onclick="Memory.closeNoteEdit()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
@@ -1959,6 +2215,95 @@ function _collectEmotionsForEdit() {
     document.body.insertAdjacentHTML('beforeend', html);
   }
 
+  // 优先级下拉选择项 — 图标 SVG（复用侧边栏同款）
+  const _PRIORITY_SVG = {
+    pinned: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:14px;height:14px"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"/></svg>',
+    important: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg>',
+    normal: ''
+  };
+  const _PRIORITY_LABEL = { pinned: '永久', important: '重要', normal: '普通' };
+
+  function _selectPriority(value) {
+    const input = document.getElementById('note-edit-priority');
+    const display = document.getElementById('note-priority-display');
+    const dropdown = document.getElementById('note-priority-dropdown');
+    if (input) input.value = value;
+    if (display) {
+      const icon = _PRIORITY_SVG[value] || '';
+      const label = _PRIORITY_LABEL[value] || value;
+      display.innerHTML = (icon ? '<span style="display:inline-flex;color:var(--accent)">' + icon + '</span>' : '') +
+        '<span>' + label + '</span>' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg>';
+    }
+    if (dropdown) dropdown.classList.add('hidden');
+  }
+
+  function _togglePriorityDropdown(e) {
+    e.stopPropagation();
+    const dd = document.getElementById('note-priority-dropdown');
+    if (dd) dd.classList.toggle('hidden');
+    // 关闭其他下拉
+    document.getElementById('note-tag-dropdown')?.classList.add('hidden');
+    document.getElementById('note-scope-dropdown')?.classList.add('hidden');
+  }
+
+  function _selectTag(value) {
+    const input = document.getElementById('note-edit-tag');
+    const display = document.getElementById('note-tag-display');
+    const dropdown = document.getElementById('note-tag-dropdown');
+    if (input) input.value = value;
+    if (display) {
+      display.innerHTML = '<span>' + value + '</span>' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg>';
+    }
+    if (dropdown) dropdown.classList.add('hidden');
+  }
+
+  function _toggleTagDropdown(e) {
+    e.stopPropagation();
+    const dd = document.getElementById('note-tag-dropdown');
+    if (dd) dd.classList.toggle('hidden');
+    // 关闭其他下拉
+    document.getElementById('note-priority-dropdown')?.classList.add('hidden');
+    document.getElementById('note-scope-dropdown')?.classList.add('hidden');
+  }
+
+  function _selectNoteScope(value, label) {
+    const input = document.getElementById('note-edit-scope');
+    const display = document.getElementById('note-scope-display');
+    const dropdown = document.getElementById('note-scope-dropdown');
+    if (input) input.value = value;
+    if (display) {
+      display.innerHTML = '<span>' + Utils.escapeHtml(label) + '</span>' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg>';
+    }
+    if (dropdown) dropdown.classList.add('hidden');
+  }
+
+  function _toggleNoteScopeDropdown(e) {
+    e.stopPropagation();
+    const dd = document.getElementById('note-scope-dropdown');
+    if (dd) dd.classList.toggle('hidden');
+    document.getElementById('note-tag-dropdown')?.classList.add('hidden');
+    document.getElementById('note-priority-dropdown')?.classList.add('hidden');
+  }
+
+  // 构建面具+后台选项列表 HTML
+  async function _buildScopeOptionsHtml(currentScope) {
+    const maskData = await DB.get('gameState', 'maskList');
+    const masks = maskData?.value || [{ id: 'default', name: '默认面具' }];
+    let html = '';
+    for (const m of masks) {
+      const isCur = m.id === currentScope;
+      html += `<div onclick="event.stopPropagation();Memory._selectNoteScope('${m.id}','${Utils.escapeHtml(m.name)}')" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--text);border-radius:var(--radius);display:flex;align-items:center;gap:6px;${isCur ? 'background:color-mix(in srgb, var(--accent) 12%, transparent);font-weight:600' : ''}"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0"></span><span>${Utils.escapeHtml(m.name)}</span></div>`;
+    }
+    // 后台选项
+    const isBs = currentScope === BACKSTAGE_SCOPE;
+    html += `<div style="height:1px;background:var(--border);margin:4px 8px"></div>`;
+    html += `<div onclick="event.stopPropagation();Memory._selectNoteScope('${BACKSTAGE_SCOPE}','后台')" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--text);border-radius:var(--radius);display:flex;align-items:center;gap:6px;${isBs ? 'background:color-mix(in srgb, var(--accent) 12%, transparent);font-weight:600' : ''}"><span style="width:8px;height:8px;border-radius:50%;background:var(--text-secondary);flex-shrink:0"></span><span>后台</span></div>`;
+    return html;
+  }
+
   function closeNoteEdit() {
     _editingNoteId = null;
     document.getElementById('note-edit-overlay')?.remove();
@@ -1966,19 +2311,59 @@ function _collectEmotionsForEdit() {
 
   async function saveNoteEdit() {
     if (!_editingNoteId) return;
-    const m = await DB.get('memories', _editingNoteId);
-    if (!m) { closeNoteEdit(); return; }
+    const isNew = _editingNoteId === '__new__';
 
     const tag = document.getElementById('note-edit-tag').value;
     const detail = document.getElementById('note-edit-detail').value.trim();
     const charsRaw = document.getElementById('note-edit-characters').value.trim();
     const characters = charsRaw ? charsRaw.split(/[,，、]/).map(s => s.trim()).filter(Boolean) : [];
+    const priority = document.getElementById('note-edit-priority')?.value || 'normal';
 
     if (!detail) { UI.showToast('内容不能为空'); return; }
+
+    if (isNew) {
+      // 新建模式
+      const newScope = document.getElementById('note-edit-scope')?.value || Character.getCurrentId();
+      const isBackstageScope = newScope === BACKSTAGE_SCOPE;
+      if (isBackstageScope) {
+        await addBackstageNote({ tag, detail, priority, characters });
+      } else {
+        await addNote({ tag, detail, priority, characters, scope: newScope });
+      }
+      closeNoteEdit();
+      showTab('notes');
+      UI.showToast('已创建');
+      return;
+    }
+
+    // 编辑模式
+    const m = await DB.get('memories', _editingNoteId);
+    if (!m) { closeNoteEdit(); return; }
+
+    // 永久纸条软限额提醒
+    if (priority === 'pinned' && m.priority !== 'pinned') {
+      const all = await DB.getAll('memories');
+      const pinnedCount = all.filter(x => x.type === 'note' && x.scope === m.scope && x.priority === 'pinned').length;
+      if (pinnedCount >= 10) {
+        UI.showToast(`永久小纸条已有 ${pinnedCount} 条，建议精简`, 2500);
+      }
+    }
 
     m.tag = tag;
     m.detail = detail;
     m.characters = characters;
+    m.priority = NOTE_PRIORITIES.includes(priority) ? priority : 'normal';
+
+    // 面具/后台切换
+    const newScope = document.getElementById('note-edit-scope')?.value || m.scope;
+    if (newScope === BACKSTAGE_SCOPE) {
+      m.scope = BACKSTAGE_SCOPE;
+      m.type = 'backstage_note';
+    } else {
+      m.scope = newScope;
+      m.type = 'note';
+    }
+
     await DB.put('memories', m);
 
     closeNoteEdit();
@@ -2383,13 +2768,13 @@ function _toggleEditScopeDropdown() { _toggleDropdown('mem-edit-scope-dropdown')
   }
 
   return {
-    add, upsertRelation, addNote, retrieve, retrieveNotes, formatNotesForPrompt, NOTE_TAGS,
+    add, upsertRelation, addNote, retrieve, retrieveNotes, formatNotesForPrompt, getPinnedNotes, formatPinnedNotesForPrompt, NOTE_TAGS, NOTE_PRIORITIES,
     addBackstageNote, queryBackstageNotes, retrieveBackstageNotes, formatBackstageNotesForPrompt,
     buildExtractionPrompt, buildNotesPrompt: _buildNotesPrompt, formatForPrompt,
     showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove, deleteNoteConfirm, _deleteBackstageNote,
     _switchBackstageFilter, editBackstageNote, closeBsEdit, saveBsEdit, deleteBsFromEdit,
     changeBackstagePwd, getBackstagePwd,
-    editNote, closeNoteEdit, saveNoteEdit, deleteNoteFromEdit,
+    editNote, closeNoteEdit, saveNoteEdit, deleteNoteFromEdit, addNoteManual, _selectPriority, _togglePriorityDropdown, _selectTag, _toggleTagDropdown, _selectNoteScope, _toggleNoteScopeDropdown,
     copyMemory, filterByScope, renderScopeSelector, onPanelShow,
     addManual,
     renderEmotionList,

@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="css/style.css?v=45">
 <link rel="stylesheet" href="css/phone.css">
 <link rel="stylesheet" href="css/markdown.css">
-<link rel="stylesheet" href="css/auth.css">
+<link rel="stylesheet" href="css/auth.css?v=20260530">
 </head>
 <body>
 <!-- 开屏动画 -->
@@ -2237,10 +2237,13 @@
   <button type="button" id="memory-menu-btn" onclick="Memory.toggleMenu()" style="padding:6px 8px;background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;display:flex;align-items:center;color:var(--text-secondary)">
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
   </button>
-  <div id="memory-menu-dropdown" class="custom-dropdown hidden" style="right:0;left:auto;min-width:140px">
-    <div class="custom-dropdown-item" onclick="Memory.toggleMenu();Memory.addManual()">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg> 新建
-    </div>
+<div id="memory-menu-dropdown" class="custom-dropdown hidden" style="right:0;left:auto;min-width:140px">
+              <div class="custom-dropdown-item" onclick="Memory.toggleMenu();Memory.addManual()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg> 新建
+              </div>
+              <div class="custom-dropdown-item" onclick="Memory.toggleMenu();Memory.addNoteManual()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M14 3v4a2 2 0 0 0 2 2h4"/></svg> 新建小纸条
+              </div>
     <div class="custom-dropdown-item" onclick="Memory.toggleMenu();Memory.toggleManageMode()">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> 批量选择
     </div>
@@ -2383,6 +2386,10 @@
           <div class="settings-card">
             <div class="settings-card-item" onclick="Agreement.open()">
               <span>用户协议</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+            <div class="settings-card-item" onclick="Agreement.openGuide()">
+              <span>使用说明</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
             </div>
           </div>

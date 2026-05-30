@@ -366,7 +366,9 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
           } else {
             // 可能是额外的角色变化代码块
             const text = contentLines.length > 0 ? contentLines.join('\n').trim() : lines.join('\n').trim();
-            if (text && text !== '无') result.changes.push(text);
+            // 防御：如果内容看起来像漏了标签的 status 块（地点/时间/场景/天气 开头），不当 changes
+            const looksLikeStatus = /^(地点|时间|场景|天气|用户角色)\s*[:：]/m.test(text);
+            if (text && text !== '无' && !looksLikeStatus) result.changes.push(text);
           }
         }
       });

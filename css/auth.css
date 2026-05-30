@@ -862,7 +862,6 @@
   align-items: baseline;
   justify-content: space-between;
   padding: 18px 24px 14px;
-  border-bottom: 1px solid var(--border);
 }
 .agreement-brand {
   font-size: 18px;
@@ -931,7 +930,6 @@
 .agreement-footer {
   flex-shrink: 0;
   padding: 14px 24px 18px;
-  border-top: 1px solid var(--border);
   text-align: center;
 }
 .agreement-btn {
