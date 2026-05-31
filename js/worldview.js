@@ -3813,32 +3813,28 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     const el = document.getElementById('wv-viewer-basic');
     if (!el) return;
     let html = '';
-    html += `<div style="margin-bottom:16px">
-      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px">世界观名称</div>
-      <div style="font-size:18px;font-weight:bold;color:var(--accent)">${Utils.escapeHtml(w.name || '未命名')}</div>
+    html += `<div style="margin-bottom:24px">
+      <div style="font-size:20px;font-weight:700;color:var(--accent);margin-bottom:6px">${Utils.escapeHtml(w.name || '未命名')}</div>
+      ${w.description ? `<div class="md-content" style="font-size:13px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(w.description)}</div>` : ''}
     </div>`;
-    if (w.description) {
-      html += `<div style="margin-bottom:16px">
-        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px">描述</div>
-        <div class="md-content" style="font-size:14px;line-height:1.8;color:var(--text)">${Markdown.render(w.description)}</div>
-      </div>`;
-    }
     if (w.setting) {
-      html += `<div style="margin-bottom:16px">
-        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px">世界观设定</div>
-        <div class="md-content" style="font-size:13px;line-height:1.8;color:var(--text);background:var(--bg-tertiary);padding:12px;border-radius:8px;border:1px solid var(--border)">${Markdown.render(w.setting)}</div>
+      html += `<div style="margin-bottom:24px">
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">世界观设定</div>
+        <div class="md-content" style="font-size:13px;line-height:2;color:var(--text);background:var(--bg-tertiary);padding:16px;border-radius:12px">${Markdown.render(w.setting)}</div>
       </div>`;
     }
     const _cur = w.currency || {};
     if (_cur.name) {
-      html += `<div style="margin-bottom:16px">
-        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px">💰 通用货币</div>
-        <div style="font-size:14px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_cur.name)}</div>
-        ${_cur.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_cur.desc)}</div>` : ''}
+      html += `<div style="margin-bottom:24px">
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">通用货币</div>
+        <div style="background:var(--bg-tertiary);padding:14px;border-radius:12px">
+          <div style="font-size:15px;font-weight:600;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_cur.name)}</div>
+          ${_cur.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_cur.desc)}</div>` : ''}
+        </div>
       </div>`;
     }
     if (!w.setting && !w.description && !_cur.name) {
-      html += '<div style="text-align:center;color:var(--text-secondary);padding:24px;font-size:13px">暂无设定内容</div>';
+      html += '<div style="text-align:center;color:var(--text-secondary);padding:40px 0;font-size:13px">暂无设定内容</div>';
     }
     el.innerHTML = html;
   }
@@ -3848,24 +3844,24 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     if (!el) return;
     const regions = w.regions || [];
     if (regions.length === 0) {
-      el.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:24px;font-size:13px">暂无地区数据</div>';
+      el.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:40px 0;font-size:13px">暂无地区数据</div>';
       return;
     }
     let html = '';
     regions.forEach(reg => {
-      html += `<div class="card" style="padding:12px;margin-bottom:12px;border:1px solid var(--border);border-radius:8px">
-        <div style="font-size:16px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(reg.name || '未命名')}</div>
+      html += `<div style="margin-bottom:20px">
+        <div style="font-size:16px;font-weight:700;color:var(--accent);margin-bottom:6px">${Utils.escapeHtml(reg.name || '未命名')}</div>
         ${reg.summary ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary);margin-bottom:8px">${Markdown.render(reg.summary)}</div>` : ''}
-        ${reg.detail ? `<div class="md-content" style="font-size:13px;line-height:1.8;color:var(--text);background:var(--bg-tertiary);padding:10px;border-radius:6px;margin-bottom:8px">${Markdown.render(reg.detail)}</div>` : ''}`;
+        ${reg.detail ? `<div class="md-content" style="font-size:13px;line-height:2;color:var(--text);background:var(--bg-tertiary);padding:14px;border-radius:12px;margin-bottom:10px">${Markdown.render(reg.detail)}</div>` : ''}`;
       
       const factions = reg.factions || [];
       if (factions.length > 0) {
-        html += '<div style="margin-left:8px;border-left:2px solid var(--border);padding-left:12px;margin-top:8px">';
+        html += '<div style="margin-left:12px;padding-left:14px;margin-top:10px">';
         factions.forEach(fac => {
-          html += `<div style="margin-bottom:8px">
-            <div style="font-size:14px;font-weight:bold;color:var(--text);margin-bottom:2px">${Utils.escapeHtml(fac.name || '未命名')}</div>
-            ${fac.summary ? `<div class="md-content" style="font-size:11px;line-height:1.8;color:var(--text-secondary);margin-bottom:4px">${Markdown.render(fac.summary)}</div>` : ''}
-            ${fac.detail ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text);background:var(--bg-secondary);padding:8px;border-radius:4px">${Markdown.render(fac.detail)}</div>` : ''}
+          html += `<div style="margin-bottom:14px">
+            <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">${Utils.escapeHtml(fac.name || '未命名')}</div>
+            ${fac.summary ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary);margin-bottom:6px">${Markdown.render(fac.summary)}</div>` : ''}
+            ${fac.detail ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text);background:var(--bg-tertiary);padding:12px;border-radius:10px">${Markdown.render(fac.detail)}</div>` : ''}
           </div>`;
         });
         html += '</div>';
@@ -3987,20 +3983,17 @@ const allNPCs = [];
     }
     
     if (allNPCs.length === 0) {
-      container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:24px;font-size:13px">无匹配角色</div>';
+      container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:40px 0;font-size:13px">无匹配角色</div>';
       return;
     }
     
     let html = '';
     allNPCs.forEach(npc => {
-      html += `<div class="card" style="padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:8px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
-          <div style="font-size:15px;font-weight:bold;color:var(--accent)">${Utils.escapeHtml(npc.name || '未命名')}${npc.aliases ? ` <span style="font-size:12px;font-weight:normal;color:var(--text-secondary)">（${Utils.escapeHtml(npc.aliases)}）</span>` : ''}</div>
-          <div style="font-size:10px;color:var(--text-secondary);text-align:right;flex-shrink:0;margin-left:8px">${Utils.escapeHtml(npc.regionName || '')} · ${Utils.escapeHtml(npc.factionName || '')}</div>
-        </div>
-        ${npc.summary ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary);margin-bottom:6px">${Markdown.render(npc.summary)}</div>` : ''}
-        ${npc.detail ? `<div class="md-content" style="font-size:13px;line-height:1.8;color:var(--text);background:var(--bg-tertiary);padding:10px;border-radius:6px;margin-bottom:6px">${Markdown.render(npc.detail)}</div>` : ''}
-        
+      html += `<div style="background:var(--bg-tertiary);padding:14px;margin-bottom:12px;border-radius:12px">
+        <div style="font-size:15px;font-weight:700;color:var(--accent);margin-bottom:2px">${Utils.escapeHtml(npc.name || '未命名')}${npc.aliases ? ` <span style="font-size:12px;font-weight:normal;color:var(--text-secondary)">（${Utils.escapeHtml(npc.aliases)}）</span>` : ''}</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">${Utils.escapeHtml(npc.regionName || '')} · ${Utils.escapeHtml(npc.factionName || '')}</div>
+        ${npc.summary ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary);margin-bottom:8px">${Markdown.render(npc.summary)}</div>` : ''}
+        ${npc.detail ? `<div class="md-content" style="font-size:13px;line-height:2;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:10px">${Markdown.render(npc.detail)}</div>` : ''}
       </div>`;
     });
     container.innerHTML = html;
@@ -4013,62 +4006,64 @@ const allNPCs = [];
     
     // 节日
     const festivals = w.festivals || [];
-    html += '<div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 2v4"/><path d="M17 14h-6"/><path d="M13 18H7"/><path d="M7 14h.01"/><path d="M17 18h.01"/></svg> 节日设定</div>';
+    html += '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:10px">节日设定</div>';
     if (festivals.length === 0) {
-      html += '<div style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">暂无节日</div>';
+      html += '<div style="color:var(--text-secondary);font-size:13px;margin-bottom:24px">暂无节日</div>';
     } else {
       festivals.forEach(f => {
-        html += `<div class="card" style="padding:10px;margin-bottom:6px;border:1px solid var(--border);border-radius:6px">
+        html += `<div style="background:var(--bg-tertiary);padding:12px;margin-bottom:8px;border-radius:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <div style="font-size:14px;font-weight:bold;color:var(--accent)">${Utils.escapeHtml(f.name || '未命名')}</div>
+            <div style="font-size:14px;font-weight:600;color:var(--accent)">${Utils.escapeHtml(f.name || '未命名')}</div>
             <div style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(f.date || '')} ${f.yearly ? '(每年)' : ''}</div>
           </div>
           ${f.content ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text)">${Markdown.render(f.content)}</div>` : ''}
         </div>`;
       });
-      html += '<div style="margin-bottom:16px"></div>';
+      html += '<div style="margin-bottom:24px"></div>';
     }
     
-    // 常驻条目（v581：从 knowledges 中筛 keywordTrigger=false）
+    // 常驻条目
     _migrateToKnowledges(w);
     const customs = (w.knowledges || []).filter(k => !k.keywordTrigger);
-    html += '<div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 常驻条目</div>';
+    html += '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:10px">常驻条目</div>';
     if (customs.length === 0) {
-      html += '<div style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">暂无常驻条目</div>';
+      html += '<div style="color:var(--text-secondary);font-size:13px;margin-bottom:24px">暂无常驻条目</div>';
     } else {
       customs.forEach(c => {
-        html += `<div class="card" style="padding:10px;margin-bottom:6px;border:1px solid var(--border);border-radius:6px">
+        html += `<div style="background:var(--bg-tertiary);padding:12px;margin-bottom:8px;border-radius:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <div style="font-size:14px;font-weight:bold;color:var(--text)">${Utils.escapeHtml(c.name || '未命名')}</div>
-            <div style="font-size:11px;padding:2px 8px;border-radius:10px;${c.enabled ? 'background:var(--accent);color:#111' : 'background:var(--bg-tertiary);color:var(--text-secondary)'}">${c.enabled ? '已启用' : '未启用'}</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text)">${Utils.escapeHtml(c.name || '未命名')}</div>
+            <div style="font-size:11px;padding:2px 8px;border-radius:10px;${c.enabled ? 'background:var(--accent);color:#111' : 'background:var(--bg-secondary);color:var(--text-secondary)'}">${c.enabled ? '启用' : '未启用'}</div>
           </div>
           ${c.content ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text)">${Markdown.render(c.content)}</div>` : ''}
         </div>`;
       });
+      html += '<div style="margin-bottom:24px"></div>';
     }
 
-    // 动态条目（v581：从 knowledges 中筛 keywordTrigger=true）
+    // 动态条目
     const knowledges = (w.knowledges || []).filter(k => !!k.keywordTrigger);
-    html += '<div style="font-size:15px;font-weight:bold;color:var(--text);margin:18px 0 8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 动态条目</div>';
+    html += '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:10px">动态条目</div>';
     if (knowledges.length === 0) {
-      html += '<div style="color:var(--text-secondary);font-size:13px">暂无动态条目</div>';
+      html += '<div style="color:var(--text-secondary);font-size:13px;margin-bottom:24px">暂无动态条目</div>';
     } else {
       knowledges.forEach(k => {
         const keys = (k.keys || '').trim();
         const keyTags = keys
-          ? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(t)}</span>`).join('')
+          ? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 8px;border-radius:6px;margin-right:6px;margin-top:3px">${Utils.escapeHtml(t)}</span>`).join('')
           : '<span style="font-size:11px;color:var(--text-secondary)">无关键词</span>';
-        html += `<div class="card" style="padding:10px;margin-bottom:6px;border:1px solid var(--border);border-radius:6px">
-          <div style="font-size:14px;font-weight:bold;color:var(--text);margin-bottom:4px">${Utils.escapeHtml(k.name || '未命名')}</div>
-          <div style="margin-bottom:6px">${keyTags}</div>
+        html += `<div style="background:var(--bg-tertiary);padding:12px;margin-bottom:8px;border-radius:10px">
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">${Utils.escapeHtml(k.name || '未命名')}</div>
+          <div style="margin-bottom:8px">${keyTags}</div>
           ${k.content ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text)">${Markdown.render(k.content)}</div>` : ''}
         </div>`;
       });
+      html += '<div style="margin-bottom:24px"></div>';
     }
 
     // 事件条目
     const events = w.events || [];
-    html += '<div style="font-size:15px;font-weight:bold;color:var(--text);margin:18px 0 8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg> 事件</div>';
+    html += '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:10px">事件</div>';
     if (events.length === 0) {
       html += '<div style="color:var(--text-secondary);font-size:13px">暂无事件</div>';
     } else {
@@ -4076,15 +4071,15 @@ const allNPCs = [];
         const triggerKeys = (ev.keys || '').trim();
         const endKeys = (ev.endKeys || '').trim();
         const triggerTags = triggerKeys
-          ? triggerKeys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(t)}</span>`).join('')
+          ? triggerKeys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 8px;border-radius:6px;margin-right:6px;margin-top:3px">${Utils.escapeHtml(t)}</span>`).join('')
           : '<span style="font-size:11px;color:var(--text-secondary)">无触发词</span>';
         const endTags = endKeys
-          ? endKeys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:color-mix(in srgb, var(--accent) 15%, var(--bg-secondary));color:var(--accent);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(t)}</span>`).join('')
+          ? endKeys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:color-mix(in srgb, var(--accent) 15%, var(--bg-secondary));color:var(--accent);padding:2px 8px;border-radius:6px;margin-right:6px;margin-top:3px">${Utils.escapeHtml(t)}</span>`).join('')
           : '<span style="font-size:11px;color:var(--text-secondary)">无结束词</span>';
-        html += `<div class="card" style="padding:10px;margin-bottom:6px;border:1px solid var(--border);border-radius:6px">
-          <div style="font-size:14px;font-weight:bold;color:var(--text);margin-bottom:6px">${Utils.escapeHtml(ev.name || '未命名')}</div>
-          <div style="margin-bottom:4px"><span style="font-size:11px;color:var(--text-secondary);margin-right:4px">触发：</span>${triggerTags}</div>
-          <div style="margin-bottom:6px"><span style="font-size:11px;color:var(--text-secondary);margin-right:4px">结束：</span>${endTags}</div>
+        html += `<div style="background:var(--bg-tertiary);padding:12px;margin-bottom:8px;border-radius:10px">
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">${Utils.escapeHtml(ev.name || '未命名')}</div>
+          <div style="margin-bottom:4px"><span style="font-size:11px;color:var(--text-secondary);margin-right:6px">触发</span>${triggerTags}</div>
+          <div style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-secondary);margin-right:6px">结束</span>${endTags}</div>
           ${ev.content ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text)">${Markdown.render(ev.content)}</div>` : ''}
         </div>`;
       });
