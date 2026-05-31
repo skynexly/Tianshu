@@ -816,7 +816,7 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
     _updateSendButton();
     _renderMessages();
 
-    const maxRetries = 3;
+    const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : 3;
     let retryCount = 0;
 
     const _doStream = (prefixContent) => {

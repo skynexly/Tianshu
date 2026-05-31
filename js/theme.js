@@ -209,10 +209,15 @@ msgFontSize: 13.5,
   }
 
   // ── 应用全量变量 ──────────────────────────────────────────
-  function apply(cfg) {
+function apply(cfg) {
     const s = document.documentElement.style;
     // 保险：如果本地存储显示省电模式关闭，但 body 上残留 lite-mode，立刻清掉；否则毛玻璃会被全局 CSS 禁用
     try { if (!isLiteMode()) document.body.classList.remove('lite-mode'); } catch(_) {}
+    // 同步 theme-color meta，让 iOS Home Indicator 区域跟着主题底色（消除底部黑/白条）
+    try {
+      const tc = document.querySelector('meta[name="theme-color"]');
+      if (tc && cfg.bg) tc.setAttribute('content', cfg.bg);
+    } catch(_) {}
     s.setProperty('--bg',           cfg.bg);
     s.setProperty('--bg-secondary', toRgba(cfg.bgSecondary, cfg.bgSecondaryOpacity ?? 1));
     s.setProperty('--bg-glass',     cfg.glassEnabled ? toRgba(cfg.bgSecondary, Math.min(cfg.bgSecondaryOpacity ?? 1, 0.7)) : toRgba(cfg.bgSecondary, cfg.bgSecondaryOpacity ?? 1));
@@ -956,6 +961,77 @@ function toggleAiBubbleRender() {
     return load().aiBubbleRender !== false;
   }
 
+  async function applyToAllWorldviews() {
+    const ok = await UI.showConfirm('全局应用主题', '将当前主题绑定至所有世界观（含无世界观），确定？');
+    if (!ok) return;
+    const cfg = load();
+    let themeName = '';
+    if (cfg.customPresetName) {
+      themeName = `custom:${cfg.customPresetName}`;
+    } else {
+      // 读取当前表单的实际颜色，和预设对比
+      const formCfg = readForm();
+      const presetNames = Object.keys(PRESETS);
+      for (const n of presetNames) {
+        const p = PRESETS[n];
+        if (p.bg === formCfg.bg && p.accent === formCfg.accent && p.text === formCfg.text) {
+          themeName = `builtin:${n}`;
+          break;
+        }
+      }
+      if (!themeName) {
+        // 表单颜色和存储的也不一样 → 用户调过色没保存
+        const savedMatch = presetNames.some(n => {
+          const p = PRESETS[n];
+          return p.bg === cfg.bg && p.accent === cfg.accent && p.text === cfg.text;
+        });
+        if (savedMatch) {
+          // 存储里是某个预设，但表单被改过了
+          UI.showToast('当前调色未保存，请先保存主题再全局应用', 2500);
+          return;
+        }
+        UI.showToast('请先保存为自定义主题再全局应用', 2000);
+        return;
+      }
+    }
+    // 遍历所有世界观写 themeName
+    if (typeof Worldview !== 'undefined' && Worldview.getWorldviewList) {
+      const list = await Worldview.getWorldviewList();
+      for (const entry of list) {
+        if (entry.id === '__default_wv__') continue;
+        const w = await DB.get('worldviews', entry.id);
+        if (w) {
+          w.themeName = themeName;
+          await DB.put('worldviews', w);
+        }
+      }
+      // 无世界观也写入
+      let defaultWv = await DB.get('worldviews', '__default_wv__');
+      if (!defaultWv) {
+        defaultWv = { id: '__default_wv__', name: '无世界观', description: '未挂世界观的对话', icon: '∅', iconImage: '' };
+      }
+      defaultWv.themeName = themeName;
+      await DB.put('worldviews', defaultWv);
+    }
+    // 存全局绑定标记（新建世界观时继承）
+    await DB.put('gameState', { key: 'globalThemeBinding', value: themeName });
+    // 如果当前处于无世界观，立刻应用
+    if (typeof Worldview !== 'undefined' && Worldview.getCurrentId) {
+      const curId = Worldview.getCurrentId();
+      if (!curId || curId === '__default_wv__') {
+        // 直接应用主题
+        if (themeName.startsWith('builtin:')) {
+          const name = themeName.slice(8);
+          const p = PRESETS[name];
+          if (p) { const c = Object.assign({}, p); c.customPresetName = ''; c.fontMode = cfg.fontMode || 'default'; c.msgFontSize = cfg.msgFontSize ?? 13.5; save(c); apply(c); }
+        } else if (themeName.startsWith('custom:')) {
+          activateCustomPreset(themeName.slice(7), true);
+        }
+      }
+    }
+    UI.showToast('已应用至所有世界观', 2000);
+  }
+
   return {
     init,
     populateForm: (cfg) => {
@@ -993,10 +1069,11 @@ setMsgFontSize,
     saveCustomPresetNow,
     exportCustomThemes, importCustomThemes, closeExportModal, toggleExportSelectAll, syncExportToggleState, confirmExportSelectedThemes,
     setConvBgOverride,
-getPresetNames: () => Object.keys(PRESETS),
+    getPresetNames: () => Object.keys(PRESETS),
     getPreset: (name) => PRESETS[name] ? Object.assign({}, PRESETS[name]) : null,
     load,
     save,
     apply,
+    applyToAllWorldviews,
   };
 })();

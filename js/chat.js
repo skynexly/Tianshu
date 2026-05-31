@@ -1656,9 +1656,9 @@ const msgEl = appendMessage(aiMsg, true, true);
         _currentAiMsg = aiMsg;
         _currentAiMsgEl = msgEl;
 
-    // 流式请求（带自动重试，最多3次）
+    // 流式请求（带自动重试，最多3次；对话设置可关闭重试）
     let retryCount = 0;
-    const maxRetries = 3;
+    const maxRetries = isRetryDisabled() ? 1 : 3;
 
     async function _doStream(prefixContent) {
       try { GameLog.log('info', '[Chat] 开始调用 API.streamChat'); } catch(_) {}
@@ -2222,7 +2222,7 @@ const config = await API.getConfig();
       `[${m.role === 'user' ? charName : 'AI'}] ${m.content}`
     ).join('\n\n');
 
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = isRetryDisabled() ? 1 : 3;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         UI.showToast(`正在提取记忆…（${attempt}/${MAX_RETRIES}）`, 3000);
@@ -2441,7 +2441,7 @@ const convId = Conversations.getCurrent();
 const char = await Character.get();
 const charName = char?.name || '用户角色';
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = isRetryDisabled() ? 1 : 3;
     let summarySuccess = false;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -2524,7 +2524,7 @@ const MAX_RETRIES = 3;
     const convId = Conversations.getCurrent();
 const char = await Character.get();
 const charName = char?.name || '用户角色';
-const MAX_RETRIES = 3;
+const MAX_RETRIES = isRetryDisabled() ? 1 : 3;
 let success = false;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -4493,6 +4493,18 @@ if (!gp) return null;
 
   // ===== 对话设置（流式输出 / 文游模式）=====
 
+  // 当前对话是否禁用了自动重试（供 chat/backstage/phone/worldvoice/gaiden 等共用）
+  function isRetryDisabled() {
+    try {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      if (conv) return !!conv.convDisableRetry;
+      // 没有当前对话时，回退到 localStorage 的最后选择
+      return localStorage.getItem('skynex_lastDisableRetry') === '1';
+    } catch(_) {
+      return false;
+    }
+  }
+
   function _getConvSettings() {
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     const voice = conv?.convVoice || {};
@@ -4500,6 +4512,7 @@ if (!gp) return null;
       stream: conv?.convStream !== false,      // 默认开
       gameMode: conv?.convGameMode !== false,   // 默认开
       format: conv?.convFormat !== false,       // 默认开
+      disableRetry: !!conv?.convDisableRetry,   // 默认关（关闭自动重试）
       backstage: !!conv?.backstageEnabled,      // 默认关
       timeAware: !!conv?.convTimeAware,         // 默认关
       batteryAware: !!conv?.convBatteryAware,   // v687.14：默认关
@@ -4889,6 +4902,8 @@ bgImage: conv?.convBgImage || '',
     document.getElementById('cs-stream').checked = s.stream;
     document.getElementById('cs-gamemode').checked = s.gameMode;
     document.getElementById('cs-format').checked = s.format;
+    const dr = document.getElementById('cs-disable-retry');
+    if (dr) dr.checked = s.disableRetry;
     document.getElementById('cs-backstage').checked = s.backstage;
     const ta = document.getElementById('cs-time-aware');
     if (ta) ta.checked = s.timeAware;
@@ -4985,6 +5000,11 @@ bgImage: conv?.convBgImage || '',
     conv.convStream = document.getElementById('cs-stream').checked;
     conv.convGameMode = document.getElementById('cs-gamemode').checked;
     conv.convFormat = document.getElementById('cs-format').checked;
+    const drEl = document.getElementById('cs-disable-retry');
+    if (drEl) {
+      conv.convDisableRetry = !!drEl.checked;
+      try { localStorage.setItem('skynex_lastDisableRetry', drEl.checked ? '1' : '0'); } catch(_) {}
+    }
     const wasBackstage = !!conv.backstageEnabled;
     conv.backstageEnabled = document.getElementById('cs-backstage').checked;
 const taEl = document.getElementById('cs-time-aware');
@@ -5799,6 +5819,7 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     _toggleThink,
     openConvSettingsModal, saveConvSettings, closeConvSettingsModal, _switchCsTab,
     openDirectiveModal, closeDirectiveModal, saveDirective, clearDirective, _getConvSettings,
+    isRetryDisabled,
     openEventManagerModal, closeEventManagerModal, resetEventState,
 openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
     unbindConvLorebook, addConvLorebooks, applyLorebooksToWorldview,

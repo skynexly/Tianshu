@@ -714,9 +714,12 @@ function _extractJsonArrayText(content) {
   async function _phoneJsonArrayWithRetry(opts) {
     const {
       label = '手机内容', url, key, model, messages,
-      temperature = 0.9, max_tokens = 2048, maxRetries = 3,
+      temperature = 0.9, max_tokens = 2048,
       onAttempt
     } = opts || {};
+    // 默认最多重试 3 次；若对话设置关闭了自动重试则只跑一次
+    const baseMax = (opts && Number.isFinite(opts.maxRetries)) ? opts.maxRetries : 3;
+    const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : baseMax;
     let lastError = '';
     let lastContent = '';
     for (let attempt = 1; attempt <= maxRetries; attempt++) {

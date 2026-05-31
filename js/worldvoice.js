@@ -205,7 +205,7 @@ ${wvPrompt}`;
     userPrompt += `请生成${mediaType}内容。`;
 
 
-    const maxRetries = 3;
+    const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : 3;
     let lastError = '';
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       if (_abortCtrl?.signal.aborted) break;
@@ -421,7 +421,7 @@ ${wvPrompt}`;
 
     const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n请生成完整内容和评论区。`;
 
-    const maxRetries = 3;
+    const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : 3;
     let lastError = '';
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       if (_abortCtrl?.signal.aborted) break;

@@ -148,7 +148,7 @@ const Gaiden = (() => {
     _abortCtrl = new AbortController();
     _showStatusBar('gaiden-action-area');
 
-    const maxRetries = 3;
+    const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : 3;
     let lastError = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -356,7 +356,7 @@ const Gaiden = (() => {
     _showStatusBar('gaiden-action-area', 'continue');
     _showStatusBar('gaiden-result-actions', 'continue');
 
-    const maxRetries = 3;
+    const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : 3;
     let lastError = null;
     try {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {

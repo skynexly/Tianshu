@@ -240,6 +240,12 @@ async function init() {
       worldviewId: wvId,
       presetId: Settings.getCurrentId()
     };
+    // 从上一次对话设置继承「关闭自动重试」
+    try {
+      if (localStorage.getItem('skynex_lastDisableRetry') === '1') {
+        conv.convDisableRetry = true;
+      }
+    } catch(_) {}
     // v684：从世界观默认世界书继承到新对话
     try {
       if (wvId && wvId !== '__default_wv__') {

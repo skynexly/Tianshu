@@ -314,6 +314,11 @@ if (!isHidden && _currentExtSubtab === 'npc') {
   async function createWorldview() {
     const id = 'wv_' + Utils.uuid().slice(0, 8);
     const newEntry = _defaultWorldview(id);
+    // 继承全局主题绑定（如果有）
+    try {
+      const binding = await DB.get('gameState', 'globalThemeBinding');
+      if (binding && binding.value) newEntry.themeName = binding.value;
+    } catch(_) {}
     const list = await getWorldviewList();
     list.push({ id, name: newEntry.name, description: newEntry.description, icon: newEntry.icon, iconImage: '' });
     await saveWorldviewList(list);
@@ -3480,7 +3485,8 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
      if (!silent) UI.showToast('保存成功');
      // 同步到运行时（如果改的就是当前激活世界观，AI 立刻看到新设定）
      await _syncRuntime(w);
-     await load();
+     // silent 模式下跳过 load()——避免和返回路径上的 showPanel('worldview') 触发的列表刷新竞态（iOS 上会导致列表空白）
+     if (!silent) await load();
    }
   
   // ---------- 删除世界观时迁移对话 ----------
@@ -3680,8 +3686,17 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
         } catch(e) { console.error('[selectWorldview] NPC同步失败:', e); }
       }
     } else {
-      // 无世界观：应用默认主题（霜白），用户可通过世界观绑定主题覆盖
-      _applyBoundTheme('builtin:霜白');
+      // 无世界观：优先读全局绑定，否则 fallback 霜白
+      try {
+        const binding = await DB.get('gameState', 'globalThemeBinding');
+        if (binding && binding.value) {
+          _applyBoundTheme(binding.value);
+        } else {
+          _applyBoundTheme('builtin:霜白');
+        }
+      } catch(_) {
+        _applyBoundTheme('builtin:霜白');
+      }
     }
     // 刷新对话列表，切换到当前世界观下的对话
     Conversations.renderList();
@@ -4586,6 +4601,7 @@ async function pickDefaultTheme(value) {
     init: load,
     load,
     createWorldview,
+    getWorldviewList,
     openEdit,
     openPreview,
     closePreview,

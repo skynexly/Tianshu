@@ -425,6 +425,14 @@ isOpen = !sidebar.classList.contains('hidden');
     const currentPanel = document.querySelector('.panel.active');
     if (currentPanel && currentPanel.id === `panel-${name}`) return;
 
+    // v688.3：iOS Safari 兜底——切面板前主动隐藏可能残留的全屏遮罩，避免遮住整个屏幕导致按钮点不了
+    try {
+      const fsOverlay = document.getElementById('fullscreen-input-overlay');
+      if (fsOverlay && !fsOverlay.classList.contains('hidden')) {
+        fsOverlay.classList.add('hidden');
+      }
+    } catch(_) {}
+
     // 旧面板退出动画
     if (currentPanel) {
       const exitClass = direction === 'back' ? 'anim-exit-back' : 'anim-exit-forward';
@@ -435,7 +443,10 @@ isOpen = !sidebar.classList.contains('hidden');
 
     // 切换到新面板
     const enterClass = direction === 'back' ? 'anim-enter-back' : 'anim-enter-forward';
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active', 'anim-enter-forward', 'anim-enter-back'));
+    // v688.3：强制清除所有 panel 的 active 与全部动画类，避免旧面板残留 active/exit 类盖在上面
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove(
+      'active', 'anim-enter-forward', 'anim-enter-back', 'anim-exit-forward', 'anim-exit-back'
+    ));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     const panel = document.getElementById(`panel-${name}`);
     if (panel) {

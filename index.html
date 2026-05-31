@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>skynex</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1a1a2e">
+<meta name="theme-color" content="#0f0f0f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
@@ -1298,6 +1298,14 @@
             </span>
           </label>
           <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后AI回复将在生成完毕后一次性显示</span>
+          <label class="circle-check-label">
+            <span class="circle-check-text">关闭自动重试</span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-disable-retry" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">生成失败后将不再自动重试，直接返回报错结果</span>
           <label class="circle-check-label">
             <span class="circle-check-text">文游模式</span>
             <span style="position:relative;display:inline-flex">
@@ -2733,10 +2741,13 @@
               </div>
 
               <!-- 操作 -->
-              <div style="display:flex;gap:8px">
-                <button type="button" onclick="Theme.resetDefaults()" style="flex:1;padding:10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);cursor:pointer;font-size:13px">恢复默认</button>
-                <button type="button" onclick="Theme.saveForm()" style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:6px;color:#000;font-weight:600;cursor:pointer;font-size:13px">保存主题</button>
-              </div>
+<div style="margin-bottom:8px">
+<button type="button" onclick="Theme.applyToAllWorldviews()" style="width:100%;padding:10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> 应用至所有世界观</button>
+</div>
+<div style="display:flex;gap:8px">
+<button type="button" onclick="Theme.resetDefaults()" style="flex:1;padding:10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);cursor:pointer;font-size:13px">恢复默认</button>
+<button type="button" onclick="Theme.saveForm()" style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:6px;color:#000;font-weight:600;cursor:pointer;font-size:13px">保存主题</button>
+</div>
 
             </div>
       </div>
