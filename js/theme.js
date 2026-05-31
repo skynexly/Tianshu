@@ -303,6 +303,12 @@ msgFontSize: 13.5,
       requestAnimationFrame(() => {
         app.style.opacity = '1';
         app.style.transform = 'translateY(0)';
+        // 动画结束后清除 inline style，避免与面板切换动画冲突
+        setTimeout(() => {
+          app.style.transition = '';
+          app.style.opacity = '';
+          app.style.transform = '';
+        }, 260);
       });
       _themeSwitchTimer = null;
     }, 120);
