@@ -1004,5 +1004,9 @@ setMsgFontSize,
     exportCustomThemes, importCustomThemes, closeExportModal, toggleExportSelectAll, syncExportToggleState, confirmExportSelectedThemes,
     setConvBgOverride,
 getPresetNames: () => Object.keys(PRESETS),
+    getPreset: (name) => PRESETS[name] ? Object.assign({}, PRESETS[name]) : null,
+    load,
+    save,
+    apply,
   };
 })();

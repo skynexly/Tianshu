@@ -4268,15 +4268,28 @@ const allNPCs = [];
   }
 
 function _applyBoundTheme(themeName) {
-  if (!themeName) return;
-  if (themeName.startsWith('builtin:')) {
-    const name = themeName.slice(8);
-    Theme.applyPreset(name);
-  } else if (themeName.startsWith('custom:')) {
-    const name = themeName.slice(7);
-    Theme.activateCustomPreset(name, true);
+    if (!themeName) return;
+    if (themeName.startsWith('builtin:')) {
+      const name = themeName.slice(8);
+      // 直接应用，不走 withThemeFade 动画（避免与面板切换冲突导致空白）
+      const p = Theme.getPreset ? Theme.getPreset(name) : null;
+      if (p) {
+        const old = Theme.load();
+        const cfg = Object.assign({}, p);
+        cfg.customPresetName = '';
+        cfg.fontMode = old.fontMode || 'default';
+        cfg.msgFontSize = old.msgFontSize ?? 13.5;
+        Theme.save(cfg);
+        Theme.apply(cfg);
+      } else {
+        // fallback：走原路径
+        Theme.applyPreset(name);
+      }
+    } else if (themeName.startsWith('custom:')) {
+      const name = themeName.slice(7);
+      Theme.activateCustomPreset(name, true);
+    }
   }
-}
 
 // ---------- 无世界观·默认主题选择弹窗 ----------
 async function openDefaultThemePicker() {
