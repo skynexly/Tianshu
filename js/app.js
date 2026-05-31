@@ -172,14 +172,15 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v688';
-const CHANGELOG = `【v688 更新内容】
+    const APP_VERSION = 'v688.1';
+const CHANGELOG = `【v688.1 更新内容】
 · 新增使用说明文档（设置 → 用户协议与使用说明）
 · 优化新手教程
 · 更新天枢城世界观
 · 新增后台频道快捷入口（加号菜单可直接开启）
 · 世界观编辑自动保存（扩展/玩法修改后自动存储，防丢失）
 · 优化记忆机制
+· 世界观查看页新增玩法tab（手机配置/属性/任务从基础移至玩法）
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

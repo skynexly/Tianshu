@@ -3792,6 +3792,10 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     _renderViewerNPCFilters(w);
     filterViewerNPCs();
     _renderViewerSpecial(w);
+    _renderViewerGameplay(w);
+    // 心动模拟隐藏玩法tab
+    const gpBtn = document.querySelector('.wv-viewer-tab-btn[data-tab="v-gameplay"]');
+    if (gpBtn) gpBtn.style.display = (id === 'wv_heartsim') ? 'none' : '';
     switchViewerTab('v-basic');
     UI.showPanel('wv-viewer', 'forward');
   }
@@ -3833,33 +3837,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
         ${_cur.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_cur.desc)}</div>` : ''}
       </div>`;
     }
-    const _pa = w.phoneApps || {};
-    const _paTk = _pa.takeout || {}; const _paSh = _pa.shop || {}; const _paFm = _pa.forum || {};
-    if (_paTk.name || _paSh.name) {
-      html += `<div style="margin-bottom:16px">
-        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:6px">🛒 手机商城</div>
-        ${_paTk.name ? `<div style="background:var(--bg-tertiary);padding:10px;border-radius:8px;margin-bottom:6px">
-          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">短时效</div>
-          <div style="font-size:14px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_paTk.name)}</div>
-          ${_paTk.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_paTk.desc)}</div>` : ''}
-        </div>` : ''}
-        ${_paSh.name ? `<div style="background:var(--bg-tertiary);padding:10px;border-radius:8px">
-          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">长时效</div>
-          <div style="font-size:14px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_paSh.name)}</div>
-          ${_paSh.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_paSh.desc)}</div>` : ''}
-        </div>` : ''}
-      </div>`;
-    }
-    if (_paFm.name) {
-      html += `<div style="margin-bottom:16px">
-        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:6px">📢 信息载体</div>
-        <div style="background:var(--bg-tertiary);padding:10px;border-radius:8px">
-          <div style="font-size:14px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_paFm.name)}</div>
-          ${_paFm.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_paFm.desc)}</div>` : ''}
-        </div>
-      </div>`;
-    }
-    if (!w.setting && !w.description) {
+    if (!w.setting && !w.description && !_cur.name) {
       html += '<div style="text-align:center;color:var(--text-secondary);padding:24px;font-size:13px">暂无设定内容</div>';
     }
     el.innerHTML = html;
@@ -4113,6 +4091,102 @@ const allNPCs = [];
     }
     el.innerHTML = html;
   }
+
+  function _renderViewerGameplay(w) {
+    const el = document.getElementById('wv-viewer-gameplay');
+    if (!el) return;
+    let html = '';
+
+    // 手机配置
+    const _pa = w.phoneApps || {};
+    const _paTk = _pa.takeout || {}; const _paSh = _pa.shop || {}; const _paFm = _pa.forum || {};
+    if (_paTk.name || _paSh.name || _paFm.name) {
+      html += '<div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg> 手机配置</div>';
+      if (_paTk.name) {
+        html += `<div style="background:var(--bg-tertiary);padding:10px;border-radius:8px;margin-bottom:6px">
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">短时效商城</div>
+          <div style="font-size:14px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_paTk.name)}</div>
+          ${_paTk.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_paTk.desc)}</div>` : ''}
+        </div>`;
+      }
+      if (_paSh.name) {
+        html += `<div style="background:var(--bg-tertiary);padding:10px;border-radius:8px;margin-bottom:6px">
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">长时效商城</div>
+          <div style="font-size:14px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_paSh.name)}</div>
+          ${_paSh.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_paSh.desc)}</div>` : ''}
+        </div>`;
+      }
+      if (_paFm.name) {
+        html += `<div style="background:var(--bg-tertiary);padding:10px;border-radius:8px;margin-bottom:6px">
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">信息载体</div>
+          <div style="font-size:14px;font-weight:bold;color:var(--accent);margin-bottom:4px">${Utils.escapeHtml(_paFm.name)}</div>
+          ${_paFm.desc ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">${Markdown.render(_paFm.desc)}</div>` : ''}
+        </div>`;
+      }
+      html += '<div style="margin-bottom:16px"></div>';
+    }
+
+    // 自定义属性
+    const gp = w.gameplay || { globalAttrs: [], characterAttrs: [] };
+    const globalAttrs = gp.globalAttrs || [];
+    const charAttrs = gp.characterAttrs || [];
+
+    html += '<div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/><circle cx="12" cy="12" r="10"/></svg> 自定义属性</div>';
+
+    if (globalAttrs.length === 0 && charAttrs.length === 0) {
+      html += '<div style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">暂无自定义属性</div>';
+    } else {
+      if (globalAttrs.length > 0) {
+        html += '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">用户 / 全局属性</div>';
+        globalAttrs.forEach(a => {
+          html += `<div class="card" style="padding:8px 10px;margin-bottom:4px;border:1px solid var(--border);border-radius:6px;display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:13px;color:var(--text)">${Utils.escapeHtml(a.name || '未命名')}</div>
+            <div style="font-size:12px;color:var(--text-secondary)">${a.type === 'number' ? `数值 (初始:${a.initial ?? 0})` : a.type === 'text' ? '文本' : a.type === 'toggle' ? '开关' : a.type || '数值'}</div>
+          </div>`;
+        });
+        html += '<div style="margin-bottom:12px"></div>';
+      }
+      if (charAttrs.length > 0) {
+        html += '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">角色属性</div>';
+        charAttrs.forEach(c => {
+          html += `<div style="background:var(--bg-tertiary);padding:10px;border-radius:8px;margin-bottom:8px">
+            <div style="font-size:13px;font-weight:bold;color:var(--accent);margin-bottom:6px">${Utils.escapeHtml(c.targetName || '未命名角色')}</div>`;
+          (c.attrs || []).forEach(a => {
+            html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">
+              <div style="font-size:12px;color:var(--text)">${Utils.escapeHtml(a.name || '未命名')}</div>
+              <div style="font-size:11px;color:var(--text-secondary)">${a.type === 'number' ? `数值 (初始:${a.initial ?? 0})` : a.type === 'text' ? '文本' : a.type === 'toggle' ? '开关' : a.type || '数值'}</div>
+            </div>`;
+          });
+          html += '</div>';
+        });
+      }
+      html += '<div style="margin-bottom:16px"></div>';
+    }
+
+    // 任务系统
+    const tasks = gp.taskTypes || [];
+    html += '<div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 任务系统</div>';
+    if (tasks.length === 0) {
+      html += '<div style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">暂无任务类型</div>';
+    } else {
+      tasks.forEach(t => {
+        const phases = t.phases || [];
+        html += `<div class="card" style="padding:10px;margin-bottom:6px;border:1px solid var(--border);border-radius:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <div style="font-size:14px;font-weight:bold;color:var(--accent)">${Utils.escapeHtml(t.label || '未命名')}</div>
+            <div style="font-size:11px;color:var(--text-secondary)">${phases.length} 阶段</div>
+          </div>
+          ${t.desc ? `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${Utils.escapeHtml(t.desc)}</div>` : ''}
+        </div>`;
+      });
+    }
+
+    if (!html.trim()) {
+      html = '<div style="text-align:center;color:var(--text-secondary);padding:24px;font-size:13px">暂无玩法配置</div>';
+    }
+    el.innerHTML = html;
+  }
+
   function _populateThemeSelect(currentThemeName) {
     const hiddenInput = document.getElementById('wv-theme-binding');
     const label = document.getElementById('wv-theme-label');
