@@ -639,32 +639,9 @@
       "events": [],
       "gameplay": {
         "globalAttrs": [],
-        "characterAttrs": [
-          {
-            "targetType": "singleCard",
-            "targetId": "sc_1051b1dd-1428-4c19-bb91-31c485dc8862",
-            "targetName": "白谲",
-            "sourceWorldviewId": "",
-            "sourceLabel": "单人卡",
-            "attrs": []
-          }
-        ],
+        "characterAttrs": [],
         "taskSystem": {
-          "phases": [
-            {
-              "id": "phase_9758ac50",
-              "name": "",
-              "batchSize": 3,
-              "totalTasks": 10,
-              "types": [],
-              "completionReward": {
-                "mode": "none",
-                "attr": "",
-                "value": 0,
-                "free": ""
-              }
-            }
-          ]
+          "phases": []
         }
       }
     }
