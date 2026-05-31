@@ -292,26 +292,10 @@ msgFontSize: 13.5,
 
   let _themeSwitchTimer = null;
   function withThemeFade(fn) {
-    const app = document.getElementById('app');
-    if (!app) { fn(); return; }
+    // v688.1: 去掉 fade 动画，直接同步应用，避免与面板切换冲突导致世界观空白
     if (_themeSwitchTimer) clearTimeout(_themeSwitchTimer);
-    app.style.transition = 'opacity 0.24s ease, transform 0.24s ease';
-    app.style.opacity = '0.68';
-    app.style.transform = 'translateY(-4px)';
-    _themeSwitchTimer = setTimeout(() => {
-      fn();
-      requestAnimationFrame(() => {
-        app.style.opacity = '1';
-        app.style.transform = 'translateY(0)';
-        // 动画结束后清除 inline style，避免与面板切换动画冲突
-        setTimeout(() => {
-          app.style.transition = '';
-          app.style.opacity = '';
-          app.style.transform = '';
-        }, 260);
-      });
-      _themeSwitchTimer = null;
-    }, 120);
+    _themeSwitchTimer = null;
+    fn();
   }
 // ── 初始化 ────────────────────────────────────────────────
 function init() {

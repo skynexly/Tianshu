@@ -704,6 +704,8 @@ lines.push('角色-引导员-姿势：站在牌坊下，手中拿着登记册。
   }
 
   async function restart() {
+    const ok = await UI.showConfirm('重新引导', '确定要重新查看新手引导吗？');
+    if (!ok) return;
     await start({ auto: false });
   }
 
@@ -716,6 +718,9 @@ lines.push('角色-引导员-姿势：站在牌坊下，手中拿着登记册。
     _removeInputHighlight();
     renderOptions([]);
     setInputDisabled(false);
+    clearChat();
+    // 恢复当前对话的消息
+    try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
     try { UI.showToast('新手引导已完成', 1800); } catch (_) {}
   }
 
