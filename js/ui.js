@@ -186,7 +186,7 @@ const UI = (() => {
         case 'panel-worldview-edit': return () => {
           // 离开编辑面板时自动保存并停止定时器
           if (typeof Worldview !== 'undefined') {
-            if (Worldview.save) try { Worldview.save(); } catch(_) {}
+            if (Worldview.save) try { Worldview.save({ silent: true }); } catch(_) {}
             if (Worldview._stopFullSaveTimer) try { Worldview._stopFullSaveTimer(); } catch(_) {}
           }
           // v596：检查是否从单人卡跳进来

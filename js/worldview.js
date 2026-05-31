@@ -791,9 +791,9 @@ function _syncBuiltinRestoreButton(w) {
   function _startFullSaveTimer() {
     _stopFullSaveTimer();
     _fullSaveTimer = setInterval(() => {
-      if (editingWorldviewId) {
-        try { save(); } catch(_) {}
-      }
+    if (editingWorldviewId) {
+      try { save({ silent: true }); } catch(_) {}
+    }
     }, 30000);
   }
   function _stopFullSaveTimer() {
@@ -803,7 +803,7 @@ function _syncBuiltinRestoreButton(w) {
   // ===== 扩展设定自动保存（节日/常驻/动态修改后 debounce 2s 写DB） =====
   const _wvExtAutoSave = Utils.debounce(async () => {
     if (!editingWorldviewId) return;
-    try { await save(); } catch(e) { console.warn('[Worldview] 扩展自动保存失败', e); }
+    try { await save({ silent: true }); } catch(e) { console.warn('[Worldview] 扩展自动保存失败', e); }
   }, 2000);
 
   function _attachWVAutoSave() {
@@ -3351,7 +3351,8 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
   }
 
   // ---------- 保存 ----------
-  async function save() {
+  async function save(opts) {
+    const silent = !!(opts && opts.silent);
     if (!editingWorldviewId) return;
 
     // v632：编辑的是世界书，直接回写 lorebooks store
@@ -3379,7 +3380,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
       if (nameEl && nameEl.value.trim()) lb.name = nameEl.value.trim();
       if (descEl) lb.description = descEl.value;
       await Lorebook.save(lb);
-      UI.showToast('已保存世界书');
+      if (!silent) UI.showToast('已保存世界书');
       return;
     }
 
@@ -3401,7 +3402,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
       w.events = eventsData.slice();
       if ('customs' in w) delete w.customs;
       await DB.put('worldviews', w);
-      UI.showToast('已保存扩展设定');
+      if (!silent) UI.showToast('已保存扩展设定');
       return;
     }
     
@@ -3476,7 +3477,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     }
     await saveWorldviewList(list);
     
-     UI.showToast('保存成功');
+     if (!silent) UI.showToast('保存成功');
      // 同步到运行时（如果改的就是当前激活世界观，AI 立刻看到新设定）
      await _syncRuntime(w);
      await load();
