@@ -8,6 +8,7 @@ const Tutorial = (() => {
   let started = false;
   let firstRun = false;
   let _skipAnim = false;
+  let _visited = new Set();
 
   const STORAGE_DONE_KEY = 'tutorial_completed_v1';
   const STORAGE_SEEN_KEY = 'tutorial_seen_v1';
@@ -112,17 +113,32 @@ const Tutorial = (() => {
     });
   }
 
+  function _shouldShow(opt) {
+    if (!opt.showIf) return true;
+    const { visited, notVisited } = opt.showIf;
+    if (visited) {
+      const arr = Array.isArray(visited) ? visited : [visited];
+      if (!arr.every(id => _visited.has(id))) return false;
+    }
+    if (notVisited) {
+      const arr = Array.isArray(notVisited) ? notVisited : [notVisited];
+      if (!arr.every(id => !_visited.has(id))) return false;
+    }
+    return true;
+  }
+
   function renderOptions(options = []) {
     const bar = optionBar();
     if (!bar) return;
-    _pendingOptions = options;
+    const filtered = options.filter(_shouldShow);
+    _pendingOptions = filtered;
     _optionsVisible = false;
-    if (!active || !options.length) {
+    if (!active || !filtered.length) {
       bar.innerHTML = '';
       bar.classList.add('hidden');
       return;
     }
-    bar.innerHTML = options.map((opt, idx) => (
+    bar.innerHTML = filtered.map((opt, idx) => (
       `<button class="tutorial-option-btn" data-index="${idx}">${Utils.escapeHtml(opt.label || '继续')}</button>`
     )).join('');
     bar.classList.add('hidden');
@@ -131,7 +147,7 @@ const Tutorial = (() => {
         if (!active) return;
         disableOptions(true);
         hideOptions();
-        const opt = options[idx];
+        const opt = filtered[idx];
         await appendUserBubble(opt.label || '继续');
         await handleOption(opt || {});
       };
@@ -511,6 +527,7 @@ const Tutorial = (() => {
       return;
     }
     currentNode = nodeId;
+    _visited.add(nodeId);
     _skipAnim = false;
     renderOptions([]);
     _showSkipBtn();
@@ -674,6 +691,7 @@ lines.push('角色-引导员-姿势：站在牌坊下，手中拿着登记册。
     active = true;
     started = true;
     firstRun = auto;
+    _visited = new Set();
     markSeen();
     try { UI.showPanel('chat'); } catch (_) {}
     try { UI.toggleTopMenu(false); } catch (_) {}

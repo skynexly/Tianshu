@@ -687,13 +687,18 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       }
       const keyword = args && args.keyword ? String(args.keyword).trim() : '';
       if (!keyword) {
-        // 返回目录（所有标题行）
-        const headings = md.split('\n')
+        // 返回目录（文本列表，缩进表示层级）
+        const toc = md.split('\n')
           .filter(l => /^#{1,5}\s/.test(l))
-          .map(l => l.replace(/^#+\s*/, '').trim());
-        return OK({ type: 'toc', headings });
+          .map(l => {
+            const level = l.match(/^(#{1,5})\s/)[1].length;
+            const indent = '  '.repeat(level - 1);
+            return indent + '- ' + l.replace(/^#+\s*/, '').trim();
+          })
+          .join('\n');
+        return OK({ type: 'toc', content: toc + '\n\n提示：传 keyword 可查看对应章节详情' });
       }
-      // 按章节过滤
+      // 按最深标题级别拆成叶子段落
       const kw = keyword.toLowerCase();
       const lines = md.split('\n');
       const sections = [];
@@ -707,17 +712,32 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
         }
       }
       if (cur.heading || cur.body.length) sections.push(cur);
-      const matched = sections.filter(s => {
-        return (s.heading + '\n' + s.body.join('\n')).toLowerCase().includes(kw);
-      });
+
+      // 分两组：标题命中 vs 仅内容命中
+      const titleHits = [];
+      const bodyHits = [];
+      for (const s of sections) {
+        const title = s.heading.toLowerCase();
+        const body = s.body.join('\n').toLowerCase();
+        if (title.includes(kw)) {
+          titleHits.push(s);
+        } else if (body.includes(kw)) {
+          bodyHits.push(s);
+        }
+      }
+      // 优先返回标题命中；没有才返回内容命中，最多3个
+      let matched = titleHits.length > 0 ? titleHits : bodyHits.slice(0, 3);
       if (matched.length === 0) {
         return OK({ result: '使用说明中没有找到包含「' + keyword + '」的内容。' });
       }
-      const items = matched.map(s => ({
-        section: s.heading.replace(/^#+\s*/, '').trim(),
-        content: (s.heading + '\n' + s.body.join('\n')).trim()
-      }));
-      return OK({ type: 'sections', items });
+      const items = matched.map(s => {
+        const content = (s.heading + '\n' + s.body.join('\n')).trim();
+        return {
+          section: s.heading.replace(/^#+\s*/, '').trim(),
+          content
+        };
+      });
+      return OK({ type: 'sections', count: items.length, items });
     }
   };
 

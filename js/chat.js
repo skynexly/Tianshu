@@ -3720,6 +3720,23 @@ renderAll();
   let pendingFiles = []; // [{ name, size, content }] 纯文本文件
   let allMemoriesCache = [];
   
+  // 从加号菜单打开后台频道（首次自动启用 + 弹设置，已启用则 toggle）
+  function _openBackstageFromPlus() {
+    if (typeof Backstage === 'undefined') return;
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (!conv) return;
+    if (!conv.backstageEnabled) {
+      // 首次：启用 + 保存 + 显示悬浮按钮 + 弹设置
+      conv.backstageEnabled = true;
+      Conversations.saveList();
+      Backstage.updateFab();
+      Backstage.openPromptEdit();
+    } else {
+      // 已启用：直接 toggle
+      Backstage.toggle();
+    }
+  }
+
   function togglePlusMenu() {
     const menu = document.getElementById('plus-menu');
     if (!menu) return;
@@ -5767,7 +5784,7 @@ async function applyLorebooksToWorldview() {
     deleteMessage, rollbackTo, rollbackAndRestore,
     continueGenerate,
     initLongPress, showContext, _showToolsLog,
-    togglePlusMenu, toggleFullscreenInput, attachImage, onImagePicked,
+    togglePlusMenu, _openBackstageFromPlus, toggleFullscreenInput, attachImage, onImagePicked,
     attachFile, onFilePicked, previewFile, _openFilePreview,
     pickMemories, filterPickMemories, _togglePickMem,
     confirmPickMemories, removeAttach,

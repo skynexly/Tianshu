@@ -786,6 +786,26 @@ function _syncBuiltinRestoreButton(w) {
   const _wvFactionAutoSave = Utils.debounce(() => saveFaction(true), 1500);
   const _wvNpcAutoSave = Utils.debounce(() => saveNPC(true), 1500);
 
+  // ===== 扩展/玩法 定时全量保存（防闪退丢数据） =====
+  let _fullSaveTimer = null;
+  function _startFullSaveTimer() {
+    _stopFullSaveTimer();
+    _fullSaveTimer = setInterval(() => {
+      if (editingWorldviewId) {
+        try { save(); } catch(_) {}
+      }
+    }, 30000);
+  }
+  function _stopFullSaveTimer() {
+    if (_fullSaveTimer) { clearInterval(_fullSaveTimer); _fullSaveTimer = null; }
+  }
+
+  // ===== 扩展设定自动保存（节日/常驻/动态修改后 debounce 2s 写DB） =====
+  const _wvExtAutoSave = Utils.debounce(async () => {
+    if (!editingWorldviewId) return;
+    try { await save(); } catch(e) { console.warn('[Worldview] 扩展自动保存失败', e); }
+  }, 2000);
+
   function _attachWVAutoSave() {
     // 主编辑页
     ['wv-name','wv-description','wv-setting','wv-currency-name','wv-currency-desc','wv-takeout-name','wv-takeout-desc','wv-shop-name','wv-shop-desc','wv-forum-name','wv-forum-desc','wv-statusbar-skin','wv-start-time','wv-start-plot','wv-start-plot-rounds','wv-start-message'].forEach(id => {
@@ -861,6 +881,7 @@ function _syncBuiltinRestoreButton(w) {
     // 先加载表单数据，再切面板，避免出现"先切到空白页 → 后填内容"的视觉空白
     await _loadEditForm(id);
     UI.showPanel('worldview-edit');
+    _startFullSaveTimer();
   }
   // 给外部调用：编辑面板返回时的目标路径
   function getEditReturnTo() {
@@ -1249,7 +1270,8 @@ switchEditTab('basic');
     _renderFestivals(festivalsData);
     _renderKnowledges(knowledgesData);
     _updateExtCounts();
-    UI.showToast(`已导入 ${fest.length + know.length} 条 ${evtMsg} ${npcMsg}（记得保存）`.replace(/\s+/g, ' ').trim(), 3500);
+    UI.showToast(`已导入 ${fest.length + know.length} 条 ${evtMsg} ${npcMsg}`.replace(/\s+/g, ' ').trim(), 3500);
+    _wvExtAutoSave();
   }
 
   // 导入 entries 格式（兼容外部格式，静默处理）
@@ -1306,8 +1328,9 @@ switchEditTab('basic');
     }
     _renderKnowledges(knowledgesData);
     _updateExtCounts();
-    const msg = `已导入 ${imported.length} 条` + (skipped ? `（跳过 ${skipped} 条空条目）` : '') + '（记得保存）';
+    const msg = `已导入 ${imported.length} 条` + (skipped ? `（跳过 ${skipped} 条空条目）` : '');
     UI.showToast(msg, 3000);
+    _wvExtAutoSave();
   }
 
   // 询问导入模式：替换 / 追加
@@ -2656,6 +2679,7 @@ let knowledgesData = [];
     if (!festivalsData[i]) return;
     festivalsData[i].enabled = festivalsData[i].enabled === false;
     _renderFestivals(festivalsData);
+    _wvExtAutoSave();
   }
 
   let _editFestivalIdx = null;
@@ -2707,12 +2731,14 @@ let knowledgesData = [];
     };
     _renderFestivals(festivalsData);
     closeFestivalModal();
+    _wvExtAutoSave();
   }
   function deleteFestivalFromModal() {
     if (_editFestivalIdx === null) return;
     festivalsData.splice(_editFestivalIdx, 1);
     _renderFestivals(festivalsData);
     closeFestivalModal();
+    _wvExtAutoSave();
   }
   function closeFestivalModal() {
     _editFestivalIdx = null;
@@ -2743,6 +2769,7 @@ let knowledgesData = [];
     if (!customsData[i]) return;
     customsData[i].enabled = !customsData[i].enabled;
     _renderCustoms(customsData);
+    _wvExtAutoSave();
   }
   function _positionLabel(pos, depth) {
     if (pos === 'system_bottom') return '系统底部';
@@ -2846,12 +2873,14 @@ ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="1
       _renderCustoms(customsData);
     }
     closeCustomModal();
+    _wvExtAutoSave();
   }
   function deleteCustomFromModal() {
     if (_editCustomIdx === null) return;
     customsData.splice(_editCustomIdx, 1);
     _renderCustoms(customsData);
     closeCustomModal();
+    _wvExtAutoSave();
   }
   function closeCustomModal() {
 _editCustomIdx = null;
@@ -2884,10 +2913,11 @@ _updateExtCounts();
 _applyExtSearch();
 }
 function toggleKnowledgeEnabled(i) {
-if (!knowledgesData[i]) return;
-knowledgesData[i].enabled = !knowledgesData[i].enabled;
-_renderKnowledges(knowledgesData);
-}
+    if (!knowledgesData[i]) return;
+    knowledgesData[i].enabled = !knowledgesData[i].enabled;
+    _renderKnowledges(knowledgesData);
+    _wvExtAutoSave();
+  }
 let _editKnowledgeIdx = null;
 function addKnowledge() {
 knowledgesData.push(_defaultKnowledge());
@@ -2961,13 +2991,15 @@ knowledgesData[_editKnowledgeIdx] = entry;
 _renderKnowledges(knowledgesData);
 }
 closeKnowledgeModal();
-}
-function deleteKnowledgeFromModal() {
-if (_editKnowledgeIdx === null) return;
-knowledgesData.splice(_editKnowledgeIdx, 1);
-_renderKnowledges(knowledgesData);
-closeKnowledgeModal();
-}
+    _wvExtAutoSave();
+  }
+  function deleteKnowledgeFromModal() {
+    if (_editKnowledgeIdx === null) return;
+    knowledgesData.splice(_editKnowledgeIdx, 1);
+    _renderKnowledges(knowledgesData);
+    closeKnowledgeModal();
+    _wvExtAutoSave();
+  }
 function closeKnowledgeModal() {
     _editKnowledgeIdx = null;
     document.getElementById('wv-knowledge-modal').classList.add('hidden');
@@ -3646,6 +3678,9 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
           }});
         } catch(e) { console.error('[selectWorldview] NPC同步失败:', e); }
       }
+    } else {
+      // 无世界观：应用默认主题（霜白），用户可通过世界观绑定主题覆盖
+      _applyBoundTheme('builtin:霜白');
     }
     // 刷新对话列表，切换到当前世界观下的对话
     Conversations.renderList();
@@ -4518,7 +4553,7 @@ toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, sele
     restoreCurrentWorldview: _restoreCurrentWorldview,
     exportCurrent, importSingle, restoreBuiltinWorldview: _restoreBuiltinWorldview, toggleEditMoreMenu: _toggleEditMoreMenu, closeEditMoreMenu: _closeEditMoreMenu, loadBuiltinWorldviews: _loadBuiltinWorldviews, migrateTianshuchengNpcNames: _migrateTianshuchengNpcNames,
     ensureHiddenWvForCard, deleteHiddenWvForCard, isHiddenWv,
-    getEditReturnTo, clearEditReturnTo,
+    getEditReturnTo, clearEditReturnTo, _stopFullSaveTimer,
     switchWorldTab(tab) {
     const wvBtn = document.getElementById('world-tab-wv-btn');
     const charBtn = document.getElementById('world-tab-char-btn');
