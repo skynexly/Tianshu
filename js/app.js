@@ -172,10 +172,10 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v688.7';
-const CHANGELOG = `【v688.7 更新内容】
+    const APP_VERSION = 'v688.8';
+const CHANGELOG = `【v688.8 更新内容】
 · 新增角色属性「继承」按钮（新建角色属性卡片后，可一键复制其他角色的属性配置）
-· 修复回复建议浮窗在部分浏览器上背景透明的问题（华为浏览器等）
+· 修复回复建议浮窗背景透明的问题（CSS 缓存版本未更新导致）
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;
