@@ -1945,7 +1945,14 @@ function _renderGameplayAttrs(w) {
       </div>`;
   }
   if (charEl) {
-    const cards = gp.characterAttrs.map((c, idx) => `
+    const cards = gp.characterAttrs.map((c, idx) => {
+      // 判断是否显示"继承"按钮：当前角色无属性 且 有其他角色卡片有属性
+      const hasAttrs = (c.attrs || []).length > 0;
+      const hasOtherWithAttrs = !hasAttrs && gp.characterAttrs.some((x, i) => i !== idx && (x.attrs || []).length > 0);
+      const inheritBtn = hasOtherWithAttrs
+        ? `<button type="button" onclick="Worldview.inheritCharAttrs(${idx})" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap">继承</button>`
+        : '';
+      return `
       <div style="padding:2px 0 10px;background:transparent">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
           <div style="min-width:0">
@@ -1953,13 +1960,15 @@ function _renderGameplayAttrs(w) {
             <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.sourceLabel || '')}</div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
+            ${inheritBtn}
             <button type="button" onclick="Worldview.addGameplayAttr('character', ${idx})" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 属性</button>
             <button type="button" onclick="Worldview.deleteGameplayCharacter(${idx})" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--danger);font-size:12px;cursor:pointer">移除</button>
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px">${_renderAttrRows(c.attrs || [], 'character', idx)}</div>
       </div>
-    `).join('');
+    `;
+    }).join('');
     charEl.innerHTML = `
       <div style="padding:2px 0 10px;background:transparent">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
@@ -2445,6 +2454,37 @@ async function deleteGameplayCharacter(idx) {
   gp.characterAttrs.splice(idx, 1);
   await _saveEditingWV(w);
   _renderGameplayAttrs(w);
+}
+
+async function inheritCharAttrs(idx) {
+  if (!editingWorldviewId) return;
+  const w = await DB.get('worldviews', editingWorldviewId);
+  if (!w) return;
+  const gp = _ensureGameplay(w);
+  const card = gp.characterAttrs[idx];
+  if (!card) return;
+  // 找最近一个有属性的其他角色卡片（优先往前找，找不到往后找）
+  let source = null;
+  for (let i = idx - 1; i >= 0; i--) {
+    if ((gp.characterAttrs[i]?.attrs || []).length > 0) { source = gp.characterAttrs[i]; break; }
+  }
+  if (!source) {
+    for (let i = idx + 1; i < gp.characterAttrs.length; i++) {
+      if ((gp.characterAttrs[i]?.attrs || []).length > 0) { source = gp.characterAttrs[i]; break; }
+    }
+  }
+  if (!source || !source.attrs || source.attrs.length === 0) {
+    UI.showToast('没有可继承的角色属性', 1800);
+    return;
+  }
+  // 深拷贝属性，id 重新生成
+  card.attrs = source.attrs.map(a => ({
+    ...JSON.parse(JSON.stringify(a)),
+    id: 'attr_' + Utils.uuid().slice(0, 8)
+  }));
+  await _saveEditingWV(w);
+  _renderGameplayAttrs(w);
+  UI.showToast(`已继承「${source.targetName || '角色'}」的 ${card.attrs.length} 条属性`, 2000);
 }
 
 async function toggleGameplayCharPicker() {
@@ -4633,7 +4673,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     _getEditingWVForImporter,
     _editingRegionIdxForImporter,
     _editingFactionIdxForImporter,
-    addGameplayAttr, updateGameplayAttr, deleteGameplayAttr, openGameplayAttrModal, closeGameplayAttrModal, saveGameplayAttrFromModal, deleteGameplayAttrFromModal, deleteGameplayCharacter, toggleGameplayCharPicker, renderGameplayCharPicker, selectGameplayCharacter,
+    addGameplayAttr, updateGameplayAttr, deleteGameplayAttr, openGameplayAttrModal, closeGameplayAttrModal, saveGameplayAttrFromModal, deleteGameplayAttrFromModal, deleteGameplayCharacter, inheritCharAttrs, toggleGameplayCharPicker, renderGameplayCharPicker, selectGameplayCharacter,
     addTaskPhase, deleteTaskPhase, updateTaskPhase, addTaskType, deleteTaskType, updateTaskType, updateTaskPhaseReward,
     openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal, onTaskTypeRewardModeChange, openPhaseRewardModal,
     _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards,
