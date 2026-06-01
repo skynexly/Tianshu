@@ -281,6 +281,10 @@ function apply(cfg) {
     // 正文字号（v681.3）
     const fs = Number(cfg.msgFontSize);
     s.setProperty('--msg-font-size', (Number.isFinite(fs) && fs > 0 ? fs : 15) + 'px');
+    // 强制浏览器刷新 CSS 变量，防止换主题后某些面板卡片样式不更新（Android Chrome / MIUI 常见问题）
+    try {
+      void document.documentElement.offsetHeight;
+    } catch(_) {}
   }
 
   // 对话级背景图覆盖（优先级高于主题级 chatBgImage；空字符串/undefined 表示走主题级）
@@ -354,20 +358,22 @@ try { applyLiteMode(isLiteMode()); } catch(_) {}
 
   // 点预设按钮
   function applyPreset(name) {
-    const p = PRESETS[name];
-    if (!p) return;
-    const old = load();
-    const cfg = Object.assign({}, p);
-    cfg.customPresetName = '';
-    // 保留字体设置
-    cfg.fontMode = old.fontMode || 'default';
-    // 保留正文字号（v681.3.2）
-    cfg.msgFontSize = old.msgFontSize ?? 13.5;
-    withThemeFade(() => {
+     const p = PRESETS[name];
+     if (!p) return;
+     const old = load();
+     const cfg = Object.assign({}, p);
+     cfg.customPresetName = '';
+     // 保留字体设置
+     cfg.fontMode = old.fontMode || 'default';
+     // 保留正文字号（v681.3.2）
+     cfg.msgFontSize = old.msgFontSize ?? 13.5;
+     withThemeFade(() => {
 save(cfg);
 apply(cfg);
 });
 _syncAllTriggers(cfg);
+     // 换主题后重新渲染当前页面，防止样式混乱
+     try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
     // 同步背景图预览（内置预设没有背景图，清空）
     const img = document.getElementById('th-bg-image-preview');
     if (img) { img.src = ''; img.style.display = 'none'; }
@@ -611,23 +617,25 @@ UI.showToast(`已载入「${name}」，可直接修改名称并保存`, 2500);
 }
 
 function activateCustomPreset(name, silent = false) {
-    const map = loadCustomPresets();
-    const cfg = map[name];
-    if (!cfg) return;
-    const old = load();
-    cfg.customPresetName = name;
-    // 保留字体设置
-    if (!cfg.fontMode) cfg.fontMode = old.fontMode || 'default';
-    // 保留正文字号（v681.3.2）
-    if (cfg.msgFontSize == null) cfg.msgFontSize = old.msgFontSize ?? 13.5;
-    editingCustomName = null;
+     const map = loadCustomPresets();
+     const cfg = map[name];
+     if (!cfg) return;
+     const old = load();
+     cfg.customPresetName = name;
+     // 保留字体设置
+     if (!cfg.fontMode) cfg.fontMode = old.fontMode || 'default';
+     // 保留正文字号（v681.3.2）
+     if (cfg.msgFontSize == null) cfg.msgFontSize = old.msgFontSize ?? 13.5;
+     editingCustomName = null;
 const nameInput = document.getElementById('th-custom-name');
-if (nameInput) nameInput.value = name;
-withThemeFade(() => {
-apply(cfg);
-save(cfg);
-});
-_syncAllTriggers(cfg);
+ if (nameInput) nameInput.value = name;
+ withThemeFade(() => {
+ apply(cfg);
+ save(cfg);
+ });
+ _syncAllTriggers(cfg);
+ // 换主题后重新渲染当前页面，防止样式混乱
+ try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
 // 同步背景图预览
 const img = document.getElementById('th-bg-image-preview');
 if (img) { img.src = cfg.chatBgImage || ''; img.style.display = cfg.chatBgImage ? 'block' : 'none'; }

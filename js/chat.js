@@ -1591,6 +1591,8 @@ try {
     } catch(e) { GameLog.log('warn', `[环境快照] 捕获失败: ${e.message}`); }
     await DB.put('messages', userMsg);
     messages.push(userMsg);
+    // 用户消息已发送，清掉这条对话的回复建议缓存
+    try { _clearSuggestCache(Conversations.getCurrent()); } catch(_) {}
     if (!userMsg.hidden) {
       appendMessage(userMsg, false, true);
     }
@@ -3753,6 +3755,182 @@ menu.classList.add('hidden');
     }
   }
 
+  // ===== 回复建议 =====
+  let _suggestAbort = null;
+  // 按 convId 缓存建议，发送消息后清空当前对话缓存
+  const _suggestCache = {};
+
+  async function generateSuggestions() {
+    const panel = document.getElementById('suggest-panel');
+    if (!panel) return;
+
+    // 如果已经显示，点击关闭（不弹确认）
+    if (!panel.classList.contains('hidden')) {
+      panel.classList.add('hidden');
+      if (_suggestAbort) { _suggestAbort.abort(); _suggestAbort = null; }
+      return;
+    }
+
+    // 没有当前对话
+    const convId = Conversations.getCurrent();
+    if (!convId) {
+      UI.showToast('请先选择对话', 1500);
+      return;
+    }
+
+    // 优先用缓存（同一对话还没发送时再点灯泡，直接展示上次结果，不弹确认）
+    if (Array.isArray(_suggestCache[convId]) && _suggestCache[convId].length > 0) {
+      panel.classList.remove('hidden');
+      _renderSuggestions(_suggestCache[convId]);
+      return;
+    }
+
+    // 没缓存：检查二次确认开关
+    let skip = false;
+    try { skip = localStorage.getItem('skynex_suggestConfirmSkip') === '1'; } catch(_) {}
+    if (skip) {
+      await _doGenerateSuggestions(convId);
+    } else {
+      _showSuggestConfirm(convId);
+    }
+  }
+
+  function _showSuggestConfirm(convId) {
+    const modal = document.getElementById('suggest-confirm-modal');
+    if (!modal) {
+      // 兜底：弹窗不存在时直接生成
+      _doGenerateSuggestions(convId);
+      return;
+    }
+    // 重置复选框
+    const skipBox = document.getElementById('suggest-confirm-skip');
+    if (skipBox) skipBox.checked = false;
+    modal._pendingConvId = convId;
+    modal.classList.remove('hidden');
+  }
+
+  function _cancelSuggestConfirm() {
+    const modal = document.getElementById('suggest-confirm-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal._pendingConvId = null;
+  }
+
+  function _okSuggestConfirm() {
+    const modal = document.getElementById('suggest-confirm-modal');
+    if (!modal) return;
+    const skipBox = document.getElementById('suggest-confirm-skip');
+    if (skipBox && skipBox.checked) {
+      try { localStorage.setItem('skynex_suggestConfirmSkip', '1'); } catch(_) {}
+    }
+    const convId = modal._pendingConvId;
+    modal.classList.add('hidden');
+    modal._pendingConvId = null;
+    if (convId) _doGenerateSuggestions(convId);
+  }
+
+  async function _doGenerateSuggestions(convId) {
+    const panel = document.getElementById('suggest-panel');
+    if (!panel) return;
+
+    // 最近消息
+    const recent = messages.slice(-10);
+    if (recent.length === 0) {
+      UI.showToast('当前对话没有消息', 1500);
+      panel.classList.add('hidden');
+      return;
+    }
+
+    // 获取面具信息
+    let charPrompt = { name: '用户角色', desc: '' };
+    try {
+      const char = await Character.get();
+      if (char) {
+        charPrompt.name = char.name || '用户角色';
+        charPrompt.desc = Character.formatForPrompt(char) || '';
+      }
+    } catch(_) {}
+
+    // 显示 loading
+    panel.classList.remove('hidden');
+    panel.innerHTML = '<div class="suggest-loading">正在生成回复建议…</div>';
+
+    // 灵感按钮变色
+    const btn = document.getElementById('btn-suggest');
+    if (btn) btn.style.color = 'var(--accent)';
+
+    _suggestAbort = new AbortController();
+    try {
+      const suggestions = await API.suggest(recent, charPrompt);
+      console.log('[Suggest] 解析出', suggestions.length, '条建议:', suggestions);
+      if (!Array.isArray(suggestions) || suggestions.length === 0) {
+        panel.innerHTML = '<div class="suggest-loading">未能生成建议，请重试</div>';
+        setTimeout(() => panel.classList.add('hidden'), 2000);
+        return;
+      }
+      // 缓存
+      _suggestCache[convId] = suggestions;
+      _renderSuggestions(suggestions);
+    } catch(e) {
+      if (e.name === 'AbortError') return;
+      panel.innerHTML = `<div class="suggest-loading" style="color:var(--danger)">生成失败：${Utils.escapeHtml(e.message)}</div>`;
+      setTimeout(() => panel.classList.add('hidden'), 3000);
+    } finally {
+      if (btn) btn.style.color = '';
+      _suggestAbort = null;
+    }
+  }
+
+  function _renderSuggestions(suggestions) {
+    const panel = document.getElementById('suggest-panel');
+    if (!panel) return;
+    const itemsHtml = suggestions.map((s, i) =>
+      `<div class="suggest-item" onclick="Chat._pickSuggestion(${i})" data-idx="${i}">${Utils.escapeHtml(s)}</div>`
+    ).join('');
+    panel.innerHTML = `
+      <div class="suggest-header">
+        <span class="suggest-title">回复建议</span>
+        <button class="suggest-refresh" onclick="Chat.refreshSuggestions()" title="重新生成">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-15-6.7L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"/><path d="M21 21v-5h-5"/></svg>
+        </button>
+      </div>
+      <div class="suggest-list">${itemsHtml}</div>
+    `;
+    panel._suggestions = suggestions;
+  }
+
+  async function refreshSuggestions() {
+    const convId = Conversations.getCurrent();
+    if (!convId) return;
+    // 清掉当前对话缓存，强制重新生成
+    delete _suggestCache[convId];
+    await _doGenerateSuggestions(convId);
+  }
+
+  function _pickSuggestion(idx) {
+    const panel = document.getElementById('suggest-panel');
+    if (!panel || !panel._suggestions) return;
+    const text = panel._suggestions[idx];
+    if (!text) return;
+    const input = document.getElementById('chat-input');
+    if (input) {
+      input.value = text;
+      input.dispatchEvent(new Event('input'));
+      input.focus();
+    }
+    panel.classList.add('hidden');
+    // 不清 _suggestCache，只清 panel 上的临时引用
+    // 用户回头点灯泡还能看到这批建议；除非他真的把消息发出去了
+  }
+
+  // 发送成功后调用，清当前对话的建议缓存
+  function _clearSuggestCache(convId) {
+    if (convId && _suggestCache[convId]) {
+      delete _suggestCache[convId];
+    }
+  }
+
+
   function toggleFullscreenInput() {
   const overlay = document.getElementById('fullscreen-input-overlay');
   const originalTextarea = document.getElementById('chat-input');
@@ -5817,6 +5995,7 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     searchMessages, toggleSearchBar, renderQuickSwitches, renderAll,
     scrollToBottom, updateScrollBtn,
     _toggleThink,
+    generateSuggestions, _pickSuggestion, refreshSuggestions, _cancelSuggestConfirm, _okSuggestConfirm,
     openConvSettingsModal, saveConvSettings, closeConvSettingsModal, _switchCsTab,
     openDirectiveModal, closeDirectiveModal, saveDirective, clearDirective, _getConvSettings,
     isRetryDisabled,

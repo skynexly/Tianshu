@@ -15,6 +15,7 @@ let visionPresets = [];
   let backstagePresets = [];
   let ttsPresets = [];
   let drawPresets = [];
+  let suggestPresets = [];
   let currentSummaryId = 'default';
   let currentMemoryId = 'default';
   let currentVisionId = 'default';
@@ -23,6 +24,7 @@ let visionPresets = [];
   let currentBackstageId = 'default';
   let currentTtsId = 'default';
   let currentDrawId = 'default';
+  let currentSuggestId = 'default';
   let editingSummaryId = null;
   let editingMemoryId = null;
   let editingVisionId = null;
@@ -31,6 +33,7 @@ let visionPresets = [];
   let editingBackstageId = null;
   let editingTtsId = null;
   let editingDrawId = null;
+  let editingSuggestId = null;
 
 // 管理模式状态
 let presetManageMode = false;
@@ -96,6 +99,8 @@ const bsData = await DB.get('settings', 'backstagePresets');
     ttsPresets = (ttsData?.value && ttsData.value.length > 0) ? ttsData.value : [{ id: 'default', name: '默认', apiUrl: 'https://api.minimaxi.com/v1/t2a_v2', apiKey: '', model: 'speech-2.8-hd', groupId: '' }];
     const drawData = await DB.get('settings', 'drawPresets');
     drawPresets = (drawData?.value && drawData.value.length > 0) ? drawData.value : [{ id: 'default', name: '默认', apiUrl: '', apiKey: '', model: '' }];
+    const sugData = await DB.get('settings', 'suggestPresets');
+    suggestPresets = (sugData?.value && sugData.value.length > 0) ? sugData.value : [{ id: 'default', name: '默认', apiUrl: '', apiKey: '', model: '' }];
 
     const currSum = await DB.get('settings', 'currentSummary');
     currentSummaryId = currSum?.value || 'default';
@@ -113,6 +118,8 @@ const bsData = await DB.get('settings', 'backstagePresets');
     currentTtsId = currTts?.value || 'default';
     const currDraw = await DB.get('settings', 'currentDraw');
     currentDrawId = currDraw?.value || 'default';
+    const currSug = await DB.get('settings', 'currentSuggest');
+    currentSuggestId = currSug?.value || 'default';
 
     // 安全校验：currentId 指向的预设不存在则重置到第一个
     if (!summaryPresets.find(p => p.id === currentSummaryId)) currentSummaryId = summaryPresets[0]?.id || 'default';
@@ -123,6 +130,7 @@ const bsData = await DB.get('settings', 'backstagePresets');
     if (!backstagePresets.find(p => p.id === currentBackstageId)) currentBackstageId = backstagePresets[0]?.id || 'default';
     if (!ttsPresets.find(p => p.id === currentTtsId)) currentTtsId = ttsPresets[0]?.id || 'default';
     if (!drawPresets.find(p => p.id === currentDrawId)) currentDrawId = drawPresets[0]?.id || 'default';
+    if (!suggestPresets.find(p => p.id === currentSuggestId)) currentSuggestId = suggestPresets[0]?.id || 'default';
 
     await savePresets();
   }
@@ -146,6 +154,8 @@ const bsData = await DB.get('settings', 'backstagePresets');
     await DB.put('settings', { key: 'currentTts', value: currentTtsId });
     await DB.put('settings', { key: 'drawPresets', value: drawPresets });
     await DB.put('settings', { key: 'currentDraw', value: currentDrawId });
+    await DB.put('settings', { key: 'suggestPresets', value: suggestPresets });
+    await DB.put('settings', { key: 'currentSuggest', value: currentSuggestId });
   }
 
   function getCurrent() {
@@ -191,6 +201,9 @@ const bsData = await DB.get('settings', 'backstagePresets');
   function getDrawConfig() {
     return _cleanFuncConfig(drawPresets.find(p => p.id === currentDrawId) || drawPresets[0]);
   }
+  function getSuggestConfig() {
+    return _cleanFuncConfig(suggestPresets.find(p => p.id === currentSuggestId) || suggestPresets[0]);
+  }
 
   async function switchPreset(id, updateConv = true) {
     if (!presets.find(p => p.id === id)) return;
@@ -217,6 +230,7 @@ const bsData = await DB.get('settings', 'backstagePresets');
     renderFuncPresetList('backstage');
     renderFuncPresetList('tts');
     renderFuncPresetList('draw');
+    renderFuncPresetList('suggest');
     // v687.6：回填 Unsplash Access Key
     try {
       const uk = document.getElementById('unsplash-access-key');
@@ -655,6 +669,7 @@ async function cancelEdit() {
     else if (type === 'backstage') { list = backstagePresets; currentId = currentBackstageId; }
     else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; }
     else if (type === 'draw') { list = drawPresets; currentId = currentDrawId; }
+    else if (type === 'suggest') { list = suggestPresets; currentId = currentSuggestId; }
     else return;
 
     const switchFnName = 'switch' + type.charAt(0).toUpperCase() + type.slice(1);
@@ -718,6 +733,7 @@ async function cancelEdit() {
     else if (type === 'backstage') { list = backstagePresets; currentId = currentBackstageId; switchFn = (x) => currentBackstageId = x; }
     else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; switchFn = (x) => currentTtsId = x; }
     else if (type === 'draw') { list = drawPresets; currentId = currentDrawId; switchFn = (x) => currentDrawId = x; }
+    else if (type === 'suggest') { list = suggestPresets; currentId = currentSuggestId; switchFn = (x) => currentSuggestId = x; }
     else return;
     const selected = funcSelectedIds[type];
     if (selected.size === 0) return;
@@ -735,7 +751,8 @@ async function cancelEdit() {
     else if (type === 'backstage') backstagePresets = list.filter(p => !toDelete.has(p.id));
     else if (type === 'tts') ttsPresets = list.filter(p => !toDelete.has(p.id));
     else if (type === 'draw') drawPresets = list.filter(p => !toDelete.has(p.id));
-    const newList = type === 'summary' ? summaryPresets : type === 'memory' ? memoryPresets : type === 'vision' ? visionPresets : type === 'gaiden' ? gaidenPresets : type === 'worldvoice' ? worldvoicePresets : type === 'tts' ? ttsPresets : type === 'draw' ? drawPresets : backstagePresets;
+    else if (type === 'suggest') suggestPresets = list.filter(p => !toDelete.has(p.id));
+    const newList = type === 'summary' ? summaryPresets : type === 'memory' ? memoryPresets : type === 'vision' ? visionPresets : type === 'gaiden' ? gaidenPresets : type === 'worldvoice' ? worldvoicePresets : type === 'tts' ? ttsPresets : type === 'draw' ? drawPresets : type === 'suggest' ? suggestPresets : backstagePresets;
     // 删光后自动补回默认预设
     if (newList.length === 0) {
       const defaultPreset = { id: 'default', name: '默认', apiUrl: '', apiKey: '', model: '' };
@@ -757,6 +774,7 @@ async function cancelEdit() {
     else if (type === 'backstage') list = backstagePresets;
     else if (type === 'tts') list = ttsPresets;
     else if (type === 'draw') list = drawPresets;
+    else if (type === 'suggest') list = suggestPresets;
     else return;
     const selected = funcSelectedIds[type];
     if (selected.size === 0) return;
@@ -818,6 +836,12 @@ async function cancelEdit() {
     savePresets();
     renderFuncPresetList('draw');
   }
+  function switchSuggest(id) {
+    if (!suggestPresets.find(p => p.id === id)) return;
+    currentSuggestId = id;
+    savePresets();
+    renderFuncPresetList('suggest');
+  }
 
   // ===== 从主模型预设填充功能模型 =====
   function fillFromMainPreset(type, presetId) {
@@ -861,6 +885,7 @@ async function cancelEdit() {
     else if (type === 'backstage') { list = backstagePresets; editingIdVar = 'editingBackstageId'; modalId = 'func-backstage-modal'; }
     else if (type === 'tts') { list = ttsPresets; editingIdVar = 'editingTtsId'; modalId = 'func-tts-modal'; }
     else if (type === 'draw') { list = drawPresets; editingIdVar = 'editingDrawId'; modalId = 'func-draw-modal'; }
+    else if (type === 'suggest') { list = suggestPresets; editingIdVar = 'editingSuggestId'; modalId = 'func-suggest-modal'; }
     else return;
 
     const preset = list.find(p => p.id === id);
@@ -873,6 +898,7 @@ async function cancelEdit() {
     else if (editingIdVar === 'editingBackstageId') editingBackstageId = id;
     else if (editingIdVar === 'editingTtsId') editingTtsId = id;
     else if (editingIdVar === 'editingDrawId') editingDrawId = id;
+    else if (editingIdVar === 'editingSuggestId') editingSuggestId = id;
 
     document.getElementById(`func-${type}-name`).value = preset.name || '';
     document.getElementById(`func-${type}-url`).value = preset.apiUrl || '';
@@ -900,9 +926,10 @@ async function cancelEdit() {
     else if (type === 'backstage') { list = backstagePresets; editingIdVar = 'editingBackstageId'; modalId = 'func-backstage-modal'; }
     else if (type === 'tts') { list = ttsPresets; editingIdVar = 'editingTtsId'; modalId = 'func-tts-modal'; }
     else if (type === 'draw') { list = drawPresets; editingIdVar = 'editingDrawId'; modalId = 'func-draw-modal'; }
+    else if (type === 'suggest') { list = suggestPresets; editingIdVar = 'editingSuggestId'; modalId = 'func-suggest-modal'; }
     else return;
 
-    const editingId = type === 'summary' ? editingSummaryId : type === 'memory' ? editingMemoryId : type === 'vision' ? editingVisionId : type === 'gaiden' ? editingGaidenId : type === 'worldvoice' ? editingWorldvoiceId : type === 'tts' ? editingTtsId : type === 'draw' ? editingDrawId : editingBackstageId;
+    const editingId = type === 'summary' ? editingSummaryId : type === 'memory' ? editingMemoryId : type === 'vision' ? editingVisionId : type === 'gaiden' ? editingGaidenId : type === 'worldvoice' ? editingWorldvoiceId : type === 'tts' ? editingTtsId : type === 'draw' ? editingDrawId : type === 'suggest' ? editingSuggestId : editingBackstageId;
     if (!editingId) return;
 
     const preset = list.find(p => p.id === editingId);
@@ -930,6 +957,7 @@ async function cancelEdit() {
     else if (type === 'backstage') editingBackstageId = null;
     else if (type === 'tts') editingTtsId = null;
     else if (type === 'draw') editingDrawId = null;
+    else if (type === 'suggest') editingSuggestId = null;
 
     renderFuncPresetList(type);
   }
@@ -943,6 +971,7 @@ async function cancelEdit() {
     else if (type === 'backstage') editingBackstageId = null;
     else if (type === 'tts') editingTtsId = null;
     else if (type === 'draw') editingDrawId = null;
+    else if (type === 'suggest') editingSuggestId = null;
 
     const modalId = `func-${type}-modal`;
     document.getElementById(modalId).classList.add('hidden');
@@ -1182,8 +1211,8 @@ async function cancelEdit() {
     getRegexRules, addRegex, editRegex, saveRegex, closeRegexEdit,
     toggleRegex, removeRegex, renderRegexRules,
     toggleRegexSelect, toggleRegexManageMode, exitRegexManageMode, batchDeleteRegex,
-    getSummaryConfig, getMemoryConfig, getVisionConfig, getGaidenConfig, getWorldvoiceConfig, getBackstageConfig, getTtsConfig, getDrawConfig,
-    renderFuncPresetList, switchSummary, switchMemory, switchVision, switchGaiden, switchWorldvoice, switchBackstage, switchTts, switchDraw,
+    getSummaryConfig, getMemoryConfig, getVisionConfig, getGaidenConfig, getWorldvoiceConfig, getBackstageConfig, getTtsConfig, getDrawConfig, getSuggestConfig,
+    renderFuncPresetList, switchSummary, switchMemory, switchVision, switchGaiden, switchWorldvoice, switchBackstage, switchTts, switchDraw, switchSuggest,
     editFuncPreset, saveFuncPreset, cancelFuncEdit, createFuncPreset,
     cloneFuncPreset, deleteFuncPreset, fetchFuncModels, fillFromMainPreset, toggleFillDropdown,
     toggleFuncSelect, toggleFuncManageMode, batchDeleteFunc, batchCloneFunc,

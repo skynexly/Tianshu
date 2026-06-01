@@ -3086,6 +3086,91 @@ input[type="range"] {
 }
 
 /* ===== 全屏输入 ===== */
+
+/* ===== 回复建议浮窗 ===== */
+.suggest-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.suggest-panel.hidden { display: none; }
+.suggest-item {
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  -webkit-user-select: none;
+  user-select: none;
+  /* 让长文本和换行能正常显示，不被截断 */
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  min-width: 0;
+}
+.suggest-item:active {
+  background: var(--bg-tertiary);
+  border-color: var(--accent);
+}
+.suggest-loading {
+  text-align: center;
+  padding: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+/* 浮窗顶部：标题 + 刷新按钮 */
+.suggest-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 4px;
+  flex-shrink: 0;
+}
+.suggest-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+}
+.suggest-refresh {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  padding: 0;
+}
+.suggest-refresh:active,
+.suggest-refresh:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent);
+}
+.suggest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .fullscreen-input-overlay {
   position: fixed;
   top: 0;

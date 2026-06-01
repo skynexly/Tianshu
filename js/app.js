@@ -172,14 +172,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v688.3';
-const CHANGELOG = `【v688.3 更新内容】
-· 新增主题一键应用至所有世界观（含无世界观和未来新建）
-· 新增对话设置「关闭自动重试」（生成失败直接报错，适合按次计费的API）
-· 修复 iOS Safari 编辑世界观保存后再次进入空白
-· 修复 iOS Safari 编辑世界观退出后按钮无法点击
-· 优化 iOS Safari 全屏输入按钮顶部安全区
-· 优化 iOS Safari 底部安全区背景跟随主题色
+    const APP_VERSION = 'v688.4';
+const CHANGELOG = `【v688.4 更新内容】
+· 新增回复建议（输入框左侧灯泡按钮，一次生成 3 条符合人设的回复，可选填后自行修改）
+· 新增回复建议功能模型（设置 → 功能模型，留空使用主模型）
+· 修复切换主题后部分面板卡片样式不更新（Android Chrome / 小米浏览器）
 
 【已知】
 · 强刷不更新请去浏览器设置注销 sw 后再刷`;

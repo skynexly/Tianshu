@@ -522,5 +522,95 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     }
   }
 
-  return { getConfig, buildMessages, streamChat, streamChatWithTools, summarize, extractMemory, fetchModelList, generate, generateImage, searchUnsplash };
+  /**
+   * 回复建议（非流式）
+   */
+  async function suggest(recentMessages, charPrompt) {
+    const mainConfig = await getConfig();
+    const funcConfig = Settings.getSuggestConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl).replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+
+    const charName = charPrompt?.name || '用户角色';
+    const charDesc = charPrompt?.desc || '';
+
+    const dialogue = recentMessages.map(m =>
+      `[${m.role === 'user' ? charName : 'AI'}] ${m.content}`
+    ).join('\n\n');
+
+    const systemPrompt = `你是一个角色扮演的回复建议助手。
+以下是用户的角色设定：
+角色名：${charName}
+${charDesc ? `角色描述：${charDesc}` : ''}
+
+以下是最近的对话：
+${dialogue}
+
+请根据角色设定和对话上下文，生成 3 个不同的回复。
+要求：
+- 符合${charName}的人设和说话风格
+- 每个建议 1-3 句话，包含语言描写和动作描写
+- 延续${charName}的回复风格，使用类似的符号区分动作描写和语言描写（例如使用括号包裹动作，或使用引号包裹语言等，和用户过去的回复保持一致）
+- 在符合${charName}人设的情况下，给出三个倾向略有不同的回复，例如偏保守、偏主动、常规
+- 不要重复对话中已经出现过的内容
+
+输出格式（严格遵守，不要输出 JSON，不要加序号或其他说明）：
+每个回复独占若干行，回复之间用单独一行的「===」分隔。例如：
+
+（动作描写）"对话内容"
+===
+（动作描写）"对话内容"
+===
+（动作描写）"对话内容"`;
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: systemPrompt }],
+        temperature: 0.9,
+      max_tokens: 2048,
+      }),
+    });
+    if (!resp.ok) throw new Error(`API ${resp.status}: ${resp.statusText}`);
+    const json = await resp.json();
+    let text = json.choices?.[0]?.message?.content || '';
+    // thinking 模型可能 content 为空，从其他字段找正文
+    if (!text) {
+      const msg = json.choices?.[0]?.message || {};
+      for (const k of Object.keys(msg)) {
+        if (k === 'role' || k === 'refusal' || k === 'tool_calls' || k === 'reasoning_content') continue;
+        const v = msg[k];
+        if (typeof v === 'string' && v.trim().length > 5) { text = v; break; }
+      }
+    }
+    if (!text) throw new Error('模型返回为空');
+    // 清理 markdown / 思考标签
+    text = text.replace(/```[\s\S]*?\n/g, '').replace(/```/g, '');
+    text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+    text = text.replace(/<\/?output>/gi, '');
+    text = text.trim();
+    // 按 === 分隔（兼容全角／半角、前后空白）
+    let items = text.split(/\n?\s*={3,}\s*\n?/).map(s => s.trim()).filter(Boolean);
+    // 如果没有分隔符（模型没听话），尝试按 JSON 数组兜底
+    if (items.length < 2) {
+      const match = text.match(/\[[\s\S]*\]/);
+      if (match) {
+        try {
+          const arr = JSON.parse(match[0]);
+          if (Array.isArray(arr) && arr.length >= 2) return arr;
+        } catch(_) {}
+      }
+      // 再兜底：按双换行分隔
+      items = text.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+    }
+    // 去掉每条可能残留的序号前缀（1. / 1、/ - 等）
+    items = items.map(s => s.replace(/^\s*(?:\d+[.、)]\s*|[-*]\s*)/, '').trim()).filter(Boolean);
+    if (items.length === 0) throw new Error('未能解析出回复建议');
+    return items.slice(0, 5);
+  }
+
+  return { getConfig, buildMessages, streamChat, streamChatWithTools, summarize, extractMemory, fetchModelList, generate, generateImage, searchUnsplash, suggest };
 })();

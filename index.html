@@ -312,8 +312,15 @@
         <div id="attachments-bar" class="attachments-bar hidden"></div>
         <!-- 输入框（独占一行） -->
         <div style="width:100%;position:relative">
-          <textarea id="chat-input" placeholder="输入你的行动..." rows="2" style="width:100%;box-sizing:border-box;padding-right:40px"></textarea>
+          <!-- 回复建议浮窗 -->
+          <div id="suggest-panel" class="suggest-panel hidden"></div>
+          <textarea id="chat-input" placeholder="输入你的行动..." rows="2" style="width:100%;box-sizing:border-box;padding-right:40px;padding-left:36px"></textarea>
           <div id="tutorial-tap-overlay" class="hidden" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:10;cursor:pointer" onclick="Tutorial.toggleOptions()"></div>
+          <!-- 灵感按钮（左） -->
+          <button id="btn-suggest" onclick="Chat.generateSuggestions()" title="回复建议" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);width:28px;height:28px;border-radius:6px;background:transparent;border:none;color:var(--text-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:5">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+          </button>
+          <!-- 全屏按钮（右） -->
           <button onclick="Chat.toggleFullscreenInput()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);width:28px;height:28px;border-radius:6px;background:transparent;border:none;color:var(--text-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:5">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg>
           </button>
@@ -2540,6 +2547,20 @@
               新建生图模型
             </button>
 
+            <!-- 回复建议模型 -->
+            <div style="margin:24px 0 12px;display:flex;align-items:center;justify-content:space-between">
+              <h3 style="color:var(--accent);font-size:14px;margin:0">回复建议</h3>
+              <button class="btn-icon" onclick="Settings.toggleFuncManageMode('suggest')" style="font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text-secondary)">
+                管理
+              </button>
+            </div>
+            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">用于生成回复建议（输入框灵感按钮）。留空则使用主模型。</p>
+            <div id="func-suggest-list" class="card-list"></div>
+            <button class="btn-full" onclick="Settings.createFuncPreset('suggest')" style="display:flex;align-items:center;justify-content:center;gap:6px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+              新建回复建议模型
+            </button>
+
             <!-- v687.6：Unsplash 配图（免费摄影图床） -->
             <div style="margin:24px 0 12px">
               <h3 style="color:var(--accent);font-size:14px;margin:0">Unsplash 配图</h3>
@@ -3514,7 +3535,28 @@ NPC
     </div>
   </div>
 
-  <!-- 确认删除弹窗 -->
+  <!-- 回复建议二次确认弹窗 -->
+<div id="suggest-confirm-modal" class="modal hidden" style="z-index:99998">
+  <div class="modal-content" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:320px">
+    <h3 style="margin:0 0 12px 0;color:var(--text);font-size:16px">生成回复建议</h3>
+    <p style="margin:0 0 14px 0;color:var(--text-secondary);font-size:13px;line-height:1.6">
+      将根据当前面具与最近对话生成 3 条回复建议，会消耗一次 API 调用。是否继续？
+    </p>
+    <label class="circle-check-label" style="margin:0 0 18px 0;cursor:pointer">
+      <span class="circle-check-text" style="color:var(--text-secondary);font-size:12px">下次不再提醒</span>
+      <span style="position:relative;display:inline-flex">
+        <input type="checkbox" id="suggest-confirm-skip" class="circle-check">
+        <span class="circle-check-ui"></span>
+      </span>
+    </label>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="Chat._cancelSuggestConfirm()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">取消</button>
+      <button onclick="Chat._okSuggestConfirm()" style="flex:1;background:var(--accent);color:#000;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">生成</button>
+    </div>
+  </div>
+</div>
+
+<!-- 确认删除弹窗 -->
 <div id="confirm-modal" class="modal hidden" style="z-index:99998">
   <div class="modal-content" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:320px">
     <h3 id="confirm-title" style="margin:0 0 16px 0;color:var(--text);font-size:16px">确认</h3>
