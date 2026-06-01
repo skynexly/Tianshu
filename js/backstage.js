@@ -18,6 +18,7 @@ let pendingImages = [];   // [{base64, name, type}]
     return {
     enabled: !!conv?.backstageEnabled,
     prompt: conv?.backstagePrompt || '',
+    rules: conv?.backstageRules || '',
     contextCount: conv?.backstageContextCount ?? 15,
     maxTokens: conv?.backstageMaxTokens ?? 8000,
     convId: conv?.backstageConvId || null,
@@ -747,6 +748,11 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
       apiMessages.splice(idx, 1);
     }
 
+    // 重要规则：注入到 apiMessages 末尾（深度0，紧贴 AI 回复前）
+    if (settings.rules) {
+      apiMessages.push({ role: 'system', content: '【重要规则】\n' + settings.rules });
+    }
+
     // 宏替换：{{user}} → OOC昵称（如有） / 面具名 / '玩家'；{{char}} → 单人卡角色名（如有）
     try {
       let _macroUser = '';
@@ -1435,6 +1441,12 @@ await DB.del('messages', m.id);
   function openPromptEdit() {
     const settings = _getSettings();
     document.getElementById('backstage-prompt-input').value = settings.prompt;
+    const rulesEl = document.getElementById('backstage-rules-input');
+    if (rulesEl) {
+      rulesEl.value = settings.rules || '';
+      const countEl = document.getElementById('backstage-rules-count');
+      if (countEl) countEl.textContent = (settings.rules || '').length + ' / 2000';
+    }
     document.getElementById('backstage-context-count').value = settings.contextCount;
     document.getElementById('backstage-max-tokens').value = settings.maxTokens || 8000;
     const taEl = document.getElementById('backstage-time-aware');
@@ -1646,6 +1658,8 @@ return String(s == null ? '' : s).replace(/[&<>"']/g, c => map[c]);
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     if (!conv) return;
     conv.backstagePrompt = document.getElementById('backstage-prompt-input').value.trim();
+    const rulesInput = document.getElementById('backstage-rules-input');
+    conv.backstageRules = rulesInput ? rulesInput.value.trim().slice(0, 2000) : '';
     conv.backstageContextCount = parseInt(document.getElementById('backstage-context-count').value) || 15;
     conv.backstageMaxTokens = parseInt(document.getElementById('backstage-max-tokens').value) || 8000;
     const taEl = document.getElementById('backstage-time-aware');

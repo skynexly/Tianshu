@@ -4377,6 +4377,14 @@ if ('serviceWorker' in navigator) {
     </div>
     <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px">告诉后台AI它应该扮演什么角色、关注什么内容。留空则使用默认设定。</p>
     <textarea id="backstage-prompt-input" rows="6" placeholder="例如：&#10;· 你是（角色名），主线好累，来聊聊天。&#10;· 你是DM，给我解释下刚才的剧情。&#10;· 你是我的赛博军师，帮我支个招……" style="width:100%;resize:vertical;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg-secondary);color:var(--text);font-size:14px;line-height:1.8;box-sizing:border-box"></textarea>
+<div style="margin-top:16px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <span style="font-size:14px;font-weight:600;color:var(--text)">重要规则</span>
+    <span id="backstage-rules-count" style="font-size:11px;color:var(--text-secondary)">0 / 2000</span>
+  </div>
+  <p style="font-size:12px;color:var(--text-secondary);margin:0 0 8px">放在此处的内容会在每轮对话末尾注入（AI 注意力最强的位置）。适合写不可违反的规则。</p>
+  <textarea id="backstage-rules-input" rows="4" maxlength="2000" oninput="document.getElementById('backstage-rules-count').textContent=this.value.length+' / 2000'" placeholder="例如：&#10;· 不要重复使用相同的开头句式&#10;· 回复中不要升华收束&#10;· 保持口语化，不要书面腔" style="width:100%;resize:vertical;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg-secondary);color:var(--text);font-size:14px;line-height:1.8;box-sizing:border-box"></textarea>
+</div>
     <label style="display:flex;align-items:center;justify-content:space-between;font-size:14px;margin-top:16px">
       <span>保留主线消息数</span>
       <input type="number" id="backstage-context-count" value="15" min="0" max="100" style="width:60px;text-align:center;border:1px solid var(--border);border-radius:6px;padding:4px 8px;background:var(--bg-secondary);color:var(--text);font-size:14px">
