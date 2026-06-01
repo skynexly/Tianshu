@@ -172,8 +172,8 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v688.4';
-const CHANGELOG = `【v688.4 更新内容】
+    const APP_VERSION = 'v688.5';
+const CHANGELOG = `【v688.5 更新内容】
 · 新增回复建议（输入框左侧灯泡按钮，一次生成 3 条符合人设的回复，可选填后自行修改）
 · 新增回复建议功能模型（设置 → 功能模型，留空使用主模型）
 · 修复回复建议功能模型无法新建的问题
