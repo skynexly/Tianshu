@@ -38,8 +38,8 @@ let visionPresets = [];
 // 管理模式状态
 let presetManageMode = false;
 let presetSelectedIds = new Set();
-let funcManageMode = { summary: false, memory: false, vision: false, gaiden: false, worldvoice: false, backstage: false, tts: false, draw: false };
-  let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set(), gaiden: new Set(), worldvoice: new Set(), backstage: new Set(), tts: new Set(), draw: new Set() };
+let funcManageMode = { summary: false, memory: false, vision: false, gaiden: false, worldvoice: false, backstage: false, tts: false, draw: false, suggest: false };
+let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set(), gaiden: new Set(), worldvoice: new Set(), backstage: new Set(), tts: new Set(), draw: new Set(), suggest: new Set() };
   let regexManageMode = false;
   let regexSelectedIdxs = new Set();
 
@@ -1019,6 +1019,11 @@ async function cancelEdit() {
       modalId = 'func-draw-modal';
       titlePrefix = '生图';
     }
+    else if (type === 'suggest') {
+      list = suggestPresets;
+      modalId = 'func-suggest-modal';
+      titlePrefix = '回复建议';
+    }
     else return;
 
     const id = 'func_' + type + '_' + Utils.uuid().slice(0, 8);
@@ -1035,6 +1040,7 @@ async function cancelEdit() {
     else if (type === 'backstage') editingBackstageId = id;
     else if (type === 'tts') editingTtsId = id;
     else if (type === 'draw') editingDrawId = id;
+    else if (type === 'suggest') editingSuggestId = id;
 
     await savePresets();
     renderFuncPresetList(type);
@@ -1049,9 +1055,10 @@ async function cancelEdit() {
     else if (type === 'gaiden') { list = gaidenPresets; currentId = currentGaidenId; }
     else if (type === 'worldvoice') { list = worldvoicePresets; currentId = currentWorldvoiceId; }
     else if (type === 'backstage') { list = backstagePresets; currentId = currentBackstageId; }
-    else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; }
-    else if (type === 'draw') { list = drawPresets; currentId = currentDrawId; }
-    else return;
+else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; }
+     else if (type === 'draw') { list = drawPresets; currentId = currentDrawId; }
+     else if (type === 'suggest') { list = suggestPresets; currentId = currentSuggestId; }
+     else return;
 
     const src = list.find(p => p.id === id);
     if (!src) return;
@@ -1070,8 +1077,10 @@ async function cancelEdit() {
     else if (type === 'gaiden') { list = gaidenPresets; currentId = currentGaidenId; switchFn = (x) => currentGaidenId = x; }
     else if (type === 'worldvoice') { list = worldvoicePresets; currentId = currentWorldvoiceId; switchFn = (x) => currentWorldvoiceId = x; }
     else if (type === 'backstage') { list = backstagePresets; currentId = currentBackstageId; switchFn = (x) => currentBackstageId = x; }
-    else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; switchFn = (x) => currentTtsId = x; }
-    else return;
+else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; switchFn = (x) => currentTtsId = x; }
+     else if (type === 'draw') { list = drawPresets; currentId = currentDrawId; switchFn = (x) => currentDrawId = x; }
+     else if (type === 'suggest') { list = suggestPresets; currentId = currentSuggestId; switchFn = (x) => currentSuggestId = x; }
+     else return;
 
     if (list.length <= 1) {
       if (!await UI.showConfirm('确认删除', '删除后将使用主模型，确定？')) return;

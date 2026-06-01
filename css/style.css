@@ -3100,11 +3100,16 @@ input[type="range"] {
   max-height: 60vh;
   overflow-y: auto;
   overflow-x: hidden;
+  /* 锁定不透明背景，不随主题透明度变化，确保内容可读 */
+  background: var(--bg-secondary-solid);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
 }
 .suggest-panel.hidden { display: none; }
 .suggest-item {
   padding: 10px 14px;
-  background: var(--bg-secondary);
+  background: var(--bg-tertiary-solid);
   border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 13px;
@@ -3121,7 +3126,6 @@ input[type="range"] {
   min-width: 0;
 }
 .suggest-item:active {
-  background: var(--bg-tertiary);
   border-color: var(--accent);
 }
 .suggest-loading {
@@ -3129,7 +3133,7 @@ input[type="range"] {
   padding: 16px;
   font-size: 12px;
   color: var(--text-secondary);
-  background: var(--bg-secondary);
+  background: var(--bg-tertiary-solid);
   border: 1px solid var(--border);
   border-radius: 8px;
 }
