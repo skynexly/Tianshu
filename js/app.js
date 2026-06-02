@@ -172,7 +172,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v688.11';
+    const APP_VERSION = 'v688.12';
 const CHANGELOG = `【v688.11 更新内容】
 · 新增手机「聊天」APP：可与世界观NPC/单人卡/挂载角色私聊
   - 输入消息连发 → 点刷新让对方回复（AI 扮演角色）
