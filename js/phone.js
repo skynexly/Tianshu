@@ -3740,16 +3740,16 @@ async function _chatSendMessage(contactId) {
     const contact = (pd.chatContacts || []).find(c => c.id === contactId);
     const contactName = contact?.name || contactId;
     // 时间戳优先级：
-    // 1. 本联系人最后一条 AI 回复时间（最准）
-    // 2. 跨联系人全局会话基准时间（切到新联系人时用）
+    // 1. 跨联系人全局会话基准时间（最新的，任何联系人收到回复都会更新）
+    // 2. 本联系人最后一条 AI 回复时间（兜底，处理没有全局基准的情况）
     // 3. 状态栏时间（第一次发消息时兜底）
     let gameTime = '';
     const thread = pd.chatThreads[contactId];
     const lastThemMsg = [...thread].reverse().find(m => m.role === 'them' && m.time);
-    if (lastThemMsg && lastThemMsg.time) {
-      gameTime = lastThemMsg.time;
-    } else if (_chatSessionBaseTime) {
+    if (_chatSessionBaseTime) {
       gameTime = _chatSessionBaseTime;
+    } else if (lastThemMsg && lastThemMsg.time) {
+      gameTime = lastThemMsg.time;
     } else {
       try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
     }
@@ -3963,7 +3963,7 @@ ${histStr}
         el.dataset.msgId = msgId;
         el.dataset.role = 'them';
         el.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;animation:fadeIn 0.3s ease-in;cursor:pointer';
-        el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div><div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0"><div style="max-width:100%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);word-break:break-word">${Utils.escapeHtml(text)}</div></div>`;
+        el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div><div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0"><div style="max-width:100%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);word-break:break-word">${Utils.escapeHtml(text)}</div>${cmTime ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(cmTime)}</div>` : ''}</div>`;
         list.appendChild(el);
         list.scrollTop = list.scrollHeight;
       }
