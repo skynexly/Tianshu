@@ -6285,5 +6285,12 @@ body[data-skin="single-default"] .sb-character-attr-bar i {
   background: var(--accent);
   transition: width .3s ease;
 }
-/* 任务面板：sb-task-system 沿用心动模拟默认样式即可（hs-mission-* 通用类已经有 base 样式），
-   single-default 下不再覆盖任何东西，让它跟拟态风一样的视觉。 */
+/* 手机聊天 App 动画 */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

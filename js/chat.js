@@ -1333,12 +1333,37 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
       if (_snapshot && _snapshot.length > 0) {
         const _phoneLogContent = '【玩家手机操作记录｜OOC】\n以下是"{{user}}"本轮在自己手机里的操作，由系统旁白记录，不是角色对白，也不是任何一方的剧情发言：\n\n' +
           _snapshot.map(a => `- {{user}} ${a}`).join('\n') +
-          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。\n⑤ 【禁止】你的回复中不要输出或模仿【玩家手机操作记录｜OOC】这个格式。它是系统自动注入的元信息，你只需阅读理解并自然融入剧情描写，绝对不要在你的输出中复制、仿写或引用此格式块。\n⑥ 【不要扩充】这些日志是用户实际做的事，不是剧情提示。用户做了什么就是什么，原样接受即可。不要扩写任何照片、论坛、好友圈等内容，只需要以旁白或角色的反应回应用户操作了手机这一事实。';
+          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。\n⑤ 【禁止】你的回复中不要输出或模仿【玩家手机操作记录｜OOC】这个格式。它是系统自动注入的元信息，你只需阅读理解并自然融入剧情描写，绝对不要在你的输出中复制、仿写或引用此格式块。\n⑥ 【不要扩充】这些日志是用户实际做的事，不是剧情提示。用户做了什么就是什么，原样接受即可。不要扩写任何照片、论坛、好友圈等内容，只需要以旁白或角色的反应回应用户操作了手机这一事实。\n⑦ 【时间流逝】手机操作需要时间。请在下一次回复推动时间时，将手机操作所消耗的时间也计算在内（浏览、聊天、拍照等行为并非瞬间完成）。';
         const insertIdx = apiMessages.length - 1; // 最后一条是当前 user 消息
         if (insertIdx >= 0) {
           apiMessages.splice(insertIdx, 0, { role: 'system', content: _phoneLogContent });
         } else {
           apiMessages.push({ role: 'system', content: _phoneLogContent });
+        }
+      }
+    } catch(_) {}
+
+    // 手机聊天记录注入：当用户提到线上聊天相关关键词时，注入在场角色的聊天记录
+    try {
+      const _lastUserContent = (apiMessages.filter(m => m.role === 'user').pop()?.content || '').toLowerCase();
+      const _chatKeywords = ['上次', '之前', '聊', '私信', '消息', '说过', '线上', '说了', '刚才', '记得', '你说'];
+      const _hasChatKeyword = _chatKeywords.some(kw => _lastUserContent.includes(kw));
+      if (_hasChatKeyword && typeof Phone !== 'undefined' && Phone.getChatHistoryForNPCs) {
+        const _present = (typeof NPC !== 'undefined' && NPC.getPresentNPCs) ? NPC.getPresentNPCs() : [];
+        if (_present.length > 0) {
+          const _chatHistory = await Promise.race([
+            Phone.getChatHistoryForNPCs(_present, 5),
+            new Promise(resolve => setTimeout(() => resolve(''), 3000))
+          ]);
+          if (_chatHistory) {
+            const _chatContent = `【{{user}}与在场角色的手机聊天记录｜OOC·参考】\n以下是{{user}}手机聊天APP里与当前在场角色的近期对话记录，仅供参考。如果当前对话涉及到线上曾聊过的内容，在场角色应该记得这些对话。\n\n${_chatHistory}\n\n注意：这些记录仅在剧情需要时自然引用，不要每轮都复述聊天内容。`;
+            const insertIdx = apiMessages.length - 1;
+            if (insertIdx >= 0) {
+              apiMessages.splice(insertIdx, 0, { role: 'system', content: _chatContent });
+            } else {
+              apiMessages.push({ role: 'system', content: _chatContent });
+            }
+          }
         }
       }
     } catch(_) {}
@@ -2484,6 +2509,12 @@ const MAX_RETRIES = isRetryDisabled() ? 1 : 3;
 
     // 3. 总结成功 → 归档 → 删除
     _summaryPending = false; // 成功，清除重试标记
+    // v689：删除前先把要归档消息里的线上聊天气泡收录进手机聊天 App（否则气泡随消息一起没了）
+    try {
+      if (typeof Phone !== 'undefined' && Phone.ingestChatMessages) {
+        await Phone.ingestChatMessages(toSummarize);
+      }
+    } catch(_) {}
     await Summary.archive(convId, toSummarize);
     for (const msg of toSummarize) {
       await DB.del('messages', msg.id);
@@ -2554,6 +2585,12 @@ let success = false;
       return;
     }
     _summaryPending = false;
+    // v689：删除前先收录线上聊天气泡进手机聊天 App
+    try {
+      if (typeof Phone !== 'undefined' && Phone.ingestChatMessages) {
+        await Phone.ingestChatMessages(toSummarize);
+      }
+    } catch(_) {}
     await Summary.archive(convId, toSummarize);
     for (const msg of toSummarize) {
       await DB.del('messages', msg.id);

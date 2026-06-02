@@ -41,6 +41,7 @@ function reloadActionLog() {
     if (!convId) {
       _actionLog = [];
       _actionLogForBackstage = [];
+      _chatRoundLog = {};
       _invalidateMomentsCache();
       return;
     }
@@ -49,11 +50,13 @@ function reloadActionLog() {
     const storedBs = conv?.phoneData?.pendingActionLogForBackstage;
     _actionLog = Array.isArray(stored) ? stored.slice() : [];
     _actionLogForBackstage = Array.isArray(storedBs) ? storedBs.slice() : [];
+    reloadChatRoundLog();
     // 切对话时连带清空好友圈渲染缓存（mask/NPC 头像可能换了）
     _invalidateMomentsCache();
   } catch(_) {
     _actionLog = [];
     _actionLogForBackstage = [];
+    _chatRoundLog = {};
     _invalidateMomentsCache();
   }
 }
@@ -76,6 +79,7 @@ function pushLog(action) {
   _persistActionLog();
 } // 供外部模块调用
 function flushActionLog() {
+  _flushChatRoundLog(); // 先把本轮聊天缓冲合并进 _actionLog
   const log = _actionLog.slice();
   _actionLog = [];
   _persistActionLog();
@@ -87,6 +91,71 @@ function flushActionLogForBackstage() {
   _actionLogForBackstage = [];
   _persistActionLog();
   return log;
+}
+
+// 用户"待回复"轮次 ID（按联系人），连发多条共用同一 roundId，AI 回复后清掉
+let _pendingMeRoundId = {};
+// 结构：{ contactId: { name: '联系人名', msgs: [{role, text, time}] } }
+let _chatRoundLog = {};
+
+function _persistChatRoundLog() {
+  try {
+    const convId = Conversations.getCurrent && Conversations.getCurrent();
+    if (!convId) return;
+    const conv = Conversations.getList().find(c => c.id === convId);
+    if (!conv) return;
+    conv.phoneData = conv.phoneData || {};
+    conv.phoneData.pendingChatRoundLog = Object.keys(_chatRoundLog).length > 0 ? JSON.parse(JSON.stringify(_chatRoundLog)) : null;
+    Conversations.saveList && Conversations.saveList();
+  } catch(_) {}
+}
+
+function reloadChatRoundLog() {
+  try {
+    const convId = Conversations.getCurrent && Conversations.getCurrent();
+    if (!convId) { _chatRoundLog = {}; return; }
+    const conv = Conversations.getList().find(c => c.id === convId);
+    _chatRoundLog = (conv?.phoneData?.pendingChatRoundLog && typeof conv.phoneData.pendingChatRoundLog === 'object')
+      ? JSON.parse(JSON.stringify(conv.phoneData.pendingChatRoundLog))
+      : {};
+  } catch(_) { _chatRoundLog = {}; }
+}
+
+function _addChatMessageToRoundLog(contactId, role, text, time, contactName) {
+  if (!contactId || !text) return;
+  if (!_chatRoundLog[contactId]) {
+    _chatRoundLog[contactId] = { name: contactName || contactId, msgs: [] };
+  }
+  _chatRoundLog[contactId].msgs.push({ role, text, time: (time || '').trim() });
+  _persistChatRoundLog();
+}
+
+function _formatChatRoundLog() {
+  if (Object.keys(_chatRoundLog).length === 0) return [];
+  const lines = [];
+  for (const contactId in _chatRoundLog) {
+    const entry = _chatRoundLog[contactId];
+    if (!entry || !entry.msgs || !entry.msgs.length) continue;
+    const contactName = entry.name || contactId;
+    lines.push(`在手机聊天APP与「${contactName}」新增以下对话：`);
+    for (const m of entry.msgs) {
+      const who = m.role === 'me' ? '{{user}}' : contactName;
+      const timeStr = m.time ? `[${m.time}] ` : '';
+      lines.push(`  ${who} ${timeStr}：${m.text}`);
+    }
+  }
+  return lines;
+}
+
+function _flushChatRoundLog() {
+  const chatLines = _formatChatRoundLog();
+  if (chatLines.length > 0) {
+    // 聊天日志作为一条完整 log 加入 action log
+    _actionLog.push(chatLines.join('\n'));
+    _actionLogForBackstage.push(chatLines.join('\n'));
+  }
+  _chatRoundLog = {};
+  _persistChatRoundLog();
 }
 
   // ===== 辅助 =====
@@ -184,6 +253,10 @@ heartsimServiceMessages: [],
     hsHomecomingTriggered: false,
  hsHomeReadyNotified: false,  // 是否已因"通关条件达成"提醒过 AI 一次
  hsHomeRequestSent: false,    // 用户是否已成功通过客服发送过"回家"指令
+ // 聊天 App（v689）
+ chatContacts: [],   // 联系人 [{id, name, source:'worldview'|'single'|'mount', avatar, sig}]
+ chatThreads: {},    // 聊天记录 { contactId: [{id, role:'me'|'them', text, time, fromMainline, createdAt}] }
+ chatSyncIdx: 0,     // 主线收录进度：已收录到第几条主线消息
  };
    }
 
@@ -816,7 +889,8 @@ function _extractJsonArrayText(content) {
  memo: `<svg ${common}><rect x="5" y="3" width="14" height="18" rx="2"></rect><line x1="8" y1="8" x2="16" y2="8"></line><line x1="8" y1="12" x2="16" y2="12"></line><line x1="8" y1="16" x2="13" y2="16"></line></svg>`,
  takeout: `<svg ${common}><path d="M5 9h14l-1 11H6L5 9z"></path><path d="M8 9V6a4 4 0 0 1 8 0v3"></path><line x1="9" y1="13" x2="9" y2="17"></line><line x1="15" y1="13" x2="15" y2="17"></line></svg>`,
  shop: `<svg ${common}><path d="M3 7h18l-2 13H5L3 7z"></path><path d="M8 7V5a4 4 0 0 1 8 0v2"></path></svg>`,
- polaroid: `<svg ${common}><rect x="3" y="5" width="18" height="16" rx="2.5"></rect><rect x="6" y="15" width="12" height="4" rx="0.5"></rect><circle cx="12" cy="10.5" r="3"></circle><circle cx="12" cy="10.5" r="1"></circle><circle cx="17.5" cy="7.8" r="0.6"></circle></svg>`
+ polaroid: `<svg ${common}><rect x="3" y="5" width="18" height="16" rx="2.5"></rect><rect x="6" y="15" width="12" height="4" rx="0.5"></rect><circle cx="12" cy="10.5" r="3"></circle><circle cx="12" cy="10.5" r="1"></circle><circle cx="17.5" cy="7.8" r="0.6"></circle></svg>`,
+  chat: `<svg ${common} stroke-linecap="round" stroke-linejoin="round"><path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"/></svg>`
  };
  return `<span class="phone-icon-glyph phone-icon-${type}">${icons[type] || ''}</span>`;
 }
@@ -883,18 +957,23 @@ function _renderHomeIcon(a) {
       const apps = [
         { id: 'forum', icon: 'forum', name: _getForumName() },
  { id: 'map', icon: 'map', name: '地图' },
- { id: 'moments', icon: 'aperture', name: '好友圈' },
- { id: 'memo', icon: 'memo', name: '备忘录' },
- ];
-      // 底部 dock：相机（占位）、设置、收起手机
+        { id: 'moments', icon: 'aperture', name: '好友圈' },
+        { id: 'memo', icon: 'memo', name: '备忘录' },
+      ];
+      // 第二页 app
+      const apps2 = [
+        { id: 'settings', icon: 'gear', name: '设置' },
+      ];
+      // 底部 dock：相机、聊天、收起手机
       const dockApps = [
         { id: 'camera', icon: 'polaroid', name: '相机' },
-        { id: 'settings', icon: 'gear', name: '设置' },
+        { id: 'chat', icon: 'chat', name: '聊天' },
         { id: 'minimize', icon: 'phone-down', name: '收起手机' },
-      ];
-
+            ];
  body.innerHTML = `
  <div class="phone-home">
+ <div class="phone-pages" id="phone-pages" onscroll="Phone._onPagesScroll()">
+ <div class="phone-page">
  <div class="phone-widget">
   <div class="phone-widget-time" id="phone-widget-time">--:--</div>
   <div class="phone-widget-subline">
@@ -929,6 +1008,18 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
  ${apps.map(a => _renderHomeIcon(a)).join('')}
  </div>
  <div class="phone-home-bottom-spacer"></div>
+ </div>
+ <div class="phone-page">
+ <div class="phone-app-grid" style="padding-top:40px">
+ ${apps2.map(a => _renderHomeIcon(a)).join('')}
+ </div>
+ <div class="phone-home-spacer"></div>
+ </div>
+ </div>
+ <div class="phone-page-indicator" id="phone-page-indicator">
+   <div class="phone-page-dot active"></div>
+   <div class="phone-page-dot"></div>
+ </div>
  <div class="phone-dock">
    ${dockApps.map(a => _renderHomeIcon(a)).join('')}
  </div>
@@ -939,6 +1030,18 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
  _refreshWidget();
  _getPhoneData().then(pd => { _applyWallpaper(pd); _applyProfile(pd); }).catch(() => {});
  _currentApp = null;
+  }
+
+  // 主屏分页滚动：更新页面指示器
+  function _onPagesScroll() {
+    const pages = document.getElementById('phone-pages');
+    const indicator = document.getElementById('phone-page-indicator');
+    if (!pages || !indicator) return;
+    const pageW = pages.clientWidth || 1;
+    const idx = Math.round(pages.scrollLeft / pageW);
+    indicator.querySelectorAll('.phone-page-dot').forEach((dot, i) => {
+      dot.classList.toggle('active', i === idx);
+    });
   }
 
   let _navStack = []; // 导航栈：每一项是 function
@@ -1035,6 +1138,7 @@ async function openApp(appId) {
  case 'map': _renderMap(phoneData); break;
  case 'moments': _renderMoments(phoneData); break;
  case 'memo': _renderMemo(phoneData); break;
+ case 'chat': _renderChatApp(phoneData); break;
  case 'takeout': _renderShopping(phoneData, 'takeout'); break;
  case 'shop': _renderShopping(phoneData, 'shop'); break;
  case 'camera': _renderCamera(phoneData); break;
@@ -2993,7 +3097,876 @@ async function _composeShootText() {
     if (n.posture && String(n.posture).trim()) parts.push(String(n.posture).trim());
     if (parts.length) lines.push(String(n.name) + '：' + parts.join('，'));
   });
-  return lines.join('\n');
+   return lines.join('\n');
+ }
+
+// ============ 聊天 App（v689）============
+let _chatTab = 'threads'; // 'threads' | 'contacts'
+let _chatCurContactId = null;
+let _chatAvatarMap = {}; // name -> 最新头像（渲染时优先用，保证改头像后同步）
+
+// 刷新最新头像 map（按联系人名匹配当前世界观/卡/世界书/挂载的最新头像）
+async function _refreshChatAvatarMap() {
+  const map = {};
+  try {
+    (await _collectChatCandidates()).forEach(c => { if (c.name) map[c.name] = c.avatar || ''; });
+  } catch(_) {}
+  _chatAvatarMap = map;
+}
+
+// 取联系人当前应显示的头像：最新 map 优先，取不到用存的快照
+function _chatContactAvatar(contact) {
+  if (!contact) return '';
+  const fresh = _chatAvatarMap[contact.name];
+  if (fresh !== undefined && fresh !== '') return fresh;
+  return contact.avatar || '';
+}
+
+// 收集可用联系人来源（世界观NPC + 单人卡 + 挂载角色），返回 [{name, source, avatar}]
+async function _collectChatCandidates() {
+  const out = [];
+  const seen = new Set();
+  // 头像表（按 NPC id 索引）
+  let avatarById = {};
+  try {
+    const rows = await DB.getAll('npcAvatars');
+    rows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
+  } catch(_) {}
+  const add = (name, source, avatar, detail) => {
+    const nm = (name || '').trim();
+    if (!nm || seen.has(nm)) return;
+    seen.add(nm);
+    out.push({ name: nm, source, avatar: avatar || '', detail: (detail || '').trim() });
+  };
+  // 拼一个 NPC/角色对象的人设描述文本
+  const _detailOf = (o) => {
+    if (!o) return '';
+    const segs = [];
+    if (o.aliases) segs.push('别名：' + o.aliases);
+    if (o.identity) segs.push('身份：' + o.identity);
+    if (o.personality) segs.push('性格：' + o.personality);
+    if (o.appearance) segs.push('外貌：' + o.appearance);
+    if (o.background) segs.push('背景：' + o.background);
+    if (o.description) segs.push(o.description);
+    if (o.setting) segs.push(o.setting);
+    if (o.detail) segs.push(o.detail);
+    if (o.relationship) segs.push('关系：' + o.relationship);
+    return segs.join('\n');
+  };
+  try {
+    const convId = Conversations.getCurrent();
+    const conv = Conversations.getList().find(c => c.id === convId);
+    const wvId = conv?.worldviewId || conv?.singleWorldviewId;
+    if (wvId) {
+      const wv = await DB.get('worldviews', wvId);
+      if (wv) {
+        (wv.globalNpcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n)));
+        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n)))));
+      }
+    }
+    // 单人卡（卡本身作为联系人）
+    if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+      try {
+        const card = await DB.get('singleCards', conv.singleCharId);
+        let scAvatar = avatarById[conv.singleCharId] || card?.avatar || '';
+        if (card?.name) add(card.name, 'single', scAvatar, _detailOf(card));
+      } catch(_) {}
+    }
+    // 当前对话绑定的世界书 NPC
+    try {
+      if (typeof Lorebook !== 'undefined' && Lorebook.collectForChat) {
+        let card = null;
+        if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+          try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
+        }
+        const wv2 = wvId ? await DB.get('worldviews', wvId) : null;
+        const lbs = await Lorebook.collectForChat({ conv, card, wv: wv2 });
+        for (const lb of (lbs || [])) {
+          (lb.globalNpcs || []).forEach(n => add(n.name, 'lorebook', avatarById[n.id] || n.avatar || '', _detailOf(n)));
+        }
+      }
+    } catch(_) {}
+    // 挂载角色
+    try {
+      if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+        const attached = await AttachedChars.resolveAll();
+        attached.forEach(c => add(c.name, 'mount', (c.id && avatarById[c.id]) || c.avatar || '', _detailOf(c)));
+      }
+    } catch(_) {}
+  } catch(_) {}
+  return out;
+}
+
+function _chatSourceLabel(s) {
+  return s === 'single' ? '主角色' : (s === 'mount' ? '常驻' : (s === 'lorebook' ? '世界书' : '世界观'));
+}
+
+function _renderChatApp(pd) {
+  const body = document.getElementById('phone-body');
+  document.getElementById('phone-title').textContent = '聊天';
+  _applyWallpaper(pd);
+  _chatCurContactId = null;
+  // 先用旧头像渲染，再异步刷新最新头像 map 后重绘
+  const threadsHtml = _renderChatThreadList(pd);
+  const contactsHtml = '<div style="padding:24px;text-align:center;color:var(--text-secondary);font-size:13px">加载中…</div>';
+  body.innerHTML = `
+    <div class="phone-chat-shell" style="display:flex;flex-direction:column;height:100%">
+      <div id="phone-chat-threads" class="phone-chat-page" style="display:${_chatTab === 'threads' ? 'flex' : 'none'};flex-direction:column;flex:1;min-height:0;overflow-y:auto">${threadsHtml}</div>
+      <div id="phone-chat-contacts" class="phone-chat-page" style="display:${_chatTab === 'contacts' ? 'flex' : 'none'};flex-direction:column;flex:1;min-height:0;overflow-y:auto">${contactsHtml}</div>
+      <div class="phone-tabbar">
+        <div class="phone-tab ${_chatTab === 'threads' ? 'active' : ''}" onclick="Phone._switchChatTab('threads')">聊天</div>
+        <div class="phone-tab ${_chatTab === 'contacts' ? 'active' : ''}" onclick="Phone._switchChatTab('contacts')">联系人</div>
+      </div>
+    </div>
+  `;
+  if (_chatTab === 'contacts') _hydrateChatContacts(pd);
+  // 进 app 自动从主线收录新气泡，刷新最新头像，收完刷新聊天列表
+  (async () => {
+    try {
+      await _refreshChatAvatarMap();
+      let messages = (typeof Chat !== 'undefined' && Chat.getMessages) ? (Chat.getMessages() || []) : [];
+      await _ingestChatFromMessages(messages);
+      if (_isAppStillActive && _isAppStillActive('chat')) {
+        const pd2 = await _getPhoneData();
+        const el = document.getElementById('phone-chat-threads');
+        if (el && pd2) el.innerHTML = _renderChatThreadList(pd2);
+        if (_chatTab === 'contacts' && pd2) _hydrateChatContacts(pd2);
+      }
+    } catch(_) {}
+  })();
+}
+
+function _switchChatTab(tab) {
+  _chatTab = tab;
+  const t = document.getElementById('phone-chat-threads');
+  const c = document.getElementById('phone-chat-contacts');
+  if (t) t.style.display = tab === 'threads' ? 'flex' : 'none';
+  if (c) c.style.display = tab === 'contacts' ? 'flex' : 'none';
+  document.querySelectorAll('.phone-chat-shell .phone-tab').forEach((el, i) => {
+    el.classList.toggle('active', (i === 0 && tab === 'threads') || (i === 1 && tab === 'contacts'));
+  });
+  if (tab === 'contacts') _getPhoneData().then(pd => _hydrateChatContacts(pd));
+}
+
+// 聊天列表（已有会话的联系人）
+function _renderChatThreadList(pd) {
+  const contacts = pd.chatContacts || [];
+  const threads = pd.chatThreads || {};
+  const withMsg = contacts.filter(c => (threads[c.id] || []).length > 0);
+  if (!withMsg.length) {
+    return '<div style="padding:40px 24px;text-align:center;color:var(--text-secondary);font-size:13px;line-height:1.8">还没有聊天记录<br><span style="font-size:11px">去「联系人」添加，或在聊天里收录主线消息</span></div>';
+  }
+  return withMsg.map(c => {
+    const msgs = threads[c.id] || [];
+    const last = msgs[msgs.length - 1];
+    const preview = last ? Utils.escapeHtml((last.text || '').slice(0, 24)) : '';
+    const initial = Utils.escapeHtml((c.name || '?')[0]);
+    const avaUrl = _chatContactAvatar(c);
+    const avatar = avaUrl
+      ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
+      : initial;
+    return `<div class="phone-chat-thread-item" onclick="Phone._openChatThread('${c.id}')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer">
+      <div style="width:46px;height:46px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;overflow:hidden">${avatar}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:2px">${Utils.escapeHtml(c.name)}</div>
+        <div style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${preview}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// 联系人 tab（异步加载候选）
+let _chatCandidatesCache = [];
+async function _hydrateChatContacts(pd) {
+  const box = document.getElementById('phone-chat-contacts');
+  if (!box) return;
+  const candidates = await _collectChatCandidates();
+  _chatCandidatesCache = candidates;
+  candidates.forEach(cc => { if (cc.name) _chatAvatarMap[cc.name] = cc.avatar || ''; });
+  const added = pd.chatContacts || [];
+  const addedNames = new Set(added.map(c => c.name));
+  let html = '';
+  // 已添加的联系人
+  if (added.length) {
+    html += '<div style="padding:10px 16px 4px;font-size:11px;color:var(--text-secondary)">已添加</div>';
+    html += added.map(c => {
+      const initial = Utils.escapeHtml((c.name || '?')[0]);
+      const avaUrl = _chatContactAvatar(c);
+      const avatar = avaUrl ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : initial;
+      return `<div class="phone-chat-contact-item" onclick="Phone._openChatThread('${c.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer">
+        <div style="width:40px;height:40px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;overflow:hidden">${avatar}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">${Utils.escapeHtml(c.name)}</div>
+          <div style="font-size:11px;color:var(--text-secondary)">${_chatSourceLabel(c.source)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  // 可添加的候选
+  const toAdd = candidates.map((c, i) => ({ c, i })).filter(({ c }) => !addedNames.has(c.name));
+  if (toAdd.length) {
+    html += '<div style="padding:14px 16px 4px;font-size:11px;color:var(--text-secondary)">可添加</div>';
+    html += toAdd.map(({ c, i }) => {
+      const initial = Utils.escapeHtml((c.name || '?')[0]);
+      const avatar = c.avatar ? `<img src="${Utils.escapeHtml(c.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : initial;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)">
+        <div style="width:40px;height:40px;border-radius:50%;flex-shrink:0;background:var(--bg-tertiary);color:var(--text-secondary);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;overflow:hidden">${avatar}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">${Utils.escapeHtml(c.name)}</div>
+          <div style="font-size:11px;color:var(--text-secondary)">${_chatSourceLabel(c.source)}</div>
+        </div>
+        <button onclick="Phone._addChatContactByIdx(${i})" style="padding:5px 14px;font-size:12px;background:var(--accent);color:#fff;border:none;border-radius:14px;cursor:pointer;flex-shrink:0">添加</button>
+      </div>`;
+    }).join('');
+  }
+  if (!html) html = '<div style="padding:40px 24px;text-align:center;color:var(--text-secondary);font-size:13px">当前世界观没有可添加的角色</div>';
+  box.innerHTML = html;
+}
+
+async function _addChatContactByIdx(idx) {
+  const c = _chatCandidatesCache[idx];
+  if (!c) return;
+  await _addChatContact(c.name, c.source, c.avatar);
+}
+
+async function _addChatContact(name, source, avatar) {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  if (!Array.isArray(pd.chatContacts)) pd.chatContacts = [];
+  if (pd.chatContacts.some(c => c.name === name)) { UI.showToast('已经添加过了', 1200); return; }
+  const id = 'ct_' + Utils.uuid().slice(0, 8);
+  pd.chatContacts.push({ id, name, source, avatar: avatar || '', sig: '' });
+  if (!pd.chatThreads) pd.chatThreads = {};
+  if (!pd.chatThreads[id]) pd.chatThreads[id] = [];
+  await _savePhoneData();
+  UI.showToast('已添加 ' + name, 1200);
+  _hydrateChatContacts(pd);
+}
+
+// 打开聊天详情
+async function _openChatThread(contactId) {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  const contact = (pd.chatContacts || []).find(c => c.id === contactId);
+  if (!contact) { UI.showToast('联系人不存在', 1200); return; }
+  _chatCurContactId = contactId;
+  try { await _refreshChatAvatarMap(); } catch(_) {}
+  _pushNav(() => _renderChatThread(pd, contactId));
+  _renderChatThread(pd, contactId);
+}
+
+function _renderChatThread(pd, contactId) {
+  const body = document.getElementById('phone-body');
+  const contact = (pd.chatContacts || []).find(c => c.id === contactId);
+  if (!contact) return;
+  document.getElementById('phone-title').textContent = contact.name;
+  const msgs = (pd.chatThreads && pd.chatThreads[contactId]) || [];
+  const initial = Utils.escapeHtml((contact.name || '?')[0]);
+  const avaUrl = _chatContactAvatar(contact);
+  const avatarInner = avaUrl
+    ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
+    : initial;
+  // me 头像：当前面具头像
+  let meAvaUrl = '';
+  try { meAvaUrl = (typeof Character !== 'undefined' && Character.getAvatar) ? (Character.getAvatar() || '') : ''; } catch(_) {}
+  let meName = '我';
+  try { const mk = (typeof Character !== 'undefined' && Character.get) ? Character.get() : null; if (mk?.name) meName = mk.name; } catch(_) {}
+  const meInitial = Utils.escapeHtml((meName || '我')[0]);
+  const meAvatarInner = meAvaUrl
+    ? `<img src="${Utils.escapeHtml(meAvaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
+    : meInitial;
+  const bubbles = msgs.length
+    ? msgs.map(m => {
+        // system role：撤回/提示（居中灰条，不加头像不加气泡框）
+        if (m.role === 'system') {
+          return `<div style="display:flex;justify-content:center;margin:4px 0 12px">
+            <div style="font-size:12px;color:var(--text-secondary);background:var(--bg-tertiary);padding:3px 12px;border-radius:20px">${Utils.escapeHtml(m.text || '')}</div>
+          </div>`;
+        }
+        const mine = m.role === 'me';
+        const time = m.time ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(m.time)}</div>` : '';
+        return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+          <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+            <div style="max-width:100%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.5;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};word-break:break-word">${Utils.escapeHtml(m.text || '')}</div>
+            ${time}
+          </div>
+        </div>`;
+      }).join('')
+    : '<div style="padding:40px 24px;text-align:center;color:var(--text-secondary);font-size:13px;line-height:1.8">还没有消息<br><span style="font-size:11px">下方输入框发消息，点刷新让对方回复</span></div>';
+  body.innerHTML = `
+    <div class="phone-chat-thread" style="display:flex;flex-direction:column;height:100%">
+      <div id="phone-chat-msglist" style="flex:1;min-height:0;overflow-y:auto;padding:14px 14px 8px">${bubbles}</div>
+      <div style="flex-shrink:0;padding:8px 10px;display:flex;gap:8px;align-items:center">
+        <button id="phone-chat-refresh-btn" onclick="Phone._chatRequestReply('${contactId}')" title="让对方回复" style="flex-shrink:0;width:38px;height:38px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+        </button>
+        <input id="phone-chat-input" type="text" placeholder="输入消息…" onkeydown="if(event.key==='Enter'){Phone._chatSendMessage('${contactId}')}" style="flex:1;min-width:0;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none">
+        <button onclick="Phone._chatSendMessage('${contactId}')" title="发送" style="flex-shrink:0;width:38px;height:38px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+        </button>
+      </div>
+    </div>
+  `;
+  const list = document.getElementById('phone-chat-msglist');
+  if (list) list.scrollTop = list.scrollHeight;
+  // 绑定长按事件
+  _bindChatThreadEvents(contactId);
+}
+
+// 绑定手机聊天气泡长按事件
+function _bindChatThreadEvents(contactId) {
+  const list = document.getElementById('phone-chat-msglist');
+  if (!list) return;
+  
+  let pressTarget = null, pressTimer = null;
+  const cancelPress = () => {
+    if (pressTimer) clearTimeout(pressTimer);
+    if (pressTarget) pressTarget.style.opacity = '1';
+    pressTarget = null;
+    pressTimer = null;
+  };
+
+  list.addEventListener('touchstart', (e) => {
+    const bubble = e.target.closest('.phone-chat-msg-bubble');
+    if (!bubble) return;
+    pressTarget = bubble;
+    bubble.style.opacity = '0.6';
+    pressTimer = setTimeout(() => {
+      _showChatBubbleMenu(contactId, bubble.dataset.msgId, bubble.dataset.role);
+      cancelPress();
+    }, 500);
+  }, { passive: true });
+
+  list.addEventListener('touchend', cancelPress);
+  list.addEventListener('touchmove', cancelPress);
+
+  // 桌面右键
+  list.addEventListener('contextmenu', (e) => {
+    const bubble = e.target.closest('.phone-chat-msg-bubble');
+    if (!bubble) return;
+    e.preventDefault();
+    _showChatBubbleMenu(contactId, bubble.dataset.msgId, bubble.dataset.role);
+  });
+}
+
+// 显示气泡长按菜单
+async function _showChatBubbleMenu(contactId, msgId, role) {
+  const pd = await _getPhoneData();
+  if (!pd?.chatThreads?.[contactId]) return;
+  const thread = pd.chatThreads[contactId];
+  const msg = thread.find(m => m.id === msgId);
+  if (!msg) return;
+
+  let actions = [];
+  if (role === 'me') {
+    actions = ['编辑', '撤回'];
+  } else {
+    actions = ['编辑', '删除'];
+  }
+
+  const choice = await _showActionMenu(actions);
+  if (choice === '编辑') {
+    const newText = await UI.showSimpleInput('编辑消息', msg.text || '');
+    if (newText !== null && newText !== msg.text) {
+      msg.text = newText;
+      await _savePhoneData();
+      _renderChatThread(pd, contactId);
+    }
+  } else if (choice === '撤回') {
+    // me 气泡撤回：删除消息，在末尾插入灰条提示
+    const idx = thread.findIndex(m => m.id === msgId);
+    if (idx >= 0) {
+      thread.splice(idx, 1);
+      thread.push({
+        id: 'm_' + Utils.uuid().slice(0, 8),
+        role: 'system',
+        text: '你撤回了一条消息',
+        time: '',
+        fromMainline: false,
+      });
+      await _savePhoneData();
+      _renderChatThread(pd, contactId);
+    }
+  } else if (choice === '删除') {
+    // them 气泡删除：直接移除
+    const idx = thread.findIndex(m => m.id === msgId);
+    if (idx >= 0) {
+      thread.splice(idx, 1);
+      await _savePhoneData();
+      _renderChatThread(pd, contactId);
+    }
+  }
+}
+
+// 轻量级菜单：在顶部显示操作列表（简单实现：用弹窗）
+async function _showActionMenu(actions) {
+  if (!actions || !actions.length) return null;
+  return new Promise(resolve => {
+    const menu = document.createElement('div');
+    menu.style.cssText = `position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+      background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);
+      border-radius:12px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);
+      min-width:160px;padding:0`;
+    menu.innerHTML = actions.map((a, i) => 
+      `<div style="padding:12px 16px;border-bottom:${i < actions.length - 1 ? '1px solid var(--border)' : 'none'};
+        cursor:pointer;text-align:center;font-size:14px">${a}</div>`
+    ).join('');
+    
+    const items = menu.querySelectorAll('div');
+    items.forEach((item, i) => {
+      item.onclick = () => {
+        document.body.removeChild(menu);
+        document.body.removeChild(mask);
+        resolve(actions[i]);
+      };
+    });
+
+    const mask = document.createElement('div');
+    mask.style.cssText = `position:fixed;top:0;left:0;right:0;bottom:0;z-index:9998;background:rgba(0,0,0,0.3)`;
+    mask.onclick = () => {
+      document.body.removeChild(menu);
+      document.body.removeChild(mask);
+      resolve(null);
+    };
+
+    document.body.appendChild(mask);
+    document.body.appendChild(menu);
+  });
+}
+
+// 重绘气泡时的 system role 处理（撤回提示等）
+function _renderChatThreadWithSystem(pd, contactId) {
+  const body = document.getElementById('phone-body');
+  const contact = (pd.chatContacts || []).find(c => c.id === contactId);
+  if (!contact) return;
+  const msgs = (pd.chatThreads && pd.chatThreads[contactId]) || [];
+  const initial = Utils.escapeHtml((contact.name || '?')[0]);
+  const avaUrl = _chatContactAvatar(contact);
+  const avatarInner = avaUrl
+    ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
+    : initial;
+  let meAvaUrl = '';
+  try { meAvaUrl = (typeof Character !== 'undefined' && Character.getAvatar) ? (Character.getAvatar() || '') : ''; } catch(_) {}
+  let meName = '我';
+  try { const mk = (typeof Character !== 'undefined' && Character.get) ? Character.get() : null; if (mk?.name) meName = mk.name; } catch(_) {}
+  const meInitial = Utils.escapeHtml((meName || '我')[0]);
+  const meAvatarInner = meAvaUrl
+    ? `<img src="${Utils.escapeHtml(meAvaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
+    : meInitial;
+
+  const bubbles = msgs.map(m => {
+    // system role：撤回/提示消息
+    if (m.role === 'system') {
+      return `<div style="display:flex;justify-content:center;margin:8px 0">
+        <div style="font-size:12px;color:var(--text-secondary);text-align:center">${Utils.escapeHtml(m.text || '')}</div>
+      </div>`;
+    }
+
+    const mine = m.role === 'me';
+    const time = m.time ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(m.time)}</div>` : '';
+    const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+      <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+        <div style="max-width:100%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.5;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};word-break:break-word">${Utils.escapeHtml(m.text || '')}</div>
+        ${time}
+      </div>
+    </div>`;
+    return bubbleHtml;
+  }).join('');
+
+  const list = document.getElementById('phone-chat-msglist');
+  if (list) {
+    list.innerHTML = bubbles || '<div style="padding:40px 24px;text-align:center;color:var(--text-secondary);font-size:13px;line-height:1.8">还没有消息</div>';
+    list.scrollTop = list.scrollHeight;
+  }
+  
+  _bindChatThreadEvents(contactId);
+}
+
+// 从主线消息收录线上聊天气泡（核心函数）
+// messages: [{id, role, content}]，自动建联系人，按游戏内时间存
+// 返回收录的条数
+async function _ingestChatFromMessages(messages) {
+  const pd = await _getPhoneData();
+  if (!pd) return 0;
+  if (!Array.isArray(pd.chatContacts)) pd.chatContacts = [];
+  if (!pd.chatThreads || typeof pd.chatThreads !== 'object') pd.chatThreads = {};
+  // 头像表
+  let avatarById = {};
+  try { const rows = await DB.getAll('npcAvatars'); rows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; }); } catch(_) {}
+  // 当前候选（用于补头像）
+  let candByName = {};
+  try { (await _collectChatCandidates()).forEach(c => { candByName[c.name] = c; }); } catch(_) {}
+
+  // 查/建联系人
+  const ensureContact = (npcName) => {
+    let ct = pd.chatContacts.find(c => c.name === npcName);
+    if (ct) return ct;
+    const cand = candByName[npcName];
+    const id = 'ct_' + Utils.uuid().slice(0, 8);
+    ct = { id, name: npcName, source: cand ? cand.source : 'auto', avatar: cand ? cand.avatar : '', sig: '' };
+    pd.chatContacts.push(ct);
+    if (!pd.chatThreads[id]) pd.chatThreads[id] = [];
+    return ct;
+  };
+
+  // 已收录 key 集合（每个 thread 内）
+  const seenKeyByContact = {};
+  for (const ct of pd.chatContacts) {
+    const arr = pd.chatThreads[ct.id] || [];
+    seenKeyByContact[ct.id] = new Set(arr.filter(m => m._k).map(m => m._k));
+  }
+
+  let added = 0;
+  for (const msg of messages) {
+    if (!msg || msg.role !== 'assistant' || !msg.content) continue;
+    let parsed;
+    try { parsed = Utils.parseAIOutput(msg.content); } catch(_) { continue; }
+    if (!parsed || !Array.isArray(parsed.chat) || !parsed.chat.length) continue;
+    for (const cm of parsed.chat) {
+      const npc = (cm.npc || '').trim();
+      const text = (cm.text || '').trim();
+      if (!npc || !text) continue;
+      const time = (cm.time || '').trim(); // 只用游戏内时间，没有就空
+      const ct = ensureContact(npc);
+      if (!pd.chatThreads[ct.id]) pd.chatThreads[ct.id] = [];
+      if (!seenKeyByContact[ct.id]) seenKeyByContact[ct.id] = new Set();
+      const key = `${npc}|${time}|${text}`;
+      if (seenKeyByContact[ct.id].has(key)) continue;
+      seenKeyByContact[ct.id].add(key);
+      pd.chatThreads[ct.id].push({
+        id: 'm_' + Utils.uuid().slice(0, 8),
+        role: 'them',
+        text,
+        time,            // 游戏内时间，可能为空
+        fromMainline: true,
+        _k: key,
+      });
+      added++;
+    }
+  }
+  if (added > 0) await _savePhoneData();
+  return added;
+}
+
+// 对外：从主线收录（供 chat.js 总结前调用 / 进 app 时调用）
+async function ingestChatMessages(messages) {
+  try { return await _ingestChatFromMessages(messages || []); } catch(_) { return 0; }
+}
+
+// 对外：根据在场角色名返回聊天记录（最近 N 轮，按 roundId 分组）
+async function getChatHistoryForNPCs(npcNames, rounds = 5) {
+  if (!npcNames || !npcNames.length) return '';
+  const pd = await _getPhoneData();
+  if (!pd || !pd.chatContacts || !pd.chatThreads) return '';
+  const parts = [];
+  const matchedContacts = pd.chatContacts.filter(c => npcNames.some(n => c.name === n || c.name.includes(n) || n.includes(c.name)));
+  for (const contact of matchedContacts.slice(0, 3)) {
+    const thread = pd.chatThreads[contact.id] || [];
+    if (!thread.length) continue;
+    // 找 AI 回复的 roundId，取最近 N 个
+    const aiRoundIds = [];
+    const seenRids = new Set();
+    for (let i = thread.length - 1; i >= 0; i--) {
+      const m = thread[i];
+      if (m.role === 'them' && m.roundId && !seenRids.has(m.roundId)) {
+        seenRids.add(m.roundId);
+        aiRoundIds.unshift(m.roundId);
+        if (aiRoundIds.length >= rounds) break;
+      }
+    }
+    // 如果没有 roundId（旧数据 / 主线收录），退回取最近20条
+    if (aiRoundIds.length === 0) {
+      const recent = thread.slice(-20);
+      const lines = recent.map(m => {
+        if (m.role === 'system') return `  [系统] ${m.text || ''}`;
+        const who = m.role === 'me' ? '{{user}}' : contact.name;
+        const t = m.time ? ` [${m.time}]` : '';
+        return `  ${who}${t}：${m.text || ''}`;
+      });
+      parts.push(`与「${contact.name}」的聊天记录：\n${lines.join('\n')}`);
+      continue;
+    }
+    // 找起始位置
+    const firstAiRid = aiRoundIds[0];
+    const firstAiIdx = thread.findIndex(m => m.role === 'them' && m.roundId === firstAiRid);
+    let startIdx = firstAiIdx;
+    for (let i = firstAiIdx - 1; i >= 0; i--) {
+      if (thread[i].role === 'them') break;
+      startIdx = i;
+    }
+    const relevant = thread.slice(startIdx);
+    const lines = relevant.map(m => {
+      if (m.role === 'system') return `  [系统] ${m.text || ''}`;
+      const who = m.role === 'me' ? '{{user}}' : contact.name;
+      const t = m.time ? ` [${m.time}]` : '';
+      return `  ${who}${t}：${m.text || ''}`;
+    });
+    parts.push(`与「${contact.name}」的聊天记录（最近${aiRoundIds.length}轮）：\n${lines.join('\n')}`);
+  }
+  return parts.length > 0 ? parts.join('\n\n') : '';
+}
+
+// 进入聊天详情时，从当前对话所有 AI 消息收录新气泡
+async function _syncMainlineForContact(contactId) {
+  try {
+    let messages = [];
+    if (typeof Chat !== 'undefined' && Chat.getMessages) {
+      messages = Chat.getMessages() || [];
+    }
+    const n = await _ingestChatFromMessages(messages);
+    UI.showToast(n > 0 ? `收录了 ${n} 条新消息` : '没有新的线上消息', 1500);
+    const pd = await _getPhoneData();
+    if (pd && _chatCurContactId) _renderChatThread(pd, _chatCurContactId);
+  } catch(e) {
+    UI.showToast('收录失败：' + (e.message || '未知'), 2000);
+  }
+}
+
+// 发送一条自己的消息（纯 append，不请求 AI，可连发）
+async function _chatSendMessage(contactId) {
+  try {
+    const input = document.getElementById('phone-chat-input');
+    if (!input) return;
+    const text = (input.value || '').trim();
+    if (!text) return;
+    const pd = await _getPhoneData();
+    if (!pd.chatThreads) pd.chatThreads = {};
+    if (!pd.chatThreads[contactId]) pd.chatThreads[contactId] = [];
+    // 获取联系人名字
+    const contact = (pd.chatContacts || []).find(c => c.id === contactId);
+    const contactName = contact?.name || contactId;
+    // 时间戳：从状态栏读游戏内时间
+    let gameTime = '';
+    try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+    // 获取或创建本轮用户 roundId（连发共用）
+    if (!_pendingMeRoundId[contactId]) {
+      _pendingMeRoundId[contactId] = 'r_' + Utils.uuid().slice(0, 8);
+    }
+    const meRoundId = _pendingMeRoundId[contactId];
+    pd.chatThreads[contactId].push({
+      id: 'm_' + Utils.uuid().slice(0, 8),
+      role: 'me',
+      text,
+      time: gameTime,
+      fromMainline: false,
+      roundId: meRoundId,
+    });
+    _addChatMessageToRoundLog(contactId, 'me', text, gameTime, contactName);
+    await _savePhoneData();
+    input.value = '';
+    _renderChatThread(pd, contactId);
+    const inp2 = document.getElementById('phone-chat-input');
+    if (inp2) inp2.focus();
+  } catch(e) {
+    UI.showToast('发送失败：' + (e.message || '未知'), 2000);
+  }
+}
+
+// 点刷新：把自己发的消息 + 角色人设 + 世界观 + 主线 + 手机聊天记录打包，请求 AI 回复
+let _chatReplyBusy = false;
+async function _chatRequestReply(contactId) {
+  if (_chatReplyBusy) { UI.showToast('对方正在回复…', 1200); return; }
+  const btn = document.getElementById('phone-chat-refresh-btn');
+  try {
+    const pd = await _getPhoneData();
+    const contact = (pd.chatContacts || []).find(c => c.id === contactId);
+    if (!contact) { UI.showToast('联系人不存在', 1500); return; }
+    const thread = (pd.chatThreads && pd.chatThreads[contactId]) || [];
+    if (!thread.length) { UI.showToast('先发条消息再让对方回复', 1500); return; }
+
+    _chatReplyBusy = true;
+    if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.74-8.74"/></svg>'; btn.style.pointerEvents = 'none'; }
+    // 插入 typing 占位（对方头像 + 三点跳动）
+    const _insertTyping = () => {
+      const list = document.getElementById('phone-chat-msglist');
+      if (!list) return null;
+      const avaUrl = _chatContactAvatar(contact);
+      const initial = Utils.escapeHtml((contact.name || '?')[0]);
+      const avatarInner = avaUrl
+        ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
+        : initial;
+      const el = document.createElement('div');
+      el.id = 'phone-chat-typing';
+      el.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:12px';
+      el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div><div style="padding:10px 14px;border-radius:14px;background:var(--bg-tertiary)"><div class="typing-indicator"><span></span><span></span><span></span></div></div>`;
+      list.appendChild(el);
+      list.scrollTop = list.scrollHeight;
+      return el;
+    };
+    const typingEl = _insertTyping();
+
+    // ① 当前角色详细人设
+    let personaStr = contact.name || '未知';
+    try {
+      const cands = await _collectChatCandidates();
+      const cand = cands.find(c => c.name === contact.name);
+      if (cand && cand.detail) personaStr += '\n' + cand.detail;
+    } catch(_) {}
+
+    // ② 基础世界观 + 速查表 + ③ 主线最近10轮（_buildFullContext 已含）
+    let fullCtx = '';
+    try { fullCtx = await _buildFullContext(); } catch(_) {}
+
+    // ④ 手机内最近20条聊天记录
+    const recent = thread.slice(-20);
+    const myName = (() => { try { const mk = Character.get(); return mk?.name || '我'; } catch(_) { return '我'; } })();
+    const histStr = recent.map(m => {
+      const who = m.role === 'me' ? `玩家（${myName}）` : contact.name;
+      const t = m.time ? `[${m.time}] ` : '';
+      return `${who}：${t}${m.text}`;
+    }).join('\n');
+
+    // 当前游戏时间
+    let gameTime = '';
+    try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+
+    const systemPrompt = `${fullCtx}
+
+【正在私聊的角色】
+你现在要扮演「${contact.name}」，通过手机和玩家进行**一对一私聊**。
+${personaStr}
+
+【手机私聊记录】（玩家＝${myName}，对方＝${contact.name}）
+${histStr}
+
+【当前游戏时间】${gameTime || '（未知）'}
+
+【私聊规则】
+1. 你是「${contact.name}」，正在用手机回复玩家的私聊消息。只写「${contact.name}」会发的内容，不要写旁白、不要写玩家的话。
+2. 上面的主线剧情仅供参考，用来判断你和玩家此刻的关系与状态。**请先判断你（${contact.name}）在那些主线场景里是否在场**：如果你不在场，绝对不要主动提起主线里发生的事（你根本不知道）；只有你在场或事后理应知道的事，才能自然提及。
+3. 回复要符合角色当下的状态：**先想这个角色此刻正在做什么**——可能在忙、在睡、在外面。据此决定回复的语气和"时机感"：可能秒回，也可能像是过了一阵才回（在内容里自然体现，比如"刚看到""在忙刚回来"），不要每次都热情秒回。
+4. 你可以一次回复多条短消息（像真人发微信那样），也可以只回一条。
+5. **必须用以下 JSON 格式输出**，放在 \`\`\`chat 代码块里，每条消息一个对象，time 用游戏内时间（"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"格式，可比玩家发消息的时间稍晚一点）：
+\`\`\`chat
+[
+  {"npc": "${contact.name}", "text": "消息内容", "time": "时间"},
+  {"npc": "${contact.name}", "text": "第二条消息内容（可选）", "time": "时间"}
+]
+\`\`\`
+只输出这个 chat 块，不要输出其它任何内容。`;
+
+    const apiMessages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `（请以「${contact.name}」的身份回复上面手机私聊记录里玩家最新发来的消息）` }
+    ];
+
+    let fullReply = '';
+    await new Promise((resolve, reject) => {
+      API.streamChat(
+        apiMessages,
+        (chunk) => { fullReply += chunk; },
+        () => resolve(),
+        (err) => reject(new Error(err || '请求失败')),
+        null,
+        { forceNoStream: true }
+      );
+    });
+// 解析回复里的 chat 块
+    let parsed = null;
+    try { parsed = Utils.parseAIOutput(fullReply); } catch(_) {}
+    let chatArr = (parsed && Array.isArray(parsed.chat)) ? parsed.chat : [];
+    // 兜底1：parseAIOutput 没解析出（比如 AI 用了竖线格式），自己从 ```chat 块里抠
+    if (!chatArr.length) {
+      const m = fullReply.match(/```chat\s*\n?([\s\S]*?)```/i);
+      if (m) {
+        const inner = m[1].trim();
+        // 先试 JSON
+        try {
+          const j = JSON.parse(inner);
+          if (Array.isArray(j)) chatArr = j;
+        } catch(_) {}
+        // 再试竖线格式：角色名 | 时间 | 内容
+        if (!chatArr.length) {
+          inner.split('\n').forEach(line => {
+            const t = line.trim();
+            if (!t) return;
+            const segs = t.split('|').map(s => s.trim());
+            if (segs.length >= 3) {
+              chatArr.push({ npc: segs[0], time: segs[1], text: segs.slice(2).join(' | ') });
+            } else if (segs.length === 2) {
+              chatArr.push({ npc: contact.name, time: segs[0], text: segs[1] });
+            } else {
+              chatArr.push({ npc: contact.name, time: '', text: t });
+            }
+          });
+        }
+      }
+    }
+    // 兜底2：连 chat 块都没有，但有正文 → 当成一条对方消息
+    if (!chatArr.length) {
+      const body = (parsed && parsed.body) ? parsed.body.trim() : fullReply.trim();
+      if (body) chatArr = [{ npc: contact.name, text: body, time: '' }];
+    }
+
+
+    const pd2 = await _getPhoneData();
+    if (!pd2.chatThreads) pd2.chatThreads = {};
+    if (!pd2.chatThreads[contactId]) pd2.chatThreads[contactId] = [];
+    let n = 0;
+    
+    // 删掉 typing 占位
+    if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+    
+    // 生成本次 AI 回复的 roundId，清掉用户待回复 roundId
+    const aiRoundId = 'r_' + Utils.uuid().slice(0, 8);
+    delete _pendingMeRoundId[contactId];
+    
+    // 逐条延迟 append 气泡
+    for (let i = 0; i < chatArr.length; i++) {
+      const cm = chatArr[i];
+      const text = (cm.text || '').trim();
+      if (!text) continue;
+      
+      // 存进 thread
+      const msgId = 'm_' + Utils.uuid().slice(0, 8);
+      const cmTime = (cm.time || '').trim();
+      pd2.chatThreads[contactId].push({
+        id: msgId,
+        role: 'them',
+        text,
+        time: cmTime,
+        fromMainline: false,
+        roundId: aiRoundId,
+      });
+      _addChatMessageToRoundLog(contactId, 'them', text, cmTime, contact.name);
+      
+      // 等 600ms 再显示，用淡入动画
+      await new Promise(resolve => setTimeout(resolve, 600));
+      
+      const list = document.getElementById('phone-chat-msglist');
+      if (list) {
+        // 只渲染这一条新气泡（不重绘全部）
+        const avaUrl = _chatContactAvatar(contact);
+        const initial = Utils.escapeHtml((contact.name || '?')[0]);
+        const avatarInner = avaUrl
+          ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
+          : initial;
+        const el = document.createElement('div');
+        el.className = 'phone-chat-msg-bubble';
+        el.dataset.msgId = msgId;
+        el.dataset.role = 'them';
+        el.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;animation:fadeIn 0.3s ease-in;cursor:pointer';
+        el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div><div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0"><div style="max-width:100%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);word-break:break-word">${Utils.escapeHtml(text)}</div></div>`;
+        list.appendChild(el);
+        list.scrollTop = list.scrollHeight;
+      }
+      
+      n++;
+    }
+    
+    if (n > 0) await _savePhoneData();
+    // 重新绑定长按事件
+    _bindChatThreadEvents(contactId);
+    if (n === 0) UI.showToast('对方没有回复', 1500);
+  } catch(e) {
+    UI.showToast('回复失败：' + (e.message || '未知'), 2200);
+  } finally {
+    _chatReplyBusy = false;
+    const b = document.getElementById('phone-chat-refresh-btn');
+    if (b) { b.textContent = '🔄'; b.style.pointerEvents = ''; }
+  }
 }
 
 function _renderCamera(pd) {
@@ -4103,7 +5076,56 @@ _renderMemo(pd);
       }
     }
 
-    // 8. 最近2条备忘录（完整内容）
+    // 8. 最近的聊天记录（每个联系人最近5轮对话，按 AI 回复的 roundId 分组）
+    const chatContacts = (pd.chatContacts || []).slice(0, 10);
+    const chatRecords = [];
+    for (const contact of chatContacts) {
+      const thread = (pd.chatThreads && pd.chatThreads[contact.id]) || [];
+      if (!thread.length) continue;
+
+      // 找出所有 AI 回复的 roundId（them 消息），保留最近5个
+      const aiRoundIds = [];
+      const seenRids = new Set();
+      for (let i = thread.length - 1; i >= 0; i--) {
+        const m = thread[i];
+        if (m.role === 'them' && m.roundId && !seenRids.has(m.roundId)) {
+          seenRids.add(m.roundId);
+          aiRoundIds.unshift(m.roundId);
+          if (aiRoundIds.length >= 5) break;
+        }
+      }
+
+      // 找第一个要显示的 roundId 对应的 me 消息起始位置
+      let startIdx = 0;
+      if (aiRoundIds.length > 0) {
+        const firstAiRid = aiRoundIds[0];
+        // 往前找：属于这个 AI roundId 的 me 消息（同一轮用户发的消息）
+        // me 消息的 roundId 是独立的，所以找这条 AI 回复之前最近的 me 消息起点
+        const firstAiIdx = thread.findIndex(m => m.role === 'them' && m.roundId === firstAiRid);
+        // 往前取 me 消息（直到上一个 AI roundId 或开头）
+        startIdx = firstAiIdx;
+        for (let i = firstAiIdx - 1; i >= 0; i--) {
+          if (thread[i].role === 'them') break; // 遇到上一轮 AI 回复就停
+          startIdx = i;
+        }
+      }
+
+      const relevant = thread.slice(startIdx);
+      if (!relevant.length) continue;
+
+      const lines = relevant.map(m => {
+        if (m.role === 'system') return `  [系统] ${m.text || ''}`;
+        const who = m.role === 'me' ? '{{user}}' : contact.name;
+        const timeStr = m.time ? ` [${m.time}]` : '';
+        return `  ${who}${timeStr}：${m.text || ''}`;
+      });
+      chatRecords.push(`【${contact.name}的聊天记录（最近${aiRoundIds.length}轮）】\n${lines.join('\n')}`);
+    }
+    if (chatRecords.length > 0) {
+      parts.push('【手机聊天记录】\n' + chatRecords.join('\n\n'));
+    }
+
+    // 9. 最近2条备忘录（完整内容）
     const memos = (pd.memos || []).slice(0, 2);
     if (memos.length > 0) {
       parts.push('【最近的备忘录】\n' + memos.map(m => {
@@ -5392,12 +6414,17 @@ async function buildHeartsimServiceChatForBackstage() {
     buildPhoneDataForAI,
     buildHeartsimAppFavorForBackstage,
     buildHeartsimServiceChatForBackstage,
-    flushActionLog, peekActionLog, pushLog, reloadActionLog,
+    flushActionLog, peekActionLog, pushLog, reloadActionLog, reloadChatRoundLog,
     flushActionLogForBackstage,
     getSnapshotForRollback, restoreFromSnapshot,
     _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _onMomentsCoverPicked, _clearMomentsCover,
     // 个人资料卡
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
+    // 主屏分页
+    _onPagesScroll,
+    // 聊天 App
+    _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu,
+    ingestChatMessages, getChatHistoryForNPCs,
     // 相机 App
     _switchCameraTab, _cameraRefillFromStatus, _cameraOpenAdjust, _cameraShoot, _cameraOpenPhoto, _cameraOnTextInput,
     _closePhotoDetail, _photoEditText, _photoCopyText, _photoDownloadImage, _photoDelete, _photoShareMoment, _photoShareMain,

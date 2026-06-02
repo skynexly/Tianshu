@@ -164,12 +164,55 @@
 }
 .phone-body > * { min-height:0; }
 .phone-home {
- flex:1;
- min-height:0;
- display: flex;
- flex-direction: column;
- padding: 8px 18px 12px;
- overflow: hidden;
+  flex:1;
+  min-height:0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+/* 滑动页面容器 */
+.phone-pages {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.phone-pages::-webkit-scrollbar { display: none; }
+/* 单页 */
+.phone-page {
+  flex-shrink: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 18px 0;
+  overflow: hidden;
+  scroll-snap-align: start;
+}
+/* 页面指示器 */
+.phone-page-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 4px;
+  flex-shrink: 0;
+}
+.phone-page-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.35);
+  transition: all 0.2s;
+}
+.phone-page-dot.active {
+  width: 16px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.9);
 }
 .phone-widget {
  padding: 26px 8px 12px;
