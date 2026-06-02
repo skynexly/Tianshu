@@ -2531,6 +2531,7 @@ input[type="range"] {
   align-items: center;
   gap: 8px;
   padding: 12px 12px 12px 8px;
+  padding-top: max(12px, env(safe-area-inset-top));
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   background: var(--bg-secondary);
