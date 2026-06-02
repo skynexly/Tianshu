@@ -4,6 +4,8 @@
 (async function App() {
   // 首先应用主题（同步，避免闪屏）
   try { Theme.init(); } catch(e) { console.error('[Theme]', e); }
+  // 初始化手势锁状态
+  try { UI.initLockBackGestureToggle(); } catch(e) { console.error('[UI] 初始化手势锁失败', e); }
   // 初始化数据库
   try { await DB.open(); } catch(e) { console.error('[DB]', e); alert('数据库初始化失败: ' + e.message); return; }
 
@@ -172,8 +174,13 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v688.14';
-const CHANGELOG = `【v688.14 更新内容】
+const APP_VERSION = 'v688.15';
+const CHANGELOG = `【v688.15 更新内容】
+· 设置→界面主题：新增「锁定返回手势」开关，防止右滑误触
+· 对话级任务：AI生成完整阶段配置（阶段名/任务类型/奖励/阶段奖励一键生成）
+· 任务类型编辑器：修复属性下拉菜单未加载对话级属性的 bug
+
+【v688.14 更新内容】
 · 修复：「所有角色」数值触发条件保存后丢失（显示"未设置触发条件"）
 · 修复：iOS Safari 全局搜索页被刘海/灵动岛遮挡，返回按钮点击无效
 · 修复：聊天APP刷新按钮加载完毕后变回 emoji

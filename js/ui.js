@@ -4,6 +4,7 @@
 const UI = (() => {
   let overlay = null;
   let _maskEditFrom = null; // 面具编辑页的来源面板
+  let _lockBackGesture = localStorage.getItem('lockBackGesture') === '1';
 
   async function toggleTopMenu() {
      const menu = document.getElementById('top-dropdown-menu');
@@ -296,6 +297,7 @@ isOpen = !sidebar.classList.contains('hidden');
         if (deltaX > 0 && !isOpen) {
           // 右滑
           if (inChat) {
+            if (_lockBackGesture) { gestureActive = false; return; }
             gestureType = 'sidebar';
             gestureActive = true;
             sidebar.classList.remove('hidden');
@@ -304,7 +306,7 @@ isOpen = !sidebar.classList.contains('hidden');
           } else {
             // 非聊天界面：返回上级
             const action = _getBackAction();
-            if (action) {
+            if (action && !_lockBackGesture) {
               gestureType = 'back';
               gestureActive = true;
             } else {
@@ -313,6 +315,7 @@ isOpen = !sidebar.classList.contains('hidden');
             }
           }
         } else if (deltaX < 0 && isOpen && inChat) {
+          if (_lockBackGesture) { gestureActive = false; return; }
           gestureType = 'sidebar';
           gestureActive = true;
         } else {
@@ -357,7 +360,7 @@ isOpen = !sidebar.classList.contains('hidden');
       const absDelta = Math.abs(deltaX);
 
       if (gestureType === 'back') {
-        if (deltaX > threshold) {
+        if (deltaX > threshold && !_lockBackGesture) {
           const action = _getBackAction();
           if (action) action();
         }
@@ -1150,6 +1153,18 @@ function showToast(text, duration = 4500) {
 
   function setMaskEditFrom(from) { _maskEditFrom = from; }
 
+  function toggleLockBackGesture() {
+    _lockBackGesture = !_lockBackGesture;
+    localStorage.setItem('lockBackGesture', _lockBackGesture ? '1' : '0');
+    const toggle = document.getElementById('th-lock-back-toggle');
+    if (toggle) toggle.checked = _lockBackGesture;
+  }
+
+  function initLockBackGestureToggle() {
+    const toggle = document.getElementById('th-lock-back-toggle');
+    if (toggle) toggle.checked = _lockBackGesture;
+  }
+
   return {
     toggleTopMenu, toggleTokenPopup, toggleNewMenu, toggleSidebar, showPanel, showPanelAndCloseSidebar,
     showBranchModal, closeBranchModal,
@@ -1162,6 +1177,6 @@ function showToast(text, duration = 4500) {
     showSimpleInput, closeSimpleInput, confirmSimpleInput,
     showConfirm, showAlert, showCopyText, showToast,
     openGlobalSearch, closeGlobalSearch, _globalSearchDebounced, _jumpToMessage,
-    setMaskEditFrom
+    setMaskEditFrom, toggleLockBackGesture, initLockBackGestureToggle
   };
 })();

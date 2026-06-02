@@ -2715,6 +2715,15 @@
 <label class="pill-toggle"><input type="checkbox" id="th-ai-render-toggle" onchange="Theme.toggleAiBubbleRender()"><span class="pill-track"></span></label>
 </div>
 
+<!-- 锁定返回手势 -->
+<div class="settings-card" style="padding:12px;display:flex;justify-content:space-between;align-items:center">
+<div>
+<div style="font-size:14px;color:var(--text);font-weight:600">锁定返回手势</div>
+<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">禁用右滑返回，防止误触退出当前界面</div>
+</div>
+<label class="pill-toggle"><input type="checkbox" id="th-lock-back-toggle" onchange="UI.toggleLockBackGesture()"><span class="pill-track"></span></label>
+</div>
+
               <!-- 全局底色 -->
               <div class="settings-card" style="padding:12px;display:flex;flex-direction:column;gap:10px">
                 <div style="font-size:12px;color:var(--text-secondary);font-weight:600;letter-spacing:.05em">全局底色（影响所有界面）</div>
@@ -3772,7 +3781,7 @@ const GameLog = (() => {
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
-<script src="js/ui.js"></script>
+<script src="js/ui.js?v=2"></script>
 <script src="js/data-mgr.js"></script>
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>

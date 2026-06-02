@@ -811,7 +811,11 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
 
   function _getConvGlobalAttrNames() {
     const gp = _cgAttrGp || _getConv()?.convGameplay;
-    return (gp?.globalAttrs || []).map(a => a.name).filter(Boolean);
+    const globals = (gp?.globalAttrs || []).map(a => a.name).filter(Boolean);
+    const chars = (gp?.characterAttrs || []).flatMap(c =>
+      (c.attrs || []).map(a => `${c.targetName || '角色'}的${a.name}`).filter(Boolean)
+    );
+    return [...globals, ...chars];
   }
 
   function _renderTaskSystem() {
@@ -870,11 +874,14 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
         <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">任务类型模板</div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${typeCards || '<div style="padding:10px;color:var(--text-secondary);font-size:12px;text-align:center;border:1px dashed var(--border);border-radius:6px">暂无类型，点击下方添加</div>'}</div>
         <button type="button" onclick="ConvGameplay.openTaskTypeModal(${pi},-1)" style="width:100%;padding:6px;border-radius:6px;border:1px dashed var(--border);background:none;color:var(--accent);font-size:12px;cursor:pointer;margin-bottom:10px">+ 添加任务类型</button>
-        <div style="display:flex;align-items:center;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
           <span style="font-size:12px;font-weight:600;color:var(--text)">阶段完成奖励：</span>
           <span style="font-size:12px;color:var(--text-secondary)">${_esc(crSummary)}</span>
           <button type="button" onclick="ConvGameplay.openPhaseRewardModal(${pi})" style="padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--accent);font-size:11px;cursor:pointer;margin-left:auto">编辑</button>
         </div>
+        <button type="button" id="cg-task-ai-btn-${pi}" onclick="ConvGameplay.aiGenerateTaskTypes(${pi})" style="width:100%;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成完整阶段配置
+        </button>
       </div>`;
     });
 
@@ -894,6 +901,154 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     _cgTaskTs.phases.push(_defaultTaskPhase());
     await _saveTaskSystem();
     _renderTaskSystem();
+  }
+
+  // ========== AI 生成完整阶段配置 ==========
+
+  let _taskAiAbort = null;
+
+  async function aiGenerateTaskTypes(phaseIndex) {
+    if (!_cgTaskTs || !_cgTaskTs.phases[phaseIndex]) return;
+    const phase = _cgTaskTs.phases[phaseIndex];
+    const btn = document.getElementById(`cg-task-ai-btn-${phaseIndex}`);
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+
+    try {
+      // 1. 收集世界观设定
+      const conv = _getConv();
+      const wvId = conv?.singleWorldviewId || conv?.worldviewId || '';
+      let settingText = '';
+      try {
+        const wv = wvId ? await DB.get('worldviews', wvId) : null;
+        settingText = wv?.setting || '';
+      } catch(_) {}
+
+      // 2. 收集自定义属性
+      const gp = _cgAttrGp || conv?.convGameplay;
+      let attrList = '';
+      if (gp) {
+        const globals = (gp.globalAttrs || []).map(a => a.name).filter(Boolean);
+        const chars = (gp.characterAttrs || []).flatMap(c =>
+          (c.attrs || []).map(a => `${c.targetName || '角色'}的${a.name}`).filter(Boolean)
+        );
+        const all = [...globals, ...chars];
+        attrList = all.length > 0 ? all.join('、') : '';
+      }
+
+      // 3. 收集玩家面具信息
+      let maskName = '玩家', maskDesc = '';
+      try {
+        const mask = await Character.get();
+        if (mask) { maskName = mask.name || '玩家'; maskDesc = mask.description || mask.detail || ''; }
+      } catch(_) {}
+
+      // 4. 收集主线最近10轮（20条）消息
+      let recentMessages = '（无对话记录）';
+      try {
+        const msgs = Chat.getMessages() || [];
+        const recent = msgs.filter(m => m.role === 'user' || m.role === 'assistant').slice(-20);
+        if (recent.length > 0) {
+          recentMessages = recent.map(m => {
+            const role = m.role === 'user' ? maskName : 'AI';
+            const text = (m.content || '').slice(0, 500);
+            return `[${role}] ${text}`;
+          }).join('\n\n');
+        }
+      } catch(_) {}
+
+      // 5. 构建 prompt
+      const sysPrompt = `你是一个文字冒险游戏的任务系统设计师。请根据当前主线剧情和世界观设定，为当前阶段设计一个完整的任务系统配置。
+
+配置包括：
+- name：阶段名称（3-8字，反映这个阶段的主题或玩家的任务特点）
+- batchSize：每批任务数量（2-5 之间，建议 3）
+- totalTasks：这个阶段的总任务目标数（5-20，建议 10）
+- types：任务类型模板数组，包含 3-5 个类型。每个类型：
+  - label：类型名称（2-6字，简洁有力）
+  - desc：类型描述（给运行时 AI 看的指令，50-150字，告诉 AI 什么时候该派这类任务）
+  - rewardMode：奖励模式（"attr" / "free" / "none"）
+  - rewardAttr：当 rewardMode="attr" 时，填属性名（必须从下方属性列表选）
+  - rewardValue：当 rewardMode="attr" 时，奖励数值（1-5）
+  - rewardFree：当 rewardMode="free" 时，奖励方向（大方向，非具体物品，例如"获得与调查相关的线索或物品"）
+- completionReward：阶段完成奖励（对象格式）
+  - mode：奖励模式（"attr" / "free" / "none"）
+  - attr：当 mode="attr" 时，属性名
+  - value：当 mode="attr" 时，奖励数值
+  - free：当 mode="free" 时，奖励方向
+
+要求：
+- name 要贴合剧情，types 要覆盖不同任务维度（日常/社交/探索/主线等）
+- 如果有自定义属性，优先使用属性奖励
+- 阶段奖励可以用属性或 free，也可以无奖励（mode="none"）
+- desc 写得像"给 AI 的投喂指令"
+
+输出纯JSON对象（不是数组），不要其他内容。格式：
+{"name":"阶段名","batchSize":3,"totalTasks":10,"types":[{"label":"...", "desc":"...", "rewardMode":"attr", "rewardAttr":"好感度", "rewardValue":2, "rewardFree":""}], "completionReward":{"mode":"attr","attr":"好感度","value":5,"free":""}}`;
+
+      const userMsg = `请为当前阶段设计完整的任务系统配置。
+
+## 玩家角色
+${maskName}${maskDesc ? '：' + maskDesc.slice(0, 300) : ''}
+
+## 世界观设定
+${settingText ? settingText.slice(0, 1000) : '（未提供）'}
+
+## 自定义属性
+${attrList || '（未配置属性——请用 rewardMode "free" 或 "none"）'}
+
+## 主线最近对话（最近10轮）
+${recentMessages}`;
+
+      // 6. 调 AI
+      _taskAiAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _taskAiAbort.signal, maxTokens: 4000 });
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const config = JSON.parse(cleaned);
+      if (!config || typeof config !== 'object') throw new Error('AI 返回的不是有效对象');
+
+      // 7. 更新阶段（保留 id，覆盖其他字段）
+      phase.name = String(config.name || '').trim();
+      phase.batchSize = Math.max(1, Math.min(5, Number(config.batchSize) || 3));
+      phase.totalTasks = Math.max(1, Math.min(999, Number(config.totalTasks) || 10));
+      
+      // 类型数组
+      phase.types = [];
+      if (Array.isArray(config.types) && config.types.length > 0) {
+        for (const item of config.types) {
+          if (!item.label) continue;
+          phase.types.push({
+            id: 'tt_' + Utils.uuid().slice(0, 8),
+            label: String(item.label).trim(),
+            desc: String(item.desc || '').trim(),
+            rewardMode: ['attr', 'free', 'none'].includes(item.rewardMode) ? item.rewardMode : 'none',
+            rewardAttr: String(item.rewardAttr || '').trim(),
+            rewardValue: Number(item.rewardValue) || 0,
+            rewardFree: String(item.rewardFree || '').trim()
+          });
+        }
+      }
+
+      // 阶段奖励
+      if (config.completionReward && typeof config.completionReward === 'object') {
+        phase.completionReward = {
+          mode: ['attr', 'free', 'none'].includes(config.completionReward.mode) ? config.completionReward.mode : 'none',
+          attr: String(config.completionReward.attr || '').trim(),
+          value: Number(config.completionReward.value) || 0,
+          free: String(config.completionReward.free || '').trim()
+        };
+      } else {
+        phase.completionReward = { mode: 'none', attr: '', value: 0, free: '' };
+      }
+
+      await _saveTaskSystem();
+      _renderTaskSystem();
+      UI.showToast(`已生成完整阶段配置（${phase.types.length} 个任务类型）`, 2000);
+    } catch(e) {
+      if (e.name === 'AbortError') { UI.showToast('已取消', 1500); return; }
+      UI.showToast(`生成失败：${e.message}`, 3000);
+      if (btn) { btn.disabled = false; btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> 重试'; }
+    } finally { _taskAiAbort = null; }
   }
 
   async function deleteTaskPhase(pi) {
@@ -1213,7 +1368,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     toggleCharPicker, renderCharPicker, selectChar, deleteCharCard,
     openTaskEditor, closeTaskEditor,
     debugDump,
-    addTaskPhase, deleteTaskPhase, updateTaskPhase,
+    addTaskPhase, deleteTaskPhase, updateTaskPhase, aiGenerateTaskTypes,
     openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal,
     openPhaseRewardModal, onTaskRewardModeChange
   };
