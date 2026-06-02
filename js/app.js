@@ -172,14 +172,15 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v688.13';
-const CHANGELOG = `【v688.13 更新内容】
+const APP_VERSION = 'v688.14';
+const CHANGELOG = `【v688.14 更新内容】
+· 修复：「所有角色」数值触发条件保存后丢失（显示"未设置触发条件"）
 · 修复：iOS Safari 全局搜索页被刘海/灵动岛遮挡，返回按钮点击无效
 · 修复：聊天APP刷新按钮加载完毕后变回 emoji
 · 修复：聊天APP逐条气泡不显示时间戳
 · 修复：跨联系人聊天时间戳错乱
 
-【v688.11-12 更新内容】
+【v688.11 更新内容】
 · 新增手机「聊天」APP：可与世界观NPC/单人卡/挂载角色私聊
   - 输入消息连发 → 点刷新让对方回复（AI 扮演角色）
   - 逐条气泡出现 + typing 加载动画
