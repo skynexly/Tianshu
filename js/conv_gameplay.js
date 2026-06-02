@@ -964,8 +964,8 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
 - batchSize：每批任务数量（2-5 之间，建议 3）
 - totalTasks：这个阶段的总任务目标数（5-20，建议 10）
 - types：任务类型模板数组，包含 3-5 个类型。每个类型：
-  - label：类型名称（2-6字，简洁有力）
-  - desc：类型描述（给运行时 AI 看的指令，50-150字，告诉 AI 什么时候该派这类任务）
+  - label：类型名称（2-6字，简洁有力，如"武力提升""线索探查""日常修炼"）
+  - desc：任务方向说明（给运行时 AI 看的大方向，50-100字）。只说这类任务的性质和内容方向，举1-2个具体任务例子，让 AI 知道应该给玩家派什么类型的事情去做。不要写触发时机，不要写"当玩家……时"，直接描述任务内容的形态。例如："属于武力提升类任务，内容围绕体能训练、格斗学习展开，如报名散打课、完成一次对练、跟师父学招式等。"
   - rewardMode：奖励模式（"attr" / "free" / "none"）
   - rewardAttr：当 rewardMode="attr" 时，填属性名（必须从下方属性列表选）
   - rewardValue：当 rewardMode="attr" 时，奖励数值（1-5）
@@ -977,15 +977,14 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
   - free：当 mode="free" 时，奖励方向
 
 要求：
-- name 要贴合剧情，types 要覆盖不同任务维度（日常/社交/探索/主线等）
-- 如果有自定义属性，优先使用属性奖励
+- types 要根据主线剧情走向设计，覆盖玩家在这个阶段自然会去做的不同类型的事情
+- 如果有自定义属性，优先使用属性奖励，选择与任务内容最相关的属性
 - 阶段奖励可以用属性或 free，也可以无奖励（mode="none"）
-- desc 写得像"给 AI 的投喂指令"
 
 输出纯JSON对象（不是数组），不要其他内容。格式：
-{"name":"阶段名","batchSize":3,"totalTasks":10,"types":[{"label":"...", "desc":"...", "rewardMode":"attr", "rewardAttr":"好感度", "rewardValue":2, "rewardFree":""}], "completionReward":{"mode":"attr","attr":"好感度","value":5,"free":""}}`;
+{"name":"阶段名","batchSize":3,"totalTasks":10,"types":[{"label":"武力提升","desc":"属于武力提升类任务，内容围绕体能训练、格斗学习展开，如报名散打课、完成一次对练等。","rewardMode":"attr","rewardAttr":"战斗力","rewardValue":2,"rewardFree":""}],"completionReward":{"mode":"attr","attr":"战斗力","value":5,"free":""}}`;
 
-      const userMsg = `请为当前阶段设计完整的任务系统配置。
+      const userMsg = `请根据以下内容为当前阶段设计完整的任务系统配置，任务类型要贴合主线剧情走向。
 
 ## 玩家角色
 ${maskName}${maskDesc ? '：' + maskDesc.slice(0, 300) : ''}
