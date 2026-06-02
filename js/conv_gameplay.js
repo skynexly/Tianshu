@@ -142,17 +142,13 @@ const ConvGameplay = (() => {
       const curVal = c.scope === 'allCharacters' ? `allCharacters|||${c.attrName || ''}` : (c.scope === 'character' ? `character||${c.targetKey || ''}||${c.attrId || ''}` : `global|||${c.attrId || ''}`);
       const optHtml = opts.map(o => `<option value="${_esc(o.value)}" ${o.value === curVal ? 'selected' : ''}>${_esc(o.label)}</option>`).join('');
       const isAll = c.scope === 'allCharacters';
-      const matchModeHtml = isAll ? `<select onchange="ConvGameplay.updateAttrCondition(${i},'matchMode',this.value)" style="flex:1;min-width:0;box-sizing:border-box;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)"><option value="all" ${(c.matchMode || 'all') === 'all' ? 'selected' : ''}>全部满足</option><option value="any" ${c.matchMode === 'any' ? 'selected' : ''}>任一满足</option></select>` : '';
-      return `<div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;animation:slideIn 0.3s ease-out">
-        <div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start">
-          <select onchange="ConvGameplay.updateAttrCondition(${i},'attr',this.value)" style="flex:1;min-width:0;box-sizing:border-box;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">${optHtml}</select>
-          <button type="button" onclick="ConvGameplay.removeAttrCondition(${i})" style="width:32px;height:32px;border:1px solid var(--danger);background:none;border-radius:6px;color:var(--danger);cursor:pointer;flex-shrink:0">×</button>
-        </div>
-        ${isAll ? `<div style="display:flex;gap:8px;margin-bottom:8px">${matchModeHtml}</div>` : ''}
-        <div style="display:flex;gap:8px;align-items:center">
-          <select onchange="ConvGameplay.updateAttrCondition(${i},'operator',this.value)" style="width:60px;box-sizing:border-box;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">${['>','>=','<','<=','==','!='].map(op => `<option value="${op}" ${c.operator === op ? 'selected' : ''}>${op}</option>`).join('')}</select>
-          <input type="number" value="${_esc(String(c.value ?? 0))}" oninput="ConvGameplay.updateAttrCondition(${i},'value',this.value)" style="flex:1;min-width:0;box-sizing:border-box;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-        </div>
+      const matchModeHtml = isAll ? `<select onchange="ConvGameplay.updateAttrCondition(${i},'matchMode',this.value)" style="width:100%;box-sizing:border-box"><option value="all" ${(c.matchMode || 'all') === 'all' ? 'selected' : ''}>全部满足</option><option value="any" ${c.matchMode === 'any' ? 'selected' : ''}>任一满足</option></select>` : '';
+      return `<div style="display:grid;grid-template-columns:1fr ${isAll ? '80px ' : ''}64px 74px 32px;gap:6px;align-items:center">
+        <select onchange="ConvGameplay.updateAttrCondition(${i},'attr',this.value)" style="min-width:0;width:100%;box-sizing:border-box">${optHtml}</select>
+        ${matchModeHtml}
+        <select onchange="ConvGameplay.updateAttrCondition(${i},'operator',this.value)" style="width:100%;box-sizing:border-box">${['>','>=','<','<=','==','!='].map(op => `<option value="${op}" ${c.operator === op ? 'selected' : ''}>${op}</option>`).join('')}</select>
+        <input type="number" value="${_esc(String(c.value ?? 0))}" oninput="ConvGameplay.updateAttrCondition(${i},'value',this.value)" style="width:100%;box-sizing:border-box">
+        <button type="button" onclick="ConvGameplay.removeAttrCondition(${i})" style="width:32px;height:32px;border:1px solid var(--border);background:none;border-radius:6px;color:var(--danger);cursor:pointer">×</button>
       </div>`;
     }).join('');
     _attrCondDraft.forEach((c, i) => {
