@@ -3363,7 +3363,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
       name: document.getElementById('wv-event-modal-name').value.trim(),
       keys: triggerType === 'keyword' ? document.getElementById('wv-event-modal-keys').value.trim() : '',
       triggerType,
-      attrConditions: triggerType === 'attr' ? _eventAttrConditionsDraft.filter(c => c && c.attrId && Number.isFinite(Number(c.value))).map(c => ({ ...c, value: Number(c.value), operator: c.operator || '>=' })) : [],
+      attrConditions: triggerType === 'attr' ? _eventAttrConditionsDraft.filter(c => c && (c.attrId || c.attrName) && Number.isFinite(Number(c.value))).map(c => ({ ...c, value: Number(c.value), operator: c.operator || '>=' })) : [],
       completeKey: document.getElementById('wv-event-modal-complete-key').value.trim(),
       finishRule: (document.getElementById('wv-event-modal-finish-rule')?.value || '').trim(),
       content: document.getElementById('wv-event-modal-content').value.trim(),
