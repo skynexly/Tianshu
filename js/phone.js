@@ -95,6 +95,8 @@ function flushActionLogForBackstage() {
 
 // 用户"待回复"轮次 ID（按联系人），连发多条共用同一 roundId，AI 回复后清掉
 let _pendingMeRoundId = {};
+// 手机聊天会话基准时间——任意联系人收到 AI 回复后更新，跨联系人共享
+let _chatSessionBaseTime = '';
 // 结构：{ contactId: { name: '联系人名', msgs: [{role, text, time}] } }
 let _chatRoundLog = {};
 
@@ -3737,12 +3739,17 @@ async function _chatSendMessage(contactId) {
     // 获取联系人名字
     const contact = (pd.chatContacts || []).find(c => c.id === contactId);
     const contactName = contact?.name || contactId;
-    // 时间戳：优先用该联系人最后一条 AI 回复的时间（避免刷新后还读主线状态栏）
+    // 时间戳优先级：
+    // 1. 本联系人最后一条 AI 回复时间（最准）
+    // 2. 跨联系人全局会话基准时间（切到新联系人时用）
+    // 3. 状态栏时间（第一次发消息时兜底）
     let gameTime = '';
     const thread = pd.chatThreads[contactId];
     const lastThemMsg = [...thread].reverse().find(m => m.role === 'them' && m.time);
     if (lastThemMsg && lastThemMsg.time) {
-      gameTime = lastThemMsg.time; // 沿用 AI 最后回复的游戏时间
+      gameTime = lastThemMsg.time;
+    } else if (_chatSessionBaseTime) {
+      gameTime = _chatSessionBaseTime;
     } else {
       try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
     }
@@ -3918,6 +3925,7 @@ ${histStr}
     // 生成本次 AI 回复的 roundId，清掉用户待回复 roundId
     const aiRoundId = 'r_' + Utils.uuid().slice(0, 8);
     delete _pendingMeRoundId[contactId];
+    let lastAiTime = '';
     
     // 逐条延迟 append 气泡
     for (let i = 0; i < chatArr.length; i++) {
@@ -3936,6 +3944,7 @@ ${histStr}
         fromMainline: false,
         roundId: aiRoundId,
       });
+      if (cmTime) lastAiTime = cmTime;
       _addChatMessageToRoundLog(contactId, 'them', text, cmTime, contact.name);
       
       // 等 600ms 再显示，用淡入动画
@@ -3962,7 +3971,10 @@ ${histStr}
       n++;
     }
     
-    if (n > 0) await _savePhoneData();
+    if (n > 0) {
+      await _savePhoneData();
+      if (lastAiTime) _chatSessionBaseTime = lastAiTime; // 更新跨联系人基准时间
+    }
     // 重新绑定长按事件
     _bindChatThreadEvents(contactId);
     if (n === 0) UI.showToast('对方没有回复', 1500);
