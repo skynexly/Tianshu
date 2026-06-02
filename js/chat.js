@@ -4338,7 +4338,37 @@ if (!gp) return null;
   function _eventAttrConditionsMet(ev, wvOverride) {
     const conds = Array.isArray(ev?.attrConditions) ? ev.attrConditions : [];
     if (!conds.length) return false;
-    return conds.every(c => _compareEventAttrValue(_getCustomAttrValueForEvent(c, wvOverride), c.operator || '>=', c.value));
+    return conds.every(c => {
+      if (c.scope === 'allCharacters') {
+        return _checkAllCharactersCondition(c, wvOverride);
+      }
+      return _compareEventAttrValue(_getCustomAttrValueForEvent(c, wvOverride), c.operator || '>=', c.value);
+    });
+  }
+  // v688.10：所有角色同名属性条件判断
+  function _checkAllCharactersCondition(cond, wvOverride) {
+    try {
+      const status = Conversations.getStatusBar() || {};
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      const gp = conv?.convGameplay || wvOverride?.gameplay || null;
+      if (!gp) return false;
+      const targetName = (cond.attrName || '').trim();
+      if (!targetName) return false;
+      const matchMode = cond.matchMode || 'all';
+      const results = [];
+      (gp.characterAttrs || []).forEach(card => {
+        const key = [card?.targetType || '', card?.targetId || '', card?.sourceWorldviewId || ''].join(':');
+        (card.attrs || []).filter(a => a && (a.name || '').trim() === targetName).forEach(a => {
+          const v = status.customAttrs?.characters?.[key]?.[a.id] ?? a.initial ?? 0;
+          const n = Number(v);
+          if (Number.isFinite(n)) {
+            results.push(_compareEventAttrValue(n, cond.operator || '>=', cond.value));
+          }
+        });
+      });
+      if (!results.length) return false; // 没有角色有这个属性
+      return matchMode === 'any' ? results.some(r => r) : results.every(r => r);
+    } catch(_) { return false; }
   }
   function _formatEventInjection(ev, phase) {
     const name = ev?.name || '事件';

@@ -3057,6 +3057,7 @@ function closeKnowledgeModal() {
     const opts = [];
     const w = window.__wvEditingCache || null;
     const gp = w?.gameplay || {};
+    const seenAllCharNames = new Set();
     (gp.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim()).forEach(a => {
       opts.push({ value: `global|||${a.id}`, scope: 'global', targetKey: '', targetName: '', attrId: a.id, attrName: a.name, label: `全局 / ${a.name}` });
     });
@@ -3064,6 +3065,11 @@ function closeKnowledgeModal() {
       const key = _attrTargetKey(c);
       (c.attrs || []).filter(a => a && a.id && (a.name || '').trim()).forEach(a => {
         opts.push({ value: `character||${key}||${a.id}`, scope: 'character', targetKey: key, targetName: c.targetName || '', attrId: a.id, attrName: a.name, label: `${c.targetName || '未命名角色'} / ${a.name}` });
+        const nm = (a.name || '').trim();
+        if (nm && !seenAllCharNames.has(nm)) {
+          seenAllCharNames.add(nm);
+          opts.push({ value: `allCharacters|||${nm}`, scope: 'allCharacters', targetKey: '', targetName: '', attrId: '', attrName: nm, label: `所有角色 / ${nm}` });
+        }
       });
     });
     return opts;
@@ -3072,7 +3078,10 @@ function closeKnowledgeModal() {
     const conds = Array.isArray(ev.attrConditions) ? ev.attrConditions : [];
     if ((ev.triggerType || 'keyword') !== 'attr') return null;
     if (!conds.length) return '<span style="font-size:11px;color:var(--danger)">未设置数值条件</span>';
-    return conds.map(c => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(`${c.targetName ? c.targetName + ' / ' : '全局 / '}${c.attrName || '属性'} ${c.operator || '>='} ${c.value ?? 0}`)}</span>`).join('');
+    return conds.map(c => {
+      const prefix = c.scope === 'allCharacters' ? `所有角色(${c.matchMode === 'any' ? '任一' : '全部'}) / ` : (c.targetName ? c.targetName + ' / ' : '全局 / ');
+      return `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(`${prefix}${c.attrName || '属性'} ${c.operator || '>='} ${c.value ?? 0}`)}</span>`;
+    }).join('');
   }
   function _renderEvents(list) {
     eventsData = list || [];
@@ -3158,6 +3167,11 @@ function closeKnowledgeModal() {
     const w = window.__wvEditingCache;
     const settingText = w?.setting || '';
     const regionNames = (w?.regions || []).map(r => r.name).filter(Boolean);
+    const factionNames = (w?.regions || []).flatMap(r => (r.factions || []).map(f => f.name)).filter(Boolean);
+    const npcNames = [
+      ...(w?.globalNpcs || []).map(n => n.name),
+      ...(w?.regions || []).flatMap(r => (r.factions || []).flatMap(f => (f.npcs || []).map(n => n.name)))
+    ].filter(Boolean);
     const existingEvents = eventsData.map(e => e.name).filter(Boolean);
 
     const sysPrompt = `你是一个文字冒险游戏的事件设计师。请根据世界观设定，生成游戏内的剧情事件。
@@ -3170,6 +3184,7 @@ function closeKnowledgeModal() {
 - content：事件内容（触发后每轮注入给AI的剧情指令，100-300字，写给AI看的指令，不是写给玩家看的）。content 只写事件背景、场景氛围、环境细节、剧情走向和可能的发展方向。**不要写任何角色的具体行为、动作、语气、情感反应**——角色有自己的人设，具体怎么行动由AI根据角色人设自行判断。content 的定位是"舞台布景"，不是"剧本台词"。
 
 要求：
+- 事件应围绕世界观中已有的势力和角色展开，让事件与世界观产生关联
 - 事件之间有剧情关联性，可以形成事件链（前一个事件的结果可能触发下一个）
 - 触发关键词要自然，是玩家在探索中容易提到的词
 - content 只描述场景和情境，不预设任何角色的反应方式
@@ -3183,6 +3198,10 @@ function closeKnowledgeModal() {
 ${settingText || '（未提供）'}
 
 ${regionNames.length ? '## 地区\n' + regionNames.join('、') : ''}
+
+${factionNames.length ? '## 势力\n' + factionNames.join('、') : ''}
+
+${npcNames.length ? '## 重要NPC\n' + npcNames.join('、') : ''}
 
 ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents.join('、') : ''}`;
 
@@ -3270,17 +3289,20 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
     }
     const opHtml = ['>','>=','<','<=','==','!='].map(op => `<option value="${op}">${op}</option>`).join('');
     box.innerHTML = _eventAttrConditionsDraft.map((c, i) => {
-      const curVal = c.scope === 'character' ? `character||${c.targetKey || ''}||${c.attrId || ''}` : `global|||${c.attrId || ''}`;
+      const curVal = c.scope === 'allCharacters' ? `allCharacters|||${c.attrName || ''}` : (c.scope === 'character' ? `character||${c.targetKey || ''}||${c.attrId || ''}` : `global|||${c.attrId || ''}`);
       const optHtml = opts.map(o => `<option value="${Utils.escapeHtml(o.value)}" ${o.value === curVal ? 'selected' : ''}>${Utils.escapeHtml(o.label)}</option>`).join('');
-      return `<div style="display:grid;grid-template-columns:1fr 64px 74px 32px;gap:6px;align-items:center">
+      const isAll = c.scope === 'allCharacters';
+      const matchModeHtml = isAll ? `<select onchange="Worldview.updateEventAttrCondition(${i}, 'matchMode', this.value)" style="width:100%;box-sizing:border-box"><option value="all" ${(c.matchMode || 'all') === 'all' ? 'selected' : ''}>全部满足</option><option value="any" ${c.matchMode === 'any' ? 'selected' : ''}>任一满足</option></select>` : '';
+      return `<div style="display:grid;grid-template-columns:1fr ${isAll ? '80px ' : ''}64px 74px 32px;gap:6px;align-items:center">
         <select onchange="Worldview.updateEventAttrCondition(${i}, 'attr', this.value)" style="min-width:0;width:100%;box-sizing:border-box">${optHtml}</select>
+        ${matchModeHtml}
         <select onchange="Worldview.updateEventAttrCondition(${i}, 'operator', this.value)" style="width:100%;box-sizing:border-box">${opHtml}</select>
         <input type="number" value="${Utils.escapeHtml(c.value ?? 0)}" oninput="Worldview.updateEventAttrCondition(${i}, 'value', this.value)" style="width:100%;box-sizing:border-box">
         <button type="button" onclick="Worldview.removeEventAttrCondition(${i})" style="width:32px;height:32px;border:1px solid var(--border);background:none;border-radius:6px;color:var(--danger);cursor:pointer">×</button>
       </div>`;
     }).join('');
     _eventAttrConditionsDraft.forEach((c, i) => {
-      if (!c.attrId && opts[0]) updateEventAttrCondition(i, 'attr', opts[0].value, true);
+      if (!c.attrId && !c.attrName && opts[0]) updateEventAttrCondition(i, 'attr', opts[0].value, true);
     });
   }
   function addEventAttrCondition() {
@@ -3297,12 +3319,16 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
       const o = _collectEventAttrOptions().find(x => x.value === value);
       if (!o) return;
       Object.assign(c, { scope: o.scope, targetKey: o.targetKey, targetName: o.targetName, attrId: o.attrId, attrName: o.attrName });
+      if (o.scope === 'allCharacters') { c.matchMode = c.matchMode || 'all'; }
+      else { delete c.matchMode; }
     } else if (field === 'value') {
       c.value = Number(value);
     } else if (field === 'operator') {
       c.operator = value || '>=';
+    } else if (field === 'matchMode') {
+      c.matchMode = value || 'all';
     }
-    if (!silent && field === 'attr') _renderEventAttrConditions();
+    if (!silent && (field === 'attr' || field === 'matchMode')) _renderEventAttrConditions();
   }
   function removeEventAttrCondition(i) {
     _eventAttrConditionsDraft.splice(i, 1);

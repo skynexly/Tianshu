@@ -43,7 +43,10 @@ const ConvGameplay = (() => {
   function _attrConditionSummary(ev) {
     const conds = Array.isArray(ev.attrConditions) ? ev.attrConditions : [];
     if (!conds.length) return '<span style="font-size:11px;color:var(--danger)">未设置数值条件</span>';
-    return conds.map(c => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${_esc(`${c.targetName ? c.targetName + ' / ' : '全局 / '}${c.attrName || '属性'} ${c.operator || '>='} ${c.value ?? 0}`)}</span>`).join('');
+    return conds.map(c => {
+      const prefix = c.scope === 'allCharacters' ? `所有角色(${c.matchMode === 'any' ? '任一' : '全部'}) / ` : (c.targetName ? c.targetName + ' / ' : '全局 / ');
+      return `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${_esc(`${prefix}${c.attrName || '属性'} ${c.operator || '>='} ${c.value ?? 0}`)}</span>`;
+    }).join('');
   }
 
   function _renderEventList() {
@@ -84,6 +87,7 @@ const ConvGameplay = (() => {
     const gp = conv?.convGameplay || null;
     // fallback 到世界观
     const opts = [];
+    const seenAllCharNames = new Set();
     const doCollect = (gameplay) => {
       if (!gameplay) return;
       (gameplay.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim()).forEach(a => {
@@ -93,6 +97,12 @@ const ConvGameplay = (() => {
         const key = [c?.targetType || '', c?.targetId || '', c?.sourceWorldviewId || ''].join(':');
         (c.attrs || []).filter(a => a && a.id && (a.name || '').trim()).forEach(a => {
           opts.push({ value: `character||${key}||${a.id}`, scope: 'character', targetKey: key, targetName: c.targetName || '', attrId: a.id, attrName: a.name, label: `${c.targetName || '未命名角色'} / ${a.name}` });
+          // 收集角色属性名，用于"所有角色"选项
+          const nm = (a.name || '').trim();
+          if (nm && !seenAllCharNames.has(nm)) {
+            seenAllCharNames.add(nm);
+            opts.push({ value: `allCharacters|||${nm}`, scope: 'allCharacters', targetKey: '', targetName: '', attrId: '', attrName: nm, label: `所有角色 / ${nm}` });
+          }
         });
       });
     };
@@ -128,19 +138,21 @@ const ConvGameplay = (() => {
       box.innerHTML = '<div style="font-size:12px;color:var(--danger);padding:10px;border:1px dashed var(--border);border-radius:8px">请先配置自定义属性（在世界观或对话级配置中）。</div>';
       return;
     }
-    const opHtml = ['>','>=','<','<=','==','!='].map(op => `<option value="${op}">${op}</option>`).join('');
     box.innerHTML = _attrCondDraft.map((c, i) => {
-      const curVal = c.scope === 'character' ? `character||${c.targetKey || ''}||${c.attrId || ''}` : `global|||${c.attrId || ''}`;
+      const curVal = c.scope === 'allCharacters' ? `allCharacters|||${c.attrName || ''}` : (c.scope === 'character' ? `character||${c.targetKey || ''}||${c.attrId || ''}` : `global|||${c.attrId || ''}`);
       const optHtml = opts.map(o => `<option value="${_esc(o.value)}" ${o.value === curVal ? 'selected' : ''}>${_esc(o.label)}</option>`).join('');
-      return `<div style="display:grid;grid-template-columns:1fr 64px 74px 32px;gap:6px;align-items:center">
+      const isAll = c.scope === 'allCharacters';
+      const matchModeHtml = isAll ? `<select onchange="ConvGameplay.updateAttrCondition(${i},'matchMode',this.value)" style="width:100%;box-sizing:border-box"><option value="all" ${(c.matchMode || 'all') === 'all' ? 'selected' : ''}>全部满足</option><option value="any" ${c.matchMode === 'any' ? 'selected' : ''}>任一满足</option></select>` : '';
+      return `<div style="display:grid;grid-template-columns:1fr ${isAll ? '80px ' : ''}64px 74px 32px;gap:6px;align-items:center">
         <select onchange="ConvGameplay.updateAttrCondition(${i},'attr',this.value)" style="min-width:0;width:100%;box-sizing:border-box">${optHtml}</select>
+        ${matchModeHtml}
         <select onchange="ConvGameplay.updateAttrCondition(${i},'operator',this.value)" style="width:100%;box-sizing:border-box">${['>','>=','<','<=','==','!='].map(op => `<option value="${op}" ${c.operator === op ? 'selected' : ''}>${op}</option>`).join('')}</select>
         <input type="number" value="${_esc(String(c.value ?? 0))}" oninput="ConvGameplay.updateAttrCondition(${i},'value',this.value)" style="width:100%;box-sizing:border-box">
         <button type="button" onclick="ConvGameplay.removeAttrCondition(${i})" style="width:32px;height:32px;border:1px solid var(--border);background:none;border-radius:6px;color:var(--danger);cursor:pointer">×</button>
       </div>`;
     }).join('');
     _attrCondDraft.forEach((c, i) => {
-      if (!c.attrId && opts[0]) updateAttrCondition(i, 'attr', opts[0].value, true);
+      if (!c.attrId && !c.attrName && opts[0]) updateAttrCondition(i, 'attr', opts[0].value, true);
     });
   }
 
@@ -159,12 +171,16 @@ const ConvGameplay = (() => {
       const o = _collectAttrOptions().find(x => x.value === value);
       if (!o) return;
       Object.assign(c, { scope: o.scope, targetKey: o.targetKey, targetName: o.targetName, attrId: o.attrId, attrName: o.attrName });
+      if (o.scope === 'allCharacters') { c.matchMode = c.matchMode || 'all'; }
+      else { delete c.matchMode; }
     } else if (field === 'value') {
       c.value = Number(value);
     } else if (field === 'operator') {
       c.operator = value || '>=';
+    } else if (field === 'matchMode') {
+      c.matchMode = value || 'all';
     }
-    if (!silent && field === 'attr') _renderAttrConditions();
+    if (!silent && (field === 'attr' || field === 'matchMode')) _renderAttrConditions();
   }
 
   function removeAttrCondition(i) {
