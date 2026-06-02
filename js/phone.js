@@ -3737,9 +3737,15 @@ async function _chatSendMessage(contactId) {
     // 获取联系人名字
     const contact = (pd.chatContacts || []).find(c => c.id === contactId);
     const contactName = contact?.name || contactId;
-    // 时间戳：从状态栏读游戏内时间
+    // 时间戳：优先用该联系人最后一条 AI 回复的时间（避免刷新后还读主线状态栏）
     let gameTime = '';
-    try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+    const thread = pd.chatThreads[contactId];
+    const lastThemMsg = [...thread].reverse().find(m => m.role === 'them' && m.time);
+    if (lastThemMsg && lastThemMsg.time) {
+      gameTime = lastThemMsg.time; // 沿用 AI 最后回复的游戏时间
+    } else {
+      try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+    }
     // 获取或创建本轮用户 roundId（连发共用）
     if (!_pendingMeRoundId[contactId]) {
       _pendingMeRoundId[contactId] = 'r_' + Utils.uuid().slice(0, 8);
