@@ -52,6 +52,153 @@ const Tools = (() => {
     return result;
   }
 
+
+  // ===== AI 编辑设定 helper（世界观/单人卡，可回滚） =====
+  const _clone = (v) => JSON.parse(JSON.stringify(v ?? null));
+  function _currentConv() {
+    try {
+      const id = Conversations.getCurrent && Conversations.getCurrent();
+      return (Conversations.getList && Conversations.getList().find(c => c.id === id)) || null;
+    } catch(_) { return null; }
+  }
+  async function _saveConvs() {
+    if (typeof Conversations !== 'undefined' && Conversations.saveList) await Conversations.saveList();
+  }
+  async function _pushEditUndo(entry) {
+    const conv = _currentConv();
+    if (!conv) return;
+    if (!Array.isArray(conv._editUndoStack)) conv._editUndoStack = [];
+    conv._editUndoStack.push({ id: 'undo_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), ts: Date.now(), ...entry });
+    if (conv._editUndoStack.length > 10) conv._editUndoStack = conv._editUndoStack.slice(-10);
+    await _saveConvs();
+  }
+  async function _getWritableWorldview() {
+    let id = '';
+    try {
+      const ss = (typeof SingleMode !== 'undefined' && SingleMode.getCurrentSingleSettings) ? SingleMode.getCurrentSingleSettings() : null;
+      if (ss && ss.worldviewId) id = ss.worldviewId;
+    } catch(_) {}
+    if (!id) {
+      const conv = _currentConv();
+      id = conv?.singleWorldviewId || conv?.worldviewId || '';
+    }
+    if ((!id || id === '__default_wv__') && typeof Worldview !== 'undefined' && Worldview.getCurrentId) id = Worldview.getCurrentId() || '';
+    if (!id || id === '__default_wv__') return null;
+    const wv = await DB.get('worldviews', id);
+    return wv ? { id, wv } : null;
+  }
+  function _findWritableEntry(wv, name, kind) {
+    if (!wv || !name) return null;
+    const target = String(name).trim().toLowerCase();
+    const matches = (s) => s && String(s).trim().toLowerCase() === target;
+    const includes = (s) => s && String(s).toLowerCase().includes(target);
+    const hits = [];
+    if (!kind || kind === 'region') (wv.regions || []).forEach((r, ri) => {
+      if (matches(r.name) || includes(r.name)) hits.push({ kind:'region', exact:matches(r.name), ref:r, path:{ ri } });
+    });
+    if (!kind || kind === 'faction') (wv.regions || []).forEach((r, ri) => (r.factions || []).forEach((f, fi) => {
+      if (matches(f.name) || includes(f.name)) hits.push({ kind:'faction', exact:matches(f.name), ref:f, path:{ ri, fi }, region:r.name || '' });
+    }));
+    if (!kind || kind === 'npc') {
+      (wv.globalNpcs || []).forEach((n, ni) => {
+        const aliasHit = n.aliases && String(n.aliases).toLowerCase().split(/[,，、]/).some(a => a.trim() === target);
+        if (matches(n.name) || aliasHit || includes(n.name) || (n.aliases && String(n.aliases).toLowerCase().includes(target))) hits.push({ kind:'npc', exact:matches(n.name)||aliasHit, ref:n, path:{ global:true, ni }, where:'全图常驻' });
+      });
+      (wv.regions || []).forEach((r, ri) => (r.factions || []).forEach((f, fi) => (f.npcs || []).forEach((n, ni) => {
+        const aliasHit = n.aliases && String(n.aliases).toLowerCase().split(/[,，、]/).some(a => a.trim() === target);
+        if (matches(n.name) || aliasHit || includes(n.name) || (n.aliases && String(n.aliases).toLowerCase().includes(target))) hits.push({ kind:'npc', exact:matches(n.name)||aliasHit, ref:n, path:{ ri, fi, ni }, where:`${r.name || '?'} / ${f.name || '?'}` });
+      })));
+    }
+    hits.sort((a,b) => (b.exact?1:0) - (a.exact?1:0));
+    return hits[0] || null;
+  }
+  function _listExtensions(wv, kind) {
+    const items = [];
+    if (!kind || kind === 'festival') (wv.festivals || []).forEach(x => items.push({ kind:'festival', id:x.id||'', name:x.name||'', date:x.date||'', yearly:!!x.yearly, enabled:x.enabled!==false, content:x.content||'' }));
+    (wv.knowledges || []).forEach(x => {
+      const k = x.keywordTrigger ? 'dynamic' : 'resident';
+      if (!kind || kind === k) items.push({ kind:k, id:x.id||'', name:x.name||'', keys:x.keys||'', position:x.position||'', depth:x.depth||0, enabled:x.enabled!==false, content:x.content||'' });
+    });
+    return items;
+  }
+  function _findExtension(wv, kind, idOrName) {
+    const target = String(idOrName || '').trim().toLowerCase();
+    if (!target) return null;
+    if ((!kind || kind === 'festival') && Array.isArray(wv.festivals)) {
+      const idx = wv.festivals.findIndex(x => String(x.id||'').toLowerCase() === target || String(x.name||'').toLowerCase() === target);
+      if (idx >= 0) return { kind:'festival', list:wv.festivals, idx, item:wv.festivals[idx] };
+    }
+    if (Array.isArray(wv.knowledges)) {
+      const idx = wv.knowledges.findIndex(x => {
+        const k = x.keywordTrigger ? 'dynamic' : 'resident';
+        return (!kind || kind === k) && (String(x.id||'').toLowerCase() === target || String(x.name||'').toLowerCase() === target);
+      });
+      if (idx >= 0) return { kind:wv.knowledges[idx].keywordTrigger ? 'dynamic' : 'resident', list:wv.knowledges, idx, item:wv.knowledges[idx] };
+    }
+    return null;
+  }
+  async function _saveWorldview(wv) {
+    await DB.put('worldviews', wv);
+    try {
+      const isCurrent = typeof Worldview !== 'undefined' && Worldview.getCurrentId && Worldview.getCurrentId() === wv.id;
+      if (isCurrent && typeof Chat !== 'undefined' && Chat.setWorldview) Chat.setWorldview(wv.setting || '');
+      // 改了地区/势力/NPC 后重建运行态 NPC 索引，使新增/改名立即生效（与 selectWorldview 同口径）
+      if (isCurrent && typeof NPC !== 'undefined' && NPC.init) {
+        const flatNpcs = [], flatFacs = [], flatRegions = [];
+        (wv.regions || []).forEach(r => {
+          flatRegions.push({ id:r.id, name:r.name, summary:r.summary, detail:r.detail, aliases:r.aliases });
+          (r.factions || []).forEach(f => {
+            flatFacs.push({ ...f, regionName:r.name, regionId:r.id });
+            (f.npcs || []).forEach(n => flatNpcs.push({ ...n, faction:f.name, regions:[r.id || r.name] }));
+          });
+        });
+        NPC.init({ npcs:flatNpcs, factions:flatFacs, regions:flatRegions });
+      }
+    } catch(_) {}
+  }
+  // 列出当前对话所有可编辑的单人卡（单人模式主角卡 + 对话级挂载的常驻 card 角色）
+  async function _listEditableCards() {
+    const seen = new Set();
+    const refs = [];
+    const _add = (id, source) => { if (id && !seen.has(id)) { seen.add(id); refs.push({ id, source }); } };
+    // 单人模式主角卡
+    try {
+      const ss = (typeof SingleMode !== 'undefined' && SingleMode.getCurrentSingleSettings) ? SingleMode.getCurrentSingleSettings() : null;
+      if (ss?.charType === 'card' && ss.charId) _add(ss.charId, '主角');
+    } catch(_) {}
+    const conv = _currentConv();
+    if (conv?.isSingle && conv.singleCharType === 'card' && conv.singleCharId) _add(conv.singleCharId, '主角');
+    // 对话级挂载的常驻角色（只取 card 类型；npc 走世界观工具改）
+    if (conv && Array.isArray(conv.attachedChars)) {
+      conv.attachedChars.filter(e => e && e.type === 'card').forEach(e => _add(e.id, '常驻'));
+    }
+    const out = [];
+    for (const r of refs) {
+      const card = await DB.get('singleCards', r.id).catch(() => null);
+      if (card) out.push({ id: r.id, source: r.source, card });
+    }
+    return out;
+  }
+  // 定位单张可编辑卡：传 idOrName 则按 id/名称匹配；不传则取主角卡或唯一卡
+  async function _getCurrentCard(idOrName) {
+    const cards = await _listEditableCards();
+    if (cards.length === 0) return null;
+    if (idOrName) {
+      const t = String(idOrName).trim().toLowerCase();
+      const byId = cards.find(c => String(c.id).toLowerCase() === t);
+      if (byId) return { id: byId.id, card: byId.card };
+      const byName = cards.find(c => String(c.card.name || '').trim().toLowerCase() === t);
+      if (byName) return { id: byName.id, card: byName.card };
+      const fuzzy = cards.find(c => String(c.card.name || '').toLowerCase().includes(t));
+      if (fuzzy) return { id: fuzzy.id, card: fuzzy.card };
+      return null;
+    }
+    const main = cards.find(c => c.source === '主角');
+    if (main) return { id: main.id, card: main.card };
+    if (cards.length === 1) return { id: cards[0].id, card: cards[0].card };
+    return null; // 多张且无主角卡，需指定
+  }
+
   // 在世界观里找某个名字（地区/势力/地点/常驻角色/角色NPC）
   // kind: 'region' | 'faction' | 'npc' | undefined（不传则全找）
   function _findInWorldview(wv, name, kind) {
@@ -130,8 +277,26 @@ const Tools = (() => {
   }
 
 
+  const editDefinitions = [
+    { type:'function', function:{ name:'read_worldview_setting', description:'读取当前挂载世界观的基础设定文本。只读，不修改。', parameters:{ type:'object', properties:{}, required:[] } }},
+    { type:'function', function:{ name:'update_worldview_setting', description:'修改当前挂载世界观的基础设定文本。仅在用户明确要求修改世界观设定时使用；写入前会保存回滚快照。', parameters:{ type:'object', properties:{ setting:{ type:'string', description:'新的完整基础设定文本，会覆盖原 setting 字段' } }, required:['setting'] } }},
+    { type:'function', function:{ name:'read_worldview_entry', description:'读取当前世界观中单个地区/势力/NPC的摘要和详细设定。', parameters:{ type:'object', properties:{ name:{ type:'string', description:'地区/势力/NPC名称或NPC别名' }, kind:{ type:'string', enum:['region','faction','npc'], description:'限定类型；不传则全搜' } }, required:['name'] } }},
+    { type:'function', function:{ name:'update_worldview_entry', description:'修改当前世界观中单个地区/势力/NPC的 name/aliases/summary/detail。只改命中的单个条目，写入前会保存回滚快照。', parameters:{ type:'object', properties:{ name:{ type:'string', description:'要修改的条目名称或NPC别名' }, kind:{ type:'string', enum:['region','faction','npc'] }, newName:{ type:'string', description:'新名称，不传则不改' }, aliases:{ type:'string', description:'NPC别名，不传则不改' }, summary:{ type:'string', description:'新摘要，不传则不改' }, detail:{ type:'string', description:'新详细设定，不传则不改' } }, required:['name'] } }},
+    { type:'function', function:{ name:'add_worldview_entry', description:'给当前世界观新增一个地区/势力/全图常驻NPC。写入前会保存回滚快照。新增势力时必须指定所属地区名；新增势力下NPC时指定所属地区+势力名。', parameters:{ type:'object', properties:{ kind:{ type:'string', enum:['region','faction','npc'], description:'新增类型' }, name:{ type:'string', description:'名称' }, summary:{ type:'string' }, detail:{ type:'string' }, aliases:{ type:'string', description:'NPC别名' }, region:{ type:'string', description:'势力/NPC归属地区名（新增全图常驻NPC不传）' }, faction:{ type:'string', description:'NPC归属势力名（新增全图常驻NPC不传）' } }, required:['kind','name'] } }},
+    { type:'function', function:{ name:'list_extension_entries', description:'列出当前世界观的扩展设定条目（节日/常驻/动态）。用于修改前定位 id。', parameters:{ type:'object', properties:{ kind:{ type:'string', enum:['festival','resident','dynamic'], description:'筛选类型；不传则全部' } }, required:[] } }},
+    { type:'function', function:{ name:'add_extension_entry', description:'给当前世界观新增一条扩展设定。写入前会保存回滚快照。', parameters:{ type:'object', properties:{ kind:{ type:'string', enum:['festival','resident','dynamic'], description:'新增类型' }, name:{ type:'string' }, content:{ type:'string' }, keys:{ type:'string', description:'动态条目触发关键词' }, date:{ type:'string', description:'节日日期' }, yearly:{ type:'boolean', description:'节日是否每年重复' }, enabled:{ type:'boolean', description:'是否启用，默认 true' } }, required:['kind','name','content'] } }},
+    { type:'function', function:{ name:'update_extension_entry', description:'修改当前世界观的一条扩展设定。用 id 或名称定位；写入前会保存回滚快照。', parameters:{ type:'object', properties:{ id:{ type:'string', description:'条目 id；id/name 至少传一个' }, name:{ type:'string', description:'条目名称；id/name 至少传一个' }, kind:{ type:'string', enum:['festival','resident','dynamic'] }, newName:{ type:'string' }, content:{ type:'string' }, keys:{ type:'string' }, date:{ type:'string' }, yearly:{ type:'boolean' }, enabled:{ type:'boolean' } }, required:[] } }},
+    { type:'function', function:{ name:'delete_extension_entry', description:'删除当前世界观的一条扩展设定。仅在用户明确要求删除时使用；写入前会保存回滚快照。', parameters:{ type:'object', properties:{ id:{ type:'string' }, name:{ type:'string' }, kind:{ type:'string', enum:['festival','resident','dynamic'] } }, required:[] } }},
+    { type:'function', function:{ name:'list_cards', description:'列出当前对话可编辑的单人卡（单人模式主角卡 + 对话级挂载的常驻角色卡）。修改前用来确认有哪些卡、各自的 id/名称。', parameters:{ type:'object', properties:{}, required:[] } }},
+    { type:'function', function:{ name:'read_card', description:'读取单人卡的可编辑文本字段。当前对话只有一张可编辑卡时可不传 card；多张时用 card 指定名称或 id。', parameters:{ type:'object', properties:{ card:{ type:'string', description:'要读的卡名称或 id；只有一张卡时可省略' } }, required:[] } }},
+    { type:'function', function:{ name:'update_card', description:'修改单人卡的 name/aliases/detail/firstMes/mesExample。仅在用户明确要求修改时使用；写入前会保存回滚快照。当前对话多张可编辑卡时必须用 card 指定改哪张。', parameters:{ type:'object', properties:{ card:{ type:'string', description:'要改的卡名称或 id（用于定位，不会被写入）；只有一张卡时可省略' }, name:{ type:'string', description:'新角色名' }, aliases:{ type:'string' }, detail:{ type:'string' }, firstMes:{ type:'string' }, mesExample:{ type:'string' } }, required:[] } }},
+    { type:'function', function:{ name:'undo_last_edit', description:'撤销上一次由AI编辑工具写入的世界观/扩展设定/单人卡修改。', parameters:{ type:'object', properties:{}, required:[] } }}
+  ];
+
+
   // ===== 前台工具定义 =====
   const definitions = [
+    ...editDefinitions,
     // --- 小纸条 ---
     { type:'function', function:{
       name:'query_notes',
@@ -272,6 +437,7 @@ characters:{ type:'array', items:{type:'string'}, description:'在场角色' }
 
   // ===== 后台工具定义 =====
   const backstageDefinitions = [
+    ...editDefinitions,
     { type:'function', function:{
       name:'query_backstage_notes',
       description:'查询 {{user}} 本人的记忆碎片（后台记忆库）。不是游戏角色的，是 {{user}} 本人的。',
@@ -617,6 +783,217 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       if (allHits.length === 0) return OK({ result: `没找到包含「${args.keyword}」的${args.kind ? args.kind : '扩展'}设定。` });
       const items = allHits.slice(0, 8);
       return OK({ items });
+    },
+
+
+    // --- AI 编辑设定（世界观/单人卡，可回滚） ---
+    async read_worldview_setting() {
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      return OK({ id: got.id, name: got.wv.name || '', setting: got.wv.setting || '' });
+    },
+    async update_worldview_setting(args) {
+      if (typeof args.setting !== 'string') return ERR('缺少 setting');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      await _pushEditUndo({ type:'worldview_setting', worldviewId:got.id, label:`世界观基础设定：${got.wv.name || got.id}`, before:got.wv.setting || '' });
+      got.wv.setting = args.setting;
+      await _saveWorldview(got.wv);
+      return OK({ success:true, message:'世界观基础设定已修改；可用 undo_last_edit 回滚。' });
+    },
+    async read_worldview_entry(args) {
+      if (!args.name) return ERR('缺少 name');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      const hit = _findWritableEntry(got.wv, args.name, args.kind);
+      if (!hit) return ERR('未找到对应地区/势力/NPC');
+      return OK({ kind:hit.kind, where:hit.where || hit.region || '', name:hit.ref.name || '', aliases:hit.ref.aliases || '', summary:hit.ref.summary || '', detail:hit.ref.detail || '' });
+    },
+    async update_worldview_entry(args) {
+      if (!args.name) return ERR('缺少 name');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      const hit = _findWritableEntry(got.wv, args.name, args.kind);
+      if (!hit) return ERR('未找到对应地区/势力/NPC');
+      await _pushEditUndo({ type:'worldview_entry', worldviewId:got.id, label:`${hit.kind}:${hit.ref.name || args.name}`, path:hit.path, kind:hit.kind, before:_clone(hit.ref) });
+      if (typeof args.newName === 'string') hit.ref.name = args.newName;
+      if (hit.kind === 'npc' && typeof args.aliases === 'string') hit.ref.aliases = args.aliases;
+      if (typeof args.summary === 'string') hit.ref.summary = args.summary;
+      if (typeof args.detail === 'string') hit.ref.detail = args.detail;
+      await _saveWorldview(got.wv);
+      return OK({ success:true, message:`${hit.kind} 已修改；可用 undo_last_edit 回滚。` });
+    },
+    async add_worldview_entry(args) {
+      if (!args.kind || !args.name) return ERR('缺少 kind/name');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      const wv = got.wv;
+      const id = (args.kind === 'region' ? 'reg_' : args.kind === 'faction' ? 'fac_' : 'npc_') + (typeof Utils !== 'undefined' ? Utils.uuid().slice(0,8) : Date.now().toString(36));
+      if (args.kind === 'region') {
+        if (!Array.isArray(wv.regions)) wv.regions = [];
+        const entry = { id, name:args.name, summary:args.summary||'', detail:args.detail||'', factions:[] };
+        wv.regions.push(entry);
+        await _pushEditUndo({ type:'entry_add', worldviewId:got.id, label:`新增地区:${args.name}`, kind:'region', id });
+      } else if (args.kind === 'faction') {
+        if (!args.region) return ERR('新增势力必须指定 region（所属地区名）');
+        const reg = (wv.regions || []).find(r => String(r.name||'').trim().toLowerCase() === String(args.region).trim().toLowerCase());
+        if (!reg) return ERR(`找不到地区「${args.region}」`);
+        if (!Array.isArray(reg.factions)) reg.factions = [];
+        const entry = { id, name:args.name, summary:args.summary||'', detail:args.detail||'', npcs:[] };
+        reg.factions.push(entry);
+        await _pushEditUndo({ type:'entry_add', worldviewId:got.id, label:`新增势力:${args.name}`, kind:'faction', id, region:args.region });
+      } else if (args.kind === 'npc') {
+        const entry = { id, name:args.name, aliases:args.aliases||'', summary:args.summary||'', detail:args.detail||'' };
+        if (!args.region && !args.faction) {
+          // 全图常驻NPC
+          if (!Array.isArray(wv.globalNpcs)) wv.globalNpcs = [];
+          wv.globalNpcs.push(entry);
+          await _pushEditUndo({ type:'entry_add', worldviewId:got.id, label:`新增全图NPC:${args.name}`, kind:'npc', id, global:true });
+        } else {
+          // 归属地区/势力的 NPC
+          if (!args.region || !args.faction) return ERR('新增势力下NPC时必须同时指定 region + faction');
+          const reg = (wv.regions || []).find(r => String(r.name||'').trim().toLowerCase() === String(args.region).trim().toLowerCase());
+          if (!reg) return ERR(`找不到地区「${args.region}」`);
+          const fac = (reg.factions || []).find(f => String(f.name||'').trim().toLowerCase() === String(args.faction).trim().toLowerCase());
+          if (!fac) return ERR(`找不到势力「${args.faction}」`);
+          if (!Array.isArray(fac.npcs)) fac.npcs = [];
+          fac.npcs.push(entry);
+          await _pushEditUndo({ type:'entry_add', worldviewId:got.id, label:`新增NPC:${args.name}`, kind:'npc', id, region:args.region, faction:args.faction });
+        }
+      } else return ERR('kind 必须是 region/faction/npc');
+      await _saveWorldview(wv);
+      return OK({ success:true, id, message:`${args.kind} 已新增；可用 undo_last_edit 回滚。` });
+    },
+    async list_extension_entries(args) {
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      return OK({ worldview:got.wv.name || got.id, items:_listExtensions(got.wv, args.kind) });
+    },
+    async add_extension_entry(args) {
+      if (!args.kind || !args.name || !args.content) return ERR('缺少 kind/name/content');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      const id = (args.kind === 'festival' ? 'fest_' : 'know_') + Utils.uuid().slice(0,8);
+      let item;
+      if (args.kind === 'festival') {
+        if (!Array.isArray(got.wv.festivals)) got.wv.festivals = [];
+        item = { id, name:args.name, date:args.date || '', yearly:args.yearly !== false, content:args.content, enabled:args.enabled !== false };
+        got.wv.festivals.push(item);
+      } else {
+        if (!Array.isArray(got.wv.knowledges)) got.wv.knowledges = [];
+        item = { id, name:args.name, content:args.content, enabled:args.enabled !== false, keywordTrigger:args.kind === 'dynamic', keys:args.keys || '', position:'system_top', depth:0 };
+        got.wv.knowledges.push(item);
+      }
+      await _pushEditUndo({ type:'extension_add', worldviewId:got.id, label:`新增扩展:${args.name}`, kind:args.kind, id });
+      await _saveWorldview(got.wv);
+      return OK({ success:true, id, message:'扩展设定已新增；可用 undo_last_edit 回滚。' });
+    },
+    async update_extension_entry(args) {
+      const key = args.id || args.name;
+      if (!key) return ERR('缺少 id 或 name');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      const hit = _findExtension(got.wv, args.kind, key);
+      if (!hit) return ERR('未找到扩展设定条目');
+      await _pushEditUndo({ type:'extension_update', worldviewId:got.id, label:`扩展:${hit.item.name || key}`, kind:hit.kind, id:hit.item.id || '', before:_clone(hit.item) });
+      if (typeof args.newName === 'string') hit.item.name = args.newName;
+      if (typeof args.content === 'string') hit.item.content = args.content;
+      if (typeof args.enabled === 'boolean') hit.item.enabled = args.enabled;
+      if (hit.kind === 'festival') {
+        if (typeof args.date === 'string') hit.item.date = args.date;
+        if (typeof args.yearly === 'boolean') hit.item.yearly = args.yearly;
+      } else if (typeof args.keys === 'string') hit.item.keys = args.keys;
+      await _saveWorldview(got.wv);
+      return OK({ success:true, message:'扩展设定已修改；可用 undo_last_edit 回滚。' });
+    },
+    async delete_extension_entry(args) {
+      const key = args.id || args.name;
+      if (!key) return ERR('缺少 id 或 name');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      const hit = _findExtension(got.wv, args.kind, key);
+      if (!hit) return ERR('未找到扩展设定条目');
+      const before = _clone(hit.item);
+      hit.list.splice(hit.idx, 1);
+      await _pushEditUndo({ type:'extension_delete', worldviewId:got.id, label:`删除扩展:${before.name || key}`, kind:hit.kind, before });
+      await _saveWorldview(got.wv);
+      return OK({ success:true, message:'扩展设定已删除；可用 undo_last_edit 回滚。' });
+    },
+    async list_cards() {
+      const cards = await _listEditableCards();
+      if (cards.length === 0) return OK({ result:'当前对话没有可编辑的单人卡（主角卡或常驻挂载角色）。' });
+      return OK({ items: cards.map(c => ({ id:c.id, source:c.source, name:c.card.name||'', aliases:c.card.aliases||'', summary:(c.card.detail||'').slice(0,60) })) });
+    },
+    async read_card(args) {
+      const got = await _getCurrentCard(args && (args.card || args.name));
+      if (!got) {
+        const cards = await _listEditableCards();
+        if (cards.length > 1) return ERR('当前对话有多张可编辑卡，请用 card 参数指定（名称或 id）。可先用 list_cards 查看。');
+        return ERR('当前对话没有可编辑的单人卡');
+      }
+      const c = got.card;
+      return OK({ id:got.id, name:c.name||'', aliases:c.aliases||'', detail:c.detail||'', firstMes:c.firstMes||'', mesExample:c.mesExample||'' });
+    },
+    async update_card(args) {
+      const got = await _getCurrentCard(args && (args.card || args.name_locate));
+      if (!got) {
+        const cards = await _listEditableCards();
+        if (cards.length > 1) return ERR('当前对话有多张可编辑卡，请用 card 参数指定要改哪张（名称或 id）。可先用 list_cards 查看。');
+        return ERR('当前对话没有可编辑的单人卡');
+      }
+      const fields = ['name','aliases','detail','firstMes','mesExample'];
+      if (!fields.some(k => typeof args[k] === 'string')) return ERR('没有可修改字段');
+      await _pushEditUndo({ type:'card_update', cardId:got.id, label:`单人卡:${got.card.name || got.id}`, before:_clone(got.card) });
+      fields.forEach(k => { if (typeof args[k] === 'string') got.card[k] = args[k]; });
+      if (typeof SingleCard !== 'undefined' && SingleCard.save) await SingleCard.save(got.card); else await DB.put('singleCards', got.card);
+      return OK({ success:true, id:got.id, message:`单人卡「${got.card.name||got.id}」已修改；可用 undo_last_edit 回滚。` });
+    },
+    async undo_last_edit() {
+      const conv = _currentConv();
+      if (!conv || !Array.isArray(conv._editUndoStack) || conv._editUndoStack.length === 0) return ERR('没有可回滚的 AI 编辑记录');
+      const u = conv._editUndoStack.pop();
+      if (u.type === 'worldview_setting') {
+        const wv = await DB.get('worldviews', u.worldviewId); if (!wv) return ERR('找不到要回滚的世界观');
+        wv.setting = u.before || ''; await _saveWorldview(wv);
+      } else if (u.type === 'worldview_entry') {
+        const wv = await DB.get('worldviews', u.worldviewId); if (!wv) return ERR('找不到要回滚的世界观');
+        let ref = null, p = u.path || {};
+        if (u.kind === 'region') ref = wv.regions?.[p.ri];
+        else if (u.kind === 'faction') ref = wv.regions?.[p.ri]?.factions?.[p.fi];
+        else if (u.kind === 'npc') ref = p.global ? wv.globalNpcs?.[p.ni] : wv.regions?.[p.ri]?.factions?.[p.fi]?.npcs?.[p.ni];
+        if (!ref) return ERR('找不到要回滚的条目');
+        Object.keys(ref).forEach(k => delete ref[k]); Object.assign(ref, _clone(u.before));
+        await _saveWorldview(wv);
+      } else if (u.type === 'entry_add') {
+        const wv = await DB.get('worldviews', u.worldviewId); if (!wv) return ERR('找不到要回滚的世界观');
+        if (u.kind === 'region') { wv.regions = (wv.regions||[]).filter(r => r.id !== u.id); }
+        else if (u.kind === 'faction') {
+          for (const r of (wv.regions||[])) { r.factions = (r.factions||[]).filter(f => f.id !== u.id); }
+        } else if (u.kind === 'npc') {
+          if (u.global) { wv.globalNpcs = (wv.globalNpcs||[]).filter(n => n.id !== u.id); }
+          else { for (const r of (wv.regions||[])) for (const f of (r.factions||[])) { f.npcs = (f.npcs||[]).filter(n => n.id !== u.id); } }
+        }
+        await _saveWorldview(wv);
+      } else if (u.type === 'extension_add') {
+        const wv = await DB.get('worldviews', u.worldviewId); if (!wv) return ERR('找不到要回滚的世界观');
+        const hit = _findExtension(wv, u.kind, u.id); if (hit) hit.list.splice(hit.idx, 1);
+        await _saveWorldview(wv);
+      } else if (u.type === 'extension_update') {
+        const wv = await DB.get('worldviews', u.worldviewId); if (!wv) return ERR('找不到要回滚的世界观');
+        const hit = _findExtension(wv, u.kind, u.id || u.before?.name); if (!hit) return ERR('找不到要回滚的扩展设定');
+        Object.keys(hit.item).forEach(k => delete hit.item[k]); Object.assign(hit.item, _clone(u.before));
+        await _saveWorldview(wv);
+      } else if (u.type === 'extension_delete') {
+        const wv = await DB.get('worldviews', u.worldviewId); if (!wv) return ERR('找不到要回滚的世界观');
+        if (u.kind === 'festival') { if (!Array.isArray(wv.festivals)) wv.festivals = []; wv.festivals.push(_clone(u.before)); }
+        else { if (!Array.isArray(wv.knowledges)) wv.knowledges = []; wv.knowledges.push(_clone(u.before)); }
+        await _saveWorldview(wv);
+      } else if (u.type === 'card_update') {
+        const before = _clone(u.before); if (!before) return ERR('缺少单人卡快照');
+        if (typeof SingleCard !== 'undefined' && SingleCard.save) await SingleCard.save(before); else await DB.put('singleCards', before);
+      } else return ERR('未知回滚类型');
+      await _saveConvs();
+      return OK({ success:true, message:`已回滚：${u.label || u.type}` });
     },
 
     // --- 历史消息搜索（搜主线归档） ---

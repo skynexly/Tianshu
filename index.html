@@ -577,7 +577,7 @@
       </div>
       <form id="character-form">
         <label>姓名<input type="text" id="char-name" placeholder="角色名"></label>
-        <label>备注<input type="text" id="char-note" placeholder="可选备注，如"好结局线"""></label>
+        <label>备注<input type="text" id="char-note" placeholder="不发送给AI，用以区分同名面具"></label>
                   <label>所属世界观
                     <div style="position:relative">
                       <input type="hidden" id="char-worldview" value="">
@@ -1662,6 +1662,13 @@
             <span class="circle-check-text">世界观查询工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 按名查地区/势力/NPC，按词搜节日/常驻/动态条目（只读）</span></span>
             <span style="position:relative;display:inline-flex">
               <input type="checkbox" id="cs-tools-worldview" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <label class="circle-check-label">
+            <span class="circle-check-text">AI 编辑设定工具<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 修改当前世界观设定、地区/势力/NPC、扩展设定及单人卡，支持撤销回滚</span></span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-tools-edit" class="circle-check">
               <span class="circle-check-ui"></span>
             </span>
           </label>
@@ -4447,13 +4454,13 @@ if ('serviceWorker' in navigator) {
 </label>
 <span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 主动记录和查询你的偏好/情绪/习惯。后台记忆独立于主线，所有窗口互通。</span>
 <label class="circle-check-label" style="margin-top:16px">
-<span class="circle-check-text">跨窗口共享</span>
+<span class="circle-check-text">跨窗记忆</span>
 <span style="position:relative;display:inline-flex">
 <input type="checkbox" id="backstage-cross-window" class="circle-check">
 <span class="circle-check-ui"></span>
 </span>
 </label>
-<span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">默认关：纸条只在当前对话的后台可见。开启后混合所有对话的后台记忆，按来源标记给 AI。</span>
+<span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">所有后台窗口的小纸条共享。</span>
 <label class="circle-check-label" style="margin-top:16px">
 <span class="circle-check-text">剧情引导工具</span>
 <span style="position:relative;display:inline-flex">
@@ -4470,6 +4477,14 @@ if ('serviceWorker' in navigator) {
 </span>
 </label>
 <span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 按名查地区/NPC，按词搜节日/常驻/动态条目（只读）。</span>
+<label class="circle-check-label" style="margin-top:16px">
+<span class="circle-check-text">AI 编辑设定工具</span>
+<span style="position:relative;display:inline-flex">
+<input type="checkbox" id="backstage-tools-edit" class="circle-check">
+<span class="circle-check-ui"></span>
+</span>
+</label>
+<span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 修改当前世界观设定、地区/势力/NPC、扩展设定及单人卡，支持撤销回滚。</span>
 <label class="circle-check-label" style="margin-top:16px">
 <span class="circle-check-text">主线记忆查询工具</span>
 <span style="position:relative;display:inline-flex">

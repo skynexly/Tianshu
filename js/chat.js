@@ -1707,10 +1707,14 @@ const msgEl = appendMessage(aiMsg, true, true);
           if (typeof Tools !== 'undefined') {
             const allDefs = Tools.getDefinitions() || [];
             merged = allDefs.filter(d => {
-              const name = d.function?.name || '';
-              if (name.startsWith('query_worldview_')) return convSettings.toolsWorldview;
-              if (name === 'search_messages') return convSettings.toolsHistory;
-              return convSettings.toolsMemory;
+        const name = d.function?.name || '';
+        if (name.startsWith('query_worldview_')) return convSettings.toolsWorldview;
+        if (name === 'search_messages') return convSettings.toolsHistory;
+        // AI 编辑设定工具（read/update/add/delete/undo + list_extension + read_card）
+        if (['read_worldview_setting','update_worldview_setting','read_worldview_entry','update_worldview_entry','add_worldview_entry',
+             'list_extension_entries','add_extension_entry','update_extension_entry','delete_extension_entry',
+             'list_cards','read_card','update_card','undo_last_edit'].includes(name)) return convSettings.toolsEdit;
+        return convSettings.toolsMemory;
             });
           }
           // v687.23：追加 MCP 工具（不受对话级开关限制，由 server.enabled 控制）
@@ -4774,9 +4778,10 @@ if (!gp) return null;
       },
 bgImage: conv?.convBgImage || '',
         imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
-        toolsMemory: !!conv?.convToolsMemory,          // 默认关（记忆类工具）
-        toolsWorldview: !!conv?.convToolsWorldview,    // 默认关（世界观查询工具）
-        toolsHistory: !!conv?.convToolsHistory,        // 默认关（历史搜索工具）
+    toolsMemory: !!conv?.convToolsMemory,          // 默认关（记忆类工具）
+    toolsWorldview: !!conv?.convToolsWorldview,    // 默认关（世界观查询工具）
+    toolsEdit: !!conv?.convToolsEdit,              // 默认关（AI 编辑设定/单人卡，高风险）
+    toolsHistory: !!conv?.convToolsHistory,        // 默认关（历史搜索工具）
         autoExtract: conv?.convAutoExtract !== false,  // 默认开（自动记忆提取）
       replyWordCount: conv?.convReplyWordCount || 800,  // 默认800字
       directive: conv?.convDirective || '',              // 剧情引导内容
@@ -5215,7 +5220,9 @@ bgImage: conv?.convBgImage || '',
     if (toolsMemEl) toolsMemEl.checked = s.toolsMemory;
     const toolsWvEl = document.getElementById('cs-tools-worldview');
     if (toolsWvEl) toolsWvEl.checked = s.toolsWorldview;
-    const toolsHistEl = document.getElementById('cs-tools-history');
+  const toolsEditEl = document.getElementById('cs-tools-edit');
+  if (toolsEditEl) toolsEditEl.checked = s.toolsEdit;
+  const toolsHistEl = document.getElementById('cs-tools-history');
     if (toolsHistEl) toolsHistEl.checked = s.toolsHistory;
     // 自动记忆提取
     const aeEl = document.getElementById('cs-auto-extract');
@@ -5269,7 +5276,9 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     if (toolsMemSaveEl) conv.convToolsMemory = toolsMemSaveEl.checked;
     const toolsWvSaveEl = document.getElementById('cs-tools-worldview');
     if (toolsWvSaveEl) conv.convToolsWorldview = toolsWvSaveEl.checked;
-    const toolsHistSaveEl = document.getElementById('cs-tools-history');
+  const toolsEditSaveEl = document.getElementById('cs-tools-edit');
+  if (toolsEditSaveEl) conv.convToolsEdit = toolsEditSaveEl.checked;
+  const toolsHistSaveEl = document.getElementById('cs-tools-history');
     if (toolsHistSaveEl) conv.convToolsHistory = toolsHistSaveEl.checked;
     const aeSaveEl = document.getElementById('cs-auto-extract');
     if (aeSaveEl) conv.convAutoExtract = aeSaveEl.checked;
