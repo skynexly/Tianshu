@@ -2252,10 +2252,16 @@ function _collectEmotionsForEdit() {
     const display = document.getElementById('note-tag-display');
     const dropdown = document.getElementById('note-tag-dropdown');
     if (input) input.value = value;
-    if (display) {
-      display.innerHTML = '<span>' + value + '</span>' +
-        '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg>';
-    }
+    if (display) { const s = display.querySelector('span'); if (s) s.textContent = value; }
+    if (dropdown) dropdown.classList.add('hidden');
+  }
+
+  function _bsSelectTag(value) {
+    const input = document.getElementById('bs-edit-tag');
+    const label = document.getElementById('bs-tag-label');
+    const dropdown = document.getElementById('bs-tag-dropdown');
+    if (input) input.value = value;
+    if (label) label.textContent = value;
     if (dropdown) dropdown.classList.add('hidden');
   }
 
@@ -2531,6 +2537,8 @@ function _collectEmotionsForEdit() {
     _editingBsNoteId = id;
     _ensureBsEditModal();
     document.getElementById('bs-edit-tag').value = m.tag || '有趣';
+  const bsTagLabel = document.getElementById('bs-tag-label');
+  if (bsTagLabel) bsTagLabel.textContent = m.tag || '有趣';
   document.getElementById('bs-edit-detail').value = m.detail || '';
   document.getElementById('bs-edit-time').value = m.time || '';
   const bsPriSel = document.getElementById('bs-edit-priority');
@@ -2550,24 +2558,41 @@ function _collectEmotionsForEdit() {
 
   function _ensureBsEditModal() {
     if (document.getElementById('bs-edit-modal')) return;
-    const tagOptions = NOTE_TAGS.map(t => `<option value="${t}">${t}</option>`).join('');
+    const tagGroups = [
+      { title: '偏好', tags: ['喜欢', '讨厌', '习惯'] },
+      { title: '情绪', tags: ['开心', '感动', '安心', '期待', '骄傲', '悲伤', '愤怒', '恐惧', '痛苦', '迷茫', '不悦'] },
+      { title: '事件', tags: ['有趣', '伏笔', '秘密'] }
+    ];
+    let tagDropdownHtml = '';
+    for (const g of tagGroups) {
+      tagDropdownHtml += `<div style="padding:4px 10px 2px;font-size:10px;color:var(--text-secondary);font-weight:700;letter-spacing:0.5px">${g.title}</div>`;
+      tagDropdownHtml += `<div style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px">`;
+      for (const t of g.tags) {
+        tagDropdownHtml += `<div onclick="event.stopPropagation();Memory._bsSelectTag('${t}')" style="padding:4px 10px;cursor:pointer;font-size:13px;border-radius:20px;background:color-mix(in srgb, var(--accent) 10%, transparent);color:var(--text)">${t}</div>`;
+      }
+      tagDropdownHtml += `</div>`;
+    }
     const html = `
     <div id="bs-edit-modal" class="hidden" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)Memory.closeBsEdit()">
       <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto" onclick="event.stopPropagation()">
         <h3 style="margin:0 0 16px 0;font-size:16px;color:var(--text)">编辑后台记忆</h3>
 
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">标签</label>
-        <select id="bs-edit-tag" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px">${tagOptions}</select>
+        <input type="hidden" id="bs-edit-tag" value="" />
+        <div style="position:relative;margin-bottom:12px">
+          <div id="bs-tag-display" onclick="event.stopPropagation();document.getElementById('bs-tag-dropdown').classList.toggle('hidden')" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px;box-sizing:border-box;user-select:none"><span id="bs-tag-label">—</span><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div id="bs-tag-dropdown" class="hidden" style="position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10;overflow:hidden;padding:4px 0;max-height:240px;overflow-y:auto">${tagDropdownHtml}</div>
+        </div>
 
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">优先级</label>
-<select id="bs-edit-priority" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px">
-  <option value="normal">普通</option>
-  <option value="important">重要</option>
-  <option value="pinned">永久</option>
-</select>
+        <select id="bs-edit-priority" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px">
+          <option value="normal">普通</option>
+          <option value="important">重要</option>
+          <option value="pinned">永久</option>
+        </select>
 
-<label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">内容</label>
-<textarea id="bs-edit-detail" rows="4" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px;resize:vertical;box-sizing:border-box"></textarea>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">内容</label>
+        <textarea id="bs-edit-detail" rows="4" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px;resize:vertical;box-sizing:border-box"></textarea>
 
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">时间</label>
         <input id="bs-edit-time" type="text" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px;box-sizing:border-box">
@@ -2603,7 +2628,7 @@ function _collectEmotionsForEdit() {
 
     if (!detail) { UI.showToast('内容不能为空', 1500); return; }
 
-    m.tag = NOTE_TAGS.includes(tag) ? tag : m.tag;
+    m.tag = String(tag || m.tag || '有趣').trim() || m.tag;
     m.detail = detail;
     m.time = time;
     const newPriority = document.getElementById('bs-edit-priority')?.value;
