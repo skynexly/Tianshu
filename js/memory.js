@@ -2531,8 +2531,10 @@ function _collectEmotionsForEdit() {
     _editingBsNoteId = id;
     _ensureBsEditModal();
     document.getElementById('bs-edit-tag').value = m.tag || '有趣';
-    document.getElementById('bs-edit-detail').value = m.detail || '';
-    document.getElementById('bs-edit-time').value = m.time || '';
+  document.getElementById('bs-edit-detail').value = m.detail || '';
+  document.getElementById('bs-edit-time').value = m.time || '';
+  const bsPriSel = document.getElementById('bs-edit-priority');
+  if (bsPriSel) bsPriSel.value = m.priority || 'normal';
 
     // 来源选择器
     const conversations = (typeof Conversations !== 'undefined' ? Conversations.getList() : []) || [];
@@ -2557,8 +2559,15 @@ function _collectEmotionsForEdit() {
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">标签</label>
         <select id="bs-edit-tag" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px">${tagOptions}</select>
 
-        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">内容</label>
-        <textarea id="bs-edit-detail" rows="4" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px;resize:vertical;box-sizing:border-box"></textarea>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">优先级</label>
+<select id="bs-edit-priority" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px">
+  <option value="normal">普通</option>
+  <option value="important">重要</option>
+  <option value="pinned">永久</option>
+</select>
+
+<label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">内容</label>
+<textarea id="bs-edit-detail" rows="4" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px;resize:vertical;box-sizing:border-box"></textarea>
 
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">时间</label>
         <input id="bs-edit-time" type="text" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);margin-bottom:12px;font-size:14px;box-sizing:border-box">
@@ -2597,6 +2606,8 @@ function _collectEmotionsForEdit() {
     m.tag = NOTE_TAGS.includes(tag) ? tag : m.tag;
     m.detail = detail;
     m.time = time;
+    const newPriority = document.getElementById('bs-edit-priority')?.value;
+    if (NOTE_PRIORITIES.includes(newPriority)) m.priority = newPriority;
 
     // 更新来源
     if (newConvId !== (m.convId || '__legacy__')) {
