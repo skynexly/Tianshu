@@ -929,7 +929,14 @@ async function taskApply(tasksArr) {
 
       // 结算单条奖励
       const tmpl = _findTypeTemplate(config, ts.phaseIndex, existing.type);
-      if (tmpl) await _settleTaskReward(tmpl);
+      if (tmpl) {
+        await _settleTaskReward(tmpl);
+        // 自由奖励：记入 pendingFreeRewards，下一轮注入 AI
+        if (tmpl.rewardMode === 'free' && tmpl.rewardFree) {
+          if (!ts.pendingFreeRewards) ts.pendingFreeRewards = [];
+          ts.pendingFreeRewards.push({ task: existing.text, reward: tmpl.rewardFree });
+        }
+      }
     } else if (status === 'skipped' && existing.status === 'active') {
       existing.status = 'skipped';
       changed = true;
@@ -1163,8 +1170,19 @@ async function taskFormatForPrompt() {
     }
   }
 
-  // 自由奖励提示（如果有刚完成的任务带自由奖励）
-  // 这里不处理——自由奖励的 prompt 注入在 chat.js 里做
+  // 自由奖励提示：本轮有任务完成且带自由奖励，追加进 prompt 并清掉
+  const freeRewards = ts.pendingFreeRewards;
+  if (Array.isArray(freeRewards) && freeRewards.length > 0) {
+    lines.push('');
+    lines.push('【自由奖励待发放】以下任务已完成，请在本轮剧情中自然地给予玩家对应奖励（道具/情报/解锁内容等），奖励方向如下：');
+    for (const r of freeRewards) {
+      lines.push(`- 任务「${r.task}」完成奖励方向：${r.reward}`);
+    }
+    lines.push('请根据当前剧情情境决定具体奖励内容，自然融入叙事，不要生硬宣布。');
+    // 读完即清，避免重复注入
+    ts.pendingFreeRewards = [];
+    _saveTaskState();
+  }
 
   return lines.join('\n');
 }

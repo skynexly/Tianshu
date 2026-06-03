@@ -3061,7 +3061,10 @@ exitMultiSelect();
   // 把当前对话的 statusBar 整体回滚到那个快照（含 heartSim 任务/好感）；
   // 找不到则清空状态栏（说明回到了对话开头）。
   // v687.33：同时恢复 phoneSnapshot（手机数据）
-  async function _restoreStatusFromMessages() {
+  // skipPhone=true 时跳过手机数据恢复——用于"重写"场景：
+  //   重写只是对同一轮换个说法，用户本轮主动做的手机操作（拍照/发圈/刷论坛）
+  //   不应该被回退抹掉。只有真正的回溯/回滚才连手机数据一起退。
+  async function _restoreStatusFromMessages(skipPhone) {
     try {
       let snap = null;
       let phoneSnap = null;
@@ -3089,9 +3092,9 @@ exitMultiSelect();
           if (NPC.setPresentNPCs) NPC.setPresentNPCs(Array.isArray(restored?.npcs) ? restored.npcs.map(n => n.name).filter(Boolean) : []);
         }
       } catch(_) {}
-      // v687.33：手机数据恢复
+      // v687.33：手机数据恢复（skipPhone 时跳过，保护用户本轮手机操作）
       try {
-        if (typeof Phone !== 'undefined' && Phone.restoreFromSnapshot && phoneSnap) {
+        if (!skipPhone && typeof Phone !== 'undefined' && Phone.restoreFromSnapshot && phoneSnap) {
           await Phone.restoreFromSnapshot(phoneSnap);
         }
       } catch(e) { console.warn('[Chat] 回溯手机数据失败', e); }
@@ -3733,22 +3736,18 @@ renderAll();
 
     // ⚠ 关键修复：把状态栏回滚到再上一条 AI 的快照
     // 之前重写时没回滚，导致旧 AI 的好感/任务/积分 delta 残留在余额里
-    await _restoreStatusFromMessages();
+    // skipPhone=true：重写不回退手机数据，保护用户本轮拍的照/发的圈/刷的论坛
+    await _restoreStatusFromMessages(true);
 
-    renderAll();
-
-    // 找到它对应的用户消息（前一条）
+    // 找到对应的用户消息（前一条），删掉后由 send() 重新创建，避免渲染两次导致气泡重复
     const lastUserMsg = messages[messages.length - 1];
-    if (lastUserMsg && lastUserMsg.role === 'user') {
-      // 重新构建并发送（不增加roundCount，不添加新用户消息）
-      roundCount--; // send()会++，所以先--
-      // 把用户消息内容放回输入框然后发送
-      document.getElementById('chat-input').value = lastUserMsg.content;
-      // 删掉这条用户消息，因为send会重新创建
-      await DB.del('messages', lastUserMsg.id);
-      messages.pop();
-      await send();
-    }
+    if (!lastUserMsg || lastUserMsg.role !== 'user') return;
+    document.getElementById('chat-input').value = lastUserMsg.content;
+    roundCount--; // send() 会 ++，先 --
+    await DB.del('messages', lastUserMsg.id);
+    messages.pop();
+    renderAll();
+    await send();
   }
 
   // ===== 附件系统 =====
@@ -5440,12 +5439,16 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     return { text: '待触发', color: 'var(--text-secondary)' };
   }
 
+  let _evmTab = 'standalone';
+  let _evmEvents = [];
+
   async function openEventManagerModal() {
     const listEl = document.getElementById('event-manager-list');
     if (!listEl) return;
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     const wv = await _getCurrentWorldviewForEvents();
-    const events = (wv?.events || []).slice();
+    // 优先用对话级事件（与运行时注入逻辑一致：conv.convEvents || wv.events）
+    const events = ((conv?.convEvents && conv.convEvents.length) ? conv.convEvents : (wv?.events || [])).slice();
     try {
       const singleSettings = (typeof SingleMode !== 'undefined') ? SingleMode.getCurrentSingleSettings() : null;
 if (singleSettings && singleSettings.charType === 'card' && singleSettings.charId) {
@@ -5455,23 +5458,77 @@ if (hidden?.events?.length) events.push(...hidden.events);
     } catch(_) {}
     if (!conv) return;
     conv.eventStates = conv.eventStates || {};
-    if (events.length === 0) {
-      listEl.innerHTML = '<div style="font-size:13px;color:var(--text-secondary);padding:12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">当前世界观没有事件条目。</div>';
-    } else {
-      listEl.innerHTML = events.map(ev => {
-        const state = conv.eventStates[ev.id] || 'locked';
-        const label = _eventStateLabel(state);
-        const canReset = state === 'active' || state === 'done';
-        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
-          <div style="min-width:0;flex:1">
-            <div style="font-size:14px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(ev.name || '未命名事件')}</div>
-            <div style="font-size:11px;color:${label.color};margin-top:4px">${label.text}</div>
-          </div>
-          ${canReset ? `<button type="button" onclick="Chat.resetEventState('${ev.id}')" style="padding:6px 10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);font-size:12px;cursor:pointer;white-space:nowrap">重置</button>` : ''}
+    _evmEvents = events;
+    _evmTab = 'standalone';
+    switchEventManagerTab('standalone');
+    document.getElementById('event-manager-modal')?.classList.remove('hidden');
+  }
+
+  function switchEventManagerTab(tab) {
+    _evmTab = tab === 'chain' ? 'chain' : 'standalone';
+    const sBtn = document.getElementById('evm-tab-standalone');
+    const cBtn = document.getElementById('evm-tab-chain');
+    if (sBtn) { sBtn.style.background = _evmTab === 'standalone' ? 'var(--accent)' : 'transparent'; sBtn.style.color = _evmTab === 'standalone' ? '#111' : 'var(--text-secondary)'; }
+    if (cBtn) { cBtn.style.background = _evmTab === 'chain' ? 'var(--accent)' : 'transparent'; cBtn.style.color = _evmTab === 'chain' ? '#111' : 'var(--text-secondary)'; }
+    _renderEventManager();
+  }
+
+  function _eventManagerCardHtml(ev, conv) {
+    const state = conv.eventStates[ev.id] || 'locked';
+    const label = _eventStateLabel(state);
+    const canReset = state === 'active' || state === 'done';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
+      <div style="min-width:0;flex:1">
+        <div style="font-size:14px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(ev.name || '未命名事件')}</div>
+        <div style="font-size:11px;color:${label.color};margin-top:4px">${label.text}</div>
+      </div>
+      ${canReset ? `<button type="button" onclick="Chat.resetEventState('${ev.id}')" style="padding:6px 10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);font-size:12px;cursor:pointer;white-space:nowrap">重置</button>` : ''}
+    </div>`;
+  }
+
+  function _renderEventManager() {
+    const listEl = document.getElementById('event-manager-list');
+    if (!listEl) return;
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (!conv) return;
+    conv.eventStates = conv.eventStates || {};
+    const events = _evmEvents || [];
+
+    if (_evmTab === 'chain') {
+      const chainEvents = events.filter(ev => ev && ev.chainId);
+      if (!chainEvents.length) {
+        listEl.innerHTML = '<div style="font-size:13px;color:var(--text-secondary);padding:12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">当前没有事件链。</div>';
+        return;
+      }
+      const groups = {};
+      chainEvents.forEach(ev => {
+        const id = ev.chainId;
+        if (!groups[id]) groups[id] = { name: ev.chainName || '未命名事件链', events: [] };
+        groups[id].events.push(ev);
+      });
+      listEl.innerHTML = Object.keys(groups).map(cid => {
+        const g = groups[cid];
+        g.events.sort((a, b) => Number(a.chainIndex || 0) - Number(b.chainIndex || 0));
+        const doneCount = g.events.filter(ev => (conv.eventStates[ev.id] || 'locked') === 'done').length;
+        const cards = g.events.map((ev, i) => {
+          const node = `<div style="display:flex;align-items:center;gap:6px;margin:6px 0 2px;font-size:11px;color:var(--text-secondary)">第 ${i + 1} 节</div>`;
+          return node + _eventManagerCardHtml(ev, conv);
+        }).join('');
+        return `<div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--bg-secondary)">
+          <div style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:2px">${Utils.escapeHtml(g.name)}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">进度 ${doneCount}/${g.events.length}</div>
+          ${cards}
         </div>`;
       }).join('');
+      return;
     }
-    document.getElementById('event-manager-modal')?.classList.remove('hidden');
+
+    const standalone = events.filter(ev => ev && !ev.chainId);
+    if (!standalone.length) {
+      listEl.innerHTML = '<div style="font-size:13px;color:var(--text-secondary);padding:12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">当前没有独立事件。</div>';
+      return;
+    }
+    listEl.innerHTML = standalone.map(ev => _eventManagerCardHtml(ev, conv)).join('');
   }
 
   function closeEventManagerModal() {
@@ -6066,7 +6123,7 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     openConvSettingsModal, saveConvSettings, closeConvSettingsModal, _switchCsTab,
     openDirectiveModal, closeDirectiveModal, saveDirective, clearDirective, _getConvSettings,
     isRetryDisabled,
-    openEventManagerModal, closeEventManagerModal, resetEventState,
+    openEventManagerModal, closeEventManagerModal, resetEventState, switchEventManagerTab,
 openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
     unbindConvLorebook, addConvLorebooks, applyLorebooksToWorldview,
     resetConvGameplay,

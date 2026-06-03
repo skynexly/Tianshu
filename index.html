@@ -1169,7 +1169,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                 从主模型预设填充
               </button>
-              <div id="fill-dropdown-draw" class="custom-dropdown hidden" style="left:0;right:auto;width:100%;max-height:200px;overflow-y:auto;margin-top:4px"></div>
+              <div id="func-draw-fill-dropdown" class="custom-dropdown hidden" style="left:0;right:auto;width:100%;max-height:200px;overflow-y:auto;margin-top:4px"></div>
             </div>
             <div class="form-group"><span class="form-label">API 地址</span><input type="text" id="func-draw-url" placeholder="如 https://api.siliconflow.cn/v1"></div>
             <div class="form-group"><span class="form-label">API Key</span>
@@ -1211,7 +1211,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                 从主模型预设填充
               </button>
-              <div id="fill-dropdown-suggest" class="custom-dropdown hidden" style="left:0;right:auto;width:100%;max-height:200px;overflow-y:auto;margin-top:4px"></div>
+              <div id="func-suggest-fill-dropdown" class="custom-dropdown hidden" style="left:0;right:auto;width:100%;max-height:200px;overflow-y:auto;margin-top:4px"></div>
             </div>
             <div class="form-group"><span class="form-label">API 地址</span><input type="text" id="func-suggest-url" placeholder="如 https://api.openai.com/v1"></div>
             <div class="form-group"><span class="form-label">API Key</span>
@@ -1795,6 +1795,10 @@
           <button onclick="Chat.closeEventManagerModal()" class="btn-icon modal-corner-btn close-btn" title="关闭">×</button>
         </div>
         <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px">仅管理当前对话的事件状态，不影响世界观模板或其他对话。</p>
+        <div style="display:flex;gap:8px;margin-bottom:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:4px;flex-shrink:0">
+          <button id="evm-tab-standalone" onclick="Chat.switchEventManagerTab('standalone')" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent);color:#111;font-size:12px;font-weight:600;cursor:pointer">独立事件</button>
+          <button id="evm-tab-chain" onclick="Chat.switchEventManagerTab('chain')" style="flex:1;padding:8px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:12px;font-weight:600;cursor:pointer">事件链</button>
+        </div>
         <div id="event-manager-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
         <div class="modal-actions" style="flex-shrink:0;margin-top:16px;padding-top:12px">
           <button onclick="Chat.closeEventManagerModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">关闭</button>
@@ -3035,10 +3039,14 @@ NPC
   <!-- 事件设定 -->
   <div class="wv-ext-subtab-content hidden" data-subtab="event">
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">关键词触发后持续注入，直到 AI 回复中出现结束关键词后自动关闭，不再触发。</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:4px">
+      <button type="button" id="wv-event-tab-standalone" onclick="Worldview.switchEventTab('standalone')" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent);color:#111;font-size:12px;font-weight:600;cursor:pointer">独立事件</button>
+      <button type="button" id="wv-event-tab-chain" onclick="Worldview.switchEventTab('chain')" style="flex:1;padding:8px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:12px;font-weight:600;cursor:pointer">事件链</button>
+    </div>
     <div id="wv-events-container"></div>
 <div style="display:flex;gap:8px;margin-top:4px">
-<button type="button" onclick="Worldview.addEvent()" style="flex:1;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px">+ 添加事件</button>
-<button type="button" onclick="Worldview.aiGenerateEvents()" style="flex:1;padding:10px;background:none;border:2px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成事件</button>
+<button type="button" id="wv-event-ai-btn" onclick="Worldview.aiGenerateEvents()" style="flex:1;padding:10px;background:none;border:2px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成事件</button>
+<button type="button" id="wv-event-add-btn" onclick="Worldview.addEvent()" style="flex:1;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px">+ 添加事件</button>
 </div>
   </div>
 
@@ -4157,6 +4165,7 @@ document.addEventListener('click', (e) => {
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
 </button>
 </div>
+<div class="form-group hidden" id="wv-event-chain-row"><span class="form-label">事件链名称 <span style="font-size:11px;color:var(--text-secondary)">（改名会同步整条链）</span></span><input type="text" id="wv-event-chain-name" placeholder="如：深蓝教会覆灭录"></div>
 <div class="form-group"><span class="form-label">事件名称</span><input type="text" id="wv-event-modal-name" placeholder="如：深蓝教会袭击"></div>
 <div class="form-group"><span class="form-label">触发方式</span><select id="wv-event-modal-trigger-type" onchange="Worldview.syncEventTriggerTypeUI()" style="width:100%;box-sizing:border-box"><option value="keyword">关键词触发</option><option value="attr">数值触发</option></select></div>
 <div class="form-group" id="wv-event-keyword-row"><span class="form-label">触发关键词 <span style="font-size:11px;color:var(--text-secondary)">（多个用逗号或空格分隔）</span></span><input type="text" id="wv-event-modal-keys" placeholder="如：深蓝教会, 深蓝, 阿司霍尔"></div>

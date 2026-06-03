@@ -912,6 +912,7 @@ function _uiIcon(type, size = 16) {
  camera: `<svg ${common}><rect x="4" y="7" width="16" height="12" rx="3"></rect><circle cx="12" cy="13" r="3"></circle><path d="M9 7l1.5-2h3L15 7"></path></svg>`,
  heart: `<svg ${common}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 6.67l-1.06-2.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78Z"></path></svg>`,
  comment: `<svg ${common}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"></path></svg>`,
+ download: `<svg ${common}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>`,
  settings: `<svg ${common}><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path></svg>`
  };
  return icons[type] || '';
@@ -1971,6 +1972,7 @@ ${wvPrompt}` },
           </div>
           <div class="phone-moment-actions">
   <button type="button" onclick="Phone._editMyMoment(${i})" class="phone-moment-action-btn" title="编辑">${_uiIcon('pen', 13)}</button>
+  ${m.image ? `<button type="button" onclick="Phone._saveMomentImageToAlbum('my', ${i})" class="phone-moment-action-btn" title="存入相册">${_uiIcon('download', 13)}</button>` : ''}
   <button type="button" onclick="Phone._collectMyMoment(${i})" class="phone-moment-action-btn" title="收藏">${_uiIcon('star', 13)}</button>
   <button type="button" onclick="Phone._shareMoment(${i})" class="phone-moment-action-btn" title="分享">${_uiIcon('share', 13)}</button>
   <button type="button" onclick="Phone._deleteMyMoment(${i})" class="phone-moment-action-btn danger" title="删除">${_uiIcon('trash', 13)}</button>
@@ -1999,6 +2001,7 @@ ${wvPrompt}` },
             <button type="button" onclick="Phone._likeNpcMoment(${i})" class="phone-moment-action-btn ${m.likedByUser ? 'active-collect' : ''}" title="${m.likedByUser ? '已赞' : '点赞'}">${_uiIcon('heart', 13)}${m.userLikeCount ? `<span class="phone-moment-action-count">${m.userLikeCount}</span>` : ''}</button>
             <button type="button" onclick="Phone._commentNpcMoment(${i})" class="phone-moment-action-btn" title="评论">${_uiIcon('comment', 13)}</button>
             <button type="button" onclick="Phone._editNpcMoment(${i})" class="phone-moment-action-btn" title="编辑">${_uiIcon('pen', 13)}</button>
+            ${m.image ? `<button type="button" onclick="Phone._saveMomentImageToAlbum('npc', ${i})" class="phone-moment-action-btn" title="存入相册">${_uiIcon('download', 13)}</button>` : ''}
             <button type="button" onclick="Phone._collectNpcMoment(${i})" class="phone-moment-action-btn" title="收藏">${_uiIcon('star', 13)}</button>
             <button type="button" onclick="Phone._shareNpcMoment(${i})" class="phone-moment-action-btn" title="分享">${_uiIcon('share', 13)}</button>
             <button type="button" onclick="Phone._deleteNpcMoment(${i})" class="phone-moment-action-btn danger" title="删除">${_uiIcon('trash', 13)}</button>
@@ -2150,7 +2153,11 @@ ${wvPrompt}` },
     const m = pd?.npcMoments?.[index];
     if (!m) return;
     const text = `【${m.npc}】${m.text}${(m.comments && m.comments.length) ? '\n\n评论：\n' + m.comments.map(c => `${c.name}：${c.text}`).join('\n') : ''}`;
-    await _addPhoneCollection('moments', `${m.npc}的动态`, text, { comments: m.comments || [] });
+    // 带上配图（dataURL）和配图描述，收藏库可显示图片
+    const extras = { comments: m.comments || [] };
+    if (m.image) extras.image = m.image;
+    if (m.imageDesc) extras.imageDesc = m.imageDesc;
+    await _addPhoneCollection('moments', `${m.npc}的动态`, text, extras);
   }
 
   async function _collectMyMoment(index) {
@@ -2159,7 +2166,48 @@ ${wvPrompt}` },
     if (!m) return;
     let text = m.text || '';
     if (m.imageDesc) text += `\n[配图描述：${m.imageDesc}]`;
-    await _addPhoneCollection('moments', '我的动态：' + (m.text || '').substring(0, 20), text, { comments: m.comments || [] });
+    // 带上配图（dataURL）和配图描述，收藏库可显示图片
+    const extras = { comments: m.comments || [] };
+    if (m.image) extras.image = m.image;
+    if (m.imageDesc) extras.imageDesc = m.imageDesc;
+    await _addPhoneCollection('moments', '我的动态：' + (m.text || '').substring(0, 20), text, extras);
+  }
+
+  // 把好友圈动态的配图存进手机相册（drawnImages 表 + album 条目）
+  // type: 'my' 我的动态 | 'npc' 好友动态
+  async function _saveMomentImageToAlbum(type, index) {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const m = type === 'npc' ? pd?.npcMoments?.[index] : pd?.moments?.[index];
+    if (!m) return;
+    if (!m.image) { UI.showToast('这条动态没有配图', 1500); return; }
+    try {
+      // 存进图库表
+      const imageId = 'img_' + Utils.uuid();
+      await DB.put('drawnImages', {
+        id: imageId,
+        dataUrl: m.image,
+        prompt: m.imageDesc || '好友圈配图',
+        createdAt: new Date().toISOString()
+      });
+      // 存进相册（mode='ai_image'，和相机生图同结构）
+      if (!Array.isArray(pd.album)) pd.album = [];
+      const who = type === 'npc' ? (m.npc || '好友') : '我';
+      pd.album.push({
+        id: 'photo_' + Utils.uuid().slice(0, 8),
+        mode: 'ai_image',
+        text: m.imageDesc ? `${who}的动态配图：${m.imageDesc}` : `${who}的动态配图`,
+        imageId,
+        location: '',
+        time: m.time || '',
+        createdAt: new Date().toISOString()
+      });
+      await _savePhoneData();
+      _log(`把${who}的好友圈配图存进了相册`);
+      UI.showToast('已存入相册', 1500);
+    } catch(e) {
+      UI.showToast('存入相册失败：' + (e.message || '未知错误'), 2000);
+    }
   }
 
   async function _deleteMyMoment(index) {
@@ -6456,7 +6504,7 @@ async function buildHeartsimServiceChatForBackstage() {
 _openMomentVisibleModal, _closeMomentVisibleModal, _filterMomentVisibleOptions, _toggleMomentVisibleOption, _setMomentVisibleAll,
 _onMomentsConfigCountChange, _onMomentsConfigImgChange, _onMomentsConfigStorageChange,
 _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
-    _switchMomentsTab, _collectNpcMoment, _likeNpcMoment, _commentNpcMoment,
+    _switchMomentsTab, _collectNpcMoment, _likeNpcMoment, _commentNpcMoment, _saveMomentImageToAlbum,
     _mapSearch, _shareMapResult, _collectMapResult, _switchMapTab, _renderMapResultsHtml,
     _shareMapSearch, _shareAllMapSearches, _deleteMapSearch, _deleteLocationHistory,
     // 外卖/网购

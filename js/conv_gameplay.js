@@ -39,6 +39,7 @@ const ConvGameplay = (() => {
   // ========== 事件卡片列表 ==========
 
   let _eventsData = [];
+  let _eventTab = 'standalone'; // standalone | chain
 
   function _attrConditionSummary(ev) {
     const conds = Array.isArray(ev.attrConditions) ? ev.attrConditions : [];
@@ -49,32 +50,103 @@ const ConvGameplay = (() => {
     }).join('');
   }
 
+  function _eventCardHtml(ev, i, extraHtml = '') {
+    const triggerType = ev.triggerType || 'keyword';
+    const keys = (ev.keys || '').trim();
+    const keyTags = triggerType === 'attr' ? _attrConditionSummary(ev) : (keys
+      ? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${_esc(t)}</span>`).join('')
+      : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>');
+    const modeLabel = triggerType === 'attr' ? '数值触发' : '关键词触发';
+    const chainLabel = ev.chainId ? `<span style="font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 6px">链#${Number(ev.chainIndex || 0) + 1}</span>` : '';
+    const completeKey = ev.completeKey ? `<span style="font-size:11px;color:var(--text-secondary)">结束词：${_esc(ev.completeKey)}</span>` : '<span style="font-size:11px;color:var(--danger)">未设置结束词</span>';
+    return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onclick="ConvGameplay.editEvent(${i})">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
+        <span style="font-size:14px;font-weight:bold;color:var(--accent)">${_esc(ev.name || '未命名事件')}</span>
+        <span style="font-size:10px;color:var(--text-secondary);border:1px solid var(--border);border-radius:999px;padding:1px 6px">${modeLabel}</span>
+        ${chainLabel}
+      </div>
+      ${extraHtml}
+      <div style="margin-bottom:4px">${keyTags}</div>
+      <div style="margin-bottom:4px">${completeKey}</div>
+      ${ev.content ? `<div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(ev.content)}</div>` : ''}
+    </div>`;
+  }
+
   function _renderEventList() {
     const container = document.getElementById('cg-event-list');
     if (!container) return;
-    if (!_eventsData.length) {
-      container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;border:1px dashed var(--border);border-radius:8px">暂无事件，点击下方添加或使用 AI 生成</div>';
+
+    if (_eventTab === 'chain') {
+      const chainEvents = _eventsData.filter(e => e.chainId);
+      if (!chainEvents.length) {
+        container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;border:1px dashed var(--border);border-radius:8px">暂无事件链，点击上方「新建事件链」或「AI生成事件链」</div>';
+        return;
+      }
+      const groups = {};
+      chainEvents.forEach((ev) => {
+        const id = ev.chainId || '__none__';
+        if (!groups[id]) groups[id] = { name: ev.chainName || '未命名事件链', events: [] };
+        groups[id].events.push(ev);
+      });
+      container.innerHTML = Object.keys(groups).map(chainId => {
+        const g = groups[chainId];
+        g.events.sort((a, b) => Number(a.chainIndex || 0) - Number(b.chainIndex || 0));
+        const cards = g.events.map(ev => {
+          const idx = _eventsData.indexOf(ev);
+          const extra = `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">事件链：${_esc(g.name)} · 第 ${Number(ev.chainIndex || 0) + 1} 节</div>`;
+          return _eventCardHtml(ev, idx, extra);
+        }).join('');
+        return `<div style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:14px;background:var(--bg-secondary)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+            <div>
+              <div style="font-size:15px;font-weight:700;color:var(--accent)">${_esc(g.name)}</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${g.events.length} 个事件 · 通过上一事件结束词触发下一事件</div>
+            </div>
+            <button onclick="event.stopPropagation();ConvGameplay.openAiGenerate('appendChain','${_esc(chainId)}')" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap">续写</button>
+          </div>
+          ${cards}
+          <button onclick="ConvGameplay.addChainNode('${_esc(chainId)}')" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px dashed var(--border);background:none;color:var(--text-secondary);font-size:12px;cursor:pointer">+ 添加节点</button>
+        </div>`;
+      }).join('');
       return;
     }
-    container.innerHTML = _eventsData.map((ev, i) => {
-      const triggerType = ev.triggerType || 'keyword';
-      const keys = (ev.keys || '').trim();
-      const keyTags = triggerType === 'attr' ? _attrConditionSummary(ev) : (keys
-        ? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${_esc(t)}</span>`).join('')
-        : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>');
-      const modeLabel = triggerType === 'attr' ? '数值触发' : '关键词触发';
-      const completeKey = ev.completeKey ? `<span style="font-size:11px;color:var(--text-secondary)">结束词：${_esc(ev.completeKey)}</span>` : '<span style="font-size:11px;color:var(--danger)">未设置结束词</span>';
-      return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onclick="ConvGameplay.editEvent(${i})">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
-          <span style="font-size:14px;font-weight:bold;color:var(--accent)">${_esc(ev.name || '未命名事件')}</span>
-          <span style="font-size:10px;color:var(--text-secondary);border:1px solid var(--border);border-radius:999px;padding:1px 6px">${modeLabel}</span>
-        </div>
-        <div style="margin-bottom:4px">${keyTags}</div>
-        <div style="margin-bottom:4px">${completeKey}</div>
-        ${ev.content ? `<div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(ev.content)}</div>` : ''}
-      </div>`;
-    }).join('');
+
+    const standalone = _eventsData.map((ev, i) => ({ ev, i })).filter(x => !x.ev.chainId);
+    if (!standalone.length) {
+      container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;border:1px dashed var(--border);border-radius:8px">暂无独立事件，点击下方添加或使用 AI 生成</div>';
+      return;
+    }
+    container.innerHTML = standalone.map(({ ev, i }) => _eventCardHtml(ev, i)).join('');
+  }
+
+  function switchEventTab(tab) {
+    _eventTab = tab === 'chain' ? 'chain' : 'standalone';
+    const sBtn = document.getElementById('cg-event-tab-standalone');
+    const cBtn = document.getElementById('cg-event-tab-chain');
+    if (sBtn) {
+      sBtn.style.background = _eventTab === 'standalone' ? 'var(--accent)' : 'transparent';
+      sBtn.style.color = _eventTab === 'standalone' ? '#111' : 'var(--text-secondary)';
+    }
+    if (cBtn) {
+      cBtn.style.background = _eventTab === 'chain' ? 'var(--accent)' : 'transparent';
+      cBtn.style.color = _eventTab === 'chain' ? '#111' : 'var(--text-secondary)';
+    }
+    const aiBtn = document.getElementById('cg-event-ai-btn');
+    const addBtn = document.getElementById('cg-event-add-btn');
+    const _sparkSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>';
+    if (aiBtn) aiBtn.innerHTML = _sparkSvg + (_eventTab === 'chain' ? ' AI生成事件链' : ' AI生成');
+    if (addBtn) {
+      if (_eventTab === 'chain') {
+        addBtn.textContent = '+ 新建事件链';
+        addBtn.setAttribute('onclick', 'ConvGameplay.addEventChain()');
+      } else {
+        addBtn.textContent = '+ 添加';
+        addBtn.setAttribute('onclick', 'ConvGameplay.addEvent()');
+      }
+      addBtn.style.display = '';
+    }
+    _renderEventList();
   }
 
   // ========== 事件编辑弹窗 ==========
@@ -197,6 +269,11 @@ function _renderAttrConditions() {
     // v687.33：先显示弹窗，再赋值（某些浏览器 hidden 状态下 select 赋值不生效）
     document.getElementById('cg-event-modal').classList.remove('hidden');
     document.getElementById('cg-event-modal-title').textContent = ev.name ? '编辑事件' : '新建事件';
+    // 事件链名称行：仅在事件属于链时显示
+    const chainRow = document.getElementById('cg-event-chain-row');
+    const chainNameEl = document.getElementById('cg-event-chain-name');
+    if (chainRow) chainRow.classList.toggle('hidden', !ev.chainId);
+    if (chainNameEl) chainNameEl.value = ev.chainName || '';
     document.getElementById('cg-event-name').value = ev.name || '';
     document.getElementById('cg-event-keys').value = ev.keys || '';
     const typeEl = document.getElementById('cg-event-trigger-type');
@@ -223,10 +300,41 @@ function _renderAttrConditions() {
     editEvent(_eventsData.length - 1);
   }
 
+  // 新建事件链：创建一条空链 + 第一个事件，并打开编辑
+  function addEventChain() {
+    const chainId = 'chain_' + Utils.uuid().slice(0, 8);
+    const chainName = '新建事件链';
+    _eventsData.push({
+      id: 'evt_' + Utils.uuid().slice(0, 8),
+      name: '', keys: '', triggerType: 'keyword', attrConditions: [],
+      completeKey: '', finishRule: '', content: '', triggerMode: 'event',
+      chainId, chainName, chainIndex: 0
+    });
+    _eventTab = 'chain';
+    editEvent(_eventsData.length - 1);
+  }
+
+  // 在指定事件链尾部追加一个节点，自动把上一节点的结束词填入新节点关键词，保持链式衔接
+  function addChainNode(chainId) {
+    const chainEvents = _eventsData.filter(e => e.chainId === chainId).sort((a, b) => Number(a.chainIndex || 0) - Number(b.chainIndex || 0));
+    if (!chainEvents.length) return;
+    const last = chainEvents[chainEvents.length - 1];
+    const nextIndex = Number(last.chainIndex || 0) + 1;
+    _eventsData.push({
+      id: 'evt_' + Utils.uuid().slice(0, 8),
+      name: '', keys: last.completeKey || '', triggerType: 'keyword', attrConditions: [],
+      completeKey: '', finishRule: '', content: '', triggerMode: 'event',
+      chainId, chainName: last.chainName || '未命名事件链', chainIndex: nextIndex
+    });
+    editEvent(_eventsData.length - 1);
+  }
+
   async function saveEvent() {
     if (_editEventIdx === null) return;
     const prev = _eventsData[_editEventIdx] || {};
     const triggerType = document.getElementById('cg-event-trigger-type')?.value || 'keyword';
+    // 链名：若属于链，取输入框的值（改名同步整条链）
+    const newChainName = prev.chainId ? ((document.getElementById('cg-event-chain-name')?.value || '').trim() || prev.chainName || '未命名事件链') : (prev.chainName || '');
     _eventsData[_editEventIdx] = {
       id: prev.id || ('evt_' + Utils.uuid().slice(0, 8)),
       name: document.getElementById('cg-event-name').value.trim(),
@@ -236,8 +344,17 @@ function _renderAttrConditions() {
       completeKey: document.getElementById('cg-event-complete-key').value.trim(),
       finishRule: (document.getElementById('cg-event-finish-rule')?.value || '').trim(),
       content: document.getElementById('cg-event-content').value.trim(),
-      triggerMode: 'event'
+      triggerMode: 'event',
+      chainId: prev.chainId || '',
+      chainName: newChainName,
+      chainIndex: Number(prev.chainIndex || 0)
     };
+    // 同步链名到整条链的其它事件
+    if (prev.chainId) {
+      _eventsData.forEach(ev => {
+        if (ev && ev.chainId === prev.chainId) ev.chainName = newChainName;
+      });
+    }
     await _saveConvEvents(_eventsData);
     _renderEventList();
     closeEventModal();
@@ -261,20 +378,25 @@ function _renderAttrConditions() {
 
   let _aiAbort = null;
 
-  function openAiGenerate() {
+  function openAiGenerate(mode, chainId) {
+    const genMode = mode || (_eventTab === 'chain' ? 'newChain' : 'standalone');
     document.getElementById('cg-ai-gen-overlay')?.remove();
+    const title = genMode === 'appendChain' ? 'AI 续写事件链' : (genMode === 'newChain' ? 'AI 根据主线生成事件链' : 'AI 根据主线生成事件');
+    const placeholder = genMode === 'standalone' ? '例如：围绕刚才的争吵生成几个后续事件' : '例如：把当前调查线扩展成连续主线；围绕复仇目标设计一条事件链';
+    const countVal = genMode === 'standalone' ? 3 : 5;
     const html = `
-    <div id="cg-ai-gen-overlay" style="position:fixed;inset:0;z-index:210;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.remove()">
+    <div id="cg-ai-gen-overlay" data-mode="${_esc(genMode)}" data-chain-id="${_esc(chainId || '')}" style="position:fixed;inset:0;z-index:210;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.remove()">
       <div style="background:var(--bg);border-radius:16px;padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto" onclick="event.stopPropagation()">
-        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成事件</h3>
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> ${title}</h3>
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
-        <textarea id="cg-ai-gen-prompt" rows="3" placeholder="例如：生成几个日常生活事件和一个主线危机事件" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <textarea id="cg-ai-gen-prompt" rows="3" placeholder="${placeholder}" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
         <div style="display:flex;gap:12px;margin-top:12px">
           <div style="flex:1">
             <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成数量</label>
-            <input type="number" id="cg-ai-gen-count" value="5" min="1" max="20" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box">
+            <input type="number" id="cg-ai-gen-count" value="${countVal}" min="1" max="10" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box">
           </div>
         </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">${genMode === 'standalone' ? '生成独立事件，不会强制串联。' : (genMode === 'appendChain' ? '会从当前事件链最后一个事件继续向后写。' : '会自动用“上一事件结束词”触发下一事件。')}</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('cg-ai-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
           <button id="cg-ai-gen-btn" onclick="ConvGameplay.doAiGenerate()" style="padding:8px 14px;border:none;border-radius:8px;background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
@@ -286,10 +408,13 @@ function _renderAttrConditions() {
   }
 
   async function doAiGenerate() {
+    const overlay = document.getElementById('cg-ai-gen-overlay');
     const btn = document.getElementById('cg-ai-gen-btn');
     const status = document.getElementById('cg-ai-gen-status');
     const prompt = document.getElementById('cg-ai-gen-prompt')?.value?.trim() || '';
-    const count = Math.max(1, Math.min(20, parseInt(document.getElementById('cg-ai-gen-count')?.value) || 5));
+    const count = Math.max(1, Math.min(10, parseInt(document.getElementById('cg-ai-gen-count')?.value) || 3));
+    const genMode = overlay?.dataset?.mode || (_eventTab === 'chain' ? 'newChain' : 'standalone');
+    const appendChainId = overlay?.dataset?.chainId || '';
 
     if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
     if (status) { status.style.display = 'block'; status.textContent = `正在生成 ${count} 个事件…`; }
@@ -303,42 +428,71 @@ function _renderAttrConditions() {
       settingText = wv?.setting || '';
       regionNames = (wv?.regions || []).map(r => r.name).filter(Boolean);
     } catch(_) {}
+
+    // 获取玩家面具
+    let maskName = '玩家', maskDesc = '';
+    try {
+      const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+      if (mask) { maskName = mask.name || '玩家'; maskDesc = mask.description || mask.detail || ''; }
+    } catch(_) {}
+
+    // 获取主线最近10轮（20条）消息
+    let recentMessages = '（无对话记录）';
+    try {
+      const msgs = (typeof Chat !== 'undefined' && Chat.getMessages) ? (Chat.getMessages() || []) : [];
+      const recent = msgs.filter(m => m.role === 'user' || m.role === 'assistant').slice(-20);
+      if (recent.length > 0) {
+        recentMessages = recent.map(m => {
+          const role = m.role === 'user' ? maskName : 'AI';
+          const text = String(m.content || '').replace(/```[\s\S]*?```/g, '').slice(0, 700);
+          return `[${role}] ${text}`;
+        }).join('\n\n');
+      }
+    } catch(_) {}
+
     const existingEvents = _eventsData.map(e => e.name).filter(Boolean);
+    const existingChains = [...new Map(_eventsData.filter(e => e.chainId).map(e => [e.chainId, e.chainName || '未命名事件链'])).values()];
+    const appendEvents = appendChainId ? _eventsData.filter(e => e.chainId === appendChainId).sort((a, b) => Number(a.chainIndex || 0) - Number(b.chainIndex || 0)) : [];
+    const appendChainName = appendEvents[0]?.chainName || '';
+    const lastEvent = appendEvents[appendEvents.length - 1] || null;
 
-    const sysPrompt = `你是一个文字冒险游戏的事件设计师。请根据世界观设定，生成游戏内的剧情事件。
+    const commonFields = `字段格式要求：\n- keys 使用中文逗号或英文逗号分隔都可以，但不要换行。\n- completeKey 只能包含英文大写字母、数字、下划线，格式必须是 __EVENT_COMPLETE_XXXX__。\n- content 不要包含 completeKey。\n- content 不要对玩家或NPC发号施令，不要写“玩家必须……”“NPC会……”。只能写环境、局势、压力、线索和可能方向。\n- 不要输出 Markdown。\n- 不要输出注释。\n- 不要输出解释。`;
 
-每个事件需要包含：
-- name：事件名称（简短有力）
-- keys：触发关键词（2-4个，逗号分隔，是玩家在对话中可能提到的词）
-- completeKey：结束关键词（格式为 __EVENT_COMPLETE_事件名缩写__，AI回复中出现此词表示事件结束）
-- finishRule：事件结束条件（1-2句话描述什么情况下事件算结束）
-- content：事件内容（触发后每轮注入给AI的剧情指令，100-300字，写给AI看的指令，不是写给玩家看的）。content 只写事件背景、场景氛围、环境细节、剧情走向和可能的发展方向。**不要写任何角色的具体行为、动作、语气、情感反应**——角色有自己的人设，具体怎么行动由AI根据角色人设自行判断。content 的定位是"舞台布景"，不是"剧本台词"。
+    const standaloneSys = `你是一个文字冒险游戏的当前主线事件设计师。请根据当前主线剧情、世界观设定和玩家角色，为当前对话生成可触发的关键词剧情事件。\n\n这些事件属于“对话级独立事件”，只服务于当前这一次对话和当前主线，不要求在其他对话中复用。\n\n事件定位：\n- 事件必须是当前主线的自然延续，用来承接、放大或推进最近剧情。\n- 你需要从最近主线中提取未解决的矛盾、玩家刚做出的决定、被提到但未展开的人物/地点/组织/线索、角色关系变化、当前行动可能引发的后果。\n- 可以引入新的角色或势力，但必须能从当前主线推导出来，说明它们为什么会被当前事件牵动。\n- 不要生成与当前主线无关的随机支线。\n- 不要写成通用世界观事件；要贴合当前对话已经发生的剧情。\n\n每个事件需要包含：\n- name：事件名称，简短有力，贴合当前主线。\n- keys：触发关键词，2-4个，逗号分隔。关键词必须是玩家接下来在对话中自然可能提到的词。\n- completeKey：结束关键词，格式为 __EVENT_COMPLETE_事件名缩写__。\n- finishRule：事件结束条件，1-2句话，说明剧情推进到什么程度算事件结束。\n- content：事件内容，100-300字，写给运行时AI看的剧情指令，不是写给玩家看的文本。content 要写清楚：这个事件承接了当前主线中的什么问题、事件发生后的舞台/情境/压力、可能浮现的新线索或新角色/势力、后续可以往哪些方向发展。不要写任何角色的具体行为、动作、语气、情感反应。\n\n要求：\n- 只生成关键词触发事件，不生成数值触发事件。\n- 事件之间可以有关联，但不要强制串成链。\n- 不要和已有事件重复。\n${commonFields}\n\n输出纯 JSON 数组。`;
 
-要求：
-- 事件之间有剧情关联性，可以形成事件链
-- 触发关键词要自然，是玩家在探索中容易提到的词
-- content 只描述场景和情境，不预设任何角色的反应方式
-- 不要和已有事件重复
+    const chainSys = `你是一个文字冒险游戏的当前主线事件链设计师。请根据当前主线剧情、世界观设定和玩家角色，为当前对话生成一条连续剧情事件链。\n\n这些事件属于“对话级事件链”，只服务于当前这一次对话和当前主线。它应当像一段主线骨架，用事件 A → 事件 B → 事件 C 的方式推动当前剧情继续发展。\n\n事件链定位：\n- 事件链必须从当前主线自然延续出来。\n- 它应承接最近剧情中的未解决矛盾、玩家决定、当前目标、刚出现的线索、人物关系变化或潜在后果。\n- 可以引入新的角色或势力，但必须能从当前主线推导出来，并且解释它们为什么会被当前事件牵动。\n- 不要生成与当前主线无关的随机支线。\n\n链式规则：\n- 事件按数组顺序组成链。\n- 第一个事件由当前主线中的自然关键词触发。\n- 从第二个事件开始，每个事件的 keys 必须包含上一个事件的 completeKey。\n- 每个事件的 content 必须承接上一个事件完成后的局面。\n- 最后一个事件可以阶段性收束，也可以留下下一阶段钩子。\n\n每个事件需要包含：name、keys、completeKey、finishRule、content。\n${commonFields}\n\n输出纯 JSON 对象，格式：{"chainName":"事件链名称","events":[{"name":"事件名称","keys":"关键词1,关键词2","completeKey":"__EVENT_COMPLETE_XXXX__","finishRule":"结束条件","content":"事件内容"}]}`;
 
-输出纯JSON数组，不要其他内容。`;
+    const appendSys = `你是一个文字冒险游戏的当前主线事件链续写设计师。请根据已有对话级事件链的最后一个事件，以及当前主线最近剧情，继续向后生成新的链式事件。\n\n这些事件属于“对话级事件链”的追加内容，必须延续原链条和当前主线，而不是重新开一条新链。\n\n续写规则：\n- 你必须读取已有事件链，尤其是最后一个事件。\n- 你还必须参考当前主线最近对话，判断原链条推进到现在后，下一步最自然会发生什么。\n- 新生成的第一个事件，其 keys 必须包含“已有事件链最后一个事件的 completeKey”。\n- 后续新事件继续按链式规则衔接：每个事件的 keys 必须包含上一个新事件的 completeKey。\n- 新事件必须承接原链条已经推进到的局面，不能回到开头，不能另起炉灶。\n- 可以扩大矛盾、引入新角色或势力、揭露更深层原因、推进到下一阶段危机，但必须与原链条、当前主线和世界观设定有关。\n- 不要重复已有事件链中已经发生过的环节。\n\n每个事件需要包含：name、keys、completeKey、finishRule、content。\n${commonFields}\n\n输出纯 JSON 数组。`;
 
-    const userMsg = `${prompt ? '用户需求：' + prompt + '\n\n' : ''}请生成 ${count} 个事件。
+    const baseUser = `${prompt ? '## 用户额外需求\n' + prompt + '\n\n' : ''}## 世界观设定\n${settingText || '（未提供）'}\n\n${regionNames.length ? '## 地区\n' + regionNames.join('、') + '\n\n' : ''}## 玩家面具\n${maskName}${maskDesc ? '：' + maskDesc.slice(0, 500) : ''}\n\n## 当前主线最近对话（最近10轮）\n${recentMessages}\n\n${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents.join('、') + '\n\n' : ''}${existingChains.length ? '## 已有事件链（不要重复）\n' + existingChains.join('、') + '\n\n' : ''}`;
 
-## 世界观设定
-${settingText || '（未提供）'}
-
-${regionNames.length ? '## 地区\n' + regionNames.join('、') : ''}
-
-${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents.join('、') : ''}`;
+    let sysPrompt = standaloneSys;
+    let userMsg = `请生成 ${count} 个对话级独立事件。\n\n${baseUser}`;
+    if (genMode === 'newChain') {
+      sysPrompt = chainSys;
+      userMsg = `请生成一条对话级事件链，包含 ${count} 个事件。\n\n${baseUser}`;
+    } else if (genMode === 'appendChain') {
+      if (!appendEvents.length || !lastEvent) {
+        if (status) status.textContent = '未找到要续写的事件链';
+        if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+        return;
+      }
+      sysPrompt = appendSys;
+      userMsg = `请为以下对话级事件链继续追加 ${count} 个事件。\n\n${baseUser}## 原事件链名称\n${appendChainName}\n\n## 原事件链已有事件\n${appendEvents.map((e, i) => `${i + 1}. ${e.name}\nkeys: ${e.keys}\ncompleteKey: ${e.completeKey}\nfinishRule: ${e.finishRule}\ncontent: ${e.content}`).join('\n\n')}\n\n## 链尾事件 completeKey\n${lastEvent.completeKey}`;
+    }
 
     try {
       _aiAbort = new AbortController();
       const raw = await API.generate(sysPrompt, userMsg, { signal: _aiAbort.signal, maxTokens: 8000 });
       let cleaned = raw.trim();
       if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
-      const arr = JSON.parse(cleaned);
-      if (!Array.isArray(arr) || arr.length === 0) throw new Error('AI 返回的不是有效数组');
+      const parsed = JSON.parse(cleaned);
+      const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.events) ? parsed.events : []);
+      if (!Array.isArray(arr) || arr.length === 0) throw new Error('AI 返回的不是有效事件数组');
 
+      const chainId = genMode === 'newChain' ? ('chain_' + Utils.uuid().slice(0, 8)) : (genMode === 'appendChain' ? appendChainId : '');
+      const chainName = genMode === 'newChain' ? (parsed.chainName || arr[0]?.chainName || '未命名事件链') : (genMode === 'appendChain' ? appendChainName : '');
+      const startIndex = genMode === 'appendChain' ? appendEvents.length : 0;
       let added = 0;
       for (const item of arr) {
         if (!item.name) continue;
@@ -346,11 +500,13 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
           id: 'evt_' + Utils.uuid().slice(0, 8),
           name: item.name || '', keys: item.keys || '', triggerType: 'keyword',
           attrConditions: [], completeKey: item.completeKey || '',
-          finishRule: item.finishRule || '', content: item.content || '', triggerMode: 'event'
+          finishRule: item.finishRule || '', content: item.content || '', triggerMode: 'event',
+          chainId: chainId || '', chainName: chainName || '', chainIndex: chainId ? startIndex + added : 0
         });
         added++;
       }
       await _saveConvEvents(_eventsData);
+      if (genMode !== 'standalone') _eventTab = 'chain';
       _renderEventList();
       document.getElementById('cg-ai-gen-overlay')?.remove();
       UI.showToast(`已生成 ${added} 个事件`, 2000);
@@ -385,15 +541,19 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
           <div style="font-size:18px;font-weight:700;color:var(--text)">事件配置（对话级）</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">修改只影响当前对话，不影响世界观原件</div>
         </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:4px">
+          <button id="cg-event-tab-standalone" class="active" onclick="ConvGameplay.switchEventTab('standalone')" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent);color:#111;font-size:12px;font-weight:600;cursor:pointer">独立事件</button>
+          <button id="cg-event-tab-chain" onclick="ConvGameplay.switchEventTab('chain')" style="flex:1;padding:8px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:12px;font-weight:600;cursor:pointer">事件链</button>
+        </div>
         <div style="display:flex;gap:8px;margin-bottom:16px">
-          <button onclick="ConvGameplay.openAiGenerate()" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI生成</button>
-          <button onclick="ConvGameplay.addEvent()" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 添加</button>
+          <button id="cg-event-ai-btn" onclick="ConvGameplay.openAiGenerate()" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI生成</button>
+          <button id="cg-event-add-btn" onclick="ConvGameplay.addEvent()" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 添加</button>
         </div>
       </div>
       <div id="cg-event-list" style="flex:1;overflow-y:auto;padding:0 16px 16px"></div>
     `;
     document.body.appendChild(panel);
-    _renderEventList();
+    switchEventTab(_eventTab);
     _ensureEventModal();
   }
 
@@ -415,6 +575,7 @@ ${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
       </div>
+      <div class="form-group hidden" id="cg-event-chain-row"><span class="form-label">事件链名称 <span style="font-size:11px;color:var(--text-secondary)">（改名会同步整条链）</span></span><input type="text" id="cg-event-chain-name" placeholder="如：复仇线第一幕"></div>
       <div class="form-group"><span class="form-label">事件名称</span><input type="text" id="cg-event-name" placeholder="如：深蓝教会袭击"></div>
       <div class="form-group"><span class="form-label">触发方式</span><select id="cg-event-trigger-type" onchange="ConvGameplay._syncTriggerTypeUI()" style="width:100%;box-sizing:border-box"><option value="keyword">关键词触发</option><option value="attr">数值触发</option></select></div>
       <div class="form-group" id="cg-event-keyword-row"><span class="form-label">触发关键词 <span style="font-size:11px;color:var(--text-secondary)">（多个用逗号或空格分隔）</span></span><input type="text" id="cg-event-keys" placeholder="如：深蓝教会, 深蓝, 阿司霍尔"></div>
@@ -1359,6 +1520,7 @@ ${recentMessages}`;
   return {
     openEventEditor, closeEventEditor,
     editEvent, addEvent, saveEvent, deleteEvent, closeEventModal,
+    switchEventTab, addEventChain, addChainNode,
     _syncTriggerTypeUI: _syncTriggerTypeUI,
     addAttrCondition, updateAttrCondition, removeAttrCondition,
     openAiGenerate, doAiGenerate,
