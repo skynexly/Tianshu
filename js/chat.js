@@ -4799,7 +4799,8 @@ bgImage: conv?.convBgImage || '',
 
   // 骰点系统开关 v686
   async function _onDiceToggle(checkbox) {
-    const cfg = document.getElementById('cs-dice-config');
+  if (document.body.getAttribute('data-worldview') === '心动模拟') { checkbox.checked = false; UI.showToast('心动模拟世界观不支持骰子', 2000); return; }
+  const cfg = document.getElementById('cs-dice-config');
     if (!checkbox.checked) {
       if (cfg) cfg.style.display = 'none';
       return;

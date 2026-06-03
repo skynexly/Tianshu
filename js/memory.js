@@ -912,6 +912,9 @@ ${dialogue}
   // ===== UI - 列表 =====
 
   async function renderList() {
+  // 退出后台模式（无论从哪条路径进 renderList 都恢复 tab）
+  _backstageViewActive = false;
+  document.querySelectorAll('.memory-tabs .tab-btn').forEach(b => b.style.display = '');
     const all = await DB.getAll('memories');
     const currentId = Character.getCurrentId();
 
@@ -2480,7 +2483,7 @@ function _collectEmotionsForEdit() {
     </div>`;
 
     const header = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:8px 12px;background:color-mix(in srgb, var(--accent) 8%, transparent);border-radius:var(--radius)">
-      <span style="font-size:13px;font-weight:700;color:var(--accent)">🔒 后台记忆库（${notes.length}条）</span>
+      <span style="font-size:13px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> 后台记忆库（${notes.length}条）</span>
       <span style="display:flex;gap:10px;align-items:center">
         <span style="font-size:11px;color:var(--text-secondary);cursor:pointer" onclick="Memory.changeBackstagePwd()" title="修改进入后台需要输入的口令">改口令</span>
         <span style="font-size:11px;color:var(--text-secondary);cursor:pointer" onclick="Memory.search('')">退出</span>

@@ -79,10 +79,21 @@ function pushLog(action) {
   _persistActionLog();
 } // 供外部模块调用
 function flushActionLog() {
-  _flushChatRoundLog(); // 先把本轮聊天缓冲合并进 _actionLog
+  _flushChatRoundLog();
   const log = _actionLog.slice();
   _actionLog = [];
   _persistActionLog();
+  // 多笔购物时追加合计，帮 AI 直接扣款无需自己加总
+  const priceRe = /，¥([\d.]+)/g;
+  let total = 0, count = 0;
+  for (const entry of log) {
+    let m;
+    while ((m = priceRe.exec(entry)) !== null) {
+      const v = parseFloat(m[1]);
+      if (!isNaN(v)) { total += v; count++; }
+    }
+  }
+  if (count > 1) log.push(`本轮购物合计：¥${total % 1 === 0 ? total : total.toFixed(2)}；若存在货币/金钱类属性，请扣除此金额`);
   return log;
 }
 function peekActionLog() { return _actionLog.slice(); }
@@ -5739,7 +5750,7 @@ ${fullCtx}`;
     const priceStr = it.price ? `¥${it.price}` : '';
     const descStr = it.desc ? `（${_clipLogText(it.desc, 30)}）` : '';
     const forWho = target === '自己' ? '给自己' : `送给${target}`;
-    _log(`在${cfg.title}APP下单了：${it.name}${priceStr ? '，' + priceStr : ''}${descStr}，${forWho}（配送时间由你在剧情中自然安排）`);
+    _log(`在${cfg.title}APP下单了：${it.name}${priceStr ? '，' + priceStr : ''}${descStr}，${forWho}（配送时间由你在剧情中自然安排）${priceStr ? `；若当前存在货币/金钱类属性，请在本次回复中扣除 ${priceStr}` : ''}`);
 
     if (_isAppStillActive(kind)) _renderShopping(pd, kind);
     UI.showToast(`下单成功`, 1500);

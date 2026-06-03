@@ -520,7 +520,8 @@ function _renderAttrConditions() {
   // ========== 主面板入口 ==========
 
   async function openEventEditor() {
-    const conv = await _ensureConvEvents();
+  if (document.body.getAttribute('data-worldview') === '心动模拟') { UI.showToast('心动模拟世界观不支持自定义事件', 2000); return; }
+  const conv = await _ensureConvEvents();
     if (!conv) return;
     _eventsData = conv.convEvents || [];
 
@@ -901,6 +902,7 @@ function _renderAttrConditions() {
 
   // ----- 属性面板入口 -----
   async function openAttrEditor() {
+    if (document.body.getAttribute('data-worldview') === '心动模拟') { UI.showToast('心动模拟世界观不支持自定义属性', 2000); return; }
     try {
       const conv = await _ensureConvGameplay();
       if (!conv) return;
@@ -1403,6 +1405,7 @@ ${recentMessages}`;
 
   // ----- 任务面板入口 -----
   async function openTaskEditor() {
+    if (document.body.getAttribute('data-worldview') === '心动模拟') { UI.showToast('心动模拟世界观不支持自定义任务', 2000); return; }
     try {
       const conv = await _ensureConvGameplay();
       if (!conv) return;
