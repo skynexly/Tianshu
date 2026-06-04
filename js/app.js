@@ -20,6 +20,7 @@
         Chat.setWorldview(wvData.setting);
         console.log('[App] 直接从DB设置worldview, 长度:', wvData.setting.length);
       }
+      // 状态栏皮肤恢复统一在 Worldview.restoreCurrentWorldview() 里处理
     }
   } catch(e) { console.error('[App.worldview]', e); }
 
@@ -174,7 +175,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v688.18';
+    const APP_VERSION = 'v689';
       const CHANGELOG = `【v688.18 更新内容】
 · 新增：AI 编辑设定工具（对话设置/后台设置中开启）
   - AI 可读写世界观基础设定、地区/势力/NPC

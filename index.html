@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=49">
+<link rel="stylesheet" href="css/style.css?v=130">
 <link rel="stylesheet" href="css/phone.css?v=3">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
@@ -458,7 +458,6 @@
             </div>
             <div id="worldview-manage-bar" class="hidden"></div>
             <div id="worldview-list-container" style="display:flex;flex-direction:column;gap:12px;"></div>
-          </div>
         </div><!-- /world-tab-wv -->
 
         <!-- 角色管理 Tab 内容 -->
@@ -491,7 +490,6 @@
               </div>
             </div>
             <div id="single-card-list" style="display:flex;flex-direction:column;gap:12px;"></div>
-          </div>
         </div>
 
         <!-- 世界书管理 Tab 内容 -->
@@ -2452,6 +2450,10 @@
               <span>界面主题</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
             </div>
+            <div class="settings-card-item" onclick="UI.switchSettingsTab('st-statusbar');StatusBarTheme.renderList()">
+              <span>状态栏美化</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
           </div>
 
           <!-- 第五个卡片：关于 -->
@@ -2834,6 +2836,16 @@
 </div>
 
             </div>
+
+      <!-- Tab: 状态栏美化 -->
+      <div id="st-statusbar" class="settings-tab-content" style="display:none">
+        <h3 style="color:var(--accent);font-size:14px;margin-bottom:16px">状态栏美化</h3>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <button onclick="StatusBarTheme.openTemplatePicker()" style="flex:1;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">新建主题</button>
+          <button onclick="StatusBarTheme.importFromFile()" style="padding:10px 16px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;cursor:pointer">导入</button>
+        </div>
+        <div id="sb-theme-list-container" style="display:flex;flex-direction:column;gap:12px"></div>
+      </div>
       </div>
     </div>
   </section>
@@ -3430,6 +3442,7 @@ NPC
         </div>
         <div id="debug-log-entries" style="flex:1;overflow-y:auto;font-family:monospace;font-size:11px;line-height:1.6;background:var(--bg-tertiary);border-radius:6px;padding:8px;min-height:0"></div>
       </div>
+
     </div>
   </div>
 
@@ -3765,7 +3778,8 @@ const GameLog = (() => {
 <script src="js/memory.js"></script>
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
-<script src="js/worldview.js?v=3"></script>
+<script src="js/statusbar_theme.js?v=29"></script>
+<script src="js/worldview.js?v=13"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js"></script>
@@ -3778,7 +3792,7 @@ const GameLog = (() => {
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js"></script>
+<script src="js/chat.js?v=13"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -3788,9 +3802,9 @@ const GameLog = (() => {
 <script src="js/gaiden.js"></script>
 <script src="js/backstage.js"></script>
 <script src="js/dice.js"></script>
-<script src="js/status_bar.js"></script>
+<script src="js/status_bar.js?v=15"></script>
 <script src="js/worldvoice.js"></script>
-<script src="js/phone.js?v=12"></script>
+<script src="js/phone.js?v=32"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -3800,16 +3814,16 @@ const GameLog = (() => {
 <script src="js/data-mgr.js"></script>
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>
-<script src="data/tutorial-script.js"></script>
-<script src="js/theme.js"></script>
-<script src="js/tutorial.js"></script>
+  <script src="data/tutorial-script.js"></script>
+  <script src="js/theme.js"></script>
+  <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js"></script>
 <script src="data/builtin-heartsim.js"></script>
 <script src="js/tianshucheng-fx.js"></script>
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js"></script>
-<script src="js/app.js"></script>
+<script src="js/app.js?v=13"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
@@ -4590,7 +4604,164 @@ if ('serviceWorker' in navigator) {
     if (isInput(e.target)) return;
     e.preventDefault();
   }, true);
-})();
 </script>
+
+<!-- ========== 状态栏美化相关弹窗 ========== -->
+
+<!-- 模板选择器 -->
+<div id="sb-template-picker-modal" class="modal hidden" onclick="if(event.target===this) StatusBarTheme.closeTemplatePicker()">
+  <div class="modal-content" style="max-width:400px;width:85%">
+    <h3 style="margin:0 0 12px 0;color:var(--text);font-size:16px">选择基础模板</h3>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px">在模板基础上进行个性化调整</div>
+    
+    <div style="display:flex;flex-direction:column;gap:12px">
+<div onclick="StatusBarTheme.selectTemplate('terminal')" style="padding:14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;cursor:pointer">
+<div style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:4px">终端风格</div>
+<div style="font-size:12px;color:var(--text-secondary)">黑客风格，等宽字体，方块装饰</div>
+</div>
+      
+      <div onclick="StatusBarTheme.selectTemplate('neumorph')" style="padding:14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;cursor:pointer">
+        <div style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:4px">拟态风格</div>
+        <div style="font-size:12px;color:var(--text-secondary)">柔和阴影，圆角卡片，现代质感</div>
+      </div>
+      
+      <div onclick="StatusBarTheme.selectTemplate('single-default')" style="padding:14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;cursor:pointer">
+        <div style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:4px">无世界观</div>
+        <div style="font-size:12px;color:var(--text-secondary)">单人卡专用，简洁优雅</div>
+      </div>
+    </div>
+    
+    <button onclick="StatusBarTheme.closeTemplatePicker()" style="width:100%;margin-top:16px;padding:10px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;font-size:13px;cursor:pointer">取消</button>
+  </div>
+</div>
+
+<!-- 状态栏主题编辑器（完整聊天界面风格） -->
+<div id="sb-theme-editor-modal" class="modal hidden" style="background:var(--bg);padding:0;z-index:600">
+  <div style="position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg)">
+    
+    <!-- 顶栏（完全复制前台结构） -->
+    <header class="topbar topbar-with-status" style="position:sticky;top:0;z-index:50">
+      <div class="topbar-row-main">
+        <!-- 汉堡菜单（返回） -->
+        <button class="btn-icon" onclick="StatusBarTheme.closeEditor()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+        </button>
+        
+        <!-- 标题 -->
+        <div class="topbar-info">
+          <span id="sb-editor-title">编辑主题</span>
+        </div>
+        
+        <!-- 烤串菜单 -->
+        <div style="margin-left:auto;position:relative">
+          <button class="btn-icon" onclick="StatusBarTheme.toggleEditorMenu()" style="font-size:20px;padding:0 8px">⋮</button>
+          <div id="sb-editor-menu" class="hidden" style="position:absolute;top:100%;right:0;margin-top:8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px 0;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:100;min-width:170px;white-space:nowrap;display:flex;flex-direction:column">
+            <button onclick="StatusBarTheme.openCssEditor(); StatusBarTheme.toggleEditorMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+              编辑 CSS
+            </button>
+            <button onclick="StatusBarTheme.exportCurrentTheme(); StatusBarTheme.toggleEditorMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+              导出主题
+            </button>
+            <button onclick="StatusBarTheme.importFromFileInEditor(); StatusBarTheme.toggleEditorMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+              导入主题
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 顶栏第二行：状态摘要（折叠态） -->
+      <div class="topbar-row-status" id="sb-editor-topbar-status" onclick="StatusBarTheme.togglePreview(event)">
+        <div class="sb-datemeta">
+          <div class="sb-datemeta-left">
+            <span class="sb-clock-main">15:02</span>
+            <span class="sb-date-sub">2065年3月27日 星期五</span>
+          </div>
+          <div class="sb-datemeta-right">
+            <span class="sb-weather-line"><svg class="sb-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/><path d="M13 22H7a5 5 0 1 1 4.9-6H13z"/></svg><span>26°C 晴</span></span>
+          </div>
+        </div>
+        <div class="sb-region-line">
+          <span class="sb-place-text">天枢城中央商业区·咖啡厅</span>
+          <svg class="sb-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </div>
+    </header>
+    
+    <!-- 状态栏展开态：Shadow DOM 宿主（点击背景关闭） -->
+    <div id="sb-editor-expanded" class="hidden" style="position:fixed;inset:0;z-index:5" onclick="StatusBarTheme.togglePreview(event)"></div>
+    
+    <!-- 消息列表 -->
+    <div id="sb-editor-messages" class="chat-messages" style="flex:1;overflow-y:auto"></div>
+    
+    <!-- 底部输入区 -->
+    <div class="chat-input-area" style="flex-shrink:0">
+      <!-- 附件预览 -->
+      <div id="sb-editor-attachments" class="attachments-bar hidden"></div>
+      
+      <!-- 输入框 -->
+      <div style="width:100%;position:relative">
+        <textarea id="sb-editor-input" placeholder="描述你想要的状态栏风格..." rows="2" style="width:100%;box-sizing:border-box;padding-right:40px;padding-left:8px"></textarea>
+      </div>
+      
+      <!-- 底部一行：API+面具（左） / 加号+发送（右） -->
+      <div style="width:100%;display:flex;align-items:center;gap:8px;margin-top:8px">
+        <!-- API 预设（功能性） -->
+        <div style="position:relative">
+          <button class="btn-icon" onclick="StatusBarTheme.toggleApiPopup(event)" style="display:flex;align-items:center;justify-content:space-between;font-size:13px;padding:4px 12px;background:var(--bg-tertiary);border-radius:6px;border:1px solid var(--border);white-space:nowrap;width:105px;box-sizing:border-box">
+            <span id="sb-editor-api-name" style="overflow:hidden;text-overflow:ellipsis;flex:1;text-align:left">预设</span>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="flex-shrink:0;width:16px;height:16px;margin-left:4px"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+          </button>
+          <div id="sb-editor-api-popup" class="sb-popup-menu hidden" style="position:absolute;bottom:100%;left:0;margin-bottom:8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px 0;min-width:160px;max-height:40vh;overflow-y:auto;box-shadow:0 -4px 16px rgba(0,0,0,0.4);z-index:50"></div>
+        </div>
+        
+        <!-- 面具（固定显示"罗亚尔"） -->
+        <button class="btn-icon" style="display:flex;align-items:center;justify-content:space-between;font-size:13px;padding:4px 12px;background:var(--bg-tertiary);border-radius:6px;border:1px solid var(--border);white-space:nowrap;width:105px;box-sizing:border-box;cursor:default;opacity:0.8">
+          <span style="overflow:hidden;text-overflow:ellipsis;flex:1;text-align:left">罗亚尔</span>
+        </button>
+        
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <!-- 加号菜单 -->
+          <div style="position:relative">
+            <button class="btn-icon" onclick="StatusBarTheme.togglePlusMenu()" style="width:36px;height:36px;border-radius:50%;background:transparent;color:var(--accent);display:flex;align-items:center;justify-content:center;outline:none;border:none">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px"><path fill-rule="evenodd" d="M12 3.75a.75.75 0 0 1 .75.75v6.75h6.75a.75.75 0 0 1 0 1.5h-6.75v6.75a.75.75 0 0 1-1.5 0v-6.75H4.5a.75.75 0 0 1 0-1.5h6.75V4.5a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" /></svg>
+            </button>
+            <div id="sb-editor-plus-menu" class="plus-menu hidden" style="bottom:100%;right:0;margin-bottom:8px">
+              <button onclick="StatusBarTheme.attachImage()">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path fill-rule="evenodd" d="M1.5 6a2.25 2.25 0 0 1 2.25-2.25h16.5A2.25 2.25 0 0 1 22.5 6v12a2.25 2.25 0 0 1-2.25 2.25H3.75A2.25 2.25 0 0 1 1.5 18V6ZM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0 0 21 18v-1.94l-2.69-2.689a1.5 1.5 0 0 0-2.12 0l-.88.879.97.97a.75.75 0 1 1-1.06 1.06l-5.16-5.159a1.5 1.5 0 0 0-2.12 0L3 16.061Zm10.125-7.81a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Z" clip-rule="evenodd" /></svg>
+                添加图片
+              </button>
+              <button onclick="StatusBarTheme.attachFile()">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path fill-rule="evenodd" d="M18.97 3.659a2.25 2.25 0 0 0-3.182 0l-10.94 10.94a3.75 3.75 0 1 0 5.304 5.303l7.693-7.693a.75.75 0 0 1 1.06 1.06l-7.693 7.693a5.25 5.25 0 1 1-7.424-7.424l10.939-10.94a3.75 3.75 0 1 1 5.303 5.304L9.097 18.835l-.008.008-.007.007-.002.002-.003.002A2.25 2.25 0 0 1 5.91 15.66l7.81-7.81a.75.75 0 0 1 1.061 1.06l-7.81 7.81a.75.75 0 0 0 1.054 1.068L18.97 6.84a2.25 2.25 0 0 0 0-3.182Z" clip-rule="evenodd" /></svg>
+                添加文件
+              </button>
+            </div>
+          </div>
+          
+          <!-- 发送按钮 -->
+        <button id="sb-editor-send" class="btn-send" onclick="StatusBarTheme.onSendBtnClick()" style="width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;border:none;outline:none;cursor:pointer">
+          <svg id="sb-editor-send-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:18px;height:18px"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" /></svg>
+        </button>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+<!-- CSS 编辑弹窗 -->
+<div id="sb-css-editor-modal" class="modal hidden" style="z-index:700" onclick="if(event.target===this) StatusBarTheme.closeCssEditor()">
+  <div class="modal-content" style="max-width:700px;width:90%;max-height:80vh;display:flex;flex-direction:column">
+    <h3 style="margin:0 0 12px 0;color:var(--text);font-size:16px">编辑 CSS</h3>
+    <textarea id="sb-css-editor-textarea" style="flex:1;min-height:300px;padding:12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:monospace;resize:vertical"></textarea>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button onclick="StatusBarTheme.saveCssFromEditor()" style="flex:1;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">应用</button>
+      <button onclick="StatusBarTheme.closeCssEditor()" style="flex:1;padding:10px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;font-size:14px;cursor:pointer">取消</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

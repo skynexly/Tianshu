@@ -620,19 +620,74 @@ if (!isHidden && _currentExtSubtab === 'npc') {
       return { ...(w || {}) };
     }
   }
-
-  function _applyStatusBarSkin(w) {
+function _applyStatusBarSkin(w) {
   try {
-    if (!w) { document.body.removeAttribute('data-sb-skin'); return; }
-    // 内置世界观锁死：天枢城走终端；心动模拟走专属 CSS；无世界观/其他内置不强行套自定义 skin
+    // 先清除之前可能残留的自定义主题样式
+    if (window.StatusBarTheme && StatusBarTheme.clearPreview) StatusBarTheme.clearPreview();
+    
+    if (!w) { document.body.removeAttribute('data-sb-skin'); document.body.removeAttribute('data-skin'); return; }
+    // 内置世界观锁死
     if (_isBuiltinWorldview(w)) {
-      if (w.id === 'wv_tianshucheng' || w.name === '天枢城') document.body.setAttribute('data-sb-skin', 'terminal');
+      if (w.id === 'wv_tianshucheng') document.body.setAttribute('data-sb-skin', 'terminal');
       else document.body.removeAttribute('data-sb-skin');
+      document.body.removeAttribute('data-skin');
       return;
     }
-    document.body.setAttribute('data-sb-skin', w.statusBarSkin || 'terminal');
+    // 自定义世界观
+    const skin = w.statusBarSkin || 'terminal';
+    if (skin.startsWith('sb_')) {
+      if (window.StatusBarTheme) {
+        const theme = StatusBarTheme.get(skin);
+        if (theme) {
+          const css = theme.css || (theme.draft && theme.draft.currentCss) || '';
+          StatusBarTheme.applyPreview(theme.baseTemplate, css);
+        } else {
+          document.body.setAttribute('data-sb-skin', 'terminal');
+        }
+      }
+    } else {
+      // 预设风格
+      document.body.setAttribute('data-sb-skin', skin);
+    }
     try { setTimeout(() => StatusBar?.refreshFromConv?.(), 0); } catch(_) {}
   } catch(_) {}
+}
+
+// 重新应用当前世界观的状态栏皮肤（供外部调用，比如编辑器关闭后恢复）
+async function reapplyStatusBarSkin() {
+  try {
+    if (!currentWorldviewId) return;
+    const w = await DB.get('worldviews', currentWorldviewId);
+    if (w) _applyStatusBarSkin(w);
+  } catch(e) { console.warn('[reapplyStatusBarSkin]', e); }
+}
+
+// 渲染状态栏风格下拉框选项
+function _renderStatusBarSkinOptions() {
+  const select = document.getElementById('wv-statusbar-skin');
+  if (!select) return;
+  
+  // 预设选项
+  let html = '<option value="neumorph">拟态风格</option>';
+  html += '<option value="terminal">终端风格</option>';
+  
+  // 自定义主题
+  if (window.StatusBarTheme) {
+    const customThemes = StatusBarTheme.getAll();
+    console.log('[WV] _renderStatusBarSkinOptions: customThemes=', customThemes.length, customThemes.map(t => t.name));
+    if (customThemes.length === 0) console.log('[WV] 无自定义状态栏主题');
+    if (customThemes.length > 0) {
+      html += '<optgroup label="自定义主题">';
+      customThemes.forEach(t => {
+        html += `<option value="${t.id}">${t.name}</option>`;
+      });
+      html += '</optgroup>';
+    }
+  } else {
+    console.warn('[WV] _renderStatusBarSkinOptions: window.StatusBarTheme 未定义!');
+  }
+  
+  select.innerHTML = html;
 }
 
 function _syncBuiltinRestoreButton(w) {
@@ -771,7 +826,7 @@ function _syncBuiltinRestoreButton(w) {
       w.phoneApps.forum.name = document.getElementById('wv-forum-name')?.value || '';
       w.phoneApps.forum.desc = document.getElementById('wv-forum-desc')?.value || '';
       const skinEl = document.getElementById('wv-statusbar-skin');
-      if (skinEl && !_isBuiltinWorldview(w)) w.statusBarSkin = skinEl.value || 'terminal';
+    if (skinEl && !_isBuiltinWorldview(w)) w.statusBarSkin = skinEl.value || 'terminal';
       w.startTime = document.getElementById('wv-start-time')?.value || '';
       w.startPlot = document.getElementById('wv-start-plot')?.value || '';
       w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds')?.value) || 5;
@@ -940,7 +995,11 @@ function _syncBuiltinRestoreButton(w) {
     const _fmN = document.getElementById('wv-forum-name'); if (_fmN) _fmN.value = _paFm.name || '';
     const _fmD = document.getElementById('wv-forum-desc'); if (_fmD) _fmD.value = _paFm.desc || '';
     const _skin = document.getElementById('wv-statusbar-skin');
-    if (_skin) { _skin.value = w.statusBarSkin || 'terminal'; _skin.disabled = _isBuiltinWorldview(w); }
+    if (_skin) {
+      _renderStatusBarSkinOptions(); // 渲染选项（包含自定义主题）
+      _skin.value = w.statusBarSkin || 'terminal';
+      _skin.disabled = _isBuiltinWorldview(w);
+    }
     document.getElementById('wv-start-time').value = w.startTime || '';
     document.getElementById('wv-start-plot').value = w.startPlot || '';
     document.getElementById('wv-start-plot-rounds').value = w.startPlotRounds ?? 5;
@@ -3846,6 +3905,8 @@ function closeKnowledgeModal() {
       if (w && w.themeName) {
         _applyBoundTheme(w.themeName);
       }
+      // 应用状态栏皮肤
+      if (w) _applyStatusBarSkin(w);
       // 同步NPC和世界观prompt到游戏运行时
       if (w) {
         Chat.setWorldview(_buildSettingWithExtras(w));
@@ -4587,6 +4648,8 @@ async function pickDefaultTheme(value) {
         if (w.themeName) {
           try { _applyBoundTheme(w.themeName); } catch(e) { console.warn('[Worldview.restore] 主题绑定失败', e); }
         }
+        // 应用状态栏皮肤
+        _applyStatusBarSkin(w);
         const settingText = _buildSettingWithExtras(w);
         // 先设世界观prompt，这是最重要的，不能被后面的NPC.init异常拖累
         Chat.setWorldview(settingText);
@@ -4833,6 +4896,7 @@ toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, sele
     toggleViewerNPCDropdown, selectViewerNPCFilter,
     toggleScopeDropdown,
     selectWorldview,
+    reapplyStatusBarSkin,
     toggleThemeDropdown, selectTheme,
     openDefaultThemePicker, closeDefaultThemePicker, pickDefaultTheme,
     restoreCurrentWorldview: _restoreCurrentWorldview,
@@ -4876,3 +4940,6 @@ toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, sele
   }
   };
   })();
+
+// 显式挂到 window，供其他模块通过 window.Worldview 访问
+try { window.Worldview = Worldview; } catch(_) {}

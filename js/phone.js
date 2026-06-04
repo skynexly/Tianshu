@@ -216,6 +216,7 @@ function _flushChatRoundLog() {
       forumViewHistory: [],      // [{title, summary, content, time}]  最多保留10条
       mapSearchHistory: [],      // [{query, time}]  最多保留10条
       cachedForumPosts: [],      // 上一次刷新/搜索到的帖子列表，持久化
+      myForumPosts: [],          // [{id, username, avatar_color, time, title, content, tags[], createdAt}] 用户发的帖子
       moments: [],               // [{id, text, image, imageDesc, visibleNpcs, time, comments, createdAt}]
       momentsCover: '',          // 好友圈顶部封面 DataURL
       npcMoments: [],            // [{npc, text, comments}] 刷新覆盖
@@ -1067,13 +1068,19 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
     document.getElementById('phone-back-btn')?.classList.remove('hidden');
   }
 
-  function goBack() {
+  async function goBack() {
     if (_navStack.length > 1) {
       _navStack.pop();
       const prev = _navStack[_navStack.length - 1];
       _isNavBack = true;
-      prev();
-      _isNavBack = false;
+      try {
+        // await：渲染函数可能是 async（内部有 await _getPhoneData()），
+        // 必须等它完全执行完（含内部 _pushNav 被拦截）再重置标志，
+        // 否则 async 让出执行后标志提前归位，导致重复 push、栈清不空、返回失效。
+        await prev();
+      } finally {
+        _isNavBack = false;
+      }
     } else {
       _navStack = [];
       _renderHomeScreen();
@@ -1296,7 +1303,7 @@ async function _clearMomentsCover() {
 
 // ===== 外壳渲染 =====
 // ===== 各 App 占位渲染 =====
-  let _forumTab = 'posts'; // 'posts' | 'history'
+  let _forumTab = 'posts'; // 'posts' | 'history' | 'myposts'
 
   function _renderForum(pd) {
     const body = document.getElementById('phone-body');
@@ -1321,12 +1328,13 @@ async function _clearMomentsCover() {
     body.innerHTML = `
       <div style="display:flex;flex-direction:column;height:100%">
         <div id="phone-forum-posts-panel" style="flex:1;overflow-y:auto;padding:10px 12px;display:${_forumTab === 'posts' ? 'block' : 'none'}">
-          <div style="display:flex;gap:6px;margin-bottom:10px">
+          <div style="display:flex;gap:6px;margin-bottom:8px">
             <input id="phone-forum-search" type="text" placeholder="搜索…" style="flex:1;border:1px solid var(--border);border-radius:6px;padding:6px 10px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
             <button onclick="Phone._forumSearch()" style="background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;white-space:nowrap">搜索</button>
-            <button onclick="Phone._forumRefresh()" class="phone-icon-btn" title="随机推荐">
- ${_uiIcon('refresh', 15)}
- </button>
+          </div>
+          <div style="display:flex;gap:6px;margin-bottom:10px">
+            <button onclick="Phone._forumRefresh()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;color:var(--text)">${_uiIcon('refresh', 13)} 刷新</button>
+            <button onclick="Phone._addForumPost()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;font-weight:600">+ 发帖</button>
           </div>
           <div id="phone-forum-posts" style="margin-top:4px">
             ${posts.length === 0 ? '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">点击刷新按钮获取推荐</p>' :
@@ -1340,9 +1348,13 @@ async function _clearMomentsCover() {
           </div>
           ${historyHtml}
         </div>
+        <div id="phone-forum-myposts-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_forumTab === 'myposts' ? 'block' : 'none'}">
+          ${_renderMyForumPosts(pd.myForumPosts || [])}
+        </div>
         <div class="phone-tabbar">
           <div class="phone-tab ${_forumTab === 'posts' ? 'active' : ''}" onclick="Phone._switchForumTab('posts')">推荐</div>
           <div class="phone-tab ${_forumTab === 'history' ? 'active' : ''}" onclick="Phone._switchForumTab('history')">搜索记录</div>
+          <div class="phone-tab ${_forumTab === 'myposts' ? 'active' : ''}" onclick="Phone._switchForumTab('myposts')">我的</div>
         </div>
       </div>
     `;
@@ -1402,6 +1414,617 @@ async function _clearMomentsCover() {
         </div>
       </div>
     `).join('');
+  }
+
+  // ===== 发帖功能 =====
+  // 头像渲染：有图片URL用图片，否则字母色块
+  function _forumAvatar(p, size) {
+    const sz = size || 24;
+    const fontSz = Math.round(sz * 0.42);
+    if (p && p.avatar) {
+      return `<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;flex-shrink:0"><img src="${Utils.escapeHtml(p.avatar)}" style="width:100%;height:100%;object-fit:cover"></div>`;
+    }
+    const color = (p && p.avatar_color) || '#888';
+    const ch = Utils.escapeHtml(((p && p.username) || '?')[0]);
+    return `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${Utils.escapeHtml(color)};display:flex;align-items:center;justify-content:center;font-size:${fontSz}px;color:#fff;font-weight:bold;flex-shrink:0">${ch}</div>`;
+  }
+
+  // 获取当前面具信息（名字+头像）
+  async function _getMaskInfo() {
+    let username = '我';
+    let avatar = '';
+    try {
+      const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+      username = mask?.name || '我';
+      avatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
+    } catch(_) {}
+    return { username, avatar };
+  }
+
+  function _renderMyForumPosts(posts) {
+    if (!posts || posts.length === 0) {
+      return '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">还没有发过帖子</p>';
+    }
+    return posts.map((p, i) => `
+      <div onclick="Phone._viewMyForumPost(${i})" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          ${_forumAvatar(p, 24)}
+          <span style="font-size:11px;font-weight:600">${Utils.escapeHtml(p.username || '匿名')}</span>
+          <span style="font-size:10px;color:var(--text-secondary);margin-left:auto">${Utils.escapeHtml(_formatPhoneTime(p.time || p.createdAt || ''))}</span>
+        </div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">${Utils.escapeHtml(p.title || '无标题')}</div>
+        <div style="font-size:11px;color:var(--text-secondary);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(p.content ? p.content.substring(0, 80) : '')}</div>
+        ${(p.tags && p.tags.length) ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${p.tags.map(t => `<span style="font-size:9px;padding:1px 6px;background:var(--bg-secondary);color:var(--accent);border-radius:8px">${Utils.escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  async function _addForumPost() {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const { username, avatar } = await _getMaskInfo();
+    let gameTime = '';
+    try {
+      const sb = Conversations.getStatusBar();
+      gameTime = sb?.time || sb?.date || '';
+    } catch(_) {}
+
+    const post = {
+      id: 'post_' + Utils.uuid().slice(0, 8),
+      username,
+      avatar,
+      avatar_color: '#888',
+      time: gameTime,
+      title: '',
+      content: '',
+      tags: [],
+      createdAt: new Date().toISOString()
+    };
+    pd.myForumPosts = pd.myForumPosts || [];
+    pd.myForumPosts.unshift(post);
+    await _savePhoneData();
+    _editForumPost(0);
+  }
+
+  async function _editForumPost(index) {
+    const pd = await _getPhoneData();
+    if (!pd || !pd.myForumPosts || !pd.myForumPosts[index]) return;
+    const p = pd.myForumPosts[index];
+    // 刷新面具头像/名字（面具可能已切换）
+    if (!p.title && !p.content) {
+      const info = await _getMaskInfo();
+      p.username = info.username;
+      p.avatar = info.avatar;
+    }
+    _pushNav(() => _editForumPost(index));
+    const body = document.getElementById('phone-body');
+    document.getElementById('phone-title').textContent = p.title ? '编辑帖子' : '发帖';
+    body.innerHTML = `
+      <div style="padding:12px;display:flex;flex-direction:column;gap:8px;height:100%">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+          ${_forumAvatar(p, 30)}
+          <span style="font-size:13px;font-weight:600;color:var(--text)">${Utils.escapeHtml(p.username || '我')}</span>
+        </div>
+        <input id="phone-forum-post-title" value="${Utils.escapeHtml(p.title || '')}" placeholder="标题" style="border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px;font-weight:600">
+        <input id="phone-forum-post-time" value="${Utils.escapeHtml(p.time || '')}" placeholder="时间" style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--bg-tertiary);color:var(--text);font-size:12px">
+        <textarea id="phone-forum-post-content" placeholder="写点什么…" style="flex:1;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px;resize:none;min-height:150px">${Utils.escapeHtml(p.content || '')}</textarea>
+        <input id="phone-forum-post-tags" value="${Utils.escapeHtml((p.tags || []).join('、'))}" placeholder="标签（用顿号分隔）" style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--bg-tertiary);color:var(--text);font-size:12px">
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button onclick="Phone._saveForumPost(${index})" style="flex:1;background:var(--accent);color:#111;border:none;border-radius:6px;padding:8px 0;font-size:13px;cursor:pointer;font-weight:600">发布</button>
+          <button onclick="Phone._deleteForumPost(${index})" style="background:none;border:1px solid var(--error);color:var(--error);border-radius:6px;padding:8px 12px;font-size:12px;cursor:pointer">删除</button>
+        </div>
+      </div>
+    `;
+  }
+
+  async function _saveForumPost(index) {
+    const pd = await _getPhoneData();
+    if (!pd || !pd.myForumPosts || !pd.myForumPosts[index]) return;
+    const title = document.getElementById('phone-forum-post-title')?.value.trim() || '';
+    const content = document.getElementById('phone-forum-post-content')?.value.trim() || '';
+    const time = document.getElementById('phone-forum-post-time')?.value.trim() || '';
+    const tagsStr = document.getElementById('phone-forum-post-tags')?.value.trim() || '';
+    const tags = tagsStr ? tagsStr.split(/[、,，]/).map(t => t.trim()).filter(Boolean) : [];
+
+    if (!title && !content) {
+      pd.myForumPosts.splice(index, 1);
+      await _savePhoneData();
+      UI.showToast('空帖子已自动删除', 1000);
+      _forumTab = 'myposts';
+      goBack();
+      return;
+    }
+
+    const post = pd.myForumPosts[index];
+    const isNew = !post.title && !post.content;
+    post.title = title;
+    post.content = content;
+    post.time = time;
+    post.tags = tags;
+    post.summary = content.substring(0, 80);
+    await _savePhoneData();
+
+    const snippet = content.length > 30 ? content.substring(0, 30) + '…' : content;
+    if (isNew) {
+      _log(`在${_getForumName()}发布了帖子：「${title || '无标题'}」，内容摘要：${snippet || '（空）'}`);
+    } else {
+      _log(`更新了${_getForumName()}帖子：「${title || '无标题'}」`);
+    }
+    UI.showToast('已发布', 1000);
+    _forumTab = 'myposts';
+    // 返回上一页（详情页/列表），保持导航栈一致
+    goBack();
+  }
+
+  async function _deleteForumPost(index) {
+    const pd = await _getPhoneData();
+    if (!pd || !pd.myForumPosts || !pd.myForumPosts[index]) return;
+    if (!await UI.showConfirm('删除帖子', '确定删除这条帖子？')) return;
+    pd.myForumPosts.splice(index, 1);
+    _log('删除了一条帖子');
+    await _savePhoneData();
+    _forumTab = 'myposts';
+    // 帖子已删，回到论坛列表页（栈底），避免回到已失效的详情/编辑页
+    _navStack = [_navStack[0]];
+    _isNavBack = true;
+    try { _navStack[0](); } finally { _isNavBack = false; }
+  }
+
+  async function _viewMyForumPost(index) {
+    const pd = await _getPhoneData();
+    if (!pd || !pd.myForumPosts || !pd.myForumPosts[index]) return;
+    const p = pd.myForumPosts[index];
+    _pushNav(() => _viewMyForumPost(index));
+    const body = document.getElementById('phone-body');
+    document.querySelector('#phone-modal .phone-shell')?.classList.add('phone-forum-detail-mode');
+    document.getElementById('phone-title').textContent = p.title || '帖子详情';
+
+    const formatNum = n => { if (!n) return '0'; if (n >= 10000) return (n/10000).toFixed(1)+'w'; if (n >= 1000) return (n/1000).toFixed(1)+'k'; return String(n); };
+
+    let html = '<div class="phone-forum-detail-page" style="display:flex;flex-direction:column;height:100%">';
+    html += '<div class="phone-forum-detail-scroll" style="flex:1;overflow-y:auto;padding:12px">';
+    // 发帖人 + 右侧操作图标
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">';
+    html += _forumAvatar(p, 28);
+    html += '<div style="flex:1;min-width:0">';
+    html += '<div style="font-size:13px;font-weight:600;color:var(--text)">' + Utils.escapeHtml(p.username || '匿名') + '</div>';
+    html += '<div style="font-size:10px;color:var(--text-secondary)">' + Utils.escapeHtml(_formatPhoneTime(p.time || p.createdAt || '')) + '</div>';
+    html += '</div>';
+    // 右侧操作按钮：编辑 / 刷新 / 删除（纯 SVG 图标，无边框）
+    html += '<div style="display:flex;gap:6px;margin-left:auto;flex-shrink:0">';
+    html += '<span onclick="event.stopPropagation();Phone._editForumPost(' + index + ')" style="cursor:pointer;color:var(--text-secondary);display:flex;align-items:center;padding:2px" title="编辑">' + _uiIcon('pen', 15) + '</span>';
+    html += '<span onclick="event.stopPropagation();Phone._refreshMyForumPost(' + index + ')" style="cursor:pointer;color:var(--text-secondary);display:flex;align-items:center;padding:2px" title="刷新评论">' + _uiIcon('refresh', 15) + '</span>';
+    html += '<span onclick="event.stopPropagation();Phone._deleteForumPost(' + index + ')" style="cursor:pointer;color:var(--error);display:flex;align-items:center;padding:2px" title="删除">' + _uiIcon('trash', 15) + '</span>';
+    html += '</div>';
+    html += '</div>';
+    // 正文（支持 Markdown 渲染，和 AI 帖子一致）
+    html += '<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">' + (window.Markdown ? Markdown.render(p.content || '') : Utils.escapeHtml(p.content || '')) + '</div>';
+    // 标签
+    if (p.tags?.length) {
+      html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px">' + p.tags.map(t => '<span style="font-size:10px;background:var(--bg-tertiary);color:var(--accent);padding:2px 8px;border-radius:10px">' + Utils.escapeHtml(t) + '</span>').join('') + '</div>';
+    }
+    // 浏览/点赞/评论数
+    html += '<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secondary);padding:8px 0;border-top:1px solid var(--border);margin-bottom:12px">';
+    html += '<span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> ' + formatNum(p.views || 0) + '</span>';
+    html += '<span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> ' + formatNum(p.likes || 0) + '</span>';
+    html += '<span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> ' + formatNum(p._comments?.length || 0) + '</span>';
+    html += '</div>';
+    // 评论区（预留）
+    if (p._comments?.length) {
+      html += '<div style="font-size:12px;font-weight:600;margin-bottom:8px">评论区</div>';
+      p._comments.forEach(c => {
+        html += '<div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px">';
+        html += '<div style="width:24px;height:24px;border-radius:50%;background:' + Utils.escapeHtml(c.avatar_color || '#666') + ';display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:bold;flex-shrink:0">' + Utils.escapeHtml((c.username || '?')[0]) + '</div>';
+        html += '<div style="flex:1">';
+        html += '<div style="display:flex;justify-content:space-between;margin-bottom:3px">';
+        html += '<span style="font-size:12px;font-weight:600">' + Utils.escapeHtml(c.username || '匿名') + '</span>';
+        html += '<span style="font-size:10px;color:var(--text-secondary)">' + Utils.escapeHtml(_formatPhoneTime(c.time || '')) + '</span>';
+        html += '</div>';
+        html += '<div class="md-content" style="font-size:12px;line-height:1.6">' + (window.Markdown ? Markdown.render(c.content || '') : Utils.escapeHtml(c.content || '')) + '</div>';
+        html += '</div></div>';
+      });
+    }
+    // 关闭滚动区
+    html += '</div>';
+    // 底栏：评论框包含发送按钮 + 操作图标组
+    html += '<div class="phone-forum-detail-actions" style="display:flex;align-items:center;gap:6px;padding:8px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg-secondary);box-sizing:border-box;width:100%">';
+    html += '<div style="flex:1;min-width:0;display:flex;align-items:center;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;padding:2px 4px 2px 12px">';
+    html += '<input id="phone-myforum-comment-input" placeholder="写评论…" style="flex:1;border:none;background:transparent;color:var(--text);font-size:13px;outline:none;min-width:0">';
+    html += '<button onclick="Phone._sendMyForumComment(' + index + ')" style="background:var(--accent);color:#111;border:none;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">';
+    html += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>';
+    html += '</button>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:2px;flex-shrink:0;min-width:max-content;color:var(--text-secondary)">';
+    html += '<span onclick="Phone._likeMyForumPost(' + index + ')" id="phone-myforum-like-btn" style="cursor:pointer;display:flex;align-items:center;padding:2px">' + _uiIcon('heart', 18) + '</span>';
+    html += '<span onclick="Phone._collectMyForumPost(' + index + ')" id="phone-myforum-collect-btn" style="cursor:pointer;display:flex;align-items:center;padding:4px">' + _uiIcon('star', 18) + '</span>';
+    html += '<span onclick="Phone._shareMyForumPost(' + index + ')" style="cursor:pointer;display:flex;align-items:center;padding:4px">' + _uiIcon('share', 18) + '</span>';
+    html += '</div>';
+    html += '</div>';
+    // 外层 flex 容器关闭
+    html += '</div>';
+    body.innerHTML = html;
+  }
+
+  async function _likeMyForumPost(index) {
+    const pd = await _getPhoneData();
+    if (!pd || !pd.myForumPosts || !pd.myForumPosts[index]) return;
+    pd.myForumPosts[index].likes = (pd.myForumPosts[index].likes || 0) + 1;
+    await _savePhoneData();
+    const btn = document.getElementById('phone-myforum-like-btn');
+    if (btn) { btn.classList.add('active-like'); btn.querySelector('svg')?.setAttribute('fill', 'currentColor'); }
+    const num = document.getElementById('phone-myforum-like-num');
+    if (num) num.textContent = pd.myForumPosts[index].likes;
+  }
+
+  async function _shareMyForumPost(index) {
+    const pd = await _getPhoneData();
+    if (!pd || !pd.myForumPosts || !pd.myForumPosts[index]) return;
+    const p = pd.myForumPosts[index];
+    let content = '标题：' + (p.title || '') + '\n作者：' + (p.username || '匿名') + '\n\n' + (p.content || '');
+    if (p.tags?.length) content += '\n标签：' + p.tags.join('、');
+    _shareToMain('forum', (_getForumName() || '论坛') + '帖子', content);
+  }
+
+  async function _sendMyForumComment(index) {
+    const input = document.getElementById('phone-myforum-comment-input');
+    const content = input?.value.trim();
+    if (!content) { UI.showToast('评论内容不能为空', 1000); return; }
+
+    const pd = await _getPhoneData();
+    if (!pd || !pd.myForumPosts || !pd.myForumPosts[index]) return;
+    const post = pd.myForumPosts[index];
+
+    let username = '我';
+    let avatar = '';
+    try {
+      const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+      username = mask?.name || '我';
+      avatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
+    } catch(_) {}
+
+    const comment = {
+      username,
+      avatar,
+      isNpc: false,
+      content,
+      time: _formatPhoneTime(Conversations.getStatusBar()?.time || new Date().toISOString()),
+      likes: 0
+    };
+    
+    post._comments = post._comments || [];
+    post._comments.push(comment);
+    await _savePhoneData();
+    
+    input.value = '';
+    UI.showToast('评论已发送', 1000);
+    
+    // 刷新当前详情页
+    _navStack.pop();
+    _viewMyForumPost(index);
+  }
+
+  async function _sendForumComment(index) {
+    const input = document.getElementById('phone-forum-comment-input');
+    const content = input?.value.trim();
+    if (!content) { UI.showToast('评论内容不能为空', 1000); return; }
+
+    const pd = await _getPhoneData();
+    let posts = [];
+    if (pd && pd.cachedForumPosts) posts = pd.cachedForumPosts;
+    if (posts.length === 0) posts = (window.WorldVoice && WorldVoice.getPosts()) || [];
+    const post = posts[index];
+    if (!post) return;
+
+    let username = '我';
+    let avatar = '';
+    try {
+      const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+      username = mask?.name || '我';
+      avatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
+    } catch(_) {}
+
+    const comment = {
+      username,
+      avatar,
+      isNpc: false,
+      content,
+      time: _formatPhoneTime(Conversations.getStatusBar()?.time || new Date().toISOString()),
+      likes: 0
+    };
+
+    post._comments = post._comments || [];
+    post._comments.push(comment);
+    
+    // 如果是 cachedForumPosts，需要保存回 phoneData
+    if (pd && pd.cachedForumPosts && pd.cachedForumPosts[index] === post) {
+      await _savePhoneData();
+    }
+    
+    input.value = '';
+    UI.showToast('评论已发送', 1000);
+    
+    // 刷新当前详情页
+    _navStack.pop();
+    _forumViewDetail(index);
+  }
+
+  async function _refreshMyForumPost(index) {
+    if (window._myForumRefreshing) { UI.showToast('正在生成评论中…', 1000); return; }
+    const pd = await _getPhoneData();
+    if (!pd || !pd.myForumPosts || !pd.myForumPosts[index]) return;
+    const post = pd.myForumPosts[index];
+
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
+
+    window._myForumRefreshing = true;
+    _setFabGenerating(true);
+    try {
+      const wvPrompt = await _buildFullContext();
+      const mt = _getForumName() || '论坛';
+      const md = _getForumDesc();
+
+      const sysPrompt = `你是一个"${mt}"评论/回复区生成器。用户给你一条由玩家角色发布的帖子/动态，以及当前已经存在的评论列表。请根据世界观、帖子内容、已有评论，生成一批新的追加评论。
+
+${md ? `载体说明：${md}\n\n` : ''}要求：
+1. 只生成评论/回复区，不要改写帖子正文，不要生成新的帖子标题。
+2. 本次生成 8-12 条“新增评论”，用于追加到已有评论后面。
+3. 大部分评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与回复（0-3条）。
+4. 如果评论者是 NPC，必须使用下方世界观资料中明确存在的 NPC 准确姓名，并在返回中标记 "isNpc": true；如果不确定某个名字是否为真实 NPC，请作为普通路人用户处理并标记 "isNpc": false。普通路人用户不要使用已有 NPC 的姓名。
+5. 评论内容要自然多样：有赞同、反对、追问、吐槽、跑题、阴阳怪气等，长度错落有致。可以加入适量的“@某人”或引用前排回复的互动感，体现出网友间的楼中楼交流（例如“@XX 确实”或“回复 @XX：不对吧”），但不要每条都@。
+6. 新评论应当参考已有评论，避免重复已有内容；可以接续已有讨论，也可以产生新分歧。
+7. 评论时间必须依次晚于该帖子的发帖时间和已有的最新评论。请根据“当前游戏时间”智能安排回复节奏：
+   - 若当前时间距离发帖/上一条评论很近，允许将新评论时间自然向后顺延（可合理超过当前游戏时间几分钟到几十分钟），模拟网友陆陆续续打字回复的过程。
+   - 若当前时间比发帖/上一条评论晚了几个小时或几天，请将新评论散布在这段过去的空窗期内，并让最新几条紧贴当前游戏时间。
+   - 严禁跳跃到不合逻辑的遥远未来。
+8. 所有 time 都必须使用 "YYYY.MM.DD 星期X HH:mm" 格式，不要写成别的时间样式。
+9. 不要让玩家角色（${post.username}）以评论者身份出现；不要冒充玩家说“我又补充一下”“楼主本人来了”等。
+10. 返回纯 JSON 对象，不要包含任何解释、Markdown 代码块或多余文字。
+
+JSON格式：
+{
+  "comments": [
+    {
+      "username": "评论者用户名或NPC姓名",
+      "isNpc": false,
+      "avatar_color": "#颜色",
+      "content": "评论内容",
+      "time": "YYYY.MM.DD 星期X HH:mm",
+      "likes": 12
+    }
+  ]
+}
+
+${wvPrompt}`;
+
+      let existingCommentsStr = '暂无';
+      if (post._comments && post._comments.length > 0) {
+        existingCommentsStr = post._comments.map(c => `用户名：${c.username} (${c.isNpc ? 'NPC' : '路人'})\n时间：${c.time}\n点赞：${c.likes}\n内容：${c.content}`).join('\n\n');
+      }
+      const gameTime = _getGameTime() || '';
+      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 玩家发帖信息\n标题：${post.title || '无标题'}\n发帖人：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。`;
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ model, stream: false, temperature: 0.85, max_tokens: 4000, messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userPrompt }] })
+      });
+      if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
+      const json = await resp.json();
+      const content = json.choices?.[0]?.message?.content || '';
+      let result = null;
+      try {
+        // 尝试剥离 Markdown 的 ```json 包裹
+        let clean = content.replace(/^s*```(json)?s*/i, '').replace(/```s*$/i, '').trim();
+        const match = clean.match(/{[\s\S]*}/);
+        if (match) clean = match[0];
+        result = JSON.parse(clean);
+      } catch(e) {
+        console.error('JSON parse fail:', content);
+        throw new Error('解析AI数据失败');
+      }
+
+      if (result.comments && result.comments.length > 0) {
+        post._comments = post._comments || [];
+        // 匹配 NPC 头像
+        const pdNow = await _getPhoneData();
+        // 匹配 NPC 头像：单独走一遍全量提取（防止没进过朋友圈就没有缓存）
+        let npcAvatarMap = {};
+        if (_momentsRenderCache) {
+          npcAvatarMap = _momentsRenderCache.npcAvatarMap || {};
+        } else {
+          // 临时构建一次映射
+          try {
+            const avatarRows = await DB.getAll('npcAvatars');
+            const avatarById = {};
+            avatarRows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
+            const all = await DB.getAll('worldviews');
+            const addNpc = (n) => {
+              if (!n) return;
+              const url = avatarById[n.id] || n.avatar || '';
+              if (!url) return;
+              const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
+              names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = url; });
+            };
+            all.forEach(wv => {
+              (wv.globalNpcs || []).forEach(addNpc);
+              (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
+            });
+          } catch(_) {}
+        }
+        result.comments.forEach(c => {
+          if (c.isNpc && npcAvatarMap[c.username]) {
+            c.avatar = npcAvatarMap[c.username];
+          }
+        });
+        post._comments.push(...result.comments);
+        await _savePhoneData();
+        _log(`刷新了${mt}帖子「${post.title}」的评论，追加了 ${result.comments.length} 条`);
+        UI.showToast('评论已刷新', 1000);
+        // 如果还在当前详情页，触发重渲染
+        const titleEl = document.getElementById('phone-title');
+        if (titleEl && titleEl.textContent === (post.title || '帖子详情')) {
+          _navStack.pop(); // 弹出当前旧的详情渲染
+          _viewMyForumPost(index); // 重新压入并执行
+        }
+      } else {
+        UI.showToast('没有生成新评论', 1000);
+      }
+    } catch (e) {
+      console.error(e);
+      window.__lastForumErr = e.message + "\n" + e.stack;
+      UI.showToast('刷新评论失败: ' + e.message, 2000);
+    } finally {
+      window._myForumRefreshing = false;
+      _setFabGenerating(false);
+    }
+  }
+  async function _collectMyForumPost(index) {
+    const pd = await _getPhoneData();
+    if (!pd || !pd.myForumPosts || !pd.myForumPosts[index]) return;
+    const p = pd.myForumPosts[index];
+    let content = `标题：${p.title || ''}\n作者：${p.username || '匿名'}\n\n${p.content || ''}`;
+    if (p.tags?.length) content += `\n标签：${p.tags.join('、')}`;
+    await _addPhoneCollection('forum', p.title || '我的帖子', content);
+  }
+
+  async function _refreshForumComment(index) {
+    if (window._myForumRefreshing) { UI.showToast('正在生成评论中…', 1000); return; }
+    const pd = await _getPhoneData();
+    let posts = [];
+    if (pd && pd.cachedForumPosts) posts = pd.cachedForumPosts;
+    if (posts.length === 0) posts = (window.WorldVoice && WorldVoice.getPosts()) || [];
+    const post = posts[index];
+    if (!post) return;
+
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
+
+    window._myForumRefreshing = true;
+    _setFabGenerating(true);
+    try {
+      const wvPrompt = await _buildFullContext();
+      const mt = _getForumName() || '论坛';
+      const md = _getForumDesc();
+
+      const sysPrompt = `你是一个"${mt}"评论/回复区生成器。用户给你一条由玩家角色发布的帖子/动态，以及当前已经存在的评论列表。请根据世界观、帖子内容、已有评论，生成一批新的追加评论。
+
+${md ? `载体说明：${md}\n\n` : ''}要求：
+1. 只生成评论/回复区，不要改写帖子正文，不要生成新的帖子标题。
+2. 本次生成 8-12 条“新增评论”，用于追加到已有评论后面。
+3. 大部分评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与回复（0-3条）。
+4. 如果评论者是 NPC，必须使用下方世界观资料中明确存在的 NPC 准确姓名，并在返回中标记 "isNpc": true；如果不确定某个名字是否为真实 NPC，请作为普通路人用户处理并标记 "isNpc": false。普通路人用户不要使用已有 NPC 的姓名。
+5. 评论内容要自然多样：可以有赞同、反对、追问、吐槽、跑题、补充信息、阴阳怪气、认真分析等；长度不要整齐划一，有人一句话，有人写一小段。
+6. 新评论应当参考已有评论，避免重复已有内容；可以接续已有讨论，也可以产生新分歧。
+7. 评论时间必须依次晚于该帖子的发帖时间和已有的最新评论。请根据“当前游戏时间”智能安排回复节奏：
+   - 若当前时间距离发帖/上一条评论很近，允许将新评论时间自然向后顺延（可合理超过当前游戏时间几分钟到几十分钟），模拟网友陆陆续续打字回复的过程。
+   - 若当前时间比发帖/上一条评论晚了几个小时或几天，请将新评论散布在这段过去的空窗期内，并让最新几条紧贴当前游戏时间。
+   - 严禁跳跃到不合逻辑的遥远未来。
+8. 所有 time 都必须使用 "YYYY.MM.DD 星期X HH:mm" 格式，不要写成别的时间样式。
+9. 返回纯 JSON 对象，不要包含任何解释、Markdown 代码块或多余文字。
+
+JSON格式：
+{
+  "comments": [
+    {
+      "username": "评论者用户名或NPC姓名",
+      "isNpc": false,
+      "avatar_color": "#颜色",
+      "content": "评论内容",
+      "time": "YYYY.MM.DD 星期X HH:mm",
+      "likes": 12
+    }
+  ]
+}
+
+${wvPrompt}`;
+
+      let existingCommentsStr = '暂无';
+      if (post._comments && post._comments.length > 0) {
+        existingCommentsStr = post._comments.map(c => `用户名：${c.username} (${c.isNpc ? 'NPC' : '路人'})\n时间：${c.time}\n点赞：${c.likes}\n内容：${c.content}`).join('\n\n');
+      }
+      const gameTime = _getGameTime() || '';
+      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 玩家发帖信息\n标题：${post.title || '无标题'}\n发帖人：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.fullContent || post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。`;
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ model, stream: false, temperature: 0.85, max_tokens: 4000, messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userPrompt }] })
+      });
+      if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
+      const json = await resp.json();
+      const content = json.choices?.[0]?.message?.content || '';
+      let result = null;
+      try {
+        // 尝试剥离 Markdown 的 ```json 包裹
+        let clean = content.replace(/^s*```(json)?s*/i, '').replace(/```s*$/i, '').trim();
+        const match = clean.match(/{[\s\S]*}/);
+        if (match) clean = match[0];
+        result = JSON.parse(clean);
+      } catch(e) {
+        console.error('JSON parse fail:', content);
+        throw new Error('解析AI数据失败');
+      }
+
+      if (result.comments && result.comments.length > 0) {
+        post._comments = post._comments || [];
+        let npcAvatarMap = {};
+        if (_momentsRenderCache) {
+          npcAvatarMap = _momentsRenderCache.npcAvatarMap || {};
+        } else {
+          try {
+            const avatarRows = await DB.getAll('npcAvatars');
+            const avatarById = {};
+            avatarRows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
+            const all = await DB.getAll('worldviews');
+            const addNpc = (n) => {
+              if (!n) return;
+              const u = avatarById[n.id] || n.avatar || '';
+              if (!u) return;
+              const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
+              names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = u; });
+            };
+            all.forEach(wv => {
+              (wv.globalNpcs || []).forEach(addNpc);
+              (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
+            });
+          } catch(_) {}
+        }
+        result.comments.forEach(c => {
+          if (c.isNpc && npcAvatarMap[c.username]) c.avatar = npcAvatarMap[c.username];
+        });
+        post._comments.push(...result.comments);
+        // 如果是 cachedForumPosts，保存回 phoneData
+        if (pd && pd.cachedForumPosts && pd.cachedForumPosts[index] === post) {
+          await _savePhoneData();
+        }
+        _log(`刷新了${mt}帖子「${post.title}」的评论，追加了 ${result.comments.length} 条`);
+        UI.showToast('评论已刷新', 1000);
+        // 重渲染详情页
+        const titleEl = document.getElementById('phone-title');
+        if (titleEl && titleEl.textContent === (post.title || '帖子详情')) {
+          _navStack.pop();
+          _forumViewDetail(index);
+        }
+      } else {
+        UI.showToast('没有生成新评论', 1000);
+      }
+    } catch (e) {
+      console.error(e);
+      window.__lastForumErr = e.message + "\n" + e.stack;
+      UI.showToast('刷新评论失败: ' + e.message, 2000);
+    } finally {
+      window._myForumRefreshing = false;
+      _setFabGenerating(false);
+    }
   }
 
   async function _forumRefresh() {
@@ -1564,10 +2187,11 @@ ${wvPrompt}` },
       const formatNum = n => { if (!n) return '0'; if (n >= 10000) return (n/10000).toFixed(1)+'w'; if (n >= 1000) return (n/1000).toFixed(1)+'k'; return String(n); };
       let html = `<div class="phone-forum-detail-page" style="display:flex;flex-direction:column;height:100%">`;
  html += `<div class="phone-forum-detail-scroll" style="flex:1;overflow-y:auto;padding:12px">`;
-      // 发帖人
+      // 发帖人 + 刷新图标
       html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <div style="width:28px;height:28px;border-radius:50%;background:${Utils.escapeHtml(p.avatar_color||'#888')};display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:bold;flex-shrink:0">${Utils.escapeHtml((p.username||'?')[0])}</div>
         <div><div style="font-size:13px;font-weight:600;color:var(--text)">${Utils.escapeHtml(p.username||'匿名')}</div><div style="font-size:10px;color:var(--text-secondary)">${Utils.escapeHtml(_formatPhoneTime(p.time||''))}</div></div>
+        ${p._detailLoaded ? `<div style="margin-left:auto;flex-shrink:0"><span onclick="event.stopPropagation();Phone._refreshForumComment(${index})" style="cursor:pointer;color:var(--text-secondary);display:flex;align-items:center;padding:2px" title="刷新评论">${_uiIcon('refresh', 15)}</span></div>` : ''}
       </div>`;
       // 正文或骨架屏
       if (p._detailLoaded) {
@@ -1596,20 +2220,19 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
         }
         // 关闭内容滚动区域
         html += `</div>`;
-        // 操作底栏：固定在底部
-        html += `<div class="phone-forum-detail-actions" style="display:flex;gap:8px;padding:8px 12px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg-secondary)">
-        <button onclick="Phone._likeForumPost(${index})" id="phone-forum-like-btn" class="wv-action-btn" style="flex:1;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;font-size:12px;display:flex;align-items:center;justify-content:center;gap:4px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-          <span id="phone-forum-like-num">${formatNum(p.likes||0)}</span>
-        </button>
-        <button onclick="Phone._collectForumPost(${index})" id="phone-forum-collect-btn" class="wv-action-btn" style="flex:1;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;font-size:12px;display:flex;align-items:center;justify-content:center;gap:4px">
-          <svg id="phone-forum-collect-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.5 2.78 5.63 6.22.9-4.5 4.39 1.06 6.2L12 17.7l-5.56 2.92 1.06-6.2L3 10.03l6.22-.9L12 3.5z"/></svg>
-          <span>收藏</span>
-        </button>
-        <button onclick="Phone._shareForumPost(${index})" class="wv-action-btn" style="flex:1;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;font-size:12px;display:flex;align-items:center;justify-content:center;gap:4px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
-          <span>分享</span>
-        </button>
+        // 底栏：评论框包含发送按钮 + 操作图标组
+        html += `<div class="phone-forum-detail-actions" style="display:flex;align-items:center;gap:6px;padding:8px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg-secondary);box-sizing:border-box;width:100%">
+          <div style="flex:1;min-width:0;display:flex;align-items:center;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;padding:2px 4px 2px 12px">
+            <input id="phone-forum-comment-input" placeholder="写评论…" style="flex:1;border:none;background:transparent;color:var(--text);font-size:13px;outline:none;min-width:0">
+            <button onclick="Phone._sendForumComment(${index})" style="background:var(--accent);color:#111;border:none;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+            </button>
+          </div>
+          <div style="display:flex;gap:2px;flex-shrink:0;min-width:max-content;color:var(--text-secondary)">
+            <span onclick="Phone._likeForumPost(${index})" id="phone-forum-like-btn" style="cursor:pointer;display:flex;align-items:center;padding:2px">${_uiIcon('heart', 18)}</span>
+            <span onclick="Phone._collectForumPost(${index})" id="phone-forum-collect-btn" style="cursor:pointer;display:flex;align-items:center;padding:4px">${_uiIcon('star', 18)}</span>
+            <span onclick="Phone._shareForumPost(${index})" style="cursor:pointer;display:flex;align-items:center;padding:4px">${_uiIcon('share', 18)}</span>
+          </div>
         </div>`;
         // 外层 flex 容器关闭
         html += `</div>`;
@@ -3363,6 +3986,7 @@ async function _hydrateChatContacts(pd) {
       </div>`;
     }).join('');
   }
+
   // 可添加的候选
   const toAdd = candidates.map((c, i) => ({ c, i })).filter(({ c }) => !addedNames.has(c.name));
   if (toAdd.length) {
@@ -6511,6 +7135,7 @@ async function buildHeartsimServiceChatForBackstage() {
     _addMemo, _editMemo, _saveMemo, _deleteMemo, _shareMemo, _collectMemo,
     _forumRefresh, _forumSearch, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,
     _switchForumTab, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
+    _addForumPost, _editForumPost, _saveForumPost, _deleteForumPost, _viewMyForumPost, _collectMyForumPost, _likeMyForumPost, _sendMyForumComment, _sendForumComment, _refreshForumComment, _shareMyForumPost, _refreshMyForumPost,
     _postMoment, _onMomentImagePicked, _toggleImageDesc, _submitMoment, _shareMoment, _collectMyMoment, _editMyMoment, _deleteMyMoment, _shareNpcMoment, _refreshMomentComments, _refreshNpcMoments, _editNpcMoment, _deleteNpcMoment,
 _openMomentVisibleModal, _closeMomentVisibleModal, _filterMomentVisibleOptions, _toggleMomentVisibleOption, _setMomentVisibleAll,
 _onMomentsConfigCountChange, _onMomentsConfigImgChange, _onMomentsConfigStorageChange,

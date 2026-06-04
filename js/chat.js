@@ -379,11 +379,24 @@ const Chat = (() => {
       // 天枢城专属：设置 body 标签 + 用当前 region 预热（避免加载已有对话时误触发）
       try {
         if (window.TianshuFX) TianshuFX.setBodyTag(_currentWvName);
-        // 自定义世界观状态栏风格：terminal / neumorph；内置世界观保持专属锁定
+        // 自定义世界观状态栏风格
         try {
           if (_wvForName && _wvForName.id === 'wv_tianshucheng') document.body.setAttribute('data-sb-skin', 'terminal');
           else if (_wvForName && _wvForName.id === 'wv_heartsim') document.body.removeAttribute('data-sb-skin');
-          else if (_wvForName && _wvForName.id && _wvForName.id !== '__default_wv__') document.body.setAttribute('data-sb-skin', _wvForName.statusBarSkin || 'terminal');
+          else if (_wvForName && _wvForName.id && _wvForName.id !== '__default_wv__') {
+            const _skin = _wvForName.statusBarSkin || 'terminal';
+            if (_skin.startsWith('sb_') && window.StatusBarTheme) {
+              const _theme = StatusBarTheme.get(_skin);
+              if (_theme) {
+                const _css = _theme.css || (_theme.draft && _theme.draft.currentCss) || '';
+                StatusBarTheme.applyPreview(_theme.baseTemplate, _css);
+              } else {
+                document.body.setAttribute('data-sb-skin', 'terminal');
+              }
+            } else {
+              document.body.setAttribute('data-sb-skin', _skin);
+            }
+          }
           else document.body.removeAttribute('data-sb-skin');
         } catch(_) {}
         if (window.TianshuRegion) {

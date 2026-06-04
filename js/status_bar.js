@@ -25,7 +25,24 @@ function _attrTargetKey(t) { return [t?.targetType || '', t?.targetId || '', t?.
  return { clock: clock || '—', rest: rest || '—' };
  }
 function _useNpcCarousel() {
-  return _isHeartSim() || document.body?.getAttribute('data-sb-skin') === 'neumorph';
+  return _isHeartSim() || _resolveSkin() === 'neumorph';
+}
+
+// 把自定义主题（sb_xxx）解析成它的 baseTemplate；其余原样返回
+function _resolveSkin(rawSkin) {
+  let skin = rawSkin;
+  if (skin === undefined || skin === null) {
+    // 不传参时，从当前世界观/body 推断
+    skin = document.body?.getAttribute('data-sb-skin') || '';
+  }
+  if (typeof skin === 'string' && skin.startsWith('sb_') && window.StatusBarTheme) {
+    try {
+      const t = StatusBarTheme.get(skin);
+      if (t && t.baseTemplate) return t.baseTemplate;
+    } catch(_) {}
+    return 'terminal';
+  }
+  return skin || '';
 }
 
 function _refreshNpcDots(count) {
@@ -185,7 +202,7 @@ async function _renderCustomAttrs(status) {
   if (!wrap) return;
   const wv = await _getCurrentWorldview();
   const gp = await _getConvGameplay();
-  const skin = wv?.statusBarSkin || document.body?.getAttribute('data-sb-skin') || '';
+  const skin = _resolveSkin(wv?.statusBarSkin || document.body?.getAttribute('data-sb-skin') || '');
   const canShowCustomAttrs = skin === 'neumorph' || skin === 'terminal' || document.body?.getAttribute('data-skin') === 'single-default';
   if (!canShowCustomAttrs || !status) {
     wrap.classList.add('hidden');
@@ -249,9 +266,9 @@ const wrap = _el('sb-character-attrs');
 if (!wrap) return;
 const wv = await _getCurrentWorldview();
 const gp = await _getConvGameplay();
-const skin = wv?.statusBarSkin || document.body?.getAttribute('data-sb-skin') || '';
-const isNeumorph = skin === 'neumorph';
-const isTerminal = skin === 'terminal';
+const skin = _resolveSkin(wv?.statusBarSkin || document.body?.getAttribute('data-sb-skin') || '');
+  const isNeumorph = skin === 'neumorph';
+  const isTerminal = skin === 'terminal';
 // v632.2：单人卡无世界观时走 single-default 皮肤
 const isSingleDefault = document.body?.getAttribute('data-skin') === 'single-default';
 const cards = (gp?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim()));
@@ -524,13 +541,13 @@ async function render(status) {
     const row = _el('topbar-row-status');
     if (!row) return;
     const _isSingleSkin = document.body.getAttribute('data-skin') === 'single-default';
-    const _isNeumorphSkin = document.body.getAttribute('data-sb-skin') === 'neumorph';
+    const _isNeumorphSkin = _resolveSkin(document.body.getAttribute('data-sb-skin')) === 'neumorph';
     if (!status) {
       let hasCustomGlobalAttrs = false;
       try {
         const wv = await _getCurrentWorldview();
         const gp = await _getConvGameplay();
-        const skin = wv?.statusBarSkin || document.body.getAttribute('data-sb-skin') || '';
+        const skin = _resolveSkin(wv?.statusBarSkin || document.body.getAttribute('data-sb-skin') || '');
         if (skin === 'neumorph' || skin === 'terminal') {
           hasCustomGlobalAttrs = !!(gp?.globalAttrs || []).some(a => a && a.id && (a.name || '').trim())
           || !!((skin === 'neumorph' || skin === 'terminal') && (gp?.characterAttrs || []).some(c => c && Array.isArray(c.attrs) && c.attrs.some(a => a && a.id && (a.name || '').trim())));
