@@ -1541,7 +1541,9 @@ async function _clearMomentsCover() {
     post.content = content;
     post.time = time;
     post.tags = tags;
-    post.summary = content.substring(0, 80);
+    // 让 summary 去掉 Markdown 的空行和换行符，并限制长度
+    post.summary = content.replace(/
+/g, ' ').replace(/s+/g, ' ').substring(0, 80);
     await _savePhoneData();
 
     const snippet = content.length > 30 ? content.substring(0, 30) + '…' : content;
@@ -1694,6 +1696,7 @@ async function _clearMomentsCover() {
     post._comments = post._comments || [];
     post._comments.push(comment);
     await _savePhoneData();
+    _log(`在${_getForumName() || '论坛'}评论了帖子「${post.title || '无标题'}」：${content}`);
     
     input.value = '';
     UI.showToast('评论已发送', 1000);
@@ -1734,6 +1737,7 @@ async function _clearMomentsCover() {
 
     post._comments = post._comments || [];
     post._comments.push(comment);
+    _log(`在${_getForumName() || '论坛'}评论了帖子「${post.title || '无标题'}」：${content}`);
     
     // 如果是 cachedForumPosts，需要保存回 phoneData
     if (pd && pd.cachedForumPosts && pd.cachedForumPosts[index] === post) {
