@@ -1051,6 +1051,7 @@ var StatusBarTheme = (() => {
             &lt;div class="sb-npc-val"&gt;&lt;span class="sb-field-label-inline"&gt;&gt; OUTFIT_&lt;/span&gt; {衣着}&lt;/div&gt;
             &lt;div class="sb-npc-val"&gt;&lt;span class="sb-field-label-inline"&gt;&gt; POSTURE_&lt;/span&gt; {姿态}&lt;/div&gt;
           &lt;/div&gt;
+          &lt;div class="sb-npc-empty"&gt;&lt;span class="sb-npc-add-full"&gt;+ 添加 NPC&lt;/span&gt;&lt;/div&gt;
         &lt;/div&gt;`;
 
     return `你是状态栏 CSS 美化助手。用户正在编辑「${templateName}」模板的状态栏主题。
