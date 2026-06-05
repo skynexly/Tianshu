@@ -176,18 +176,9 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
     const APP_VERSION = 'v689.6';
-      const CHANGELOG = `【v688.18 更新内容】
-· 新增：AI 编辑设定工具（对话设置/后台设置中开启）
-  - AI 可读写世界观基础设定、地区/势力/NPC
-  - AI 可新增地区、势力、全图常驻NPC
-  - AI 可管理扩展设定（节日/常驻/动态条目）
-  - AI 可读写当前对话挂载的单人卡及常驻角色卡
-  - 所有修改支持 10 步撤销回滚
-  - 默认关闭，需手动开启
-· 优化了部分文案
-
-【已知】
-· 强刷不更新请去浏览器设置注销 sw 后再刷`;
+      const CHANGELOG = `【v689.6 更新内容】
+· 优化了状态栏美化编辑器
+· 修复手机功能打不开的问题`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {
