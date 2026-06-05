@@ -861,7 +861,8 @@ var StatusBarTheme = (() => {
 
     // 保留最近的消息，直到总 Token 低于限制
     // 注意：至少保留最后一条用户消息
-    let historyMsgs = draft.messages.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
+    // 此时 AI 占位还没有 push，所以 draft.messages 最后一条就是用户最新消息，全部保留
+    let historyMsgs = draft.messages.slice().map(m => ({ role: m.role, content: m.content }));
     
     let totalEst = 0;
     let keepIdx = historyMsgs.length - 1;
