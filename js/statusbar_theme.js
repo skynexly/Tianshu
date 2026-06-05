@@ -629,6 +629,28 @@ var StatusBarTheme = (() => {
         ${contentHtml}
       </div>
     `;
+
+    // NPC 折叠交互（终端/默认风可折叠；拟态/单人风 CSS 里 max-height:none，点击无视觉变化）
+    const npcsHeader = shadow.querySelector('.sb-npcs-header');
+    const npcsBody = shadow.querySelector('.sb-npcs-body');
+    const npcsTitle = shadow.querySelector('.sb-npcs-title');
+    if (npcsHeader && npcsBody) {
+      npcsHeader.style.cursor = 'pointer';
+      // 终端/默认风的标题带折叠箭头
+      const isCollapsible = (baseTemplate === 'terminal' || baseTemplate === 'default');
+      const baseTitle = isCollapsible ? 'NPCS' : 'Presences';
+      const updateTitle = () => {
+        if (!isCollapsible || !npcsTitle) return;
+        const open = npcsBody.classList.contains('open');
+        npcsTitle.textContent = `[ ${open ? '-' : '+'} ] ${baseTitle} (2)`;
+      };
+      updateTitle();
+      npcsHeader.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        npcsBody.classList.toggle('open');
+        updateTitle();
+      });
+    }
   }
 
   /**
@@ -1438,6 +1460,7 @@ ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'
               <div class="sb-npc-val"><span class="sb-field-label-inline">> OUTFIT_</span> 黑色外套</div>
               <div class="sb-npc-val"><span class="sb-field-label-inline">> POSTURE_</span> 坐在角落看书</div>
             </div>`}
+            <div class="sb-npc-empty"><span class="sb-npc-add-full">+ 添加 NPC</span><span class="sb-npc-add-plus">+</span></div>
           </div>
         </div>
       </div>
