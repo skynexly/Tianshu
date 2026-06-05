@@ -4548,6 +4548,7 @@ body[data-worldview="心动模拟"] .sb-player-card .sb-field-row:nth-child(2) .
  font-weight:800;
  color: var(--accent);
  letter-spacing: .06em;
+ text-transform: none;
 }
 .hs-mission-section {
  margin: 12px 4px 18px;
