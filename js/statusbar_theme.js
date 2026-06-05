@@ -970,15 +970,21 @@ var StatusBarTheme = (() => {
         draft.messages[aiMsgIdx].content = fullContent;
         draft.messages[aiMsgIdx].loading = false;
         
-        // 尝试从 AI 回复中提取 CSS
-        const extractedCss = _extractCssFromResponse(fullContent);
-        if (extractedCss !== null) {
-          draft.currentCss = extractedCss;
-          // 自动保存到正式字段（无需手动保存）
-          update(_editingId, { css: extractedCss });
-          updateCssPreview(extractedCss);
-          UI.showToast('CSS 已更新，点击状态栏预览', 2000);
-        }
+// 尝试从 AI 回复中提取 CSS
+            const extractedCss = _extractCssFromResponse(fullContent);
+            if (extractedCss !== null) {
+              // ── 撤销历史：保存旧 CSS（最多5步）──
+              if (!draft.cssHistory) draft.cssHistory = [];
+              const oldCss = draft.currentCss || '';
+              draft.cssHistory.push(oldCss);
+              if (draft.cssHistory.length > 5) draft.cssHistory.shift();
+              
+              draft.currentCss = extractedCss;
+              // 自动保存到正式字段（无需手动保存）
+              update(_editingId, { css: extractedCss });
+              updateCssPreview(extractedCss);
+              UI.showToast('CSS 已更新，点击状态栏预览', 2000);
+            }
         
         saveDraft(_editingId, draft);
         renderMessages(draft.messages);
@@ -1192,11 +1198,7 @@ ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'
     if (match && match[1] && match[1].trim()) {
       return match[1].trim();
     }
-    // 2) 退而求其次：任意 ``` ... ``` 代码块，且内容看起来像 CSS（含 { 和 }）
-    match = text.match(/```[^\n]*\n?([\s\S]*?)```/);
-    if (match && match[1] && /[.#:][\w-]+[\s\S]*\{[\s\S]*\}/.test(match[1])) {
-      return match[1].trim();
-    }
+    // 2) 不再匹配任意代码块——只有明确标记为 css 的才提取，避免误替换
     // 3) 检测截断：有开头无结尾
     if (text.includes('```') && (text.match(/```/g) || []).length % 2 === 1) {
       UI.showToast('CSS 似乎被截断，请让 AI 继续输出', 3000);
@@ -1645,6 +1647,24 @@ ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'
     _renderEditorAttachments();
   }
 
+  // ── 撤销 CSS（最多5步）────────────────────────────────────
+  function undoCss() {
+    if (!_editingId) return;
+    const theme = get(_editingId);
+    if (!theme || !theme.draft) return;
+    const draft = theme.draft;
+    if (!draft.cssHistory || draft.cssHistory.length === 0) {
+      UI.showToast('没有可撤销的历史', 1500);
+      return;
+    }
+    const prevCss = draft.cssHistory.pop();
+    draft.currentCss = prevCss;
+    update(_editingId, { css: prevCss });
+    updateCssPreview(prevCss);
+    saveDraft(_editingId, draft);
+    UI.showToast(`已撤销（剩余 ${draft.cssHistory.length} 步）`, 1500);
+  }
+
   async function renameTheme() {
     if (!_editingId) return;
     const theme = get(_editingId);
@@ -1761,6 +1781,7 @@ ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'
     attachFile,
     removeAttachment,
     renameTheme,
+    undoCss,
     setContextLimit,
     exportCurrentTheme,
     importFromFileInEditor

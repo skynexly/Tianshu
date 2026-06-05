@@ -175,7 +175,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v689.4';
+    const APP_VERSION = 'v689.5';
       const CHANGELOG = `【v688.18 更新内容】
 · 新增：AI 编辑设定工具（对话设置/后台设置中开启）
   - AI 可读写世界观基础设定、地区/势力/NPC
