@@ -124,8 +124,6 @@ var StatusBarTheme = (() => {
       reset += `
 .sb-player-card .sb-field-row::after { content: none !important; display: none !important; }
 .sb-player-card::before { content: none !important; display: none !important; }
-.sb-npcs-title::before { content: none !important; }
-.sb-npcs-title { font-size: inherit !important; }
 `;
     }
     return reset;
@@ -605,7 +603,10 @@ var StatusBarTheme = (() => {
       '--bg', '--bg-secondary', '--bg-tertiary', '--text', '--text-secondary',
       '--accent', '--border', '--decoration', '--status-bg', '--status-card',
       '--font-family'
-    ].map(v => `${v}: ${computedStyle.getPropertyValue(v)};`).join('\n');
+    ].map(v => {
+      const val = computedStyle.getPropertyValue(v).trim();
+      return val ? `${v}: ${val};` : '';
+    }).filter(Boolean).join('\n');
     
     // 覆盖 topbar/input 高度变量（编辑器 topbar 约 120px，底部输入约 110px）
     const overrideVars = '--sb-topbar-h: 120px; --sb-input-h: 110px;';
@@ -1114,11 +1115,15 @@ var StatusBarTheme = (() => {
         &lt;div class="hs-module-title"&gt;Tasks&lt;/div&gt;
         &lt;div class="hs-mission-card"&gt;
           &lt;div class="hs-mission-head"&gt;
-            &lt;div&gt;
-              &lt;div class="hs-mission-label"&gt;{阶段名}&lt;/div&gt;
-              &lt;div class="hs-mission-score"&gt;&lt;span&gt;{进度}&lt;/span&gt;&lt;span&gt;{百分比}&lt;/span&gt;&lt;/div&gt;
-            &lt;/div&gt;
-          &lt;/div&gt;
+&lt;div&gt;
+&lt;div class="hs-mission-label"&gt;{阶段名}&lt;/div&gt;
+&lt;div class="hs-mission-score"&gt;&lt;span&gt;{进度}&lt;/span&gt;&lt;span&gt;{百分比}&lt;/span&gt;&lt;/div&gt;
+&lt;/div&gt;
+&lt;div style="display:flex;gap:6px;align-items:center"&gt;
+&lt;button class="hs-skip-btn" style="background:rgba(255,255,255,0.06)"&gt;Sync&lt;/button&gt;
+&lt;button class="hs-skip-btn"&gt;Skip&lt;/button&gt;
+&lt;/div&gt;
+&lt;/div&gt;
           &lt;div class="hs-score-track"&gt;&lt;div class="hs-score-fill" style="width:{%}"&gt;&lt;/div&gt;&lt;/div&gt;
           &lt;div class="hs-task-list"&gt;
             &lt;div class="hs-task-item active"&gt;
@@ -1443,6 +1448,10 @@ ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'
               <div>
                 <div class="hs-mission-label">阶段 1</div>
                 <div class="hs-mission-score"><span>2/5</span><span>40%</span></div>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center">
+                <button class="hs-skip-btn" style="background:rgba(255,255,255,0.06)">Sync</button>
+                <button class="hs-skip-btn">Skip</button>
               </div>
             </div>
             <div class="hs-score-track"><div class="hs-score-fill" style="width:40%"></div></div>

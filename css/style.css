@@ -58,6 +58,8 @@ body.lite-mode .phone-shell::before { display: none !important; }
   --msg-ai-border: #2a2a3e;
   --msg-user-text: var(--text);
   --msg-ai-text: var(--text);
+  --status-bg: #1a1a1a;
+  --status-card: #242424;
   --danger: #a33;
   --success: #3a7;
   --radius: 8px;
@@ -4066,11 +4068,19 @@ body[data-sb-skin="neumorph"] #sb-character-attrs {
 }
 #sb-character-attrs.hidden { display: none !important; }
 body[data-sb-skin="neumorph"] .sb-character-attrs-title {
-  font-size: 11px;
-  line-height: 1;
-  font-weight: 800;
-  color: var(--accent);
-  letter-spacing: .06em;
+ font-size: 11px;
+ line-height: 1;
+ font-weight: 800;
+ color: var(--accent);
+ letter-spacing: .06em;
+}
+body[data-sb-skin="neumorph"] #sb-task-system .hs-module-title {
+ text-transform: none;
+ font-size: 11px;
+}
+body[data-skin="single-default"] #sb-task-system .hs-module-title {
+ text-transform: none;
+ font-size: 11px;
 }
 body[data-sb-skin="neumorph"] .sb-character-attrs-list {
   display: flex;
