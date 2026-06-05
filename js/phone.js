@@ -3819,11 +3819,11 @@ async function _collectChatCandidates() {
     const rows = await DB.getAll('npcAvatars');
     rows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
   } catch(_) {}
-  const add = (name, source, avatar, detail) => {
+  const add = (name, source, avatar, detail, aliases) => {
     const nm = (name || '').trim();
     if (!nm || seen.has(nm)) return;
     seen.add(nm);
-    out.push({ name: nm, source, avatar: avatar || '', detail: (detail || '').trim() });
+    out.push({ name: nm, source, avatar: avatar || '', detail: (detail || '').trim(), aliases: (aliases || '').trim() });
   };
   // 拼一个 NPC/角色对象的人设描述文本
   const _detailOf = (o) => {
@@ -3847,8 +3847,8 @@ async function _collectChatCandidates() {
     if (wvId) {
       const wv = await DB.get('worldviews', wvId);
       if (wv) {
-        (wv.globalNpcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n)));
-        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n)))));
+        (wv.globalNpcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n), n.aliases || ''));
+        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n), n.aliases || ''))));
       }
     }
     // 单人卡（卡本身作为联系人）
@@ -4285,15 +4285,32 @@ async function _ingestChatFromMessages(messages) {
   try { const rows = await DB.getAll('npcAvatars'); rows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; }); } catch(_) {}
   // 当前候选（用于补头像）
   let candByName = {};
-  try { (await _collectChatCandidates()).forEach(c => { candByName[c.name] = c; }); } catch(_) {}
+  // 代号→本名映射（aliases 字段，逗号/顿号分隔）
+  let aliasToCand = {};
+  try {
+    (await _collectChatCandidates()).forEach(c => {
+      candByName[c.name] = c;
+      if (c.aliases) {
+        String(c.aliases).split(/[,，、\s]+/).map(s => s.trim()).filter(Boolean).forEach(alias => {
+          if (!aliasToCand[alias]) aliasToCand[alias] = c;
+        });
+      }
+    });
+  } catch(_) {}
 
-  // 查/建联系人
+  // 查/建联系人（支持代号解析）
   const ensureContact = (npcName) => {
+    // 先直接查本名
     let ct = pd.chatContacts.find(c => c.name === npcName);
     if (ct) return ct;
-    const cand = candByName[npcName];
+    // 再查代号映射，找到后用本名查/建联系人
+    const realCand = aliasToCand[npcName];
+    const realName = realCand ? realCand.name : npcName;
+    ct = pd.chatContacts.find(c => c.name === realName);
+    if (ct) return ct;
+    const cand = candByName[realName] || realCand;
     const id = 'ct_' + Utils.uuid().slice(0, 8);
-    ct = { id, name: npcName, source: cand ? cand.source : 'auto', avatar: cand ? cand.avatar : '', sig: '' };
+    ct = { id, name: realName, source: cand ? cand.source : 'auto', avatar: cand ? cand.avatar : '', sig: '' };
     pd.chatContacts.push(ct);
     if (!pd.chatThreads[id]) pd.chatThreads[id] = [];
     return ct;

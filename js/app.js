@@ -175,7 +175,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v689.6';
+    const APP_VERSION = 'v689.7';
       const CHANGELOG = `【v689.6 更新内容】
 · 优化了状态栏美化编辑器
 · 修复手机功能打不开的问题`;
