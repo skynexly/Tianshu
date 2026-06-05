@@ -1542,8 +1542,7 @@ async function _clearMomentsCover() {
     post.time = time;
     post.tags = tags;
     // 让 summary 去掉 Markdown 的空行和换行符，并限制长度
-    post.summary = content.replace(/
-/g, ' ').replace(/s+/g, ' ').substring(0, 80);
+    post.summary = content.replace(/\n/g, ' ').replace(/\s+/g, ' ').substring(0, 80);
     await _savePhoneData();
 
     const snippet = content.length > 30 ? content.substring(0, 30) + '…' : content;

@@ -681,12 +681,18 @@ async function render(status) {
   function toggleNpcs() {
     const body = document.getElementById('sb-npcs-body');
     const npcsCountText = document.getElementById('sb-npcs-count') ? document.getElementById('sb-npcs-count').textContent : '(0)';
+    
+    // 根据皮肤决定标题文本
+    const skin = _resolveSkin(document.body.getAttribute('data-sb-skin') || '');
+    const isSingleDefault = document.body.getAttribute('data-skin') === 'single-default';
+    const titleText = (skin === 'neumorph' || isSingleDefault) ? 'Presences' : 'NPCS';
+    
     if (body.classList.contains('open')) {
       body.classList.remove('open');
-      document.querySelector('.sb-npcs-title').innerHTML = '[ + ] NPCS <span id="sb-npcs-count">' + npcsCountText + '</span>';
+      document.querySelector('.sb-npcs-title').innerHTML = '[ + ] ' + titleText + ' <span id="sb-npcs-count">' + npcsCountText + '</span>';
     } else {
       body.classList.add('open');
-      document.querySelector('.sb-npcs-title').innerHTML = '[ - ] NPCS <span id="sb-npcs-count">' + npcsCountText + '</span>';
+      document.querySelector('.sb-npcs-title').innerHTML = '[ - ] ' + titleText + ' <span id="sb-npcs-count">' + npcsCountText + '</span>';
     }
   }
 

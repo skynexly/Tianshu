@@ -3596,8 +3596,8 @@ body.glass-on #worldview-edit-more-menu {
 
 /* 引号包裹文本下划线装饰 */
 .md-content .quoted-text, .chat-msg .quoted-text {
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 1px;
+    border-bottom: 1.5px solid var(--border);
+    padding-bottom: 1px;
 }
 
 
@@ -5040,11 +5040,11 @@ body[data-worldview="心动模拟"] .sb-player-card .sb-field-row:nth-child(2) .
 }
 .sb-npcs-header:hover { background: rgba(255,255,255,0.03); }
 .sb-npcs-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.15em;
-  color: var(--accent);
-  opacity: 0.9;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    opacity: 1;
 }
 .sb-npcs-body {
   overflow: hidden;
@@ -5104,17 +5104,17 @@ body[data-worldview="心动模拟"] .sb-npcs-header:hover {
  background: transparent;
 }
 body[data-worldview="心动模拟"] .sb-npcs-title {
- font-size:0;
- opacity:1;
- letter-spacing:0;
+    font-size:0;
+    opacity:1;
+    letter-spacing:0;
 }
 body[data-worldview="心动模拟"] .sb-npcs-title::before {
- content: "Presence";
- font-size:11px;
- line-height:1;
- font-weight:800;
- color: var(--accent);
- letter-spacing: .06em;
+    content: "Presence";
+    font-size: 11px;
+    line-height: 1;
+    font-weight: 800;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
 }
 body[data-worldview="心动模拟"] .sb-npcs-body {
  max-height: none;
@@ -5475,12 +5475,12 @@ body[data-sb-skin="neumorph"] .sb-npcs-title {
 }
 body[data-skin="single-default"] .sb-npcs-title::before,
 body[data-sb-skin="neumorph"] .sb-npcs-title::before {
-  content: "Presence";
-  font-size: 11px;
-  line-height: 1;
-  font-weight: 800;
-  color: var(--accent);
-  letter-spacing: .06em;
+    content: "Presences";
+    font-size: 11px;
+    line-height: 1;
+    font-weight: 800;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
 }
 body[data-skin="single-default"] .sb-npcs-body,
 body[data-sb-skin="neumorph"] .sb-npcs-body {

@@ -436,6 +436,12 @@ var StatusBarTheme = (() => {
     // 更新标题
     const titleEl = document.getElementById('sb-editor-title');
     if (titleEl) titleEl.textContent = theme.name;
+
+    // 更新用户昵称
+    const nickEl = document.getElementById('sb-editor-user-nickname');
+    if (nickEl && window.Auth) {
+      nickEl.textContent = Auth.getNickname() || '用户';
+    }
     
     console.log('[StatusBarTheme.openEditor] 显示 modal...');
     modal.classList.remove('hidden');
@@ -632,6 +638,9 @@ var StatusBarTheme = (() => {
   function _transformCssForShadow(css) {
     if (!css) return '';
     let out = css;
+    // 将 :root 转换为 :host (Shadow DOM 根节点)
+    out = out.replace(/:root/g, ':host');
+    
     out = out.replace(/body\[data-sb-skin="([^"]+)"\]/g, '.sb-root[data-sb-skin="$1"]');
     out = out.replace(/body\[data-skin="([^"]+)"\]/g, '.sb-root[data-skin="$1"]');
     out = out.replace(/body\[data-worldview="([^"]+)"\]/g, '.sb-root[data-worldview="$1"]');
@@ -670,7 +679,7 @@ var StatusBarTheme = (() => {
       // 加载中（无内容）：显示三点动画
       if (m.loading && !m.content) {
         return `<div style="display:flex;gap:10px;margin-bottom:16px">
-          <div style="flex:1;max-width:80%">
+          <div style="flex:1;max-width:100%">
             <div style="padding:12px 14px;background:var(--bg-tertiary);border-radius:10px;display:inline-flex;gap:5px;align-items:center">
               <span class="sb-typing-dot"></span><span class="sb-typing-dot"></span><span class="sb-typing-dot"></span>
             </div>
@@ -680,19 +689,20 @@ var StatusBarTheme = (() => {
       // 报错气泡：红色边框 + 可点重试
       if (m.error) {
         return `<div style="display:flex;gap:10px;margin-bottom:16px">
-          <div style="flex:1;max-width:80%">
+          <div style="flex:1;max-width:100%">
             <div onclick="StatusBarTheme.retryLastSend()" style="padding:10px 12px;background:rgba(229,72,77,0.12);border:1px solid #e5484d;color:#e5484d;border-radius:10px;font-size:13px;line-height:1.5;white-space:pre-wrap;cursor:pointer">⚠️ ${_esc(m.content)}</div>
           </div>
         </div>`;
       }
-      // 操作按钮（复制/编辑）——用户和 AI 消息都有
+      // 操作按钮（复制/编辑/删除）——用户和 AI 消息都有
       const actionBtns = `<div style="display:flex;gap:10px;margin-top:5px;${isUser ? 'justify-content:flex-end' : ''}">
         <span onclick="StatusBarTheme.copyMessage(${idx})" style="font-size:11px;color:var(--text-secondary);cursor:pointer;opacity:.75">复制</span>
         <span onclick="StatusBarTheme.editMessage(${idx})" style="font-size:11px;color:var(--text-secondary);cursor:pointer;opacity:.75">编辑</span>
+        <span onclick="StatusBarTheme.deleteMessage(${idx})" style="font-size:11px;color:var(--text-secondary);cursor:pointer;opacity:.75">删除</span>
       </div>`;
       return `<div style="display:flex;gap:10px;margin-bottom:16px;${isUser ? 'flex-direction:row-reverse' : ''}">
-        <div style="flex:1;max-width:80%;${isUser ? 'margin-left:auto' : ''}">
-          <div style="padding:10px 12px;background:${isUser ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isUser ? '#fff' : 'var(--text)'};border-radius:10px;font-size:13px;line-height:1.5;white-space:pre-wrap">${_esc(m.content)}</div>
+        <div style="flex:1;max-width:100%;${isUser ? 'margin-left:auto' : ''}">
+          <div class="md-content" style="padding:10px 12px;background:${isUser ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isUser ? '#fff' : 'var(--text)'};border-radius:10px;font-size:13px;line-height:1.5">${isUser ? _esc(m.content) : (typeof Markdown !== 'undefined' ? Markdown.render(m.content) : _esc(m.content))}</div>
           ${actionBtns}
         </div>
       </div>`;
@@ -767,6 +777,18 @@ var StatusBarTheme = (() => {
     }
   }
 
+  // 删除消息
+  function deleteMessage(idx) {
+    if (_isGenerating) { UI.showToast('生成中，请稍候', 1500); return; }
+    const theme = get(_editingId);
+    if (!theme || !theme.draft) return;
+    const msgs = theme.draft.messages || [];
+    if (idx < 0 || idx >= msgs.length) return;
+    msgs.splice(idx, 1);
+    saveDraft(_editingId, theme.draft);
+    renderMessages(msgs);
+  }
+
   // 编辑消息：弹出输入框修改该条消息内容
   async function editMessage(idx) {
     if (_isGenerating) { UI.showToast('生成中，请稍候', 1500); return; }
@@ -826,6 +848,37 @@ var StatusBarTheme = (() => {
     if (!theme) return;
     const draft = theme.draft || { messages: [], currentCss: '' };
     
+    // ── 上下文长度管理（滑动窗口） ──
+    const contextLimit = parseInt(draft.contextLimit) || 128000;
+    
+    // 估算 Token (粗略算法：中文1.5/字，其他1/字)
+    const _est = (text) => {
+      if (!text) return 0;
+      const cn = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+      return Math.ceil(cn * 1.5 + (text.length - cn));
+    };
+
+    // 保留最近的消息，直到总 Token 低于限制
+    // 注意：至少保留最后一条用户消息
+    let historyMsgs = draft.messages.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
+    
+    let totalEst = 0;
+    let keepIdx = historyMsgs.length - 1;
+    for (let i = historyMsgs.length - 1; i >= 0; i--) {
+      const mToken = _est(typeof historyMsgs[i].content === 'string' ? historyMsgs[i].content : JSON.stringify(historyMsgs[i].content));
+      if (totalEst + mToken > contextLimit && i < historyMsgs.length - 1) {
+        keepIdx = i + 1;
+        break;
+      }
+      totalEst += mToken;
+      keepIdx = i;
+    }
+    
+    if (keepIdx > 0) {
+      console.log(`[StatusBarTheme] 上下文触发滑窗，丢弃前 ${keepIdx} 条消息，保留约 ${totalEst} tokens`);
+      historyMsgs = historyMsgs.slice(keepIdx);
+    }
+
     // ── 调用 AI ──
     _isGenerating = true;
     _abortCtrl = new AbortController();
@@ -843,9 +896,8 @@ var StatusBarTheme = (() => {
     const systemPrompt = _buildSystemPrompt(baseTemplate, currentCss);
     
     // 构建 API messages
-    // 历史消息（除最后的 AI 占位）正常映射
-    const historyMsgs = draft.messages.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
-    
+    // (历史消息已在上方滑窗逻辑中处理完成)
+
     // 把附件挂到最后一条用户消息上（图片走 multimodal，文件内容拼进 text）
     if ((_pendingImages.length > 0 || _pendingFiles.length > 0) && historyMsgs.length > 0) {
       const lastUserIdx = historyMsgs.length - 1;
@@ -885,8 +937,16 @@ var StatusBarTheme = (() => {
       const presets = Settings._getPresets ? Settings._getPresets() : [];
       const preset = presets.find(p => p.id === selectedPresetId);
       if (preset && preset.apiUrl && preset.apiKey && preset.model) {
-        overrideConfig = { apiUrl: preset.apiUrl, apiKey: preset.apiKey, model: preset.model };
+        overrideConfig = { 
+          apiUrl: preset.apiUrl, 
+          apiKey: preset.apiKey, 
+          model: preset.model,
+          maxTokens: 16000  // 状态栏美化默认 16k 输出限制，防止 CSS 被截断
+        };
       }
+    } else {
+      // 没选预设时也给个兜底值（避免全局配置太低）
+      overrideConfig = { maxTokens: 16000 };
     }
     
     let fullContent = '';
@@ -1039,12 +1099,12 @@ var StatusBarTheme = (() => {
       &lt;/div&gt;
     &lt;/div&gt;
     
-    &lt;!-- NPC 区域 --&gt;
-    &lt;div class="sb-npcs-accordion"&gt;
-      &lt;div class="sb-npcs-header"&gt;
-        &lt;div class="sb-npcs-title"&gt;[ - ] NPCS &lt;span&gt;({数量})&lt;/span&gt;&lt;/div&gt;
-      &lt;/div&gt;
-      &lt;div class="sb-npcs-body open"&gt;${npcDom}
+      &lt;!-- NPC 区域 --&gt;
+      &lt;div class="sb-npcs-accordion"&gt;
+        &lt;div class="sb-npcs-header"&gt;
+          &lt;div class="sb-npcs-title"&gt;Presences&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class="sb-npcs-body open"&gt;${npcDom}
       &lt;/div&gt;
     &lt;/div&gt;
     
@@ -1104,8 +1164,9 @@ var StatusBarTheme = (() => {
 ## 📌 标题样式说明（大标题/小标题，容易"改了没用"）
 状态栏有这些标题，改它们时注意以下机制，否则会"回归默认"：
 - **状态卡大标题** \`.sb-status-title\`（里面有 \`.sb-dot\` 圆点 + \`.sb-title-default\` 文字"STATUS CARD"）
-- **小标题**：\`.sb-custom-attrs-title\`（"Custom Attributes"）、\`.sb-character-attrs-title\`（"Character Attributes"）、\`.sb-npcs-title\`（"NPCS"）、\`#sb-task-system .hs-mission-label\`（任务标题）
+- **小标题**：\`.sb-custom-attrs-title\`（"Custom Attributes"）、\`.sb-character-attrs-title\`（"Character Attributes"）、\`.sb-npcs-title\`（"Presences"）、\`#sb-task-system .hs-mission-label\`（任务标题）
 - **优先级陷阱**：模板默认标题样式选择器是 \`body[data-sb-skin="${baseTemplate}"] .xxx-title\`。你写覆盖时**必须带上 \`body[data-sb-skin="${baseTemplate}"]\` 前缀或加 !important**，否则优先级不够会被默认样式盖回去（这就是"改了没用/回归默认"的原因）。
+- **拟态风阴影**：拟态风格的阴影是由变量控制的。要去掉阴影，请在 CSS 顶部加入：\`:root { --hs-shadow-neu: none !important; --hs-shadow-neu-hover: none !important; }\`
 ${baseTemplate === 'neumorph' || baseTemplate === 'single-default' ? `- **⚠️ 障眼法警告**：拟态风/无世界观风的 \`.sb-npcs-title\` 用了 \`font-size:0\` 隐藏原文字，再用 \`::before{content:"Presence"}\` 显示假标题。你改这个标题时要么改 \`::before\` 的 content，要么先把 \`font-size\` 改回正常值再设新文字。` : ''}
 - 推荐写法示例：\`body[data-sb-skin="${baseTemplate}"] .sb-custom-attrs-title { font-size:14px; color:var(--accent); letter-spacing:.1em; }\`
 
@@ -1331,13 +1392,13 @@ ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'
         </div>
       </div>
 
-      <!-- NPC -->
-      <div class="sb-npcs-accordion">
-        <div class="sb-npcs-header">
-          <div class="sb-npcs-title">[ - ] NPCS <span>(2)</span></div>
-        </div>
-        <div class="sb-npcs-body open">
-          <div class="sb-npcs-list">
+        <!-- NPC -->
+        <div class="sb-npcs-accordion">
+          <div class="sb-npcs-header">
+            <div class="sb-npcs-title">Presences</div>
+          </div>
+          <div class="sb-npcs-body open">
+            <div class="sb-npcs-list">
             ${isSingle ? `
             <div class="sb-npc-card">
               <div class="sb-npc-content">
@@ -1574,6 +1635,59 @@ ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'
     _renderEditorAttachments();
   }
 
+  async function renameTheme() {
+    if (!_editingId) return;
+    const theme = get(_editingId);
+    if (!theme) return;
+
+    const newName = await UI.showSimpleInput('重命名主题', theme.name, {
+      placeholder: '输入新名称',
+      allowEmpty: false
+    });
+
+    if (newName === null || newName.trim() === theme.name) return;
+
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      UI.showToast('名称不能为空', 2000);
+      return;
+    }
+
+    theme.name = trimmed;
+    update(_editingId, { name: trimmed });
+
+    // 更新编辑器标题
+    const titleEl = document.getElementById('sb-editor-title');
+    if (titleEl) titleEl.textContent = trimmed;
+
+    UI.showToast('已重命名', 1500);
+  }
+
+  async function setContextLimit() {
+    if (!_editingId) return;
+    const theme = get(_editingId);
+    if (!theme) return;
+    const draft = theme.draft || { messages: [], currentCss: '' };
+    const current = draft.contextLimit || 128000;
+
+    const val = await UI.showSimpleInput('上下文长度限制 (tokens)', current, {
+      type: 'number',
+      placeholder: '默认 128000',
+      helpText: '超过此长度的消息将从较早的记录开始舍弃。设置为 0 则不限制。'
+    });
+
+    if (val === null) return;
+    const num = parseInt(val);
+    if (isNaN(num) || num < 0) {
+      UI.showToast('请输入有效的正整数', 2000);
+      return;
+    }
+
+    draft.contextLimit = num;
+    saveDraft(_editingId, draft);
+    UI.showToast(`已设置上下文限制为 ${num} tokens`, 2000);
+  }
+
   // ── 导出/导入（编辑器内） ────────────────────────────────────
   function exportCurrentTheme() {
     if (_editingId) {
@@ -1619,6 +1733,7 @@ ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'
     retryLastSend,
     copyMessage,
     editMessage,
+    deleteMessage,
     saveEditorChanges,
     updateCssPreview,
     exportSingle,
@@ -1635,6 +1750,8 @@ ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'
     attachImage,
     attachFile,
     removeAttachment,
+    renameTheme,
+    setContextLimit,
     exportCurrentTheme,
     importFromFileInEditor
   };

@@ -68,7 +68,11 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     // 只在有值时加可选参数
     const temp = parseFloat(config.temperature);
     if (!isNaN(temp)) body.temperature = temp;
-    const maxTk = parseInt(config.maxTokens);
+    // overrideConfig?.maxTokens 优先，其次全局配置
+    const maxTkOverride = overrideConfig?.maxTokens;
+    const maxTk = (maxTkOverride && parseInt(maxTkOverride) > 0)
+      ? parseInt(maxTkOverride)
+      : parseInt(config.maxTokens);
     if (!isNaN(maxTk) && maxTk > 0) body.max_tokens = maxTk;
     body.stream = useStream;
 
