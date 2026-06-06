@@ -858,6 +858,7 @@ function _extractJsonArrayText(content) {
     modal.id = 'phone-modal';
     modal.className = 'hidden';
     modal.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.38);backdrop-filter:blur(8px)';
+    modal.onclick = (e) => { if (e.target === modal) close(); };
  modal.innerHTML = `
  <div class="phone-shell" onclick="event.stopPropagation()">
  <div class="phone-statusbar">
@@ -4792,7 +4793,7 @@ function _renderChatThread(pd, contactId) {
 
   body.innerHTML = `
     <div class="phone-chat-thread" style="display:flex;flex-direction:column;height:100%">
-      <div id="phone-chat-msglist" style="flex:1;min-height:0;overflow-y:auto;padding:14px 14px 8px">${bubbles}</div>
+      <div id="phone-chat-msglist" onclick="Phone._closeChatPlusMenu()" style="flex:1;min-height:0;overflow-y:auto;padding:14px 14px 8px">${bubbles}</div>
 <div style="flex-shrink:0;padding:8px 10px;display:flex;gap:8px;align-items:center">
         <button id="phone-chat-plus-btn" onclick="Phone._toggleChatPlusMenu()" title="更多" style="flex-shrink:0;width:34px;height:34px;background:none;border:none;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:24px;height:24px"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 9a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V15a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V9Z" clip-rule="evenodd" /></svg>
@@ -5576,6 +5577,10 @@ async function _saveChatSettings(contactId) {
 }
 
 // 加号菜单开关
+function _closeChatPlusMenu() {
+  const menu = document.getElementById('phone-chat-plus-menu');
+  if (menu && !menu.classList.contains('hidden')) menu.classList.add('hidden');
+}
 function _toggleChatPlusMenu() {
   const menu = document.getElementById('phone-chat-plus-menu');
   if (!menu) return;
@@ -9025,7 +9030,7 @@ async function buildHeartsimServiceChatForBackstage() {
     // 主屏分页
     _onPagesScroll,
     // 聊天 App
-  _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openChatOrderPicker, _sendChatOrder, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
+  _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openChatOrderPicker, _sendChatOrder, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
   ingestChatMessages, getChatHistoryForNPCs,
     // 相机 App
     _switchCameraTab, _cameraRefillFromStatus, _cameraOpenAdjust, _cameraShoot, _cameraOpenPhoto, _cameraOnTextInput,
