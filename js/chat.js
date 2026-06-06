@@ -31,7 +31,7 @@ const Chat = (() => {
       const addNpc = (n) => {
         if (!n) return;
         const url = avatarById[n.id] || n.avatar || '';
-        const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/))].map(s => String(s || '').trim()).filter(Boolean);
+        const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))].map(s => String(s || '').trim()).filter(Boolean);
         names.forEach(name => { if (url || !map[name]) map[name] = url; });
       };
       wvs.forEach(wvItem => {
@@ -48,7 +48,19 @@ const Chat = (() => {
         let scName = '', scAvatar = '';
         if (conv.singleCharType === 'card') {
           const card = await DB.get('singleCards', conv.singleCharId);
-          if (card) { scName = card.name || ''; scAvatar = card.avatar || ''; }
+          if (card) {
+            scName = card.name || '';
+            scAvatar = card.avatar || '';
+            // 把 aliases 和 onlineName 也注册进头像 map
+            if (scAvatar) {
+              [card.aliases, card.onlineName].forEach(field => {
+                String(field || '').split(/[,，、\s]+/).forEach(s => {
+                  const t = s.trim();
+                  if (t && !_onlineNpcAvatarMap[t]) _onlineNpcAvatarMap[t] = scAvatar;
+                });
+              });
+            }
+          }
         } else if (conv.singleCharType === 'npc') {
           scAvatar = (await DB.get('npcAvatars', conv.singleCharId).catch(() => null))?.avatar || '';
           // NPC 名在世界观里已经加过了，但头像可能存在 npcAvatars 表
