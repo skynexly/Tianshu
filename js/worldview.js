@@ -5042,6 +5042,7 @@ async function _updateCalendarCardLabel() {
 async function _calSaveAndRefresh() {
   const w = await _getEditingWV();
   if (!w) return;
+  await _saveEditingWV(w);
   const cal = _ensureCalendarSystem(w);
   const overlay = document.getElementById('calendar-editor-overlay');
   if (overlay) {
@@ -5059,6 +5060,7 @@ async function _onCalWeekDayChange(idx, value) {
   const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.weekDayNames[idx] = value;
+  await _saveEditingWV(w);
 }
 
 async function _calAddWeekDay() {
@@ -5066,6 +5068,7 @@ async function _calAddWeekDay() {
   const cal = _ensureCalendarSystem(w);
   cal.weekDayNames.push(`第${cal.weekDayNames.length + 1}日`);
   cal.daysPerWeek = cal.weekDayNames.length;
+  await _saveEditingWV(w);
   _calSaveAndRefresh();
 }
 
@@ -5075,6 +5078,7 @@ async function _calRemoveWeekDay(idx) {
   if (cal.weekDayNames.length <= 1) return;
   cal.weekDayNames.splice(idx, 1);
   cal.daysPerWeek = cal.weekDayNames.length;
+  await _saveEditingWV(w);
   _calSaveAndRefresh();
 }
 
@@ -5086,6 +5090,7 @@ async function _calSetMonthMode(uniform) {
     const d = cal.daysPerMonth[0] || 30;
     cal.daysPerMonth = Array(cal.monthsPerYear).fill(d);
   }
+  await _saveEditingWV(w);
   _calSaveAndRefresh();
 }
 
@@ -5094,12 +5099,14 @@ async function _calSetUniformDays(val) {
   const cal = _ensureCalendarSystem(w);
   const d = Math.max(1, parseInt(val) || 30);
   cal.daysPerMonth = Array(cal.monthsPerYear).fill(d);
+  await _saveEditingWV(w);
 }
 
 async function _calSetMonthDays(idx, val) {
   const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.daysPerMonth[idx] = Math.max(1, parseInt(val) || 30);
+  await _saveEditingWV(w);
 }
 
 async function _calAddMonth() {
@@ -5107,6 +5114,7 @@ async function _calAddMonth() {
   const cal = _ensureCalendarSystem(w);
   cal.monthsPerYear += 1;
   cal.daysPerMonth.push(cal.uniformDaysPerMonth ? (cal.daysPerMonth[0] || 30) : 30);
+  await _saveEditingWV(w);
   _calSaveAndRefresh();
 }
 
@@ -5117,6 +5125,7 @@ async function _calRemoveMonth() {
   cal.monthsPerYear -= 1;
   cal.daysPerMonth.pop();
   cal.seasons.forEach(s => { s.months = (s.months || []).filter(m => m <= cal.monthsPerYear); });
+  await _saveEditingWV(w);
   _calSaveAndRefresh();
 }
 
@@ -5124,6 +5133,7 @@ async function _calSetSeasonName(idx, val) {
   const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   if (cal.seasons[idx]) cal.seasons[idx].name = val;
+  await _saveEditingWV(w);
 }
 
 async function _calSetSeasonMonths(idx, val) {
@@ -5132,18 +5142,21 @@ async function _calSetSeasonMonths(idx, val) {
   if (cal.seasons[idx]) {
     cal.seasons[idx].months = val.split(/[,，\s]+/).map(s => parseInt(s)).filter(n => n > 0 && n <= cal.monthsPerYear);
   }
+  await _saveEditingWV(w);
 }
 
 async function _calSetSeasonWeather(idx, val) {
   const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   if (cal.seasons[idx]) cal.seasons[idx].weather = val;
+  await _saveEditingWV(w);
 }
 
 async function _calAddSeason() {
   const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.seasons.push({ name: '', months: [], weather: '' });
+  await _saveEditingWV(w);
   _calSaveAndRefresh();
 }
 
@@ -5151,6 +5164,7 @@ async function _calRemoveSeason(idx) {
   const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.seasons.splice(idx, 1);
+  await _saveEditingWV(w);
   _calSaveAndRefresh();
 }
 
@@ -5159,6 +5173,7 @@ async function _calReset() {
   const gp = _ensureGameplay(w);
   gp.calendarSystem = null;
   _ensureCalendarSystem(w);
+  await _saveEditingWV(w);
   _calSaveAndRefresh();
   UI.showToast('已恢复默认历法', 1200);
 }
