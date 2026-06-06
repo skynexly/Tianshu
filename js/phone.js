@@ -4658,6 +4658,9 @@ async function _openChatSettings(contactId) {
 
   const body = document.getElementById('phone-body');
   if (!body) return;
+  // 挂到 phone-shell，透明背景只透出壁纸，不透出聊天内容
+  const shell = body.closest('.phone-shell') || body.parentElement;
+  if (!shell) return;
 
   const nickname = contact.nickname || '';
   const voiceEnabled = !!contact.voiceEnabled;
@@ -4665,9 +4668,10 @@ async function _openChatSettings(contactId) {
 
   const panel = document.createElement('div');
   panel.id = 'phone-chat-settings-panel';
-  panel.style.cssText = 'position:absolute;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;overflow:hidden';
+  panel.className = 'phone-fullscreen-panel';
+  panel.style.cssText = 'position:absolute;inset:0;background:transparent;z-index:200;display:flex;flex-direction:column;overflow:hidden';
   panel.innerHTML = `
-    <div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0">
+    <div style="display:flex;align-items:center;padding:12px 14px;flex-shrink:0">
       <button onclick="document.getElementById('phone-chat-settings-panel').remove()" style="width:34px;height:34px;background:none;border:none;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;margin-right:4px;line-height:0">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
       </button>
@@ -4699,7 +4703,7 @@ async function _openChatSettings(contactId) {
               </span>
             </label>
           </div>
-          <div id="chat-settings-voice-id-row" style="border-top:1px solid var(--border);padding:0 14px;display:${voiceEnabled ? 'flex' : 'none'};align-items:center">
+          <div id="chat-settings-voice-id-row" style="padding:0 14px;display:${voiceEnabled ? 'flex' : 'none'};align-items:center">
             <span style="font-size:14px;color:var(--text);flex-shrink:0;margin-right:10px">音色 ID</span>
             <input id="chat-settings-voice-id" type="text" value="${Utils.escapeHtml(voiceId)}" placeholder="填写 TTS 音色 ID"
               style="flex:1;padding:13px 0;font-size:14px;background:none;border:none;color:var(--text);outline:none">
@@ -4709,14 +4713,14 @@ async function _openChatSettings(contactId) {
       </div>
 
     </div>
-    <div style="flex-shrink:0;padding:12px 16px;border-top:1px solid var(--border)">
+    <div style="flex-shrink:0;padding:12px 16px">
       <button onclick="Phone._saveChatSettings('${contactId}')"
         style="width:100%;padding:13px;border-radius:12px;background:var(--accent);color:#fff;border:none;font-size:15px;font-weight:600;cursor:pointer">
         保存
       </button>
     </div>
   `;
-  body.appendChild(panel);
+  shell.appendChild(panel);
 }
 
 // 语音开关联动显示音色 ID 输入框
