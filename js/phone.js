@@ -4359,7 +4359,55 @@ function _renderChatThread(pd, contactId) {
           </div>`;
         }
 
-        // 地点链接气泡
+        // 订单气泡
+        if (m.type === 'order') {
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+              <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+                <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:8px">
+                  <svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='var(--accent)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/><line x1='3' x2='21' y1='6' y2='6'/><path d='M16 10a4 4 0 0 1-8 0'/></svg>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.orderName || '订单')}</div>
+                    ${m.orderShop ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.orderShop)}</div>` : ''}
+                  </div>
+                  ${m.orderPrice ? `<span style="font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0">¥${Utils.escapeHtml(String(m.orderPrice))}</span>` : ''}
+                </div>
+                <div style="padding:5px 14px 10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px">
+                  <span style="font-size:10px;padding:2px 6px;border-radius:5px;background:var(--bg-secondary,#eee);color:var(--text-secondary)">${Utils.escapeHtml(m.orderPlatform || '')}</span>
+                  <span style="font-size:10px;color:var(--text-secondary)">已购</span>
+                </div>
+              </div>
+              ${time}
+            </div>
+          </div>`;
+        }
+
+        // 订单气泡
+    if (m.type === 'order') {
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+          <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+            <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:8px">
+              <svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='var(--accent)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/><line x1='3' x2='21' y1='6' y2='6'/><path d='M16 10a4 4 0 0 1-8 0'/></svg>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.orderName || '订单')}</div>
+                ${m.orderShop ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.orderShop)}</div>` : ''}
+              </div>
+              ${m.orderPrice ? `<span style="font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0">¥${Utils.escapeHtml(String(m.orderPrice))}</span>` : ''}
+            </div>
+            <div style="padding:5px 14px 10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px">
+              <span style="font-size:10px;padding:2px 6px;border-radius:5px;background:var(--bg-secondary,#eee);color:var(--text-secondary)">${Utils.escapeHtml(m.orderPlatform || '')}</span>
+              <span style="font-size:10px;color:var(--text-secondary)">已购</span>
+            </div>
+          </div>
+          ${time}
+        </div>
+      </div>`;
+    }
+
+    // 地点链接气泡
         if (m.type === 'map_place') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
@@ -4511,13 +4559,13 @@ function _renderChatThread(pd, contactId) {
            </div>
            <span style="font-size:11px;color:var(--text-secondary)">位置</span>
          </button>
-        <!-- 订单 -->
-        <button class="phone-plus-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
-          <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          </div>
-          <span style="font-size:11px;color:var(--text-secondary)">订单</span>
-        </button>
+<!-- 订单 -->
+         <button class="phone-plus-item" onclick="Phone._openChatOrderPicker('${contactId}')" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
+           <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
+             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+           </div>
+           <span style="font-size:11px;color:var(--text-secondary)">订单</span>
+         </button>
         <!-- 转账 -->
         <button class="phone-plus-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
           <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
@@ -5305,6 +5353,92 @@ function _toggleChatVoiceMode(contactId) {
   if (menu) menu.classList.add('hidden');
 }
 
+// 聊天订单选择器：全屏弹窗列出所有订单，点击发送
+async function _openChatOrderPicker(contactId) {
+  const plusMenu = document.getElementById('phone-chat-plus-menu');
+  if (plusMenu) plusMenu.classList.add('hidden');
+
+  const pd = await _getPhoneData();
+  const takeoutOrders = (pd?.takeoutOrders || []).slice().reverse();
+  const shopOrders = (pd?.shopOrders || []).slice().reverse();
+  const allOrders = [
+    ...takeoutOrders.map(o => ({ ...o, _kind: 'takeout' })),
+    ...shopOrders.map(o => ({ ...o, _kind: 'shop' }))
+  ];
+
+  const old = document.getElementById('phone-order-picker-overlay');
+  if (old) old.remove();
+
+  const myName = (() => { try { const mk = Character.get(); return mk?.name || '我'; } catch(_) { return '我'; } })();
+
+  const cardsHtml = allOrders.length > 0 ? allOrders.map(o => {
+    const platform = o._kind === 'takeout' ? '饿了咪' : '桃宝';
+    const targetLabel = o.target === '自己' ? `${myName}自己` : `→ ${o.target}`;
+    return `
+      <div onclick="Phone._sendChatOrder('${contactId}','${Utils.escapeHtml(o.id)}','${o._kind}')"
+           style="padding:12px 14px;border-radius:12px;background:var(--bg-tertiary);margin-bottom:8px;cursor:pointer;active:opacity:0.7">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:13px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(o.name || '')}</span>
+          ${o.price ? `<span style="font-size:13px;font-weight:700;color:var(--accent);margin-left:8px;flex-shrink:0">¥${Utils.escapeHtml(String(o.price))}</span>` : ''}
+        </div>
+        ${o.shop ? `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:3px">${Utils.escapeHtml(o.shop)}</div>` : ''}
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <span style="font-size:10px;padding:2px 7px;border-radius:6px;background:var(--bg-secondary,#eee);color:var(--text-secondary)">${Utils.escapeHtml(platform)}</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:6px;background:var(--bg-secondary,#eee);color:var(--text-secondary)">${Utils.escapeHtml(targetLabel)}</span>
+          <span style="font-size:10px;color:var(--text-secondary);margin-left:auto">${Utils.escapeHtml(o.time || '')}</span>
+        </div>
+      </div>
+    `;
+  }).join('') : '<div style="padding:40px;text-align:center;color:var(--text-secondary);font-size:13px">还没有订单记录</div>';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'phone-order-picker-overlay';
+  overlay.className = 'phone-inner-modal';
+  overlay.innerHTML = `
+    <div class="modal-content phone-album-picker-card">
+      <div class="phone-album-picker-header">
+        <span style="font-size:14px;font-weight:600">发送订单</span>
+        <button type="button" onclick="document.getElementById('phone-order-picker-overlay')?.remove()" class="phone-album-picker-close" aria-label="关闭">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:12px">${cardsHtml}</div>
+    </div>
+  `;
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  const shell = document.querySelector('#phone-modal .phone-shell');
+  (shell || document.body).appendChild(overlay);
+}
+
+// 确认发送订单消息
+async function _sendChatOrder(contactId, orderId, kind) {
+  document.getElementById('phone-order-picker-overlay')?.remove();
+  const pd = await _getPhoneData();
+  const ordersField = kind === 'takeout' ? 'takeoutOrders' : 'shopOrders';
+  const order = (pd?.[ordersField] || []).find(o => o.id === orderId);
+  if (!order) { UI.showToast('订单不存在', 1200); return; }
+  const platform = kind === 'takeout' ? '饿了咪' : '桃宝';
+  let gameTime = '';
+  try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+  if (!pd.chatThreads) pd.chatThreads = {};
+  if (!pd.chatThreads[contactId]) pd.chatThreads[contactId] = [];
+  pd.chatThreads[contactId].push({
+    id: 'ord_' + Date.now(),
+    role: 'me',
+    type: 'order',
+    orderName: order.name || '',
+    orderShop: order.shop || '',
+    orderPrice: order.price || '',
+    orderDesc: order.desc || '',
+    orderTarget: order.target || '自己',
+    orderPlatform: platform,
+    orderTime: order.time || '',
+    text: `[订单信息]${order.name || ''}`,
+    time: gameTime,
+    createdAt: Date.now()
+  });
+  await _savePhoneData();
+  _openChatThread(contactId);
+}
+
 // 打开位置选择器：从 StatusBar 提取当前位置预填，用户可编辑后确认发送
 async function _openChatLocationPicker(contactId) {
   // 关闭加号菜单
@@ -5515,6 +5649,7 @@ async function _chatRequestReply(contactId) {
       if (m.type === 'forum_card') return `${who}：${t}发送了一条帖子摘要截图：${m.forumTitle || ''}`;
       if (m.type === 'forum_detail') return `${who}：${t}发送了一条帖子详情链接：${m.forumTitle || ''}`;
       if (m.type === 'map_place') return `${who}：${t}发送了一条地点链接：${m.placeName || ''}${m.placeAddress ? '（' + m.placeAddress + '）' : ''}`;
+      if (m.type === 'order') return `${who}：${t}发送了一条订单信息（${who}已购）：${m.orderName || ''}${m.orderPrice ? '（¥' + m.orderPrice + '）' : ''}${m.orderPlatform ? ' · ' + m.orderPlatform : ''}`;
       return `${who}：${t}${m.text}`;
     }).join('\n');
 
@@ -8512,7 +8647,7 @@ async function buildHeartsimServiceChatForBackstage() {
     // 主屏分页
     _onPagesScroll,
     // 聊天 App
-  _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
+  _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openChatOrderPicker, _sendChatOrder, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
   ingestChatMessages, getChatHistoryForNPCs,
     // 相机 App
     _switchCameraTab, _cameraRefillFromStatus, _cameraOpenAdjust, _cameraShoot, _cameraOpenPhoto, _cameraOnTextInput,
