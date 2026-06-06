@@ -328,6 +328,28 @@ async function init() {
         try { conv.phoneData = JSON.parse(JSON.stringify(srcConv.phoneData)); } catch(e) {}
       }
     }
+    // 状态栏时间兜底：如果到这里还没有statusBar.time（单人模式首次创建等情况）
+    if (!conv.statusBar || !conv.statusBar.time) {
+      try {
+        let initTime = '';
+        // 尝试从单人世界观读startTime
+        if (conv.isSingle && conv.singleWorldviewId) {
+          const swv = await DB.get('worldviews', conv.singleWorldviewId);
+          if (swv?.startTime) initTime = swv.startTime;
+        }
+        // 兜底用现实时间
+        if (!initTime) {
+          const now = new Date();
+          const weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+          initTime = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        }
+        if (!conv.statusBar) {
+          conv.statusBar = { region: '', location: '', time: initTime, weather: '', scene: '', playerOutfit: '', playerPosture: '', npcs: [] };
+        } else {
+          conv.statusBar.time = initTime;
+        }
+      } catch(_) {}
+    }
     list.push(conv);
     await saveList();
     await Character.switchMask(maskId);
