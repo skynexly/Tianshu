@@ -4123,6 +4123,31 @@ function _renderChatThread(pd, contactId) {
           </div>`;
         }
 
+        // 商品卡片气泡
+        if (m.type === 'product') {
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+              <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+                <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:flex-start">
+                  <div style="width:44px;height:44px;border-radius:8px;background:var(--bg-secondary,#eee);flex-shrink:0;display:flex;align-items:center;justify-content:center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" x2="21" y1="6" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                  </div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.productName || '商品')}</div>
+                    ${m.productPrice ? `<div style="font-size:14px;font-weight:700;color:var(--accent);margin-top:4px">¥${Utils.escapeHtml(String(m.productPrice))}</div>` : ''}
+                  </div>
+                </div>
+                <div style="padding:6px 14px 10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                  <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(m.productPlatform || '')}</span>
+                  ${m.productShop ? `<span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${Utils.escapeHtml(m.productShop)}</span>` : ''}
+                </div>
+              </div>
+              ${time}
+            </div>
+          </div>`;
+        }
+
         // 图片气泡（相册照片 / 本地真图）
         if (m.type === 'photo' || m.type === 'real_image') {
           const isAiImage = m.mode === 'ai_image' && m.imageId;
@@ -4142,7 +4167,7 @@ function _renderChatThread(pd, contactId) {
             </div>
           </div>`;
         }
-        
+
         return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
           <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
           <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
@@ -4483,6 +4508,31 @@ function _renderChatThreadWithSystem(pd, contactId) {
             </div>
             <div style="height:56px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.7">
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.5"><path d="M3 3h18M3 9h18M3 15h18M3 21h18M9 3v18M15 3v18"/></svg>
+            </div>
+          </div>
+          ${time}
+        </div>
+      </div>`;
+    }
+
+    // 商品卡片气泡
+    if (m.type === 'product') {
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+          <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+            <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:flex-start">
+              <div style="width:44px;height:44px;border-radius:8px;background:var(--bg-secondary,#eee);flex-shrink:0;display:flex;align-items:center;justify-content:center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" x2="21" y1="6" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.productName || '商品')}</div>
+                ${m.productPrice ? `<div style="font-size:14px;font-weight:700;color:var(--accent);margin-top:4px">¥${Utils.escapeHtml(String(m.productPrice))}</div>` : ''}
+              </div>
+            </div>
+            <div style="padding:6px 14px 10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(m.productPlatform || '')}</span>
+              ${m.productShop ? `<span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${Utils.escapeHtml(m.productShop)}</span>` : ''}
             </div>
           </div>
           ${time}
@@ -4912,11 +4962,11 @@ async function _openChatLocationPicker(contactId) {
   const plusMenu = document.getElementById('phone-chat-plus-menu');
   if (plusMenu) plusMenu.classList.add('hidden');
 
-  // 从 StatusBar 拿当前位置
+  // 从 StatusBar 拿当前位置（region·location 拼接，与轨迹记录一致）
   let defaultLocation = '';
   try {
     const sb = Conversations.getStatusBar();
-    defaultLocation = sb?.location || sb?.place || '';
+    defaultLocation = [sb?.region, sb?.location].filter(Boolean).join('·');
   } catch(_) {}
 
   // 弹出编辑卡片
@@ -4930,14 +4980,9 @@ async function _openChatLocationPicker(contactId) {
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-        <span style="font-size:12px;color:var(--text-secondary)">位置名称</span>
+        <span style="font-size:12px;color:var(--text-secondary)">当前位置</span>
       </div>
-      <input id="loc-picker-name" type="text" value="${Utils.escapeHtml(defaultLocation)}" placeholder="输入位置名称…" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-        <span style="font-size:12px;color:var(--text-secondary)">详细地址（可选）</span>
-      </div>
-      <input id="loc-picker-addr" type="text" placeholder="输入详细地址…" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:20px">
+      <input id="loc-picker-name" type="text" value="${Utils.escapeHtml(defaultLocation)}" placeholder="输入位置名称…" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:20px">
       <button id="loc-picker-confirm" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer">发送位置</button>
     </div>
   `;
@@ -4947,9 +4992,8 @@ async function _openChatLocationPicker(contactId) {
   overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
   overlay.querySelector('#loc-picker-confirm').onclick = () => {
     const loc = (overlay.querySelector('#loc-picker-name').value || '').trim();
-    const addr = (overlay.querySelector('#loc-picker-addr').value || '').trim();
     document.body.removeChild(overlay);
-    if (loc) Phone._confirmChatLocation(contactId, loc, addr);
+    if (loc) Phone._confirmChatLocation(contactId, loc, '');
     else UI.showToast('请输入位置名称', 1200);
   };
 }
@@ -5118,6 +5162,7 @@ async function _chatRequestReply(contactId) {
       if (m.type === 'location') return `${who}：${t}发送了一条位置信息：${m.location || ''}${m.address ? '（' + m.address + '）' : ''}`;
       if (m.type === 'voice') return `${who}：${t}${m.voiceDesc || m.text || ''}`;
       if (m.type === 'photo') return `${who}：${t}[发送了一张照片]`;
+      if (m.type === 'product') return `${who}：${t}发送了一条商品链接：${m.productName || ''}${m.productPrice ? '（¥' + m.productPrice + '）' : ''}${m.productPlatform ? ' · ' + m.productPlatform : ''}`;
       return `${who}：${t}${m.text}`;
     }).join('\n');
 
@@ -7160,17 +7205,117 @@ ${fullCtx}`;
     const pd = await _getPhoneData();
     const it = pd?.[_getShopCfg(kind).cachedField]?.[idx];
     if (!it) return;
-    const platform = _getShopCfg(kind).title;  // '饿了咪' / '桃宝'
+    const platform = _getShopCfg(kind).title;
     const title = `${platform}：${it.name || '商品'}`;
-    const lines = [];
-    lines.push(`平台：${platform}`);
-    lines.push(`商品：${it.name || ''}`);
+    const lines = [`平台：${platform}`, `商品：${it.name || ''}`];
     if (it.shop) lines.push(`店铺：${it.shop}`);
-    if (it.price !== undefined && it.price !== null && String(it.price).trim() !== '') {
-      lines.push(`价格：¥${it.price}`);
-    }
+    if (it.price !== undefined && it.price !== null && String(it.price).trim() !== '') lines.push(`价格：¥${it.price}`);
     if (it.desc) lines.push(`描述：${it.desc}`);
-    await _shareToMain('shop', title, lines.join('\n'));
+    const content = lines.join('\n');
+
+    // 弹出分享选项面板
+    const choice = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.45)';
+      overlay.innerHTML = `
+        <div style="width:100%;max-width:420px;background:var(--bg);border-radius:20px 20px 0 0;padding:20px 20px 32px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <span style="font-size:16px;font-weight:600;color:var(--text)">分享</span>
+            <button id="share-choice-cancel" style="background:none;border:none;color:var(--text-secondary);font-size:22px;cursor:pointer;line-height:1">×</button>
+          </div>
+          <button id="share-to-main" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+            分享到主线
+          </button>
+          <button id="share-to-chat" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            分享到聊天
+          </button>
+        </div>
+      `;
+      const close = val => { document.body.removeChild(overlay); resolve(val); };
+      overlay.querySelector('#share-choice-cancel').onclick = () => close(null);
+      overlay.querySelector('#share-to-main').onclick = () => close('main');
+      overlay.querySelector('#share-to-chat').onclick = () => close('chat');
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+      document.body.appendChild(overlay);
+    });
+
+    if (choice === 'main') {
+      await _shareToMain('shop', title, content);
+    } else if (choice === 'chat') {
+      await _shopShareToChat(it, platform);
+    }
+  }
+
+  // 分享商品到聊天：弹联系人选择，发送商品卡片
+  async function _shopShareToChat(item, platform) {
+    const pd = await _getPhoneData();
+    const contacts = (pd?.chatContacts || []).filter(c => c.added);
+    if (!contacts.length) { UI.showToast('还没有聊天联系人', 1500); return; }
+
+    const contactId = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5)';
+
+      const listHtml = contacts.map(c => {
+        const displayName = c.nickname || c.name || '?';
+        const avaUrl = _chatContactAvatar(c);
+        const avatarEl = avaUrl
+          ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+          : `<div style="width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${Utils.escapeHtml(displayName[0])}</div>`;
+        const thread = (pd.chatThreads && pd.chatThreads[c.id]) || [];
+        const lastMsg = thread.length ? thread[thread.length - 1] : null;
+        const lastText = lastMsg
+          ? (lastMsg.type === 'location' ? '[位置]' : lastMsg.type === 'voice' ? '[语音]' : lastMsg.type === 'photo' ? '[图片]' : lastMsg.type === 'product' ? '[商品链接]' : (lastMsg.text || ''))
+          : '暂无消息';
+        return `<div class="share-chat-pick-item" data-cid="${Utils.escapeHtml(c.id)}" style="padding:10px 12px;border-radius:10px;margin-bottom:4px;cursor:pointer;background:var(--bg-tertiary);display:flex;align-items:center;gap:10px">
+          ${avatarEl}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(displayName)}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(lastText.substring(0, 28))}</div>
+          </div>
+        </div>`;
+      }).join('');
+
+      overlay.innerHTML = `<div style="width:min(320px,88vw);background:var(--bg);border-radius:18px;padding:20px;max-height:70vh;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-shrink:0">
+          <span style="font-size:16px;font-weight:600;color:var(--text)">分享到</span>
+          <button id="share-chat-cancel" style="background:none;border:none;color:var(--text-secondary);font-size:22px;cursor:pointer;line-height:1">×</button>
+        </div>
+        <div style="flex:1;overflow-y:auto">${listHtml}</div>
+      </div>`;
+
+      const close = val => { document.body.removeChild(overlay); resolve(val); };
+      overlay.querySelector('#share-chat-cancel').onclick = () => close(null);
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+      overlay.querySelectorAll('.share-chat-pick-item').forEach(el => {
+        el.addEventListener('click', () => close(el.dataset.cid));
+      });
+      document.body.appendChild(overlay);
+    });
+
+    if (!contactId) return;
+
+    let gameTime = '';
+    try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+    if (!pd.chatThreads) pd.chatThreads = {};
+    if (!pd.chatThreads[contactId]) pd.chatThreads[contactId] = [];
+    pd.chatThreads[contactId].push({
+      id: 'prod_' + Date.now(),
+      role: 'me',
+      type: 'product',
+      productName: item.name || '',
+      productShop: item.shop || '',
+      productPrice: item.price || '',
+      productDesc: item.desc || '',
+      productPlatform: platform,
+      text: `[商品链接]${item.name || ''}`,
+      time: gameTime,
+      createdAt: Date.now()
+    });
+    await _savePhoneData();
+    UI.showToast('已发送', 1200);
   }
 
   // 给自己买
@@ -8038,7 +8183,7 @@ _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
     _switchShopTab, _shopRefresh, _shopSearch, _shopRepeatSearch, _deleteShopSearch,
     _shopOpenCustomModal, _shopCloseCustomModal, _shopConfirmCustom,
     _shopBuyForSelf, _shopBuyForTarget, _shopConfirmTarget, _shopCloseTargetModal,
-    _shopShareItem,
+    _shopShareItem, _shopShareToChat,
     _shopDeleteOrder,
     // 心动模拟 APP
     _hsAppFavorChange,
