@@ -184,7 +184,22 @@ const UI = (() => {
       switch (id) {
         case 'panel-chat': return null; // 聊天面板不走返回
         case 'panel-worldview': return () => showPanel('chat', 'back');
-        case 'panel-worldview-edit': return () => {
+case 'panel-worldview-edit': return async () => {
+          // 历法系统校验：有自定义历法必须填开场时间
+          if (typeof Worldview !== 'undefined' && Worldview._getEditingWV) {
+            try {
+              const w = await Worldview._getEditingWV();
+              if (w?.gameplay?.calendarSystem) {
+                const startTime = document.getElementById('wv-start-time')?.value?.trim();
+                if (!startTime) {
+                  UI.showToast('已启用历法系统，请填写开场时间', 3000);
+                  const stEl = document.getElementById('wv-start-time');
+                  if (stEl) { stEl.focus(); stEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                  return; // 阻止退出
+                }
+              }
+            } catch(_) {}
+          }
           // 离开编辑面板时自动保存并停止定时器
           if (typeof Worldview !== 'undefined') {
             if (Worldview.save) try { Worldview.save({ silent: true }); } catch(_) {}
