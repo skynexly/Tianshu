@@ -4852,6 +4852,317 @@ async function pickDefaultTheme(value) {
     }
   }
 
+// ===== 历法系统编辑器 =====
+
+function _ensureCalendarSystem(w) {
+  const gp = _ensureGameplay(w);
+  if (!gp.calendarSystem) {
+    gp.calendarSystem = {
+      hoursPerDay: 24,
+      daysPerWeek: 7,
+      weekDayNames: ['一', '二', '三', '四', '五', '六', '日'],
+      monthsPerYear: 12,
+      daysPerMonth: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+      uniformDaysPerMonth: false,
+      seasons: [
+        { name: '春', months: [3, 4, 5], weather: '微风渐暖' },
+        { name: '夏', months: [6, 7, 8], weather: '炎热潮湿' },
+        { name: '秋', months: [9, 10, 11], weather: '凉爽干燥' },
+        { name: '冬', months: [12, 1, 2], weather: '寒冷' }
+      ]
+    };
+  }
+  return gp.calendarSystem;
+}
+
+function openCalendarEditor() {
+  const w = _getEditingWV();
+  if (!w) { UI.showToast('请先选择世界观', 1200); return; }
+  const cal = _ensureCalendarSystem(w);
+
+  let overlay = document.getElementById('calendar-editor-overlay');
+  if (overlay) overlay.remove();
+
+  overlay = document.createElement('div');
+  overlay.id = 'calendar-editor-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;animation:sbFadeIn .2s ease-out';
+  overlay.innerHTML = _buildCalendarEditorHTML(cal);
+  document.body.appendChild(overlay);
+}
+
+function _buildCalendarEditorHTML(cal) {
+  const weekDayInputs = cal.weekDayNames.map((name, i) => `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+      <span style="font-size:11px;color:var(--text-secondary);min-width:24px">第${i + 1}天</span>
+      <input type="text" value="${Utils.escapeHtml(name)}" maxlength="10" data-weekday-idx="${i}"
+        style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
+        oninput="Worldview._onCalWeekDayChange(${i}, this.value)">
+      ${cal.weekDayNames.length > 1 ? `<button type="button" onclick="Worldview._calRemoveWeekDay(${i})" style="border:none;background:none;color:var(--text-secondary);cursor:pointer;font-size:14px;padding:2px 4px" title="删除">×</button>` : ''}
+    </div>
+  `).join('');
+
+  let monthContent = '';
+  if (cal.uniformDaysPerMonth) {
+    monthContent = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:12px;color:var(--text)">每月天数</span>
+        <input type="number" min="1" max="999" value="${cal.daysPerMonth[0] || 30}" id="cal-uniform-days"
+          style="width:60px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
+          oninput="Worldview._calSetUniformDays(this.value)">
+      </div>`;
+  } else {
+    monthContent = cal.daysPerMonth.map((d, i) => `
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <span style="font-size:11px;color:var(--text-secondary);min-width:36px">${i + 1}月</span>
+        <input type="number" min="1" max="999" value="${d}" data-month-idx="${i}"
+          style="width:55px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
+          oninput="Worldview._calSetMonthDays(${i}, this.value)">
+        <span style="font-size:11px;color:var(--text-secondary)">天</span>
+      </div>
+    `).join('');
+  }
+
+  const seasonCards = cal.seasons.map((s, i) => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg-secondary)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <input type="text" value="${Utils.escapeHtml(s.name || '')}" placeholder="季节名" maxlength="10"
+          style="width:60px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
+          oninput="Worldview._calSetSeasonName(${i}, this.value)">
+        <input type="text" value="${(s.months || []).join(',')}" placeholder="包含月份(逗号分隔)"
+          style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
+          oninput="Worldview._calSetSeasonMonths(${i}, this.value)">
+        <button type="button" onclick="Worldview._calRemoveSeason(${i})" style="border:none;background:none;color:var(--text-secondary);cursor:pointer;font-size:14px;padding:2px 4px" title="删除">×</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:11px;color:var(--text-secondary)">概述</span>
+        <input type="text" value="${Utils.escapeHtml(s.weather || '')}" placeholder="该季节的天气概述" maxlength="20"
+          style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
+          oninput="Worldview._calSetSeasonWeather(${i}, this.value)">
+      </div>
+    </div>
+  `).join('');
+
+  const totalDays = cal.daysPerMonth.reduce((a, b) => a + b, 0);
+
+  return `
+    <div style="padding:16px 16px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:8px">
+        <button type="button" onclick="Worldview.closeCalendarEditor()" style="border:none;background:none;color:var(--text);cursor:pointer;padding:4px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span style="font-size:16px;font-weight:600;color:var(--text)">历法系统</span>
+      </div>
+      <button type="button" onclick="Worldview._calReset()" style="border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;padding:5px 10px;border-radius:6px;font-size:11px">恢复默认</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:16px">
+
+      <!-- 周设定 -->
+      <div style="margin-bottom:24px">
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          周设定
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px">一周有 ${cal.daysPerWeek} 天。可增减天数并自定义每天名称。</div>
+        <div id="cal-weekday-list">
+          ${weekDayInputs}
+        </div>
+        <button type="button" onclick="Worldview._calAddWeekDay()" style="margin-top:4px;padding:5px 12px;border:1px dashed var(--border);border-radius:6px;background:none;color:var(--accent);cursor:pointer;font-size:11px">+ 添加一天</button>
+      </div>
+
+      <!-- 月设定 -->
+      <div style="margin-bottom:24px">
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+          月设定
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:12px;color:var(--text)">一年 ${cal.monthsPerYear} 个月</span>
+          <button type="button" onclick="Worldview._calAddMonth()" style="border:1px dashed var(--border);border-radius:6px;background:none;color:var(--accent);cursor:pointer;font-size:11px;padding:3px 8px">+</button>
+          ${cal.monthsPerYear > 1 ? `<button type="button" onclick="Worldview._calRemoveMonth()" style="border:1px dashed var(--border);border-radius:6px;background:none;color:var(--text-secondary);cursor:pointer;font-size:11px;padding:3px 8px">−</button>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <label style="font-size:12px;color:var(--text);display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="radio" name="cal-month-mode" ${cal.uniformDaysPerMonth ? 'checked' : ''} onchange="Worldview._calSetMonthMode(true)"> 每月统一
+          </label>
+          <label style="font-size:12px;color:var(--text);display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="radio" name="cal-month-mode" ${!cal.uniformDaysPerMonth ? 'checked' : ''} onchange="Worldview._calSetMonthMode(false)"> 分月设定
+          </label>
+        </div>
+        <div id="cal-month-content">
+          ${monthContent}
+        </div>
+      </div>
+
+      <!-- 季设定 -->
+      <div style="margin-bottom:24px">
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></svg>
+          季设定
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px">设定哪些月份属于哪个季节，以及该季节的天气概述。</div>
+        <div id="cal-season-list">
+          ${seasonCards}
+        </div>
+        <button type="button" onclick="Worldview._calAddSeason()" style="margin-top:4px;padding:5px 12px;border:1px dashed var(--border);border-radius:6px;background:none;color:var(--accent);cursor:pointer;font-size:11px">+ 添加季节</button>
+      </div>
+
+      <!-- 年设定 -->
+      <div style="margin-bottom:24px">
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+          年设定
+        </div>
+        <div style="font-size:12px;color:var(--text);margin-bottom:4px">一年共 <strong>${totalDays}</strong> 天（${cal.monthsPerYear} 个月 × 各月天数）</div>
+        <div style="font-size:11px;color:var(--text-secondary)">年总天数由月设定自动计算，无需手动填写。</div>
+      </div>
+
+    </div>
+  `;
+}
+
+function closeCalendarEditor() {
+  const overlay = document.getElementById('calendar-editor-overlay');
+  if (overlay) overlay.remove();
+  _updateCalendarCardLabel();
+  const w = _getEditingWV();
+  if (w) _saveEditingWV(w);
+}
+
+function _updateCalendarCardLabel() {
+  const label = document.getElementById('wv-calendar-card-label');
+  if (!label) return;
+  const w = _getEditingWV();
+  if (!w) return;
+  const gp = w.gameplay;
+  if (!gp || !gp.calendarSystem) { label.textContent = '设置历法系统'; return; }
+  const cal = gp.calendarSystem;
+  label.textContent = `${cal.daysPerWeek}天/周 · ${cal.monthsPerYear}月/年 · ${cal.seasons.length}季`;
+}
+
+function _calSaveAndRefresh() {
+  const w = _getEditingWV();
+  if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  const overlay = document.getElementById('calendar-editor-overlay');
+  if (overlay) {
+    const scroller = overlay.querySelector('div[style*="overflow-y:auto"]');
+    const scrollTop = scroller?.scrollTop || 0;
+    overlay.innerHTML = _buildCalendarEditorHTML(cal);
+    requestAnimationFrame(() => {
+      const s2 = overlay.querySelector('div[style*="overflow-y:auto"]');
+      if (s2) s2.scrollTop = scrollTop;
+    });
+  }
+}
+
+function _onCalWeekDayChange(idx, value) {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  cal.weekDayNames[idx] = value;
+}
+
+function _calAddWeekDay() {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  cal.weekDayNames.push(`第${cal.weekDayNames.length + 1}日`);
+  cal.daysPerWeek = cal.weekDayNames.length;
+  _calSaveAndRefresh();
+}
+
+function _calRemoveWeekDay(idx) {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  if (cal.weekDayNames.length <= 1) return;
+  cal.weekDayNames.splice(idx, 1);
+  cal.daysPerWeek = cal.weekDayNames.length;
+  _calSaveAndRefresh();
+}
+
+function _calSetMonthMode(uniform) {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  cal.uniformDaysPerMonth = uniform;
+  if (uniform) {
+    const d = cal.daysPerMonth[0] || 30;
+    cal.daysPerMonth = Array(cal.monthsPerYear).fill(d);
+  }
+  _calSaveAndRefresh();
+}
+
+function _calSetUniformDays(val) {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  const d = Math.max(1, parseInt(val) || 30);
+  cal.daysPerMonth = Array(cal.monthsPerYear).fill(d);
+}
+
+function _calSetMonthDays(idx, val) {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  cal.daysPerMonth[idx] = Math.max(1, parseInt(val) || 30);
+}
+
+function _calAddMonth() {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  cal.monthsPerYear += 1;
+  cal.daysPerMonth.push(cal.uniformDaysPerMonth ? (cal.daysPerMonth[0] || 30) : 30);
+  _calSaveAndRefresh();
+}
+
+function _calRemoveMonth() {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  if (cal.monthsPerYear <= 1) return;
+  cal.monthsPerYear -= 1;
+  cal.daysPerMonth.pop();
+  cal.seasons.forEach(s => { s.months = (s.months || []).filter(m => m <= cal.monthsPerYear); });
+  _calSaveAndRefresh();
+}
+
+function _calSetSeasonName(idx, val) {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  if (cal.seasons[idx]) cal.seasons[idx].name = val;
+}
+
+function _calSetSeasonMonths(idx, val) {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  if (cal.seasons[idx]) {
+    cal.seasons[idx].months = val.split(/[,，\s]+/).map(s => parseInt(s)).filter(n => n > 0 && n <= cal.monthsPerYear);
+  }
+}
+
+function _calSetSeasonWeather(idx, val) {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  if (cal.seasons[idx]) cal.seasons[idx].weather = val;
+}
+
+function _calAddSeason() {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  cal.seasons.push({ name: '', months: [], weather: '' });
+  _calSaveAndRefresh();
+}
+
+function _calRemoveSeason(idx) {
+  const w = _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  cal.seasons.splice(idx, 1);
+  _calSaveAndRefresh();
+}
+
+function _calReset() {
+  const w = _getEditingWV(); if (!w) return;
+  const gp = _ensureGameplay(w);
+  gp.calendarSystem = null;
+  _ensureCalendarSystem(w);
+  _calSaveAndRefresh();
+  UI.showToast('已恢复默认历法', 1200);
+}
+
   return {
     init: load,
     load,
@@ -4891,6 +5202,9 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     addGameplayAttr, updateGameplayAttr, deleteGameplayAttr, openGameplayAttrModal, closeGameplayAttrModal, saveGameplayAttrFromModal, deleteGameplayAttrFromModal, deleteGameplayCharacter, inheritCharAttrs, toggleGameplayCharPicker, renderGameplayCharPicker, selectGameplayCharacter,
     addTaskPhase, deleteTaskPhase, updateTaskPhase, addTaskType, deleteTaskType, updateTaskType, updateTaskPhaseReward,
     openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal, onTaskTypeRewardModeChange, openPhaseRewardModal,
+    openCalendarEditor, closeCalendarEditor,
+    _onCalWeekDayChange, _calAddWeekDay, _calRemoveWeekDay, _calSetMonthMode, _calSetUniformDays, _calSetMonthDays, _calAddMonth, _calRemoveMonth,
+    _calSetSeasonName, _calSetSeasonMonths, _calSetSeasonWeather, _calAddSeason, _calRemoveSeason, _calReset,
     _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards,
 editLorebookDescription,
     addFestival, editFestival, saveFestivalFromModal, deleteFestivalFromModal, closeFestivalModal,
