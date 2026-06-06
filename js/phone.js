@@ -108,6 +108,8 @@ function flushActionLogForBackstage() {
 let _pendingMeRoundId = {};
 // 手机聊天会话基准时间——任意联系人收到 AI 回复后更新，跨联系人共享
 let _chatSessionBaseTime = '';
+// 语音模式状态：{ contactId: true/false }
+let _chatVoiceMode = {};
 // 结构：{ contactId: { name: '联系人名', msgs: [{role, text, time}] } }
 let _chatRoundLog = {};
 
@@ -869,7 +871,7 @@ function _extractJsonArrayText(content) {
  <div class="phone-header">
  <button id="phone-back-btn" class="hidden phone-nav-btn" onclick="Phone.goBack()">${_uiIcon('back', 18)}</button>
  <span id="phone-title">手机</span>
- <span class="phone-header-spacer"></span>
+ <div id="phone-header-right" style="margin-left:auto;display:flex;align-items:center;gap:4px"></div>
  </div>
  <div id="phone-body" class="phone-body"></div>
  </div>
@@ -952,10 +954,12 @@ function _renderHomeIcon(a) {
   function _renderHomeScreen() {
     const body = document.getElementById('phone-body');
     if (!body) return;
-    document.getElementById('phone-back-btn')?.classList.add('hidden');
- document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-forum-detail-mode');
- document.querySelector('#phone-modal .phone-shell')?.classList.add('phone-home-mode');
- document.getElementById('phone-title').textContent = '';
+document.getElementById('phone-back-btn')?.classList.add('hidden');
+  document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-forum-detail-mode');
+  document.querySelector('#phone-modal .phone-shell')?.classList.add('phone-home-mode');
+  document.getElementById('phone-title').textContent = '';
+  const headerRight = document.getElementById('phone-header-right');
+  if (headerRight) headerRight.innerHTML = '';
 
     // 系统 App：饿了咪/桃宝 + 心动模拟（仅特定世界观）+ 占位
       const isHeartSim = document.body?.getAttribute('data-worldview') === '心动模拟';
@@ -4073,6 +4077,48 @@ function _renderChatThread(pd, contactId) {
         }
         const mine = m.role === 'me';
         const time = m.time ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(m.time)}</div>` : '';
+        
+        // 语音气泡
+        if (m.type === 'voice') {
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0;max-width:70%">
+              <div onclick="Phone._playVoice('${m.id}')" style="padding:10px 14px;border-radius:18px;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer;${mine ? 'flex-direction:row-reverse' : ''}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                <div class="phone-chat-voice-wave" id="voice-wave-${m.id}" style="display:flex;align-items:center;gap:3px;opacity:0.7">
+                  <div style="width:3px;height:4px;background:currentColor;border-radius:2px"></div>
+                  <div style="width:3px;height:8px;background:currentColor;border-radius:2px"></div>
+                  <div style="width:3px;height:12px;background:currentColor;border-radius:2px"></div>
+                  <div style="width:3px;height:8px;background:currentColor;border-radius:2px"></div>
+                  <div style="width:3px;height:5px;background:currentColor;border-radius:2px"></div>
+                </div>
+              </div>
+              <div style="margin-top:4px;padding:6px 10px;border-radius:8px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;max-width:100%;word-break:break-word">${Utils.escapeHtml(m.voiceDesc || '')}</div>
+              ${time}
+            </div>
+          </div>`;
+        }
+
+        // 图片气泡（相册照片 / 本地真图）
+        if (m.type === 'photo' || m.type === 'real_image') {
+          const isAiImage = m.mode === 'ai_image' && m.imageId;
+          const isRealImage = m.type === 'real_image' && m.imageBase64;
+          const innerHtml = isRealImage
+            ? `<img src="${Utils.escapeHtml(m.imageBase64)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px" />`
+            : isAiImage
+              ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="生成的图片" />`
+              : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div>`;
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+              <div class="phone-camera-polaroid" onclick="Phone._showChatPhotoDetail('${contactId}', '${m.id}')" style="opacity:1;margin:0;width:150px;min-height:150px;transform:none;cursor:pointer">
+                <div class="phone-camera-polaroid-frame" style="padding:8px 8px 28px">${innerHtml}</div>
+              </div>
+              ${time}
+            </div>
+          </div>`;
+        }
+        
         return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
           <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
           <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
@@ -4082,16 +4128,73 @@ function _renderChatThread(pd, contactId) {
         </div>`;
       }).join('')
     : '<div style="padding:40px 24px;text-align:center;color:var(--text-secondary);font-size:13px;line-height:1.8">还没有消息<br><span style="font-size:11px">下方输入框发消息，点刷新让对方回复</span></div>';
+  // 刷新按钮注入右上角
+  const headerRight = document.getElementById('phone-header-right');
+  if (headerRight) {
+    headerRight.innerHTML = `
+    <button id="phone-chat-refresh-btn" onclick="Phone._chatRequestReply('${contactId}')" title="让对方回复" style="width:36px;height:36px;background:none;border:none;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+    </button>
+    <button onclick="Phone._openChatSettings('${contactId}')" title="聊天设置" style="width:36px;height:36px;background:none;border:none;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+    </button>
+  `;
+  }
+
   body.innerHTML = `
     <div class="phone-chat-thread" style="display:flex;flex-direction:column;height:100%">
       <div id="phone-chat-msglist" style="flex:1;min-height:0;overflow-y:auto;padding:14px 14px 8px">${bubbles}</div>
-      <div style="flex-shrink:0;padding:8px 10px;display:flex;gap:8px;align-items:center">
-        <button id="phone-chat-refresh-btn" onclick="Phone._chatRequestReply('${contactId}')" title="让对方回复" style="flex-shrink:0;width:38px;height:38px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+<div style="flex-shrink:0;padding:8px 10px;display:flex;gap:8px;align-items:center">
+        <button id="phone-chat-plus-btn" onclick="Phone._toggleChatPlusMenu()" title="更多" style="flex-shrink:0;width:34px;height:34px;background:none;border:none;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:24px;height:24px"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 9a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V15a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V9Z" clip-rule="evenodd" /></svg>
         </button>
-        <input id="phone-chat-input" type="text" placeholder="输入消息…" onkeydown="if(event.key==='Enter'){Phone._chatSendMessage('${contactId}')}" style="flex:1;min-width:0;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none">
-        <button onclick="Phone._chatSendMessage('${contactId}')" title="发送" style="flex-shrink:0;width:38px;height:38px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+        <input id="phone-chat-input" type="text" placeholder="输入消息…" onkeydown="if(event.key==='Enter'){Phone._chatDoSend('${contactId}')}" oninput="Phone._onChatInput()" style="flex:1;min-width:0;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none">
+        <button id="phone-chat-send-btn" onclick="Phone._chatDoSend('${contactId}')" title="发送" style="flex-shrink:0;width:34px;height:34px;background:var(--accent);color:#fff;border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0;box-shadow:0 2px 4px var(--accent-dim)">
+          <svg id="phone-chat-send-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+         </button>
+       </div>
+       <div id="phone-chat-plus-menu" class="hidden" style="flex-shrink:0;background:transparent;padding:16px 20px;display:grid;grid-template-columns:repeat(4, 1fr);gap:16px 12px">
+<!-- 图片 -->
+        <button class="phone-plus-item" onclick="Phone._openImagePickerForChat('${contactId}')" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
+          <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+          </div>
+          <span style="font-size:11px;color:var(--text-secondary)">图片</span>
+        </button>
+        <!-- 相册 -->
+        <button class="phone-plus-item" onclick="Phone._openAlbumPickerForChat('${contactId}')" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
+          <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"></rect><rect x="6" y="15" width="12" height="4" rx="0.5"></rect><circle cx="12" cy="10.5" r="3"></circle><circle cx="12" cy="10.5" r="1"></circle><circle cx="17.5" cy="7.8" r="0.6"></circle></svg>
+          </div>
+          <span style="font-size:11px;color:var(--text-secondary)">相册</span>
+        </button>
+<!-- 语音 -->
+         <button class="phone-plus-item" onclick="Phone._toggleChatVoiceMode('${contactId}')" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
+          <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+          </div>
+          <span style="font-size:11px;color:var(--text-secondary)">语音</span>
+        </button>
+        <!-- 位置 -->
+        <button class="phone-plus-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
+          <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <span style="font-size:11px;color:var(--text-secondary)">位置</span>
+        </button>
+        <!-- 订单 -->
+        <button class="phone-plus-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
+          <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <span style="font-size:11px;color:var(--text-secondary)">订单</span>
+        </button>
+        <!-- 转账 -->
+        <button class="phone-plus-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
+          <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+          </div>
+          <span style="font-size:11px;color:var(--text-secondary)">转账</span>
         </button>
       </div>
     </div>
@@ -4100,6 +4203,35 @@ function _renderChatThread(pd, contactId) {
   if (list) list.scrollTop = list.scrollHeight;
   // 绑定长按事件
   _bindChatThreadEvents(contactId);
+}
+
+let _voicePlayTimers = {};
+function _playVoice(msgId, isMine) {
+  // 兼容 msgId 带 update- 前缀
+  const realId = msgId.startsWith('update-') ? msgId.substring(7) : msgId;
+  const waveEl1 = document.getElementById('voice-wave-' + realId);
+  const waveEl2 = document.getElementById('voice-wave-update-' + realId);
+  
+  if (!waveEl1 && !waveEl2) return;
+  
+  // 清除该条语音可能存在的定时器
+  if (_voicePlayTimers[realId]) {
+    clearTimeout(_voicePlayTimers[realId]);
+    delete _voicePlayTimers[realId];
+    if (waveEl1) waveEl1.classList.remove('playing');
+    if (waveEl2) waveEl2.classList.remove('playing');
+    return;
+  }
+  
+  if (waveEl1) waveEl1.classList.add('playing');
+  if (waveEl2) waveEl2.classList.add('playing');
+  
+  // 模拟播放时间，固定2秒
+  _voicePlayTimers[realId] = setTimeout(() => {
+    if (waveEl1) waveEl1.classList.remove('playing');
+    if (waveEl2) waveEl2.classList.remove('playing');
+    delete _voicePlayTimers[realId];
+  }, 2000);
 }
 
 // 绑定手机聊天气泡长按事件
@@ -4147,7 +4279,9 @@ async function _showChatBubbleMenu(contactId, msgId, role) {
   if (!msg) return;
 
   let actions = [];
-  if (role === 'me') {
+  if (msg.type === 'photo') {
+    actions = ['删除'];
+  } else if (role === 'me') {
     actions = ['编辑', '撤回'];
   } else {
     actions = ['编辑', '删除'];
@@ -4177,7 +4311,7 @@ async function _showChatBubbleMenu(contactId, msgId, role) {
       _renderChatThread(pd, contactId);
     }
   } else if (choice === '删除') {
-    // them 气泡删除：直接移除
+    // 气泡删除：直接移除（不论是我发出的图片还是对方的气泡）
     const idx = thread.findIndex(m => m.id === msgId);
     if (idx >= 0) {
       thread.splice(idx, 1);
@@ -4253,6 +4387,53 @@ function _renderChatThreadWithSystem(pd, contactId) {
 
     const mine = m.role === 'me';
     const time = m.time ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(m.time)}</div>` : '';
+    
+    // 语音气泡
+    if (m.type === 'voice') {
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0;max-width:70%">
+          <div onclick="Phone._playVoice('${m.id}')" style="padding:10px 14px;border-radius:18px;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer;${mine ? 'flex-direction:row-reverse' : ''}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            <div class="phone-chat-voice-wave" id="voice-wave-${m.id}" style="display:flex;align-items:center;gap:3px;opacity:0.7">
+              <div style="width:3px;height:4px;background:currentColor;border-radius:2px"></div>
+              <div style="width:3px;height:8px;background:currentColor;border-radius:2px"></div>
+              <div style="width:3px;height:12px;background:currentColor;border-radius:2px"></div>
+              <div style="width:3px;height:8px;background:currentColor;border-radius:2px"></div>
+              <div style="width:3px;height:5px;background:currentColor;border-radius:2px"></div>
+            </div>
+          </div>
+          <div style="margin-top:4px;padding:6px 10px;border-radius:8px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;max-width:100%;word-break:break-word">${Utils.escapeHtml(m.voiceDesc || '')}</div>
+          ${time}
+        </div>
+      </div>`;
+    }
+
+    // 如果是照片气泡，渲染为图片样式
+    if (m.type === 'photo') {
+      const isImage = m.mode === 'ai_image' && m.imageId;
+      const innerHtml = isImage
+        ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="生成的图片" />`
+        : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div>`;
+      
+      const photoHtml = `
+        <div class="phone-camera-polaroid" onclick="Phone._showChatPhotoDetail('${contactId}', '${m.id}')" style="opacity:1;margin:0;width:160px;min-height:160px;transform:none">
+          <div class="phone-camera-polaroid-frame" style="padding:10px 10px 30px">
+            ${innerHtml}
+          </div>
+        </div>
+      `;
+      
+      const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+          ${photoHtml}
+          ${time}
+        </div>
+      </div>`;
+      return bubbleHtml;
+    }
+    
     const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
@@ -4442,20 +4623,9 @@ async function _chatSendMessage(contactId) {
     // 获取联系人名字
     const contact = (pd.chatContacts || []).find(c => c.id === contactId);
     const contactName = contact?.name || contactId;
-    // 时间戳优先级：
-    // 1. 跨联系人全局会话基准时间（最新的，任何联系人收到回复都会更新）
-    // 2. 本联系人最后一条 AI 回复时间（兜底，处理没有全局基准的情况）
-    // 3. 状态栏时间（第一次发消息时兜底）
+    // 时间戳：取状态栏、全局基准、thread最新消息三者中最新的
     let gameTime = '';
-    const thread = pd.chatThreads[contactId];
-    const lastThemMsg = [...thread].reverse().find(m => m.role === 'them' && m.time);
-    if (_chatSessionBaseTime) {
-      gameTime = _chatSessionBaseTime;
-    } else if (lastThemMsg && lastThemMsg.time) {
-      gameTime = lastThemMsg.time;
-    } else {
-      try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
-    }
+    try { gameTime = _getChatGameTime(contactId, pd); } catch(_) {}
     // 获取或创建本轮用户 roundId（连发共用）
     if (!_pendingMeRoundId[contactId]) {
       _pendingMeRoundId[contactId] = 'r_' + Utils.uuid().slice(0, 8);
@@ -4480,6 +4650,218 @@ async function _chatSendMessage(contactId) {
   }
 }
 
+// 聊天设置面板
+async function _openChatSettings(contactId) {
+  const pd = await _getPhoneData();
+  const contact = (pd.chatContacts || []).find(c => c.id === contactId);
+  if (!contact) return;
+
+  const body = document.getElementById('phone-body');
+  if (!body) return;
+
+  const nickname = contact.nickname || '';
+  const voiceEnabled = !!contact.voiceEnabled;
+  const voiceId = contact.voiceId || '';
+
+  const panel = document.createElement('div');
+  panel.id = 'phone-chat-settings-panel';
+  panel.style.cssText = 'position:absolute;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;overflow:hidden';
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <button onclick="document.getElementById('phone-chat-settings-panel').remove()" style="width:34px;height:34px;background:none;border:none;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;margin-right:4px;line-height:0">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+      </button>
+      <span style="font-size:16px;font-weight:600;color:var(--text);flex:1">聊天设置</span>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:16px 16px 32px">
+
+      <div style="margin-bottom:24px">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:500;letter-spacing:.04em">备注昵称</div>
+        <div style="background:var(--bg-tertiary);border-radius:12px;overflow:hidden">
+          <div style="display:flex;align-items:center;padding:0 14px">
+            <input id="chat-settings-nickname" type="text" value="${Utils.escapeHtml(nickname)}" placeholder="留空则显示原名" maxlength="20"
+              style="flex:1;padding:13px 0;font-size:14px;background:none;border:none;color:var(--text);outline:none">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding:0 4px">仅对你显示，不会发送给 AI</div>
+      </div>
+
+      <div style="margin-bottom:24px">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:500;letter-spacing:.04em">角色语音</div>
+        <div style="background:var(--bg-tertiary);border-radius:12px;overflow:hidden">
+          <div style="display:flex;align-items:center;padding:13px 14px">
+            <span style="flex:1;font-size:14px;color:var(--text)">启用角色语音</span>
+            <label style="position:relative;width:44px;height:26px;cursor:pointer;flex-shrink:0">
+              <input id="chat-settings-voice-enabled" type="checkbox" ${voiceEnabled ? 'checked' : ''} onchange="Phone._onChatSettingsVoiceToggle()"
+                style="opacity:0;width:0;height:0;position:absolute">
+              <span id="chat-settings-voice-track" style="position:absolute;inset:0;border-radius:13px;background:${voiceEnabled ? 'var(--accent)' : 'var(--border)'};transition:background .2s">
+                <span style="position:absolute;top:3px;left:${voiceEnabled ? '21px' : '3px'};width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+              </span>
+            </label>
+          </div>
+          <div id="chat-settings-voice-id-row" style="border-top:1px solid var(--border);padding:0 14px;display:${voiceEnabled ? 'flex' : 'none'};align-items:center">
+            <span style="font-size:14px;color:var(--text);flex-shrink:0;margin-right:10px">音色 ID</span>
+            <input id="chat-settings-voice-id" type="text" value="${Utils.escapeHtml(voiceId)}" placeholder="填写 TTS 音色 ID"
+              style="flex:1;padding:13px 0;font-size:14px;background:none;border:none;color:var(--text);outline:none">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding:0 4px">启用后 AI 回复将通过语音播放</div>
+      </div>
+
+    </div>
+    <div style="flex-shrink:0;padding:12px 16px;border-top:1px solid var(--border)">
+      <button onclick="Phone._saveChatSettings('${contactId}')"
+        style="width:100%;padding:13px;border-radius:12px;background:var(--accent);color:#fff;border:none;font-size:15px;font-weight:600;cursor:pointer">
+        保存
+      </button>
+    </div>
+  `;
+  body.appendChild(panel);
+}
+
+// 语音开关联动显示音色 ID 输入框
+function _onChatSettingsVoiceToggle() {
+  const cb = document.getElementById('chat-settings-voice-enabled');
+  const row = document.getElementById('chat-settings-voice-id-row');
+  const track = document.getElementById('chat-settings-voice-track');
+  const knob = track ? track.querySelector('span') : null;
+  if (!cb) return;
+  const on = cb.checked;
+  if (row) row.style.display = on ? 'flex' : 'none';
+  if (track) track.style.background = on ? 'var(--accent)' : 'var(--border)';
+  if (knob) knob.style.left = on ? '21px' : '3px';
+}
+
+// 保存聊天设置
+async function _saveChatSettings(contactId) {
+  const nicknameEl = document.getElementById('chat-settings-nickname');
+  const voiceEnabledEl = document.getElementById('chat-settings-voice-enabled');
+  const voiceIdEl = document.getElementById('chat-settings-voice-id');
+  const pd = await _getPhoneData();
+  const contact = (pd.chatContacts || []).find(c => c.id === contactId);
+  if (!contact) return;
+  contact.nickname = (nicknameEl?.value || '').trim();
+  contact.voiceEnabled = !!(voiceEnabledEl?.checked);
+  contact.voiceId = (voiceIdEl?.value || '').trim();
+  await _savePhoneData();
+  const panel = document.getElementById('phone-chat-settings-panel');
+  if (panel) panel.remove();
+  UI.showToast('已保存', 1200);
+  // 刷新标题（如果有昵称需要更新显示）
+  const headerTitle = document.getElementById('phone-header-title');
+  if (headerTitle) headerTitle.textContent = contact.nickname || contact.name || '';
+}
+
+// 加号菜单开关
+function _toggleChatPlusMenu() {
+  const menu = document.getElementById('phone-chat-plus-menu');
+  if (!menu) return;
+  const isHidden = menu.classList.contains('hidden');
+  menu.classList.toggle('hidden');
+  if (isHidden) {
+    const list = document.getElementById('phone-chat-msglist');
+    if (list) {
+      setTimeout(() => {
+        list.scrollTop = list.scrollHeight;
+      }, 50);
+    }
+    // 点外部关闭
+    setTimeout(() => {
+      const close = (e) => {
+        if (!menu.contains(e.target) && e.target.id !== 'phone-chat-plus-btn') {
+          menu.classList.add('hidden');
+          document.removeEventListener('click', close);
+        }
+      };
+      document.addEventListener('click', close);
+    }, 0);
+  }
+}
+
+// 分发发送：语音模式走 _chatSendVoice，普通模式走 _chatSendMessage
+function _chatDoSend(contactId) {
+  if (_chatVoiceMode[contactId]) {
+    _chatSendVoice(contactId);
+  } else {
+    _chatSendMessage(contactId);
+  }
+}
+
+// 切换语音模式：发送按钮图标在箭头↑和话筒之间切换，左侧按钮在加号和叉叉之间切换
+function _toggleChatVoiceMode(contactId) {
+  _chatVoiceMode[contactId] = !_chatVoiceMode[contactId];
+  const isVoice = !!_chatVoiceMode[contactId];
+  // 切换发送按钮图标
+  const icon = document.getElementById('phone-chat-send-icon');
+  if (icon) {
+    icon.innerHTML = isVoice
+      ? '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>'
+      : '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>';
+  }
+  // 切换左侧加号/叉叉按钮
+  const plusBtn = document.getElementById('phone-chat-plus-btn');
+  if (plusBtn) {
+    if (isVoice) {
+      plusBtn.onclick = () => Phone._toggleChatVoiceMode(contactId);
+      plusBtn.title = '退出语音模式';
+      plusBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+    } else {
+      plusBtn.onclick = () => Phone._toggleChatPlusMenu();
+      plusBtn.title = '更多';
+      plusBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:24px;height:24px"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 9a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V15a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V9Z" clip-rule="evenodd" /></svg>`;
+    }
+  }
+  // 切换输入框 placeholder
+  const input = document.getElementById('phone-chat-input');
+  if (input) {
+    input.placeholder = isVoice ? '输入语音内容…' : '输入消息…';
+    input.focus();
+  }
+  // 关闭加号菜单
+  const menu = document.getElementById('phone-chat-plus-menu');
+  if (menu) menu.classList.add('hidden');
+}
+
+// 发送语音消息：存 type=voice，不触发 AI，等刷新打包
+async function _chatSendVoice(contactId) {
+  try {
+    const input = document.getElementById('phone-chat-input');
+    if (!input) return;
+    const text = (input.value || '').trim();
+    if (!text) return;
+    const pd = await _getPhoneData();
+    if (!pd.chatThreads) pd.chatThreads = {};
+    if (!pd.chatThreads[contactId]) pd.chatThreads[contactId] = [];
+    const contact = (pd.chatContacts || []).find(c => c.id === contactId);
+    const contactName = contact?.name || contactId;
+    let gameTime = '';
+    try { gameTime = _getChatGameTime(contactId, pd); } catch(_) {}
+    if (!_pendingMeRoundId[contactId]) {
+      _pendingMeRoundId[contactId] = 'r_' + Utils.uuid().slice(0, 8);
+    }
+    const meRoundId = _pendingMeRoundId[contactId];
+    const aiText = `{{user}}发送了一条语音，内容为：${text}`;
+    pd.chatThreads[contactId].push({
+      id: 'm_' + Utils.uuid().slice(0, 8),
+      role: 'me',
+      type: 'voice',
+      voiceDesc: text,
+      text: aiText,
+      time: gameTime,
+      fromMainline: false,
+      roundId: meRoundId,
+    });
+    _addChatMessageToRoundLog(contactId, 'me', aiText, gameTime, contactName);
+    await _savePhoneData();
+    input.value = '';
+    _renderChatThread(pd, contactId);
+    const inp2 = document.getElementById('phone-chat-input');
+    if (inp2) inp2.focus();
+  } catch(e) {
+    UI.showToast('发送失败：' + (e.message || '未知'), 2000);
+  }
+}
+
 // 点刷新：把自己发的消息 + 角色人设 + 世界观 + 主线 + 手机聊天记录打包，请求 AI 回复
 let _chatReplyBusy = false;
 async function _chatRequestReply(contactId) {
@@ -4494,6 +4876,27 @@ async function _chatRequestReply(contactId) {
 
     _chatReplyBusy = true;
     if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.74-8.74"/></svg>'; btn.style.pointerEvents = 'none'; }
+
+    // 先识图：处理所有 needsVision=true 的气泡
+    const visionPending = thread.filter(m => m.needsVision && m.type === 'real_image' && m.imageBase64);
+    if (visionPending.length > 0) {
+      UI.showToast('正在识别图片…', 1500);
+      for (const m of visionPending) {
+        try {
+          const description = await API.describeImage(m.imageBase64, '请用中文详细描述这张图片的内容，包括画面主体、场景、颜色、氛围等。');
+          if (description) {
+            m.photoDesc = description;
+            m.text = `{{user}}发送了一张图片，图片内容为：${description}`;
+            m.needsVision = false;
+          }
+        } catch(e) {
+          m.text = `{{user}}发送了一张图片（识图失败：${e.message || '未知'}）`;
+          m.needsVision = false;
+        }
+      }
+      await _savePhoneData();
+      _renderChatThread(pd, contactId);
+    }
     // 插入 typing 占位（对方头像 + 三点跳动）
     const _insertTyping = () => {
       const list = document.getElementById('phone-chat-msglist');
@@ -5322,6 +5725,225 @@ async function _pickAlbumForMoment(id) {
   UI.showToast('已填入', 1000);
 }
 
+// 聊天界面"图片"：调起本地文件选择器，选图后调识图模型，把描述发到聊天
+function _openImagePickerForChat(contactId) {
+  // 隐藏加号菜单
+  const menu = document.getElementById('phone-chat-plus-menu');
+  if (menu) menu.classList.add('hidden');
+
+  // 创建隐藏的 file input
+  let picker = document.getElementById('phone-chat-image-picker');
+  if (!picker) {
+    picker = document.createElement('input');
+    picker.id = 'phone-chat-image-picker';
+    picker.type = 'file';
+    picker.accept = 'image/*';
+    picker.style.display = 'none';
+    document.body.appendChild(picker);
+  }
+  picker.value = '';
+  picker.onchange = () => _onChatImagePicked(contactId, picker);
+  picker.click();
+}
+
+async function _onChatImagePicked(contactId, input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+
+  try {
+    // 读取为 base64 dataURL
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    let gameTime = '';
+    const pd = await _getPhoneData();
+    try { gameTime = _getChatGameTime(contactId, pd); } catch(_) {}
+    if (!pd.chatThreads) pd.chatThreads = {};
+    if (!pd.chatThreads[contactId]) pd.chatThreads[contactId] = [];
+
+    // 存图片气泡，text 暂时为空占位，刷新时再调识图填充
+    pd.chatThreads[contactId].push({
+      id: 'm_' + Utils.uuid().slice(0, 8),
+      role: 'me',
+      text: '',          // 刷新时才填充
+      type: 'real_image',
+      imageBase64: base64,
+      photoDesc: '',     // 刷新时才填充
+      needsVision: true, // 标记：还未识图
+      time: gameTime
+    });
+
+    await _savePhoneData();
+    _renderChatThread(pd, contactId);
+    UI.showToast('图片已添加，点刷新发送给对方', 1500);
+  } catch(e) {
+    UI.showToast('读取图片失败：' + (e.message || '未知'), 2500);
+  }
+}
+
+// 聊天界面"相册"：弹一个相册图选择器，选中后发送图片到当前会话
+async function _openAlbumPickerForChat(contactId) {
+  const pd = await _getPhoneData();
+  const album = Array.isArray(pd?.album) ? pd.album : [];
+  if (!album.length) {
+    UI.showToast('相册还是空的，先去拍一张吧', 1800);
+    return;
+  }
+
+  // 移除旧的 overlay
+  const old = document.getElementById('phone-album-picker-overlay');
+  if (old) old.remove();
+
+  const sorted = album.slice().reverse();
+  const cardsHtml = sorted.map(p => {
+    const text = String(p.text || '').trim();
+    const preview = text.length > 50 ? text.slice(0, 50) + '…' : text;
+    const time = p.time || '';
+    const location = p.location || '';
+    const isImage = p.mode === 'ai_image' && p.imageId;
+    const innerHtml = isImage
+      ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(p.imageId)}" alt="生成的图片" />`
+      : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(preview || '(空)')}</div>`;
+    return `
+      <div class="phone-camera-polaroid" onclick="Phone._pickAlbumForChat('${contactId}', '${p.id}')" style="opacity:1">
+        <div class="phone-camera-polaroid-frame">
+          ${innerHtml}
+        </div>
+        ${location ? `<div class="phone-camera-polaroid-loc">${Utils.escapeHtml(location)}</div>` : ''}
+        ${time ? `<div class="phone-camera-polaroid-caption">${Utils.escapeHtml(time)}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'phone-album-picker-overlay';
+  overlay.className = 'phone-inner-modal';
+  overlay.innerHTML = `
+    <div class="modal-content phone-album-picker-card">
+      <div class="phone-album-picker-header">
+        <span style="font-size:14px;font-weight:600">发送相册图片</span>
+        <button type="button" onclick="Phone._closeAlbumPicker()" class="phone-album-picker-close" aria-label="关闭">×</button>
+      </div>
+      <div class="phone-album-picker-grid">${cardsHtml}</div>
+    </div>
+  `;
+  overlay.onclick = (e) => { if (e.target === overlay) _closeAlbumPicker(); };
+  const shell = document.querySelector('#phone-modal .phone-shell');
+  (shell || document.body).appendChild(overlay);
+  
+  // 处理异步图片加载
+  setTimeout(() => {
+    const imgs = overlay.querySelectorAll('img[data-img-id]');
+    if (imgs.length > 0) {
+      (async () => {
+        for (const img of imgs) {
+          const imgId = img.getAttribute('data-img-id');
+          if (!imgId) continue;
+          try {
+            const doc = await DB.get('drawnImages', imgId);
+            if (doc && doc.dataUrl) img.src = doc.dataUrl;
+          } catch(e) {}
+        }
+      })();
+    }
+  }, 50);
+}
+
+async function _pickAlbumForChat(contactId, photoId) {
+  const pd = await _getPhoneData();
+  const photo = pd?.album?.find(p => p.id === photoId);
+  if (!photo) { UI.showToast('照片已被删除', 1500); return; }
+  
+  _closeAlbumPicker();
+  
+  // 隐藏加号菜单
+  const menu = document.getElementById('phone-chat-plus-menu');
+  if (menu) menu.classList.add('hidden');
+  
+  // 构造发送到 AI 的文本和手机显示的特殊气泡类型
+  const textDesc = photo.text || '(无描述)';
+  const aiText = `{{user}}发送了一张图片，图片内容为：${textDesc}`;
+  
+  let gameTime = '';
+  try { gameTime = _getChatGameTime(contactId, pd); } catch(_) {}
+
+  // 保存到聊天记录
+  if (!pd.chatThreads) pd.chatThreads = {};
+  if (!pd.chatThreads[contactId]) pd.chatThreads[contactId] = [];
+  
+  pd.chatThreads[contactId].push({
+    id: 'm_' + Utils.uuid().slice(0, 8),
+    role: 'me',
+    text: aiText,
+    type: 'photo',
+    photoId: photoId,
+    mode: photo.mode,
+    imageId: photo.imageId,
+    photoDesc: photo.text,
+    time: gameTime
+  });
+  
+  await _savePhoneData();
+  
+  // 只渲染气泡，不自动触发 AI 回复（等用户手动点刷新）
+  _renderChatThread(pd, contactId);
+}
+
+// 聊天图片点击详情
+async function _showChatPhotoDetail(contactId, msgId) {
+  const pd = await _getPhoneData();
+  if (!pd?.chatThreads?.[contactId]) return;
+  const msg = pd.chatThreads[contactId].find(m => m.id === msgId);
+  if (!msg) return;
+
+  // 移除已有 overlay
+  const old = document.getElementById('phone-photo-detail-overlay');
+  if (old) old.remove();
+
+  const isImage = msg.mode === 'ai_image';
+  const text = msg.photoDesc || '';
+
+  const bodyHtml = isImage
+    ? `<div class="phone-photo-detail-image-wrap">
+         <img class="phone-photo-detail-image" data-img-id="${Utils.escapeHtml(msg.imageId || '')}" alt="生成的图片" />
+       </div>
+       ${text ? `<div class="phone-photo-detail-img-caption">${Utils.escapeHtml(text)}</div>` : ''}`
+    : `<div class="phone-photo-detail-text-immersive">${Utils.escapeHtml(text)}</div>`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'phone-photo-detail-overlay';
+  overlay.className = 'phone-inner-modal';
+  overlay.innerHTML = `
+    <div class="modal-content phone-photo-detail-card">
+      <button class="phone-photo-detail-close" onclick="Phone._closePhotoDetail()" aria-label="关闭">×</button>
+      ${bodyHtml}
+    </div>
+  `;
+  // 点蒙层关闭
+  overlay.onclick = (e) => { if (e.target === overlay) _closePhotoDetail(); };
+
+  const shell = document.querySelector('#phone-modal .phone-shell');
+  (shell || document.body).appendChild(overlay);
+
+  // 异步加载真图
+  if (isImage && msg.imageId) {
+    (async () => {
+      try {
+        const doc = await DB.get('drawnImages', msg.imageId);
+        if (doc && doc.dataUrl) {
+          const img = overlay.querySelector('img.phone-photo-detail-image');
+          if (img) img.src = doc.dataUrl;
+        }
+      } catch(e) {}
+    })();
+  }
+}
+
 function _showPhotoDetail(photo) {
   // 移除已有 overlay
   const old = document.getElementById('phone-photo-detail-overlay');
@@ -5646,6 +6268,57 @@ _renderMemo(pd);
       return `${m[1]}.${mm}.${dd}${m[4] ? ' ' + m[4] : ''}${m[5] ? ' ' + m[5] : ''}`.trim();
     }
     return s;
+  }
+
+  // 把游戏时间字符串解析为可比较的数字（yyyymmddHHMM），解析失败返回 0
+  function _parsePhoneTimeScore(t) {
+    const s = String(t || '').trim();
+    if (!s) return 0;
+    // 格式1：YYYY.MM.DD 星期X HH:mm
+    let m = s.match(/(\d{4})\.(\d{2})\.(\d{2})(?:\s+星期[一二三四五六日天])?(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (m) {
+      const hh = String(m[4] || '0').padStart(2, '0');
+      const mm2 = String(m[5] || '0').padStart(2, '0');
+      return parseInt(`${m[1]}${m[2]}${m[3]}${hh}${mm2}`, 10);
+    }
+    // 格式2：YYYY年MM月DD日 星期X HH:mm
+    m = s.match(/(\d{4})年(\d{1,2})月(\d{1,2})日(?:\s+星期[一二三四五六日天])?(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (m) {
+      const mo = String(m[2]).padStart(2, '0');
+      const dd = String(m[3]).padStart(2, '0');
+      const hh = String(m[4] || '0').padStart(2, '0');
+      const mm2 = String(m[5] || '0').padStart(2, '0');
+      return parseInt(`${m[1]}${mo}${dd}${hh}${mm2}`, 10);
+    }
+    return 0;
+  }
+
+  // 获取当前聊天场景下最合适的游戏时间（取状态栏、thread最新消息、全局基准三者中最大）
+  function _getChatGameTime(contactId, pd) {
+    const candidates = [];
+
+    // 1. 状态栏时间
+    try {
+      const sb = (typeof Conversations !== 'undefined') ? Conversations.getStatusBar() : null;
+      if (sb?.time) candidates.push(_formatPhoneTime(sb.time));
+    } catch(_) {}
+
+    // 2. 全局基准时间
+    if (_chatSessionBaseTime) candidates.push(_chatSessionBaseTime);
+
+    // 3. thread 中最新一条有时间的消息
+    try {
+      const thread = pd?.chatThreads?.[contactId] || [];
+      for (let i = thread.length - 1; i >= 0; i--) {
+        if (thread[i].time) { candidates.push(thread[i].time); break; }
+      }
+    } catch(_) {}
+
+    if (!candidates.length) return '';
+    // 取分数最大（最新）的
+    return candidates.reduce((best, t) =>
+      _parsePhoneTimeScore(t) >= _parsePhoneTimeScore(best) ? t : best
+    , candidates[0]);
   }
 
   // 抓当前游戏时间（来自状态栏；统一供搜索记录等使用）
@@ -7144,8 +7817,8 @@ async function buildHeartsimServiceChatForBackstage() {
     // 主屏分页
     _onPagesScroll,
     // 聊天 App
-    _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu,
-    ingestChatMessages, getChatHistoryForNPCs,
+  _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _saveChatSettings, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
+  ingestChatMessages, getChatHistoryForNPCs,
     // 相机 App
     _switchCameraTab, _cameraRefillFromStatus, _cameraOpenAdjust, _cameraShoot, _cameraOpenPhoto, _cameraOnTextInput,
     _closePhotoDetail, _photoEditText, _photoCopyText, _photoDownloadImage, _photoDelete, _photoShareMoment, _photoShareMain,

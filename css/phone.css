@@ -1175,14 +1175,24 @@ background: transparent !important;
 }
 .phone-photo-action-danger:hover { background: rgba(255,138,128,0.20); }
 /* ===== 相册选择器（朋友圈"从相册选"）===== */
-.phone-shell .phone-inner-modal .modal-content.phone-album-picker-card {
-  background: var(--bg-secondary) !important;
-  border: 1px solid var(--border) !important;
+#phone-album-picker-overlay {
+  background: var(--bg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  display: flex !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
   padding: 0 !important;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.4) !important;
-  max-width: 90% !important;
-  width: 90% !important;
-  max-height: 70vh !important;
+}
+.phone-shell .phone-inner-modal .modal-content.phone-album-picker-card {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
@@ -1822,6 +1832,21 @@ background: transparent !important;
 @keyframes phoneSpin { to { transform: rotate(360deg); } }
 @keyframes phonePulse { 0%,100% { opacity: .72; } 50% { opacity: 1; } }
 
+@keyframes phoneVoicePlay {
+  0% { transform: scaleY(0.7); }
+  50% { transform: scaleY(1.5); }
+  100% { transform: scaleY(0.7); }
+}
+.phone-chat-voice-wave.playing > div {
+  animation: phoneVoicePlay 0.8s ease-in-out infinite;
+  transform-origin: center;
+}
+.phone-chat-voice-wave.playing > div:nth-child(1) { animation-delay: 0.0s; }
+.phone-chat-voice-wave.playing > div:nth-child(2) { animation-delay: 0.15s; }
+.phone-chat-voice-wave.playing > div:nth-child(3) { animation-delay: 0.3s; }
+.phone-chat-voice-wave.playing > div:nth-child(4) { animation-delay: 0.45s; }
+.phone-chat-voice-wave.playing > div:nth-child(5) { animation-delay: 0.6s; }
+
 /* 发动态编辑页 / 可见范围弹窗 */
 .phone-moment-edit-btn {
  background: none;
@@ -2127,12 +2152,16 @@ background: transparent !important;
  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
 }
 .phone-shell.has-custom-wallpaper .phone-body [style*="color:var(--text-secondary)"],
-.phone-shell.has-custom-wallpaper .phone-body [style*="color: var(--text-secondary)"] {
- color: rgba(255, 255, 255, 0.68) !important;
+.phone-shell.has-custom-wallpaper .phone-body [style*="color: var(--text-secondary)"],
+.phone-shell.has-custom-wallpaper .phone-header [style*="color:var(--text-secondary)"],
+.phone-shell.has-custom-wallpaper .phone-header [style*="color: var(--text-secondary)"] {
+  color: rgba(255, 255, 255, 0.68) !important;
 }
 .phone-shell.has-custom-wallpaper .phone-body [style*="color:var(--text)"],
-.phone-shell.has-custom-wallpaper .phone-body [style*="color: var(--text)"] {
- color: rgba(255, 255, 255, 0.92) !important;
+.phone-shell.has-custom-wallpaper .phone-body [style*="color: var(--text)"],
+.phone-shell.has-custom-wallpaper .phone-header [style*="color:var(--text)"],
+.phone-shell.has-custom-wallpaper .phone-header [style*="color: var(--text)"] {
+  color: rgba(255, 255, 255, 0.92) !important;
 }
 .phone-shell.has-custom-wallpaper .phone-body input::placeholder,
 .phone-shell.has-custom-wallpaper .phone-body textarea::placeholder {

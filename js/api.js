@@ -379,6 +379,41 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
   }
 
   /**
+   * 识图：调用 vision 模型（没配就用主模型），传入 base64 dataURL，返回描述文字
+   */
+  async function describeImage(base64DataUrl, prompt) {
+    const mainConfig = await getConfig();
+    const funcConfig = Settings.getVisionConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl).replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = cleanModelName(funcConfig.model || mainConfig.model);
+    if (!url || !key || !model) throw new Error('请先配置 API Key 和端点');
+
+    const userContent = [
+      { type: 'text', text: prompt || '请描述这张图片的内容' },
+      { type: 'image_url', image_url: { url: base64DataUrl } }
+    ];
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: userContent }],
+        stream: false,
+        max_tokens: 1000
+      })
+    });
+
+    if (!resp.ok) throw new Error(`识图 API 错误: ${resp.status}`);
+    const json = await resp.json();
+    return (json.choices?.[0]?.message?.content || '').trim();
+  }
+
+  /**
    * 世界观生成专用（非流式，主模型，高温度）
    */
   async function generate(systemPrompt, userPrompt, options = {}) {
@@ -616,5 +651,5 @@ ${dialogue}
     return items.slice(0, 5);
   }
 
-  return { getConfig, buildMessages, streamChat, streamChatWithTools, summarize, extractMemory, fetchModelList, generate, generateImage, searchUnsplash, suggest };
+  return { getConfig, buildMessages, streamChat, streamChatWithTools, summarize, extractMemory, describeImage, fetchModelList, generate, generateImage, searchUnsplash, suggest };
 })();
