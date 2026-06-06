@@ -4591,16 +4591,17 @@ function _renderChatThread(pd, contactId) {
 
         // 转账气泡
         if (m.type === 'transfer') {
+          const transferTitle = `向${Utils.escapeHtml(contact.nickname || contact.name)}转账`;
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-              <div style="max-width:220px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
+              <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
                 <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-                  <span style="font-size:13px;font-weight:600;color:#fff">转账</span>
+                  <span style="font-size:13px;font-weight:600;color:#fff">${transferTitle}</span>
                 </div>
-                <div style="padding:12px 14px">
-                  <div style="font-size:18px;font-weight:700;color:var(--text)">${Utils.escapeHtml(String(m.transferAmount || 0))} <span style="font-size:12px;font-weight:400;color:var(--text-secondary)">${Utils.escapeHtml(m.transferCurrency || '')}</span></div>
+                <div style="padding:14px">
+                  <div style="font-size:20px;font-weight:700;color:var(--text)">${Utils.escapeHtml(String(m.transferAmount || 0))} <span style="font-size:13px;font-weight:400;color:var(--text-secondary)">${Utils.escapeHtml(m.transferCurrency || '')}</span></div>
                 </div>
               </div>
               ${time}
@@ -5094,16 +5095,17 @@ function _renderChatThreadWithSystem(pd, contactId) {
 
     // 转账气泡
     if (m.type === 'transfer') {
+      const transferTitle = `向${Utils.escapeHtml(contact.nickname || contact.name)}转账`;
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
         <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-          <div style="max-width:220px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
+          <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
             <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-              <span style="font-size:13px;font-weight:600;color:#fff">转账</span>
+              <span style="font-size:13px;font-weight:600;color:#fff">${transferTitle}</span>
             </div>
-            <div style="padding:12px 14px">
-              <div style="font-size:18px;font-weight:700;color:var(--text)">${Utils.escapeHtml(String(m.transferAmount || 0))} <span style="font-size:12px;font-weight:400;color:var(--text-secondary)">${Utils.escapeHtml(m.transferCurrency || '')}</span></div>
+            <div style="padding:14px">
+              <div style="font-size:20px;font-weight:700;color:var(--text)">${Utils.escapeHtml(String(m.transferAmount || 0))} <span style="font-size:13px;font-weight:400;color:var(--text-secondary)">${Utils.escapeHtml(m.transferCurrency || '')}</span></div>
             </div>
           </div>
           ${time}
