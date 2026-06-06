@@ -1303,6 +1303,130 @@ async function _walletRemoveCurrency(attrId) {
   _renderWallet(pd);
 }
 
+// ===== 聊天转账功能 =====
+async function _openChatTransfer(contactId) {
+  // 隐藏加号菜单
+  const menu = document.getElementById('phone-chat-plus-menu');
+  if (menu) menu.classList.add('hidden');
+
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  pd.walletCurrencies = pd.walletCurrencies || [];
+
+  // 获取可用货币
+  let walletInfos = [];
+  try {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    const gp = conv?.convGameplay || null;
+    const globalAttrs = (gp?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+    const sb = Conversations.getStatusBar() || {};
+    const statusAttrs = sb?.customAttrs?.global || {};
+    walletInfos = pd.walletCurrencies
+      .map(id => {
+        const def = globalAttrs.find(a => a.id === id);
+        if (!def) return null;
+        return { id, name: def.name, balance: statusAttrs[id] ?? def.initial ?? 0 };
+      })
+      .filter(Boolean);
+  } catch(_) {}
+
+  if (!walletInfos.length) {
+    UI.showToast('请先在钱包中绑定货币', 2000);
+    return;
+  }
+
+  // 弹转账弹窗
+  const mask = document.createElement('div');
+  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+
+  const currencyOptions = walletInfos.map((w, i) =>
+    `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--bg-tertiary)">
+      <input type="radio" name="transfer-currency" value="${Utils.escapeHtml(w.id)}" ${i === 0 ? 'checked' : ''} style="accent-color:var(--accent)">
+      <span style="flex:1;font-size:13px;color:var(--text)">${Utils.escapeHtml(w.name)}</span>
+      <span style="font-size:12px;color:var(--text-secondary)">余额 ${Utils.escapeHtml(String(w.balance))}</span>
+    </label>`
+  ).join('');
+
+  mask.innerHTML = `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text)">
+      <div style="font-size:15px;font-weight:600;margin-bottom:14px">转账</div>
+      <div style="font-size:12px;color:var(--text);font-weight:600;margin-bottom:8px">选择货币</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">${currencyOptions}</div>
+      <div style="font-size:12px;color:var(--text);font-weight:600;margin-bottom:8px">转账金额</div>
+      <input id="transfer-amount-input" type="number" placeholder="输入金额" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px;outline:none;box-sizing:border-box;margin-bottom:16px">
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button id="transfer-cancel" style="padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+        <button id="transfer-confirm" style="padding:8px 18px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">确认转账</button>
+      </div>
+    </div>`;
+
+  mask.querySelector('#transfer-cancel').onclick = () => document.body.removeChild(mask);
+  mask.querySelector('#transfer-confirm').onclick = async () => {
+    const selected = mask.querySelector('input[name="transfer-currency"]:checked');
+    const currencyId = selected?.value || walletInfos[0].id;
+    const info = walletInfos.find(w => w.id === currencyId);
+    const amountStr = mask.querySelector('#transfer-amount-input').value.trim();
+    const amount = parseFloat(amountStr);
+
+    if (!amountStr || !Number.isFinite(amount) || amount <= 0) {
+      UI.showToast('请输入有效金额', 1500);
+      return;
+    }
+
+    // 检查余额
+    try {
+      const sb = Conversations.getStatusBar() || {};
+      sb.customAttrs = sb.customAttrs || {};
+      sb.customAttrs.global = sb.customAttrs.global || {};
+      const balance = Number(sb.customAttrs.global[currencyId]) || 0;
+      if (balance < amount) {
+        UI.showToast(`${info.name}余额不足（需要 ${amount}，当前 ${balance}）`, 2500);
+        return;
+      }
+      // 扣款
+      sb.customAttrs.global[currencyId] = balance - amount;
+      await Conversations.setStatusBar(sb);
+      if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
+    } catch(e) {
+      UI.showToast('扣款失败', 1500);
+      return;
+    }
+
+    document.body.removeChild(mask);
+
+    // 写入聊天记录
+    let gameTime = '';
+    try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+
+    pd.chatThreads = pd.chatThreads || {};
+    pd.chatThreads[contactId] = pd.chatThreads[contactId] || [];
+    pd.chatThreads[contactId].push({
+      id: 'msg_' + Utils.uuid().slice(0, 8),
+      role: 'me',
+      type: 'transfer',
+      transferAmount: amount,
+      transferCurrency: info.name,
+      transferCurrencyId: currencyId,
+      text: `[转账] ${amount} ${info.name}`,
+      time: gameTime,
+      createdAt: Date.now()
+    });
+    await _savePhoneData();
+
+    // 操作日志
+    const newBalance = (Number(Conversations.getStatusBar()?.customAttrs?.global?.[currencyId]) || 0);
+    _log(`向聊天对象转账了 ${amount} ${info.name}（前端已自动扣除，余额 ${newBalance}，AI无需再处理此扣款）`);
+
+    // 刷新聊天界面
+    _openChatThread(contactId);
+  };
+
+  mask.addEventListener('click', (e) => {
+    if (e.target === mask) document.body.removeChild(mask);
+  });
+  document.body.appendChild(mask);
+}
+
   // ===== 设置 App =====
 function _renderSettings(pd) {
  const body = document.getElementById('phone-body');
@@ -4465,6 +4589,25 @@ function _renderChatThread(pd, contactId) {
           </div>`;
         }
 
+        // 转账气泡
+        if (m.type === 'transfer') {
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+              <div style="max-width:220px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
+                <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  <span style="font-size:13px;font-weight:600;color:#fff">转账</span>
+                </div>
+                <div style="padding:12px 14px">
+                  <div style="font-size:18px;font-weight:700;color:var(--text)">${Utils.escapeHtml(String(m.transferAmount || 0))} <span style="font-size:12px;font-weight:400;color:var(--text-secondary)">${Utils.escapeHtml(m.transferCurrency || '')}</span></div>
+                </div>
+              </div>
+              ${time}
+            </div>
+          </div>`;
+        }
+
         // 位置气泡
         if (m.type === 'location') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
@@ -4695,7 +4838,7 @@ function _renderChatThread(pd, contactId) {
            <span style="font-size:11px;color:var(--text-secondary)">订单</span>
          </button>
         <!-- 转账 -->
-        <button class="phone-plus-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
+        <button class="phone-plus-item" onclick="Phone._openChatTransfer('${contactId}')" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
           <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
           </div>
@@ -4944,6 +5087,25 @@ function _renderChatThreadWithSystem(pd, contactId) {
             </div>
           </div>
           <div style="margin-top:4px;padding:6px 10px;border-radius:8px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;max-width:100%;word-break:break-word">${Utils.escapeHtml(m.voiceDesc || '')}</div>
+          ${time}
+        </div>
+      </div>`;
+    }
+
+    // 转账气泡
+    if (m.type === 'transfer') {
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+          <div style="max-width:220px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
+            <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+              <span style="font-size:13px;font-weight:600;color:#fff">转账</span>
+            </div>
+            <div style="padding:12px 14px">
+              <div style="font-size:18px;font-weight:700;color:var(--text)">${Utils.escapeHtml(String(m.transferAmount || 0))} <span style="font-size:12px;font-weight:400;color:var(--text-secondary)">${Utils.escapeHtml(m.transferCurrency || '')}</span></div>
+            </div>
+          </div>
           ${time}
         </div>
       </div>`;
@@ -5772,6 +5934,7 @@ async function _chatRequestReply(contactId) {
       if (m.type === 'forum_detail') return `${who}：${t}发送了一条帖子详情链接：${m.forumTitle || ''}`;
       if (m.type === 'map_place') return `${who}：${t}发送了一条地点链接：${m.placeName || ''}${m.placeAddress ? '（' + m.placeAddress + '）' : ''}`;
       if (m.type === 'order') return `${who}：${t}发送了一条订单信息（${who}已购）：${m.orderName || ''}${m.orderPrice ? '（¥' + m.orderPrice + '）' : ''}${m.orderPlatform ? ' · ' + m.orderPlatform : ''}`;
+      if (m.type === 'transfer') return `${who}：${t}向你转账 ${m.transferAmount || 0} ${m.transferCurrency || ''}`;
       return `${who}：${t}${m.text}`;
     }).join('\n');
 
@@ -8888,7 +9051,7 @@ _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
     _shopShareItem, _shopShareToChat,
     _shopDeleteOrder,
     // 钱包
-    _walletAddCurrency, _walletRemoveCurrency,
+    _walletAddCurrency, _walletRemoveCurrency, _openChatTransfer,
     // 心动模拟 APP
     _hsAppFavorChange,
     _switchHsAppTab,
