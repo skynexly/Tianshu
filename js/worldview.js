@@ -3683,6 +3683,17 @@ function closeKnowledgeModal() {
     const skinInput = document.getElementById('wv-statusbar-skin');
     if (skinInput && !_isBuiltinWorldview(w)) w.statusBarSkin = skinInput.value || 'terminal';
     w.startTime = document.getElementById('wv-start-time').value.trim();
+
+    // 历法系统校验：有自定义历法必须填开场时间
+    if (w.gameplay?.calendarSystem && !w.startTime) {
+      if (!silent) {
+        UI.showToast('已启用历法系统，请填写开场时间（否则前端无法计算时间增量）', 3000);
+        // 聚焦到开场时间输入框
+        const stEl = document.getElementById('wv-start-time');
+        if (stEl) { stEl.focus(); stEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      }
+      return;
+    }
     w.startPlot = document.getElementById('wv-start-plot').value.trim();
     w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds').value) || 5;
     w.startMessage = document.getElementById('wv-start-message').value.trim();

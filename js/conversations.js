@@ -253,6 +253,20 @@ async function init() {
         if (wv && Array.isArray(wv.defaultLorebookIds) && wv.defaultLorebookIds.length) {
           conv.lorebookIds = wv.defaultLorebookIds.slice();
         }
+        // 历法系统：如果有自定义历法+开场时间，初始化状态栏
+        if (wv?.gameplay?.calendarSystem && wv.startTime) {
+          conv.statusBar = {
+            region: '', location: '', time: wv.startTime,
+            weather: '', scene: '', playerOutfit: '', playerPosture: '', npcs: []
+          };
+          // 自动计算初始季节
+          try {
+            if (typeof Calendar !== 'undefined') {
+              const result = Calendar.processTimeField(wv.startTime, wv.startTime, wv.gameplay.calendarSystem);
+              if (result.season) conv.statusBar.season = result.season.name;
+            }
+          } catch(_) {}
+        }
       }
     } catch(_) {}
     list.push(conv);
