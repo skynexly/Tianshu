@@ -45,6 +45,7 @@ const NPC = (() => {
             npcs.forEach(n => {
               text += `  │  └ ${n.name}`;
               if (n.aliases) text += `（${n.aliases}）`;
+              if (n.onlineName) text += `[网名：${n.onlineName}]`;
               if (n.summary) text += `：${n.summary}`;
               text += '\n';
             });
@@ -57,6 +58,7 @@ const NPC = (() => {
         loosenpcs.forEach(n => {
           text += `  └ ${n.name}`;
           if (n.aliases) text += `（${n.aliases}）`;
+          if (n.onlineName) text += `[网名：${n.onlineName}]`;
           if (n.summary) text += `：${n.summary}`;
           text += '\n';
         });
@@ -124,6 +126,7 @@ const NPC = (() => {
           regionNpcs.forEach(n => {
             text += `\n[${n.name}]`;
             if (n.aliases) text += ` 代号/别名:${n.aliases}`;
+            if (n.onlineName) text += ` 网名:${n.onlineName}`;
             if (n.profession) text += ` 职业:${n.profession}`;
             if (n.faction) text += ` 势力:${n.faction}`;
             text += `\n${n.detail || ''}\n`;
@@ -151,6 +154,7 @@ const NPC = (() => {
         npcs.forEach(n => {
           text += `\n[${n.name}]`;
           if (n.aliases) text += ` 代号/别名:${n.aliases}`;
+          if (n.onlineName) text += ` 网名:${n.onlineName}`;
           if (n.profession) text += ` 职业:${n.profession}`;
           if (n.faction) text += ` 势力:${n.faction}`;
           text += `\n${n.detail || ''}\n`;
@@ -294,6 +298,7 @@ const NPC = (() => {
     presentNPCs.forEach(n => {
       text += `\n[${n.name}]`;
       if (n.aliases) text += ` 代号/别名:${n.aliases}`;
+      if (n.onlineName) text += ` 网名:${n.onlineName}`;
       if (n.profession) text += ` 职业:${n.profession}`;
       if (n.faction) { text += ` 势力:${n.faction}`; mentionedFactions.add(n.faction); }
       text += `\n${n.detail || ''}`;
