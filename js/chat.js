@@ -742,7 +742,7 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
         const now = new Date();
         const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
         const realTime = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        systemParts.push(`【开场时间参考】\n本对话开始于现实时间：${realTime}。\n规则：如果世界观/角色卡/单人卡设定中有明确的开场时间（如 startTime 字段、或在设定文本里写明的具体年代/时刻），优先使用那个时间作为剧情开场；如果都没有提及开场时间，再以上述现实时间作为开场时间。`);
+        systemParts.push(`【开场时间参考】\n本对话开始于现实时间：${realTime}。状态栏已初始化为此时间，第一轮时间写"+0min"即可。\n规则：如果世界观/角色卡/单人卡设定中有明确的开场时间（如 startTime 字段、或在设定文本里写明的具体年代/时刻），优先使用那个时间作为剧情开场；如果都没有提及开场时间，再以上述现实时间作为开场时间。`);
       }
     } catch(e) { console.warn('[Chat] 首轮现实时间注入失败', e); }
 
