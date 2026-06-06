@@ -40,6 +40,31 @@ const WorldVoice = (() => {
     } catch(_) { return ''; }
   }
 
+  // 提取世界观中有设定的NPC角色列表（供论坛prompt使用）
+  async function _getNpcListForForum() {
+    try {
+      const wv = await Worldview.getCurrent();
+      if (!wv || !wv.regions) return '';
+      const npcs = [];
+      for (const region of wv.regions) {
+        if (!region.factions) continue;
+        for (const faction of region.factions) {
+          if (!faction.npcs) continue;
+          for (const n of faction.npcs) {
+            if (!n.name) continue;
+            let desc = n.name;
+            if (n.onlineName) desc += `（网名：${n.onlineName}）`;
+            else if (n.aliases) desc += `（${n.aliases}）`;
+            if (n.summary) desc += `：${n.summary}`;
+            npcs.push(desc);
+          }
+        }
+      }
+      if (npcs.length === 0) return '';
+      return `\n\n## 世界观中的角色（可作为发帖人/评论者）\n${npcs.join('\n')}`;
+    } catch(_) { return ''; }
+  }
+
   // 更新加号菜单里的按钮名
   async function updateLabel() {
     const label = document.getElementById('world-voice-label');
@@ -203,6 +228,8 @@ ${wvPrompt}`;
     if (summaryText) userPrompt += `## 剧情总结\n${summaryText}\n\n`;
     if (gameTime) userPrompt += `## 当前游戏时间\n${gameTime}\n\n`;
     if (recentMain) userPrompt += `## 最近剧情\n${recentMain}\n\n`;
+    const npcListStr = await _getNpcListForForum();
+    if (npcListStr) userPrompt += npcListStr + '\n\n';
     userPrompt += `请生成${mediaType}内容。`;
 
 
@@ -424,7 +451,8 @@ JSON格式：
 
 ${wvPrompt}`;
 
-    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n请生成完整内容和评论区。`;
+    const npcListStr2 = await _getNpcListForForum();
+    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}${npcListStr2}\n\n请生成完整内容和评论区。`;
 
     const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : 3;
     let lastError = '';
@@ -709,7 +737,8 @@ JSON格式：
 {"content":"帖子/动态完整正文","comments":[{"username":"用户名","avatar_color":"#颜色","content":"评论内容","time":"YYYY.MM.DD 星期X HH:mm","likes":数字}]}
 
 ${wvPrompt}`;
-    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags||[]).join('、')}\n\n请生成完整内容和评论区。`;
+    const npcListStr3 = await _getNpcListForForum();
+    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags||[]).join('、')}${npcListStr3}\n\n请生成完整内容和评论区。`;
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
