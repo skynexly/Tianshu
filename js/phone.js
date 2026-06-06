@@ -2222,7 +2222,7 @@ ${md ? `载体说明：${md}\n\n` : ''}要求：
 1. 只生成评论/回复区，不要改写帖子正文，不要生成新的帖子标题。
 2. 本次生成 8-12 条“新增评论”，用于追加到已有评论后面。
 3. 大部分评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与回复（0-3条）。
-4. 如果评论者是 NPC，username 只填该 NPC 的网名（仅当世界观资料中明确有网名字段时）或本名，不得加括号、注释或其他任何说明性文字，并在返回中标记 "isNpc": true；如果不确定某个名字是否为真实 NPC，请作为普通路人用户处理并标记 "isNpc": false。普通路人用户不要使用已有 NPC 的姓名。
+4. 如果评论者是 NPC，username 直接填该 NPC 在世界观资料中列出的名字（不要加括号或注释），并标记 "isNpc": true；不确定是否为 NPC 则作为路人处理并标记 "isNpc": false。评论者不能是楼主本人。
 5. 评论内容要自然多样：有赞同、反对、追问、吐槽、跑题、阴阳怪气等，长度错落有致。可以加入适量的“@某人”或引用前排回复的互动感，体现出网友间的楼中楼交流（例如“@XX 确实”或“回复 @XX：不对吧”），但不要每条都@。
 6. 新评论应当参考已有评论，避免重复已有内容；可以接续已有讨论，也可以产生新分歧。
 7. 评论时间必须依次晚于该帖子的发帖时间和已有的最新评论。请根据“当前游戏时间”智能安排回复节奏：
@@ -2254,7 +2254,7 @@ ${wvPrompt}`;
         existingCommentsStr = post._comments.map(c => `用户名：${c.username} (${c.isNpc ? 'NPC' : '路人'})\n时间：${c.time}\n点赞：${c.likes}\n内容：${c.content}`).join('\n\n');
       }
       const gameTime = _getGameTime() || '';
-      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 玩家发帖信息\n标题：${post.title || '无标题'}\n发帖人：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。`;
+      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 玩家发帖信息\n标题：${post.title || '无标题'}\n发帖人：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。注意：评论者不能是楼主本人（即发帖人），楼主不会评论自己的帖子。`;
 
       const resp = await fetch(url, {
         method: 'POST',
@@ -2377,7 +2377,7 @@ ${md ? `载体说明：${md}\n\n` : ''}要求：
 1. 只生成评论/回复区，不要改写帖子正文，不要生成新的帖子标题。
 2. 本次生成 8-12 条“新增评论”，用于追加到已有评论后面。
 3. 大部分评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与回复（0-3条）。
-4. 如果评论者是 NPC，username 只填该 NPC 的网名（仅当世界观资料中明确有网名字段时）或本名，不得加括号、注释或其他任何说明性文字，并在返回中标记 "isNpc": true；如果不确定某个名字是否为真实 NPC，请作为普通路人用户处理并标记 "isNpc": false。普通路人用户不要使用已有 NPC 的姓名。
+4. 如果评论者是 NPC，username 直接填该 NPC 在世界观资料中列出的名字（不要加括号或注释），并标记 "isNpc": true；不确定是否为 NPC 则作为路人处理并标记 "isNpc": false。评论者不能是楼主本人。
 5. 评论内容要自然多样：可以有赞同、反对、追问、吐槽、跑题、补充信息、阴阳怪气、认真分析等；长度不要整齐划一，有人一句话，有人写一小段。
 6. 新评论应当参考已有评论，避免重复已有内容；可以接续已有讨论，也可以产生新分歧。
 7. 评论时间必须依次晚于该帖子的发帖时间和已有的最新评论。请根据“当前游戏时间”智能安排回复节奏：
@@ -2408,7 +2408,7 @@ ${wvPrompt}`;
         existingCommentsStr = post._comments.map(c => `用户名：${c.username} (${c.isNpc ? 'NPC' : '路人'})\n时间：${c.time}\n点赞：${c.likes}\n内容：${c.content}`).join('\n\n');
       }
       const gameTime = _getGameTime() || '';
-      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 玩家发帖信息\n标题：${post.title || '无标题'}\n发帖人：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.fullContent || post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。`;
+      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 玩家发帖信息\n标题：${post.title || '无标题'}\n发帖人：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.fullContent || post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。注意：评论者不能是楼主本人（即发帖人），楼主不会评论自己的帖子。`;
 
       const resp = await fetch(url, {
         method: 'POST',
