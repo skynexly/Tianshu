@@ -1414,7 +1414,7 @@ async function _clearMomentsCover() {
             <span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>${p.likes || 0}</span>
             <span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>${p.comments || 0}</span>
           </div>
-          <button type="button" onclick="event.stopPropagation();Phone._shareForumPost(${i})" class="phone-forum-preview-action-btn" title="分享到主线">${_uiIcon('share', 12)} 分享</button>
+          <button type="button" onclick="event.stopPropagation();Phone._shareForumPost(${i},'card')" class="phone-forum-preview-action-btn" title="分享">${_uiIcon('share', 12)} 分享</button>
         </div>
       </div>
     `).join('');
@@ -2238,7 +2238,7 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
           <div style="display:flex;gap:2px;flex-shrink:0;min-width:max-content;color:var(--text-secondary)">
             <span onclick="Phone._likeForumPost(${index})" id="phone-forum-like-btn" style="cursor:pointer;display:flex;align-items:center;padding:2px">${_uiIcon('heart', 18)}</span>
             <span onclick="Phone._collectForumPost(${index})" id="phone-forum-collect-btn" style="cursor:pointer;display:flex;align-items:center;padding:4px">${_uiIcon('star', 18)}</span>
-            <span onclick="Phone._shareForumPost(${index})" style="cursor:pointer;display:flex;align-items:center;padding:4px">${_uiIcon('share', 18)}</span>
+            <span onclick="Phone._shareForumPost(${index},'detail')" style="cursor:pointer;display:flex;align-items:center;padding:4px">${_uiIcon('share', 18)}</span>
           </div>
         </div>`;
         // 外层 flex 容器关闭
@@ -2308,23 +2308,126 @@ async function _likeForumPost(index) {
     }
   }
 
-  async function _shareForumPost(index) {
+  async function _shareForumPost(index, mode) {
     const pd = await _getPhoneData();
     let posts = pd?.cachedForumPosts || [];
     if (posts.length === 0) posts = (window.WorldVoice && WorldVoice.getPosts()) || [];
     const p = posts[index];
     if (!p) { UI.showToast('帖子不存在', 1000); return; }
+
+    const isDetail = mode === 'detail';
+
+    // 主线内容
     let content = `标题：${p.title || ''}\n作者：${p.username || '匿名'}\n`;
-    if (p.fullContent) {
+    if (isDetail && p.fullContent) {
       content += `\n${p.fullContent}`;
     } else {
       content += `摘要：${p.summary || ''}`;
     }
     if (p.tags?.length) content += `\n标签：${p.tags.join('、')}`;
-    if (p._comments?.length) {
+    if (isDetail && p._comments?.length) {
       content += '\n\n评论区：\n' + p._comments.map(c => `${c.username || '匿名'}：${c.content || ''}`).join('\n');
     }
-    _shareToMain('forum', p.title || `${_getForumName()}帖子`, content);
+
+    // 弹出分享选项面板
+    const choice = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.45)';
+      overlay.innerHTML = `
+        <div style="width:100%;max-width:420px;background:var(--bg);border-radius:20px 20px 0 0;padding:20px 20px 32px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <span style="font-size:16px;font-weight:600;color:var(--text)">分享</span>
+            <button id="share-forum-cancel" style="background:none;border:none;color:var(--text-secondary);font-size:22px;cursor:pointer;line-height:1">×</button>
+          </div>
+          <button id="share-forum-main" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+            分享到主线
+          </button>
+          <button id="share-forum-chat" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            分享到聊天
+          </button>
+        </div>
+      `;
+      const close = val => { document.body.removeChild(overlay); resolve(val); };
+      overlay.querySelector('#share-forum-cancel').onclick = () => close(null);
+      overlay.querySelector('#share-forum-main').onclick = () => close('main');
+      overlay.querySelector('#share-forum-chat').onclick = () => close('chat');
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+      document.body.appendChild(overlay);
+    });
+
+    if (choice === 'main') {
+      _shareToMain('forum', p.title || `${_getForumName()}帖子`, content);
+    } else if (choice === 'chat') {
+      await _forumShareToChat(p, isDetail ? 'detail' : 'card');
+    }
+  }
+
+  // 论坛帖子分享到聊天
+  async function _forumShareToChat(post, mode) {
+    const pd = await _getPhoneData();
+    const contacts = pd?.chatContacts || [];
+    if (!contacts.length) { UI.showToast('还没有聊天联系人', 1500); return; }
+
+    const contactId = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5)';
+      const listHtml = contacts.map(c => {
+        const displayName = c.nickname || c.name || '?';
+        const avaUrl = _chatContactAvatar(c);
+        const avatarEl = avaUrl
+          ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+          : `<div style="width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${Utils.escapeHtml(displayName[0])}</div>`;
+        const thread = (pd.chatThreads && pd.chatThreads[c.id]) || [];
+        const lastMsg = thread.length ? thread[thread.length - 1] : null;
+        const lastText = lastMsg
+          ? (lastMsg.type === 'location' ? '[位置]' : lastMsg.type === 'voice' ? '[语音]' : lastMsg.type === 'photo' ? '[图片]' : lastMsg.type === 'product' ? '[商品链接]' : lastMsg.type === 'forum_card' ? '[帖子摘要]' : lastMsg.type === 'forum_detail' ? '[帖子详情]' : (lastMsg.text || ''))
+          : '暂无消息';
+        return `<div class="share-chat-pick-item" data-cid="${Utils.escapeHtml(c.id)}" style="padding:10px 12px;border-radius:10px;margin-bottom:4px;cursor:pointer;background:var(--bg-tertiary);display:flex;align-items:center;gap:10px">
+          ${avatarEl}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(displayName)}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(lastText.substring(0, 28))}</div>
+          </div>
+        </div>`;
+      }).join('');
+      overlay.innerHTML = `<div style="width:min(320px,88vw);background:var(--bg);border-radius:18px;padding:20px;max-height:70vh;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-shrink:0">
+          <span style="font-size:16px;font-weight:600;color:var(--text)">分享到</span>
+          <button id="share-forum-chat-cancel" style="background:none;border:none;color:var(--text-secondary);font-size:22px;cursor:pointer;line-height:1">×</button>
+        </div>
+        <div style="flex:1;overflow-y:auto">${listHtml}</div>
+      </div>`;
+      const close = val => { document.body.removeChild(overlay); resolve(val); };
+      overlay.querySelector('#share-forum-chat-cancel').onclick = () => close(null);
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+      overlay.querySelectorAll('.share-chat-pick-item').forEach(el => {
+        el.addEventListener('click', () => close(el.dataset.cid));
+      });
+      document.body.appendChild(overlay);
+    });
+
+    if (!contactId) return;
+
+    let gameTime = '';
+    try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+    if (!pd.chatThreads) pd.chatThreads = {};
+    if (!pd.chatThreads[contactId]) pd.chatThreads[contactId] = [];
+    pd.chatThreads[contactId].push({
+      id: 'forum_' + Date.now(),
+      role: 'me',
+      type: mode === 'detail' ? 'forum_detail' : 'forum_card',
+      forumTitle: post.title || '',
+      forumSummary: post.summary || '',
+      forumAuthor: post.username || '匿名',
+      forumPlatform: _getForumName() || '论坛',
+      text: mode === 'detail' ? `[帖子详情链接]${post.title || ''}` : `[帖子摘要截图]${post.title || ''}`,
+      time: gameTime,
+      createdAt: Date.now()
+    });
+    await _savePhoneData();
+    UI.showToast('已发送', 1200);
   }
 
   let _mapTab = 'search'; // 'search' | 'history' | 'searchhist'
@@ -4148,6 +4251,30 @@ function _renderChatThread(pd, contactId) {
           </div>`;
         }
 
+        // 论坛帖子气泡（摘要截图 / 详情链接）
+        if (m.type === 'forum_card' || m.type === 'forum_detail') {
+          const isDetail = m.type === 'forum_detail';
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+              <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+                <div style="padding:12px 14px 10px">
+                  <div style="font-size:11px;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:4px">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    ${Utils.escapeHtml(m.forumPlatform || '论坛')} · ${isDetail ? '帖子详情' : '帖子摘要'}
+                  </div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.forumTitle || '帖子')}</div>
+                  ${m.forumSummary && !isDetail ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.forumSummary)}</div>` : ''}
+                </div>
+                <div style="padding:6px 14px 10px;border-top:1px solid var(--border)">
+                  <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(m.forumAuthor || '匿名')}</span>
+                </div>
+              </div>
+              ${time}
+            </div>
+          </div>`;
+        }
+
         // 图片气泡（相册照片 / 本地真图）
         if (m.type === 'photo' || m.type === 'real_image') {
           const isAiImage = m.mode === 'ai_image' && m.imageId;
@@ -4533,6 +4660,55 @@ function _renderChatThreadWithSystem(pd, contactId) {
             <div style="padding:6px 14px 10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
               <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(m.productPlatform || '')}</span>
               ${m.productShop ? `<span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${Utils.escapeHtml(m.productShop)}</span>` : ''}
+            </div>
+          </div>
+          ${time}
+        </div>
+      </div>`;
+    }
+
+    // 商品卡片气泡
+    if (m.type === 'product') {
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+          <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+            <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:flex-start">
+              <div style="width:44px;height:44px;border-radius:8px;background:var(--bg-secondary,#eee);flex-shrink:0;display:flex;align-items:center;justify-content:center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" x2="21" y1="6" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.productName || '商品')}</div>
+                ${m.productPrice ? `<div style="font-size:14px;font-weight:700;color:var(--accent);margin-top:4px">¥${Utils.escapeHtml(String(m.productPrice))}</div>` : ''}
+              </div>
+            </div>
+            <div style="padding:6px 14px 10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(m.productPlatform || '')}</span>
+              ${m.productShop ? `<span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${Utils.escapeHtml(m.productShop)}</span>` : ''}
+            </div>
+          </div>
+          ${time}
+        </div>
+      </div>`;
+    }
+
+    // 论坛帖子气泡（摘要截图 / 详情链接）
+    if (m.type === 'forum_card' || m.type === 'forum_detail') {
+      const isDetail = m.type === 'forum_detail';
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+          <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+            <div style="padding:12px 14px 10px">
+              <div style="font-size:11px;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:4px">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                ${Utils.escapeHtml(m.forumPlatform || '论坛')} · ${isDetail ? '帖子详情' : '帖子摘要'}
+              </div>
+              <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.forumTitle || '帖子')}</div>
+              ${m.forumSummary && !isDetail ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.forumSummary)}</div>` : ''}
+            </div>
+            <div style="padding:6px 14px 10px;border-top:1px solid var(--border)">
+              <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(m.forumAuthor || '匿名')}</span>
             </div>
           </div>
           ${time}
@@ -5163,6 +5339,8 @@ async function _chatRequestReply(contactId) {
       if (m.type === 'voice') return `${who}：${t}${m.voiceDesc || m.text || ''}`;
       if (m.type === 'photo') return `${who}：${t}[发送了一张照片]`;
       if (m.type === 'product') return `${who}：${t}发送了一条商品链接：${m.productName || ''}${m.productPrice ? '（¥' + m.productPrice + '）' : ''}${m.productPlatform ? ' · ' + m.productPlatform : ''}`;
+      if (m.type === 'forum_card') return `${who}：${t}发送了一条帖子摘要截图：${m.forumTitle || ''}`;
+      if (m.type === 'forum_detail') return `${who}：${t}发送了一条帖子详情链接：${m.forumTitle || ''}`;
       return `${who}：${t}${m.text}`;
     }).join('\n');
 
@@ -7251,7 +7429,7 @@ ${fullCtx}`;
   // 分享商品到聊天：弹联系人选择，发送商品卡片
   async function _shopShareToChat(item, platform) {
     const pd = await _getPhoneData();
-    const contacts = (pd?.chatContacts || []).filter(c => c.added);
+    const contacts = pd?.chatContacts || [];
     if (!contacts.length) { UI.showToast('还没有聊天联系人', 1500); return; }
 
     const contactId = await new Promise(resolve => {
@@ -8172,6 +8350,7 @@ async function buildHeartsimServiceChatForBackstage() {
     _forumRefresh, _forumSearch, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,
     _switchForumTab, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
     _addForumPost, _editForumPost, _saveForumPost, _deleteForumPost, _viewMyForumPost, _collectMyForumPost, _likeMyForumPost, _sendMyForumComment, _sendForumComment, _refreshForumComment, _shareMyForumPost, _refreshMyForumPost,
+    _forumShareToChat,
     _postMoment, _onMomentImagePicked, _toggleImageDesc, _submitMoment, _shareMoment, _collectMyMoment, _editMyMoment, _deleteMyMoment, _shareNpcMoment, _refreshMomentComments, _refreshNpcMoments, _editNpcMoment, _deleteNpcMoment,
 _openMomentVisibleModal, _closeMomentVisibleModal, _filterMomentVisibleOptions, _toggleMomentVisibleOption, _setMomentVisibleAll,
 _onMomentsConfigCountChange, _onMomentsConfigImgChange, _onMomentsConfigStorageChange,
