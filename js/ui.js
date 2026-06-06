@@ -185,45 +185,8 @@ const UI = (() => {
         case 'panel-chat': return null; // 聊天面板不走返回
         case 'panel-worldview': return () => showPanel('chat', 'back');
 case 'panel-worldview-edit': return () => {
-          // 历法系统校验：检查是否改了历法（和默认不同）且没填开场时间
-          try {
-            const stEl = document.getElementById('wv-start-time');
-            const startTime = stEl?.value?.trim();
-            const calContainer = document.getElementById('wv-calendar-system-container');
-            const calLabel = document.getElementById('wv-calendar-card-label');
-            // 如果卡片标签不是默认的"设置历法系统"，说明用户自定义了历法
-            if (calLabel && calLabel.textContent && calLabel.textContent !== '设置历法系统' && !startTime) {
-              UI.showToast('已启用历法系统，请填写开场时间', 3000);
-              if (stEl) { stEl.focus(); stEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-              return; // 阻止退出
-            }
-          } catch(_) {}
-          // 离开编辑面板时自动保存并停止定时器
-          if (typeof Worldview !== 'undefined') {
-            if (Worldview.save) try { Worldview.save({ silent: true }); } catch(_) {}
-            if (Worldview._stopFullSaveTimer) try { Worldview._stopFullSaveTimer(); } catch(_) {}
-          }
-          // v596：检查是否从单人卡跳进来
-          const rt = (typeof Worldview !== 'undefined' && Worldview.getEditReturnTo) ? Worldview.getEditReturnTo() : null;
-          if (rt === 'single-card-edit') {
-            if (Worldview.clearEditReturnTo) Worldview.clearEditReturnTo();
-            // 让 single_card 自己恢复编辑状态
-            if (typeof SingleCard !== 'undefined' && SingleCard.restoreEditPanel) {
-              SingleCard.restoreEditPanel();
-            } else {
-              showPanel('single-card-edit', 'back');
-            }
-          } else if (rt === 'lorebook-list') {
-            // v632：从世界书列表跳进来，返回时回到世界 tab 的世界书 tab
-            if (Worldview.clearEditReturnTo) Worldview.clearEditReturnTo();
-            showPanel('worldview', 'back');
-            if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
-              Worldview.switchWorldTab('lb');
-            }
-            // 刷新列表
-            if (typeof LorebookUI !== 'undefined' && LorebookUI.renderList) {
-              setTimeout(() => LorebookUI.renderList(), 50);
-            }
+          if (typeof Worldview !== 'undefined' && Worldview._tryExitEdit) {
+            Worldview._tryExitEdit();
           } else {
             showPanel('worldview', 'back');
           }
