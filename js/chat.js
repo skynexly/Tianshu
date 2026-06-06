@@ -225,7 +225,7 @@ const Chat = (() => {
 
 \`\`\`status
 地点：（当前所在地点，格式为"大地点｜小地点"，如"天枢城·东区｜某街道·某建筑·某房间"；必须使用世界观实际地名，禁止照抄此示例）
-时间：（当前时间，格式为"YYYY年M月D日 星期X HH:MM"，如"2065年3月27日 星期五 15:02"；根据剧情推进自然流逝，禁止照抄此示例）
+时间：（时间推进量，用增量格式表示本轮剧情相对上一轮过了多久，如"+30min""+2h""+1d""+3d12h"；必须考虑用户行为和正文描写所消耗的时间，合理估算。若时间没有变化写"+0min"。特殊情况如闪回可用"-1h"。禁止写绝对日期）
 天气：（当前天气和温度，如"晴朗 22℃"；只写天气和温度，不写体感）
 场景：（当前场景的环境描写，1-3句话，如"夜风将窗帘吹得噼啪作响，室内只开了一盏台灯，桌上有半杯冷掉的咖啡。"）
 用户角色-{{user}}-衣着：（用户角色当前穿的衣服饰品，如"白色睡裙，裙摆坠着荷叶边；颈部一条蓝宝石项链"；字段中的{{user}}应替换为用户角色姓名）
@@ -237,7 +237,7 @@ const Chat = (() => {
 状态面板规则：
 1. **每轮都必须完整输出 status 代码块**，即使所有字段都没变化。未变化的字段直接抄上一轮的内容。
 2. **地点**必须用世界观实际地区名，不要编造；格式为"大地点｜小地点"，用全角竖线分隔。根据{{user}}的身份和剧情决定地点，禁止照抄示例中的地名。
-3. **时间**格式为"YYYY年M月D日 星期X HH:MM"，根据剧情推进自然流逝。
+3. **时间**用增量格式（如"+30min""+2h""+1d"），表示本轮相对上轮过了多久。需综合考虑用户行为耗时+正文描写的时间流逝。前端会自动计算绝对日期，你无需关心当前是几号星期几。
 4. **天气**只写天气和温度，不写体感。
 5. 在场的每个角色各写两行（衣着+姿势），格式严格为 \`角色-<名字>-衣着：xxx\` 和 \`角色-<名字>-姿势：xxx\`。不在场的角色不要写。为兼容旧格式，系统仍可识别 \`NPC-<名字>-衣着/姿势\`，但你本轮输出应优先使用 \`角色-<名字>-...\`。
 6. 用户角色的衣着/姿势格式为 \`用户角色-<名字>-衣着：xxx\` 和 \`用户角色-<名字>-姿势：xxx\`，其中 \`<名字>\` 必须替换为用户角色姓名；禁止写成"玩家衣着/玩家姿势"。
@@ -269,7 +269,7 @@ const Chat = (() => {
 1. 仅当剧情中确实出现"线上消息"时才输出此代码块。日常对话、面对面交流、电话通话等不要使用此格式。
 2. 没有线上消息的轮次完全不要输出 \`\`\`chat 块（不是输出空数组，是整个块都不要写）。
 3. text 用 NPC 实际发送的内容，简短自然，符合 IM 聊天习惯。
-4. time 是消息发出时间，格式必须为 "YYYY.MM.DD 星期X HH:mm"（与 status 中的时间同一套写法，论坛/好友圈也用这个格式）。可与 status 中的时间略有差异（消息可能发出前几分钟）。
+4. time 是消息发出时间，格式必须为 "YYYY.MM.DD 星期X HH:mm"（如"2065.03.27 星期五 15:02"）。参考状态栏注入的【当前游戏时间】来确定日期，可与当前时间略有差异（消息可能发出前几分钟）。
 5. npc 必须使用角色真名，与正文/status 中的名字一致。
 6. 当输出了 \`\`\`chat 块时，**消息的具体内容只写在 chat 块里，正文不要复述**。正文需要简短交代"发送/收到了消息"这个动作或场景本身（例如"她拿起手机，给他发了一条消息"/"手机震了一下，是来自{{NPC}}的消息"），但不要把消息原文也写进正文，避免一条消息出现两次。
 7. **chat 块里只放 NPC 发出的消息，不要包含{{user}}的消息**。用户的消息由用户自己输入，AI 既不要复述也不要替用户写入 chat 块。
@@ -776,6 +776,52 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
           }
         }
       } catch(e) {}
+    }
+
+    // 2c. 历法系统注入（自定义历法时告知AI基本规则）
+    if (isGameMode) {
+      try {
+        const _calWv = isSingleConv ? singleWv : await Worldview.getCurrent();
+        const _calSys = _calWv?.gameplay?.calendarSystem;
+        if (_calSys && _calSys.daysPerWeek) {
+          // 判断是否非默认（和7天/12月不同就算自定义）
+          const isCustom = _calSys.daysPerWeek !== 7 ||
+            (_calSys.daysPerMonth && _calSys.daysPerMonth.length !== 12) ||
+            (_calSys.weekDayNames && _calSys.weekDayNames.some((n, i) => n !== ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'][i])) ||
+            (_calSys.seasons && _calSys.seasons.length !== 4);
+          if (isCustom) {
+            let calParts = [];
+            calParts.push(`每周${_calSys.daysPerWeek}天，分别为：${(_calSys.weekDayNames || []).join('、')}`);
+            if (_calSys.weekDayTypes && _calSys.weekDayTypes.length) {
+              const workDays = _calSys.weekDayNames.filter((_, i) => _calSys.weekDayTypes[i] === 'work');
+              const restDays = _calSys.weekDayNames.filter((_, i) => _calSys.weekDayTypes[i] === 'rest');
+              if (workDays.length) calParts.push(`工作日：${workDays.join('、')}`);
+              if (restDays.length) calParts.push(`休息日：${restDays.join('、')}`);
+            }
+            const monthCount = _calSys.daysPerMonth ? _calSys.daysPerMonth.length : 12;
+            calParts.push(`一年${monthCount}个月`);
+            if (_calSys.daysPerMonth) {
+              const allSame = _calSys.daysPerMonth.every(d => d === _calSys.daysPerMonth[0]);
+              if (allSame) {
+                calParts.push(`每月${_calSys.daysPerMonth[0]}天`);
+              } else {
+                calParts.push(`各月天数：${_calSys.daysPerMonth.join('、')}`);
+              }
+            }
+            if (_calSys.seasons && _calSys.seasons.length) {
+              const seasonDesc = _calSys.seasons.map(s => {
+                let txt = `${s.name}（${(s.months || []).map(m => m + '月').join('、')}）`;
+                if (s.weather) txt += `：${s.weather}`;
+                return txt;
+              }).join('；');
+              calParts.push(`季节：${seasonDesc}`);
+            }
+            const totalDays = (_calSys.daysPerMonth || []).reduce((a, b) => a + b, 0);
+            if (totalDays) calParts.push(`一年共${totalDays}天`);
+            systemParts.push(`<世界观特殊历法>\n${calParts.join('\n')}\n</世界观特殊历法>`);
+          }
+        }
+      } catch(e) { console.warn('[Chat] 历法注入失败', e); }
     }
 
     // 3. 角色卡（面具）— 只要挂了面具就发，让人机恋/纯聊天也能用
