@@ -4101,6 +4101,28 @@ function _renderChatThread(pd, contactId) {
           </div>`;
         }
 
+        // 位置气泡
+        if (m.type === 'location') {
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+              <div onclick="Phone._showChatLocationDetail('${Utils.escapeHtml(m.location || '')}','${Utils.escapeHtml(m.address || '')}')" style="width:200px;border-radius:14px;overflow:hidden;cursor:pointer;background:var(--bg-tertiary)">
+                <div style="padding:12px 14px 8px;display:flex;align-items:center;gap:10px">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <div style="min-width:0">
+                    <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(m.location || '位置')}</div>
+                    <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(m.address || '')}</div>
+                  </div>
+                </div>
+                <div style="height:56px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.7">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.5"><path d="M3 3h18M3 9h18M3 15h18M3 21h18M9 3v18M15 3v18"/></svg>
+                </div>
+              </div>
+              ${time}
+            </div>
+          </div>`;
+        }
+
         // 图片气泡（相册照片 / 本地真图）
         if (m.type === 'photo' || m.type === 'real_image') {
           const isAiImage = m.mode === 'ai_image' && m.imageId;
@@ -4178,12 +4200,12 @@ function _renderChatThread(pd, contactId) {
           <span style="font-size:11px;color:var(--text-secondary)">语音</span>
         </button>
         <!-- 位置 -->
-        <button class="phone-plus-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
-          <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-          </div>
-          <span style="font-size:11px;color:var(--text-secondary)">位置</span>
-        </button>
+         <button class="phone-plus-item" onclick="Phone._openChatLocationPicker('${contactId}')" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
+           <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
+             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+           </div>
+           <span style="font-size:11px;color:var(--text-secondary)">位置</span>
+         </button>
         <!-- 订单 -->
         <button class="phone-plus-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
           <div style="width:50px;height:50px;border-radius:14px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center">
@@ -4208,31 +4230,66 @@ function _renderChatThread(pd, contactId) {
 }
 
 let _voicePlayTimers = {};
-function _playVoice(msgId, isMine) {
-  // 兼容 msgId 带 update- 前缀
-  const realId = msgId.startsWith('update-') ? msgId.substring(7) : msgId;
-  const waveEl1 = document.getElementById('voice-wave-' + realId);
-  const waveEl2 = document.getElementById('voice-wave-update-' + realId);
-  
-  if (!waveEl1 && !waveEl2) return;
-  
-  // 清除该条语音可能存在的定时器
-  if (_voicePlayTimers[realId]) {
-    clearTimeout(_voicePlayTimers[realId]);
-    delete _voicePlayTimers[realId];
-    if (waveEl1) waveEl1.classList.remove('playing');
-    if (waveEl2) waveEl2.classList.remove('playing');
+async function _playVoice(msgId) {
+  const waveEl = document.getElementById('voice-wave-' + msgId);
+
+  // 如果 TTS 可用且当前联系人开启了角色语音，走 TTS
+  if (typeof TTS !== 'undefined' && _chatCurContactId) {
+    try {
+      const pd = await _getPhoneData();
+      const contact = (pd.chatContacts || []).find(c => c.id === _chatCurContactId);
+      if (contact && contact.voiceEnabled) {
+        const thread = (pd.chatThreads && pd.chatThreads[_chatCurContactId]) || [];
+        const msg = thread.find(m => m.id === msgId);
+        // 用户自己发的语音不播放
+        if (msg && msg.role === 'me') return;
+        const raw = (msg && (msg.voiceDesc || msg.text)) || '';
+        const speakText = raw.replace(/^\[语音\]/, '').trim();
+        if (!speakText) { UI.showToast('没有可播放的内容', 1200); return; }
+
+        // 正在播放同一条 → 停止
+        if (TTS.isPlaying(msgId)) {
+          TTS.stop();
+          if (waveEl) waveEl.classList.remove('playing');
+          return;
+        }
+        // 停掉上一条
+        TTS.stop();
+
+        if (waveEl) waveEl.classList.add('playing');
+        try {
+          await TTS.speak(speakText, {
+            msgId,
+            voiceId: contact.voiceId || undefined,
+          });
+        } catch(e) {
+          UI.showToast('语音播放失败：' + (e.message || '未知'), 2000);
+        } finally {
+          if (waveEl) waveEl.classList.remove('playing');
+        }
+        return;
+      }
+    } catch(_) {}
+  }
+
+  // fallback：纯动画模拟（无 TTS 或未开启角色语音），用户气泡不播放
+  try {
+    const pd = await _getPhoneData();
+    const thread = (pd.chatThreads && pd.chatThreads[_chatCurContactId]) || [];
+    const msg = thread.find(m => m.id === msgId);
+    if (msg && msg.role === 'me') return;
+  } catch(_) {}
+
+  if (_voicePlayTimers[msgId]) {
+    clearTimeout(_voicePlayTimers[msgId]);
+    delete _voicePlayTimers[msgId];
+    if (waveEl) waveEl.classList.remove('playing');
     return;
   }
-  
-  if (waveEl1) waveEl1.classList.add('playing');
-  if (waveEl2) waveEl2.classList.add('playing');
-  
-  // 模拟播放时间，固定2秒
-  _voicePlayTimers[realId] = setTimeout(() => {
-    if (waveEl1) waveEl1.classList.remove('playing');
-    if (waveEl2) waveEl2.classList.remove('playing');
-    delete _voicePlayTimers[realId];
+  if (waveEl) waveEl.classList.add('playing');
+  _voicePlayTimers[msgId] = setTimeout(() => {
+    if (waveEl) waveEl.classList.remove('playing');
+    delete _voicePlayTimers[msgId];
   }, 2000);
 }
 
@@ -4406,6 +4463,28 @@ function _renderChatThreadWithSystem(pd, contactId) {
             </div>
           </div>
           <div style="margin-top:4px;padding:6px 10px;border-radius:8px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;max-width:100%;word-break:break-word">${Utils.escapeHtml(m.voiceDesc || '')}</div>
+          ${time}
+        </div>
+      </div>`;
+    }
+
+    // 位置气泡
+    if (m.type === 'location') {
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+          <div onclick="Phone._showChatLocationDetail('${Utils.escapeHtml(m.location || '')}','${Utils.escapeHtml(m.address || '')}')" style="width:200px;border-radius:14px;overflow:hidden;cursor:pointer;background:var(--bg-tertiary)">
+            <div style="padding:12px 14px 8px;display:flex;align-items:center;gap:10px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              <div style="min-width:0">
+                <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(m.location || '位置')}</div>
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(m.address || '')}</div>
+              </div>
+            </div>
+            <div style="height:56px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.7">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.5"><path d="M3 3h18M3 9h18M3 15h18M3 21h18M9 3v18M15 3v18"/></svg>
+            </div>
+          </div>
           ${time}
         </div>
       </div>`;
@@ -4827,6 +4906,103 @@ function _toggleChatVoiceMode(contactId) {
   if (menu) menu.classList.add('hidden');
 }
 
+// 打开位置选择器：从 StatusBar 提取当前位置预填，用户可编辑后确认发送
+async function _openChatLocationPicker(contactId) {
+  // 关闭加号菜单
+  const plusMenu = document.getElementById('phone-chat-plus-menu');
+  if (plusMenu) plusMenu.classList.add('hidden');
+
+  // 从 StatusBar 拿当前位置
+  let defaultLocation = '';
+  try {
+    const sb = Conversations.getStatusBar();
+    defaultLocation = sb?.location || sb?.place || '';
+  } catch(_) {}
+
+  // 弹出编辑卡片
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.45)';
+  overlay.innerHTML = `
+    <div style="width:100%;max-width:420px;background:var(--bg);border-radius:20px 20px 0 0;padding:20px 20px 32px;box-shadow:0 -4px 24px rgba(0,0,0,0.18)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <span style="font-size:16px;font-weight:600;color:var(--text)">发送位置</span>
+        <button id="loc-picker-cancel" style="background:none;border:none;color:var(--text-secondary);font-size:22px;cursor:pointer;line-height:1">×</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span style="font-size:12px;color:var(--text-secondary)">位置名称</span>
+      </div>
+      <input id="loc-picker-name" type="text" value="${Utils.escapeHtml(defaultLocation)}" placeholder="输入位置名称…" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        <span style="font-size:12px;color:var(--text-secondary)">详细地址（可选）</span>
+      </div>
+      <input id="loc-picker-addr" type="text" placeholder="输入详细地址…" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:20px">
+      <button id="loc-picker-confirm" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer">发送位置</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#loc-picker-cancel').onclick = () => document.body.removeChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
+  overlay.querySelector('#loc-picker-confirm').onclick = () => {
+    const loc = (overlay.querySelector('#loc-picker-name').value || '').trim();
+    const addr = (overlay.querySelector('#loc-picker-addr').value || '').trim();
+    document.body.removeChild(overlay);
+    if (loc) Phone._confirmChatLocation(contactId, loc, addr);
+    else UI.showToast('请输入位置名称', 1200);
+  };
+}
+
+// 确认发送位置消息
+async function _confirmChatLocation(contactId, location, address) {
+  try {
+    const pd = await _getPhoneData();
+    if (!pd.chatThreads) pd.chatThreads = {};
+    if (!pd.chatThreads[contactId]) pd.chatThreads[contactId] = [];
+    let gameTime = '';
+    try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+    pd.chatThreads[contactId].push({
+      id: 'loc_' + Date.now(),
+      role: 'me',
+      type: 'location',
+      location,
+      address,
+      text: `[位置]${location}`,
+      time: gameTime,
+      createdAt: Date.now()
+    });
+    await _savePhoneData();
+    _openChatThread(contactId);
+  } catch(e) {
+    UI.showToast('发送失败：' + (e.message || '未知'), 2000);
+  }
+}
+
+// 查看位置详情
+function _showChatLocationDetail(location, address) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5)';
+  overlay.innerHTML = `
+    <div style="width:min(320px,88vw);background:var(--bg);border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.25)">
+      <div style="height:160px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;position:relative">
+        <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1" opacity="0.3"><path d="M3 3h18M3 9h18M3 15h18M3 21h18M9 3v18M15 3v18"/></svg>
+        <div style="position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="var(--accent)" stroke="none"><path d="M12 2a8 8 0 0 0-8 8c0 5.4 7.05 11.5 7.35 11.76a1 1 0 0 0 1.3 0C12.95 21.5 20 15.4 20 10a8 8 0 0 0-8-8Zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg>
+          <div style="background:rgba(255,255,255,0.9);border-radius:8px;padding:4px 10px;font-size:13px;font-weight:600;color:var(--text)">${Utils.escapeHtml(location || '位置')}</div>
+        </div>
+      </div>
+      <div style="padding:16px 20px 20px">
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">${Utils.escapeHtml(location || '位置')}</div>
+        ${address ? `<div style="font-size:13px;color:var(--text-secondary)">${Utils.escapeHtml(address)}</div>` : ''}
+        <button onclick="this.closest('div[style*=fixed]').remove()" style="margin-top:16px;width:100%;padding:11px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:10px;font-size:14px;cursor:pointer">关闭</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
 // 发送语音消息：存 type=voice，不触发 AI，等刷新打包
 async function _chatSendVoice(contactId) {
   try {
@@ -4939,6 +5115,9 @@ async function _chatRequestReply(contactId) {
     const histStr = recent.map(m => {
       const who = m.role === 'me' ? `玩家（${myName}）` : contact.name;
       const t = m.time ? `[${m.time}] ` : '';
+      if (m.type === 'location') return `${who}：${t}发送了一条位置信息：${m.location || ''}${m.address ? '（' + m.address + '）' : ''}`;
+      if (m.type === 'voice') return `${who}：${t}${m.voiceDesc || m.text || ''}`;
+      if (m.type === 'photo') return `${who}：${t}[发送了一张照片]`;
       return `${who}：${t}${m.text}`;
     }).join('\n');
 
@@ -7836,7 +8015,7 @@ async function buildHeartsimServiceChatForBackstage() {
     // 主屏分页
     _onPagesScroll,
     // 聊天 App
-  _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _saveChatSettings, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
+  _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
   ingestChatMessages, getChatHistoryForNPCs,
     // 相机 App
     _switchCameraTab, _cameraRefillFromStatus, _cameraOpenAdjust, _cameraShoot, _cameraOpenPhoto, _cameraOnTextInput,
