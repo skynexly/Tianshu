@@ -1585,10 +1585,10 @@ async function _clearMomentsCover() {
         (wv.globalNpcs || []).forEach(addNpc);
         (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
       });
-      // 补充：单人卡 / 挂载角色头像
+      // 补充：单人卡头像
+      const convId = Conversations.getCurrent();
+      const conv = Conversations.getList().find(c => c.id === convId);
       try {
-        const convId = Conversations.getCurrent();
-        const conv = Conversations.getList().find(c => c.id === convId);
         if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
           const card = await DB.get('singleCards', conv.singleCharId);
           const scAvatar = avatarById[conv.singleCharId] || card?.avatar || '';
@@ -1596,6 +1596,40 @@ async function _clearMomentsCover() {
             const names = [card.name, ...(String(card.aliases || '').split(/[,，、\s]+/)), ...(String(card.onlineName || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
             names.forEach(name => { if (!map[name]) map[name] = scAvatar; });
           }
+        }
+      } catch(_) {}
+      // 补充：当前对话生效的世界书 NPC
+      try {
+        if (typeof Lorebook !== 'undefined' && Lorebook.collectForChat) {
+          let card = null;
+          if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+            try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
+          }
+          const wvId = conv?.worldviewId || conv?.singleWorldviewId;
+          const wv2 = wvId ? await DB.get('worldviews', wvId) : null;
+          const lbs = await Lorebook.collectForChat({ conv, card, wv: wv2 });
+          for (const lb of (lbs || [])) {
+            (lb.globalNpcs || []).forEach(n => {
+              if (!n) return;
+              const url = avatarById[n.id] || n.avatar || '';
+              if (!url) return;
+              const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
+              names.forEach(name => { if (!map[name]) map[name] = url; });
+            });
+          }
+        }
+      } catch(_) {}
+      // 补充：挂载角色
+      try {
+        if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+          const attached = await AttachedChars.resolveAll();
+          (attached || []).forEach(c => {
+            if (!c || !c.name) return;
+            const url = (c.id && avatarById[c.id]) || c.avatar || '';
+            if (!url) return;
+            const names = [c.name, ...(String(c.aliases || '').split(/[,，、\s]+/)), ...(String(c.onlineName || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
+            names.forEach(name => { if (!map[name]) map[name] = url; });
+          });
         }
       } catch(_) {}
     } catch(_) {}

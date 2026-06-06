@@ -44,22 +44,64 @@ const WorldVoice = (() => {
   async function _getNpcListForForum() {
     try {
       const wv = await Worldview.getCurrent();
-      if (!wv || !wv.regions) return '';
       const npcs = [];
-      for (const region of wv.regions) {
-        if (!region.factions) continue;
-        for (const faction of region.factions) {
-          if (!faction.npcs) continue;
-          for (const n of faction.npcs) {
-            if (!n.name) continue;
-            let desc = n.name;
-            if (n.onlineName) desc += `（网名：${n.onlineName}）`;
-            else if (n.aliases) desc += `（${n.aliases}）`;
-            if (n.summary) desc += `：${n.summary}`;
-            npcs.push(desc);
+      // 世界观 NPC
+      if (wv && wv.regions) {
+        for (const region of wv.regions) {
+          if (!region.factions) continue;
+          for (const faction of region.factions) {
+            if (!faction.npcs) continue;
+            for (const n of faction.npcs) {
+              if (!n.name) continue;
+              let desc = n.name;
+              if (n.onlineName) desc += `（网名：${n.onlineName}）`;
+              else if (n.aliases) desc += `（${n.aliases}）`;
+              if (n.summary) desc += `：${n.summary}`;
+              npcs.push(desc);
+            }
           }
         }
       }
+      // 当前对话生效的世界书 NPC
+      try {
+        if (typeof Lorebook !== 'undefined' && Lorebook.collectForChat) {
+          const convId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
+          const conv = convId ? Conversations.getList().find(c => c.id === convId) : null;
+          let card = null;
+          if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+            try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
+          }
+          const wvId = conv?.worldviewId || conv?.singleWorldviewId;
+          const wv2 = wvId ? await DB.get('worldviews', wvId) : null;
+          const lbs = await Lorebook.collectForChat({ conv, card, wv: wv2 });
+          for (const lb of (lbs || [])) {
+            (lb.globalNpcs || []).forEach(n => {
+              if (!n || !n.name) return;
+              // 避免重复
+              if (npcs.some(x => x.startsWith(n.name))) return;
+              let desc = n.name;
+              if (n.onlineName) desc += `（网名：${n.onlineName}）`;
+              else if (n.aliases) desc += `（${n.aliases}）`;
+              if (n.summary) desc += `：${n.summary}`;
+              npcs.push(desc);
+            });
+          }
+        }
+      } catch(_) {}
+      // 单人卡（作为角色也可以出现在论坛）
+      try {
+        const convId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
+        const conv = convId ? Conversations.getList().find(c => c.id === convId) : null;
+        if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+          const card = await DB.get('singleCards', conv.singleCharId);
+          if (card && card.name && !npcs.some(x => x.startsWith(card.name))) {
+            let desc = card.name;
+            if (card.onlineName) desc += `（网名：${card.onlineName}）`;
+            else if (card.aliases) desc += `（${card.aliases}）`;
+            npcs.push(desc);
+          }
+        }
+      } catch(_) {}
       if (npcs.length === 0) return '';
       return `\n\n## 世界观中的角色（可作为发帖人/评论者）\n${npcs.join('\n')}`;
     } catch(_) { return ''; }
