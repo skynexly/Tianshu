@@ -413,7 +413,8 @@ if (Array.isArray(lb.globalNpcs)) merged.globalNpcs.push(...lb.globalNpcs);
         const text = '【全图常驻 NPC】\n以下 NPC 不受地区限制，在本世界观下全程常驻，随时可以出现在任何场景中。\n\n' +
           gs.map(n => {
             const head = n.aliases ? `${n.name}（${n.aliases}）` : (n.name || '未命名');
-            return n.detail ? `${head}\n${n.detail}` : head;
+const headFull = head + (n.onlineName ? `（网名：${n.onlineName}）` : '');
+            return n.detail ? `${headFull}\n${n.detail}` : headFull;
           }).join('\n\n---\n\n');
         systemParts.push(text);
       }
@@ -547,7 +548,8 @@ if (Array.isArray(lb.globalNpcs)) merged.globalNpcs.push(...lb.globalNpcs);
           const c = await SingleCard.get(settings.roleId);
           if (c && c.name) {
             roleIdentityText = `你是${c.name}。`;
-            if (c.aliases) roleIdentityText += `\n别称：${c.aliases}`;
+if (c.aliases) roleIdentityText += `\n别称：${c.aliases}`;
+if (c.onlineName) roleIdentityText += `\n网名：${c.onlineName}`;
             if (c.detail) roleIdentityText += `\n\n${c.detail}`;
           }
         } else if (settings.roleType === 'wv_npc') {
@@ -567,7 +569,8 @@ if (Array.isArray(lb.globalNpcs)) merged.globalNpcs.push(...lb.globalNpcs);
               }
               if (npc && npc.name) {
                 roleIdentityText = `你是${npc.name}。`;
-                if (npc.aliases) roleIdentityText += `\n别称：${npc.aliases}`;
+if (npc.aliases) roleIdentityText += `\n别称：${npc.aliases}`;
+if (npc.onlineName) roleIdentityText += `\n网名：${npc.onlineName}`;
                 if (npc.detail) roleIdentityText += `\n\n${npc.detail}`;
               }
             }

@@ -891,7 +891,7 @@ function _syncBuiltinRestoreButton(w) {
     });
   }
   function _attachWVNpcAutoSave() {
-    ['wv-npc-name','wv-npc-aliases','wv-npc-summary','wv-npc-detail'].forEach(id => {
+    ['wv-npc-name','wv-npc-aliases','wv-npc-onlinename','wv-npc-summary','wv-npc-detail'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.removeEventListener('input', _wvNpcAutoSave); el.addEventListener('input', _wvNpcAutoSave); }
     });
@@ -1852,10 +1852,12 @@ return;
     }
 
     document.getElementById('wv-npc-title').textContent = npc.name || '编辑角色';
-    document.getElementById('wv-npc-name').value = npc.name || '';
-    document.getElementById('wv-npc-aliases').value = npc.aliases || '';
-    document.getElementById('wv-npc-summary').value = npc.summary || '';
-    document.getElementById('wv-npc-detail').value = npc.detail || '';
+document.getElementById('wv-npc-name').value = npc.name || '';
+document.getElementById('wv-npc-aliases').value = npc.aliases || '';
+const wvNpcOnline1 = document.getElementById('wv-npc-onlinename');
+if (wvNpcOnline1) wvNpcOnline1.value = npc.onlineName || '';
+document.getElementById('wv-npc-summary').value = npc.summary || '';
+document.getElementById('wv-npc-detail').value = npc.detail || '';
 
     UI.showPanel('wv-npc', 'forward');
     requestAnimationFrame(_attachWVNpcAutoSave);
@@ -1883,6 +1885,7 @@ return;
       if (!npc) return;
       npc.name = document.getElementById('wv-npc-name').value.trim();
       npc.aliases = document.getElementById('wv-npc-aliases').value.trim();
+      npc.onlineName = (document.getElementById('wv-npc-onlinename')?.value || '').trim();
       npc.summary = document.getElementById('wv-npc-summary').value.trim();
       npc.detail = document.getElementById('wv-npc-detail').value.trim();
       await _saveEditingWV(w);
@@ -1896,6 +1899,7 @@ return;
     if (!npc) return;
     npc.name = document.getElementById('wv-npc-name').value.trim();
     npc.aliases = document.getElementById('wv-npc-aliases').value.trim();
+    npc.onlineName = (document.getElementById('wv-npc-onlinename')?.value || '').trim();
     npc.summary = document.getElementById('wv-npc-summary').value.trim();
     npc.detail = document.getElementById('wv-npc-detail').value.trim();
 
@@ -2732,6 +2736,8 @@ function _editingFactionIdxForImporter() { return _editFactionIdx; }
     }
     document.getElementById('wv-npc-name').value = npc.name || '';
     document.getElementById('wv-npc-aliases').value = npc.aliases || '';
+    const wvNpcOnline2 = document.getElementById('wv-npc-onlinename');
+    if (wvNpcOnline2) wvNpcOnline2.value = npc.onlineName || '';
     document.getElementById('wv-npc-summary').value = npc.summary || '';
     document.getElementById('wv-npc-detail').value = npc.detail || '';
     const sumLbl = document.getElementById('wv-npc-summary-label');
