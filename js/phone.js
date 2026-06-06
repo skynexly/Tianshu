@@ -1564,12 +1564,58 @@ async function _clearMomentsCover() {
 // ===== 各 App 占位渲染 =====
   let _forumTab = 'posts'; // 'posts' | 'history' | 'myposts'
 
-  function _renderForum(pd) {
+  // 论坛头像匹配：根据用户名（本名/代号/网名）从 NPC 头像表中查找
+  let _forumNpcAvatarMap = null; // 延迟初始化
+  async function _ensureForumNpcAvatarMap() {
+    if (_forumNpcAvatarMap) return _forumNpcAvatarMap;
+    const map = {};
+    try {
+      if (_momentsRenderCache && _momentsRenderCache.npcAvatarMap) {
+        Object.assign(map, _momentsRenderCache.npcAvatarMap);
+      } else {
+        const avatarRows = await DB.getAll('npcAvatars');
+        const avatarById = {};
+        avatarRows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
+        const all = await DB.getAll('worldviews');
+        all.forEach(wv => {
+          const addNpc = (n) => {
+            if (!n) return;
+            const url = avatarById[n.id] || n.avatar || '';
+            if (!url) return;
+            const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
+            names.forEach(name => { if (!map[name]) map[name] = url; });
+          };
+          (wv.globalNpcs || []).forEach(addNpc);
+          (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
+        });
+      }
+    } catch(_) {}
+    _forumNpcAvatarMap = map;
+    return map;
+  }
+
+  // 给帖子/评论匹配 NPC 头像
+  function _matchForumAvatar(item) {
+    if (item.avatar) return; // 已有头像不覆盖
+    if (_forumNpcAvatarMap && _forumNpcAvatarMap[item.username]) {
+      item.avatar = _forumNpcAvatarMap[item.username];
+    }
+  }
+
+  async function _renderForum(pd) {
     const body = document.getElementById('phone-body');
     document.getElementById('phone-title').textContent = _getForumName();
 
+    // 确保论坛头像映射已就绪
+    await _ensureForumNpcAvatarMap();
+
     // 统一以 phoneData 缓存为准（WorldVoice 仅作为生成器）
     const posts = pd.cachedForumPosts || [];
+    // 给帖子和评论匹配NPC头像
+    posts.forEach(p => {
+      _matchForumAvatar(p);
+      (p._comments || []).forEach(c => _matchForumAvatar(c));
+    });
     const searchHistory = pd.forumSearchHistory || [];
 
     const historyHtml = searchHistory.length > 0
@@ -1656,7 +1702,7 @@ async function _clearMomentsCover() {
     return posts.map((p, i) => `
       <div onclick="Phone._forumViewDetail(${i})" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-          <div style="width:24px;height:24px;border-radius:50%;background:${Utils.escapeHtml(p.avatar_color || '#888')};display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:bold;flex-shrink:0">${Utils.escapeHtml((p.username || '?')[0])}</div>
+          ${_forumAvatar(p, 24)}
           <span style="font-size:11px;font-weight:600">${Utils.escapeHtml(p.username || '匿名')}</span>
           <span style="font-size:10px;color:var(--text-secondary);margin-left:auto">${Utils.escapeHtml(_formatPhoneTime(p.time || ''))}</span>
         </div>
@@ -1874,7 +1920,7 @@ async function _clearMomentsCover() {
       html += '<div style="font-size:12px;font-weight:600;margin-bottom:8px">评论区</div>';
       p._comments.forEach(c => {
         html += '<div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px">';
-        html += '<div style="width:24px;height:24px;border-radius:50%;background:' + Utils.escapeHtml(c.avatar_color || '#666') + ';display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:bold;flex-shrink:0">' + Utils.escapeHtml((c.username || '?')[0]) + '</div>';
+        html += _forumAvatar(c, 24);
         html += '<div style="flex:1">';
         html += '<div style="display:flex;justify-content:space-between;margin-bottom:3px">';
         html += '<span style="font-size:12px;font-weight:600">' + Utils.escapeHtml(c.username || '匿名') + '</span>';
@@ -2495,6 +2541,10 @@ ${wvPrompt}` },
     const body = document.getElementById('phone-body');
     document.querySelector('#phone-modal .phone-shell')?.classList.add('phone-forum-detail-mode');
     document.getElementById('phone-title').textContent = post.title || '帖子详情';
+    // 确保头像映射就绪并匹配
+    await _ensureForumNpcAvatarMap();
+    _matchForumAvatar(post);
+    (post._comments || []).forEach(c => _matchForumAvatar(c));
     // push 详情页到导航栈
     _pushNav(() => _forumViewDetail(index));
 
@@ -2504,7 +2554,7 @@ ${wvPrompt}` },
  html += `<div class="phone-forum-detail-scroll" style="flex:1;overflow-y:auto;padding:12px">`;
       // 发帖人 + 刷新图标
       html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <div style="width:28px;height:28px;border-radius:50%;background:${Utils.escapeHtml(p.avatar_color||'#888')};display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:bold;flex-shrink:0">${Utils.escapeHtml((p.username||'?')[0])}</div>
+        ${_forumAvatar(p, 28)}
         <div><div style="font-size:13px;font-weight:600;color:var(--text)">${Utils.escapeHtml(p.username||'匿名')}</div><div style="font-size:10px;color:var(--text-secondary)">${Utils.escapeHtml(_formatPhoneTime(p.time||''))}</div></div>
         ${p._detailLoaded ? `<div style="margin-left:auto;flex-shrink:0"><span onclick="event.stopPropagation();Phone._refreshForumComment(${index})" style="cursor:pointer;color:var(--text-secondary);display:flex;align-items:center;padding:2px" title="刷新评论">${_uiIcon('refresh', 15)}</span></div>` : ''}
       </div>`;
@@ -2522,7 +2572,7 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
           html += `<div style="font-size:12px;font-weight:600;margin-bottom:8px">评论区</div>`;
           p._comments.forEach(c => {
             html += `<div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px">
-              <div style="width:24px;height:24px;border-radius:50%;background:${Utils.escapeHtml(c.avatar_color||'#666')};display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:bold;flex-shrink:0">${Utils.escapeHtml((c.username||'?')[0])}</div>
+              ${_forumAvatar(c, 24)}
               <div style="flex:1">
                 <div style="display:flex;justify-content:space-between;margin-bottom:3px">
                   <span style="font-size:12px;font-weight:600">${Utils.escapeHtml(c.username||'匿名')}</span>
