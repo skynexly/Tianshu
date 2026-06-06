@@ -2220,17 +2220,17 @@ async function _clearMomentsCover() {
 
 ${md ? `载体说明：${md}\n\n` : ''}要求：
 1. 只生成评论/回复区，不要改写帖子正文，不要生成新的帖子标题。
-2. 本次生成 8-12 条“新增评论”，用于追加到已有评论后面。
-3. 大部分评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与回复（0-3条）。
-4. 如果评论者是 NPC，username 直接填该 NPC 在世界观资料中列出的名字（不要加括号或注释），并标记 "isNpc": true；不确定是否为 NPC 则作为路人处理并标记 "isNpc": false。如果楼主出现在评论区，必须是以作者身份回复读者，而不是路人视角。
-5. 评论内容要自然多样：有赞同、反对、追问、吐槽、跑题、阴阳怪气等，长度错落有致。可以加入适量的“@某人”或引用前排回复的互动感，体现出网友间的楼中楼交流（例如“@XX 确实”或“回复 @XX：不对吧”），但不要每条都@。
+2. 本次生成 8-12 条"新增评论"，用于追加到已有评论后面。
+3. 绝大多数评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与回复（0-3条）。
+4. 如果评论者是 NPC，username 直接填该 NPC 的网名（如有）或本名（不要加括号或注释），并标记 "isNpc": true；不确定是否为 NPC 则作为路人处理并标记 "isNpc": false。
+5. 评论内容要自然多样：有赞同、反对、追问、吐槽、跑题、阴阳怪气等，长度错落有致。可以加入适量的"@某人"或引用前排回复的互动感，但不要每条都@。
 6. 新评论应当参考已有评论，避免重复已有内容；可以接续已有讨论，也可以产生新分歧。
-7. 评论时间必须依次晚于该帖子的发帖时间和已有的最新评论。请根据“当前游戏时间”智能安排回复节奏：
+7. 评论时间必须依次晚于该帖子的发帖时间和已有的最新评论。请根据"当前游戏时间"智能安排回复节奏：
    - 若当前时间距离发帖/上一条评论很近，允许将新评论时间自然向后顺延（可合理超过当前游戏时间几分钟到几十分钟），模拟网友陆陆续续打字回复的过程。
    - 若当前时间比发帖/上一条评论晚了几个小时或几天，请将新评论散布在这段过去的空窗期内，并让最新几条紧贴当前游戏时间。
    - 严禁跳跃到不合逻辑的遥远未来。
 8. 所有 time 都必须使用 "YYYY.MM.DD 星期X HH:mm" 格式，不要写成别的时间样式。
-9. 不要让玩家角色（${post.username}）以评论者身份出现；不要冒充玩家说“我又补充一下”“楼主本人来了”等。
+9. 【严禁】发帖人"${post.username}"是玩家本人。绝对不能让"${post.username}"出现在评论区——不能以楼主身份回复、不能以路人身份出现、不能以任何形式代替玩家发言。评论者只能是其他人。
 10. 返回纯 JSON 对象，不要包含任何解释、Markdown 代码块或多余文字。
 
 JSON格式：
@@ -2254,7 +2254,7 @@ ${wvPrompt}`;
         existingCommentsStr = post._comments.map(c => `用户名：${c.username} (${c.isNpc ? 'NPC' : '路人'})\n时间：${c.time}\n点赞：${c.likes}\n内容：${c.content}`).join('\n\n');
       }
       const gameTime = _getGameTime() || '';
-      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 玩家发帖信息\n标题：${post.title || '无标题'}\n发帖人：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。注意：如果楼主（发帖人）出现在评论区，必须是以作者身份回复读者，而不是以路人视角评论自己的帖子。`;
+      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 玩家发帖信息\n标题：${post.title || '无标题'}\n发帖人（玩家本人）：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。注意：发帖人"${post.username}"是玩家本人，绝对不能出现在评论区中。`;
 
       const resp = await fetch(url, {
         method: 'POST',
@@ -2278,45 +2278,10 @@ ${wvPrompt}`;
 
       if (result.comments && result.comments.length > 0) {
         post._comments = post._comments || [];
-        // 匹配 NPC 头像
-        const pdNow = await _getPhoneData();
-        // 匹配 NPC 头像 + 显示名：单独走一遍全量提取（防止没进过朋友圈就没有缓存）
-        let npcAvatarMap = {};
-        let npcDisplayNameMap = {}; // NPC本名 → 优先显示名（网名 > 本名）
-        if (_momentsRenderCache) {
-          npcAvatarMap = _momentsRenderCache.npcAvatarMap || {};
-        } else {
-          // 临时构建一次映射
-          try {
-            const avatarRows = await DB.getAll('npcAvatars');
-            const avatarById = {};
-            avatarRows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
-            const all = await DB.getAll('worldviews');
-            const addNpc = (n) => {
-              if (!n) return;
-              const url = avatarById[n.id] || n.avatar || '';
-              const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
-              if (url) names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = url; });
-              // 显示名优先级：网名 > 本名
-              if (n.name) {
-                const displayName = (n.onlineName || '').trim() || n.name;
-                npcDisplayNameMap[n.name] = displayName;
-                // 别称也映射到同一个显示名
-                String(n.aliases || '').split(/[,，、\s]+/).map(x => x.trim()).filter(Boolean).forEach(a => { if (!npcDisplayNameMap[a]) npcDisplayNameMap[a] = displayName; });
-              }
-            };
-            all.forEach(wv => {
-              (wv.globalNpcs || []).forEach(addNpc);
-              (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
-            });
-          } catch(_) {}
-        }
-        result.comments.forEach(c => {
-          if (c.isNpc) {
-            if (npcAvatarMap[c.username]) c.avatar = npcAvatarMap[c.username];
-            if (npcDisplayNameMap[c.username]) c.username = npcDisplayNameMap[c.username];
-          }
-        });
+        // 使用统一的论坛头像+显示名匹配
+        await _ensureForumNpcAvatarMap();
+        await _ensureForumDisplayNameMap();
+        result.comments.forEach(c => _matchForumAvatar(c));
         post._comments.push(...result.comments);
         await _savePhoneData();
         _log(`刷新了${mt}帖子「${post.title}」的评论，追加了 ${result.comments.length} 条`);
@@ -2371,21 +2336,22 @@ ${wvPrompt}`;
       const mt = _getForumName() || '论坛';
       const md = _getForumDesc();
 
-      const sysPrompt = `你是一个"${mt}"评论/回复区生成器。用户给你一条由玩家角色发布的帖子/动态，以及当前已经存在的评论列表。请根据世界观、帖子内容、已有评论，生成一批新的追加评论。
+      const sysPrompt = `你是一个"${mt}"评论/回复区生成器。用户给你一条帖子/动态，以及当前已经存在的评论列表。请根据世界观、帖子内容、已有评论，生成一批新的追加评论。
 
 ${md ? `载体说明：${md}\n\n` : ''}要求：
 1. 只生成评论/回复区，不要改写帖子正文，不要生成新的帖子标题。
-2. 本次生成 8-12 条“新增评论”，用于追加到已有评论后面。
-3. 大部分评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与回复（0-3条）。
-4. 如果评论者是 NPC，username 直接填该 NPC 在世界观资料中列出的名字（不要加括号或注释），并标记 "isNpc": true；不确定是否为 NPC 则作为路人处理并标记 "isNpc": false。如果楼主出现在评论区，必须是以作者身份回复读者，而不是路人视角。
-5. 评论内容要自然多样：可以有赞同、反对、追问、吐槽、跑题、补充信息、阴阳怪气、认真分析等；长度不要整齐划一，有人一句话，有人写一小段。
-6. 新评论应当参考已有评论，避免重复已有内容；可以接续已有讨论，也可以产生新分歧。
-7. 评论时间必须依次晚于该帖子的发帖时间和已有的最新评论。请根据“当前游戏时间”智能安排回复节奏：
+2. 本次生成 8-12 条"新增评论"，用于追加到已有评论后面。
+3. 绝大多数评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与回复（0-3条）。
+4. 如果评论者是 NPC，username 直接填该 NPC 的网名（如有）或本名（不要加括号或注释），并标记 "isNpc": true；不确定是否为 NPC 则作为路人处理并标记 "isNpc": false。
+5. 如果楼主（发帖人）出现在评论区，必须是以作者/楼主身份回复读者（如答疑、补充），而不是以路人视角评论自己。
+6. 评论内容要自然多样：可以有赞同、反对、追问、吐槽、跑题、补充信息、阴阳怪气、认真分析等；长度不要整齐划一，有人一句话，有人写一小段。
+7. 新评论应当参考已有评论，避免重复已有内容；可以接续已有讨论，也可以产生新分歧。
+8. 评论时间必须依次晚于该帖子的发帖时间和已有的最新评论。请根据"当前游戏时间"智能安排回复节奏：
    - 若当前时间距离发帖/上一条评论很近，允许将新评论时间自然向后顺延（可合理超过当前游戏时间几分钟到几十分钟），模拟网友陆陆续续打字回复的过程。
    - 若当前时间比发帖/上一条评论晚了几个小时或几天，请将新评论散布在这段过去的空窗期内，并让最新几条紧贴当前游戏时间。
    - 严禁跳跃到不合逻辑的遥远未来。
-8. 所有 time 都必须使用 "YYYY.MM.DD 星期X HH:mm" 格式，不要写成别的时间样式。
-9. 返回纯 JSON 对象，不要包含任何解释、Markdown 代码块或多余文字。
+9. 所有 time 都必须使用 "YYYY.MM.DD 星期X HH:mm" 格式，不要写成别的时间样式。
+10. 返回纯 JSON 对象，不要包含任何解释、Markdown 代码块或多余文字。
 
 JSON格式：
 {
@@ -2408,7 +2374,7 @@ ${wvPrompt}`;
         existingCommentsStr = post._comments.map(c => `用户名：${c.username} (${c.isNpc ? 'NPC' : '路人'})\n时间：${c.time}\n点赞：${c.likes}\n内容：${c.content}`).join('\n\n');
       }
       const gameTime = _getGameTime() || '';
-      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 玩家发帖信息\n标题：${post.title || '无标题'}\n发帖人：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.fullContent || post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。注意：如果楼主（发帖人）出现在评论区，必须是以作者身份回复读者，而不是以路人视角评论自己的帖子。`;
+      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子信息\n标题：${post.title || '无标题'}\n发帖人（楼主）：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.fullContent || post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。注意：楼主如果出现在评论区，要以作者身份回复读者。评论者绝对不能是玩家本人。`;
 
       const resp = await fetch(url, {
         method: 'POST',
@@ -2432,40 +2398,10 @@ ${wvPrompt}`;
 
       if (result.comments && result.comments.length > 0) {
         post._comments = post._comments || [];
-        let npcAvatarMap = {};
-        let npcDisplayNameMap = {};
-        if (_momentsRenderCache) {
-          npcAvatarMap = _momentsRenderCache.npcAvatarMap || {};
-        } else {
-          try {
-            const avatarRows = await DB.getAll('npcAvatars');
-            const avatarById = {};
-            avatarRows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
-            const all = await DB.getAll('worldviews');
-            const addNpc = (n) => {
-              if (!n) return;
-              const u = avatarById[n.id] || n.avatar || '';
-              const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
-              if (u) names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = u; });
-              // 显示名优先级：网名 > 本名
-              if (n.name) {
-                const displayName = (n.onlineName || '').trim() || n.name;
-                npcDisplayNameMap[n.name] = displayName;
-                String(n.aliases || '').split(/[,，、\s]+/).map(x => x.trim()).filter(Boolean).forEach(a => { if (!npcDisplayNameMap[a]) npcDisplayNameMap[a] = displayName; });
-              }
-            };
-            all.forEach(wv => {
-              (wv.globalNpcs || []).forEach(addNpc);
-              (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
-            });
-          } catch(_) {}
-        }
-        result.comments.forEach(c => {
-          if (c.isNpc) {
-            if (npcAvatarMap[c.username]) c.avatar = npcAvatarMap[c.username];
-            if (npcDisplayNameMap[c.username]) c.username = npcDisplayNameMap[c.username];
-          }
-        });
+        // 使用统一的论坛头像+显示名匹配
+        await _ensureForumNpcAvatarMap();
+        await _ensureForumDisplayNameMap();
+        result.comments.forEach(c => _matchForumAvatar(c));
         post._comments.push(...result.comments);
         // 如果是 cachedForumPosts，保存回 phoneData
         if (pd && pd.cachedForumPosts && pd.cachedForumPosts[index] === post) {
