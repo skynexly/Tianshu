@@ -50,7 +50,8 @@ const WorldVoice = (() => {
         const username = (n.onlineName || '').trim() || n.name;
         let s = `- ${username}`;
         if (n.onlineName && n.name !== n.onlineName) s += `（即${n.name}）`;
-        if (n.summary) s += `：${n.summary}`;
+        const brief = n.summary || n.background || n.detail || '';
+        if (brief) s += `：${brief.slice(0, 80)}`;
         return s;
       };
       // 世界观 NPC
@@ -492,7 +493,7 @@ JSON格式：
 ${wvPrompt}`;
 
     const npcListStr2 = await _getNpcListForForum();
-    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人（楼主）：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}${npcListStr2}\n\n请生成完整内容和评论区。注意：正文是以楼主"${post.username}"的口吻写的，语气和内容要符合这个角色的性格。评论区的评论者是其他人，不要让楼主自己评论自己的帖子。`;
+    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人（楼主）：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}${npcListStr2}\n\n请生成完整内容和评论区。注意：正文是以楼主"${post.username}"的口吻写的，语气和内容要符合这个角色的性格。评论区中如果楼主出现，必须是以作者身份回复读者（如答疑、补充），而不是以路人视角评论自己。`;
 
     const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : 3;
     let lastError = '';
@@ -779,7 +780,7 @@ JSON格式：
 
 ${wvPrompt}`;
     const npcListStr3 = await _getNpcListForForum();
-    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人（楼主）：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags||[]).join('、')}${npcListStr3}\n\n请生成完整内容和评论区。注意：正文是以楼主"${post.username}"的口吻写的，语气和内容要符合这个角色的性格。评论区的评论者是其他人，不要让楼主自己评论自己的帖子。`;
+    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人（楼主）：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags||[]).join('、')}${npcListStr3}\n\n请生成完整内容和评论区。注意：正文是以楼主"${post.username}"的口吻写的，语气和内容要符合这个角色的性格。评论区中如果楼主出现，必须是以作者身份回复读者（如答疑、补充），而不是以路人视角评论自己。`;
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
