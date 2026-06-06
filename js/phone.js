@@ -906,7 +906,8 @@ function _extractJsonArrayText(content) {
  takeout: `<svg ${common}><path d="M5 9h14l-1 11H6L5 9z"></path><path d="M8 9V6a4 4 0 0 1 8 0v3"></path><line x1="9" y1="13" x2="9" y2="17"></line><line x1="15" y1="13" x2="15" y2="17"></line></svg>`,
  shop: `<svg ${common}><path d="M3 7h18l-2 13H5L3 7z"></path><path d="M8 7V5a4 4 0 0 1 8 0v2"></path></svg>`,
  polaroid: `<svg ${common}><rect x="3" y="5" width="18" height="16" rx="2.5"></rect><rect x="6" y="15" width="12" height="4" rx="0.5"></rect><circle cx="12" cy="10.5" r="3"></circle><circle cx="12" cy="10.5" r="1"></circle><circle cx="17.5" cy="7.8" r="0.6"></circle></svg>`,
-  chat: `<svg ${common} stroke-linecap="round" stroke-linejoin="round"><path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"/></svg>`
+  chat: `<svg ${common} stroke-linecap="round" stroke-linejoin="round"><path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"/></svg>`,
+ wallet: `<svg ${common}><rect x="2" y="6" width="20" height="14" rx="2"></rect><path d="M16 12h2v2h-2z"></path><path d="M2 10h20"></path></svg>`
  };
  return `<span class="phone-icon-glyph phone-icon-${type}">${icons[type] || ''}</span>`;
 }
@@ -981,6 +982,7 @@ document.getElementById('phone-back-btn')?.classList.add('hidden');
       ];
       // 第二页 app
       const apps2 = [
+        { id: 'wallet', icon: 'wallet', name: '钱包' },
         { id: 'settings', icon: 'gear', name: '设置' },
       ];
       // 底部 dock：相机、聊天、收起手机
@@ -1159,6 +1161,7 @@ async function openApp(appId) {
     const renderApp = () => {
  switch (appId) {
  case 'settings': _renderSettings(phoneData); break;
+ case 'wallet': _renderWallet(phoneData); break;
  case 'forum': _renderForum(phoneData); break;
  case 'map': _renderMap(phoneData); break;
  case 'moments': _renderMoments(phoneData); break;
@@ -1174,6 +1177,131 @@ async function openApp(appId) {
     _navStack = [renderApp]; // 重置栈，App 列表页为栈底
     renderApp();
   }
+
+// ===== 钱包 App =====
+async function _renderWallet(pd) {
+  const body = document.getElementById('phone-body');
+  document.getElementById('phone-title').textContent = '钱包';
+  _applyWallpaper(pd);
+
+  // 读取当前对话的属性定义和值
+  let globalAttrs = [];
+  let statusAttrs = {};
+  try {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    const gp = conv?.convGameplay || null;
+    globalAttrs = (gp?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+    const sb = Conversations.getStatusBar() || {};
+    statusAttrs = sb?.customAttrs?.global || {};
+  } catch(_) {}
+
+  // 已绑定的货币列表
+  pd.walletCurrencies = pd.walletCurrencies || [];
+  // 过滤掉已不存在的属性
+  pd.walletCurrencies = pd.walletCurrencies.filter(id => globalAttrs.some(a => a.id === id));
+
+  if (!globalAttrs.length) {
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px 20px;text-align:center">
+        <div style="font-size:40px;margin-bottom:16px">💰</div>
+        <div style="font-size:14px;color:var(--text-secondary);line-height:1.8">当前对话没有可用的自定义属性<br><span style="font-size:12px;opacity:0.7">请先在世界观中配置自定义属性</span></div>
+      </div>`;
+    return;
+  }
+
+  // 已绑定的卡片
+  const boundCards = pd.walletCurrencies.map(id => {
+    const def = globalAttrs.find(a => a.id === id);
+    if (!def) return '';
+    const val = statusAttrs[id] ?? def.initial ?? 0;
+    return `
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px">
+        <div style="width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#111" stroke-width="2"><rect x="2" y="6" width="20" height="14" rx="2"></rect><path d="M16 12h2v2h-2z"></path><path d="M2 10h20"></path></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(def.name)}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">余额</div>
+        </div>
+        <div style="font-size:18px;font-weight:700;color:var(--accent);flex-shrink:0">${Utils.escapeHtml(String(val))}</div>
+        <button onclick="Phone._walletRemoveCurrency('${Utils.escapeHtml(id)}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;padding:4px;flex-shrink:0" title="移除">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>`;
+  }).join('');
+
+  // 可添加的属性（未绑定的）
+  const unboundAttrs = globalAttrs.filter(a => !pd.walletCurrencies.includes(a.id));
+
+  body.innerHTML = `
+    <div style="padding:16px;display:flex;flex-direction:column;gap:12px;height:100%;overflow-y:auto">
+      ${boundCards || '<div style="text-align:center;color:var(--text-secondary);font-size:13px;padding:20px 0">还没有绑定货币<br><span style="font-size:11px;opacity:0.7">点击下方按钮从属性中选择</span></div>'}
+      ${unboundAttrs.length ? `<button onclick="Phone._walletAddCurrency()" style="width:100%;padding:12px;border-radius:10px;border:1px dashed var(--border);background:transparent;color:var(--text-secondary);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+        添加货币
+      </button>` : ''}
+    </div>`;
+}
+
+// 钱包：添加货币（弹出可选属性列表）
+async function _walletAddCurrency() {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  let globalAttrs = [];
+  try {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    const gp = conv?.convGameplay || null;
+    globalAttrs = (gp?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+  } catch(_) {}
+
+  pd.walletCurrencies = pd.walletCurrencies || [];
+  const unboundAttrs = globalAttrs.filter(a => !pd.walletCurrencies.includes(a.id));
+  if (!unboundAttrs.length) { UI.showToast('所有属性都已绑定', 1500); return; }
+
+  const sb = Conversations.getStatusBar() || {};
+  const statusAttrs = sb?.customAttrs?.global || {};
+
+  // 弹底部选择面板
+  const mask = document.createElement('div');
+  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.4);display:flex;align-items:flex-end;justify-content:center';
+  const listHtml = unboundAttrs.map(a => {
+    const val = statusAttrs[a.id] ?? a.initial ?? 0;
+    return `<div data-id="${Utils.escapeHtml(a.id)}" style="padding:12px 16px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--bg-tertiary);display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;color:var(--text);font-weight:600">${Utils.escapeHtml(a.name)}</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">当前值：${Utils.escapeHtml(String(val))}</div>
+      </div>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+    </div>`;
+  }).join('');
+  mask.innerHTML = `<div style="background:var(--bg);border-radius:16px 16px 0 0;padding:20px 16px;max-height:60vh;overflow-y:auto;width:100%;max-width:400px">
+    <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:12px">选择属性作为货币</div>
+    <div style="display:flex;flex-direction:column;gap:8px">${listHtml}</div>
+  </div>`;
+
+  mask.querySelector('div').addEventListener('click', async (e) => {
+    const item = e.target.closest('[data-id]');
+    if (!item) return;
+    const attrId = item.dataset.id;
+    pd.walletCurrencies.push(attrId);
+    await _savePhoneData();
+    document.body.removeChild(mask);
+    _renderWallet(pd);
+  });
+  mask.addEventListener('click', (e) => {
+    if (e.target === mask) document.body.removeChild(mask);
+  });
+  document.body.appendChild(mask);
+}
+
+// 钱包：移除货币
+async function _walletRemoveCurrency(attrId) {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  pd.walletCurrencies = (pd.walletCurrencies || []).filter(id => id !== attrId);
+  await _savePhoneData();
+  _renderWallet(pd);
+}
 
   // ===== 设置 App =====
 function _renderSettings(pd) {
@@ -7804,13 +7932,9 @@ ${fullCtx}`;
     const pd = await _getPhoneData();
     const it = pd?.[_getShopCfg(kind).cachedField]?.[idx];
     if (!it) return;
-    const priceStr = it.price ? `¥${it.price}` : '';
-    const ok = await UI.showConfirm(
-      '确认下单',
-      `给自己买：${it.name}${priceStr ? ' · ' + priceStr : ''}${it.shop ? '\n店铺：' + it.shop : ''}`
-    );
-    if (!ok) return;
-    await _shopCreateOrder(kind, idx, '自己');
+    const payResult = await _shopPaymentConfirm(pd, it, '自己');
+    if (!payResult) return;
+    await _shopCreateOrder(kind, idx, '自己', payResult);
   }
 
   // 给角色买：打开 NPC 选择弹窗
@@ -7856,22 +7980,117 @@ ${fullCtx}`;
     const pd = await _getPhoneData();
     const it = pd?.[_getShopCfg(kind).cachedField]?.[idx];
     if (!it) return;
-    const priceStr = it.price ? `¥${it.price}` : '';
-    const ok = await UI.showConfirm(
-      '确认下单',
-      `给 ${target} 买：${it.name}${priceStr ? ' · ' + priceStr : ''}${it.shop ? '\n店铺：' + it.shop : ''}`
-    );
-    if (!ok) return;
-    await _shopCreateOrder(kind, idx, target);
+    const payResult = await _shopPaymentConfirm(pd, it, target);
+    if (!payResult) return;
+    await _shopCreateOrder(kind, idx, target, payResult);
+  }
+
+  // 支付确认弹窗（含钱包货币选择）
+  // 返回 { useCurrency: true/false, currencyId, currencyName } 或 null（取消）
+  async function _shopPaymentConfirm(pd, item, target) {
+    pd.walletCurrencies = pd.walletCurrencies || [];
+    const priceStr = item.price ? `¥${item.price}` : '';
+    const forWho = target === '自己' ? '给自己买' : `给 ${target} 买`;
+
+    // 获取可用货币信息
+    let walletInfos = [];
+    try {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      const gp = conv?.convGameplay || null;
+      const globalAttrs = (gp?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+      const sb = Conversations.getStatusBar() || {};
+      const statusAttrs = sb?.customAttrs?.global || {};
+      walletInfos = pd.walletCurrencies
+        .map(id => {
+          const def = globalAttrs.find(a => a.id === id);
+          if (!def) return null;
+          return { id, name: def.name, balance: statusAttrs[id] ?? def.initial ?? 0 };
+        })
+        .filter(Boolean);
+    } catch(_) {}
+
+    // 没有绑定货币的情况
+    if (!walletInfos.length) {
+      const ok = await UI.showConfirm(
+        '确认下单',
+        `${forWho}：${item.name}${priceStr ? ' · ' + priceStr : ''}${item.shop ? '\n店铺：' + item.shop : ''}\n\n⚠️ 目前并没有在钱包中绑定货币，是否继续下单？`
+      );
+      return ok ? { useCurrency: false } : null;
+    }
+
+    // 有绑定货币：弹自定义确认弹窗（含货币选择）
+    return new Promise(resolve => {
+      const mask = document.createElement('div');
+      mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+      const currencyOptions = walletInfos.map((w, i) =>
+        `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--bg-tertiary)">
+          <input type="radio" name="wallet-pay-currency" value="${Utils.escapeHtml(w.id)}" ${i === 0 ? 'checked' : ''} style="accent-color:var(--accent)">
+          <span style="flex:1;font-size:13px;color:var(--text)">${Utils.escapeHtml(w.name)}</span>
+          <span style="font-size:12px;color:var(--text-secondary)">余额 ${Utils.escapeHtml(String(w.balance))}</span>
+        </label>`
+      ).join('');
+
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text)">
+          <div style="font-size:15px;font-weight:600;margin-bottom:12px">确认下单</div>
+          <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6">${forWho}：${Utils.escapeHtml(item.name)}${priceStr ? ' · ' + priceStr : ''}${item.shop ? '<br>店铺：' + Utils.escapeHtml(item.shop) : ''}</div>
+          <div style="font-size:12px;color:var(--text);font-weight:600;margin-bottom:8px">选择支付货币</div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">${currencyOptions}</div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button id="wallet-pay-cancel" style="padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+            <button id="wallet-pay-confirm" style="padding:8px 18px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">确认支付</button>
+          </div>
+        </div>`;
+
+      mask.querySelector('#wallet-pay-cancel').onclick = () => {
+        document.body.removeChild(mask);
+        resolve(null);
+      };
+      mask.querySelector('#wallet-pay-confirm').onclick = () => {
+        const selected = mask.querySelector('input[name="wallet-pay-currency"]:checked');
+        const currencyId = selected?.value || walletInfos[0].id;
+        const info = walletInfos.find(w => w.id === currencyId);
+        document.body.removeChild(mask);
+        resolve({ useCurrency: true, currencyId, currencyName: info?.name || '' });
+      };
+      mask.addEventListener('click', (e) => {
+        if (e.target === mask) { document.body.removeChild(mask); resolve(null); }
+      });
+      document.body.appendChild(mask);
+    });
   }
 
   // 创建订单（通用）
-  async function _shopCreateOrder(kind, idx, target) {
+  async function _shopCreateOrder(kind, idx, target, payResult) {
     const cfg = _getShopCfg(kind);
     const pd = await _getPhoneData();
     if (!pd) return;
     const it = pd[cfg.cachedField]?.[idx];
     if (!it) return;
+
+    // 扣款逻辑
+    let deductMsg = '';
+    if (payResult?.useCurrency && it.price) {
+      const priceNum = parseFloat(String(it.price).replace(/[^0-9.]/g, ''));
+      if (Number.isFinite(priceNum) && priceNum > 0) {
+        try {
+          const sb = Conversations.getStatusBar() || {};
+          sb.customAttrs = sb.customAttrs || {};
+          sb.customAttrs.global = sb.customAttrs.global || {};
+          const balance = Number(sb.customAttrs.global[payResult.currencyId]) || 0;
+          if (balance < priceNum) {
+            UI.showToast(`${payResult.currencyName}余额不足（需要 ${priceNum}，当前 ${balance}）`, 2500);
+            return;
+          }
+          sb.customAttrs.global[payResult.currencyId] = balance - priceNum;
+          await Conversations.setStatusBar(sb);
+          if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
+          deductMsg = `；前端已自动扣除 ${priceNum} ${payResult.currencyName}（余额 ${balance - priceNum}），AI无需再处理此扣款`;
+        } catch(e) {
+          console.warn('[Wallet] 扣款失败', e);
+        }
+      }
+    }
 
     const order = {
       id: 'order_' + Utils.uuid().slice(0, 8),
@@ -7887,11 +8106,11 @@ ${fullCtx}`;
     pd[cfg.ordersField] = pd[cfg.ordersField].slice(-30); // 最多保留30条
     await _savePhoneData();
 
-    // 操作日志：AI 看到这条就知道剧情里要演"送达"
+    // 操作日志
     const priceStr = it.price ? `¥${it.price}` : '';
     const descStr = it.desc ? `（${_clipLogText(it.desc, 30)}）` : '';
     const forWho = target === '自己' ? '给自己' : `送给${target}`;
-    _log(`在${cfg.title}APP下单了：${it.name}${priceStr ? '，' + priceStr : ''}${descStr}，${forWho}（配送时间由你在剧情中自然安排）${priceStr ? `；若当前存在货币/金钱类属性，请在本次回复中扣除 ${priceStr}` : ''}`);
+    _log(`在${cfg.title}APP下单了：${it.name}${priceStr ? '，' + priceStr : ''}${descStr}，${forWho}（配送时间由你在剧情中自然安排）${deductMsg}`);
 
     if (_isAppStillActive(kind)) _renderShopping(pd, kind);
     UI.showToast(`下单成功`, 1500);
@@ -8668,6 +8887,8 @@ _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
     _shopBuyForSelf, _shopBuyForTarget, _shopConfirmTarget, _shopCloseTargetModal,
     _shopShareItem, _shopShareToChat,
     _shopDeleteOrder,
+    // 钱包
+    _walletAddCurrency, _walletRemoveCurrency,
     // 心动模拟 APP
     _hsAppFavorChange,
     _switchHsAppTab,
