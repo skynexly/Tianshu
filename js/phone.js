@@ -1637,9 +1637,68 @@ async function _clearMomentsCover() {
     return map;
   }
 
-  // 给帖子/评论匹配 NPC 头像
+  let _forumDisplayNameMap = {}; // username → 优先显示名（网名 > 本名）
+
+  // 构建显示名映射（在 _ensureForumNpcAvatarMap 之后紧接调用）
+  async function _ensureForumDisplayNameMap() {
+    const dmap = {};
+    try {
+      const all = await DB.getAll('worldviews');
+      const addNpc = (n) => {
+        if (!n || !n.name) return;
+        const displayName = (n.onlineName || '').trim() || n.name;
+        // 本名 → 显示名
+        dmap[n.name] = displayName;
+        // 代号/别称 → 显示名
+        String(n.aliases || '').split(/[,，、\s]+/).map(x => x.trim()).filter(Boolean).forEach(a => { if (!dmap[a]) dmap[a] = displayName; });
+      };
+      all.forEach(wv => {
+        (wv.globalNpcs || []).forEach(addNpc);
+        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
+      });
+      // 世界书 NPC
+      try {
+        if (typeof Lorebook !== 'undefined' && Lorebook.collectForChat) {
+          const convId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
+          const conv = convId ? Conversations.getList().find(c => c.id === convId) : null;
+          let card = null;
+          if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+            try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
+          }
+          const wvId = conv?.worldviewId || conv?.singleWorldviewId;
+          const wv2 = wvId ? await DB.get('worldviews', wvId) : null;
+          const lbs = await Lorebook.collectForChat({ conv, card, wv: wv2 });
+          for (const lb of (lbs || [])) { (lb.globalNpcs || []).forEach(addNpc); }
+        }
+      } catch(_) {}
+      // 单人卡
+      try {
+        const convId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
+        const conv = convId ? Conversations.getList().find(c => c.id === convId) : null;
+        if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+          const card = await DB.get('singleCards', conv.singleCharId);
+          if (card && card.name) addNpc(card);
+        }
+      } catch(_) {}
+      // 挂载角色
+      try {
+        if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+          const attached = await AttachedChars.resolveAll();
+          (attached || []).forEach(c => { if (c) addNpc(c); });
+        }
+      } catch(_) {}
+    } catch(_) {}
+    _forumDisplayNameMap = dmap;
+  }
+
+  // 给帖子/评论匹配 NPC 头像 + 显示名替换
   function _matchForumAvatar(item) {
-    if (item.avatar) return; // 已有头像不覆盖
+    // 显示名替换：优先网名
+    if (item.username && _forumDisplayNameMap[item.username]) {
+      item.username = _forumDisplayNameMap[item.username];
+    }
+    // 头像匹配
+    if (item.avatar) return;
     if (_forumNpcAvatarMap && _forumNpcAvatarMap[item.username]) {
       item.avatar = _forumNpcAvatarMap[item.username];
     }
@@ -1651,6 +1710,7 @@ async function _clearMomentsCover() {
 
     // 确保论坛头像映射已就绪
     await _ensureForumNpcAvatarMap();
+    await _ensureForumDisplayNameMap();
 
     // 统一以 phoneData 缓存为准（WorldVoice 仅作为生成器）
     const posts = pd.cachedForumPosts || [];
@@ -2586,6 +2646,7 @@ ${wvPrompt}` },
     document.getElementById('phone-title').textContent = post.title || '帖子详情';
     // 确保头像映射就绪并匹配
     await _ensureForumNpcAvatarMap();
+    await _ensureForumDisplayNameMap();
     _matchForumAvatar(post);
     (post._comments || []).forEach(c => _matchForumAvatar(c));
     // push 详情页到导航栈
