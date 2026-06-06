@@ -4860,7 +4860,7 @@ function _ensureCalendarSystem(w) {
     gp.calendarSystem = {
       hoursPerDay: 24,
       daysPerWeek: 7,
-      weekDayNames: ['一', '二', '三', '四', '五', '六', '日'],
+      weekDayNames: ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'],
       monthsPerYear: 12,
       daysPerMonth: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
       uniformDaysPerMonth: false,
@@ -4962,7 +4962,7 @@ function _buildCalendarEditorHTML(cal) {
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           周设定
         </div>
-        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px">一周有 ${cal.daysPerWeek} 天。可增减天数并自定义每天名称。</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px">一周有 ${cal.daysPerWeek} 天。填写完整名称（如"星期一"或"水曜日"），将直接显示在状态栏。</div>
         <div id="cal-weekday-list">
           ${weekDayInputs}
         </div>

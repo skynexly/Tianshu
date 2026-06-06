@@ -15,7 +15,7 @@ const Calendar = (() => {
     hoursPerDay: 24,
     minutesPerHour: 60,
     daysPerWeek: 7,
-    weekDayNames: ['一', '二', '三', '四', '五', '六', '日'],
+    weekDayNames: ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'],
     monthsPerYear: 12,
     daysPerMonth: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
     seasons: [
@@ -370,7 +370,8 @@ const Calendar = (() => {
 
   /**
    * 时间对象 → 显示字符串
-   * 输出格式："YYYY年M月D日 星期X HH:mm"
+   * 输出格式："YYYY年M月D日 [天名] HH:mm"
+   * 天名由用户自定义（如"星期一"或"水曜日"），直接显示不加前缀
    */
   function format(time, rules) {
     if (!time) return '';
@@ -378,7 +379,7 @@ const Calendar = (() => {
     const weekDay = getWeekDay(time, rules);
     const h = String(time.hour).padStart(2, '0');
     const mi = String(time.minute).padStart(2, '0');
-    return `${time.year}年${time.month}月${time.day}日 星期${weekDay} ${h}:${mi}`;
+    return `${time.year}年${time.month}月${time.day}日 ${weekDay} ${h}:${mi}`;
   }
 
   // ===== 主入口：处理 AI 返回的 time 字段 =====
