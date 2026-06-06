@@ -3325,7 +3325,7 @@ ${wvPrompt}` },
         if (!n) return;
         const url = avatarById[n.id] || n.avatar || '';
         if (!url) return;
-        const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/))]
+        const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))]
           .map(x => String(x || '').trim()).filter(Boolean);
         names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = url; });
       };
@@ -3333,6 +3333,48 @@ ${wvPrompt}` },
         (wv.globalNpcs || []).forEach(addNpc);
         (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
       });
+      // 单人卡头像
+      try {
+        if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+          const sCard = await DB.get('singleCards', conv.singleCharId);
+          if (sCard) {
+            const url = avatarById[sCard.id] || sCard.avatar || '';
+            if (url) {
+              const names = [sCard.name, ...(String(sCard.aliases || '').split(/[,，、\s]+/)), ...(String(sCard.onlineName || '').split(/[,，、\s]+/))]
+                .map(x => String(x || '').trim()).filter(Boolean);
+              names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = url; });
+            }
+          }
+        }
+      } catch(_) {}
+      // 挂载角色头像
+      try {
+        if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+          const attached = await AttachedChars.resolveAll();
+          attached.forEach(c => {
+            if (!c) return;
+            const url = avatarById[c.id] || c.avatar || '';
+            if (!url) return;
+            const names = [c.name, ...(String(c.aliases || '').split(/[,，、\s]+/)), ...(String(c.onlineName || '').split(/[,，、\s]+/))]
+              .map(x => String(x || '').trim()).filter(Boolean);
+            names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = url; });
+          });
+        }
+      } catch(_) {}
+      // 世界书 NPC 头像
+      try {
+        if (typeof Lorebook !== 'undefined' && Lorebook.collectForChat) {
+          let card = null;
+          if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+            try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
+          }
+          const wv2 = wvIds[0] ? await DB.get('worldviews', wvIds[0]) : null;
+          const lbs = await Lorebook.collectForChat({ conv, card, wv: wv2 });
+          for (const lb of (lbs || [])) {
+            (lb.globalNpcs || []).forEach(addNpc);
+          }
+        }
+      } catch(_) {}
     } catch(_) {}
 
     _momentsRenderCache = { convId, maskId: (typeof Character !== 'undefined' && Character.getCurrentId) ? Character.getCurrentId() : null, maskName, maskAvatar, npcAvatarMap };
