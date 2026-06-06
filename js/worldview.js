@@ -1034,6 +1034,8 @@ _populateThemeSelect(w.themeName || '');
 _renderGlobalNpcs(w.globalNpcs || []);
 // 玩法配置：自定义属性
 _renderGameplayAttrs(w);
+// 历法系统卡片标签
+_updateCalendarCardLabel();
 
 switchEditTab('basic');
     // 绑定主编辑页自动保存
@@ -3684,14 +3686,11 @@ function closeKnowledgeModal() {
     if (skinInput && !_isBuiltinWorldview(w)) w.statusBarSkin = skinInput.value || 'terminal';
     w.startTime = document.getElementById('wv-start-time').value.trim();
 
-    // 历法系统校验：有自定义历法必须填开场时间
-    if (w.gameplay?.calendarSystem && !w.startTime) {
-      if (!silent) {
-        UI.showToast('已启用历法系统，请填写开场时间（否则前端无法计算时间增量）', 3000);
-        // 聚焦到开场时间输入框
-        const stEl = document.getElementById('wv-start-time');
-        if (stEl) { stEl.focus(); stEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-      }
+    // 历法系统校验：有自定义历法必须填开场时间（仅非静默保存时拦截）
+    if (!silent && w.gameplay?.calendarSystem && !w.startTime) {
+      UI.showToast('已启用历法系统，请填写开场时间（否则前端无法计算时间增量）', 3000);
+      const stEl = document.getElementById('wv-start-time');
+      if (stEl) { stEl.focus(); stEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
       return;
     }
     w.startPlot = document.getElementById('wv-start-plot').value.trim();
