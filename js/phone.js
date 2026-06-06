@@ -2128,8 +2128,9 @@ ${wvPrompt}`;
         post._comments = post._comments || [];
         // 匹配 NPC 头像
         const pdNow = await _getPhoneData();
-        // 匹配 NPC 头像：单独走一遍全量提取（防止没进过朋友圈就没有缓存）
+        // 匹配 NPC 头像 + 显示名：单独走一遍全量提取（防止没进过朋友圈就没有缓存）
         let npcAvatarMap = {};
+        let npcDisplayNameMap = {}; // NPC本名 → 优先显示名（网名 > 本名）
         if (_momentsRenderCache) {
           npcAvatarMap = _momentsRenderCache.npcAvatarMap || {};
         } else {
@@ -2142,9 +2143,15 @@ ${wvPrompt}`;
             const addNpc = (n) => {
               if (!n) return;
               const url = avatarById[n.id] || n.avatar || '';
-              if (!url) return;
-              const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
-              names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = url; });
+              const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
+              if (url) names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = url; });
+              // 显示名优先级：网名 > 本名
+              if (n.name) {
+                const displayName = (n.onlineName || '').trim() || n.name;
+                npcDisplayNameMap[n.name] = displayName;
+                // 别称也映射到同一个显示名
+                String(n.aliases || '').split(/[,，、\s]+/).map(x => x.trim()).filter(Boolean).forEach(a => { if (!npcDisplayNameMap[a]) npcDisplayNameMap[a] = displayName; });
+              }
             };
             all.forEach(wv => {
               (wv.globalNpcs || []).forEach(addNpc);
@@ -2153,8 +2160,9 @@ ${wvPrompt}`;
           } catch(_) {}
         }
         result.comments.forEach(c => {
-          if (c.isNpc && npcAvatarMap[c.username]) {
-            c.avatar = npcAvatarMap[c.username];
+          if (c.isNpc) {
+            if (npcAvatarMap[c.username]) c.avatar = npcAvatarMap[c.username];
+            if (npcDisplayNameMap[c.username]) c.username = npcDisplayNameMap[c.username];
           }
         });
         post._comments.push(...result.comments);
@@ -2273,6 +2281,7 @@ ${wvPrompt}`;
       if (result.comments && result.comments.length > 0) {
         post._comments = post._comments || [];
         let npcAvatarMap = {};
+        let npcDisplayNameMap = {};
         if (_momentsRenderCache) {
           npcAvatarMap = _momentsRenderCache.npcAvatarMap || {};
         } else {
@@ -2284,9 +2293,14 @@ ${wvPrompt}`;
             const addNpc = (n) => {
               if (!n) return;
               const u = avatarById[n.id] || n.avatar || '';
-              if (!u) return;
-              const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
-              names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = u; });
+              const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
+              if (u) names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = u; });
+              // 显示名优先级：网名 > 本名
+              if (n.name) {
+                const displayName = (n.onlineName || '').trim() || n.name;
+                npcDisplayNameMap[n.name] = displayName;
+                String(n.aliases || '').split(/[,，、\s]+/).map(x => x.trim()).filter(Boolean).forEach(a => { if (!npcDisplayNameMap[a]) npcDisplayNameMap[a] = displayName; });
+              }
             };
             all.forEach(wv => {
               (wv.globalNpcs || []).forEach(addNpc);
@@ -2295,7 +2309,10 @@ ${wvPrompt}`;
           } catch(_) {}
         }
         result.comments.forEach(c => {
-          if (c.isNpc && npcAvatarMap[c.username]) c.avatar = npcAvatarMap[c.username];
+          if (c.isNpc) {
+            if (npcAvatarMap[c.username]) c.avatar = npcAvatarMap[c.username];
+            if (npcDisplayNameMap[c.username]) c.username = npcDisplayNameMap[c.username];
+          }
         });
         post._comments.push(...result.comments);
         // 如果是 cachedForumPosts，保存回 phoneData
@@ -4312,11 +4329,11 @@ async function _collectChatCandidates() {
     const rows = await DB.getAll('npcAvatars');
     rows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
   } catch(_) {}
-  const add = (name, source, avatar, detail, aliases) => {
+  const add = (name, source, avatar, detail, aliases, onlineName) => {
     const nm = (name || '').trim();
     if (!nm || seen.has(nm)) return;
     seen.add(nm);
-    out.push({ name: nm, source, avatar: avatar || '', detail: (detail || '').trim(), aliases: (aliases || '').trim() });
+    out.push({ name: nm, source, avatar: avatar || '', detail: (detail || '').trim(), aliases: (aliases || '').trim(), onlineName: (onlineName || '').trim() });
   };
   // 拼一个 NPC/角色对象的人设描述文本
   const _detailOf = (o) => {
@@ -4340,8 +4357,8 @@ async function _collectChatCandidates() {
     if (wvId) {
       const wv = await DB.get('worldviews', wvId);
       if (wv) {
-        (wv.globalNpcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n), n.aliases || ''));
-        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n), n.aliases || ''))));
+        (wv.globalNpcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n), n.aliases || '', n.onlineName || ''));
+        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n), n.aliases || '', n.onlineName || ''))));
       }
     }
     // 单人卡（卡本身作为联系人）
@@ -5295,6 +5312,11 @@ async function _ingestChatFromMessages(messages) {
       if (c.aliases) {
         String(c.aliases).split(/[,，、\s]+/).map(s => s.trim()).filter(Boolean).forEach(alias => {
           if (!aliasToCand[alias]) aliasToCand[alias] = c;
+        });
+      }
+      if (c.onlineName) {
+        String(c.onlineName).split(/[,，、\s]+/).map(s => s.trim()).filter(Boolean).forEach(oname => {
+          if (!aliasToCand[oname]) aliasToCand[oname] = c;
         });
       }
     });
