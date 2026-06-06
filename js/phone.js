@@ -2460,6 +2460,10 @@ ${wvPrompt}`;
       UI.showToast(posts.length > 0 ? `${fn}已刷新，可回${fn}查看` : `${fn}刷新失败，请重试`, 1600);
       return;
     }
+    // 匹配头像和显示名
+    await _ensureForumNpcAvatarMap();
+    await _ensureForumDisplayNameMap();
+    posts.forEach(p => _matchForumAvatar(p));
     const cont = document.getElementById('phone-forum-posts');
     if (cont) cont.innerHTML = posts.length > 0 ? _renderForumPosts(posts) : '<p style="text-align:center;color:var(--text-secondary);font-size:12px">生成失败，请重试</p>';
   }
@@ -2538,6 +2542,10 @@ ${wvPrompt}` },
         UI.showToast(`${_getForumName()}搜索完成，可回${_getForumName()}查看`, 1600);
         return;
       }
+      // 匹配头像和显示名
+      await _ensureForumNpcAvatarMap();
+      await _ensureForumDisplayNameMap();
+      results.forEach(p => _matchForumAvatar(p));
       const cont = document.getElementById('phone-forum-posts');
       if (cont) cont.innerHTML = results.length > 0 ? _renderForumPosts(results) : '<p style="text-align:center;color:var(--text-secondary);font-size:12px">没有找到相关内容</p>';
     } catch(e) {
