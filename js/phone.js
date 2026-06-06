@@ -4374,7 +4374,7 @@ function _renderChatThread(pd, contactId) {
                   ${m.orderPrice ? `<span style="font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0">¥${Utils.escapeHtml(String(m.orderPrice))}</span>` : ''}
                 </div>
                 <div style="padding:5px 14px 10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px">
-                  <span style="font-size:10px;padding:2px 6px;border-radius:5px;background:var(--bg-secondary,#eee);color:var(--text-secondary)">${Utils.escapeHtml(m.orderPlatform || '')}</span>
+                  <span style="font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--border);color:var(--text-secondary)">${Utils.escapeHtml(m.orderPlatform || '')}</span>
                   <span style="font-size:10px;color:var(--text-secondary)">已购</span>
                 </div>
               </div>
@@ -4398,7 +4398,7 @@ function _renderChatThread(pd, contactId) {
               ${m.orderPrice ? `<span style="font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0">¥${Utils.escapeHtml(String(m.orderPrice))}</span>` : ''}
             </div>
             <div style="padding:5px 14px 10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px">
-              <span style="font-size:10px;padding:2px 6px;border-radius:5px;background:var(--bg-secondary,#eee);color:var(--text-secondary)">${Utils.escapeHtml(m.orderPlatform || '')}</span>
+              <span style="font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--border);color:var(--text-secondary)">${Utils.escapeHtml(m.orderPlatform || '')}</span>
               <span style="font-size:10px;color:var(--text-secondary)">已购</span>
             </div>
           </div>
@@ -5396,7 +5396,7 @@ async function _openChatOrderPicker(contactId) {
   _pushNav(() => _openChatThread(contactId));
 
   body.innerHTML = `
-    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg)">
+    <div style="display:flex;flex-direction:column;height:100%">
       <div style="flex:1;overflow-y:auto;padding:12px">${cardsHtml}</div>
     </div>
   `;
