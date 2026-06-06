@@ -1567,28 +1567,37 @@ async function _clearMomentsCover() {
   // 论坛头像匹配：根据用户名（本名/代号/网名）从 NPC 头像表中查找
   let _forumNpcAvatarMap = null; // 延迟初始化
   async function _ensureForumNpcAvatarMap() {
-    if (_forumNpcAvatarMap) return _forumNpcAvatarMap;
+    // 每次进论坛都重建，确保最新头像数据
     const map = {};
     try {
-      if (_momentsRenderCache && _momentsRenderCache.npcAvatarMap) {
-        Object.assign(map, _momentsRenderCache.npcAvatarMap);
-      } else {
-        const avatarRows = await DB.getAll('npcAvatars');
-        const avatarById = {};
-        avatarRows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
-        const all = await DB.getAll('worldviews');
-        all.forEach(wv => {
-          const addNpc = (n) => {
-            if (!n) return;
-            const url = avatarById[n.id] || n.avatar || '';
-            if (!url) return;
-            const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
-            names.forEach(name => { if (!map[name]) map[name] = url; });
-          };
-          (wv.globalNpcs || []).forEach(addNpc);
-          (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
-        });
-      }
+      const avatarRows = await DB.getAll('npcAvatars');
+      const avatarById = {};
+      avatarRows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
+      const all = await DB.getAll('worldviews');
+      all.forEach(wv => {
+        const addNpc = (n) => {
+          if (!n) return;
+          const url = avatarById[n.id] || n.avatar || '';
+          if (!url) return;
+          const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
+          names.forEach(name => { if (!map[name]) map[name] = url; });
+        };
+        (wv.globalNpcs || []).forEach(addNpc);
+        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
+      });
+      // 补充：单人卡 / 挂载角色头像
+      try {
+        const convId = Conversations.getCurrent();
+        const conv = Conversations.getList().find(c => c.id === convId);
+        if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+          const card = await DB.get('singleCards', conv.singleCharId);
+          const scAvatar = avatarById[conv.singleCharId] || card?.avatar || '';
+          if (card && scAvatar) {
+            const names = [card.name, ...(String(card.aliases || '').split(/[,，、\s]+/)), ...(String(card.onlineName || '').split(/[,，、\s]+/))].map(x => String(x || '').trim()).filter(Boolean);
+            names.forEach(name => { if (!map[name]) map[name] = scAvatar; });
+          }
+        }
+      } catch(_) {}
     } catch(_) {}
     _forumNpcAvatarMap = map;
     return map;
@@ -2638,6 +2647,9 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
               }
             }
           } catch(_) {}
+          // 加载完后对新评论匹配NPC头像
+          _matchForumAvatar(post);
+          (post._comments || []).forEach(c => _matchForumAvatar(c));
           if (_isAppStillActive('forum')) _renderDetailInPhone(post);
         } else {
           if (_isAppStillActive('forum')) body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger);font-size:12px">加载失败，请重试</div>`;
