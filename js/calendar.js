@@ -370,18 +370,15 @@ const Calendar = (() => {
 
   /**
    * 时间对象 → 显示字符串
-   * 输出格式："YYYY.MM.DD 星期X HH:mm"
+   * 输出格式："YYYY年M月D日 星期X HH:mm"
    */
   function format(time, rules) {
     if (!time) return '';
     rules = getRules(rules);
     const weekDay = getWeekDay(time, rules);
-    const y = String(time.year).padStart(4, '0');
-    const mo = String(time.month).padStart(2, '0');
-    const d = String(time.day).padStart(2, '0');
     const h = String(time.hour).padStart(2, '0');
     const mi = String(time.minute).padStart(2, '0');
-    return `${y}.${mo}.${d} 星期${weekDay} ${h}:${mi}`;
+    return `${time.year}年${time.month}月${time.day}日 星期${weekDay} ${h}:${mi}`;
   }
 
   // ===== 主入口：处理 AI 返回的 time 字段 =====
