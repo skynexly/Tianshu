@@ -485,6 +485,7 @@ result.playerOutfit = val;
     const loc = [status.region, status.location].filter(Boolean).join('｜');
     if (loc) lines.push('地点：' + loc);
     if (status.time) lines.push('时间：' + status.time);
+    if (status.season) lines.push('季节：' + status.season);
     if (status.weather) lines.push('天气：' + status.weather);
     if (status.scene) lines.push('场景：' + status.scene);
     if (status.playerOutfit) lines.push('用户角色-{{user}}-衣着：' + status.playerOutfit);
