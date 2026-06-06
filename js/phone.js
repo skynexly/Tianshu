@@ -2506,21 +2506,30 @@ ${wvPrompt}`;
 
       const wvPrompt = await _buildFullContext();
 
+      // 获取玩家名用于禁止冒充
+      let _searchBanStr = '';
+      try {
+        const mask = await Character.get();
+        const bn = [mask?.name, (mask?.onlineName || '').trim()].filter(Boolean);
+        if (bn.length > 0) _searchBanStr = `\n【禁止冒充玩家】玩家角色"${bn.join('"和"')}"绝对不能作为帖子发布者出现。\n`;
+      } catch(_) {}
+
       const results = await _phoneJsonArrayWithRetry({
         label: `${_getForumName()}搜索`, url, key, model,
         temperature: 0.9,
         max_tokens: 5000,
         messages: [
           { role: 'system', content: `你是一个"${_getForumName()}"搜索引擎。${_getForumDesc() ? `载体说明：${_getForumDesc()}。\n\n` : ''}用户搜索了"${query}"，请根据资料生成 6~8 条与搜索内容相关的帖子/动态。
-
+${_searchBanStr}
 要求：
 1. 内容可以有：关键词相同但实际不沾边的、虚假信息、半真半假的消息、科普、吃瓜、求助、吐槽等
 2. 发帖人以虚构的普通用户为主，用户名要符合世界观和${_getForumName()}的画风。NPC 偶尔出现（0-2 条即可），不要每条都是 NPC 发的
 3. 帖子风格贴合${_getForumName()}的画风，长短皆可，摘要长度不要千篇一律
 4. tags 风格也要贴合${_getForumName()}（论坛/贴吧偏普通词、微博偏"#话题#"、小红书偏"#标签"），无需统一形式
-5. 时间分布：80% 在当前游戏时间附近 7 天内（最近热议），可以有 20% 是置顶/热门/挖坟的更早老帖，time 可以更靠前；time 永远不要超过当前游戏时间
-6. 所有 time 都必须使用"YYYY.MM.DD 星期X HH:mm"格式，必须和当前游戏时间同一套写法
-7. 返回纯JSON数组，不要包含任何其他文字
+5. 每条帖子都是独立的原创帖/一楼，不是对其他帖子的回复。标题和摘要不能出现"回楼上""楼主""回复@"等评论区用语
+6. 时间分布：80% 在当前游戏时间附近 7 天内（最近热议），可以有 20% 是置顶/热门/挖坟的更早老帖，time 可以更靠前；time 永远不要超过当前游戏时间
+7. 所有 time 都必须使用"YYYY.MM.DD 星期X HH:mm"格式，必须和当前游戏时间同一套写法
+8. 返回纯JSON数组，不要包含任何其他文字
 
 JSON格式：[{"id":"s1","username":"用户名","avatar_color":"#颜色","time":"YYYY.MM.DD 星期X HH:mm","title":"标题","summary":"摘要","tags":["标签"],"views":数字,"likes":数字,"comments":数字}]
 
