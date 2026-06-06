@@ -227,6 +227,8 @@ const SingleCard = (() => {
     // 填充字段
     document.getElementById('sc-panel-name').value = card.name || '';
     document.getElementById('sc-panel-aliases').value = card.aliases || '';
+    const panelOnline = document.getElementById('sc-panel-onlinename');
+    if (panelOnline) panelOnline.value = card.onlineName || '';
     document.getElementById('sc-panel-detail').value = card.detail || '';
     document.getElementById('sc-panel-firstmes').value = card.firstMes || '';
     document.getElementById('sc-panel-mesexample').value = card.mesExample || '';
@@ -384,6 +386,7 @@ const SingleCard = (() => {
     const name = document.getElementById('sc-panel-name').value.trim();
     if (!name) { UI.showToast('请填写姓名'); return; }
     const aliases = document.getElementById('sc-panel-aliases').value.trim();
+    const onlineName = (document.getElementById('sc-panel-onlinename')?.value || '').trim();
     const detail = document.getElementById('sc-panel-detail').value.trim();
     const firstMes = (document.getElementById('sc-panel-firstmes')?.value || '').trim();
     const mesExample = (document.getElementById('sc-panel-mesexample')?.value || '').trim();
@@ -395,6 +398,7 @@ const SingleCard = (() => {
     const card = _editingId ? (await get(_editingId)) : {};
     card.name = name;
     card.aliases = aliases;
+    card.onlineName = onlineName;
     card.detail = detail;
     card.avatar = avatar;
     card.firstMes = firstMes;
@@ -413,6 +417,8 @@ const SingleCard = (() => {
   function _openEditModal(card) {
     document.getElementById('sc-edit-name').value = card.name || '';
     document.getElementById('sc-edit-aliases').value = card.aliases || '';
+    const editOnline = document.getElementById('sc-edit-onlinename');
+    if (editOnline) editOnline.value = card.onlineName || '';
     document.getElementById('sc-edit-detail').value = card.detail || '';
     const fm = document.getElementById('sc-edit-firstmes'); if (fm) fm.value = card.firstMes || '';
     const me = document.getElementById('sc-edit-mesexample'); if (me) me.value = card.mesExample || '';
@@ -447,6 +453,7 @@ const SingleCard = (() => {
     const name = document.getElementById('sc-edit-name').value.trim();
     if (!name) { UI.showToast('请填写姓名'); return; }
     const aliases = document.getElementById('sc-edit-aliases').value.trim();
+    const onlineName = (document.getElementById('sc-edit-onlinename')?.value || '').trim();
     const detail = document.getElementById('sc-edit-detail').value.trim();
     const firstMes = (document.getElementById('sc-edit-firstmes')?.value || '').trim();
     const mesExample = (document.getElementById('sc-edit-mesexample')?.value || '').trim();
@@ -457,6 +464,7 @@ const SingleCard = (() => {
     const card = _editingId ? await get(_editingId) : {};
     card.name = name;
     card.aliases = aliases;
+    card.onlineName = onlineName;
     card.detail = detail;
     card.avatar = avatar;
     card.firstMes = firstMes;
@@ -509,6 +517,7 @@ const SingleCard = (() => {
     if (!card) return '';
     let text = `【AI 扮演角色】\n你将扮演以下角色与用户进行一对一对话。请始终以这个角色的视角说话和行动，不要扮演用户。\n\n姓名：${card.name}`;
     if (card.aliases) text += `\n别称/代号：${card.aliases}`;
+    if (card.onlineName) text += `\n网名：${card.onlineName}`;
     if (card.detail) text += `\n\n${card.detail}`;
     if (card.mesExample) text += `\n\n【对话样例】（参考其语气和风格，不要照抄）\n${card.mesExample}`;
     return text;
@@ -523,6 +532,7 @@ const SingleCard = (() => {
         __format: 'tianshu_single_card_v1',
         name: card.name || '',
         aliases: card.aliases || '',
+        onlineName: card.onlineName || '',
         detail: card.detail || '',
         avatar: card.avatar || '',
         firstMes: card.firstMes || '',
@@ -586,6 +596,7 @@ const SingleCard = (() => {
         const newCard = {
           name: parsed.name || '未命名',
           aliases: parsed.aliases || '',
+          onlineName: parsed.onlineName || '',
           detail: parsed.detail || '',
           avatar: parsed.avatar || '',
           firstMes: parsed.firstMes || '',
