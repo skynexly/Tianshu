@@ -3200,7 +3200,12 @@ ${wvPrompt}` },
     (pd.chatContacts || []).forEach(c => {
       if (c.name && c.nickname) nicknameMap[c.name] = c.nickname;
     });
-    const _dispName = (npcName) => nicknameMap[npcName] || npcName || '?';
+    const aliasToName = cache?.aliasToName || {};
+    // 网名/代号→本名→备注昵称，没有备注就显示本名
+    const _dispName = (npcName) => {
+      const realName = aliasToName[npcName] || npcName;
+      return nicknameMap[realName] || realName || '?';
+    };
 
     const avatarHtml = (name, avatar, cls = '') => avatar
       ? `<img src="${Utils.escapeHtml(avatar)}" class="phone-moment-avatar ${cls}" alt="头像">`
@@ -3336,15 +3341,24 @@ ${wvPrompt}` },
           .map(x => String(x || '').trim()).filter(Boolean);
         names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = url; });
       };
+      // 构建"网名/代号→本名"反向映射
+      const aliasToName = {};
+      const addAlias = (n) => {
+        if (!n || !n.name) return;
+        const altNames = [...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))]
+          .map(x => String(x || '').trim()).filter(Boolean);
+        altNames.forEach(alt => { if (alt !== n.name && !aliasToName[alt]) aliasToName[alt] = n.name; });
+      };
       wvs.forEach(wv => {
-        (wv.globalNpcs || []).forEach(addNpc);
-        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
+        (wv.globalNpcs || []).forEach(n => { addNpc(n); addAlias(n); });
+        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => { addNpc(n); addAlias(n); })));
       });
       // 单人卡头像
       try {
         if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
           const sCard = await DB.get('singleCards', conv.singleCharId);
           if (sCard) {
+            addAlias(sCard);
             const url = avatarById[sCard.id] || sCard.avatar || '';
             if (url) {
               const names = [sCard.name, ...(String(sCard.aliases || '').split(/[,，、\s]+/)), ...(String(sCard.onlineName || '').split(/[,，、\s]+/))]
@@ -3360,6 +3374,7 @@ ${wvPrompt}` },
           const attached = await AttachedChars.resolveAll();
           attached.forEach(c => {
             if (!c) return;
+            addAlias(c);
             const url = avatarById[c.id] || c.avatar || '';
             if (!url) return;
             const names = [c.name, ...(String(c.aliases || '').split(/[,，、\s]+/)), ...(String(c.onlineName || '').split(/[,，、\s]+/))]
@@ -3378,13 +3393,13 @@ ${wvPrompt}` },
           const wv2 = wvIds[0] ? await DB.get('worldviews', wvIds[0]) : null;
           const lbs = await Lorebook.collectForChat({ conv, card, wv: wv2 });
           for (const lb of (lbs || [])) {
-            (lb.globalNpcs || []).forEach(addNpc);
+            (lb.globalNpcs || []).forEach(n => { addNpc(n); addAlias(n); });
           }
         }
       } catch(_) {}
     } catch(_) {}
 
-    _momentsRenderCache = { convId, maskId: (typeof Character !== 'undefined' && Character.getCurrentId) ? Character.getCurrentId() : null, maskName, maskAvatar, npcAvatarMap };
+    _momentsRenderCache = { convId, maskId: (typeof Character !== 'undefined' && Character.getCurrentId) ? Character.getCurrentId() : null, maskName, maskAvatar, npcAvatarMap, aliasToName };
 
     // 当前还在好友圈页 + 同对话 → 重渲一次（这次会走缓存命中路径，DOM 同步即出）
     if (_currentApp === 'moments' && Conversations.getCurrent() === convId) {
