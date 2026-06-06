@@ -4875,8 +4875,8 @@ function _ensureCalendarSystem(w) {
   return gp.calendarSystem;
 }
 
-function openCalendarEditor() {
-  const w = _getEditingWV();
+async function openCalendarEditor() {
+  const w = await _getEditingWV();
   if (!w) { UI.showToast('请先选择世界观', 1200); return; }
   const cal = _ensureCalendarSystem(w);
 
@@ -5020,18 +5020,18 @@ function _buildCalendarEditorHTML(cal) {
   `;
 }
 
-function closeCalendarEditor() {
+async function closeCalendarEditor() {
   const overlay = document.getElementById('calendar-editor-overlay');
   if (overlay) overlay.remove();
   _updateCalendarCardLabel();
-  const w = _getEditingWV();
+  const w = await _getEditingWV();
   if (w) _saveEditingWV(w);
 }
 
-function _updateCalendarCardLabel() {
+async function _updateCalendarCardLabel() {
   const label = document.getElementById('wv-calendar-card-label');
   if (!label) return;
-  const w = _getEditingWV();
+  const w = await _getEditingWV();
   if (!w) return;
   const gp = w.gameplay;
   if (!gp || !gp.calendarSystem) { label.textContent = '设置历法系统'; return; }
@@ -5039,8 +5039,8 @@ function _updateCalendarCardLabel() {
   label.textContent = `${cal.daysPerWeek}天/周 · ${cal.monthsPerYear}月/年 · ${cal.seasons.length}季`;
 }
 
-function _calSaveAndRefresh() {
-  const w = _getEditingWV();
+async function _calSaveAndRefresh() {
+  const w = await _getEditingWV();
   if (!w) return;
   const cal = _ensureCalendarSystem(w);
   const overlay = document.getElementById('calendar-editor-overlay');
@@ -5055,22 +5055,22 @@ function _calSaveAndRefresh() {
   }
 }
 
-function _onCalWeekDayChange(idx, value) {
-  const w = _getEditingWV(); if (!w) return;
+async function _onCalWeekDayChange(idx, value) {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.weekDayNames[idx] = value;
 }
 
-function _calAddWeekDay() {
-  const w = _getEditingWV(); if (!w) return;
+async function _calAddWeekDay() {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.weekDayNames.push(`第${cal.weekDayNames.length + 1}日`);
   cal.daysPerWeek = cal.weekDayNames.length;
   _calSaveAndRefresh();
 }
 
-function _calRemoveWeekDay(idx) {
-  const w = _getEditingWV(); if (!w) return;
+async function _calRemoveWeekDay(idx) {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   if (cal.weekDayNames.length <= 1) return;
   cal.weekDayNames.splice(idx, 1);
@@ -5078,8 +5078,8 @@ function _calRemoveWeekDay(idx) {
   _calSaveAndRefresh();
 }
 
-function _calSetMonthMode(uniform) {
-  const w = _getEditingWV(); if (!w) return;
+async function _calSetMonthMode(uniform) {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.uniformDaysPerMonth = uniform;
   if (uniform) {
@@ -5089,29 +5089,29 @@ function _calSetMonthMode(uniform) {
   _calSaveAndRefresh();
 }
 
-function _calSetUniformDays(val) {
-  const w = _getEditingWV(); if (!w) return;
+async function _calSetUniformDays(val) {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   const d = Math.max(1, parseInt(val) || 30);
   cal.daysPerMonth = Array(cal.monthsPerYear).fill(d);
 }
 
-function _calSetMonthDays(idx, val) {
-  const w = _getEditingWV(); if (!w) return;
+async function _calSetMonthDays(idx, val) {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.daysPerMonth[idx] = Math.max(1, parseInt(val) || 30);
 }
 
-function _calAddMonth() {
-  const w = _getEditingWV(); if (!w) return;
+async function _calAddMonth() {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.monthsPerYear += 1;
   cal.daysPerMonth.push(cal.uniformDaysPerMonth ? (cal.daysPerMonth[0] || 30) : 30);
   _calSaveAndRefresh();
 }
 
-function _calRemoveMonth() {
-  const w = _getEditingWV(); if (!w) return;
+async function _calRemoveMonth() {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   if (cal.monthsPerYear <= 1) return;
   cal.monthsPerYear -= 1;
@@ -5120,42 +5120,42 @@ function _calRemoveMonth() {
   _calSaveAndRefresh();
 }
 
-function _calSetSeasonName(idx, val) {
-  const w = _getEditingWV(); if (!w) return;
+async function _calSetSeasonName(idx, val) {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   if (cal.seasons[idx]) cal.seasons[idx].name = val;
 }
 
-function _calSetSeasonMonths(idx, val) {
-  const w = _getEditingWV(); if (!w) return;
+async function _calSetSeasonMonths(idx, val) {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   if (cal.seasons[idx]) {
     cal.seasons[idx].months = val.split(/[,，\s]+/).map(s => parseInt(s)).filter(n => n > 0 && n <= cal.monthsPerYear);
   }
 }
 
-function _calSetSeasonWeather(idx, val) {
-  const w = _getEditingWV(); if (!w) return;
+async function _calSetSeasonWeather(idx, val) {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   if (cal.seasons[idx]) cal.seasons[idx].weather = val;
 }
 
-function _calAddSeason() {
-  const w = _getEditingWV(); if (!w) return;
+async function _calAddSeason() {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.seasons.push({ name: '', months: [], weather: '' });
   _calSaveAndRefresh();
 }
 
-function _calRemoveSeason(idx) {
-  const w = _getEditingWV(); if (!w) return;
+async function _calRemoveSeason(idx) {
+  const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.seasons.splice(idx, 1);
   _calSaveAndRefresh();
 }
 
-function _calReset() {
-  const w = _getEditingWV(); if (!w) return;
+async function _calReset() {
+  const w = await _getEditingWV(); if (!w) return;
   const gp = _ensureGameplay(w);
   gp.calendarSystem = null;
   _ensureCalendarSystem(w);
