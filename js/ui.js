@@ -184,13 +184,7 @@ const UI = (() => {
       switch (id) {
         case 'panel-chat': return null; // 聊天面板不走返回
         case 'panel-worldview': return () => showPanel('chat', 'back');
-case 'panel-worldview-edit': return () => {
-          if (typeof Worldview !== 'undefined' && Worldview._tryExitEdit) {
-            Worldview._tryExitEdit();
-          } else {
-            showPanel('worldview', 'back');
-          }
-        };
+case 'panel-worldview-edit': return null; // 禁用手势返回，只能用按钮退出
         case 'panel-wv-region': return () => showPanel('worldview-edit', 'back');
         case 'panel-wv-faction': return () => showPanel('wv-region', 'back');
         case 'panel-wv-npc': return () => {
