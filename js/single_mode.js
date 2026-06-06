@@ -408,6 +408,28 @@ const SingleMode = (() => {
       singleEnableCustom: enableCustom,
       singleEnableKnowledge: enableKnowledge,
     };
+    // 初始化状态栏时间：从单人世界观读startTime，没有就用现实时间
+    try {
+      let initTime = '';
+      if (wvId) {
+        const swv = await DB.get('worldviews', wvId);
+        if (swv?.startTime) initTime = swv.startTime;
+      }
+      if (!initTime) {
+        const now = new Date();
+        const weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+        initTime = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      }
+      conv.statusBar = { region: '', location: '', time: initTime, weather: '', scene: '', playerOutfit: '', playerPosture: '', npcs: [] };
+      // 有历法系统时自动计算季节
+      if (wvId) {
+        const swv = await DB.get('worldviews', wvId);
+        if (swv?.gameplay?.calendarSystem && typeof Calendar !== 'undefined') {
+          const result = Calendar.processTimeField(initTime, initTime, swv.gameplay.calendarSystem);
+          if (result.season) conv.statusBar.season = result.season.name;
+        }
+      }
+    } catch(_) {}
     Conversations.getList().push(conv);
     await Conversations.saveList();
     closeCreateModal();
