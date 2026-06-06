@@ -2585,7 +2585,7 @@ ${wvPrompt}`;
 JSON格式：[{"id":"s1","username":"用户名","avatar_color":"#颜色","time":"YYYY.MM.DD 星期X HH:mm","title":"标题","summary":"摘要","tags":["标签"],"views":数字,"likes":数字,"comments":数字}]
 
 ${wvPrompt}` },
-          { role: 'user', content: `搜索：${query}` }
+          { role: 'user', content: `搜索：${query}${await (async () => { try { return (typeof WorldVoice !== 'undefined' && WorldVoice._getNpcListForForum) ? await WorldVoice._getNpcListForForum() : ''; } catch(_) { return ''; } })()}` }
         ]
       });
       // 搜索结果也缓存进 phoneData（用搜索关键词标记）
@@ -9223,7 +9223,7 @@ async function buildHeartsimServiceChatForBackstage() {
   return {
     open, close, minimize, goHome, goBack, openApp, isOpen,
     setNotification, recordLocation,
-    buildPhoneDataForAI,
+    buildPhoneDataForAI, _buildFullContext,
     buildHeartsimAppFavorForBackstage,
     buildHeartsimServiceChatForBackstage,
     flushActionLog, peekActionLog, pushLog, reloadActionLog, reloadChatRoundLog,

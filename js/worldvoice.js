@@ -50,8 +50,6 @@ const WorldVoice = (() => {
         const username = (n.onlineName || '').trim() || n.name;
         let s = `- ${username}`;
         if (n.onlineName && n.name !== n.onlineName) s += `（即${n.name}）`;
-        const brief = n.summary || n.background || n.detail || '';
-        if (brief) s += `：${brief.slice(0, 80)}`;
         return s;
       };
       // 世界观 NPC
@@ -228,7 +226,7 @@ const WorldVoice = (() => {
 
     const mediaType = await _getMediaType();
     const mediaDesc = await _getMediaDesc();
-    const wvPrompt = Chat.getWorldviewPrompt() || '';
+    const wvPrompt = (typeof Phone !== 'undefined' && Phone._buildFullContext) ? await Phone._buildFullContext() : (Chat.getWorldviewPrompt() || '');
     const chatMessages = Chat.getMessages();
     const summaryText = await Summary.formatForPrompt(Conversations.getCurrent());
 
@@ -460,7 +458,7 @@ function _renderLoadingSkeleton() {
 
     isGenerating = true;
     _abortCtrl = new AbortController();
-    const wvPrompt = Chat.getWorldviewPrompt() || '';
+    const wvPrompt = (typeof Phone !== 'undefined' && Phone._buildFullContext) ? await Phone._buildFullContext() : (Chat.getWorldviewPrompt() || '');
     const gameTime = _extractGameTime();
 
     const _mt = await _getMediaType();
@@ -736,6 +734,7 @@ ${wvPrompt}`;
   return {
     // 数据生成接口（手机论坛 App 使用）
     refresh,
+    _getNpcListForForum,
     // 手机论坛接口
   getPosts: () => posts,
   getDetail: () => currentDetail,
@@ -752,7 +751,7 @@ ${wvPrompt}`;
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) throw new Error('请先配置功能模型');
-    const wvPrompt = Chat.getWorldviewPrompt() || '';
+    const wvPrompt = (typeof Phone !== 'undefined' && Phone._buildFullContext) ? await Phone._buildFullContext() : (Chat.getWorldviewPrompt() || '');
     const gameTime = _extractGameTime();
     const _mt = await _getMediaType();
     const _md = await _getMediaDesc();
