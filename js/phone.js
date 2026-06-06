@@ -1667,7 +1667,43 @@ async function _clearMomentsCover() {
     const p = pd.myForumPosts[index];
     let content = '标题：' + (p.title || '') + '\n作者：' + (p.username || '匿名') + '\n\n' + (p.content || '');
     if (p.tags?.length) content += '\n标签：' + p.tags.join('、');
-    _shareToMain('forum', (_getForumName() || '论坛') + '帖子', content);
+
+    const choice = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.45)';
+      overlay.innerHTML = `
+        <div style="width:100%;max-width:420px;background:var(--bg);border-radius:20px 20px 0 0;padding:20px 20px 32px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <span style="font-size:16px;font-weight:600;color:var(--text)">分享</span>
+            <button id="share-myforum-cancel" style="background:none;border:none;color:var(--text-secondary);font-size:22px;cursor:pointer;line-height:1">×</button>
+          </div>
+          <button id="share-myforum-main" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+            分享到主线
+          </button>
+          <button id="share-myforum-chat" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            分享到聊天
+          </button>
+        </div>
+      `;
+      const close = val => { document.body.removeChild(overlay); resolve(val); };
+      overlay.querySelector('#share-myforum-cancel').onclick = () => close(null);
+      overlay.querySelector('#share-myforum-main').onclick = () => close('main');
+      overlay.querySelector('#share-myforum-chat').onclick = () => close('chat');
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+      document.body.appendChild(overlay);
+    });
+
+    if (choice === 'main') {
+      _shareToMain('forum', (_getForumName() || '论坛') + '帖子', content);
+    } else if (choice === 'chat') {
+      await _forumShareToChat({
+        title: p.title || '',
+        summary: p.content ? p.content.substring(0, 80) : '',
+        username: p.username || '匿名'
+      }, 'detail');
+    }
   }
 
   async function _sendMyForumComment(index) {
