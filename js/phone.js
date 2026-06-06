@@ -3195,6 +3195,13 @@ ${wvPrompt}` },
     const maskAvatar = cache?.maskAvatar || '';
     const npcAvatarMap = cache?.npcAvatarMap || {};
 
+    // 构建 NPC名→备注昵称 映射（好友圈熟人空间，优先显示用户设的备注）
+    const nicknameMap = {};
+    (pd.chatContacts || []).forEach(c => {
+      if (c.name && c.nickname) nicknameMap[c.name] = c.nickname;
+    });
+    const _dispName = (npcName) => nicknameMap[npcName] || npcName || '?';
+
     const avatarHtml = (name, avatar, cls = '') => avatar
       ? `<img src="${Utils.escapeHtml(avatar)}" class="phone-moment-avatar ${cls}" alt="头像">`
       : `<div class="phone-moment-avatar ${cls}">${Utils.escapeHtml((name || '?')[0])}</div>`;
@@ -3202,7 +3209,7 @@ ${wvPrompt}` },
     const commentsHtml = (comments) => (comments && comments.length)
       ? `<div class="phone-moment-comments"><div class="phone-moment-comments-title">评论区</div>${comments.map(c => `
           <div class="phone-moment-comment-card">
-            <span class="phone-moment-comment-name">${Utils.escapeHtml(c.name || '?')}</span>
+            <span class="phone-moment-comment-name">${Utils.escapeHtml(_dispName(c.name))}</span>
             <span class="phone-moment-comment-text">${Utils.escapeHtml(c.text || '')}</span>
           </div>`).join('')}</div>`
       : '';
@@ -3242,10 +3249,10 @@ ${wvPrompt}` },
       ? npcMoments.map((m, i) => `
         <div class="phone-moment-card">
           <div class="phone-moment-layout">
-            ${avatarHtml(m.npc || '?', npcAvatarMap[String(m.npc || '').trim()] || '', 'npc')}
+            ${avatarHtml(_dispName(m.npc), npcAvatarMap[String(m.npc || '').trim()] || '', 'npc')}
             <div class="phone-moment-main">
               <div class="phone-moment-head">
-                <div class="phone-moment-name">${Utils.escapeHtml(m.npc || '')}</div>
+                <div class="phone-moment-name">${Utils.escapeHtml(_dispName(m.npc))}</div>
                 <div class="phone-moment-time">${Utils.escapeHtml(_formatPhoneTime(m.time || '未知时间'))}</div>
               </div>
               <div class="phone-moment-text">${Utils.escapeHtml(m.text || '')}</div>
@@ -3302,7 +3309,7 @@ ${wvPrompt}` },
     let maskAvatar = '';
     try {
       const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
-      maskName = (mask?.onlineName || '').trim() || mask?.name || '我';
+      maskName = mask?.name || '我';
       maskAvatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
     } catch(_) {}
 
@@ -3435,7 +3442,7 @@ ${wvPrompt}` },
     const text = await UI.showSimpleInput('评论好友动态', '');
     if (!text || !text.trim()) return;
     let maskName = '我';
-    try { const mask = await Character.get(); maskName = (mask?.onlineName || '').trim() || mask?.name || '我'; } catch(_) {}
+    try { const mask = await Character.get(); maskName = mask?.name || '我'; } catch(_) {}
     if (!Array.isArray(m.comments)) m.comments = [];
     const comment = { name: maskName, text: text.trim(), byUser: true, time: new Date().toISOString() };
     m.comments.push(comment);
