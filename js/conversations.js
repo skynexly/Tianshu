@@ -268,10 +268,10 @@ async function init() {
             region: '', location: '', time: initTime,
             weather: '', scene: '', playerOutfit: '', playerPosture: '', npcs: []
           };
-          // 自动计算初始季节（有历法系统时）
+          // 自动计算初始季节（有历法用历法规则，没有用默认四季）
           try {
-            if (typeof Calendar !== 'undefined' && wv?.gameplay?.calendarSystem) {
-              const result = Calendar.processTimeField(initTime, initTime, wv.gameplay.calendarSystem);
+            if (typeof Calendar !== 'undefined') {
+              const result = Calendar.processTimeField(initTime, initTime, wv?.gameplay?.calendarSystem || null);
               if (result.season) conv.statusBar.season = result.season.name;
             }
           } catch(_) {}
@@ -347,6 +347,17 @@ async function init() {
           conv.statusBar = { region: '', location: '', time: initTime, weather: '', scene: '', playerOutfit: '', playerPosture: '', npcs: [] };
         } else {
           conv.statusBar.time = initTime;
+        }
+        // 自动计算初始季节（有历法用历法规则，没有用默认四季）
+        if (typeof Calendar !== 'undefined') {
+          let calRules2 = null;
+          if (conv.isSingle && conv.singleWorldviewId) {
+            try { const sw2 = await DB.get('worldviews', conv.singleWorldviewId); calRules2 = sw2?.gameplay?.calendarSystem || null; } catch(_) {}
+          } else if (wvId && wvId !== '__default_wv__') {
+            try { const wv2 = await DB.get('worldviews', wvId); calRules2 = wv2?.gameplay?.calendarSystem || null; } catch(_) {}
+          }
+          const res = Calendar.processTimeField(initTime, initTime, calRules2);
+          if (res.season) conv.statusBar.season = res.season.name;
         }
       } catch(_) {}
     }

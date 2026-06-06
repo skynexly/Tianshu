@@ -421,13 +421,17 @@ const SingleMode = (() => {
         initTime = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
       }
       conv.statusBar = { region: '', location: '', time: initTime, weather: '', scene: '', playerOutfit: '', playerPosture: '', npcs: [] };
-      // 有历法系统时自动计算季节
-      if (wvId) {
-        const swv = await DB.get('worldviews', wvId);
-        if (swv?.gameplay?.calendarSystem && typeof Calendar !== 'undefined') {
-          const result = Calendar.processTimeField(initTime, initTime, swv.gameplay.calendarSystem);
-          if (result.season) conv.statusBar.season = result.season.name;
+      // 自动计算初始季节（有历法用历法规则，没有用默认四季）
+      if (typeof Calendar !== 'undefined') {
+        let calRules = null;
+        if (wvId) {
+          try {
+            const swv2 = await DB.get('worldviews', wvId);
+            calRules = swv2?.gameplay?.calendarSystem || null;
+          } catch(_) {}
         }
+        const result = Calendar.processTimeField(initTime, initTime, calRules);
+        if (result.season) conv.statusBar.season = result.season.name;
       }
     } catch(_) {}
     Conversations.getList().push(conv);
