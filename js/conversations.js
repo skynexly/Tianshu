@@ -258,16 +258,20 @@ async function init() {
           UI.showToast('该世界观已启用历法系统但未填写开场时间，请先去世界观编辑填写', 3000);
           return;
         }
-        // 历法系统：如果有自定义历法+开场时间，初始化状态栏
-        if (wv?.gameplay?.calendarSystem && wv.startTime) {
+        // 初始化状态栏时间：有startTime用startTime，没有用现实时间
+        {
+          const now = new Date();
+          const weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+          const fallbackTime = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+          const initTime = wv.startTime || fallbackTime;
           conv.statusBar = {
-            region: '', location: '', time: wv.startTime,
+            region: '', location: '', time: initTime,
             weather: '', scene: '', playerOutfit: '', playerPosture: '', npcs: []
           };
-          // 自动计算初始季节
+          // 自动计算初始季节（有历法系统时）
           try {
-            if (typeof Calendar !== 'undefined') {
-              const result = Calendar.processTimeField(wv.startTime, wv.startTime, wv.gameplay.calendarSystem);
+            if (typeof Calendar !== 'undefined' && wv?.gameplay?.calendarSystem) {
+              const result = Calendar.processTimeField(initTime, initTime, wv.gameplay.calendarSystem);
               if (result.season) conv.statusBar.season = result.season.name;
             }
           } catch(_) {}

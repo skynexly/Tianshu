@@ -755,7 +755,7 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
           const userMsgCount = messages.filter(m => m.role === 'user').length;
           if (userMsgCount < rounds) {
             let startParts = [];
-            if (wv.startTime) startParts.push(`开场时间：${wv.startTime}。第一轮的时间必须从此刻开始。`);
+            if (wv.startTime) startParts.push(`开场时间：${wv.startTime}。状态栏已初始化为此时间，第一轮时间写"+0min"即可（表示从此刻开始）。`);
             if (wv.startPlot) startParts.push(`开场剧情指令：${wv.startPlot}`);
             if (startParts.length > 0) {
               systemParts.push(`【开场引导（前${rounds}轮生效）】\n${startParts.join('\n')}`);
@@ -769,7 +769,7 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
         const userMsgCount = messages.filter(m => m.role === 'user').length;
         if (userMsgCount < rounds) {
           let startParts = [];
-          if (singleWv.startTime) startParts.push(`开场时间：${singleWv.startTime}。第一轮的时间必须从此刻开始。`);
+          if (singleWv.startTime) startParts.push(`开场时间：${singleWv.startTime}。状态栏已初始化为此时间，第一轮时间写"+0min"即可（表示从此刻开始）。`);
           if (singleWv.startPlot) startParts.push(`开场剧情指令：${singleWv.startPlot}`);
           if (startParts.length > 0) {
             systemParts.push(`【开场引导（前${rounds}轮生效）】\n${startParts.join('\n')}`);
