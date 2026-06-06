@@ -3951,7 +3951,8 @@ function _renderChatThreadList(pd) {
     const msgs = threads[c.id] || [];
     const last = msgs[msgs.length - 1];
     const preview = last ? Utils.escapeHtml((last.text || '').slice(0, 24)) : '';
-    const initial = Utils.escapeHtml((c.name || '?')[0]);
+    const displayName = c.nickname || c.name;
+    const initial = Utils.escapeHtml((displayName || '?')[0]);
     const avaUrl = _chatContactAvatar(c);
     const avatar = avaUrl
       ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
@@ -3959,7 +3960,7 @@ function _renderChatThreadList(pd) {
     return `<div class="phone-chat-thread-item" onclick="Phone._openChatThread('${c.id}')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer">
       <div style="width:46px;height:46px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;overflow:hidden">${avatar}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:2px">${Utils.escapeHtml(c.name)}</div>
+        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:2px">${Utils.escapeHtml(displayName)}</div>
         <div style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${preview}</div>
       </div>
     </div>`;
@@ -3981,13 +3982,14 @@ async function _hydrateChatContacts(pd) {
   if (added.length) {
     html += '<div style="padding:10px 16px 4px;font-size:11px;color:var(--text-secondary)">已添加</div>';
     html += added.map(c => {
-      const initial = Utils.escapeHtml((c.name || '?')[0]);
+      const displayName = c.nickname || c.name;
+      const initial = Utils.escapeHtml((displayName || '?')[0]);
       const avaUrl = _chatContactAvatar(c);
       const avatar = avaUrl ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : initial;
       return `<div class="phone-chat-contact-item" onclick="Phone._openChatThread('${c.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer">
         <div style="width:40px;height:40px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;overflow:hidden">${avatar}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:14px;font-weight:600;color:var(--text)">${Utils.escapeHtml(c.name)}</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text)">${Utils.escapeHtml(displayName)}</div>
           <div style="font-size:11px;color:var(--text-secondary)">${_chatSourceLabel(c.source)}</div>
         </div>
       </div>`;
@@ -4051,7 +4053,7 @@ function _renderChatThread(pd, contactId) {
   const body = document.getElementById('phone-body');
   const contact = (pd.chatContacts || []).find(c => c.id === contactId);
   if (!contact) return;
-  document.getElementById('phone-title').textContent = contact.name;
+  document.getElementById('phone-title').textContent = contact.nickname || contact.name;
   const msgs = (pd.chatThreads && pd.chatThreads[contactId]) || [];
   const initial = Utils.escapeHtml((contact.name || '?')[0]);
   const avaUrl = _chatContactAvatar(contact);
@@ -4658,26 +4660,22 @@ async function _openChatSettings(contactId) {
 
   const body = document.getElementById('phone-body');
   if (!body) return;
-  // 挂到 phone-shell，透明背景只透出壁纸，不透出聊天内容
-  const shell = body.closest('.phone-shell') || body.parentElement;
-  if (!shell) return;
 
   const nickname = contact.nickname || '';
   const voiceEnabled = !!contact.voiceEnabled;
   const voiceId = contact.voiceId || '';
 
-  const panel = document.createElement('div');
-  panel.id = 'phone-chat-settings-panel';
-  panel.className = 'phone-fullscreen-panel';
-  panel.style.cssText = 'position:absolute;inset:0;background:transparent;z-index:200;display:flex;flex-direction:column;overflow:hidden';
-  panel.innerHTML = `
-    <div style="display:flex;align-items:center;padding:12px 14px;flex-shrink:0">
-      <button onclick="document.getElementById('phone-chat-settings-panel').remove()" style="width:34px;height:34px;background:none;border:none;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;margin-right:4px;line-height:0">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
-      </button>
-      <span style="font-size:16px;font-weight:600;color:var(--text);flex:1">聊天设置</span>
-    </div>
-    <div style="flex:1;overflow-y:auto;padding:16px 16px 32px">
+  // 更新标题
+  const title = document.getElementById('phone-header-title');
+  if (title) title.textContent = '聊天设置';
+
+  // 更新右上角按钮区为空
+  const headerRight = document.getElementById('phone-header-right');
+  if (headerRight) headerRight.innerHTML = '';
+
+  // 替换 body 内容（和设置页一样，直接渲染进 phone-body，壁纸自然透出）
+  body.innerHTML = `
+    <div style="display:flex;flex-direction:column;height:100%;padding:16px 16px 32px;overflow-y:auto">
 
       <div style="margin-bottom:24px">
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:500;letter-spacing:.04em">备注昵称</div>
@@ -4712,15 +4710,21 @@ async function _openChatSettings(contactId) {
         <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding:0 4px">启用后 AI 回复将通过语音播放</div>
       </div>
 
-    </div>
-    <div style="flex-shrink:0;padding:12px 16px">
-      <button onclick="Phone._saveChatSettings('${contactId}')"
-        style="width:100%;padding:13px;border-radius:12px;background:var(--accent);color:#fff;border:none;font-size:15px;font-weight:600;cursor:pointer">
-        保存
-      </button>
+      <div style="margin-top:auto;padding-top:16px">
+        <button onclick="Phone._saveChatSettings('${contactId}')"
+          style="width:100%;padding:13px;border-radius:12px;background:var(--accent);color:#fff;border:none;font-size:15px;font-weight:600;cursor:pointer">
+          保存
+        </button>
+      </div>
+
     </div>
   `;
-  shell.appendChild(panel);
+
+  // 把 phone-header-left 的返回箭头改成回到聊天
+  const headerLeft = document.getElementById('phone-header-left');
+  if (headerLeft) {
+    headerLeft.innerHTML = '<button onclick="Phone._openChatThread(\'' + contactId + '\')" style="width:34px;height:34px;background:none;border:none;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg></button>';
+  }
 }
 
 // 语音开关联动显示音色 ID 输入框
@@ -4748,12 +4752,9 @@ async function _saveChatSettings(contactId) {
   contact.voiceEnabled = !!(voiceEnabledEl?.checked);
   contact.voiceId = (voiceIdEl?.value || '').trim();
   await _savePhoneData();
-  const panel = document.getElementById('phone-chat-settings-panel');
-  if (panel) panel.remove();
   UI.showToast('已保存', 1200);
-  // 刷新标题（如果有昵称需要更新显示）
-  const headerTitle = document.getElementById('phone-header-title');
-  if (headerTitle) headerTitle.textContent = contact.nickname || contact.name || '';
+  // 返回聊天界面
+  _openChatThread(contactId);
 }
 
 // 加号菜单开关
@@ -4945,6 +4946,9 @@ async function _chatRequestReply(contactId) {
     let gameTime = '';
     try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
 
+    const voiceInstruction = contact.voiceEnabled ? `
+6. 你可以选择以语音形式发送某些消息（比如情绪饱满、语气强烈或亲近的话语）。语音消息使用以下格式：[语音]消息内容。例如：[语音]快来找我！。普通文字消息不需要任何前缀。` : '';
+
     const systemPrompt = `${fullCtx}
 
 【正在私聊的角色】
@@ -4961,7 +4965,7 @@ ${histStr}
 2. 上面的主线剧情仅供参考，用来判断你和玩家此刻的关系与状态。**请先判断你（${contact.name}）在那些主线场景里是否在场**：如果你不在场，绝对不要主动提起主线里发生的事（你根本不知道）；只有你在场或事后理应知道的事，才能自然提及。
 3. 回复要符合角色当下的状态：**先想这个角色此刻正在做什么**——可能在忙、在睡、在外面。据此决定回复的语气和"时机感"：可能秒回，也可能像是过了一阵才回（在内容里自然体现，比如"刚看到""在忙刚回来"），不要每次都热情秒回。
 4. 你可以一次回复多条短消息（像真人发微信那样），也可以只回一条。
-5. **必须用以下 JSON 格式输出**，放在 \`\`\`chat 代码块里，每条消息一个对象，time 用游戏内时间（"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"格式，可比玩家发消息的时间稍晚一点）：
+5. **必须用以下 JSON 格式输出**，放在 \`\`\`chat 代码块里，每条消息一个对象，time 用游戏内时间（"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"格式，可比玩家发消息的时间稍晚一点）：${voiceInstruction}
 \`\`\`chat
 [
   {"npc": "${contact.name}", "text": "消息内容", "time": "时间"},
@@ -5040,15 +5044,22 @@ ${histStr}
     // 逐条延迟 append 气泡
     for (let i = 0; i < chatArr.length; i++) {
       const cm = chatArr[i];
-      const text = (cm.text || '').trim();
+      let text = (cm.text || '').trim();
       if (!text) continue;
-      
+
+      // 解析语音格式：[语音]内容
+      const voiceMatch = text.match(/^\[语音\](.+)$/s);
+      const isVoiceMsg = !!voiceMatch;
+      const voiceDesc = isVoiceMsg ? voiceMatch[1].trim() : '';
+
       // 存进 thread
       const msgId = 'm_' + Utils.uuid().slice(0, 8);
       const cmTime = (cm.time || '').trim();
       pd2.chatThreads[contactId].push({
         id: msgId,
         role: 'them',
+        type: isVoiceMsg ? 'voice' : undefined,
+        voiceDesc: isVoiceMsg ? voiceDesc : undefined,
         text,
         time: cmTime,
         fromMainline: false,
@@ -5056,13 +5067,12 @@ ${histStr}
       });
       if (cmTime) lastAiTime = cmTime;
       _addChatMessageToRoundLog(contactId, 'them', text, cmTime, contact.name);
-      
+
       // 等 600ms 再显示，用淡入动画
       await new Promise(resolve => setTimeout(resolve, 600));
-      
+
       const list = document.getElementById('phone-chat-msglist');
       if (list) {
-        // 只渲染这一条新气泡（不重绘全部）
         const avaUrl = _chatContactAvatar(contact);
         const initial = Utils.escapeHtml((contact.name || '?')[0]);
         const avatarInner = avaUrl
@@ -5073,11 +5083,16 @@ ${histStr}
         el.dataset.msgId = msgId;
         el.dataset.role = 'them';
         el.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;animation:fadeIn 0.3s ease-in;cursor:pointer';
-        el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div><div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0"><div style="max-width:100%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);word-break:break-word">${Utils.escapeHtml(text)}</div>${cmTime ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(cmTime)}</div>` : ''}</div>`;
+        if (isVoiceMsg) {
+          const waveHtml = `<div class="phone-chat-voice-wave" id="voice-wave-${msgId}" style="display:flex;align-items:center;gap:3px;opacity:0.7"><div style="width:3px;height:4px;background:currentColor;border-radius:2px"></div><div style="width:3px;height:8px;background:currentColor;border-radius:2px"></div><div style="width:3px;height:12px;background:currentColor;border-radius:2px"></div><div style="width:3px;height:8px;background:currentColor;border-radius:2px"></div><div style="width:3px;height:5px;background:currentColor;border-radius:2px"></div></div>`;
+          el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div><div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:70%"><div onclick="Phone._playVoice('${msgId}')" style="padding:10px 14px;border-radius:18px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>${waveHtml}</div><div style="margin-top:4px;padding:6px 10px;border-radius:8px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;max-width:100%;word-break:break-word">${Utils.escapeHtml(voiceDesc)}</div>${cmTime ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(cmTime)}</div>` : ''}</div>`;
+        } else {
+          el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div><div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0"><div style="max-width:100%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);word-break:break-word">${Utils.escapeHtml(text)}</div>${cmTime ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(cmTime)}</div>` : ''}</div>`;
+        }
         list.appendChild(el);
         list.scrollTop = list.scrollHeight;
       }
-      
+
       n++;
     }
     
