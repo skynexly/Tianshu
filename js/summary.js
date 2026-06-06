@@ -239,11 +239,18 @@ ${dialogue}
       id: Utils.uuid(),
       conversationId,
       archivedAt: Utils.timestamp(),
-      messages: messages.map(m => ({
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp
-      }))
+      messages: messages.map(m => {
+        let content = m.content || '';
+        // 归档时将增量时间替换为绝对时间，方便日后查阅
+        if (m.statusSnapshot && m.statusSnapshot.time) {
+          content = content.replace(/时间：[+\-]\d[^\n]*/g, '时间：' + m.statusSnapshot.time);
+        }
+        return {
+          role: m.role,
+          content,
+          timestamp: m.timestamp
+        };
+      })
     };
     await DB.put('archives', arch);
     GameLog.log('info', `[Archive] 归档 ${messages.length} 条消息`);
