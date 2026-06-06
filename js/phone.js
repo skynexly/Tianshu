@@ -3968,6 +3968,13 @@ ${wvPrompt}` },
           });
         }
       } catch(_) {}
+      // 单人卡角色加入 NPC 候选
+      try {
+        if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+          const sCard = await DB.get('singleCards', conv.singleCharId);
+          if (sCard?.name && !npcNames.includes(sCard.name)) npcNames.push(sCard.name);
+        }
+      } catch(_) {}
       // v617：取用户名（面具 name）
       try {
         const mask = await Character.get();
@@ -4171,6 +4178,13 @@ ${fullCtx}`;
           attached.forEach(c => {
             if (c.name && !npcNames.includes(c.name)) npcNames.push(c.name);
           });
+        }
+      } catch(_) {}
+      // 单人卡角色加入 NPC 候选
+      try {
+        if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+          const sCard = await DB.get('singleCards', conv.singleCharId);
+          if (sCard?.name && !npcNames.includes(sCard.name)) npcNames.push(sCard.name);
         }
       } catch(_) {}
       try {
