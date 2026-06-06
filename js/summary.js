@@ -80,7 +80,14 @@ const Summary = (() => {
 
     const dialogue = toSummarizeMessages
       .filter(m => m.role !== 'system')
-      .map(m => `[${m.role === 'user' ? playerName : 'AI'}] ${m.content}`)
+      .map(m => {
+        let content = m.content || '';
+        // 将status块中的增量时间替换为绝对时间（总结模型需要知道具体日期）
+        if (m.statusSnapshot && m.statusSnapshot.time) {
+          content = content.replace(/时间：[+\-]\d[^\n]*/g, '时间：' + m.statusSnapshot.time);
+        }
+        return `[${m.role === 'user' ? playerName : 'AI'}] ${content}`;
+      })
       .join('\n\n');
 
     // 旧内容作为背景提供给AI

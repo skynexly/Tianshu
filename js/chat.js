@@ -2351,9 +2351,14 @@ const config = await API.getConfig();
         .filter(t => t.title);
     } catch(_) {}
     const prompt = Memory.buildExtractionPrompt(toExtract, charName, charInfo, extractLimits, existingTitles);
-    const dialogue = toExtract.map(m =>
-      `[${m.role === 'user' ? charName : 'AI'}] ${m.content}`
-    ).join('\n\n');
+    const dialogue = toExtract.map(m => {
+      let content = m.content || '';
+      // 将status块中的增量时间替换为绝对时间（记忆提取模型需要知道具体日期）
+      if (m.statusSnapshot && m.statusSnapshot.time) {
+        content = content.replace(/时间：[+\-]\d[^\n]*/g, '时间：' + m.statusSnapshot.time);
+      }
+      return `[${m.role === 'user' ? charName : 'AI'}] ${content}`;
+    }).join('\n\n');
 
     const MAX_RETRIES = isRetryDisabled() ? 1 : 3;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
