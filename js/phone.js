@@ -5353,7 +5353,7 @@ function _toggleChatVoiceMode(contactId) {
   if (menu) menu.classList.add('hidden');
 }
 
-// 聊天订单选择器：全屏弹窗列出所有订单，点击发送
+// 聊天订单选择器：替换 phone-body 内容，避免透出聊天界面
 async function _openChatOrderPicker(contactId) {
   const plusMenu = document.getElementById('phone-chat-plus-menu');
   if (plusMenu) plusMenu.classList.add('hidden');
@@ -5366,9 +5366,6 @@ async function _openChatOrderPicker(contactId) {
     ...shopOrders.map(o => ({ ...o, _kind: 'shop' }))
   ];
 
-  const old = document.getElementById('phone-order-picker-overlay');
-  if (old) old.remove();
-
   const myName = (() => { try { const mk = Character.get(); return mk?.name || '我'; } catch(_) { return '我'; } })();
 
   const cardsHtml = allOrders.length > 0 ? allOrders.map(o => {
@@ -5376,36 +5373,33 @@ async function _openChatOrderPicker(contactId) {
     const targetLabel = o.target === '自己' ? `${myName}自己` : `→ ${o.target}`;
     return `
       <div onclick="Phone._sendChatOrder('${contactId}','${Utils.escapeHtml(o.id)}','${o._kind}')"
-           style="padding:12px 14px;border-radius:12px;background:var(--bg-tertiary);margin-bottom:8px;cursor:pointer;active:opacity:0.7">
+           style="padding:12px 14px;border-radius:12px;background:var(--bg-tertiary);margin-bottom:8px;cursor:pointer">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
           <span style="font-size:13px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(o.name || '')}</span>
           ${o.price ? `<span style="font-size:13px;font-weight:700;color:var(--accent);margin-left:8px;flex-shrink:0">¥${Utils.escapeHtml(String(o.price))}</span>` : ''}
         </div>
         ${o.shop ? `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:3px">${Utils.escapeHtml(o.shop)}</div>` : ''}
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <span style="font-size:10px;padding:2px 7px;border-radius:6px;background:var(--bg-secondary,#eee);color:var(--text-secondary)">${Utils.escapeHtml(platform)}</span>
-          <span style="font-size:10px;padding:2px 7px;border-radius:6px;background:var(--bg-secondary,#eee);color:var(--text-secondary)">${Utils.escapeHtml(targetLabel)}</span>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+          <span style="font-size:10px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);color:var(--text-secondary)">${Utils.escapeHtml(platform)}</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);color:var(--text-secondary)">${Utils.escapeHtml(targetLabel)}</span>
           <span style="font-size:10px;color:var(--text-secondary);margin-left:auto">${Utils.escapeHtml(o.time || '')}</span>
         </div>
       </div>
     `;
   }).join('') : '<div style="padding:40px;text-align:center;color:var(--text-secondary);font-size:13px">还没有订单记录</div>';
 
-  const overlay = document.createElement('div');
-  overlay.id = 'phone-order-picker-overlay';
-  overlay.className = 'phone-inner-modal';
-  overlay.innerHTML = `
-    <div class="modal-content phone-album-picker-card">
-      <div class="phone-album-picker-header">
-        <span style="font-size:14px;font-weight:600">发送订单</span>
-        <button type="button" onclick="document.getElementById('phone-order-picker-overlay')?.remove()" class="phone-album-picker-close" aria-label="关闭">×</button>
-      </div>
+  const body = document.getElementById('phone-body');
+  if (!body) return;
+  const headerRight = document.getElementById('phone-header-right');
+  if (headerRight) headerRight.innerHTML = '';
+  document.getElementById('phone-title').textContent = '发送订单';
+  _pushNav(() => _openChatThread(contactId));
+
+  body.innerHTML = `
+    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg)">
       <div style="flex:1;overflow-y:auto;padding:12px">${cardsHtml}</div>
     </div>
   `;
-  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
-  const shell = document.querySelector('#phone-modal .phone-shell');
-  (shell || document.body).appendChild(overlay);
 }
 
 // 确认发送订单消息
