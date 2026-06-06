@@ -253,6 +253,11 @@ async function init() {
         if (wv && Array.isArray(wv.defaultLorebookIds) && wv.defaultLorebookIds.length) {
           conv.lorebookIds = wv.defaultLorebookIds.slice();
         }
+        // 历法系统校验：有自定义历法但没填开场时间，阻止创建
+        if (wv?.gameplay?.calendarSystem && !wv.startTime) {
+          UI.showToast('该世界观已启用历法系统但未填写开场时间，请先去世界观编辑填写', 3000);
+          return;
+        }
         // 历法系统：如果有自定义历法+开场时间，初始化状态栏
         if (wv?.gameplay?.calendarSystem && wv.startTime) {
           conv.statusBar = {

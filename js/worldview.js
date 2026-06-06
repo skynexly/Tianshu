@@ -5210,19 +5210,6 @@ async function _calReset() {
 }
 
 function _tryExitEdit() {
-  // 历法系统校验：如果历法卡片不是默认状态，说明用户自定义了历法
-  try {
-    const calLabel = document.getElementById('wv-calendar-card-label');
-    if (calLabel && calLabel.textContent && calLabel.textContent !== '设置历法系统') {
-      const startTime = document.getElementById('wv-start-time')?.value?.trim();
-      if (!startTime) {
-        UI.showToast('已启用历法系统，请填写开场时间', 3000);
-        const stEl = document.getElementById('wv-start-time');
-        if (stEl) { stEl.focus(); stEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-        return; // 阻止退出
-      }
-    }
-  } catch(_) {}
   // 正常退出：保存 + 停定时器 + 返回列表
   if (typeof Worldview !== 'undefined') {
     if (Worldview.save) try { Worldview.save({ silent: true }); } catch(_) {}
