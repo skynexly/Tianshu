@@ -577,6 +577,13 @@ async function render(status) {
       dateEl.textContent = timeParts.rest && timeParts.rest !== '—' ? timeParts.rest : '';
       dateEl.style.display = dateEl.textContent ? '' : 'none';
     }
+    // 季节
+    const seasonEl = _el('sb-season-text');
+    if (seasonEl) {
+      const seasonName = status.season || '';
+      seasonEl.textContent = seasonName;
+      seasonEl.style.display = seasonName ? '' : 'none';
+    }
     _el('sb-weather-text').textContent = weather || '';
     const ww = _el('sb-weather-wrap');
     if (ww) ww.style.display = weather ? '' : 'none';

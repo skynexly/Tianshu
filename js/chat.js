@@ -1877,6 +1877,37 @@ const msgEl = appendMessage(aiMsg, true, true);
                 }
                 const merged = Utils.mergeStatus(oldStatus, newStatus, statusBlockPresent);
                 if (merged) {
+                  // 历法系统：处理增量时间 + 自动计算季节
+                  if (merged.time && typeof Calendar !== 'undefined' && Calendar.isDelta(merged.time)) {
+                    try {
+                      const currentTimeStr = oldStatus?.time || '';
+                      let calRules = null;
+                      try {
+                        const wv = await Worldview.getCurrent();
+                        calRules = wv?.gameplay?.calendarSystem || null;
+                      } catch(_) {}
+                      const result = Calendar.processTimeField(merged.time, currentTimeStr, calRules);
+                      if (!result.parseError) {
+                        merged.time = result.timeStr;
+                        if (result.season) merged.season = result.season.name;
+                      }
+                    } catch(_) {}
+                  } else if (merged.time && typeof Calendar !== 'undefined') {
+                    // 绝对时间也自动算季节
+                    try {
+                      let calRules = null;
+                      try {
+                        const wv = await Worldview.getCurrent();
+                        calRules = wv?.gameplay?.calendarSystem || null;
+                      } catch(_) {}
+                      const result = Calendar.processTimeField(merged.time, merged.time, calRules);
+                      if (!result.parseError && result.season) merged.season = result.season.name;
+                    } catch(_) {}
+                  }
+                  // 天气限制5字
+                  if (merged.weather && merged.weather.length > 5) {
+                    merged.weather = merged.weather.slice(0, 5);
+                  }
                   if (oldStatus?.heartSim) merged.heartSim = oldStatus.heartSim;
                   if (oldStatus?.customAttrs) merged.customAttrs = oldStatus.customAttrs;
                   if (oldStatus?.taskSystem) merged.taskSystem = oldStatus.taskSystem;
