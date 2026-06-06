@@ -5209,6 +5209,44 @@ async function _calReset() {
   UI.showToast('已恢复默认历法', 1200);
 }
 
+function _tryExitEdit() {
+  // 历法系统校验：如果历法卡片不是默认状态，说明用户自定义了历法
+  try {
+    const calLabel = document.getElementById('wv-calendar-card-label');
+    if (calLabel && calLabel.textContent && calLabel.textContent !== '设置历法系统') {
+      const startTime = document.getElementById('wv-start-time')?.value?.trim();
+      if (!startTime) {
+        UI.showToast('已启用历法系统，请填写开场时间', 3000);
+        const stEl = document.getElementById('wv-start-time');
+        if (stEl) { stEl.focus(); stEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        return; // 阻止退出
+      }
+    }
+  } catch(_) {}
+  // 正常退出：保存 + 停定时器 + 返回列表
+  if (typeof Worldview !== 'undefined') {
+    if (Worldview.save) try { Worldview.save({ silent: true }); } catch(_) {}
+    if (Worldview._stopFullSaveTimer) try { Worldview._stopFullSaveTimer(); } catch(_) {}
+  }
+  // 检查 returnTo
+  const rt = (typeof Worldview !== 'undefined' && Worldview.getEditReturnTo) ? Worldview.getEditReturnTo() : null;
+  if (rt === 'single-card-edit') {
+    if (Worldview.clearEditReturnTo) Worldview.clearEditReturnTo();
+    if (typeof SingleCard !== 'undefined' && SingleCard.restoreEditPanel) {
+      SingleCard.restoreEditPanel();
+    } else {
+      UI.showPanel('single-card-edit', 'back');
+    }
+  } else if (rt === 'lorebook-list') {
+    if (Worldview.clearEditReturnTo) Worldview.clearEditReturnTo();
+    UI.showPanel('worldview', 'back');
+    if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) Worldview.switchWorldTab('lb');
+    if (typeof LorebookUI !== 'undefined' && LorebookUI.renderList) setTimeout(() => LorebookUI.renderList(), 50);
+  } else {
+    UI.showPanel('worldview', 'back');
+  }
+}
+
   return {
     init: load,
     load,
@@ -5251,6 +5289,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     openCalendarEditor, closeCalendarEditor,
     _onCalWeekDayChange, _calAddWeekDay, _calRemoveWeekDay, _calToggleDayType, _calSetMonthMode, _calSetUniformDays, _calSetMonthDays, _calAddMonth, _calRemoveMonth,
     _calSetSeasonName, _calSetSeasonMonths, _calSetSeasonWeather, _calAddSeason, _calRemoveSeason, _calReset,
+    _tryExitEdit,
     _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards,
 editLorebookDescription,
     addFestival, editFestival, saveFestivalFromModal, deleteFestivalFromModal, closeFestivalModal,
