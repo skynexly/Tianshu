@@ -676,6 +676,7 @@ function _isAppStillActive(appId) {
       const mask = await Character.get();
       if (mask && mask.name) {
         let maskStr = `名字：${mask.name}`;
+        if (mask.onlineName) maskStr += `\n网名：${mask.onlineName}`;
         // 兼容历史字段名：实际数据字段是 background；老代码写的 description/personality 实际从未存在
         const bg = mask.background || mask.description || '';
         if (bg) maskStr += `\n设定：${bg}`;
@@ -1837,13 +1838,13 @@ async function _clearMomentsCover() {
     return `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${Utils.escapeHtml(color)};display:flex;align-items:center;justify-content:center;font-size:${fontSz}px;color:#fff;font-weight:bold;flex-shrink:0">${ch}</div>`;
   }
 
-  // 获取当前面具信息（名字+头像）
+  // 获取当前面具信息（名字+头像），论坛/社交媒体优先网名
   async function _getMaskInfo() {
     let username = '我';
     let avatar = '';
     try {
       const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
-      username = mask?.name || '我';
+      username = (mask?.onlineName || '').trim() || mask?.name || '我';
       avatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
     } catch(_) {}
     return { username, avatar };
@@ -2123,7 +2124,7 @@ async function _clearMomentsCover() {
     let avatar = '';
     try {
       const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
-      username = mask?.name || '我';
+      username = (mask?.onlineName || '').trim() || mask?.name || '我';
       avatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
     } catch(_) {}
 
@@ -2165,7 +2166,7 @@ async function _clearMomentsCover() {
     let avatar = '';
     try {
       const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
-      username = mask?.name || '我';
+      username = (mask?.onlineName || '').trim() || mask?.name || '我';
       avatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
     } catch(_) {}
 
@@ -3357,7 +3358,7 @@ ${wvPrompt}` },
     let maskAvatar = '';
     try {
       const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
-      maskName = mask?.name || '我';
+      maskName = (mask?.onlineName || '').trim() || mask?.name || '我';
       maskAvatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
     } catch(_) {}
 
@@ -3448,7 +3449,7 @@ ${wvPrompt}` },
     const text = await UI.showSimpleInput('评论好友动态', '');
     if (!text || !text.trim()) return;
     let maskName = '我';
-    try { const mask = await Character.get(); maskName = mask?.name || '我'; } catch(_) {}
+    try { const mask = await Character.get(); maskName = (mask?.onlineName || '').trim() || mask?.name || '我'; } catch(_) {}
     if (!Array.isArray(m.comments)) m.comments = [];
     const comment = { name: maskName, text: text.trim(), byUser: true, time: new Date().toISOString() };
     m.comments.push(comment);
@@ -3912,9 +3913,11 @@ ${wvPrompt}` },
     const imgInfo = m.imageDesc ? `（配图描述：${m.imageDesc}）` : (m.image ? '（附带了一张图片）' : '');
     // v617：禁止冒充玩家
     let _userName = '';
-    try { const mask = await Character.get(); _userName = mask?.name || ''; } catch(_) {}
-    const userBan = _userName
-      ? `\n【严格约束】评论者姓名绝对不能是"${_userName}"（那是玩家本人），也不允许任何评论以"我"（指代玩家）的口吻发言。这条动态是玩家自己发的，不需要玩家自评。`
+    let _userOnlineName = '';
+    try { const mask = await Character.get(); _userName = mask?.name || ''; _userOnlineName = (mask?.onlineName || '').trim(); } catch(_) {}
+    const banNames = [_userName, _userOnlineName].filter(Boolean);
+    const userBan = banNames.length > 0
+      ? `\n【严格约束】评论者姓名绝对不能是"${banNames.join('"或"')}"（那是玩家本人），也不允许任何评论以"我"（指代玩家）的口吻发言。这条动态是玩家自己发的，不需要玩家自评。`
       : '\n【严格约束】评论者不能是玩家本人。';
     const prompt = `用户发了一条动态："${m.text}"${imgInfo}（对 ${visibleStr} 可见）。
 请根据NPC列表中角色的性格和当前剧情，让可见的NPC评论这条动态。每个NPC最多评论一条，总评论数不超过15条。部分NPC可以选择不评论。${userBan}
@@ -3982,6 +3985,7 @@ ${wvPrompt}` },
     let npcNames = [];
     // v617：用户名（用于禁止 AI 发言时冒充玩家）
     let userName = '';
+    let userOnlineName = '';
     try {
       const convId = Conversations.getCurrent();
       const conv = Conversations.getList().find(c => c.id === convId);
@@ -4024,6 +4028,7 @@ ${wvPrompt}` },
       try {
         const mask = await Character.get();
         if (mask?.name) userName = mask.name;
+        if (mask?.onlineName) userOnlineName = mask.onlineName.trim();
       } catch(_) {}
     } catch(_) {}
 
@@ -4051,8 +4056,9 @@ ${wvPrompt}` },
       ? `\n\n【严格约束】动态发布者必须从以下NPC列表中选：${npcNames.join('、')}。评论者可以是列表中的NPC，也可以是虚构的路人账号（但路人名字要符合世界观风格）。禁止编造列表外的NPC。`
       : '';
     // v617：禁止冒充玩家
-    const userBan = userName
-      ? `\n\n【禁止冒充玩家】玩家角色"${userName}"绝对不能作为动态发布者出现，也不能作为任何评论者出现（包括路人评论）。评论者 name 字段不允许是"${userName}"，也不允许任何评论以"我"（指代玩家）的口吻发布。玩家会自己评论，不需要 AI 代劳。`
+    const _momBanNames = [userName, userOnlineName].filter(Boolean);
+    const userBan = _momBanNames.length > 0
+      ? `\n\n【禁止冒充玩家】玩家角色"${_momBanNames.join('"和"')}"绝对不能作为动态发布者出现，也不能作为任何评论者出现（包括路人评论）。评论者 name 字段不允许是"${_momBanNames.join('"或"')}"，也不允许任何评论以"我"（指代玩家）的口吻发布。玩家会自己评论，不需要 AI 代劳。`
       : '\n\n【禁止冒充玩家】不要让玩家角色作为动态发布者或评论者，也不要让任何角色冒充用户/玩家发言。';
     
     const systemPrompt = `根据以下世界观、NPC资料和剧情，生成${wantCount}条NPC的社交媒体动态。从NPC列表中随机挑选，内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。允许同一NPC发多条动态，但发布时间必须不同（互相错开至少几十分钟）。每条带1-3条路人或者与该NPC有关的其他NPC的评论，若NPC相互不认识或没有交集，可以仅路人评论。
@@ -4186,6 +4192,7 @@ ${fullCtx}`;
     // 收集 NPC 名字（同 _refreshNpcMoments）
     let npcNames = [];
     let userName = '';
+    let userOnlineName = '';
     try {
       const convId = Conversations.getCurrent();
       const conv = Conversations.getList().find(c => c.id === convId);
@@ -4225,6 +4232,7 @@ ${fullCtx}`;
       try {
         const mask = await Character.get();
         if (mask?.name) userName = mask.name;
+        if (mask?.onlineName) userOnlineName = mask.onlineName.trim();
       } catch(_) {}
     } catch(_) {}
 
@@ -4251,8 +4259,9 @@ ${fullCtx}`;
       : '';
 
     const nameConstraint = `\n\n【严格约束】动态发布者必须从以下NPC列表中选：${npcNames.join('、')}。评论者可以是列表中的NPC，也可以是虚构的路人账号（但路人名字要符合世界观风格）。禁止编造列表外的NPC。`;
-    const userBan = userName
-      ? `\n\n【禁止冒充玩家】玩家角色"${userName}"绝对不能作为动态发布者出现，也不能作为任何评论者出现。`
+    const _autoBanNames = [userName, userOnlineName].filter(Boolean);
+    const userBan = _autoBanNames.length > 0
+      ? `\n\n【禁止冒充玩家】玩家角色"${_autoBanNames.join('"和"')}"绝对不能作为动态发布者出现，也不能作为任何评论者出现。`
       : '\n\n【禁止冒充玩家】不要让玩家角色作为动态发布者或评论者。';
 
     const systemPrompt = `根据以下世界观、NPC资料和剧情，生成${wantCount}条NPC的社交媒体动态。从NPC列表中随机挑选，内容要贴合角色性格和当前剧情，可以是日常、心情、暗示、或和主角相关的。允许同一NPC发多条动态，但发布时间必须不同（互相错开至少几十分钟）。每条带1-3条路人或者与该NPC有关的其他NPC的评论。

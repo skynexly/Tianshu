@@ -2,7 +2,7 @@
  * 面具（角色卡）管理 — 多面具支持
  */
 const Character = (() => {
-  const BASIC_FIELDS = ['name', 'background', 'note'];
+  const BASIC_FIELDS = ['name', 'onlineName', 'background', 'note'];
   let currentMaskId = 'default';
   let editingMaskId = null; // 当前在弹窗中编辑的面具
 
@@ -1003,6 +1003,7 @@ async function closeItemModal() {
     if (!char) return '';
     let text = '【用户角色卡】\n';
     if (char.name) text += `姓名: ${char.name}\n`;
+    if (char.onlineName) text += `网名: ${char.onlineName}\n`;
     if (char.gender) text += `性别: ${char.gender}\n`;
     if (char.age) text += `年龄: ${char.age}\n`;
     if (char.appearance) text += `外貌: ${char.appearance}\n`;

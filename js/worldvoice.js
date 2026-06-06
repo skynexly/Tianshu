@@ -32,12 +32,12 @@ const WorldVoice = (() => {
     return wv?.phoneApps?.forum?.desc?.trim() || '';
   }
 
-  // v617：获取玩家角色名（面具名）
+  // v617：获取玩家角色名（面具名+网名）
   async function _getPlayerName() {
     try {
       const mask = await Character.get();
-      return mask?.name?.trim() || '';
-    } catch(_) { return ''; }
+      return { name: mask?.name?.trim() || '', onlineName: (mask?.onlineName || '').trim() };
+    } catch(_) { return { name: '', onlineName: '' }; }
   }
 
   // 提取世界观中有设定的NPC角色列表（供论坛prompt使用）
@@ -242,9 +242,10 @@ const WorldVoice = (() => {
     ).join('\n');
 
     const mediaBrief = mediaDesc ? `\n\n载体说明：${mediaDesc}` : '';
-const userName = await _getPlayerName();
-const userBan = userName
-  ? `\n\n【禁止冒充玩家】玩家角色"${userName}"绝对不能作为帖子/动态发布者或评论者出现。所有用户名和评论者名字都不允许是"${userName}"，也不允许任何角色用"我"（指代玩家）的口吻发言。玩家自己发的内容由用户单独操作，不在本生成范围内。`
+const { name: userName, onlineName: userOnlineName } = await _getPlayerName();
+const banNames = [userName, userOnlineName].filter(Boolean);
+const userBan = banNames.length > 0
+  ? `\n\n【禁止冒充玩家】玩家角色"${banNames.join('"和"')}"绝对不能作为帖子/动态发布者或评论者出现。所有用户名和评论者名字都不允许是"${banNames.join('"或"')}"，也不允许任何角色用"我"（指代玩家）的口吻发言。玩家自己发的内容由用户单独操作，不在本生成范围内。`
   : '\n\n【禁止冒充玩家】不要让玩家角色作为发布者或评论者，也不要让任何角色冒充玩家发言。';
 const systemPrompt = `你是一个"${mediaType}"内容生成器。根据提供的世界观和当前剧情，生成${mediaType}上的帖子/动态。${mediaBrief}${userBan}
 
@@ -470,9 +471,10 @@ function _renderLoadingSkeleton() {
     const _mb = _md ? `
 
 载体说明：${_md}` : '';
-    const _un = await _getPlayerName();
-    const _ub = _un
-      ? `\n\n【禁止冒充玩家】玩家角色"${_un}"绝对不能作为帖子/动态发布者或评论者出现。评论者用户名不允许是"${_un}"，也不允许任何评论以"我"（指代玩家）的口吻发布。`
+    const { name: _un, onlineName: _uon } = await _getPlayerName();
+    const _banNames2 = [_un, _uon].filter(Boolean);
+    const _ub = _banNames2.length > 0
+      ? `\n\n【禁止冒充玩家】玩家角色"${_banNames2.join('"和"')}"绝对不能作为帖子/动态发布者或评论者出现。评论者用户名不允许是"${_banNames2.join('"或"')}"，也不允许任何评论以"我"（指代玩家）的口吻发布。`
       : '\n\n【禁止冒充玩家】不要让玩家角色作为发布者或评论者。';
     const systemPrompt = `你是一个"${_mt}"内容生成器。用户给你一条帖子/动态的预览信息，请生成完整的正文和评论/回复区。${_mb}${_ub}
 
@@ -760,9 +762,10 @@ ${wvPrompt}`;
     const _mb = _md ? `
 
 载体说明：${_md}` : '';
-    const _un = await _getPlayerName();
-    const _ub = _un
-      ? `\n\n【禁止冒充玩家】玩家角色"${_un}"绝对不能作为帖子/动态发布者或评论者出现。评论者用户名不允许是"${_un}"，也不允许任何评论以"我"（指代玩家）的口吻发布。`
+    const { name: _un, onlineName: _uon } = await _getPlayerName();
+    const _banNames2 = [_un, _uon].filter(Boolean);
+    const _ub = _banNames2.length > 0
+      ? `\n\n【禁止冒充玩家】玩家角色"${_banNames2.join('"和"')}"绝对不能作为帖子/动态发布者或评论者出现。评论者用户名不允许是"${_banNames2.join('"或"')}"，也不允许任何评论以"我"（指代玩家）的口吻发布。`
       : '\n\n【禁止冒充玩家】不要让玩家角色作为发布者或评论者。';
     const systemPrompt = `你是一个"${_mt}"内容生成器。用户给你一条帖子/动态的预览信息，请生成完整的正文和评论/回复区。${_mb}${_ub}
 
