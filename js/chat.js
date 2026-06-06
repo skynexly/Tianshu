@@ -4205,13 +4205,25 @@ menu.classList.add('hidden');
 
   // 从最近AI回复中提取游戏内日期（月和日）
   function _extractGameDate(messages) {
-    // 从后往前找最近的assistant消息
+    // 优先从状态栏读取当前游戏时间
+    try {
+      const sb = Conversations.getStatusBar();
+      if (sb?.time) {
+        const tm = sb.time.match(/(\d{1,2})月(\d{1,2})日/);
+        if (tm) return { month: parseInt(tm[1]), day: parseInt(tm[2]) };
+        // 兼容 "YYYY.MM.DD" 格式
+        const tm2 = sb.time.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+        if (tm2) return { month: parseInt(tm2[2]), day: parseInt(tm2[3]) };
+      }
+    } catch(_) {}
+    // 兜底：从聊天记录倒序查找
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role !== 'assistant') continue;
       const text = messages[i].content || '';
-      // 匹配 "X月X日" 格式
       const m = text.match(/(\d{1,2})月(\d{1,2})日/);
       if (m) return { month: parseInt(m[1]), day: parseInt(m[2]) };
+      const m2 = text.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+      if (m2) return { month: parseInt(m2[2]), day: parseInt(m2[3]) };
     }
     return null;
   }
