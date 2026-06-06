@@ -175,10 +175,15 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v689.8';
-      const CHANGELOG = `【v689.8 更新内容】
+    const APP_VERSION = 'v690';
+      const CHANGELOG = `【v690 更新内容】
 · 修复角色管理和世界书页面空白的bug
-· 更新手机功能（位置/商品分享/论坛分享/订单发送）`;
+· 手机新增「钱包」APP：绑定自定义属性作为货币，实时显示余额
+· 手机聊天新增：位置消息、商品分享、论坛分享、订单发送、转账
+· 商城下单支持钱包扣款（前端自动扣除，AI无需处理）
+· 转账功能：选择货币+输入金额，自动扣款并生成转账卡片
+· 交互优化：点击手机外空白区域可直接关闭手机
+· 交互优化：点击聊天消息区域自动收起加号菜单`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {
