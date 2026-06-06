@@ -4064,7 +4064,7 @@ ${wvPrompt}` },
 - 角色之间的评论互动也要体现关系亲疏和各自的说话风格
 不要让所有角色的语气都一样。${nameConstraint}${userBan}
 
-时间要求：每条动态必须带发布时间 time，格式为“YYYY.MM.DD 星期X HH:mm”。发布时间必须在当前/截止剧情最新时间之前，且不早于该时间前7天；禁止生成未来时间。若能从上下文中的【当前游戏时间】读取到时间，就以它为基准生成；如果无法确定具体剧情日期，也要使用世界观/状态栏中能推断出的最新时间附近的过去7天内时间。
+时间要求：每条动态必须带发布时间 time，格式为"YYYY.MM.DD 星期X HH:mm"。发布时间必须严格早于【当前游戏时间】，且不早于该时间前7天；绝对禁止生成等于或晚于当前游戏时间的时间。
 
 配图要求：每条动态可选填 imageQuery 字段（英文摄影关键词，1~3 个词），用于自动配图。仅当动态内容明显适合配图时填写（如美食、风景、宠物、天气、咖啡、夜景等具象意象），抽象情绪或对话类动态请省略该字段。imageQuery 必须是英文，禁止中文。例如：餐厅吃饭→"ramen bowl"、看星空→"starry night sky"、咖啡店→"coffee shop interior"。
 
@@ -4081,7 +4081,14 @@ ${fullCtx}`;
         onAttempt: setLoading,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `请生成${wantCount}条NPC动态，严格使用NPC列表中的名字，并为每条动态填写符合要求的发布时间 time。` }
+          { role: 'user', content: (() => {
+            let msg = `请生成${wantCount}条NPC动态，严格使用NPC列表中的名字，并为每条动态填写符合要求的发布时间 time。`;
+            try {
+              const sb = Conversations.getStatusBar();
+              if (sb?.time) msg += `\n\n【再次强调】当前游戏时间是"${_formatPhoneTime(sb.time)}"，所有动态的 time 必须严格早于这个时间。`;
+            } catch(_) {}
+            return msg;
+          })() }
         ]
       });
       // v687.6：追加在顶部 + 储存上限截断（旧的从尾巴砍）
@@ -4269,7 +4276,7 @@ ${fullCtx}`;
 【角色个性化要求】
 发布内容必须符合该角色的人物个性、说话习惯和措辞风格。好友圈是公开的社交空间，角色会展示愿意展示的一面，回避不愿意公开的部分。内敛角色可能只发一句话，话痨角色可能长篇大论，有秘密的角色会刻意回避。评论互动也要体现关系亲疏和各自说话风格。不要让所有角色语气一样。${nameConstraint}${userBan}
 
-时间要求：每条动态必须带发布时间 time，格式为"YYYY.MM.DD 星期X HH:mm"。发布时间必须在当前/截止剧情最新时间之前，且不早于该时间前7天；禁止生成未来时间。
+时间要求：每条动态必须带发布时间 time，格式为"YYYY.MM.DD 星期X HH:mm"。发布时间必须严格早于【当前游戏时间】，且不早于该时间前7天；绝对禁止生成等于或晚于当前游戏时间的时间。
 
 配图要求：每条动态可选填 imageQuery 字段（英文摄影关键词，1~3 个词），用于自动配图。仅当动态内容明显适合配图时填写。imageQuery 必须是英文。
 
@@ -4286,7 +4293,14 @@ ${fullCtx}`;
       onAttempt: null,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `请生成${wantCount}条NPC动态。` }
+        { role: 'user', content: (() => {
+          let msg = `请生成${wantCount}条NPC动态。`;
+          try {
+            const sb = Conversations.getStatusBar();
+            if (sb?.time) msg += `\n\n【再次强调】当前游戏时间是"${_formatPhoneTime(sb.time)}"，所有动态的 time 必须严格早于这个时间。`;
+          } catch(_) {}
+          return msg;
+        })() }
       ]
     });
 
