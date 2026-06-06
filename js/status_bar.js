@@ -577,10 +577,19 @@ async function render(status) {
       dateEl.textContent = timeParts.rest && timeParts.rest !== '—' ? timeParts.rest : '';
       dateEl.style.display = dateEl.textContent ? '' : 'none';
     }
-    // 季节
+    // 季节：优先用已存的season字段，没有则根据time实时计算
     const seasonEl = _el('sb-season-text');
     if (seasonEl) {
-      const seasonName = status.season || '';
+      let seasonName = status.season || '';
+      if (!seasonName && timeStr && typeof Calendar !== 'undefined') {
+        try {
+          const parsed = Calendar.parseAbsoluteTime(timeStr);
+          if (parsed) {
+            const s = Calendar.getSeason ? Calendar.getSeason(parsed.month, null) : null;
+            if (s) seasonName = s.name;
+          }
+        } catch(_) {}
+      }
       seasonEl.textContent = seasonName;
       seasonEl.style.display = seasonName ? '' : 'none';
     }
