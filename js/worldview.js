@@ -4861,6 +4861,7 @@ function _ensureCalendarSystem(w) {
       hoursPerDay: 24,
       daysPerWeek: 7,
       weekDayNames: ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'],
+      weekDayTypes: ['work', 'work', 'work', 'work', 'work', 'rest', 'rest'],
       monthsPerYear: 12,
       daysPerMonth: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
       uniformDaysPerMonth: false,
@@ -4891,15 +4892,24 @@ async function openCalendarEditor() {
 }
 
 function _buildCalendarEditorHTML(cal) {
-  const weekDayInputs = cal.weekDayNames.map((name, i) => `
+  // 确保 weekDayTypes 数组长度和 weekDayNames 一致
+  if (!cal.weekDayTypes) cal.weekDayTypes = cal.weekDayNames.map((_, i) => i < cal.weekDayNames.length - 2 ? 'work' : 'rest');
+  while (cal.weekDayTypes.length < cal.weekDayNames.length) cal.weekDayTypes.push('work');
+
+  const weekDayInputs = cal.weekDayNames.map((name, i) => {
+    const isRest = cal.weekDayTypes[i] === 'rest';
+    return `
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
       <span style="font-size:11px;color:var(--text-secondary);min-width:24px">第${i + 1}天</span>
       <input type="text" value="${Utils.escapeHtml(name)}" maxlength="10" data-weekday-idx="${i}"
         style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
         oninput="Worldview._onCalWeekDayChange(${i}, this.value)">
+      <button type="button" onclick="Worldview._calToggleDayType(${i})"
+        style="border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer;min-width:40px;text-align:center;background:${isRest ? 'var(--accent)' : 'var(--bg-secondary)'};color:${isRest ? '#111' : 'var(--text-secondary)'}"
+        title="${isRest ? '休息日' : '工作日'}">${isRest ? '休' : '工'}</button>
       ${cal.weekDayNames.length > 1 ? `<button type="button" onclick="Worldview._calRemoveWeekDay(${i})" style="border:none;background:none;color:var(--text-secondary);cursor:pointer;font-size:14px;padding:2px 4px" title="删除">×</button>` : ''}
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 
   let monthContent = '';
   if (cal.uniformDaysPerMonth) {
@@ -4928,7 +4938,7 @@ function _buildCalendarEditorHTML(cal) {
         <input type="text" value="${Utils.escapeHtml(s.name || '')}" placeholder="季节名" maxlength="10"
           style="width:60px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
           oninput="Worldview._calSetSeasonName(${i}, this.value)">
-        <input type="text" value="${(s.months || []).join(',')}" placeholder="包含月份(逗号分隔)"
+        <input type="text" value="${(s.months || []).join(',')}" placeholder="如：3,4,5 或 3、4、5"
           style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
           oninput="Worldview._calSetSeasonMonths(${i}, this.value)">
         <button type="button" onclick="Worldview._calRemoveSeason(${i})" style="border:none;background:none;color:var(--text-secondary);cursor:pointer;font-size:14px;padding:2px 4px" title="删除">×</button>
@@ -5067,6 +5077,7 @@ async function _calAddWeekDay() {
   const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   cal.weekDayNames.push(`第${cal.weekDayNames.length + 1}日`);
+  cal.weekDayTypes.push('work');
   cal.daysPerWeek = cal.weekDayNames.length;
   await _saveEditingWV(w);
   _calSaveAndRefresh();
@@ -5077,7 +5088,17 @@ async function _calRemoveWeekDay(idx) {
   const cal = _ensureCalendarSystem(w);
   if (cal.weekDayNames.length <= 1) return;
   cal.weekDayNames.splice(idx, 1);
+  cal.weekDayTypes.splice(idx, 1);
   cal.daysPerWeek = cal.weekDayNames.length;
+  await _saveEditingWV(w);
+  _calSaveAndRefresh();
+}
+
+async function _calToggleDayType(idx) {
+  const w = await _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  if (!cal.weekDayTypes) cal.weekDayTypes = cal.weekDayNames.map(() => 'work');
+  cal.weekDayTypes[idx] = cal.weekDayTypes[idx] === 'rest' ? 'work' : 'rest';
   await _saveEditingWV(w);
   _calSaveAndRefresh();
 }
@@ -5140,7 +5161,7 @@ async function _calSetSeasonMonths(idx, val) {
   const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
   if (cal.seasons[idx]) {
-    cal.seasons[idx].months = val.split(/[,，\s]+/).map(s => parseInt(s)).filter(n => n > 0 && n <= cal.monthsPerYear);
+    cal.seasons[idx].months = val.split(/[,，、\s]+/).map(s => parseInt(s)).filter(n => n > 0 && n <= cal.monthsPerYear);
   }
   await _saveEditingWV(w);
 }
@@ -5218,7 +5239,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     addTaskPhase, deleteTaskPhase, updateTaskPhase, addTaskType, deleteTaskType, updateTaskType, updateTaskPhaseReward,
     openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal, onTaskTypeRewardModeChange, openPhaseRewardModal,
     openCalendarEditor, closeCalendarEditor,
-    _onCalWeekDayChange, _calAddWeekDay, _calRemoveWeekDay, _calSetMonthMode, _calSetUniformDays, _calSetMonthDays, _calAddMonth, _calRemoveMonth,
+    _onCalWeekDayChange, _calAddWeekDay, _calRemoveWeekDay, _calToggleDayType, _calSetMonthMode, _calSetUniformDays, _calSetMonthDays, _calAddMonth, _calRemoveMonth,
     _calSetSeasonName, _calSetSeasonMonths, _calSetSeasonWeather, _calAddSeason, _calRemoveSeason, _calReset,
     _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards,
 editLorebookDescription,
