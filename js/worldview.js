@@ -3685,14 +3685,6 @@ function closeKnowledgeModal() {
     const skinInput = document.getElementById('wv-statusbar-skin');
     if (skinInput && !_isBuiltinWorldview(w)) w.statusBarSkin = skinInput.value || 'terminal';
     w.startTime = document.getElementById('wv-start-time').value.trim();
-
-    // 历法系统校验：有自定义历法必须填开场时间（仅非静默保存时拦截）
-    if (!silent && w.gameplay?.calendarSystem && !w.startTime) {
-      UI.showToast('已启用历法系统，请填写开场时间（否则前端无法计算时间增量）', 3000);
-      const stEl = document.getElementById('wv-start-time');
-      if (stEl) { stEl.focus(); stEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-      return;
-    }
     w.startPlot = document.getElementById('wv-start-plot').value.trim();
     w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds').value) || 5;
     w.startMessage = document.getElementById('wv-start-message').value.trim();
@@ -4975,6 +4967,8 @@ function _buildCalendarEditorHTML(cal) {
       <button type="button" onclick="Worldview._calReset()" style="border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;padding:5px 10px;border-radius:6px;font-size:11px">恢复默认</button>
     </div>
     <div style="flex:1;overflow-y:auto;padding:16px">
+
+      <div style="font-size:11px;color:#e74c3c;line-height:1.5;margin-bottom:16px;padding:8px 10px;border:1px solid rgba(231,76,60,0.3);border-radius:6px;background:rgba(231,76,60,0.05)">⚠️ 自定义历法后，必须在「开场设定」中填写开场时间，否则历法系统无法正常计算时间增量。</div>
 
       <!-- 周设定 -->
       <div style="margin-bottom:24px">
