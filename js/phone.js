@@ -1417,6 +1417,8 @@ async function _openChatTransfer(contactId) {
     // 操作日志
     const newBalance = (Number(Conversations.getStatusBar()?.customAttrs?.global?.[currencyId]) || 0);
     _log(`向聊天对象转账了 ${amount} ${info.name}（前端已自动扣除，余额 ${newBalance}，AI无需再处理此扣款）`);
+    const _ctName = (pd.chatContacts || []).find(c => c.id === contactId)?.name || contactId;
+    _addChatMessageToRoundLog(contactId, 'me', `[转账] ${amount} ${info.name}`, gameTime, _ctName);
 
     // 刷新聊天界面
     _openChatThread(contactId);
@@ -2733,6 +2735,8 @@ async function _likeForumPost(index) {
       createdAt: Date.now()
     });
     await _savePhoneData();
+    const _ctName3 = (pd.chatContacts || []).find(c => c.id === contactId)?.name || contactId;
+    _addChatMessageToRoundLog(contactId, 'me', `分享了帖子（${post.title || '无标题'}）`, gameTime, _ctName3);
     UI.showToast('已发送', 1200);
   }
 
@@ -2985,6 +2989,8 @@ async function _likeForumPost(index) {
       createdAt: Date.now()
     });
     await _savePhoneData();
+    const _ctNameMap = (pd.chatContacts || []).find(c => c.id === contactId)?.name || contactId;
+    _addChatMessageToRoundLog(contactId, 'me', `发送了地点链接（${place.name || ''}）`, gameTime, _ctNameMap);
     UI.showToast('已发送', 1200);
   }
 
@@ -4340,6 +4346,7 @@ async function _collectChatCandidates() {
     if (!o) return '';
     const segs = [];
     if (o.aliases) segs.push('别名：' + o.aliases);
+    if (o.onlineName) segs.push('网名：' + o.onlineName);
     if (o.identity) segs.push('身份：' + o.identity);
     if (o.personality) segs.push('性格：' + o.personality);
     if (o.appearance) segs.push('外貌：' + o.appearance);
@@ -5749,6 +5756,8 @@ async function _sendChatOrder(contactId, orderId, kind) {
     createdAt: Date.now()
   });
   await _savePhoneData();
+  const _ctNameOrd = (pd.chatContacts || []).find(c => c.id === contactId)?.name || contactId;
+  _addChatMessageToRoundLog(contactId, 'me', `发送了已购订单（${order.name || ''}）`, gameTime, _ctNameOrd);
   _openChatThread(contactId);
 }
 
@@ -5813,6 +5822,8 @@ async function _confirmChatLocation(contactId, location, address) {
       createdAt: Date.now()
     });
     await _savePhoneData();
+    const _ctNameLoc = (pd.chatContacts || []).find(c => c.id === contactId)?.name || contactId;
+    _addChatMessageToRoundLog(contactId, 'me', `发送了位置`, gameTime, _ctNameLoc);
     _openChatThread(contactId);
   } catch(e) {
     UI.showToast('发送失败：' + (e.message || '未知'), 2000);
@@ -6823,6 +6834,8 @@ async function _onChatImagePicked(contactId, input) {
     });
 
     await _savePhoneData();
+    const _ctNameImg = (pd.chatContacts || []).find(c => c.id === contactId)?.name || contactId;
+    _addChatMessageToRoundLog(contactId, 'me', `发送了图片`, gameTime, _ctNameImg);
     _renderChatThread(pd, contactId);
     UI.showToast('图片已添加，点刷新发送给对方', 1500);
   } catch(e) {
@@ -6933,6 +6946,8 @@ async function _pickAlbumForChat(contactId, photoId) {
   });
   
   await _savePhoneData();
+  const _ctNamePhoto = (pd.chatContacts || []).find(c => c.id === contactId)?.name || contactId;
+  _addChatMessageToRoundLog(contactId, 'me', `发送了图片`, gameTime, _ctNamePhoto);
   
   // 只渲染气泡，不自动触发 AI 回复（等用户手动点刷新）
   _renderChatThread(pd, contactId);
@@ -8116,6 +8131,8 @@ ${fullCtx}`;
       createdAt: Date.now()
     });
     await _savePhoneData();
+    const _ctNameProd = (pd.chatContacts || []).find(c => c.id === contactId)?.name || contactId;
+    _addChatMessageToRoundLog(contactId, 'me', `发送了商品链接（${item.name || ''}）`, gameTime, _ctNameProd);
     UI.showToast('已发送', 1200);
   }
 
