@@ -272,8 +272,9 @@ heartsimServiceMessages: [],
  // 聊天 App（v689）
  chatContacts: [],   // 联系人 [{id, name, source:'worldview'|'single'|'mount', avatar, sig}]
  chatThreads: {},    // 聊天记录 { contactId: [{id, role:'me'|'them', text, time, fromMainline, createdAt}] }
- chatSyncIdx: 0,     // 主线收录进度：已收录到第几条主线消息
- };
+  chatSyncIdx: 0,     // 主线收录进度：已收录到第几条主线消息
+  calendarEvents: [], // 日历事项 [{id, title, type, month, day, year, note, color}]
+  };
    }
 
   
@@ -909,7 +910,8 @@ function _extractJsonArrayText(content) {
  shop: `<svg ${common}><path d="M3 7h18l-2 13H5L3 7z"></path><path d="M8 7V5a4 4 0 0 1 8 0v2"></path></svg>`,
  polaroid: `<svg ${common}><rect x="3" y="5" width="18" height="16" rx="2.5"></rect><rect x="6" y="15" width="12" height="4" rx="0.5"></rect><circle cx="12" cy="10.5" r="3"></circle><circle cx="12" cy="10.5" r="1"></circle><circle cx="17.5" cy="7.8" r="0.6"></circle></svg>`,
   chat: `<svg ${common} stroke-linecap="round" stroke-linejoin="round"><path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"/></svg>`,
- wallet: `<svg ${common}><rect x="2" y="6" width="20" height="14" rx="2"></rect><path d="M16 12h2v2h-2z"></path><path d="M2 10h20"></path></svg>`
+  wallet: `<svg ${common}><rect x="2" y="6" width="20" height="14" rx="2"></rect><path d="M16 12h2v2h-2z"></path><path d="M2 10h20"></path></svg>`,
+  calendar: `<svg ${common}><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><rect x="8" y="14" width="2" height="2"></rect><rect x="13" y="14" width="2" height="2"></rect></svg>`
  };
  return `<span class="phone-icon-glyph phone-icon-${type}">${icons[type] || ''}</span>`;
 }
@@ -984,6 +986,7 @@ document.getElementById('phone-back-btn')?.classList.add('hidden');
       ];
       // 第二页 app
       const apps2 = [
+        { id: 'calendar', icon: 'calendar', name: '日历' },
         { id: 'wallet', icon: 'wallet', name: '钱包' },
         { id: 'settings', icon: 'gear', name: '设置' },
       ];
@@ -1033,10 +1036,12 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
  <div class="phone-home-bottom-spacer"></div>
  </div>
  <div class="phone-page">
- <div class="phone-app-grid" style="padding-top:40px">
+ <div id="phone-cal-banner" class="phone-cal-banner" onclick="Phone.openApp('calendar')" style="display:none"></div>
+ <div class="phone-app-grid" style="padding-top:16px">
  ${apps2.map(a => _renderHomeIcon(a)).join('')}
  </div>
  <div class="phone-home-spacer"></div>
+ </div>
  </div>
  </div>
  <div class="phone-page-indicator" id="phone-page-indicator">
@@ -1137,6 +1142,8 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
       if (dateEl) dateEl.textContent = datePart || '';
       if (weatherEl) weatherEl.textContent = s.weather || '';
     } catch(_) {}
+    // 刷新第二页 banner
+    try { _refreshCalBanner(); } catch(_) {}
   }
 
   // ===== App 路由 =====
@@ -1169,6 +1176,7 @@ async function openApp(appId) {
  case 'moments': _renderMoments(phoneData); break;
  case 'memo': _renderMemo(phoneData); break;
  case 'chat': _renderChatApp(phoneData); break;
+  case 'calendar': _renderCalendar(phoneData); break;
  case 'takeout': _renderShopping(phoneData, 'takeout'); break;
  case 'shop': _renderShopping(phoneData, 'shop'); break;
  case 'camera': _renderCamera(phoneData); break;
@@ -1303,6 +1311,357 @@ async function _walletRemoveCurrency(attrId) {
   pd.walletCurrencies = (pd.walletCurrencies || []).filter(id => id !== attrId);
   await _savePhoneData();
   _renderWallet(pd);
+}
+
+// ===== 日历 Banner（第二页横条卡片）=====
+function _refreshCalBanner() {
+  const el = document.getElementById('phone-cal-banner');
+  if (!el) return;
+  try {
+    const sb = Conversations.getStatusBar() || {};
+    const timeStr = sb.time || '';
+    if (!timeStr) { el.style.display = 'none'; return; }
+
+    // 解析当前游戏时间
+    const calRules = (() => {
+      try {
+        const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+        return conv?.convGameplay?.calendarSystem || null;
+      } catch(_) { return null; }
+    })();
+    const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+    const parsed = (typeof Calendar !== 'undefined') ? Calendar.parseAbsoluteTime(timeStr) : null;
+
+    // 时间显示
+    const clockMatch = timeStr.match(/(\d{1,2}:\d{2})/);
+    const clock = clockMatch ? clockMatch[1] : '--:--';
+    const datePart = timeStr.replace(/\s*\d{1,2}:\d{2}\s*/, ' ').trim();
+
+    // 季节
+    let seasonName = sb.season || '';
+    if (!seasonName && parsed && rules) {
+      const s = Calendar.getSeason(parsed.month, rules);
+      if (s) seasonName = s.name;
+    }
+
+    // 天气
+    const weather = sb.weather || '';
+
+    // 下一个事件倒计时
+    let countdownHtml = '';
+    try {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      const pd = conv?.phoneData;
+      const events = pd?.calendarEvents || [];
+      if (parsed && events.length) {
+        // 找最近的未来事件
+        let nearest = null, minDiff = Infinity;
+        for (const ev of events) {
+          // 计算到事件的天数差
+          const evYear = ev.year || parsed.year;
+          let diff = 0;
+          if (rules && typeof Calendar !== 'undefined') {
+            const evTime = { year: evYear, month: ev.month, day: ev.day, hour: 0, minute: 0 };
+            const curEpoch = Calendar._daysSinceEpoch(parsed, rules);
+            const evEpoch = Calendar._daysSinceEpoch(evTime, rules);
+            diff = evEpoch - curEpoch;
+          } else {
+            const curD = new Date(parsed.year, parsed.month-1, parsed.day);
+            const evD = new Date(evYear, ev.month-1, ev.day);
+            diff = Math.round((evD - curD) / 86400000);
+          }
+          // 年重复事件：如果今年已过，看明年
+          if (ev.repeat === 'yearly' && diff < 0) {
+            const nextYear = { year: parsed.year + 1, month: ev.month, day: ev.day, hour: 0, minute: 0 };
+            if (rules && typeof Calendar !== 'undefined') {
+              diff = Calendar._daysSinceEpoch(nextYear, rules) - Calendar._daysSinceEpoch(parsed, rules);
+            } else {
+              const evD2 = new Date(parsed.year + 1, ev.month - 1, ev.day);
+              diff = Math.round((evD2 - new Date(parsed.year, parsed.month-1, parsed.day)) / 86400000);
+            }
+          }
+          if (diff >= 0 && diff < minDiff) { minDiff = diff; nearest = ev; }
+        }
+        if (nearest) {
+          const label = minDiff === 0 ? '今天' : minDiff === 1 ? '明天' : `还有 ${minDiff} 天`;
+          const dot = nearest.color ? `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${nearest.color};margin-right:4px;vertical-align:middle"></span>` : '';
+          countdownHtml = `<div class="phone-cal-banner-countdown">${dot}${Utils.escapeHtml(nearest.title)} · ${label}</div>`;
+        }
+      }
+    } catch(_) {}
+
+    el.style.display = '';
+    el.innerHTML = `
+      <div class="phone-cal-banner-main">
+        <div class="phone-cal-banner-left">
+          <div class="phone-cal-banner-clock">${Utils.escapeHtml(clock)}</div>
+          <div class="phone-cal-banner-date">${Utils.escapeHtml(datePart)}</div>
+        </div>
+        <div class="phone-cal-banner-right">
+          ${seasonName ? `<span class="phone-cal-banner-tag">${Utils.escapeHtml(seasonName)}</span>` : ''}
+          ${weather ? `<span class="phone-cal-banner-tag">${Utils.escapeHtml(weather)}</span>` : ''}
+        </div>
+      </div>
+      ${countdownHtml}
+    `;
+  } catch(_) { el.style.display = 'none'; }
+}
+
+// ===== 日历 App =====
+let _calViewYear = 0, _calViewMonth = 0, _calSelectedDay = 0;
+
+async function _renderCalendar(pd) {
+  const body = document.getElementById('phone-body');
+  document.getElementById('phone-title').textContent = '日历';
+  _applyWallpaper(pd);
+
+  // 读取当前游戏时间确定"今天"
+  const sb = Conversations.getStatusBar() || {};
+  const calRules = (() => {
+    try {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      return conv?.convGameplay?.calendarSystem || null;
+    } catch(_) { return null; }
+  })();
+  const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+  const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
+
+  // 初始化视图年月（第一次打开用"今天"，之后保持用户选择的）
+  if (!_calViewYear) {
+    _calViewYear = todayObj?.year || new Date().getFullYear();
+    _calViewMonth = todayObj?.month || (new Date().getMonth() + 1);
+    _calSelectedDay = todayObj?.day || new Date().getDate();
+  }
+
+  _renderCalBody(pd, rules, todayObj);
+  _pushNav(() => _renderCalendar(pd));
+}
+
+function _renderCalBody(pd, rules, todayObj) {
+  const body = document.getElementById('phone-body');
+  if (!body) return;
+
+  const yr = _calViewYear, mo = _calViewMonth;
+  const events = pd?.calendarEvents || [];
+
+  // 月份标题
+  const monthsPerYear = rules?.monthsPerYear || 12;
+  const prevMo = mo === 1 ? monthsPerYear : mo - 1;
+  const prevYr = mo === 1 ? yr - 1 : yr;
+  const nextMo = mo === monthsPerYear ? 1 : mo + 1;
+  const nextYr = mo === monthsPerYear ? yr + 1 : yr;
+
+  // 本月天数
+  const daysInMonth = (rules && typeof Calendar !== 'undefined')
+    ? Calendar._getDaysInMonth(mo, yr, rules)
+    : new Date(yr, mo, 0).getDate();
+
+  // 本月第一天的星期索引（0=第一天）
+  const daysPerWeek = rules?.daysPerWeek || 7;
+  let firstDayOffset = 0;
+  if (rules && typeof Calendar !== 'undefined') {
+    const firstDayEpoch = Calendar._daysSinceEpoch({ year: yr, month: mo, day: 1, hour: 0, minute: 0 }, rules);
+    firstDayOffset = ((firstDayEpoch % daysPerWeek) + daysPerWeek) % daysPerWeek;
+  } else {
+    firstDayOffset = new Date(yr, mo - 1, 1).getDay();
+    firstDayOffset = firstDayOffset === 0 ? 6 : firstDayOffset - 1; // 周一起始
+  }
+
+  // 星期表头
+  const weekNames = rules?.weekDayNames || ['一','二','三','四','五','六','日'];
+  const weekHeader = weekNames.map(n => `<div class="phone-cal-weekday">${Utils.escapeHtml(n.replace('星期',''))}</div>`).join('');
+
+  // 有事件的日期 set
+  const eventDays = new Set();
+  for (const ev of events) {
+    if (ev.month === mo && (!ev.year || ev.year === yr || ev.repeat === 'yearly')) {
+      eventDays.add(ev.day);
+    }
+  }
+
+  // 日期格子
+  let cells = '';
+  // 空白占位
+  for (let i = 0; i < firstDayOffset; i++) {
+    cells += `<div class="phone-cal-cell phone-cal-cell-empty"></div>`;
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const isToday = todayObj && todayObj.year === yr && todayObj.month === mo && todayObj.day === d;
+    const isSel = _calSelectedDay === d;
+    const hasDot = eventDays.has(d);
+    cells += `<div class="phone-cal-cell${isToday ? ' phone-cal-today' : ''}${isSel ? ' phone-cal-selected' : ''}" onclick="Phone._calSelectDay(${yr},${mo},${d})">
+      <span class="phone-cal-daynum">${d}</span>
+      ${hasDot ? '<span class="phone-cal-dot"></span>' : ''}
+    </div>`;
+  }
+
+  // 选中日的事项
+  const selEvents = events.filter(ev =>
+    ev.month === mo && ev.day === _calSelectedDay &&
+    (!ev.year || ev.year === yr || ev.repeat === 'yearly')
+  );
+  const evCards = selEvents.length
+    ? selEvents.map(ev => `
+        <div class="phone-cal-ev-card" style="border-left:3px solid ${ev.color || 'var(--accent)'}">
+          <div class="phone-cal-ev-title">${Utils.escapeHtml(ev.title || '无标题')}</div>
+          ${ev.note ? `<div class="phone-cal-ev-note">${Utils.escapeHtml(ev.note)}</div>` : ''}
+          <div class="phone-cal-ev-meta">${_calTypeLabel(ev.type)}${ev.repeat === 'yearly' ? ' · 每年重复' : ''}</div>
+          <button class="phone-cal-ev-del" onclick="Phone._calDeleteEvent('${Utils.escapeHtml(ev.id)}')">删除</button>
+        </div>`).join('')
+    : `<div class="phone-cal-ev-empty">这一天没有事项</div>`;
+
+  body.innerHTML = `
+    <div class="phone-cal-wrap">
+      <div class="phone-cal-header">
+        <button class="phone-cal-nav-btn" onclick="Phone._calNavMonth(${prevYr},${prevMo})">‹</button>
+        <span class="phone-cal-title-text">${yr}年 ${mo}月</span>
+        <button class="phone-cal-nav-btn" onclick="Phone._calNavMonth(${nextYr},${nextMo})">›</button>
+      </div>
+      <div class="phone-cal-grid-wrap">
+        <div class="phone-cal-week-header">${weekHeader}</div>
+        <div class="phone-cal-grid">${cells}</div>
+      </div>
+      <div class="phone-cal-day-panel">
+        <div class="phone-cal-day-title">
+          <span>${mo}月${_calSelectedDay}日</span>
+          <button class="phone-cal-add-btn" onclick="Phone._calOpenAddEvent()">＋ 添加事项</button>
+        </div>
+        <div class="phone-cal-ev-list">${evCards}</div>
+      </div>
+    </div>`;
+}
+
+function _calTypeLabel(type) {
+  const map = { birthday: '🎂 生日', todo: '✅ 待办', period: '🌸 经期', holiday: '🎉 节日', note: '📝 备忘' };
+  return map[type] || '📌 事项';
+}
+
+async function _calNavMonth(yr, mo) {
+  _calViewYear = yr; _calViewMonth = mo; _calSelectedDay = 1;
+  const pd = await _getPhoneData();
+  const sb = Conversations.getStatusBar() || {};
+  const calRules = (() => {
+    try {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      return conv?.convGameplay?.calendarSystem || null;
+    } catch(_) { return null; }
+  })();
+  const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+  const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
+  _renderCalBody(pd, rules, todayObj);
+}
+
+async function _calSelectDay(yr, mo, day) {
+  _calViewYear = yr; _calViewMonth = mo; _calSelectedDay = day;
+  const pd = await _getPhoneData();
+  const sb = Conversations.getStatusBar() || {};
+  const calRules = (() => {
+    try {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      return conv?.convGameplay?.calendarSystem || null;
+    } catch(_) { return null; }
+  })();
+  const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+  const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
+  _renderCalBody(pd, rules, todayObj);
+}
+
+function _calOpenAddEvent() {
+  const yr = _calViewYear, mo = _calViewMonth, day = _calSelectedDay;
+  const mask = document.createElement('div');
+  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center';
+  mask.innerHTML = `
+    <div style="background:var(--bg);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-width:400px">
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px">${mo}月${day}日 · 添加事项</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <input id="cal-ev-title" type="text" placeholder="事项名称（必填）" maxlength="30"
+          style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box;outline:none">
+        <select id="cal-ev-type"
+          style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box;outline:none">
+          <option value="note">📝 备忘</option>
+          <option value="birthday">🎂 生日</option>
+          <option value="todo">✅ 待办</option>
+          <option value="period">🌸 经期</option>
+          <option value="holiday">🎉 节日</option>
+        </select>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:13px;color:var(--text-secondary);white-space:nowrap">颜色</label>
+          <input id="cal-ev-color" type="color" value="#7c9ef0"
+            style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:var(--bg-secondary)">
+          <label style="font-size:13px;color:var(--text-secondary);margin-left:8px">
+            <input id="cal-ev-repeat" type="checkbox" style="margin-right:4px">每年重复
+          </label>
+        </div>
+        <input id="cal-ev-note" type="text" placeholder="备注（可选）" maxlength="60"
+          style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box;outline:none">
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button onclick="this.closest('div[style*=fixed]').remove()"
+            style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
+          <button onclick="Phone._calSaveEvent(${yr},${mo},${day})"
+            style="flex:2;padding:11px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+      </div>
+    </div>`;
+  mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
+  document.body.appendChild(mask);
+  setTimeout(() => document.getElementById('cal-ev-title')?.focus(), 100);
+}
+
+async function _calSaveEvent(yr, mo, day) {
+  const title = (document.getElementById('cal-ev-title')?.value || '').trim();
+  if (!title) { UI.showToast('请填写事项名称', 1500); return; }
+  const type = document.getElementById('cal-ev-type')?.value || 'note';
+  const color = document.getElementById('cal-ev-color')?.value || '#7c9ef0';
+  const note = (document.getElementById('cal-ev-note')?.value || '').trim();
+  const repeat = document.getElementById('cal-ev-repeat')?.checked ? 'yearly' : '';
+
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  pd.calendarEvents = pd.calendarEvents || [];
+  pd.calendarEvents.push({
+    id: Utils.uuid(),
+    title, type, color, note,
+    year: repeat === 'yearly' ? 0 : yr,
+    month: mo, day,
+    repeat: repeat || 'once',
+    createdAt: Date.now()
+  });
+  await _savePhoneData();
+
+  // 关闭弹窗
+  document.querySelector('div[style*="z-index:99999"]')?.remove();
+
+  // 刷新视图
+  const sb = Conversations.getStatusBar() || {};
+  const calRules = (() => {
+    try {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      return conv?.convGameplay?.calendarSystem || null;
+    } catch(_) { return null; }
+  })();
+  const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+  const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
+  _renderCalBody(pd, rules, todayObj);
+  _refreshCalBanner();
+  UI.showToast('已添加', 1200);
+}
+
+async function _calDeleteEvent(id) {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  pd.calendarEvents = (pd.calendarEvents || []).filter(ev => ev.id !== id);
+  await _savePhoneData();
+  const sb = Conversations.getStatusBar() || {};
+  const calRules = (() => {
+    try {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      return conv?.convGameplay?.calendarSystem || null;
+    } catch(_) { return null; }
+  })();
+  const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+  const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
+  _renderCalBody(pd, rules, todayObj);
+  _refreshCalBanner();
 }
 
 // ===== 聊天转账功能 =====
@@ -9320,6 +9679,8 @@ _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
     _shopDeleteOrder,
     // 钱包
     _walletAddCurrency, _walletRemoveCurrency, _openChatTransfer,
+    // 日历
+    _refreshCalBanner, _calNavMonth, _calSelectDay, _calOpenAddEvent, _calSaveEvent, _calDeleteEvent,
     // 心动模拟 APP
     _hsAppFavorChange,
     _switchHsAppTab,
