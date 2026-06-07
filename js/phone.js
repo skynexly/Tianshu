@@ -5575,7 +5575,18 @@ async function _ingestChatFromMessages(messages) {
       const npc = (cm.npc || '').trim();
       const text = (cm.text || '').trim();
       if (!npc || !text) continue;
-      const time = (cm.time || '').trim(); // 只用游戏内时间，没有就空
+      let time = (cm.time || '').trim();
+      // 如果AI只写了时分(如"15:02")，用消息对应的statusSnapshot或当前状态栏日期补全
+      if (time && /^\d{1,2}:\d{2}$/.test(time)) {
+        let datePart = '';
+        try {
+          const sbTime = msg.statusSnapshot?.time || Conversations.getStatusBar()?.time || '';
+          // 从绝对时间里提取日期部分（去掉时分）
+          const dateMatch = sbTime.match(/^(.+?)\s+\d{1,2}:\d{2}$/);
+          if (dateMatch) datePart = dateMatch[1] + ' ';
+        } catch(_) {}
+        time = datePart + time;
+      }
       const ct = ensureContact(npc);
       if (!pd.chatThreads[ct.id]) pd.chatThreads[ct.id] = [];
       if (!seenKeyByContact[ct.id]) seenKeyByContact[ct.id] = new Set();
@@ -5586,7 +5597,7 @@ async function _ingestChatFromMessages(messages) {
         id: 'm_' + Utils.uuid().slice(0, 8),
         role: 'them',
         text,
-        time,            // 游戏内时间，可能为空
+        time,            // 游戏内时间（已补全日期）
         fromMainline: true,
         _k: key,
       });
