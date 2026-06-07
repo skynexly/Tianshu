@@ -31,7 +31,7 @@
  z-index:0;
 }
 .phone-shell > * { position: relative; z-index:1; }
-.phone-shell.has-custom-wallpaper { color: #fff; }
+.phone-shell.has-custom-wallpaper { color: #fff; --text: #fff; --text-secondary: rgba(255,255,255,0.7); }
 .phone-statusbar {
  display: flex;
  justify-content: space-between;
