@@ -1981,8 +1981,13 @@ const msgEl = appendMessage(aiMsg, true, true);
                       const currentTimeStr = oldStatus?.time || '';
                       let calRules = null;
                       try {
-                        const wv = await Worldview.getCurrent();
+                        // 从当前对话绑定的世界观读历法
+                        const _conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+                        const _wvId = _conv?.worldviewId;
+                        const wv = _wvId ? await DB.get('worldviews', _wvId) : null;
                         calRules = wv?.gameplay?.calendarSystem || null;
+                        // fallback: 对话级覆盖
+                        if (!calRules && _conv?.convGameplay?.calendarSystem) calRules = _conv.convGameplay.calendarSystem;
                       } catch(_) {}
                       const result = Calendar.processTimeField(merged.time, currentTimeStr, calRules);
                       if (!result.parseError) {
@@ -1995,8 +2000,11 @@ const msgEl = appendMessage(aiMsg, true, true);
                     try {
                       let calRules = null;
                       try {
-                        const wv = await Worldview.getCurrent();
+                        const _conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+                        const _wvId = _conv?.worldviewId;
+                        const wv = _wvId ? await DB.get('worldviews', _wvId) : null;
                         calRules = wv?.gameplay?.calendarSystem || null;
+                        if (!calRules && _conv?.convGameplay?.calendarSystem) calRules = _conv.convGameplay.calendarSystem;
                       } catch(_) {}
                       const result = Calendar.processTimeField(merged.time, merged.time, calRules);
                       if (!result.parseError && result.season) merged.season = result.season.name;
