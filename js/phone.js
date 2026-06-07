@@ -1605,8 +1605,10 @@ function _calOpenAddEvent() {
         <!-- 颜色 + 备注 -->
         <div style="display:flex;gap:10px;align-items:center">
           <div style="font-size:12px;color:var(--text-secondary);white-space:nowrap">颜色</div>
-          <input id="cal-ev-color" type="color" value="#7c9ef0"
-            style="width:36px;height:36px;border:none;border-radius:10px;cursor:pointer;padding:2px;background:var(--bg-secondary);flex-shrink:0">
+          <div id="cal-ev-color-swatch"
+            onclick="Phone._calOpenColorPicker(this)"
+            data-color="#7c9ef0"
+            style="width:32px;height:32px;border-radius:10px;background:#7c9ef0;cursor:pointer;flex-shrink:0;border:2px solid rgba(255,255,255,0.15);box-shadow:0 2px 6px rgba(0,0,0,0.18);transition:all .15s;-webkit-tap-highlight-color:transparent"></div>
           <input id="cal-ev-note" type="text" placeholder="备注（可选）" maxlength="60"
             style="flex:1;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box;outline:none">
         </div>
@@ -1642,6 +1644,20 @@ function _calOpenAddEvent() {
   }, 80);
 }
 
+// 日历弹窗：调起色环
+function _calOpenColorPicker(swatchEl) {
+  if (typeof ColorPicker === 'undefined') return;
+  const currentColor = swatchEl?.dataset.color || '#7c9ef0';
+  ColorPicker.open(swatchEl, currentColor, 1, (hex) => {
+    if (!hex) return;
+    const el = document.getElementById('cal-ev-color-swatch');
+    if (el) {
+      el.dataset.color = hex;
+      el.style.background = hex;
+    }
+  });
+}
+
 // 日历弹窗：切换类型 chip
 function _calPickType(el) {
   document.querySelectorAll('.cal-type-chip').forEach(c => {
@@ -1674,7 +1690,7 @@ async function _calSaveEvent(yr, mo, day) {
   // 从选中的 chip 读类型
   const activeChip = document.querySelector('.cal-type-chip[data-selected="1"]');
   const type = activeChip?.dataset.type || 'note';
-  const color = document.getElementById('cal-ev-color')?.value || '#7c9ef0';
+  const color = document.getElementById('cal-ev-color-swatch')?.dataset.color || '#7c9ef0';
   const note = (document.getElementById('cal-ev-note')?.value || '').trim();
   // 从选中的重复按钮读重复方式
   const activeRep = document.querySelector('.cal-rep-btn[data-active="1"]');
@@ -9745,7 +9761,7 @@ _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
     // 钱包
     _walletAddCurrency, _walletRemoveCurrency, _openChatTransfer,
     // 日历
-    _refreshCalBanner, _calNavMonth, _calSelectDay, _calOpenAddEvent, _calSaveEvent, _calDeleteEvent, _calPickType, _calPickRepeat,
+    _refreshCalBanner, _calNavMonth, _calSelectDay, _calOpenAddEvent, _calSaveEvent, _calDeleteEvent, _calPickType, _calPickRepeat, _calOpenColorPicker,
     // 心动模拟 APP
     _hsAppFavorChange,
     _switchHsAppTab,
