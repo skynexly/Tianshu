@@ -56,7 +56,7 @@ const ConvGameplay = (() => {
     const keyTags = triggerType === 'attr' ? _attrConditionSummary(ev) : (keys
       ? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${_esc(t)}</span>`).join('')
       : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>');
-    const modeLabel = triggerType === 'attr' ? '数值触发' : '关键词触发';
+    const modeLabel = triggerType === 'attr' ? '数值触发' : (triggerType === 'time' ? '时间触发' : '关键词触发');
     const chainLabel = ev.chainId ? `<span style="font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 6px">链#${Number(ev.chainIndex || 0) + 1}</span>` : '';
     const completeKey = ev.completeKey ? `<span style="font-size:11px;color:var(--text-secondary)">结束词：${_esc(ev.completeKey)}</span>` : '<span style="font-size:11px;color:var(--danger)">未设置结束词</span>';
     return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onclick="ConvGameplay.editEvent(${i})">
@@ -194,8 +194,9 @@ const ConvGameplay = (() => {
   function _syncTriggerTypeUI() {
     const typeEl = document.getElementById('cg-event-trigger-type');
     const type = typeEl?.value || 'keyword';
-    document.getElementById('cg-event-keyword-row')?.classList.toggle('hidden', type === 'attr');
+    document.getElementById('cg-event-keyword-row')?.classList.toggle('hidden', type !== 'keyword');
     document.getElementById('cg-event-attr-row')?.classList.toggle('hidden', type !== 'attr');
+    document.getElementById('cg-event-time-row')?.classList.toggle('hidden', type !== 'time');
     if (type === 'attr') {
       if (_attrCondDraft.length === 0) addAttrCondition();
       else _renderAttrConditions();
@@ -285,6 +286,11 @@ function _renderAttrConditions() {
       }
     }
     _attrCondDraft = Array.isArray(ev.attrConditions) ? JSON.parse(JSON.stringify(ev.attrConditions)) : [];
+    // 时间触发字段回填
+    const timeStartEl = document.getElementById('cg-event-time-start');
+    const timeEndEl = document.getElementById('cg-event-time-end');
+    if (timeStartEl) timeStartEl.value = ev.triggerTimeStart || '';
+    if (timeEndEl) timeEndEl.value = ev.triggerTimeEnd || '';
     document.getElementById('cg-event-complete-key').value = ev.completeKey || '';
     document.getElementById('cg-event-finish-rule').value = ev.finishRule || '';
     document.getElementById('cg-event-content').value = ev.content || '';
@@ -341,6 +347,8 @@ function _renderAttrConditions() {
       keys: triggerType === 'keyword' ? document.getElementById('cg-event-keys').value.trim() : '',
       triggerType,
       attrConditions: triggerType === 'attr' ? _attrCondDraft.filter(c => c && c.attrId && Number.isFinite(Number(c.value))).map(c => ({ ...c, value: Number(c.value), operator: c.operator || '>=' })) : [],
+      triggerTimeStart: triggerType === 'time' ? (document.getElementById('cg-event-time-start')?.value.trim() || '') : '',
+      triggerTimeEnd: triggerType === 'time' ? (document.getElementById('cg-event-time-end')?.value.trim() || '') : '',
       completeKey: document.getElementById('cg-event-complete-key').value.trim(),
       finishRule: (document.getElementById('cg-event-finish-rule')?.value || '').trim(),
       content: document.getElementById('cg-event-content').value.trim(),
@@ -578,9 +586,10 @@ function _renderAttrConditions() {
       </div>
       <div class="form-group hidden" id="cg-event-chain-row"><span class="form-label">事件链名称 <span style="font-size:11px;color:var(--text-secondary)">（改名会同步整条链）</span></span><input type="text" id="cg-event-chain-name" placeholder="如：复仇线第一幕"></div>
       <div class="form-group"><span class="form-label">事件名称</span><input type="text" id="cg-event-name" placeholder="如：深蓝教会袭击"></div>
-      <div class="form-group"><span class="form-label">触发方式</span><select id="cg-event-trigger-type" onchange="ConvGameplay._syncTriggerTypeUI()" style="width:100%;box-sizing:border-box"><option value="keyword">关键词触发</option><option value="attr">数值触发</option></select></div>
+      <div class="form-group"><span class="form-label">触发方式</span><select id="cg-event-trigger-type" onchange="ConvGameplay._syncTriggerTypeUI()" style="width:100%;box-sizing:border-box"><option value="keyword">关键词触发</option><option value="attr">数值触发</option><option value="time">时间触发</option></select></div>
       <div class="form-group" id="cg-event-keyword-row"><span class="form-label">触发关键词 <span style="font-size:11px;color:var(--text-secondary)">（多个用逗号或空格分隔）</span></span><input type="text" id="cg-event-keys" placeholder="如：深蓝教会, 深蓝, 阿司霍尔"></div>
       <div class="form-group hidden" id="cg-event-attr-row"><span class="form-label">数值触发条件 <span style="font-size:11px;color:var(--text-secondary)">（全部满足才触发）</span></span><div id="cg-event-attr-conditions" style="display:flex;flex-direction:column;gap:8px"></div><button type="button" onclick="ConvGameplay.addAttrCondition()" style="width:100%;margin-top:8px;padding:8px 10px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12px">+ 添加条件</button></div>
+      <div class="form-group hidden" id="cg-event-time-row"><span class="form-label">时间范围 <span style="font-size:11px;color:var(--text-secondary)">（游戏时间进入此范围时触发。只填时分=每天重复，填完整日期=一次性）</span></span><div style="display:flex;flex-direction:column;gap:8px"><input type="text" id="cg-event-time-start" placeholder="开始，如 08:00 或 3月15日 08:00"><input type="text" id="cg-event-time-end" placeholder="结束（可选），如 12:00 或 3月15日 12:00。不填则到结束时间自动关闭"></div></div>
       <div class="form-group"><span class="form-label">结束关键词 <span style="font-size:11px;color:var(--text-secondary)">（AI 回复中出现此词后事件自动关闭）</span></span><input type="text" id="cg-event-complete-key" placeholder="如：__EVENT_COMPLETE_深蓝袭击__"></div>
       <div class="form-group"><span class="form-label">如何判断事件结束 <span style="font-size:11px;color:var(--text-secondary)">（满足后 AI 应输出结束关键词）</span></span><textarea id="cg-event-finish-rule" rows="3" placeholder="如：当袭击者撤退、现场危机解除、主要角色确认安全后，视为事件结束。"></textarea></div>
       <div class="form-group"><span class="form-label">事件内容 <span style="font-size:11px;color:var(--text-secondary)">（触发后每轮注入，直到结束）</span></span><textarea id="cg-event-content" rows="8" placeholder="事件剧情引导、场景氛围、环境细节、可能的发展方向…"></textarea></div>
