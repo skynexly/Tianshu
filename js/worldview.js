@@ -4894,6 +4894,8 @@ async function pickDefaultTheme(value) {
       }
     }
     _updateStartTimeWeekday();
+    // 同步更新 hidden input（确保非法旧数据被清理或用现实时间补齐）
+    _onStartTimeChange();
   }
 
   function _onStartTimeChange() {
