@@ -2965,7 +2965,22 @@
 
             <div style="padding-top:16px;margin-top:16px">
               <div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.296 3.464 3.02 3.956"/><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m6.18 5.276 3.1 3.899"/></svg> 开场设定</div>
-              <label>开场时间 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI故事从何时开始）</span><input type="text" id="wv-start-time" placeholder="如：2046年4月15日 星期三 08:00"></label>
+              <label>开场时间 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI故事从何时开始）</span></label>
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+                <input type="number" id="wv-start-time-year" placeholder="年" style="width:70px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px" oninput="Worldview._onStartTimeChange()">
+                <span style="font-size:13px;color:var(--text-secondary)">年</span>
+                <input type="number" id="wv-start-time-month" placeholder="月" min="1" max="99" style="width:52px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px" oninput="Worldview._onStartTimeChange()">
+                <span style="font-size:13px;color:var(--text-secondary)">月</span>
+                <input type="number" id="wv-start-time-day" placeholder="日" min="1" max="999" style="width:52px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px" oninput="Worldview._onStartTimeChange()">
+                <span style="font-size:13px;color:var(--text-secondary)">日</span>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+                <input type="number" id="wv-start-time-hour" placeholder="时" min="0" max="23" style="width:48px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px" oninput="Worldview._onStartTimeChange()">
+                <span style="font-size:13px;color:var(--text-secondary)">:</span>
+                <input type="number" id="wv-start-time-min" placeholder="分" min="0" max="59" style="width:48px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px" oninput="Worldview._onStartTimeChange()">
+                <span id="wv-start-time-weekday" style="font-size:12px;color:var(--accent);margin-left:8px"></span>
+              </div>
+              <input type="hidden" id="wv-start-time">
               <label>开场剧情 <span style="font-size:11px;color:var(--text-secondary)">（前N轮持续注入）</span><div style="position:relative;width:100%"><textarea id="wv-start-plot" class="auto-resize-textarea" rows="6" placeholder="开场的背景描述、初始场景..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-start-plot','开场剧情')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
 <label>保留轮数<input type="number" id="wv-start-plot-rounds" value="5" min="1" max="99" style="width:80px"></label>
 <label>开场第一条消息 <span style="font-size:11px;color:var(--text-secondary)">（新建对话时自动显示为AI气泡）</span><div style="position:relative;width:100%"><textarea id="wv-start-message" class="auto-resize-textarea" rows="6" placeholder="开启对话后自动发给用户的第一条消息..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-start-message','开场第一条消息')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
@@ -3835,7 +3850,7 @@ const GameLog = (() => {
 <script src="js/gaiden.js"></script>
 <script src="js/backstage.js"></script>
 <script src="js/dice.js"></script>
-<script src="js/calendar.js?v=1"></script>
+<script src="js/calendar.js?v=2"></script>
 <script src="js/status_bar.js?v=16"></script>
 <script src="js/worldvoice.js?v=3"></script>
 <script src="js/phone.js?v=86"></script>

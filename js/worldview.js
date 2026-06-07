@@ -1001,6 +1001,8 @@ function _syncBuiltinRestoreButton(w) {
       _skin.disabled = _isBuiltinWorldview(w);
     }
     document.getElementById('wv-start-time').value = w.startTime || '';
+    // 回填分字段
+    _fillStartTimeFields(w.startTime || '');
     document.getElementById('wv-start-plot').value = w.startPlot || '';
     document.getElementById('wv-start-plot-rounds').value = w.startPlotRounds ?? 5;
     document.getElementById('wv-start-message').value = w.startMessage || '';
@@ -4862,7 +4864,90 @@ async function pickDefaultTheme(value) {
     }
   }
 
-// ===== 历法系统编辑器 =====
+// ===== 开场时间分字段辅助 =====
+  function _fillStartTimeFields(str) {
+    const yEl = document.getElementById('wv-start-time-year');
+    const moEl = document.getElementById('wv-start-time-month');
+    const dEl = document.getElementById('wv-start-time-day');
+    const hEl = document.getElementById('wv-start-time-hour');
+    const miEl = document.getElementById('wv-start-time-min');
+    if (!yEl) return;
+    if (!str) { yEl.value = ''; moEl.value = ''; dEl.value = ''; hEl.value = ''; miEl.value = ''; _updateStartTimeWeekday(); return; }
+    // 尝试解析
+    const parsed = (typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) ? Calendar.parseAbsoluteTime(str) : null;
+    if (parsed) {
+      yEl.value = parsed.year || '';
+      moEl.value = parsed.month || '';
+      dEl.value = parsed.day || '';
+      hEl.value = parsed.hour ?? '';
+      miEl.value = parsed.minute ?? '';
+    } else {
+      // 无法解析，尝试简单正则
+      const m = str.match(/(\d+)[年.\-\/](\d+)[月.\-\/](\d+)[日]?\s*(?:.*?)?(\d{1,2}):(\d{2})/);
+      if (m) { yEl.value = m[1]; moEl.value = m[2]; dEl.value = m[3]; hEl.value = m[4]; miEl.value = m[5]; }
+      else {
+        const m2 = str.match(/(\d+)[年.\-\/](\d+)[月.\-\/](\d+)/);
+        if (m2) { yEl.value = m2[1]; moEl.value = m2[2]; dEl.value = m2[3]; hEl.value = ''; miEl.value = ''; }
+      }
+    }
+    _updateStartTimeWeekday();
+  }
+
+  function _onStartTimeChange() {
+    const now = new Date();
+    const _val = (id) => {
+      const raw = document.getElementById(id)?.value?.trim() || '';
+      const n = parseInt(raw, 10);
+      return isNaN(n) ? null : n;
+    };
+    const y = _val('wv-start-time-year') ?? now.getFullYear();
+    const mo = _val('wv-start-time-month') ?? (now.getMonth() + 1);
+    const d = _val('wv-start-time-day') ?? now.getDate();
+    const h = _val('wv-start-time-hour') ?? now.getHours();
+    const mi = _val('wv-start-time-min') ?? now.getMinutes();
+
+    const hh = String(h).padStart(2, '0');
+    const mm = String(mi).padStart(2, '0');
+    let timeStr = `${y}年${mo}月${d}日 ${hh}:${mm}`;
+
+    // 算星期并补上
+    if (typeof Calendar !== 'undefined' && Calendar.getWeekDay) {
+      try {
+        const timeObj = { year: y, month: mo, day: d, hour: h, minute: mi };
+        const wd = Calendar.getWeekDay(timeObj, null);
+        if (wd) timeStr = `${y}年${mo}月${d}日 ${wd} ${hh}:${mm}`;
+      } catch(_) {}
+    }
+
+    const hidden = document.getElementById('wv-start-time');
+    if (hidden) hidden.value = timeStr;
+    _updateStartTimeWeekday();
+    // 触发自动保存
+    if (typeof _wvAutoSave === 'function') _wvAutoSave();
+  }
+
+  function _updateStartTimeWeekday() {
+    const el = document.getElementById('wv-start-time-weekday');
+    if (!el) return;
+    const now = new Date();
+    const _val = (id) => {
+      const raw = document.getElementById(id)?.value?.trim() || '';
+      const n = parseInt(raw, 10);
+      return isNaN(n) ? null : n;
+    };
+    const y = _val('wv-start-time-year') ?? now.getFullYear();
+    const mo = _val('wv-start-time-month') ?? (now.getMonth() + 1);
+    const d = _val('wv-start-time-day') ?? now.getDate();
+    try {
+      if (typeof Calendar !== 'undefined' && Calendar.getWeekDay) {
+        const timeObj = { year: y, month: mo, day: d, hour: 0, minute: 0 };
+        const wd = Calendar.getWeekDay(timeObj, null);
+        el.textContent = wd || '';
+      }
+    } catch(_) { el.textContent = ''; }
+  }
+
+  // ===== 历法系统编辑器 =====
 
 function _ensureCalendarSystem(w) {
   const gp = _ensureGameplay(w);
@@ -5278,6 +5363,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     openCalendarEditor, closeCalendarEditor,
     _onCalWeekDayChange, _calAddWeekDay, _calRemoveWeekDay, _calToggleDayType, _calSetMonthMode, _calSetUniformDays, _calSetMonthDays, _calAddMonth, _calRemoveMonth,
     _calSetSeasonName, _calSetSeasonMonths, _calSetSeasonWeather, _calAddSeason, _calRemoveSeason, _calReset,
+    _onStartTimeChange,
     _tryExitEdit,
     _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards,
 editLorebookDescription,

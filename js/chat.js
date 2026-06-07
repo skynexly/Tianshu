@@ -719,6 +719,10 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
           // v687.31：状态栏改为最近上下文注入（从 systemParts 移到最后 user 前）
           _recentStatusParts.push('【上一轮状态面板】\n以下是当前场景的状态快照。你下一次回复的 `status` 代码块应基于此更新：未发生变化的字段请原样抄回；有变化则写新值。\n\n```status\n' + statusText + '\n```');
         }
+        // 强调当前时间，防止剧情描写与状态栏时间矛盾
+        if (curStatus?.time) {
+          _recentStatusParts.push(`【当前剧情时间】${curStatus.time}\n正文描写的时间段（早晨/中午/傍晚/深夜等）必须与此一致。`);
+        }
       } catch(e) {}
     }
 
