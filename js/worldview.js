@@ -4,6 +4,7 @@
 const Worldview = (() => {
   let currentWorldviewId = null;
   let editingWorldviewId = null;
+  let _editingCalRules = null; // 当前编辑世界观的历法缓存
   
   // 管理模式
   let manageMode = false;
@@ -1001,6 +1002,8 @@ function _syncBuiltinRestoreButton(w) {
       _skin.disabled = _isBuiltinWorldview(w);
     }
     document.getElementById('wv-start-time').value = w.startTime || '';
+    // 缓存当前编辑世界观的历法规则（供开场时间星期计算用）
+    _editingCalRules = w?.gameplay?.calendarSystem || null;
     // 回填分字段
     _fillStartTimeFields(w.startTime || '');
     document.getElementById('wv-start-plot').value = w.startPlot || '';
@@ -4914,7 +4917,7 @@ async function pickDefaultTheme(value) {
     if (typeof Calendar !== 'undefined' && Calendar.getWeekDay) {
       try {
         const timeObj = { year: y, month: mo, day: d, hour: h, minute: mi };
-        const wd = Calendar.getWeekDay(timeObj, null);
+        const wd = Calendar.getWeekDay(timeObj, _editingCalRules);
         if (wd) timeStr = `${y}年${mo}月${d}日 ${wd} ${hh}:${mm}`;
       } catch(_) {}
     }
@@ -4941,7 +4944,7 @@ async function pickDefaultTheme(value) {
     try {
       if (typeof Calendar !== 'undefined' && Calendar.getWeekDay) {
         const timeObj = { year: y, month: mo, day: d, hour: 0, minute: 0 };
-        const wd = Calendar.getWeekDay(timeObj, null);
+        const wd = Calendar.getWeekDay(timeObj, _editingCalRules);
         el.textContent = wd || '';
       }
     } catch(_) { el.textContent = ''; }
