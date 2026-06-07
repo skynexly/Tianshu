@@ -366,6 +366,35 @@ const Calendar = (() => {
     return null;
   }
 
+  // ===== 日期修正（day超过当月天数时自动进位） =====
+  function _normalizeDate(timeObj, rules) {
+    if (!timeObj) return;
+    const dpm = rules.daysPerMonth || DEFAULT_RULES.daysPerMonth;
+    const monthCount = dpm.length;
+    // 修正day溢出
+    let safety = 50; // 防死循环
+    while (safety-- > 0) {
+      const mIdx = ((timeObj.month - 1) % monthCount + monthCount) % monthCount;
+      const maxDay = dpm[mIdx] || 30;
+      if (timeObj.day <= maxDay) break;
+      timeObj.day -= maxDay;
+      timeObj.month++;
+      if (timeObj.month > monthCount) {
+        timeObj.month = 1;
+        timeObj.year++;
+      }
+    }
+    // 修正month溢出
+    while (timeObj.month > monthCount) {
+      timeObj.month -= monthCount;
+      timeObj.year++;
+    }
+    while (timeObj.month < 1) {
+      timeObj.month += monthCount;
+      timeObj.year--;
+    }
+  }
+
   // ===== 格式化输出 =====
 
   /**
@@ -412,6 +441,8 @@ const Calendar = (() => {
     // 情况2：绝对时间格式
     const parsed = parseAbsoluteTime(aiTimeValue);
     if (parsed) {
+      // 防御：day超过当月天数时自动进位修正（兼容旧窗口AI写非法日期）
+      _normalizeDate(parsed, rules);
       const weekDay = getWeekDay(parsed, rules);
       const season = getSeason(parsed.month, rules);
       // 重新格式化（确保星期正确）
