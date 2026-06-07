@@ -4671,6 +4671,18 @@ if (!gp) return null;
         const state = convEventStates[ev.id] || 'locked'; // locked | active | done
         if (state === 'done') continue; // 已完成，跳过
         if (state === 'active') {
+          // 时间触发的事件：检查是否已超出结束时间，自动关闭
+          if ((ev.triggerType || 'keyword') === 'time' && ev.triggerTimeEnd) {
+            try {
+              const sb = Conversations.getStatusBar();
+              const currentTime = sb?.time || '';
+              if (currentTime && !_eventTimeConditionMet(currentTime, ev.triggerTimeStart, ev.triggerTimeEnd)) {
+                // 超出时间范围，自动关闭
+                convEventStates[ev.id] = 'done';
+                continue;
+              }
+            } catch(_) {}
+          }
           // 进行中：每轮注入
           out.systemTop.push(_formatEventInjection(ev, 'active'));
           out._activeEvents = (out._activeEvents || 0) + 1;
