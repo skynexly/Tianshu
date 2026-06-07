@@ -1117,7 +1117,7 @@ async function closeItemModal() {
     return cloned;
   }
 
-  async function addItemDirect(rawText) {
+  async function addItemDirect(rawText, gotAtOverride) {
     const maskId = editingMaskId || getCurrentId();
     if (!maskId) { UI.showToast('请先选择面具', 2000); return; }
     let maskData = await DB.get('characters', maskId);
@@ -1127,16 +1127,11 @@ async function closeItemModal() {
       await DB.put('characters', maskData);
     }
     const inv = maskData.inventory || [];
-    // 从最近 assistant 消息提取游戏时间
-    let gotAt = '';
-    try {
-      const msgs = (typeof Chat !== 'undefined' && Chat.getMessages) ? Chat.getMessages() : [];
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i].role !== 'assistant') continue;
-        const tm = (msgs[i].content || '').match(/\d{4}年\d{1,2}月\d{1,2}日(?:\s*\d{1,2}[:：]\d{1,2})?/);
-        if (tm) { gotAt = tm[0]; break; }
-      }
-    } catch(e) {}
+    // 优先使用传入的时间（气泡对应的statusSnapshot.time），兜底从状态栏读
+    let gotAt = gotAtOverride || '';
+    if (!gotAt) {
+      try { gotAt = Conversations.getStatusBar()?.time || ''; } catch(_) {}
+    }
     // 可能多行多个物品，逐行解析
     const lines = rawText.split('\n').map(l => l.replace(/^[-•·\d.]\s*/, '').trim()).filter(Boolean);
     let addedNames = [];
