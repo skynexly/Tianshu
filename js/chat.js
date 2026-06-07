@@ -1028,7 +1028,17 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
       systemParts.push('全程性别平等。不使用冠夫姓称呼（如"X太太""X夫人"），直接用本名或平等昵称。不默认性别分工（家务归女性、决策归男性），不使用"大姨妈""你那个"等羞耻化表达，直接说月经/生理期。角色的能力、地位、选择不受性别限制。');
     }
     if (convSettings.constraintTimeFlow) {
-      _constraintDepth3.push('【注意】时间会自然流逝。不要把所有事情压缩在同一个时间段内发生。每个场景转换或事务完成后应体现合理的时间流逝——移动需要根据距离推算（步行/交通，通常10分钟到几小时），用餐20-60分钟，工作和学习以小时起步，烹饪至少半小时以上。不要过短估计任何事务完成的时间，也不要压缩娱乐和休闲——没有人到达景点看一眼就走。状态栏的时间应跟随剧情节奏同步推进。');
+      _constraintDepth3.push(`<rules:时间流逝感知>
+- 默认倾向：连续对话/肢体接触等互动场景中，时间推进为 +0min~+5min
+- 纯对话来回、没有动作行为的轮次写 +0min~+2min
+- 场景内做一件小事（泡茶、洗漱、翻看手机、简单整理桌面/着装、挑选商品、等待公共交通/排队等）：+5~15min
+- 场景转换（步行移动、乘车、到达新地点）：+15min~2h甚至更多（根据距离和载具）
+- 完成一个事务（家务、用餐、逛街、工作、学习、烹饪、大段时间的娱乐如拼豆/手工/绘画/写作等）：+20min~3h
+- 睡眠：根据情境判断（午睡20min~1h，夜间睡眠6h~10h，熬夜/失眠则更短）
+- 明确的时间跳跃（"第二天早上""几天后"）：根据实际情况推进
+- 累加规则：如果一轮内描写了多个连续行为，时间应为各行为耗时的合理叠加
+- 禁止无剧情支撑的大幅时间推进。如果互动只有几句对话、拥抱牵手拍肩捏脸等肢体动作，时间推进不应超过5分钟
+</rules:时间流逝感知>`);
     }
 
     // v687.41b：防八股（全局每5轮自动触发，不依赖角色名检测）
@@ -4911,7 +4921,7 @@ bgImage: conv?.convBgImage || '',
       constraintSublime: !!conv?.convConstraintSublime,   // 防止升华收束（默认关）
       constraintGodView: !!conv?.convConstraintGodView,   // 信息传播规则（默认关）
       constraintAbility: !!conv?.convConstraintAbility,   // 角色能力边界（默认关）
-      constraintTimeFlow: !!conv?.convConstraintTimeFlow,  // 时间流逝提醒（默认关）
+      constraintTimeFlow: conv?.convConstraintTimeFlow !== false,  // 时间流逝感知（默认开）
       constraintGender: !!conv?.convConstraintGender,      // 去刻板表达（默认关）
     };
   }
