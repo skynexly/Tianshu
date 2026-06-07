@@ -721,7 +721,7 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
         }
         // 强调当前时间，防止剧情描写与状态栏时间矛盾
         if (curStatus?.time) {
-          _recentStatusParts.push(`【当前剧情时间】${curStatus.time}\n正文描写的时间段（早晨/中午/傍晚/深夜等）必须与此一致。`);
+          _recentStatusParts.push(`【当前剧情时间】${curStatus.time}\n这是本轮剧情开始时的绝对时间。你的正文描写（光线、活动、氛围等）必须符合这个时间段。你在status中输出的时间增量将基于此时间累加。`);
         }
       } catch(e) {}
     }
