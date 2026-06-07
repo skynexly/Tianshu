@@ -1474,7 +1474,7 @@ function _renderCalBody(pd, rules, todayObj) {
   // 有事件的日期 set
   const eventDays = new Set();
   for (const ev of events) {
-    if (ev.month === mo && (!ev.year || ev.year === yr || ev.repeat === 'yearly')) {
+    if (ev.month === mo && (!ev.year || ev.year === yr || ev.repeat === 'yearly' || ev.repeat === 'monthly')) {
       eventDays.add(ev.day);
     }
   }
@@ -1498,14 +1498,14 @@ function _renderCalBody(pd, rules, todayObj) {
   // 选中日的事项
   const selEvents = events.filter(ev =>
     ev.month === mo && ev.day === _calSelectedDay &&
-    (!ev.year || ev.year === yr || ev.repeat === 'yearly')
+    (!ev.year || ev.year === yr || ev.repeat === 'yearly' || ev.repeat === 'monthly')
   );
   const evCards = selEvents.length
     ? selEvents.map(ev => `
         <div class="phone-cal-ev-card" style="border-left:3px solid ${ev.color || 'var(--accent)'}">
           <div class="phone-cal-ev-title">${Utils.escapeHtml(ev.title || '无标题')}</div>
           ${ev.note ? `<div class="phone-cal-ev-note">${Utils.escapeHtml(ev.note)}</div>` : ''}
-          <div class="phone-cal-ev-meta">${_calTypeLabel(ev.type)}${ev.repeat === 'yearly' ? ' · 每年重复' : ''}</div>
+          <div class="phone-cal-ev-meta">${_calTypeLabel(ev.type)}${ev.repeat === 'yearly' ? ' · 每年重复' : ev.repeat === 'monthly' ? ' · 每月重复' : ''}</div>
           <button class="phone-cal-ev-del" onclick="Phone._calDeleteEvent('${Utils.escapeHtml(ev.id)}')">删除</button>
         </div>`).join('')
     : `<div class="phone-cal-ev-empty">这一天没有事项</div>`;
@@ -1569,51 +1569,116 @@ async function _calSelectDay(yr, mo, day) {
 function _calOpenAddEvent() {
   const yr = _calViewYear, mo = _calViewMonth, day = _calSelectedDay;
   const mask = document.createElement('div');
-  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center';
+  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center';
+
+  const sv = `viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
+  const types = [
+    { id:'note',    label:'备忘', svg:`<svg ${sv}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>` },
+    { id:'birthday',label:'生日', svg:`<svg ${sv}><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"></path><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"></path><line x1="2" y1="21" x2="22" y2="21"></line><path d="M7 8v2"></path><path d="M12 8v2"></path><path d="M17 8v2"></path><path d="M7 4 L 7 5"></path><path d="M12 3 L 12 5"></path><path d="M17 4 L 17 5"></path></svg>` },
+    { id:'todo',    label:'待办', svg:`<svg ${sv}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>` },
+    { id:'period',  label:'经期', svg:`<svg ${sv}><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"></path></svg>` },
+    { id:'holiday', label:'节日', svg:`<svg ${sv}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>` },
+  ];
+  const typeGrid = types.map(t => `
+    <div class="cal-type-chip" data-type="${t.id}" onclick="Phone._calPickType(this)" style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 6px;border-radius:12px;border:1.5px solid var(--border);cursor:pointer;flex:1;background:var(--bg-secondary);transition:all .15s;-webkit-tap-highlight-color:transparent">
+      <span class="cal-type-icon" style="color:var(--text-secondary)">${t.svg}</span>
+      <span style="font-size:11px;color:var(--text-secondary)">${t.label}</span>
+    </div>`).join('');
+
   mask.innerHTML = `
-    <div style="background:var(--bg);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-width:400px">
-      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px">${mo}月${day}日 · 添加事项</div>
-      <div style="display:flex;flex-direction:column;gap:10px">
+    <div style="background:var(--bg);border-radius:20px 20px 0 0;padding:20px 16px 36px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+      <div style="width:36px;height:4px;border-radius:2px;background:var(--border);margin:0 auto 18px"></div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:18px">${mo}月${day}日 · 添加事项</div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+
+        <!-- 名称 -->
         <input id="cal-ev-title" type="text" placeholder="事项名称（必填）" maxlength="30"
-          style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box;outline:none">
-        <select id="cal-ev-type"
-          style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box;outline:none">
-          <option value="note">📝 备忘</option>
-          <option value="birthday">🎂 生日</option>
-          <option value="todo">✅ 待办</option>
-          <option value="period">🌸 经期</option>
-          <option value="holiday">🎉 节日</option>
-        </select>
-        <div style="display:flex;gap:8px;align-items:center">
-          <label style="font-size:13px;color:var(--text-secondary);white-space:nowrap">颜色</label>
-          <input id="cal-ev-color" type="color" value="#7c9ef0"
-            style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:var(--bg-secondary)">
-          <label style="font-size:13px;color:var(--text-secondary);margin-left:8px">
-            <input id="cal-ev-repeat" type="checkbox" style="margin-right:4px">每年重复
-          </label>
+          style="width:100%;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box;outline:none">
+
+        <!-- 类型 -->
+        <div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">类型</div>
+          <div style="display:flex;gap:6px">${typeGrid}</div>
         </div>
-        <input id="cal-ev-note" type="text" placeholder="备注（可选）" maxlength="60"
-          style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box;outline:none">
+
+        <!-- 颜色 + 备注 -->
+        <div style="display:flex;gap:10px;align-items:center">
+          <div style="font-size:12px;color:var(--text-secondary);white-space:nowrap">颜色</div>
+          <input id="cal-ev-color" type="color" value="#7c9ef0"
+            style="width:36px;height:36px;border:none;border-radius:10px;cursor:pointer;padding:2px;background:var(--bg-secondary);flex-shrink:0">
+          <input id="cal-ev-note" type="text" placeholder="备注（可选）" maxlength="60"
+            style="flex:1;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box;outline:none">
+        </div>
+
+        <!-- 重复 -->
+        <div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">重复</div>
+          <div style="display:flex;gap:0;border-radius:12px;border:1.5px solid var(--border);overflow:hidden">
+            <button id="cal-rep-once"    class="cal-rep-btn cal-rep-active" onclick="Phone._calPickRepeat('once')"    style="flex:1;padding:9px 0;border:none;font-size:13px;cursor:pointer;transition:all .15s;background:var(--accent);color:#fff;font-weight:600">不重复</button>
+            <button id="cal-rep-monthly" class="cal-rep-btn"               onclick="Phone._calPickRepeat('monthly')" style="flex:1;padding:9px 0;border:none;font-size:13px;cursor:pointer;transition:all .15s;background:var(--bg-secondary);color:var(--text-secondary)">每月</button>
+            <button id="cal-rep-yearly"  class="cal-rep-btn"               onclick="Phone._calPickRepeat('yearly')"  style="flex:1;padding:9px 0;border:none;font-size:13px;cursor:pointer;transition:all .15s;background:var(--bg-secondary);color:var(--text-secondary)">每年</button>
+          </div>
+        </div>
+
+        <!-- 按钮 -->
         <div style="display:flex;gap:8px;margin-top:4px">
           <button onclick="this.closest('div[style*=fixed]').remove()"
-            style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
+            style="flex:1;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
           <button onclick="Phone._calSaveEvent(${yr},${mo},${day})"
-            style="flex:2;padding:11px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+            style="flex:2;padding:12px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">保存</button>
         </div>
+
       </div>
     </div>`;
+
+  // 默认选中 note 类型
   mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
   document.body.appendChild(mask);
-  setTimeout(() => document.getElementById('cal-ev-title')?.focus(), 100);
+  setTimeout(() => {
+    const firstChip = mask.querySelector('.cal-type-chip[data-type="note"]');
+    if (firstChip) Phone._calPickType(firstChip);
+    document.getElementById('cal-ev-title')?.focus();
+  }, 80);
+}
+
+// 日历弹窗：切换类型 chip
+function _calPickType(el) {
+  document.querySelectorAll('.cal-type-chip').forEach(c => {
+    const isThis = c === el;
+    c.dataset.selected = isThis ? '1' : '0';
+    c.style.borderColor = isThis ? 'var(--accent)' : 'var(--border)';
+    c.style.background = isThis ? 'color-mix(in srgb, var(--accent) 15%, var(--bg-secondary))' : 'var(--bg-secondary)';
+    const icon = c.querySelector('.cal-type-icon');
+    if (icon) icon.style.color = isThis ? 'var(--accent)' : 'var(--text-secondary)';
+    const label = c.querySelector('span:last-child');
+    if (label) label.style.color = isThis ? 'var(--accent)' : 'var(--text-secondary)';
+  });
+}
+
+// 日历弹窗：切换重复选项
+function _calPickRepeat(rep) {
+  document.querySelectorAll('.cal-rep-btn').forEach(btn => {
+    const isThis = btn.id === `cal-rep-${rep}`;
+    btn.dataset.active = isThis ? '1' : '0';
+    btn.dataset.rep = btn.id.replace('cal-rep-', '');
+    btn.style.background = isThis ? 'var(--accent)' : 'var(--bg-secondary)';
+    btn.style.color = isThis ? '#fff' : 'var(--text-secondary)';
+    btn.style.fontWeight = isThis ? '600' : '400';
+  });
 }
 
 async function _calSaveEvent(yr, mo, day) {
   const title = (document.getElementById('cal-ev-title')?.value || '').trim();
   if (!title) { UI.showToast('请填写事项名称', 1500); return; }
-  const type = document.getElementById('cal-ev-type')?.value || 'note';
+  // 从选中的 chip 读类型
+  const activeChip = document.querySelector('.cal-type-chip[data-selected="1"]');
+  const type = activeChip?.dataset.type || 'note';
   const color = document.getElementById('cal-ev-color')?.value || '#7c9ef0';
   const note = (document.getElementById('cal-ev-note')?.value || '').trim();
-  const repeat = document.getElementById('cal-ev-repeat')?.checked ? 'yearly' : '';
+  // 从选中的重复按钮读重复方式
+  const activeRep = document.querySelector('.cal-rep-btn[data-active="1"]');
+  const repeat = activeRep?.dataset.rep || 'once';
 
   const pd = await _getPhoneData();
   if (!pd) return;
@@ -1621,7 +1686,7 @@ async function _calSaveEvent(yr, mo, day) {
   pd.calendarEvents.push({
     id: Utils.uuid(),
     title, type, color, note,
-    year: repeat === 'yearly' ? 0 : yr,
+    year: (repeat === 'yearly' || repeat === 'monthly') ? 0 : yr,
     month: mo, day,
     repeat: repeat || 'once',
     createdAt: Date.now()
@@ -9680,7 +9745,7 @@ _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
     // 钱包
     _walletAddCurrency, _walletRemoveCurrency, _openChatTransfer,
     // 日历
-    _refreshCalBanner, _calNavMonth, _calSelectDay, _calOpenAddEvent, _calSaveEvent, _calDeleteEvent,
+    _refreshCalBanner, _calNavMonth, _calSelectDay, _calOpenAddEvent, _calSaveEvent, _calDeleteEvent, _calPickType, _calPickRepeat,
     // 心动模拟 APP
     _hsAppFavorChange,
     _switchHsAppTab,
