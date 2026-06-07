@@ -1997,6 +1997,27 @@ const msgEl = appendMessage(aiMsg, true, true);
                       if (!result.parseError) {
                         merged.time = result.timeStr;
                         if (result.season) merged.season = result.season.name;
+                      } else {
+                        // 解析失败：通常是 currentTimeStr 缺日期（如纯 "00:00"），
+                        // 导致增量加不上去、时间卡死。尝试用现实日期把纯时分补成
+                        // 完整时间，再重新累加增量，让旧的坏数据自愈。
+                        let recovered = false;
+                        try {
+                          const _hm = String(currentTimeStr).match(/(\d{1,2}):(\d{2})/);
+                          if (_hm && Calendar.format) {
+                            const _now = new Date();
+                            const _base = { year: _now.getFullYear(), month: _now.getMonth()+1, day: _now.getDate(), hour: +_hm[1], minute: +_hm[2] };
+                            const _baseStr = Calendar.format(_base, calRules);
+                            const _r2 = Calendar.processTimeField(merged.time, _baseStr, calRules);
+                            if (!_r2.parseError) {
+                              merged.time = _r2.timeStr;
+                              if (_r2.season) merged.season = _r2.season.name;
+                              recovered = true;
+                            }
+                          }
+                        } catch(_) {}
+                        // 仍无法恢复：回退到上一轮时间，不让增量原文污染状态栏
+                        if (!recovered) merged.time = currentTimeStr || merged.time;
                       }
                     } catch(_) {}
                   } else if (merged.time && typeof Calendar !== 'undefined') {

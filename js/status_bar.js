@@ -840,12 +840,48 @@ async function render(status) {
 async function saveEdit() {
     if (!_editBuf || !_currentStatus) { closeEdit(); return; }
     if (_editBuf.mode === 'field') {
-      const val = _el('sb-edit-input').value.trim();
+      let val = _el('sb-edit-input').value.trim();
+      // 如果编辑的是时间字段，尝试标准化格式
+      if (_editBuf.field === 'time' && val && typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) {
+        const parsed = Calendar.parseAbsoluteTime(val);
+        if (parsed) {
+          try {
+            let calRules = null;
+            try {
+              const _conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+              const _wvId = _conv?.worldviewId;
+              const wv = _wvId ? await DB.get('worldviews', _wvId) : null;
+              calRules = wv?.gameplay?.calendarSystem || null;
+            } catch(_) {}
+            const formatted = Calendar.format(parsed, calRules);
+            if (formatted) val = formatted;
+          } catch(_) {}
+        }
+      }
       _currentStatus[_editBuf.field] = val;
     } else if (_editBuf.mode === 'env') {
       _currentStatus.region = _el('sb-edit-env-region').value.trim();
       _currentStatus.location = _el('sb-edit-env-location').value.trim();
-      _currentStatus.time = _el('sb-edit-env-time').value.trim();
+      let timeVal = _el('sb-edit-env-time').value.trim();
+      // 尝试标准化时间格式，确保后续增量计算能解析
+      if (timeVal && typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) {
+        const parsed = Calendar.parseAbsoluteTime(timeVal);
+        if (parsed) {
+          // 能解析就格式化成标准格式
+          try {
+            let calRules = null;
+            try {
+              const _conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+              const _wvId = _conv?.worldviewId;
+              const wv = _wvId ? await DB.get('worldviews', _wvId) : null;
+              calRules = wv?.gameplay?.calendarSystem || null;
+            } catch(_) {}
+            const formatted = Calendar.format ? Calendar.format(parsed, calRules) : null;
+            if (formatted) timeVal = formatted;
+          } catch(_) {}
+        }
+      }
+      _currentStatus.time = timeVal;
       _currentStatus.weather = _el('sb-edit-env-weather').value.trim();
     } else if (_editBuf.mode === 'npc') {
       const name = _el('sb-edit-npc-name').value.trim();

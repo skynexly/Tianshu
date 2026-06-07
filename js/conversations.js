@@ -263,7 +263,30 @@ async function init() {
           const now = new Date();
           const weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
           const fallbackTime = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-          const initTime = wv.startTime || fallbackTime;
+          let initTime = wv.startTime || fallbackTime;
+          // 关键修复：把开场时间规范化成带完整日期的标准格式。
+          // 否则若 startTime 是纯时间（如 "00:00"）或缺日期的格式，
+          // parseAbsoluteTime 会返回 null，导致此后每轮增量都解析失败、
+          // 时间卡在开场值加不上去（表现为"每轮都从开场时间加"）。
+          try {
+            if (typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) {
+              const _calRules = wv?.gameplay?.calendarSystem || null;
+              const _parsed = Calendar.parseAbsoluteTime(initTime);
+              if (_parsed) {
+                // 能解析就重新格式化（补全星期、统一格式）
+                initTime = Calendar.format(_parsed, _calRules);
+              } else {
+                // 解析不出完整日期：尝试只抓时分，用现实日期补全；都抓不到就用现实时间
+                const _hm = String(initTime).match(/(\d{1,2}):(\d{2})/);
+                if (_hm) {
+                  const _t = { year: now.getFullYear(), month: now.getMonth()+1, day: now.getDate(), hour: +_hm[1], minute: +_hm[2] };
+                  initTime = Calendar.format(_t, _calRules);
+                } else {
+                  initTime = fallbackTime;
+                }
+              }
+            }
+          } catch(_) {}
           conv.statusBar = {
             region: '', location: '', time: initTime,
             weather: '', scene: '', playerOutfit: '', playerPosture: '', npcs: []

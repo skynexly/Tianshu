@@ -828,6 +828,7 @@ function _syncBuiltinRestoreButton(w) {
       w.phoneApps.forum.desc = document.getElementById('wv-forum-desc')?.value || '';
       const skinEl = document.getElementById('wv-statusbar-skin');
     if (skinEl && !_isBuiltinWorldview(w)) w.statusBarSkin = skinEl.value || 'terminal';
+      try { if (typeof _syncStartTimeHidden === 'function') _syncStartTimeHidden(); } catch(_) {}
       w.startTime = document.getElementById('wv-start-time')?.value || '';
       w.startPlot = document.getElementById('wv-start-plot')?.value || '';
       w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds')?.value) || 5;
@@ -1532,11 +1533,23 @@ if (_isLorebookEditing(editingWorldviewId)) {
   await Lorebook.save(existing);
   return;
 }
+// 关键修复：历法等子保存走的是"从 DB 现读 w → 改字段 → 整体 put 回写"。
+// 但用户在编辑表单里改的开场时间（startTime）可能尚未落库，
+// 若不合并就 put，会用 DB 旧快照（无 startTime）覆盖掉表单上的最新值，
+// 导致"填了开场时间却仍提示未填"。这里在写库前同步一次表单的开场时间字段。
+try {
+  const stEl = document.getElementById('wv-start-time');
+  // 仅当编辑面板已加载（hidden 元素存在）且不是隐藏/世界书世界观时才合并
+  if (stEl && !isHiddenWv(w)) {
+    if (typeof _syncStartTimeHidden === 'function') _syncStartTimeHidden();
+    const stVal = (stEl.value || '').trim();
+    if (stVal) w.startTime = stVal;
+  }
+} catch(_) {}
 await DB.put('worldviews', w);
 // 立刻同步到运行时（仅当编辑的是当前激活世界观）
 await _syncRuntime(w);
 }
-
 // v632.1：世界书状态下，弹窗编辑描述（AI 生成时作为 setting 兜底）
 async function editLorebookDescription() {
   if (!_isLorebookEditing(editingWorldviewId)) return;
@@ -3697,6 +3710,8 @@ function closeKnowledgeModal() {
     w.phoneApps.forum.desc = (document.getElementById('wv-forum-desc')?.value || '').trim();
     const skinInput = document.getElementById('wv-statusbar-skin');
     if (skinInput && !_isBuiltinWorldview(w)) w.statusBarSkin = skinInput.value || 'terminal';
+    // 读取前强制从分字段同步 hidden，避免 oninput 时序遗漏导致存旧值
+    try { if (typeof _syncStartTimeHidden === 'function') _syncStartTimeHidden(); } catch(_) {}
     w.startTime = document.getElementById('wv-start-time').value.trim();
     w.startPlot = document.getElementById('wv-start-plot').value.trim();
     w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds').value) || 5;
@@ -4894,14 +4909,18 @@ async function pickDefaultTheme(value) {
       }
     }
     _updateStartTimeWeekday();
-    // 同步更新 hidden input（确保非法旧数据被清理或用现实时间补齐）
-    _onStartTimeChange();
+    // 加载阶段：只同步 hidden，不触发自动保存（避免回填过程反向覆盖刚保存的数据）
+    try { if (typeof _syncStartTimeHidden === 'function') _syncStartTimeHidden(); } catch(_) {}
   }
 
-  function _onStartTimeChange() {
+  // 纯同步函数：从分字段读值 → 拼标准时间字符串 → 写回 hidden input，并返回该字符串。
+  // 不依赖 oninput 时序；save / 自动保存在读取 hidden 之前都应主动调用一次，
+  // 避免分字段变化未触发 oninput 导致 hidden 滞留旧值（表现为"改了又变回去"）。
+  function _syncStartTimeHidden() {
     const now = new Date();
     const _val = (id) => {
-      const raw = document.getElementById(id)?.value?.trim() || '';
+      const el = document.getElementById(id);
+      const raw = (el && el.value != null) ? String(el.value).trim() : '';
       const n = parseInt(raw, 10);
       return isNaN(n) ? null : n;
     };
@@ -4926,6 +4945,11 @@ async function pickDefaultTheme(value) {
 
     const hidden = document.getElementById('wv-start-time');
     if (hidden) hidden.value = timeStr;
+    return timeStr;
+  }
+
+  function _onStartTimeChange() {
+    _syncStartTimeHidden();
     _updateStartTimeWeekday();
     // 触发自动保存
     if (typeof _wvAutoSave === 'function') _wvAutoSave();
