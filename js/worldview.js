@@ -3443,8 +3443,9 @@ function closeKnowledgeModal() {
     if (hidden && typeEl) typeEl.value = 'keyword';
     if (typeRow) typeRow.classList.toggle('hidden', hidden);
     const type = hidden ? 'keyword' : (typeEl?.value || 'keyword');
-    document.getElementById('wv-event-keyword-row')?.classList.toggle('hidden', type === 'attr');
+    document.getElementById('wv-event-keyword-row')?.classList.toggle('hidden', type !== 'keyword');
     document.getElementById('wv-event-attr-row')?.classList.toggle('hidden', type !== 'attr');
+    document.getElementById('wv-event-time-row')?.classList.toggle('hidden', type !== 'time');
     if (type === 'attr') {
       if (_eventAttrConditionsDraft.length === 0) addEventAttrCondition();
       else _renderEventAttrConditions();
@@ -3523,6 +3524,11 @@ function closeKnowledgeModal() {
     const typeEl = document.getElementById('wv-event-modal-trigger-type');
     if (typeEl) typeEl.value = triggerType;
     _eventAttrConditionsDraft = Array.isArray(ev.attrConditions) ? JSON.parse(JSON.stringify(ev.attrConditions)) : [];
+    // 时间触发字段回填
+    const timeStartEl = document.getElementById('wv-event-modal-time-start');
+    const timeEndEl = document.getElementById('wv-event-modal-time-end');
+    if (timeStartEl) timeStartEl.value = ev.triggerTimeStart || '';
+    if (timeEndEl) timeEndEl.value = ev.triggerTimeEnd || '';
     document.getElementById('wv-event-modal-complete-key').value = ev.completeKey || '';
     const finishEl = document.getElementById('wv-event-modal-finish-rule');
     if (finishEl) finishEl.value = ev.finishRule || '';
@@ -3541,6 +3547,8 @@ function closeKnowledgeModal() {
       keys: triggerType === 'keyword' ? document.getElementById('wv-event-modal-keys').value.trim() : '',
       triggerType,
       attrConditions: triggerType === 'attr' ? _eventAttrConditionsDraft.filter(c => c && (c.attrId || c.attrName) && Number.isFinite(Number(c.value))).map(c => ({ ...c, value: Number(c.value), operator: c.operator || '>=' })) : [],
+      triggerTimeStart: triggerType === 'time' ? (document.getElementById('wv-event-modal-time-start')?.value.trim() || '') : '',
+      triggerTimeEnd: triggerType === 'time' ? (document.getElementById('wv-event-modal-time-end')?.value.trim() || '') : '',
       completeKey: document.getElementById('wv-event-modal-complete-key').value.trim(),
       finishRule: (document.getElementById('wv-event-modal-finish-rule')?.value || '').trim(),
       content: document.getElementById('wv-event-modal-content').value.trim(),

@@ -4559,6 +4559,60 @@ if (!gp) return null;
       return matchMode === 'any' ? results.some(r => r) : results.every(r => r);
     } catch(_) { return false; }
   }
+
+  // 时间触发条件判断
+  function _eventTimeConditionMet(currentTimeStr, startStr, endStr) {
+    try {
+      if (!currentTimeStr || !startStr) return false;
+      // 从当前时间里提取时分和月日
+      const curParsed = typeof Calendar !== 'undefined' ? Calendar.parseAbsoluteTime(currentTimeStr) : null;
+      if (!curParsed) return false;
+      const curMinutes = curParsed.hour * 60 + curParsed.minute;
+      const curMonth = curParsed.month;
+      const curDay = curParsed.day;
+
+      // 解析用户填的时间（支持 "HH:mm" 或 "M月D日 HH:mm"）
+      function parseEventTime(str) {
+        str = str.trim();
+        // 完整格式：X月X日 HH:mm
+        const full = str.match(/(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})/);
+        if (full) return { month: parseInt(full[1]), day: parseInt(full[2]), hour: parseInt(full[3]), minute: parseInt(full[4]), hasDate: true };
+        // 只有时分：HH:mm
+        const hm = str.match(/^(\d{1,2}):(\d{2})$/);
+        if (hm) return { month: 0, day: 0, hour: parseInt(hm[1]), minute: parseInt(hm[2]), hasDate: false };
+        return null;
+      }
+
+      const start = parseEventTime(startStr);
+      if (!start) return false;
+      const end = endStr ? parseEventTime(endStr) : null;
+
+      if (start.hasDate) {
+        // 一次性时间触发：精确日期范围
+        const curVal = curMonth * 10000 + curDay * 100 + curParsed.hour * 60 + curParsed.minute;
+        const startVal = start.month * 10000 + start.day * 100 + start.hour * 60 + start.minute;
+        if (end && end.hasDate) {
+          const endVal = end.month * 10000 + end.day * 100 + end.hour * 60 + end.minute;
+          return curVal >= startVal && curVal <= endVal;
+        }
+        return curVal >= startVal;
+      } else {
+        // 每天重复：只比较时分
+        const startMin = start.hour * 60 + start.minute;
+        if (end && !end.hasDate) {
+          const endMin = end.hour * 60 + end.minute;
+          if (startMin <= endMin) {
+            return curMinutes >= startMin && curMinutes <= endMin;
+          } else {
+            // 跨午夜：如 22:00~06:00
+            return curMinutes >= startMin || curMinutes <= endMin;
+          }
+        }
+        return curMinutes >= startMin;
+      }
+    } catch(_) { return false; }
+  }
+
   function _formatEventInjection(ev, phase) {
     const name = ev?.name || '事件';
     const content = ev?.content || '';
@@ -4621,12 +4675,21 @@ if (!gp) return null;
           out.systemTop.push(_formatEventInjection(ev, 'active'));
           out._activeEvents = (out._activeEvents || 0) + 1;
         } else {
-          // locked：检查关键词或数值条件是否命中
+          // locked：检查关键词或数值或时间条件是否命中
           const triggerType = ev.triggerType || 'keyword';
           let hit = false;
           if (triggerType === 'attr') {
             if (!allowAttrEvents) continue;
             hit = _eventAttrConditionsMet(ev, wvOverride);
+          } else if (triggerType === 'time') {
+            // 时间触发：检查当前游戏时间是否在范围内
+            try {
+              const sb = Conversations.getStatusBar();
+              const currentTime = sb?.time || '';
+              if (currentTime && ev.triggerTimeStart) {
+                hit = _eventTimeConditionMet(currentTime, ev.triggerTimeStart, ev.triggerTimeEnd);
+              }
+            } catch(_) {}
           } else {
             const keyStr = (ev.keys || '').trim();
             if (!keyStr) continue;
