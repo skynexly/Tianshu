@@ -53,6 +53,9 @@ function reloadActionLog() {
     reloadChatRoundLog();
     // 切对话时连带清空好友圈渲染缓存（mask/NPC 头像可能换了）
     _invalidateMomentsCache();
+    // 切对话时重置日历状态
+    _calViewYear = 0; _calViewMonth = 0; _calSelectedDay = 0;
+    _wvFestivalsCache = []; _calRulesCache = null;
   } catch(_) {
     _actionLog = [];
     _actionLogForBackstage = [];
@@ -1074,6 +1077,7 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
 
   let _navStack = []; // 导航栈：每一项是 function
   let _isNavBack = false; // 防止 goBack 触发的渲染再次 push
+  let _lastPageScroll = 0; // 返回首页时恢复滚动位置
 
   function _pushNav(renderFn) {
     if (_isNavBack) return; // goBack 触发的渲染不 push
@@ -1097,6 +1101,15 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
     } else {
       _navStack = [];
       _renderHomeScreen();
+      // 直接恢复之前所在的页面（无动画）
+      requestAnimationFrame(() => {
+        const pages = document.getElementById('phone-pages');
+        if (pages && _lastPageScroll) {
+          pages.style.scrollBehavior = 'auto';
+          pages.scrollLeft = _lastPageScroll;
+          pages.style.scrollBehavior = '';
+        }
+      });
     }
     // 防 ghost click：返回按钮 touchend 后浏览器会再派发一次 click，
     // 此时新 DOM 已经在按钮下方位置，会误触新渲染元素的 onclick。
@@ -1143,7 +1156,14 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
       if (weatherEl) weatherEl.textContent = s.weather || '';
     } catch(_) {}
     // 刷新第二页 banner
-    try { _refreshCalBanner(); } catch(_) {}
+    try {
+      if (!_calRulesCache && !_wvFestivalsCache.length) {
+        // 缓存为空，异步刷新后再渲染 banner
+        Promise.all([_refreshCalRulesCache(), _refreshWvFestivalsCache()]).then(() => _refreshCalBanner()).catch(() => {});
+      } else {
+        _refreshCalBanner();
+      }
+    } catch(_) {}
   }
 
   // ===== App 路由 =====
@@ -1157,6 +1177,11 @@ async function openApp(appId) {
       try { close(); } catch(_) {}
       return;
     }
+  } catch(_) {}
+  // 记住当前页面滚动位置，返回时恢复
+  try {
+    const pages = document.getElementById('phone-pages');
+    if (pages) _lastPageScroll = pages.scrollLeft;
   } catch(_) {}
   _currentApp = appId;
  document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-forum-detail-mode');
@@ -1314,6 +1339,26 @@ async function _walletRemoveCurrency(attrId) {
 }
 
 // ===== 日历 Banner（第二页横条卡片）=====
+// 历法规则缓存（在打开日历APP时异步刷新，Banner同步读）
+let _calRulesCache = null;
+
+async function _refreshCalRulesCache() {
+  try {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (conv?.convGameplay?.calendarSystem) { _calRulesCache = conv.convGameplay.calendarSystem; return; }
+    const wvId = conv?.worldviewId || conv?.singleWorldviewId;
+    if (wvId) {
+      const wv = await DB.get('worldviews', wvId);
+      if (wv?.gameplay?.calendarSystem) { _calRulesCache = wv.gameplay.calendarSystem; return; }
+    }
+    _calRulesCache = null;
+  } catch(_) { _calRulesCache = null; }
+}
+
+function _getCalRulesCached() {
+  return (typeof Calendar !== 'undefined') ? Calendar.getRules(_calRulesCache) : null;
+}
+
 function _refreshCalBanner() {
   const el = document.getElementById('phone-cal-banner');
   if (!el) return;
@@ -1323,13 +1368,7 @@ function _refreshCalBanner() {
     if (!timeStr) { el.style.display = 'none'; return; }
 
     // 解析当前游戏时间
-    const calRules = (() => {
-      try {
-        const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-        return conv?.convGameplay?.calendarSystem || null;
-      } catch(_) { return null; }
-    })();
-    const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+    const rules = _getCalRulesCached();
     const parsed = (typeof Calendar !== 'undefined') ? Calendar.parseAbsoluteTime(timeStr) : null;
 
     // 时间显示
@@ -1352,7 +1391,7 @@ function _refreshCalBanner() {
     try {
       const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
       const pd = conv?.phoneData;
-      const events = pd?.calendarEvents || [];
+      const events = [...(pd?.calendarEvents || []), ..._getWvFestivalsAsEvents()];
       if (parsed && events.length) {
         // 找最近的未来事件
         let nearest = null, minDiff = Infinity;
@@ -1385,10 +1424,14 @@ function _refreshCalBanner() {
         if (nearest) {
           const label = minDiff === 0 ? '今天' : minDiff === 1 ? '明天' : `还有 ${minDiff} 天`;
           const dot = nearest.color ? `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${nearest.color};margin-right:4px;vertical-align:middle"></span>` : '';
-          countdownHtml = `<div class="phone-cal-banner-countdown">${dot}${Utils.escapeHtml(nearest.title)} · ${label}</div>`;
+          const titleTrunc = nearest.title.length > 10 ? nearest.title.slice(0, 10) + '…' : nearest.title;
+          countdownHtml = `<div class="phone-cal-banner-countdown">${dot}${Utils.escapeHtml(titleTrunc)} · ${label}</div>`;
+        } else {
+          countdownHtml = `<div class="phone-cal-banner-countdown" style="opacity:0.5">当前还没有日程</div>`;
         }
       }
     } catch(_) {}
+    if (!countdownHtml) countdownHtml = `<div class="phone-cal-banner-countdown" style="opacity:0.5">当前还没有日程</div>`;
 
     el.style.display = '';
     el.innerHTML = `
@@ -1415,15 +1458,14 @@ async function _renderCalendar(pd) {
   document.getElementById('phone-title').textContent = '日历';
   _applyWallpaper(pd);
 
+  // 异步刷新节日缓存
+  await _refreshWvFestivalsCache();
+  // 异步刷新历法规则缓存
+  await _refreshCalRulesCache();
+
   // 读取当前游戏时间确定"今天"
   const sb = Conversations.getStatusBar() || {};
-  const calRules = (() => {
-    try {
-      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-      return conv?.convGameplay?.calendarSystem || null;
-    } catch(_) { return null; }
-  })();
-  const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+  const rules = _getCalRulesCached();
   const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
 
   // 初始化视图年月（第一次打开用"今天"，之后保持用户选择的）
@@ -1434,7 +1476,6 @@ async function _renderCalendar(pd) {
   }
 
   _renderCalBody(pd, rules, todayObj);
-  _pushNav(() => _renderCalendar(pd));
 }
 
 function _renderCalBody(pd, rules, todayObj) {
@@ -1442,7 +1483,7 @@ function _renderCalBody(pd, rules, todayObj) {
   if (!body) return;
 
   const yr = _calViewYear, mo = _calViewMonth;
-  const events = pd?.calendarEvents || [];
+  const events = [...(pd?.calendarEvents || []), ..._getWvFestivalsAsEvents()];
 
   // 月份标题
   const monthsPerYear = rules?.monthsPerYear || 12;
@@ -1470,12 +1511,27 @@ function _renderCalBody(pd, rules, todayObj) {
   // 星期表头
   const weekNames = rules?.weekDayNames || ['一','二','三','四','五','六','日'];
   const weekHeader = weekNames.map(n => `<div class="phone-cal-weekday">${Utils.escapeHtml(n.replace('星期',''))}</div>`).join('');
+  const gridCols = `grid-template-columns:repeat(${daysPerWeek},1fr)`;
 
-  // 有事件的日期 set
+  // 有事件的日期 set（含持续天数范围）
   const eventDays = new Set();
   for (const ev of events) {
-    if (ev.month === mo && (!ev.year || ev.year === yr || ev.repeat === 'yearly' || ev.repeat === 'monthly')) {
-      eventDays.add(ev.day);
+    let match = false;
+    if (ev.repeat === 'monthly') {
+      // 每月重复：任何月份都显示，只看日数
+      match = true;
+    } else if (ev.repeat === 'yearly') {
+      // 每年重复：月匹配即可，不看年
+      match = (ev.month === mo);
+    } else {
+      // 一次性：年月都要匹配
+      match = (ev.month === mo && (!ev.year || ev.year === yr));
+    }
+    if (match) {
+      const dur = Math.max(1, ev.duration || 1);
+      for (let d = ev.day; d < ev.day + dur && d <= daysInMonth; d++) {
+        eventDays.add(d);
+      }
     }
   }
 
@@ -1495,19 +1551,50 @@ function _renderCalBody(pd, rules, todayObj) {
     </div>`;
   }
 
-  // 选中日的事项
-  const selEvents = events.filter(ev =>
-    ev.month === mo && ev.day === _calSelectedDay &&
-    (!ev.year || ev.year === yr || ev.repeat === 'yearly' || ev.repeat === 'monthly')
-  );
+  // 选中日的事项（含持续天数：ev.day ~ ev.day+duration-1 范围内的都显示）
+  const selEvents = events.filter(ev => {
+    let match = false;
+    if (ev.repeat === 'monthly') {
+      // 每月重复：任何月份，只看日数范围
+      match = true;
+    } else if (ev.repeat === 'yearly') {
+      // 每年重复：月匹配即可
+      if (ev.month !== mo) return false;
+      match = true;
+    } else {
+      // 一次性：年月都要匹配
+      if (ev.month !== mo || (ev.year && ev.year !== yr)) return false;
+      match = true;
+    }
+    if (!match) return false;
+    const dur = Math.max(1, ev.duration || 1);
+    return _calSelectedDay >= ev.day && _calSelectedDay < ev.day + dur;
+  });
   const evCards = selEvents.length
-    ? selEvents.map(ev => `
-        <div class="phone-cal-ev-card" style="border-left:3px solid ${ev.color || 'var(--accent)'}">
-          <div class="phone-cal-ev-title">${Utils.escapeHtml(ev.title || '无标题')}</div>
-          ${ev.note ? `<div class="phone-cal-ev-note">${Utils.escapeHtml(ev.note)}</div>` : ''}
-          <div class="phone-cal-ev-meta">${_calTypeLabel(ev.type)}${ev.repeat === 'yearly' ? ' · 每年重复' : ev.repeat === 'monthly' ? ' · 每月重复' : ''}</div>
-          <button class="phone-cal-ev-del" onclick="Phone._calDeleteEvent('${Utils.escapeHtml(ev.id)}')">删除</button>
-        </div>`).join('')
+    ? selEvents.map(ev => {
+        const svBtn = `viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+        const editSvg = `<svg ${svBtn}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+        const delSvg  = `<svg ${svBtn}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
+        const typeSvg = _calTypeIconOnly(ev.type);
+        const metaParts = [_calTypeName(ev.type)];
+        if (ev.note) metaParts.push(ev.note);
+        if (ev.repeat === 'yearly') metaParts.push('每年');
+        else if (ev.repeat === 'monthly') metaParts.push('每月');
+        if (ev.duration && ev.duration > 1) metaParts.push(`${ev.duration}天`);
+        const metaText = metaParts.join(' · ');
+        return `
+        <div class="phone-cal-ev-card">
+          <div class="phone-cal-ev-dot" style="background:${ev.color || 'var(--accent)'}"></div>
+          <div class="phone-cal-ev-body">
+            <div class="phone-cal-ev-title">${Utils.escapeHtml(ev.title || '无标题')}${ev.fromWv ? '<span class="phone-cal-ev-wv-tag">世界观</span>' : ''}</div>
+            <div class="phone-cal-ev-meta"><span class="phone-cal-ev-type-icon">${typeSvg}</span>${Utils.escapeHtml(metaText)}</div>
+          </div>
+          ${!ev.fromWv ? `<div class="phone-cal-ev-actions">
+            <button class="phone-cal-ev-icon-btn" onclick="Phone._calOpenEditEvent('${Utils.escapeHtml(ev.id)}')" title="编辑">${editSvg}</button>
+            <button class="phone-cal-ev-icon-btn phone-cal-ev-del-btn" onclick="Phone._calDeleteEvent('${Utils.escapeHtml(ev.id)}')" title="删除">${delSvg}</button>
+          </div>` : ''}
+        </div>`;
+      }).join('')
     : `<div class="phone-cal-ev-empty">这一天没有事项</div>`;
 
   body.innerHTML = `
@@ -1516,10 +1603,11 @@ function _renderCalBody(pd, rules, todayObj) {
         <button class="phone-cal-nav-btn" onclick="Phone._calNavMonth(${prevYr},${prevMo})">‹</button>
         <span class="phone-cal-title-text">${yr}年 ${mo}月</span>
         <button class="phone-cal-nav-btn" onclick="Phone._calNavMonth(${nextYr},${nextMo})">›</button>
+        <button class="phone-cal-today-btn" onclick="Phone._calGoToday()">今天</button>
       </div>
       <div class="phone-cal-grid-wrap">
-        <div class="phone-cal-week-header">${weekHeader}</div>
-        <div class="phone-cal-grid">${cells}</div>
+        <div class="phone-cal-week-header" style="${gridCols}">${weekHeader}</div>
+        <div class="phone-cal-grid" style="${gridCols}">${cells}</div>
       </div>
       <div class="phone-cal-day-panel">
         <div class="phone-cal-day-title">
@@ -1532,22 +1620,51 @@ function _renderCalBody(pd, rules, todayObj) {
 }
 
 function _calTypeLabel(type) {
-  const map = { birthday: '🎂 生日', todo: '✅ 待办', period: '🌸 经期', holiday: '🎉 节日', note: '📝 备忘' };
-  return map[type] || '📌 事项';
+  const sv = `viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"`;
+  const icons = {
+    birthday: `<svg ${sv}><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><line x1="2" y1="21" x2="22" y2="21"/><path d="M7 8v1M12 6v3M17 8v1"/></svg> 生日`,
+    todo:     `<svg ${sv}><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> 待办`,
+    period:   `<svg ${sv}><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg> 经期`,
+    holiday:  `<svg ${sv}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> 节日`,
+    note:     `<svg ${sv}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> 备忘`,
+  };
+  return icons[type] || `<svg ${sv}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> 事项`;
+}
+
+function _calTypeIconOnly(type) {
+  const sv = `viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const icons = {
+    birthday: `<svg ${sv}><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><line x1="2" y1="21" x2="22" y2="21"/></svg>`,
+    todo:     `<svg ${sv}><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+    period:   `<svg ${sv}><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>`,
+    holiday:  `<svg ${sv}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+    note:     `<svg ${sv}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+  };
+  return icons[type] || `<svg ${sv}><circle cx="12" cy="10" r="3"/></svg>`;
+}
+
+function _calTypeName(type) {
+  const map = { birthday: '生日', todo: '待办', period: '经期', holiday: '节日', note: '备忘' };
+  return map[type] || '事项';
 }
 
 async function _calNavMonth(yr, mo) {
   _calViewYear = yr; _calViewMonth = mo; _calSelectedDay = 1;
   const pd = await _getPhoneData();
   const sb = Conversations.getStatusBar() || {};
-  const calRules = (() => {
-    try {
-      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-      return conv?.convGameplay?.calendarSystem || null;
-    } catch(_) { return null; }
-  })();
-  const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+  const rules = _getCalRulesCached();
   const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
+  _renderCalBody(pd, rules, todayObj);
+}
+
+async function _calGoToday() {
+  const sb = Conversations.getStatusBar() || {};
+  const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
+  _calViewYear = todayObj?.year || new Date().getFullYear();
+  _calViewMonth = todayObj?.month || (new Date().getMonth() + 1);
+  _calSelectedDay = todayObj?.day || new Date().getDate();
+  const pd = await _getPhoneData();
+  const rules = _getCalRulesCached();
   _renderCalBody(pd, rules, todayObj);
 }
 
@@ -1555,13 +1672,7 @@ async function _calSelectDay(yr, mo, day) {
   _calViewYear = yr; _calViewMonth = mo; _calSelectedDay = day;
   const pd = await _getPhoneData();
   const sb = Conversations.getStatusBar() || {};
-  const calRules = (() => {
-    try {
-      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-      return conv?.convGameplay?.calendarSystem || null;
-    } catch(_) { return null; }
-  })();
-  const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+  const rules = _getCalRulesCached();
   const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
   _renderCalBody(pd, rules, todayObj);
 }
@@ -1570,6 +1681,7 @@ function _calOpenAddEvent() {
   const yr = _calViewYear, mo = _calViewMonth, day = _calSelectedDay;
   const mask = document.createElement('div');
   mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center';
+  mask.className = 'phone-cal-modal-mask';
 
   const sv = `viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
   const types = [
@@ -1623,6 +1735,14 @@ function _calOpenAddEvent() {
           </div>
         </div>
 
+        <!-- 持续天数 -->
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-size:12px;color:var(--text-secondary);white-space:nowrap">持续天数</div>
+          <input id="cal-ev-duration" type="number" min="1" max="365" value="1"
+            style="width:72px;padding:9px 12px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;text-align:center;box-sizing:border-box;outline:none">
+          <div style="font-size:12px;color:var(--text-secondary)">天（默认1天）</div>
+        </div>
+
         <!-- 按钮 -->
         <div style="display:flex;gap:8px;margin-top:4px">
           <button onclick="this.closest('div[style*=fixed]').remove()"
@@ -1644,6 +1764,71 @@ function _calOpenAddEvent() {
   }, 80);
 }
 
+// ===== 从世界观节日生成日历事项（只读，fromWv标记） =====
+// 世界观/世界书节日缓存（异步刷新，同步读）
+let _wvFestivalsCache = [];
+
+// 异步刷新节日缓存（在打开日历APP时调用）
+async function _refreshWvFestivalsCache() {
+  try {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    if (!conv) { _wvFestivalsCache = []; return; }
+
+    // 1. 世界观节日（从对话绑定的世界观读DB）
+    let allFestivals = [];
+    const wvId = conv.worldviewId || conv.singleWorldviewId || '';
+    let wv = null;
+    if (wvId) {
+      try { wv = await DB.get('worldviews', wvId); } catch(_) {}
+    }
+    if (wv?.festivals) allFestivals.push(...wv.festivals);
+
+    // 2. 世界书节日
+    try {
+      if (typeof Lorebook !== 'undefined' && Lorebook.collectForChat) {
+        let card = null;
+        if (conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+          try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
+        }
+        const lbs = await Lorebook.collectForChat({ conv, card, wv });
+        for (const lb of (lbs || [])) {
+          if (Array.isArray(lb.festivals)) allFestivals.push(...lb.festivals);
+        }
+      }
+    } catch(_) {}
+
+    // 转成日历事项格式
+    const result = [];
+    for (const f of allFestivals) {
+      if (f.enabled === false || !f.date) continue;
+      const m1 = f.date.match(/(\d{4})[年\/\-.](\d{1,2})[月\/\-.](\d{1,2})/);
+      const m2 = !m1 && f.date.match(/(\d{1,2})[月\/](\d{1,2})/);
+      let month, day, year = 0;
+      if (m1) { year = parseInt(m1[1]); month = parseInt(m1[2]); day = parseInt(m1[3]); }
+      else if (m2) { month = parseInt(m2[1]); day = parseInt(m2[2]); }
+      else continue;
+      if (!month || !day) continue;
+      result.push({
+        id: f.id,
+        title: f.name || '节日',
+        type: 'holiday',
+        color: '#e8a44a',
+        note: f.content || '',
+        year: f.yearly ? 0 : (year || 0),
+        month, day,
+        repeat: f.yearly ? 'yearly' : 'once',
+        duration: 1,
+        fromWv: true,
+      });
+    }
+    _wvFestivalsCache = result;
+  } catch(_) { _wvFestivalsCache = []; }
+}
+
+function _getWvFestivalsAsEvents() {
+  return _wvFestivalsCache;
+}
+
 // 日历弹窗：调起色环
 function _calOpenColorPicker(swatchEl) {
   if (typeof ColorPicker === 'undefined') return;
@@ -1655,6 +1840,11 @@ function _calOpenColorPicker(swatchEl) {
       el.dataset.color = hex;
       el.style.background = hex;
     }
+  });
+  // 色环 overlay 必须比弹窗 mask(99999) 更高
+  requestAnimationFrame(() => {
+    const ov = document.getElementById('cp-overlay');
+    if (ov) ov.style.setProperty('z-index', '999999', 'important');
   });
 }
 
@@ -1695,6 +1885,7 @@ async function _calSaveEvent(yr, mo, day) {
   // 从选中的重复按钮读重复方式
   const activeRep = document.querySelector('.cal-rep-btn[data-active="1"]');
   const repeat = activeRep?.dataset.rep || 'once';
+  const duration = Math.max(1, parseInt(document.getElementById('cal-ev-duration')?.value || '1', 10) || 1);
 
   const pd = await _getPhoneData();
   if (!pd) return;
@@ -1705,26 +1896,125 @@ async function _calSaveEvent(yr, mo, day) {
     year: (repeat === 'yearly' || repeat === 'monthly') ? 0 : yr,
     month: mo, day,
     repeat: repeat || 'once',
+    duration: duration,
     createdAt: Date.now()
   });
   await _savePhoneData();
 
   // 关闭弹窗
-  document.querySelector('div[style*="z-index:99999"]')?.remove();
+  document.querySelector('.phone-cal-modal-mask')?.remove();
 
   // 刷新视图
   const sb = Conversations.getStatusBar() || {};
-  const calRules = (() => {
-    try {
-      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-      return conv?.convGameplay?.calendarSystem || null;
-    } catch(_) { return null; }
-  })();
-  const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+  const rules = _getCalRulesCached();
   const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
   _renderCalBody(pd, rules, todayObj);
   _refreshCalBanner();
   UI.showToast('已添加', 1200);
+}
+
+async function _calOpenEditEvent(id) {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  const ev = (pd.calendarEvents || []).find(e => e.id === id);
+  if (!ev) { UI.showToast('找不到事项', 1500); return; }
+
+  const yr = ev.year || _calViewYear, mo = ev.month, day = ev.day;
+  const mask = document.createElement('div');
+  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center';
+  mask.className = 'phone-cal-modal-mask';
+
+  const sv = `viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
+  const types = [
+    { id:'note',    label:'备忘', svg:`<svg ${sv}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>` },
+    { id:'birthday',label:'生日', svg:`<svg ${sv}><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"></path><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"></path><line x1="2" y1="21" x2="22" y2="21"></line><path d="M7 8v2M12 8v2M17 8v2"></path></svg>` },
+    { id:'todo',    label:'待办', svg:`<svg ${sv}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>` },
+    { id:'period',  label:'经期', svg:`<svg ${sv}><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"></path></svg>` },
+    { id:'holiday', label:'节日', svg:`<svg ${sv}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>` },
+  ];
+  const typeGrid = types.map(t => `
+    <div class="cal-type-chip" data-type="${t.id}" onclick="Phone._calPickType(this)" style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 6px;border-radius:12px;border:1.5px solid var(--border);cursor:pointer;flex:1;background:var(--bg-secondary);transition:all .15s;-webkit-tap-highlight-color:transparent">
+      <span class="cal-type-icon" style="color:var(--text-secondary)">${t.svg}</span>
+      <span style="font-size:11px;color:var(--text-secondary)">${t.label}</span>
+    </div>`).join('');
+
+  mask.innerHTML = `
+    <div style="background:var(--bg);border-radius:20px 20px 0 0;padding:20px 16px 36px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+      <div style="width:36px;height:4px;border-radius:2px;background:var(--border);margin:0 auto 18px"></div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:18px">${mo}月${day}日 · 编辑事项</div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <input id="cal-ev-title" type="text" placeholder="事项名称（必填）" maxlength="30" value="${Utils.escapeHtml(ev.title || '')}"
+          style="width:100%;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box;outline:none">
+        <div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">类型</div>
+          <div style="display:flex;gap:6px">${typeGrid}</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <div style="font-size:12px;color:var(--text-secondary);white-space:nowrap">颜色</div>
+          <div id="cal-ev-color-swatch" onclick="Phone._calOpenColorPicker(this)" data-color="${ev.color || '#7c9ef0'}"
+            style="width:32px;height:32px;border-radius:10px;background:${ev.color || '#7c9ef0'};cursor:pointer;flex-shrink:0;border:2px solid rgba(255,255,255,0.15);box-shadow:0 2px 6px rgba(0,0,0,0.18);transition:all .15s;-webkit-tap-highlight-color:transparent"></div>
+          <input id="cal-ev-note" type="text" placeholder="备注（可选）" maxlength="60" value="${Utils.escapeHtml(ev.note || '')}"
+            style="flex:1;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box;outline:none">
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">重复</div>
+          <div style="display:flex;gap:0;border-radius:12px;border:1.5px solid var(--border);overflow:hidden">
+            <button id="cal-rep-once"    class="cal-rep-btn" onclick="Phone._calPickRepeat('once')"    style="flex:1;padding:9px 0;border:none;font-size:13px;cursor:pointer;transition:all .15s;background:var(--bg-secondary);color:var(--text-secondary)">不重复</button>
+            <button id="cal-rep-monthly" class="cal-rep-btn" onclick="Phone._calPickRepeat('monthly')" style="flex:1;padding:9px 0;border:none;font-size:13px;cursor:pointer;transition:all .15s;background:var(--bg-secondary);color:var(--text-secondary)">每月</button>
+            <button id="cal-rep-yearly"  class="cal-rep-btn" onclick="Phone._calPickRepeat('yearly')"  style="flex:1;padding:9px 0;border:none;font-size:13px;cursor:pointer;transition:all .15s;background:var(--bg-secondary);color:var(--text-secondary)">每年</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-size:12px;color:var(--text-secondary);white-space:nowrap">持续天数</div>
+          <input id="cal-ev-duration" type="number" min="1" max="365" value="${ev.duration || 1}"
+            style="width:72px;padding:9px 12px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;text-align:center;box-sizing:border-box;outline:none">
+          <div style="font-size:12px;color:var(--text-secondary)">天</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button onclick="this.closest('div[style*=fixed]').remove()"
+            style="flex:1;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
+          <button onclick="Phone._calSaveEditEvent('${id}')"
+            style="flex:2;padding:12px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+      </div>
+    </div>`;
+
+  mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
+  document.body.appendChild(mask);
+  setTimeout(() => {
+    const chip = mask.querySelector(`.cal-type-chip[data-type="${ev.type || 'note'}"]`);
+    if (chip) Phone._calPickType(chip);
+    Phone._calPickRepeat(ev.repeat || 'once');
+  }, 80);
+}
+
+async function _calSaveEditEvent(id) {
+  const title = (document.getElementById('cal-ev-title')?.value || '').trim();
+  if (!title) { UI.showToast('请填写事项名称', 1500); return; }
+  const activeChip = document.querySelector('.cal-type-chip[data-selected="1"]');
+  const type = activeChip?.dataset.type || 'note';
+  const color = document.getElementById('cal-ev-color-swatch')?.dataset.color || '#7c9ef0';
+  const note = (document.getElementById('cal-ev-note')?.value || '').trim();
+  const activeRep = document.querySelector('.cal-rep-btn[data-active="1"]');
+  const repeat = activeRep?.dataset.rep || 'once';
+  const duration = Math.max(1, parseInt(document.getElementById('cal-ev-duration')?.value || '1', 10) || 1);
+
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  const ev = (pd.calendarEvents || []).find(e => e.id === id);
+  if (!ev) return;
+  ev.title = title; ev.type = type; ev.color = color; ev.note = note;
+  ev.repeat = repeat; ev.duration = duration;
+  if (repeat === 'yearly' || repeat === 'monthly') ev.year = 0;
+  await _savePhoneData();
+
+  document.querySelector('.phone-cal-modal-mask')?.remove();
+  const sb = Conversations.getStatusBar() || {};
+  const rules = _getCalRulesCached();
+  const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
+  _renderCalBody(pd, rules, todayObj);
+  _refreshCalBanner();
+  UI.showToast('已更新', 1200);
 }
 
 async function _calDeleteEvent(id) {
@@ -1733,13 +2023,7 @@ async function _calDeleteEvent(id) {
   pd.calendarEvents = (pd.calendarEvents || []).filter(ev => ev.id !== id);
   await _savePhoneData();
   const sb = Conversations.getStatusBar() || {};
-  const calRules = (() => {
-    try {
-      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-      return conv?.convGameplay?.calendarSystem || null;
-    } catch(_) { return null; }
-  })();
-  const rules = (typeof Calendar !== 'undefined') ? Calendar.getRules(calRules) : null;
+  const rules = _getCalRulesCached();
   const todayObj = (typeof Calendar !== 'undefined' && sb.time) ? Calendar.parseAbsoluteTime(sb.time) : null;
   _renderCalBody(pd, rules, todayObj);
   _refreshCalBanner();
@@ -9761,7 +10045,7 @@ _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
     // 钱包
     _walletAddCurrency, _walletRemoveCurrency, _openChatTransfer,
     // 日历
-    _refreshCalBanner, _calNavMonth, _calSelectDay, _calOpenAddEvent, _calSaveEvent, _calDeleteEvent, _calPickType, _calPickRepeat, _calOpenColorPicker,
+    _refreshCalBanner, _calNavMonth, _calSelectDay, _calOpenAddEvent, _calSaveEvent, _calDeleteEvent, _calPickType, _calPickRepeat, _calOpenColorPicker, _calOpenEditEvent, _calSaveEditEvent, _calGoToday,
     // 心动模拟 APP
     _hsAppFavorChange,
     _switchHsAppTab,

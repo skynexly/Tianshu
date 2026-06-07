@@ -1346,6 +1346,48 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
           }
         }
       }
+      // ===== 日历日程提醒（用户自建事项，当天首次触发） =====
+      try {
+        const _calConv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+        const _calPd = _calConv?.phoneData;
+        if (_calPd?.calendarEvents?.length) {
+          const _calSb = Conversations.getStatusBar() || {};
+          const _calTime = (typeof Calendar !== 'undefined' && _calSb.time) ? Calendar.parseAbsoluteTime(_calSb.time) : null;
+          if (_calTime) {
+            const _todayKey = `${_calTime.year}-${_calTime.month}-${_calTime.day}`;
+            _calPd.calendarReminded = _calPd.calendarReminded || {};
+            const _todayEvents = _calPd.calendarEvents.filter(ev => {
+              if (ev.fromWv) return false; // 世界观节日走原有机制
+              let match = false;
+              if (ev.repeat === 'monthly') match = true;
+              else if (ev.repeat === 'yearly') match = (ev.month === _calTime.month);
+              else match = (ev.month === _calTime.month && (!ev.year || ev.year === _calTime.year));
+              if (!match) return false;
+              const dur = Math.max(1, ev.duration || 1);
+              return _calTime.day >= ev.day && _calTime.day < ev.day + dur;
+            });
+            // 过滤已提醒过的
+            const _unreminded = _todayEvents.filter(ev => !_calPd.calendarReminded[`${_todayKey}_${ev.id}`]);
+            if (_unreminded.length > 0) {
+              const _calTypeNames = { birthday: '生日', todo: '待办', period: '经期', holiday: '节日', note: '备忘' };
+              const _lines = _unreminded.map(ev => {
+                const tn = _calTypeNames[ev.type] || '事项';
+                return `· ${tn}：${ev.title}${ev.note ? '（' + ev.note + '）' : ''}`;
+              });
+              const _calPrompt = `【今日日程提醒】\n${_lines.join('\n')}\n请在本轮剧情中描述{{user}}的手机震动并弹出日程提醒。若当前{{user}}无法查看手机，请以旁白方式简短提及。`;
+              // 注入到 systemTop 位置
+              let _calInsertIdx = apiMessages.findIndex(m => m.role !== 'system');
+              if (_calInsertIdx === -1) _calInsertIdx = apiMessages.length;
+              apiMessages.splice(_calInsertIdx, 0, { role: 'system', content: _calPrompt });
+              // 标记已提醒
+              for (const ev of _unreminded) {
+                _calPd.calendarReminded[`${_todayKey}_${ev.id}`] = true;
+              }
+              try { await Conversations.saveList(); } catch(_) {}
+            }
+          }
+        }
+      } catch(_) {}
       // v632：单人卡的世界书注入（独立于 currentWv，没绑主世界观也要跑）
       if (isGameMode) { // v685：所有模式都聚合 conv/wv/card/常驻角色书
         try {

@@ -557,7 +557,7 @@ const Memory = (() => {
         let score = 0;
 
         // 参与者和在场NPC交叉（主权重）
-        const parts = m.participants || [];
+        const parts = Array.isArray(m.participants) ? m.participants : [];
         if (parts.length > 0 && presentNPCNames.length > 0) {
           const matchCount = parts.filter(p =>
             presentNPCNames.some(name => name === p)

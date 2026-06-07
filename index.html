@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=140">
-<link rel="stylesheet" href="css/phone.css?v=10">
+<link rel="stylesheet" href="css/phone.css?v=11">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
 </head>
@@ -2949,6 +2949,20 @@
         </div>
       </div>
 
+          <!-- 状态栏布局 -->
+          <div style="margin-bottom:20px;margin-top:16px">
+            <div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+              状态栏布局
+            </div>
+            <label style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;color:var(--text);font-size:13px">状态栏风格
+              <select id="wv-statusbar-skin" style="width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px">
+                <option value="neumorph">拟态风格</option>
+                <option value="terminal">终端风格</option>
+              </select>
+            </label>
+          </div>
+
             <div style="padding-top:16px;margin-top:16px">
               <div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.296 3.464 3.02 3.956"/><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m6.18 5.276 3.1 3.899"/></svg> 开场设定</div>
               <label>开场时间 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI故事从何时开始）</span><input type="text" id="wv-start-time" placeholder="如：2046年4月15日 星期三 08:00"></label>
@@ -3164,20 +3178,6 @@ NPC
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
               </div>
             </div>
-          </div>
-
-          <!-- 状态栏布局 -->
-          <div style="margin-bottom:20px">
-            <div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-              状态栏布局
-            </div>
-            <label style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;color:var(--text);font-size:13px">状态栏风格
-              <select id="wv-statusbar-skin" style="width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px">
-                <option value="neumorph">拟态风格</option>
-                <option value="terminal">终端风格</option>
-              </select>
-            </label>
           </div>
 
         </div>
@@ -3838,7 +3838,7 @@ const GameLog = (() => {
 <script src="js/calendar.js?v=1"></script>
 <script src="js/status_bar.js?v=16"></script>
 <script src="js/worldvoice.js?v=3"></script>
-<script src="js/phone.js?v=79"></script>
+<script src="js/phone.js?v=80"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
