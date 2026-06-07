@@ -3198,6 +3198,26 @@ exitMultiSelect();
         }
       }
       const restored = snap ? JSON.parse(JSON.stringify(snap)) : null;
+      // 兜底：如果没有找到任何statusSnapshot（回溯到最早），用开场时间或现实时间初始化
+      if (!restored) {
+        let fallbackStatus = null;
+        try {
+          const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+          if (conv?.statusBar?.time) {
+            // 对话创建时已经初始化过statusBar
+            fallbackStatus = JSON.parse(JSON.stringify(conv.statusBar));
+          } else {
+            // 最终兜底：用现实时间
+            const now = new Date();
+            const weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+            const initTime = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            fallbackStatus = { region: '', location: '', time: initTime, weather: '', scene: '', playerOutfit: '', playerPosture: '', npcs: [] };
+          }
+        } catch(_) {}
+        await Conversations.setStatusBar(fallbackStatus);
+        if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(fallbackStatus);
+        return;
+      }
       // 整体覆盖（包括 heartSim：剧情都回去了，好感/任务也得退回）
       await Conversations.setStatusBar(restored);
       if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(restored);
