@@ -823,6 +823,11 @@ background: transparent !important;
 }
 .phone-camera-btn-secondary:hover { background: var(--bg-secondary); color: var(--text); }
 .phone-camera-btn-secondary:active { transform: scale(.96); }
+.phone-shell.has-custom-wallpaper .phone-camera-btn-secondary {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.3);
+  color: #fff;
+}
 /* 快门按钮：经典同心圆 */
 .phone-camera-shutter {
   flex: 0 0 auto;
@@ -2546,6 +2551,10 @@ background: transparent !important;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
 }
+.phone-shell.has-custom-wallpaper .phone-cal-ev-card {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+}
 .phone-cal-ev-dot {
   width: 8px;
   height: 8px;
@@ -2617,4 +2626,54 @@ background: transparent !important;
   font-size: 13px;
   padding: 24px 0;
   opacity: 0.7;
+}
+
+/* ===== 第二页布局：左APP + 右纪念日卡片 ===== */
+.phone-page2-row {
+  display: flex;
+  gap: 12px;
+  padding-top: 16px;
+  align-items: stretch;
+}
+.phone-page2-apps {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px 14px;
+  flex-shrink: 0;
+}
+
+/* ===== 纪念日卡片 ===== */
+.phone-anniversary-card {
+  flex: 1;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.45);
+  border: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2), 0 1px 4px rgba(0,0,0,0.1);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 12px;
+  background-size: cover;
+  background-position: center;
+  transition: transform .1s;
+}
+.phone-anniversary-card:active { transform: scale(0.97); }
+.phone-anniversary-card-text {
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6), 0 0 8px rgba(0,0,0,0.3);
+  text-align: right;
+  line-height: 1.4;
+}
+.phone-anniversary-card-title {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.9;
+}
+.phone-shell.has-custom-wallpaper .phone-anniversary-card {
+  background-color: rgba(255,255,255,0.08);
 }

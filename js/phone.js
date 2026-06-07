@@ -914,7 +914,8 @@ function _extractJsonArrayText(content) {
  polaroid: `<svg ${common}><rect x="3" y="5" width="18" height="16" rx="2.5"></rect><rect x="6" y="15" width="12" height="4" rx="0.5"></rect><circle cx="12" cy="10.5" r="3"></circle><circle cx="12" cy="10.5" r="1"></circle><circle cx="17.5" cy="7.8" r="0.6"></circle></svg>`,
   chat: `<svg ${common} stroke-linecap="round" stroke-linejoin="round"><path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"/></svg>`,
   wallet: `<svg ${common}><rect x="2" y="6" width="20" height="14" rx="2"></rect><path d="M16 12h2v2h-2z"></path><path d="M2 10h20"></path></svg>`,
-  calendar: `<svg ${common}><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><rect x="8" y="14" width="2" height="2"></rect><rect x="13" y="14" width="2" height="2"></rect></svg>`
+  calendar: `<svg ${common}><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><rect x="8" y="14" width="2" height="2"></rect><rect x="13" y="14" width="2" height="2"></rect></svg>`,
+ mail: `<svg ${common}><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>`
  };
  return `<span class="phone-icon-glyph phone-icon-${type}">${icons[type] || ''}</span>`;
 }
@@ -992,6 +993,7 @@ document.getElementById('phone-back-btn')?.classList.add('hidden');
         { id: 'calendar', icon: 'calendar', name: '日历' },
         { id: 'wallet', icon: 'wallet', name: '钱包' },
         { id: 'settings', icon: 'gear', name: '设置' },
+        { id: 'email', icon: 'mail', name: '邮箱' },
       ];
       // 底部 dock：相机、聊天、收起手机
       const dockApps = [
@@ -1040,8 +1042,11 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
  </div>
  <div class="phone-page">
  <div id="phone-cal-banner" class="phone-cal-banner" onclick="Phone.openApp('calendar')" style="display:none"></div>
- <div class="phone-app-grid" style="padding-top:16px">
- ${apps2.map(a => _renderHomeIcon(a)).join('')}
+ <div class="phone-page2-row">
+   <div class="phone-page2-apps">
+     ${apps2.map(a => _renderHomeIcon(a)).join('')}
+   </div>
+   <div class="phone-anniversary-card" id="phone-anniversary-card" onclick="Phone._openAnniversaryEditor()"></div>
  </div>
  <div class="phone-home-spacer"></div>
  </div>
@@ -1164,6 +1169,8 @@ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
         _refreshCalBanner();
       }
     } catch(_) {}
+    // 刷新纪念日卡片
+    try { _refreshAnniversaryCard(); } catch(_) {}
   }
 
   // ===== App 路由 =====
@@ -1178,6 +1185,8 @@ async function openApp(appId) {
       return;
     }
   } catch(_) {}
+  // 未完成的APP：直接拦截，不进入APP模式
+  if (appId === 'email') { UI.showToast('邮箱开发中...', 1500); return; }
   // 记住当前页面滚动位置，返回时恢复
   try {
     const pages = document.getElementById('phone-pages');
@@ -1238,7 +1247,6 @@ async function _renderWallet(pd) {
   if (!globalAttrs.length) {
     body.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px 20px;text-align:center">
-        <div style="font-size:40px;margin-bottom:16px">💰</div>
         <div style="font-size:14px;color:var(--text-secondary);line-height:1.8">当前对话没有可用的自定义属性<br><span style="font-size:12px;opacity:0.7">请先在世界观中配置自定义属性</span></div>
       </div>`;
     return;
@@ -1336,6 +1344,149 @@ async function _walletRemoveCurrency(attrId) {
   pd.walletCurrencies = (pd.walletCurrencies || []).filter(id => id !== attrId);
   await _savePhoneData();
   _renderWallet(pd);
+}
+
+// ===== 纪念日卡片 =====
+function _refreshAnniversaryCard() {
+  const el = document.getElementById('phone-anniversary-card');
+  if (!el) return;
+  try {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    const pd = conv?.phoneData;
+    const anni = pd?.anniversary;
+    if (!anni || !anni.day || !anni.month) {
+      // 没设置纪念日：显示占位
+      el.style.backgroundImage = '';
+      el.innerHTML = `<div class="phone-anniversary-card-text" style="color:var(--text-secondary);text-shadow:none;font-size:12px;opacity:0.6">点击设置<br>纪念日</div>`;
+      return;
+    }
+    // 有背景图
+    if (anni.image) {
+      el.style.backgroundImage = `url("${anni.image}")`;
+    } else {
+      el.style.backgroundImage = '';
+    }
+    // 计算天数
+    const rules = _getCalRulesCached();
+    const sb = Conversations.getStatusBar() || {};
+    const timeStr = sb.time || '';
+    const parsed = (typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime)
+      ? Calendar.parseAbsoluteTime(timeStr) : null;
+    let diffDays = 0;
+    if (parsed && rules && typeof Calendar !== 'undefined') {
+      const anniTime = { year: anni.year || parsed.year, month: anni.month, day: anni.day, hour: 0, minute: 0 };
+      const curEpoch = Calendar._daysSinceEpoch(parsed, rules);
+      const anniEpoch = Calendar._daysSinceEpoch(anniTime, rules);
+      diffDays = curEpoch - anniEpoch;
+    } else if (parsed) {
+      const cur = new Date(parsed.year, parsed.month - 1, parsed.day);
+      const anniD = new Date(anni.year || parsed.year, anni.month - 1, anni.day);
+      diffDays = Math.round((cur - anniD) / 86400000);
+    }
+    const dayText = diffDays >= 0 ? `第 ${diffDays + 1} 天` : `还有 ${Math.abs(diffDays)} 天`;
+    const titleText = anni.title ? Utils.escapeHtml(anni.title) : '';
+    el.innerHTML = `<div class="phone-anniversary-card-text">${titleText ? `<div class="phone-anniversary-card-title">${titleText}</div>` : ''}${dayText}</div>`;
+  } catch(_) {
+    el.innerHTML = `<div class="phone-anniversary-card-text" style="color:var(--text-secondary);text-shadow:none;font-size:12px;opacity:0.6">点击设置<br>纪念日</div>`;
+  }
+}
+
+async function _openAnniversaryEditor() {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  const anni = pd.anniversary || {};
+  const mask = document.createElement('div');
+  mask.className = 'phone-cal-modal-mask';
+  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center';
+  mask.onclick = e => { if (e.target === mask) mask.remove(); };
+  mask.innerHTML = `
+    <div style="background:var(--bg);border-radius:20px 20px 0 0;width:100%;max-width:400px;padding:20px 20px 28px;max-height:80vh;overflow-y:auto">
+      <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px"></div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px">设置纪念日</div>
+
+      <label style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:12px;color:var(--text-secondary)">标题
+        <input type="text" id="anni-title" value="${Utils.escapeHtml(anni.title || '')}" placeholder="如：在一起" maxlength="20"
+          style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
+      </label>
+
+      <div style="display:flex;gap:10px;margin-bottom:12px">
+        <label style="flex:1;display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-secondary)">年
+          <input type="number" id="anni-year" value="${anni.year || ''}" placeholder="可选"
+            style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
+        </label>
+        <label style="flex:1;display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-secondary)">月
+          <input type="number" id="anni-month" value="${anni.month || ''}" min="1" max="99" placeholder="必填"
+            style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
+        </label>
+        <label style="flex:1;display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-secondary)">日
+          <input type="number" id="anni-day" value="${anni.day || ''}" min="1" max="999" placeholder="必填"
+            style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
+        </label>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">背景图片</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div id="anni-img-preview" style="width:60px;height:60px;border-radius:10px;border:1px solid var(--border);background:var(--bg-tertiary);background-size:cover;background-position:center;${anni.image ? `background-image:url('${anni.image}')` : ''}"></div>
+          <button type="button" onclick="Phone._anniPickImage()" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text);font-size:12px;cursor:pointer">选择图片</button>
+          <button type="button" onclick="document.getElementById('anni-img-preview').style.backgroundImage='';Phone._anniTempImage=''" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text-secondary);font-size:12px;cursor:pointer">清除</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <button type="button" onclick="Phone._anniSave()" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+        <button type="button" onclick="Phone._anniDelete()" style="padding:10px 16px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">删除</button>
+      </div>
+    </div>`;
+  document.body.appendChild(mask);
+  _anniTempImage = anni.image || '';
+}
+
+let _anniTempImage = '';
+
+function _anniPickImage() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = () => {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      _anniTempImage = reader.result;
+      const prev = document.getElementById('anni-img-preview');
+      if (prev) prev.style.backgroundImage = `url("${reader.result}")`;
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+async function _anniSave() {
+  const month = parseInt(document.getElementById('anni-month')?.value, 10);
+  const day = parseInt(document.getElementById('anni-day')?.value, 10);
+  if (!month || !day) { UI.showToast('请填写月和日', 1500); return; }
+  const title = document.getElementById('anni-title')?.value?.trim() || '';
+  const yearVal = document.getElementById('anni-year')?.value?.trim();
+  const year = yearVal ? parseInt(yearVal, 10) : 0;
+
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  pd.anniversary = { title, year, month, day, image: _anniTempImage || '' };
+  await _savePhoneData();
+  document.querySelector('.phone-cal-modal-mask')?.remove();
+  _refreshAnniversaryCard();
+  UI.showToast('纪念日已保存', 1200);
+}
+
+async function _anniDelete() {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  delete pd.anniversary;
+  await _savePhoneData();
+  document.querySelector('.phone-cal-modal-mask')?.remove();
+  _refreshAnniversaryCard();
+  UI.showToast('纪念日已删除', 1200);
 }
 
 // ===== 日历 Banner（第二页横条卡片）=====
@@ -4046,12 +4197,30 @@ ${wvPrompt}` },
     let maskName = '我';
     let maskAvatar = '';
     try {
-      const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
-      maskName = mask?.name || '我';
-      maskAvatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
+      // 优先从对话绑定的 maskId 读
+      const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === convId) : null;
+      const convMaskId = conv?.maskId || conv?.branchMaskId || ((typeof Character !== 'undefined' && Character.getCurrentId) ? Character.getCurrentId() : null);
+      if (convMaskId) {
+        // 从 characters store 读详细数据
+        const charData = await DB.get('characters', convMaskId);
+        if (charData?.name) {
+          maskName = charData.name;
+          maskAvatar = charData.avatar || '';
+        } else {
+          // fallback: 从 maskList 读名字
+          const listData = await DB.get('gameState', 'maskList');
+          const entry = (listData?.value || []).find(m => m.id === convMaskId);
+          if (entry?.name) maskName = entry.name;
+        }
+        // 头像再从 activeAvatar 补一次
+        if (!maskAvatar && typeof Character !== 'undefined' && Character.getAvatar) {
+          maskAvatar = Character.getAvatar() || '';
+        }
+      }
     } catch(_) {}
 
     const npcAvatarMap = {};
+    const aliasToName = {};
     try {
       const avatarRows = await DB.getAll('npcAvatars');
       const avatarById = {};
@@ -4075,7 +4244,6 @@ ${wvPrompt}` },
         names.forEach(name => { if (!npcAvatarMap[name]) npcAvatarMap[name] = url; });
       };
       // 构建"网名/代号→本名"反向映射
-      const aliasToName = {};
       const addAlias = (n) => {
         if (!n || !n.name) return;
         const altNames = [...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))]
@@ -10046,6 +10214,10 @@ _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
     _walletAddCurrency, _walletRemoveCurrency, _openChatTransfer,
     // 日历
     _refreshCalBanner, _calNavMonth, _calSelectDay, _calOpenAddEvent, _calSaveEvent, _calDeleteEvent, _calPickType, _calPickRepeat, _calOpenColorPicker, _calOpenEditEvent, _calSaveEditEvent, _calGoToday,
+    // 纪念日
+    _openAnniversaryEditor, _anniPickImage, _anniSave, _anniDelete, _refreshAnniversaryCard,
+    get _anniTempImage() { return _anniTempImage; },
+    set _anniTempImage(v) { _anniTempImage = v; },
     // 心动模拟 APP
     _hsAppFavorChange,
     _switchHsAppTab,
