@@ -451,6 +451,19 @@ const Chat = (() => {
     refreshAiAvatar();
     // 更新加号菜单里的生图按钮可见性
     _updateImgGenButtons();
+    // 环境音：切换对话时恢复/关闭
+    try {
+      if (typeof Ambient !== 'undefined') {
+        const _conv = Conversations.getList()?.find(c => c.id === conversationId);
+        if (_conv?.convAmbientEnabled) {
+          Ambient.setVolume((_conv.convAmbientVolume ?? 50) / 100);
+          Ambient.setMode(_conv.convAmbientMode || 'loop');
+          Ambient.enable();
+        } else {
+          Ambient.disable();
+        }
+      }
+    } catch(_) {}
 
   // 淡入动画
   if (container) {
@@ -1205,7 +1218,7 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
     // v687.33：assistant 历史消息剥离格式代码块（省 token + 降噪），但保留最近 3 轮的原文
     // 避免 AI 看到"之前都没输出格式"就认为本轮也不需要
     const config = await API.getConfig();
-    const _visibleMsgs = messages.filter(m => !m.hidden);
+    const _visibleMsgs = messages.filter(m => !m.hidden || m.content === '<Continue the Chat/>' || m.content === '<PhoneDown/>');
     // 找到最近 3 条 assistant 消息的索引（保留原文不剥离）
     const _recentAiIndices = new Set();
     {
@@ -1631,6 +1644,36 @@ isStreaming = true;
     let userContent = text;
     let userContentForAPI = text;
 
+    // phoneDown：手机聊天触发的自动回复，把 pending 内容作为系统级上下文注入
+    const _isPhoneDown = text === '<PhoneDown/>';
+    if (_isPhoneDown && typeof Phone !== 'undefined' && Phone.getPendingPhoneDown) {
+      const _pdPending = Phone.getPendingPhoneDown();
+      if (_pdPending) {
+        Phone.clearPendingPhoneDown();
+        let pdContext = `【手机打断事件】${_pdPending.contactName}打断了{{user}}看手机，请描写${_pdPending.contactName}打断后的线下场景。照常输出状态块。\n时间增量请从当前状态栏时间继续往前推进（手机聊天的时间消耗已自动同步到状态栏）。`;
+        if (_pdPending.actionLog) {
+          pdContext += `\n\n以下是{{user}}本轮在手机上的操作（含聊天内容）：\n${typeof _pdPending.actionLog === 'string' ? _pdPending.actionLog : _pdPending.actionLog.join('\n')}`;
+        }
+        userContentForAPI = pdContext;
+      }
+    }
+    // phoneDown 场景6：用户自己先发了消息（非 <PhoneDown/>），但 pending 还在 → 合并进本轮
+    if (!_isPhoneDown && typeof Phone !== 'undefined' && Phone.getPendingPhoneDown && Phone.getPendingPhoneDown()) {
+      try {
+        const _pdPending2 = Phone.getPendingPhoneDown();
+        Phone.clearPendingPhoneDown();
+        let pdExtra = `\n\n【补充：手机打断事件】${_pdPending2.contactName}刚才在手机里打断了{{user}}看手机。`;
+        if (_pdPending2.actionLog) {
+          pdExtra += `\n{{user}}本轮在手机上的操作（含聊天内容）：\n${typeof _pdPending2.actionLog === 'string' ? _pdPending2.actionLog : _pdPending2.actionLog.join('\n')}`;
+        }
+        if (typeof userContentForAPI === 'string') {
+          userContentForAPI = userContentForAPI + pdExtra;
+        } else {
+          userContentForAPI[0].text += pdExtra;
+        }
+      } catch(_) {}
+    }
+
     // 心动模拟：开场动画刚结束的第一条用户消息，追加开场剧情提示
     try {
       if (typeof HeartSimIntro !== 'undefined' && HeartSimIntro.onFirstUserMessage) {
@@ -1760,7 +1803,7 @@ try {
       branchId: currentBranchId,
       parentId: messages.length > 0 ? messages[messages.length - 1].id : null,
       timestamp: Utils.timestamp(),
-      hidden: text === '<Continue the Chat/>'  // 隐藏继续指令的消息
+      hidden: text === '<Continue the Chat/>' || text === '<PhoneDown/>'  // 隐藏继续指令和phoneDown自动触发的消息
     };
     // v687.15：环境快照（电量/天气），存到消息上，下一轮拼前缀回放
     try {
@@ -2373,6 +2416,20 @@ const msgEl = appendMessage(aiMsg, true, true);
       if (window.TianshuRegion) {
         const s = Conversations.getStatusBar();
         if (s && s.region) TianshuRegion.check(s.region);
+      }
+    } catch(_) {}
+
+    // phoneDown：流式结束后检测是否有待消费的 phoneDown pending
+    try {
+      if (typeof Phone !== 'undefined' && Phone.getPendingPhoneDown && Phone.getPendingPhoneDown()) {
+        // 延迟触发，避免和当前轮尾部逻辑冲突
+        setTimeout(() => {
+          try {
+            if (!Phone.getPendingPhoneDown()) return;
+            const input = document.getElementById('chat-input');
+            if (input && !isStreaming) { input.value = '<PhoneDown/>'; send(); }
+          } catch(_) {}
+        }, 500);
       }
     } catch(_) {}
 
@@ -5537,6 +5594,18 @@ bgImage: conv?.convBgImage || '',
     if (wa) wa.checked = s.weatherAware;
     const wc = document.getElementById('cs-weather-city');
     if (wc && window.EnvAwareness) wc.value = EnvAwareness.getCity();
+    // 环境音设置回填
+    try {
+      const conv = Conversations.getList()?.find(c => c.id === Conversations.getCurrent());
+      const ambEl = document.getElementById('cs-ambient-enabled');
+      if (ambEl) ambEl.checked = !!conv?.convAmbientEnabled;
+      const ambVolEl = document.getElementById('cs-ambient-volume');
+      if (ambVolEl) { ambVolEl.value = conv?.convAmbientVolume ?? 50; }
+      const ambVolLabel = document.getElementById('cs-ambient-volume-label');
+      if (ambVolLabel) ambVolLabel.textContent = (conv?.convAmbientVolume ?? 50) + '%';
+      const ambModeEl = document.getElementById('cs-ambient-mode');
+      if (ambModeEl) ambModeEl.value = conv?.convAmbientMode || 'loop';
+    } catch(_) {}
     const oc = document.getElementById('cs-online-chat');
     if (oc) oc.checked = s.onlineChat;
     const evEnabled = document.getElementById('cs-events-enabled');
@@ -5641,6 +5710,13 @@ const taEl = document.getElementById('cs-time-aware');
       if (waEl) conv.convWeatherAware = waEl.checked;
       const wcityEl = document.getElementById('cs-weather-city');
 if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
+    // 环境音设置保存
+    const ambEnabledEl = document.getElementById('cs-ambient-enabled');
+    if (ambEnabledEl) conv.convAmbientEnabled = ambEnabledEl.checked;
+    const ambVolumeEl = document.getElementById('cs-ambient-volume');
+    if (ambVolumeEl) conv.convAmbientVolume = parseInt(ambVolumeEl.value, 10) || 50;
+    const ambModeEl = document.getElementById('cs-ambient-mode');
+    if (ambModeEl) conv.convAmbientMode = ambModeEl.value;
     const ocEl = document.getElementById('cs-online-chat');
     if (ocEl) conv.convOnlineChat = ocEl.checked;
     const igSaveEl = document.getElementById('cs-imggen');
@@ -6480,6 +6556,33 @@ async function applyLorebooksToWorldview() {
     }
   }
 
+  // ===== 环境音控制 =====
+  function _onAmbientToggle() {
+    const el = document.getElementById('cs-ambient-enabled');
+    if (!el) return;
+    if (el.checked) {
+      const volEl = document.getElementById('cs-ambient-volume');
+      const modeEl = document.getElementById('cs-ambient-mode');
+      const vol = parseInt(volEl?.value || '50', 10) / 100;
+      Ambient.setVolume(vol);
+      Ambient.setMode(modeEl?.value || 'loop');
+      Ambient.enable();
+    } else {
+      Ambient.disable();
+    }
+  }
+
+  function _onAmbientVolume(val) {
+    const v = parseInt(val, 10) || 50;
+    const label = document.getElementById('cs-ambient-volume-label');
+    if (label) label.textContent = v + '%';
+    if (typeof Ambient !== 'undefined') Ambient.setVolume(v / 100);
+  }
+
+  function _onAmbientMode(val) {
+    if (typeof Ambient !== 'undefined') Ambient.setMode(val);
+  }
+
   return {
     loadHistory, send, cancelRequest, editMessage, saveEdit,
     createBranch, switchBranch, regenerate,
@@ -6519,6 +6622,8 @@ openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
     _onDiceToggle, _openDiceConfigModal, _closeDiceConfigModal, _saveDiceConfigModal, _toggleDiceRuleDropdown,
     // v687.23：MCP
     _renderMcpList, _openMcpAddModal, _closeMcpAddModal, _onMcpAuthTypeChange, _saveMcpServer,
-    _toggleMcpServer, _removeMcpServer, _rediscoverMcpServer
+    _toggleMcpServer, _removeMcpServer, _rediscoverMcpServer,
+    // 环境音控制
+    _onAmbientToggle, _onAmbientVolume, _onAmbientMode
   };
 })();

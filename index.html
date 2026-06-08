@@ -1630,9 +1630,33 @@
           <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">让 AI 知道你所在城市的天气（30 分钟刷新）</span>
           <input type="text" id="cs-weather-city" placeholder="城市（留空走 IP 定位，开梯子可能不准）" style="margin-top:4px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
 
-          <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em;margin-bottom:12px">认知系统</div>
-          </div>
+<div style="border-top:1px solid var(--border);padding-top:12px;margin-top:8px">
+<div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em;margin-bottom:12px">环境音</div>
+</div>
+<label class="circle-check-label">
+  <span class="circle-check-text">开启环境音</span>
+  <span style="position:relative;display:inline-flex">
+    <input type="checkbox" id="cs-ambient-enabled" class="circle-check" onchange="Chat._onAmbientToggle()">
+    <span class="circle-check-ui"></span>
+  </span>
+</label>
+<span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">根据游戏天气自动播放环境音效（雨/风/雷/白噪音）</span>
+<div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+  <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">音量</span>
+  <input type="range" id="cs-ambient-volume" min="0" max="100" value="50" style="flex:1;accent-color:var(--accent)" oninput="Chat._onAmbientVolume(this.value)">
+  <span id="cs-ambient-volume-label" style="font-size:11px;color:var(--text-secondary);width:30px;text-align:right">50%</span>
+</div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+  <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">模式</span>
+  <select id="cs-ambient-mode" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px" onchange="Chat._onAmbientMode(this.value)">
+    <option value="loop">持续循环</option>
+    <option value="short">触发短播（20-30秒）</option>
+  </select>
+</div>
+
+<div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+<div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em;margin-bottom:12px">认知系统</div>
+</div>
           <label class="circle-check-label">
             <span class="circle-check-text">后台频道</span>
             <span style="position:relative;display:inline-flex">
@@ -3827,7 +3851,7 @@ const GameLog = (() => {
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=47"></script>
-<script src="js/worldview.js?v=17"></script>
+<script src="js/worldview.js?v=20"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js"></script>
@@ -3840,7 +3864,7 @@ const GameLog = (() => {
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=5"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=17"></script>
+<script src="js/chat.js?v=20"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -3850,16 +3874,17 @@ const GameLog = (() => {
 <script src="js/gaiden.js"></script>
 <script src="js/backstage.js"></script>
 <script src="js/dice.js"></script>
-<script src="js/calendar.js?v=5"></script>
-<script src="js/status_bar.js?v=17"></script>
+<script src="js/calendar.js?v=7"></script>
+<script src="js/status_bar.js?v=19"></script>
+<script src="js/ambient.js?v=1"></script>
 <script src="js/worldvoice.js?v=3"></script>
-<script src="js/phone.js?v=87"></script>
+<script src="js/phone.js?v=94"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
-<script src="js/ui.js?v=2"></script>
+<script src="js/ui.js?v=3"></script>
 <script src="js/data-mgr.js"></script>
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>
@@ -3872,7 +3897,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js"></script>
-<script src="js/app.js?v=15"></script>
+<script src="js/app.js?v=17"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

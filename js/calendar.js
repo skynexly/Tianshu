@@ -404,10 +404,18 @@ const Calendar = (() => {
    */
   function getTimePeriod(hour, rules) {
     rules = getRules(rules);
-    const periods = rules.timePeriods;
+    let periods = rules.timePeriods;
     if (!periods || periods.length === 0) return null;
-    // periods 按 startHour 升序排列，找最后一个 startHour <= hour 的
-    let result = periods[0];
+    // 防御：过滤掉 startHour 非法（NaN/null/超出 0-23）的脏数据，并强制按 startHour 升序排序。
+    // 不信任调用方/存量数据的顺序与合法性，避免 26 时起、乱序、负数等导致选错段或整段失效。
+    periods = periods
+      .filter(p => p && Number.isFinite(Number(p.startHour)) && Number(p.startHour) >= 0 && Number(p.startHour) <= 23)
+      .map(p => ({ name: p.name, desc: p.desc || '', startHour: Number(p.startHour) }))
+      .sort((a, b) => a.startHour - b.startHour);
+    if (periods.length === 0) return null;
+    // 找最后一个 startHour <= hour 的；若 hour 比所有段都小（首段未从0开始），
+    // 则归到最后一段（跨午夜时段，如 23 点起的"深夜"覆盖到次日凌晨）。
+    let result = periods[periods.length - 1];
     for (const p of periods) {
       if (p.startHour <= hour) result = p;
       else break;

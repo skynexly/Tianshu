@@ -111,6 +111,8 @@ function flushActionLogForBackstage() {
 let _pendingMeRoundId = {};
 // 手机聊天会话基准时间——任意联系人收到 AI 回复后更新，跨联系人共享
 let _chatSessionBaseTime = '';
+// phoneDown：线上聊天触发收手机后的 pending 数据，供 chat.js 消费
+let _pendingPhoneDown = null;
 // 语音模式状态：{ contactId: true/false }
 let _chatVoiceMode = {};
 // 结构：{ contactId: { name: '联系人名', msgs: [{role, text, time}] } }
@@ -155,7 +157,7 @@ function _formatChatRoundLog() {
     const entry = _chatRoundLog[contactId];
     if (!entry || !entry.msgs || !entry.msgs.length) continue;
     const contactName = entry.name || contactId;
-    lines.push(`在手机聊天APP与「${contactName}」新增以下对话：`);
+    lines.push(`在手机聊天APP与「${contactName}」新增以下对话（仅供了解上下文，不要在线下剧情中以对话格式复述这些内容）：`);
     for (const m of entry.msgs) {
       const who = m.role === 'me' ? '{{user}}' : contactName;
       const timeStr = m.time ? `[${m.time}] ` : '';
@@ -509,6 +511,23 @@ _isOpen = false;
       _updateFab();
     } else if (fab && _locked) {
       fab.classList.add('hidden');
+    }
+
+    // phoneDown 入口A：手机关闭时，如果有 pending 且用户在聊天页且不在 streaming，直接触发
+    if (_pendingPhoneDown) {
+      try {
+        const chatPanel = document.querySelector('#panel-chat.active');
+        const canTrigger = chatPanel && typeof Chat !== 'undefined' && !Chat.isStreamingNow();
+        if (canTrigger) {
+          setTimeout(() => {
+            try {
+              if (!_pendingPhoneDown) return;
+              const input = document.getElementById('chat-input');
+              if (input && !Chat.isStreamingNow()) { input.value = '<PhoneDown/>'; Chat.send(); }
+            } catch(_) {}
+          }, 500);
+        }
+      } catch(_) {}
     }
   }
 
@@ -1364,6 +1383,115 @@ async function _walletRemoveCurrency(attrId) {
   pd.walletCurrencies = (pd.walletCurrencies || []).filter(id => id !== attrId);
   await _savePhoneData();
   _renderWallet(pd);
+}
+
+// 订单详情弹窗
+function _showOrderDetail(name, price, desc, platform) {
+  const mask = document.createElement('div');
+  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;padding:20px';
+  mask.onclick = e => { if (e.target === mask) mask.remove(); };
+  mask.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text)">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='var(--accent)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/><line x1='3' x2='21' y1='6' y2='6'/><path d='M16 10a4 4 0 0 1-8 0'/></svg>
+      <div style="font-size:16px;font-weight:600">${Utils.escapeHtml(name || '订单')}</div>
+    </div>
+    ${price ? `<div style="font-size:22px;font-weight:700;color:var(--accent);margin-bottom:12px">¥${Utils.escapeHtml(price)}</div>` : ''}
+    ${desc ? `<div style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px;word-break:break-word">${Utils.escapeHtml(desc)}</div>` : ''}
+    ${platform ? `<div style="display:inline-block;font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--border);color:var(--text-secondary)">${Utils.escapeHtml(platform)}</div>` : ''}
+    <div style="margin-top:16px;text-align:right">
+      <button onclick="this.closest('[style*=fixed]').remove()" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:13px;cursor:pointer">关闭</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mask);
+}
+
+// 转账收取：对方转来的钱，用户点击后选择绑定的货币属性收入
+async function _claimTransfer(contactId, msgId) {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  const thread = pd.chatThreads?.[contactId];
+  if (!thread) return;
+  const msg = thread.find(m => m.id === msgId);
+  if (!msg || msg.transferClaimed) { UI.showToast('已收取', 1200); return; }
+
+  // 获取钱包绑定的货币列表
+  pd.walletCurrencies = pd.walletCurrencies || [];
+  let globalAttrs = [];
+  let statusAttrs = {};
+  try {
+    const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+    const gp = conv?.convGameplay || null;
+    globalAttrs = (gp?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+    const sb = Conversations.getStatusBar() || {};
+    statusAttrs = sb?.customAttrs?.global || {};
+  } catch(_) {}
+
+  const walletInfos = pd.walletCurrencies
+    .map(id => { const def = globalAttrs.find(a => a.id === id); return def ? { id, name: def.name, balance: statusAttrs[id] ?? def.initial ?? 0 } : null; })
+    .filter(Boolean);
+
+  if (!walletInfos.length) {
+    UI.showToast('请先在钱包中绑定货币', 2000);
+    return;
+  }
+
+  // 只有一种货币直接收取，多种弹选择
+  if (walletInfos.length === 1) {
+    await _doClaimTransfer(contactId, msgId, walletInfos[0].id, msg.transferAmount);
+    return;
+  }
+
+  // 弹底部货币选择面板
+  const mask = document.createElement('div');
+  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.4);display:flex;align-items:flex-end;justify-content:center';
+  mask.onclick = e => { if (e.target === mask) mask.remove(); };
+  const listHtml = walletInfos.map(w => `
+    <div data-id="${Utils.escapeHtml(w.id)}" style="padding:12px 16px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--bg-tertiary);display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;color:var(--text);font-weight:600">${Utils.escapeHtml(w.name)}</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">当前余额：${Utils.escapeHtml(String(w.balance))}</div>
+      </div>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+    </div>`).join('');
+  mask.innerHTML = `<div style="background:var(--bg);border-radius:16px 16px 0 0;padding:20px 16px;max-height:60vh;overflow-y:auto;width:100%;max-width:400px">
+    <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:12px">收取 ¥${msg.transferAmount} 到</div>
+    <div style="display:flex;flex-direction:column;gap:8px">${listHtml}</div>
+  </div>`;
+  mask.querySelector('div').addEventListener('click', async (e) => {
+    const item = e.target.closest('[data-id]');
+    if (!item) return;
+    const attrId = item.dataset.id;
+    mask.remove();
+    await _doClaimTransfer(contactId, msgId, attrId, msg.transferAmount);
+  });
+  document.body.appendChild(mask);
+}
+
+// 实际执行收取：加余额 + 标记 + 重渲染
+async function _doClaimTransfer(contactId, msgId, attrId, amount) {
+  try {
+    const sb = Conversations.getStatusBar() || {};
+    if (!sb.customAttrs) sb.customAttrs = {};
+    if (!sb.customAttrs.global) sb.customAttrs.global = {};
+    const cur = parseFloat(sb.customAttrs.global[attrId] || 0);
+    sb.customAttrs.global[attrId] = cur + (parseFloat(amount) || 0);
+    await Conversations.setStatusBar(sb);
+    if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
+  } catch(e) {
+    UI.showToast('收取失败：' + (e.message || ''), 2000);
+    return;
+  }
+  // 标记已收取
+  const pd = await _getPhoneData();
+  const thread = pd?.chatThreads?.[contactId];
+  if (thread) {
+    const msg = thread.find(m => m.id === msgId);
+    if (msg) msg.transferClaimed = true;
+  }
+  await _savePhoneData();
+  UI.showToast('已收取', 1500);
+  // 重渲染气泡
+  try { _renderChatThread(pd, contactId); } catch(_) {}
 }
 
 // ===== 纪念日卡片 =====
@@ -5739,7 +5867,11 @@ function _renderChatThread(pd, contactId) {
 
         // 转账气泡
         if (m.type === 'transfer') {
-          const transferTitle = `向${Utils.escapeHtml(contact.nickname || contact.name)}转账`;
+          const transferTitle = mine ? `向${Utils.escapeHtml(contact.nickname || contact.name)}转账` : `${Utils.escapeHtml(contact.nickname || contact.name)}向你转账`;
+          const claimed = !!m.transferClaimed;
+          const claimBar = (!mine)
+            ? `<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:${claimed ? 'var(--text-secondary)' : 'var(--accent)'};${claimed ? 'opacity:0.7' : 'cursor:pointer'}" ${claimed ? '' : `onclick="Phone._claimTransfer('${Utils.escapeHtml(contact.id)}','${m.id}')"`}>${claimed ? '已收取' : '点击收取'}</div>`
+            : '';
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
@@ -5749,8 +5881,9 @@ function _renderChatThread(pd, contactId) {
                   <span style="font-size:13px;font-weight:600;color:#fff">${transferTitle}</span>
                 </div>
                 <div style="padding:14px">
-                  <div style="font-size:20px;font-weight:700;color:var(--text)">${Utils.escapeHtml(String(m.transferAmount || 0))} <span style="font-size:13px;font-weight:400;color:var(--text-secondary)">${Utils.escapeHtml(m.transferCurrency || '')}</span></div>
+                  <div style="font-size:20px;font-weight:700;color:var(--text)">¥${Utils.escapeHtml(String(m.transferAmount || 0))}</div>
                 </div>
+                ${claimBar}
               </div>
               ${time}
             </div>
@@ -5784,7 +5917,7 @@ function _renderChatThread(pd, contactId) {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-              <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+              <div onclick="Phone._showOrderDetail('${Utils.escapeHtml(m.orderName || '')}','${Utils.escapeHtml(String(m.orderPrice || ''))}','${Utils.escapeHtml(m.orderShop || '')}','${Utils.escapeHtml(m.orderPlatform || '')}')" style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);cursor:pointer">
                 <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:8px">
                   <svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='var(--accent)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/><line x1='3' x2='21' y1='6' y2='6'/><path d='M16 10a4 4 0 0 1-8 0'/></svg>
                   <div style="flex:1;min-width:0">
@@ -5794,8 +5927,8 @@ function _renderChatThread(pd, contactId) {
                   ${m.orderPrice ? `<span style="font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0">¥${Utils.escapeHtml(String(m.orderPrice))}</span>` : ''}
                 </div>
                 <div style="padding:5px 14px 10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px">
-                  <span style="font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--border);color:var(--text-secondary)">${Utils.escapeHtml(m.orderPlatform || '')}</span>
-                  <span style="font-size:10px;color:var(--text-secondary)">已购</span>
+                  ${m.orderPlatform ? `<span style="font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--border);color:var(--text-secondary)">${Utils.escapeHtml(m.orderPlatform)}</span>` : ''}
+                  <span style="font-size:10px;color:var(--text-secondary)">点击查看详情</span>
                 </div>
               </div>
               ${time}
@@ -5803,29 +5936,6 @@ function _renderChatThread(pd, contactId) {
           </div>`;
         }
 
-        // 订单气泡
-    if (m.type === 'order') {
-      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
-        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-          <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
-            <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:8px">
-              <svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='var(--accent)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/><line x1='3' x2='21' y1='6' y2='6'/><path d='M16 10a4 4 0 0 1-8 0'/></svg>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.orderName || '订单')}</div>
-                ${m.orderShop ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.orderShop)}</div>` : ''}
-              </div>
-              ${m.orderPrice ? `<span style="font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0">¥${Utils.escapeHtml(String(m.orderPrice))}</span>` : ''}
-            </div>
-            <div style="padding:5px 14px 10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px">
-              <span style="font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--border);color:var(--text-secondary)">${Utils.escapeHtml(m.orderPlatform || '')}</span>
-              <span style="font-size:10px;color:var(--text-secondary)">已购</span>
-            </div>
-          </div>
-          ${time}
-        </div>
-      </div>`;
-    }
 
     // 地点链接气泡
         if (m.type === 'map_place') {
@@ -6121,7 +6231,7 @@ async function _showChatBubbleMenu(contactId, msgId, role) {
 
   const choice = await _showActionMenu(actions);
   if (choice === '编辑') {
-    const newText = await UI.showSimpleInput('编辑消息', msg.text || '');
+    const newText = await UI.showSimpleInput('编辑消息', msg.text || '', { multiline: true, rows: 4, minHeight: '100px' });
     if (newText !== null && newText !== msg.text) {
       msg.text = newText;
       await _savePhoneData();
@@ -6241,25 +6351,30 @@ function _renderChatThreadWithSystem(pd, contactId) {
       </div>`;
     }
 
-    // 转账气泡
-    if (m.type === 'transfer') {
-      const transferTitle = `向${Utils.escapeHtml(contact.nickname || contact.name)}转账`;
-      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
-        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-          <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
-            <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-              <span style="font-size:13px;font-weight:600;color:#fff">${transferTitle}</span>
+        // 转账气泡
+        if (m.type === 'transfer') {
+          const transferTitle = mine ? `向${Utils.escapeHtml(contact.nickname || contact.name)}转账` : `${Utils.escapeHtml(contact.nickname || contact.name)}向你转账`;
+          const claimed = !!m.transferClaimed;
+          const claimBar = (!mine)
+            ? `<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:${claimed ? 'var(--text-secondary)' : 'var(--accent)'};${claimed ? 'opacity:0.7' : 'cursor:pointer'}" ${claimed ? '' : `onclick="Phone._claimTransfer('${Utils.escapeHtml(contact.id)}','${m.id}')"`}>${claimed ? '已收取' : '点击收取'}</div>`
+            : '';
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+              <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
+                <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  <span style="font-size:13px;font-weight:600;color:#fff">${transferTitle}</span>
+                </div>
+                <div style="padding:14px">
+                  <div style="font-size:20px;font-weight:700;color:var(--text)">¥${Utils.escapeHtml(String(m.transferAmount || 0))}</div>
+                </div>
+                ${claimBar}
+              </div>
+              ${time}
             </div>
-            <div style="padding:14px">
-              <div style="font-size:20px;font-weight:700;color:var(--text)">${Utils.escapeHtml(String(m.transferAmount || 0))} <span style="font-size:13px;font-weight:400;color:var(--text-secondary)">${Utils.escapeHtml(m.transferCurrency || '')}</span></div>
-            </div>
-          </div>
-          ${time}
-        </div>
-      </div>`;
-    }
+          </div>`;
+        }
 
     // 位置气泡
     if (m.type === 'location') {
@@ -6276,6 +6391,31 @@ function _renderChatThreadWithSystem(pd, contactId) {
             </div>
             <div style="height:56px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.7">
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.5"><path d="M3 3h18M3 9h18M3 15h18M3 21h18M9 3v18M15 3v18"/></svg>
+            </div>
+          </div>
+          ${time}
+        </div>
+      </div>`;
+    }
+
+
+    // 订单气泡
+    if (m.type === 'order') {
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+          <div onclick="Phone._showOrderDetail('${Utils.escapeHtml(m.orderName || '')}','${Utils.escapeHtml(String(m.orderPrice || ''))}','${Utils.escapeHtml(m.orderShop || '')}','${Utils.escapeHtml(m.orderPlatform || '')}')" style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);cursor:pointer">
+            <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:8px">
+              <svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='var(--accent)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/><line x1='3' x2='21' y1='6' y2='6'/><path d='M16 10a4 4 0 0 1-8 0'/></svg>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.orderName || '订单')}</div>
+                ${m.orderShop ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.orderShop)}</div>` : ''}
+              </div>
+              ${m.orderPrice ? `<span style="font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0">¥${Utils.escapeHtml(String(m.orderPrice))}</span>` : ''}
+            </div>
+            <div style="padding:5px 14px 10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px">
+              ${m.orderPlatform ? `<span style="font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--border);color:var(--text-secondary)">${Utils.escapeHtml(m.orderPlatform)}</span>` : ''}
+              <span style="font-size:10px;color:var(--text-secondary)">点击查看详情</span>
             </div>
           </div>
           ${time}
@@ -6470,12 +6610,18 @@ async function _ingestChatFromMessages(messages) {
     return ct;
   };
 
-  // 已收录 key 集合（每个 thread 内）
-  const seenKeyByContact = {};
-  for (const ct of pd.chatContacts) {
-    const arr = pd.chatThreads[ct.id] || [];
-    seenKeyByContact[ct.id] = new Set(arr.filter(m => m._k).map(m => m._k));
-  }
+// 已收录 key 集合（每个 thread 内）
+    const seenKeyByContact = {};
+    for (const ct of pd.chatContacts) {
+      const arr = pd.chatThreads[ct.id] || [];
+      const keySet = new Set();
+      for (const m of arr) {
+        if (m._k) keySet.add(m._k);
+        // 按名字+内容去重（忽略时间），防止主线复述被重复收录
+        if (m.role === 'them' && m.text) keySet.add(`${ct.name || ct.id}||${m.text}`);
+      }
+      seenKeyByContact[ct.id] = keySet;
+    }
 
   let added = 0;
   for (const msg of messages) {
@@ -6499,17 +6645,24 @@ async function _ingestChatFromMessages(messages) {
         } catch(_) {}
         time = datePart + time;
       }
+      // 去重 key 必须在格式化前生成（保持和旧数据的 _k 一致，避免格式变化导致重复收录）
+      const key = `${npc}|${time}|${text}`;
+      // 统一格式化：让主线收录的时间和手机AI回复的时间格式一致
+      time = _formatPhoneTime(time) || time;
       const ct = ensureContact(npc);
       if (!pd.chatThreads[ct.id]) pd.chatThreads[ct.id] = [];
       if (!seenKeyByContact[ct.id]) seenKeyByContact[ct.id] = new Set();
-      const key = `${npc}|${time}|${text}`;
       if (seenKeyByContact[ct.id].has(key)) continue;
+      // 二次去重：按名字+内容（忽略时间），防止主线AI复述手机聊天内容被重复收录
+      const contentKey = `${npc}||${text}`;
+      if (seenKeyByContact[ct.id].has(contentKey)) continue;
       seenKeyByContact[ct.id].add(key);
+      seenKeyByContact[ct.id].add(contentKey);
       pd.chatThreads[ct.id].push({
         id: 'm_' + Utils.uuid().slice(0, 8),
         role: 'them',
         text,
-        time,            // 游戏内时间（已补全日期）
+        time,            // 游戏内时间（已格式化）
         fromMainline: true,
         _k: key,
       });
@@ -6692,6 +6845,35 @@ async function _openChatSettings(contactId) {
         <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding:0 4px">启用后 AI 回复将通过语音播放</div>
       </div>
 
+      <div style="margin-bottom:24px">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:500;letter-spacing:.04em">线下互动</div>
+        <div style="background:var(--bg-tertiary);border-radius:12px;overflow:hidden">
+          <div style="display:flex;align-items:center;padding:13px 14px">
+            <span style="flex:1;font-size:14px;color:var(--text)">允许角色打断看手机</span>
+            <label style="position:relative;width:44px;height:26px;cursor:pointer;flex-shrink:0">
+              <input id="chat-settings-phone-down" type="checkbox" ${contact.allowPhoneDown !== false ? 'checked' : ''} onchange="Phone._onChatSettingsPhoneDownToggle()"
+                style="opacity:0;width:0;height:0;position:absolute">
+              <span id="chat-settings-phone-down-track" style="position:absolute;inset:0;border-radius:13px;background:${contact.allowPhoneDown !== false ? 'var(--accent)' : 'var(--border)'};transition:background .2s">
+                <span style="position:absolute;top:3px;left:${contact.allowPhoneDown !== false ? '21px' : '3px'};width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding:0 4px">开启后，在场角色可在聊天中打断你看手机并触发线下剧情</div>
+      </div>
+
+      <div style="margin-bottom:24px">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:500;letter-spacing:.04em">上下文</div>
+        <div style="background:var(--bg-tertiary);border-radius:12px;overflow:hidden">
+          <div style="display:flex;align-items:center;padding:13px 14px">
+            <span style="flex:1;font-size:14px;color:var(--text)">发送历史条数</span>
+            <input id="chat-settings-history-limit" type="number" min="5" max="50" value="${contact.chatHistoryLimit || 20}"
+              style="width:60px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text);font-size:14px;text-align:center;outline:none">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding:0 4px">每次请求AI时发送的最近聊天记录条数（5-50，默认20）</div>
+      </div>
+
       <div style="margin-top:auto;padding-top:16px">
         <button onclick="Phone._saveChatSettings('${contactId}')"
           style="width:100%;padding:13px;border-radius:12px;background:var(--accent);color:#fff;border:none;font-size:15px;font-weight:600;cursor:pointer">
@@ -6707,6 +6889,17 @@ async function _openChatSettings(contactId) {
   if (headerLeft) {
     headerLeft.innerHTML = '<button onclick="Phone._openChatThread(\'' + contactId + '\')" style="width:34px;height:34px;background:none;border:none;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg></button>';
   }
+}
+
+// phoneDown 开关联动
+function _onChatSettingsPhoneDownToggle() {
+  const cb = document.getElementById('chat-settings-phone-down');
+  const track = document.getElementById('chat-settings-phone-down-track');
+  const knob = track ? track.querySelector('span') : null;
+  if (!cb) return;
+  const on = cb.checked;
+  if (track) track.style.background = on ? 'var(--accent)' : 'var(--border)';
+  if (knob) knob.style.left = on ? '21px' : '3px';
 }
 
 // 语音开关联动显示音色 ID 输入框
@@ -6727,12 +6920,21 @@ async function _saveChatSettings(contactId) {
   const nicknameEl = document.getElementById('chat-settings-nickname');
   const voiceEnabledEl = document.getElementById('chat-settings-voice-enabled');
   const voiceIdEl = document.getElementById('chat-settings-voice-id');
+  const phoneDownEl = document.getElementById('chat-settings-phone-down');
   const pd = await _getPhoneData();
   const contact = (pd.chatContacts || []).find(c => c.id === contactId);
   if (!contact) return;
   contact.nickname = (nicknameEl?.value || '').trim();
   contact.voiceEnabled = !!(voiceEnabledEl?.checked);
   contact.voiceId = (voiceIdEl?.value || '').trim();
+  contact.allowPhoneDown = phoneDownEl ? !!(phoneDownEl.checked) : true;
+  const historyLimitEl = document.getElementById('chat-settings-history-limit');
+  if (historyLimitEl) {
+    let lim = parseInt(historyLimitEl.value, 10);
+    if (isNaN(lim)) lim = 20;
+    lim = Math.max(5, Math.min(50, lim)); // 钳到 5-50
+    contact.chatHistoryLimit = lim;
+  }
   await _savePhoneData();
   UI.showToast('已保存', 1200);
   // 返回聊天界面
@@ -7094,8 +7296,9 @@ async function _chatRequestReply(contactId) {
     let fullCtx = '';
     try { fullCtx = await _buildFullContext({ npcBrief: true }); } catch(_) {}
 
-    // ④ 手机内最近20条聊天记录
-    const recent = thread.slice(-20);
+    // ④ 手机内最近N条聊天记录（N 由联系人设置 chatHistoryLimit 控制，默认20）
+    const _histLimit = Math.max(5, Math.min(50, parseInt(contact.chatHistoryLimit, 10) || 20));
+    const recent = thread.slice(-_histLimit);
     const myName = (() => { try { const mk = Character.get(); return mk?.name || '我'; } catch(_) { return '我'; } })();
     const histStr = recent.map(m => {
       const who = m.role === 'me' ? `玩家（${myName}）` : contact.name;
@@ -7108,7 +7311,7 @@ async function _chatRequestReply(contactId) {
       if (m.type === 'forum_detail') return `${who}：${t}发送了一条帖子详情链接：${m.forumTitle || ''}`;
       if (m.type === 'map_place') return `${who}：${t}发送了一条地点链接：${m.placeName || ''}${m.placeAddress ? '（' + m.placeAddress + '）' : ''}`;
       if (m.type === 'order') return `${who}：${t}发送了一条订单信息（${who}已购）：${m.orderName || ''}${m.orderPrice ? '（¥' + m.orderPrice + '）' : ''}${m.orderPlatform ? ' · ' + m.orderPlatform : ''}`;
-      if (m.type === 'transfer') return `${who}：${t}向你转账 ${m.transferAmount || 0} ${m.transferCurrency || ''}`;
+      if (m.type === 'transfer') return `${who}：${t}转账 ¥${m.transferAmount || 0}${m.transferClaimed ? '（已收取）' : ''}`;
       return `${who}：${t}${m.text}`;
     }).join('\n');
 
@@ -7118,6 +7321,34 @@ async function _chatRequestReply(contactId) {
 
     const voiceInstruction = contact.voiceEnabled ? `
 6. 你可以选择以语音形式发送某些消息（比如情绪饱满、语气强烈或亲近的话语）。语音消息使用以下格式：[语音]消息内容。例如：[语音]快来找我！。普通文字消息不需要任何前缀。` : '';
+
+    // phoneDown：仅当该联系人允许打断（allowPhoneDown !== false）且当前在场时，才告诉 AI 有这个选项。
+    // 不在场的人无法物理打断玩家看手机，所以根本不提，AI 不会知道有这个能力。
+    let canPhoneDown = false;
+    try {
+      if (contact.allowPhoneDown !== false) {
+        // 检查两个来源：NPC.getPresentNPCs()（AI输出解析）和 statusBar.npcs（状态栏持久数据）
+        let isPresent = false;
+        if (typeof NPC !== 'undefined' && NPC.getPresentNPCs) {
+          const present = NPC.getPresentNPCs() || [];
+          if (present.includes(contact.name)) isPresent = true;
+        }
+        if (!isPresent) {
+          try {
+            const sb = (typeof Conversations !== 'undefined') ? Conversations.getStatusBar() : null;
+            if (sb && Array.isArray(sb.npcs)) {
+              if (sb.npcs.some(n => n.name === contact.name)) isPresent = true;
+            }
+          } catch(_) {}
+        }
+        canPhoneDown = isPresent;
+      }
+    } catch(_) {}
+    const phoneDownInstruction = canPhoneDown ? `
+7. 你（${contact.name}）此刻就在玩家身边。如果你有充分的理由让玩家放下手机面对面交流（比如想当面说话、有紧急或重要的事、觉得对方一直盯着手机该被打断了），可以在**最后一条消息**的对象里加上 "phoneDown": true 字段。这会让玩家收起手机，转入你和玩家面对面的线下剧情。注意：不要滥用，只在角色真的会这样做的时候才用；"phoneDown" 只能出现在最后一条消息上。` : '';
+
+    const phoneDownExample = canPhoneDown ? `
+  {"npc": "${contact.name}", "text": "别看手机了，看我", "time": "时间", "phoneDown": true}` : '';
 
     const systemPrompt = `${fullCtx}
 
@@ -7135,11 +7366,18 @@ ${histStr}
 2. 上面的主线剧情仅供参考，用来判断你和玩家此刻的关系与状态。**请先判断你（${contact.name}）在那些主线场景里是否在场**：如果你不在场，绝对不要主动提起主线里发生的事（你根本不知道）；只有你在场或事后理应知道的事，才能自然提及。
 3. 回复要符合角色当下的状态：**先想这个角色此刻正在做什么**——可能在忙、在睡、在外面。据此决定回复的语气和"时机感"：可能秒回，也可能像是过了一阵才回（在内容里自然体现，比如"刚看到""在忙刚回来"），不要每次都热情秒回。
 4. 你可以一次回复多条短消息（像真人发微信那样），也可以只回一条。
-5. **必须用以下 JSON 格式输出**，放在 \`\`\`chat 代码块里，每条消息一个对象，time 用游戏内时间（"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"格式，可比玩家发消息的时间稍晚一点）：${voiceInstruction}
+5. **必须用以下 JSON 格式输出**，放在 \`\`\`chat 代码块里，每条消息一个对象，time 用游戏内时间（"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"格式，可比玩家发消息的时间稍晚一点）：${voiceInstruction}${phoneDownInstruction}
+${voiceInstruction ? '8' : '7'}. 除了普通文字消息，你还可以发送以下特殊类型的消息（在对象里加 "type" 字段，**不要用纯文字描述这些行为**，必须使用 type 字段让前端渲染为卡片）：
+   - **图片**：{"npc":"...", "type":"image", "desc":"对图片内容的描述（如：一张窗外的夕阳照片）", "time":"..."}
+   - **位置**：{"npc":"...", "type":"location", "location":"地点名", "address":"详细地址（可选）", "time":"..."}
+   - **订单**（为{{user}}购买物品时使用，如外卖、网购、跑腿代买等通过网络下单的内容）：{"npc":"...", "type":"order", "name":"商品名", "price":数字金额, "desc":"备注（可选）", "time":"..."}
+   - **转账**：{"npc":"...", "type":"transfer", "amount":数字金额, "time":"..."}
+   注意：转账金额必须符合你的人设财力和世界观中的货币购买力，不要随意转大额。特殊消息不需要 "text" 字段。禁止用纯文字如"【转账】""[图片]"来代替，必须使用 type 字段。
 \`\`\`chat
 [
   {"npc": "${contact.name}", "text": "消息内容", "time": "时间"},
-  {"npc": "${contact.name}", "text": "第二条消息内容（可选）", "time": "时间"}
+  {"npc": "${contact.name}", "type": "image", "desc": "发的图的描述", "time": "时间"},
+  {"npc": "${contact.name}", "text": "第二条消息内容（可选）", "time": "时间"}${phoneDownExample}
 ]
 \`\`\`
 只输出这个 chat 块，不要输出其它任何内容。`;
@@ -7210,11 +7448,44 @@ ${histStr}
     const aiRoundId = 'r_' + Utils.uuid().slice(0, 8);
     delete _pendingMeRoundId[contactId];
     let lastAiTime = '';
-    
     // 逐条延迟 append 气泡
+    let _hasSpecialMsg = false; // 本轮是否出现了特殊卡片消息（图片/位置/订单/转账），用于全量重渲染
     for (let i = 0; i < chatArr.length; i++) {
       const cm = chatArr[i];
+      const cmType = (cm.type || '').trim();
       let text = (cm.text || '').trim();
+
+      // 特殊卡片消息（图片/位置/订单/转账）：不依赖 text，单独构造 thread 消息
+      if (cmType === 'image' || cmType === 'location' || cmType === 'order' || cmType === 'transfer') {
+        const msgId = 'm_' + Utils.uuid().slice(0, 8);
+        const cmTime = (cm.time || '').trim();
+        const baseMsg = { id: msgId, role: 'them', time: cmTime, fromMainline: false, roundId: aiRoundId };
+        let logText = '';
+        if (cmType === 'image') {
+          const desc = (cm.desc || cm.text || '').trim() || '(图片)';
+          Object.assign(baseMsg, { type: 'photo', mode: 'ai_text', photoDesc: desc });
+          logText = `发送了一张图片：${desc}`;
+        } else if (cmType === 'location') {
+          Object.assign(baseMsg, { type: 'location', location: (cm.location || '').trim(), address: (cm.address || '').trim() });
+          logText = `发送了位置：${baseMsg.location}${baseMsg.address ? '（' + baseMsg.address + '）' : ''}`;
+        } else if (cmType === 'order') {
+          const amt = parseFloat(cm.price);
+          Object.assign(baseMsg, { type: 'order', orderName: (cm.name || '订单').trim(), orderPrice: isNaN(amt) ? '' : amt, orderShop: (cm.desc || '').trim(), orderPlatform: '' });
+          logText = `发送了订单：${baseMsg.orderName}${baseMsg.orderPrice !== '' ? '（¥' + baseMsg.orderPrice + '）' : ''}`;
+        } else if (cmType === 'transfer') {
+          const amt = parseFloat(cm.amount);
+          Object.assign(baseMsg, { type: 'transfer', transferAmount: isNaN(amt) ? 0 : amt, transferClaimed: false });
+          logText = `向你转账了 ${baseMsg.transferAmount}`;
+        }
+        pd2.chatThreads[contactId].push(baseMsg);
+        if (cmTime) lastAiTime = cmTime;
+        _addChatMessageToRoundLog(contactId, 'them', logText, cmTime, contact.name);
+        _hasSpecialMsg = true;
+        n++;
+        await new Promise(resolve => setTimeout(resolve, 300));
+        continue;
+      }
+
       if (!text) continue;
 
       // 解析语音格式：[语音]内容
@@ -7237,6 +7508,7 @@ ${histStr}
       });
       if (cmTime) lastAiTime = cmTime;
       _addChatMessageToRoundLog(contactId, 'them', text, cmTime, contact.name);
+
 
       // 等 600ms 再显示，用淡入动画
       await new Promise(resolve => setTimeout(resolve, 600));
@@ -7264,11 +7536,59 @@ ${histStr}
       }
 
       n++;
+
+      // phoneDown 检测：渲染完这条后，如果带 phoneDown 标记，收手机并存 pending
+      if (cm.phoneDown) {
+        await new Promise(r => setTimeout(r, 800)); // 让用户看清最后这句
+        // flush 操作日志（已含完整聊天记录）—— 直接调内部函数，不走 Phone.xxx（IIFE 内部 Phone 对象尚未暴露）
+        let phoneActionLog = '';
+        try {
+          const flushed = flushActionLog();
+          if (Array.isArray(flushed)) phoneActionLog = flushed.join('\n');
+          else if (typeof flushed === 'string') phoneActionLog = flushed;
+        } catch(_) {}
+        // 先存 pending，再 close —— close 末尾会检测 pending 并触发主线回复
+        _pendingPhoneDown = {
+          contactName: contact.name,
+          actionLog: phoneActionLog
+        };
+        if (_isOpen) close();
+        break; // 后面的消息丢弃
+      }
     }
     
     if (n > 0) {
       await _savePhoneData();
+      // 本轮有特殊卡片消息（图片/位置/订单/转账）：全量重渲染让卡片正确显示（无淡入动画）
+      if (_hasSpecialMsg) {
+        try { _renderChatThread(pd2, contactId); } catch(_) {}
+      }
       if (lastAiTime) _chatSessionBaseTime = lastAiTime; // 更新跨联系人基准时间
+      // 线上聊天推进主线状态栏时间（只增不减）：
+      // 把本轮 AI 给的最新聊天时间写回状态栏，让"在手机上聊天消耗了时间"反映到主线。
+      // 只更新 time 字段，不动 timePeriod/season —— 留给下一次主线 AI 回复时检测跨段/跨季并注入过渡描写。
+      try {
+        if (lastAiTime && typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime && Calendar.format) {
+          await _refreshCalRulesCache(); // 确保拿到当前历法规则（自定义周天名等）
+          const sb = (typeof Conversations !== 'undefined') ? Conversations.getStatusBar() : null;
+          const oldTimeStr = sb?.time || '';
+          // 只增不减：新时间分数 > 当前状态栏时间分数才推进
+          const newScore = _parsePhoneTimeScore(lastAiTime);
+          const oldScore = _parsePhoneTimeScore(oldTimeStr);
+          if (sb && newScore > 0 && newScore > oldScore) {
+            const timeObj = Calendar.parseAbsoluteTime(lastAiTime);
+            if (timeObj) {
+              // 标准化成主线状态栏格式（YYYY年M月D日 周天名 HH:mm），供 chat.js 增量计算依赖
+              const stdTime = Calendar.format(timeObj, _calRulesCache);
+              if (stdTime) {
+                sb.time = stdTime;
+                await Conversations.setStatusBar(sb);
+                if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
+              }
+            }
+          }
+        }
+      } catch(e) { console.warn('[Phone] 聊天推进状态栏时间失败', e); }
     }
     // 重新绑定长按事件
     _bindChatThreadEvents(contactId);
@@ -8454,7 +8774,9 @@ _renderMemo(pd);
   function _formatPhoneTime(t) {
     const s = String(t || '').trim();
     if (!s) return '';
-    const m = s.match(/(\d{4})年(\d{1,2})月(\d{1,2})日\s*(星期[一二三四五六日天])?\s*(\d{1,2}:\d{2})?/);
+    // 周天名放宽到任意 1-4 个中文（支持自定义历法的"风日""寅时""水曜日"等），
+    // 时分单独捕获，避免周天名匹配失败时把时分一起吞掉。
+    const m = s.match(/(\d{4})年(\d{1,2})月(\d{1,2})日\s*([\u4e00-\u9fa5]{1,4}[日曜]?)?\s*(\d{1,2}:\d{1,2})?/);
     if (m) {
       const mm = String(m[2]).padStart(2, '0');
       const dd = String(m[3]).padStart(2, '0');
@@ -8464,17 +8786,31 @@ _renderMemo(pd);
   }
 
   // 把游戏时间字符串解析为可比较的数字（yyyymmddHHMM），解析失败返回 0
+  // 统一复用 Calendar.parseAbsoluteTime，使其支持自定义周天名（如"风日""寅时""水曜日"），
+  // 避免手机自己维护的正则与历法系统跑偏（旧正则写死"星期X"，遇自定义周天名会吞掉时分）。
   function _parsePhoneTimeScore(t) {
     const s = String(t || '').trim();
     if (!s) return 0;
-    // 格式1：YYYY.MM.DD 星期X HH:mm
+    // 优先用历法系统解析（兼容自定义周天名 + 一位分钟等）
+    try {
+      if (typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) {
+        const obj = Calendar.parseAbsoluteTime(s);
+        if (obj) {
+          const mo = String(obj.month).padStart(2, '0');
+          const dd = String(obj.day).padStart(2, '0');
+          const hh = String(obj.hour).padStart(2, '0');
+          const mm2 = String(obj.minute).padStart(2, '0');
+          return parseInt(`${String(obj.year).padStart(4, '0')}${mo}${dd}${hh}${mm2}`, 10);
+        }
+      }
+    } catch(_) {}
+    // 兜底：Calendar 不可用时用本地正则（仅识别内置"星期X"）
     let m = s.match(/(\d{4})\.(\d{2})\.(\d{2})(?:\s+星期[一二三四五六日天])?(?:\s+(\d{1,2}):(\d{2}))?/);
     if (m) {
       const hh = String(m[4] || '0').padStart(2, '0');
       const mm2 = String(m[5] || '0').padStart(2, '0');
       return parseInt(`${m[1]}${m[2]}${m[3]}${hh}${mm2}`, 10);
     }
-    // 格式2：YYYY年MM月DD日 星期X HH:mm
     m = s.match(/(\d{4})年(\d{1,2})月(\d{1,2})日(?:\s+星期[一二三四五六日天])?(?:\s+(\d{1,2}):(\d{2}))?/);
     if (m) {
       const mo = String(m[2]).padStart(2, '0');
@@ -8497,13 +8833,13 @@ _renderMemo(pd);
     } catch(_) {}
 
     // 2. 全局基准时间
-    if (_chatSessionBaseTime) candidates.push(_chatSessionBaseTime);
+    if (_chatSessionBaseTime) candidates.push(_formatPhoneTime(_chatSessionBaseTime) || _chatSessionBaseTime);
 
     // 3. thread 中最新一条有时间的消息
     try {
       const thread = pd?.chatThreads?.[contactId] || [];
       for (let i = thread.length - 1; i >= 0; i--) {
-        if (thread[i].time) { candidates.push(thread[i].time); break; }
+        if (thread[i].time) { candidates.push(_formatPhoneTime(thread[i].time) || thread[i].time); break; }
       }
     } catch(_) {}
 
@@ -10203,8 +10539,11 @@ async function buildHeartsimServiceChatForBackstage() {
     // 主屏分页
     _onPagesScroll,
     // 聊天 App
-  _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openChatOrderPicker, _sendChatOrder, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
+  _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _onChatSettingsPhoneDownToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openChatOrderPicker, _sendChatOrder, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
   ingestChatMessages, getChatHistoryForNPCs,
+  // phoneDown 接口
+  getPendingPhoneDown: () => _pendingPhoneDown,
+  clearPendingPhoneDown: () => { _pendingPhoneDown = null; },
     // 相机 App
     _switchCameraTab, _cameraRefillFromStatus, _cameraOpenAdjust, _cameraShoot, _cameraOpenPhoto, _cameraOnTextInput,
     _closePhotoDetail, _photoEditText, _photoCopyText, _photoDownloadImage, _photoDelete, _photoShareMoment, _photoShareMain,
@@ -10231,7 +10570,7 @@ _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
     _shopShareItem, _shopShareToChat,
     _shopDeleteOrder,
     // 钱包
-    _walletAddCurrency, _walletRemoveCurrency, _openChatTransfer,
+    _walletAddCurrency, _walletRemoveCurrency, _claimTransfer, _showOrderDetail, _openChatTransfer,
     // 日历
     _refreshCalBanner, _calNavMonth, _calSelectDay, _calOpenAddEvent, _calSaveEvent, _calDeleteEvent, _calPickType, _calPickRepeat, _calOpenColorPicker, _calOpenEditEvent, _calSaveEditEvent, _calGoToday,
     // 纪念日

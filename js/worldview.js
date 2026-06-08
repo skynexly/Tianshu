@@ -2785,8 +2785,39 @@ let customsData = [];
 let knowledgesData = [];
 
   // ---------- 节日渲染（只读卡片） ----------
+  // 从节日 date 文本解析出可排序数值（年*10000+月*100+日）。无法解析的返回 Infinity（排末尾）
+  function _festSortKey(dateStr) {
+    const s = String(dateStr || '').trim();
+    if (!s) return Infinity;
+    // 年（可选）：YYYY年 / YYYY-
+    let year = 0;
+    const ym = s.match(/(\d{1,4})\s*年/);
+    if (ym) year = parseInt(ym[1], 10) || 0;
+    // 月日：支持 "4月15日"、"4-15"、"4/15"、"4.15"
+    let mo = 0, day = 0;
+    let m = s.match(/(\d{1,2})\s*月\s*(\d{1,2})/);
+    if (m) { mo = parseInt(m[1], 10); day = parseInt(m[2], 10); }
+    else {
+      m = s.match(/(\d{1,2})\s*[-\/.]\s*(\d{1,2})/);
+      if (m) { mo = parseInt(m[1], 10); day = parseInt(m[2], 10); }
+      else {
+        // 只有月份
+        const mo2 = s.match(/(\d{1,2})\s*月/);
+        if (mo2) mo = parseInt(mo2[1], 10);
+      }
+    }
+    if (!mo) return Infinity; // 解析不出月份，排末尾
+    return year * 10000 + mo * 100 + day;
+  }
+
   function _renderFestivals(festivals) {
     festivalsData = festivals || [];
+    // 按日期顺序排序（无法解析日期的排在最后，保持稳定）
+    festivalsData.sort((a, b) => {
+      const ka = _festSortKey(a && a.date);
+      const kb = _festSortKey(b && b.date);
+      return ka - kb;
+    });
     const container = document.getElementById('wv-festivals-container');
     if (!container) return;
     container.innerHTML = festivalsData.map((f, i) => {
@@ -5194,7 +5225,7 @@ function _buildCalendarEditorHTML(cal) {
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           时段设定
         </div>
-        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px">定义一天中的时间段（按起始小时升序）。跨段时会自动提醒AI进行环境描写过渡。</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px">定义一天中的时间段（按起始小时升序）。跨段时会自动提醒AI进行环境描写过渡。<br>起始小时须为 0-23 的整数，且首个时段必须从 0 点开始（用于覆盖凌晨时分）。</div>
         <div id="cal-period-list">
           ${periodCards}
         </div>
@@ -5392,6 +5423,11 @@ async function _calSetPeriodHour(idx, val) {
     cal.timePeriods[idx].startHour = Math.max(0, Math.min(23, parseInt(val) || 0));
     // 按 startHour 升序排列
     cal.timePeriods.sort((a, b) => a.startHour - b.startHour);
+    // 强制首个时段从 0 点开始（覆盖凌晨时分，避免 0 点到首段之间出现无归属的时间空洞）
+    if (cal.timePeriods.length > 0 && cal.timePeriods[0].startHour !== 0) {
+      cal.timePeriods[0].startHour = 0;
+      try { UI.showToast('首个时段已自动设为 0 点起', 1800); } catch(_) {}
+    }
   }
   await _saveEditingWV(w);
   _calSaveAndRefresh();
@@ -5420,6 +5456,11 @@ async function _calRemovePeriod(idx) {
   const cal = _ensureCalendarSystem(w);
   if (!cal.timePeriods) return;
   cal.timePeriods.splice(idx, 1);
+  // 删除后若首段不再从 0 点开始，自动拉回 0（避免删掉 0 点段后凌晨无归属）
+  if (cal.timePeriods.length > 0 && cal.timePeriods[0].startHour !== 0) {
+    cal.timePeriods[0].startHour = 0;
+    try { UI.showToast('首个时段已自动设为 0 点起', 1800); } catch(_) {}
+  }
   await _saveEditingWV(w);
   _calSaveAndRefresh();
 }

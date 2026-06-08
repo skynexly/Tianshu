@@ -448,6 +448,24 @@ isOpen = !sidebar.classList.contains('hidden');
       Theme.syncGlassPadding();
     }
 
+    // 切回聊天面板时，检测 phoneDown pending 并自动触发
+    if (name === 'chat') {
+      try {
+        if (typeof Phone !== 'undefined' && Phone.getPendingPhoneDown && Phone.getPendingPhoneDown()) {
+          if (typeof Chat !== 'undefined' && !Chat.isStreamingNow()) {
+            // 延迟一帧，等面板动画完成再触发
+            setTimeout(() => {
+              try {
+                if (!Phone.getPendingPhoneDown()) return; // 可能已被消费
+                const input = document.getElementById('chat-input');
+                if (input) { input.value = '<PhoneDown/>'; Chat.send(); }
+              } catch(_) {}
+            }, 300);
+          }
+        }
+      } catch(_) {}
+    }
+
     // 聊天面板：显示 token 和下拉菜单
 const topbarActions = document.querySelector('.topbar-actions');
 if (topbarActions) topbarActions.style.display = (name === 'chat') ? '' : 'none';

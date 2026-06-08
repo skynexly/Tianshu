@@ -596,6 +596,8 @@ async function render(status) {
     _el('sb-weather-text').textContent = weather || '';
     const ww = _el('sb-weather-wrap');
     if (ww) ww.style.display = weather ? '' : 'none';
+    // 环境音：天气变化时同步
+    try { if (typeof Ambient !== 'undefined') Ambient.updateWeather(weather); } catch(_) {}
 
     // 地点
     const placeText = [status.region, status.location].filter(Boolean).join(' · ') || '—';
@@ -1484,19 +1486,14 @@ function hsApplyRelation(relationObj) {
     }
   }
 
-  // 任务批次结清通知：active 从 >0 变 0 时通过手机操作日志告知 AI 下轮可发新任务
-  // 同一对话内只发一次，由 hs._taskBatchNoticed 标记，新批次出现时重置
+  // 任务批次结清通知：active 从 >0 变 0 时标记，供任务面板快照告知 AI 下轮可发新任务
+  // 不再通过 Phone.pushLog 写入手机操作记录（任务状态面板快照每轮已含此信息）
   function _notifyTaskBatchClearedIfNeeded(hs) {
     if (!hs) return;
     const activeNow = (hs.tasks || []).filter(t => (t.status || 'active') === 'active').length;
     if (activeNow === 0) {
       if (!hs._taskBatchNoticed) {
         hs._taskBatchNoticed = true;
-        try {
-          if (window.Phone && Phone.pushLog) {
-            Phone.pushLog('当前任务批次已全部完成/跳过，下一轮可发布新的一批 active 任务（最多3条）。');
-          }
-        } catch(_) {}
       }
     } else {
       // 一旦又有 active 任务（新批次发布），重置通知标记，下次清空再发一次
