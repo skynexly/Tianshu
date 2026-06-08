@@ -23,6 +23,16 @@ const Calendar = (() => {
       { name: '夏', months: [6, 7, 8], weather: '炎热潮湿' },
       { name: '秋', months: [9, 10, 11], weather: '凉爽干燥' },
       { name: '冬', months: [12, 1, 2], weather: '寒冷' }
+    ],
+    timePeriods: [
+      { name: '凌晨', startHour: 0, desc: '天色未明，万籁俱寂' },
+      { name: '早晨', startHour: 5, desc: '天色渐亮，日光初照' },
+      { name: '上午', startHour: 8, desc: '日光明亮，正是活动时间' },
+      { name: '中午', startHour: 11, desc: '日头正盛，光线最强' },
+      { name: '下午', startHour: 14, desc: '日光偏斜，暑气渐消' },
+      { name: '傍晚', startHour: 18, desc: '太阳落山，天色渐暗' },
+      { name: '夜晚', startHour: 20, desc: '天色已暗，灯火亮起' },
+      { name: '深夜', startHour: 23, desc: '夜深人静，一片沉寂' }
     ]
   };
 
@@ -43,9 +53,12 @@ const Calendar = (() => {
         ? customRules.daysPerMonth
         : DEFAULT_RULES.daysPerMonth,
       seasons: (customRules.seasons && customRules.seasons.length > 0)
-        ? customRules.seasons
-        : DEFAULT_RULES.seasons
-    };
+      ? customRules.seasons
+      : DEFAULT_RULES.seasons,
+    timePeriods: (customRules.timePeriods && customRules.timePeriods.length > 0)
+      ? customRules.timePeriods
+      : DEFAULT_RULES.timePeriods
+  };
   }
 
   // ===== 时间格式解析 =====
@@ -300,8 +313,9 @@ const Calendar = (() => {
   // ===== 星期计算 =====
 
   /**
-   * 计算从参考点到目标日期的总天数差，然后 mod 每周天数得到星期
-   * 参考点：使用 year=1, month=1, day=1 作为"星期一"
+   * 计算星期
+   * 默认历法（标准公历7天制）：用 JS Date 精确计算（含闰年）
+   * 自定义历法（非7天制或自定义周天名非标准）：用 _daysSinceEpoch 按固定月天数计算
    * 
    * @param {object} time - { year, month, day }
    * @param {object} rules - 日历规则
@@ -309,6 +323,20 @@ const Calendar = (() => {
    */
   function getWeekDay(time, rules) {
     rules = getRules(rules);
+    // 判断是否为默认公历：7天制且周天名是标准中文星期
+    const isDefaultCalendar = rules.daysPerWeek === 7 &&
+      JSON.stringify(rules.weekDayNames) === JSON.stringify(DEFAULT_RULES.weekDayNames);
+    if (isDefaultCalendar && time.year > 0 && time.month >= 1 && time.month <= 12 && time.day >= 1) {
+      // 用 JS Date 精确算（处理闰年）
+      try {
+        const d = new Date(time.year, time.month - 1, time.day);
+        // JS getDay(): 0=Sun, 1=Mon, ..., 6=Sat → 转换为 weekDayNames index (0=Mon, ..., 6=Sun)
+        const jsDay = d.getDay(); // 0=Sun
+        const idx = jsDay === 0 ? 6 : jsDay - 1; // 0=Mon, 1=Tue, ..., 6=Sun
+        return rules.weekDayNames[idx] || `第${idx + 1}日`;
+      } catch(_) {}
+    }
+    // 自定义历法：按固定规则算
     const totalDays = _daysSinceEpoch(time, rules);
     const weekIdx = ((totalDays % rules.daysPerWeek) + rules.daysPerWeek) % rules.daysPerWeek;
     return rules.weekDayNames[weekIdx] || `第${weekIdx + 1}日`;
@@ -364,6 +392,27 @@ const Calendar = (() => {
       }
     }
     return null;
+  }
+
+  // ===== 时段计算 =====
+
+  /**
+   * 根据当前小时获取时段信息
+   * @param {number} hour - 当前小时 (0-23)
+   * @param {object} rules - 日历规则
+   * @returns {object|null} { name, desc } 或 null
+   */
+  function getTimePeriod(hour, rules) {
+    rules = getRules(rules);
+    const periods = rules.timePeriods;
+    if (!periods || periods.length === 0) return null;
+    // periods 按 startHour 升序排列，找最后一个 startHour <= hour 的
+    let result = periods[0];
+    for (const p of periods) {
+      if (p.startHour <= hour) result = p;
+      else break;
+    }
+    return { name: result.name, desc: result.desc || '' };
   }
 
   // ===== 日期修正（day超过当月天数时自动进位） =====
@@ -430,12 +479,14 @@ const Calendar = (() => {
       const currentTime = parseAbsoluteTime(currentTimeStr);
       if (!delta || !currentTime) {
         // 解析失败，原样返回
-        return { timeStr: currentTimeStr, timeObj: currentTime, season: getSeason(currentTime?.month, rules), weekDay: currentTime ? getWeekDay(currentTime, rules) : '', isDeltaFormat: true, parseError: true };
+        const tp = currentTime ? getTimePeriod(currentTime.hour, rules) : null;
+        return { timeStr: currentTimeStr, timeObj: currentTime, season: getSeason(currentTime?.month, rules), weekDay: currentTime ? getWeekDay(currentTime, rules) : '', timePeriod: tp, isDeltaFormat: true, parseError: true };
       }
       const newTime = addDelta(currentTime, delta, rules);
       const weekDay = getWeekDay(newTime, rules);
       const season = getSeason(newTime.month, rules);
-      return { timeStr: format(newTime, rules), timeObj: newTime, season, weekDay, isDeltaFormat: true };
+      const timePeriod = getTimePeriod(newTime.hour, rules);
+      return { timeStr: format(newTime, rules), timeObj: newTime, season, weekDay, timePeriod, isDeltaFormat: true };
     }
 
     // 情况2：绝对时间格式
@@ -445,12 +496,13 @@ const Calendar = (() => {
       _normalizeDate(parsed, rules);
       const weekDay = getWeekDay(parsed, rules);
       const season = getSeason(parsed.month, rules);
+      const timePeriod = getTimePeriod(parsed.hour, rules);
       // 重新格式化（确保星期正确）
-      return { timeStr: format(parsed, rules), timeObj: parsed, season, weekDay, isDeltaFormat: false };
+      return { timeStr: format(parsed, rules), timeObj: parsed, season, weekDay, timePeriod, isDeltaFormat: false };
     }
 
     // 情况3：无法解析，原样返回
-    return { timeStr: aiTimeValue, timeObj: null, season: null, weekDay: '', isDeltaFormat: false, parseError: true };
+    return { timeStr: aiTimeValue, timeObj: null, season: null, weekDay: '', timePeriod: null, isDeltaFormat: false, parseError: true };
   }
 
   // ===== 暴露接口 =====
@@ -463,6 +515,7 @@ const Calendar = (() => {
     addDelta,
     getWeekDay,
     getSeason,
+    getTimePeriod,
     format,
     processTimeField,
     _getDaysInMonth,

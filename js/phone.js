@@ -539,7 +539,8 @@ function _isAppStillActive(appId) {
   }
 
   // ===== 构建完整上下文（供论坛/地图/好友圈 AI 调用共用） =====
-  async function _buildFullContext() {
+  async function _buildFullContext(opts) {
+    const npcBrief = !!(opts && opts.npcBrief);
     const parts = [];
 
     // v687.33：心动模拟返航后，根据 hsPostHomeMode 决定如何构建世界观/NPC 数据
@@ -606,6 +607,24 @@ function _isAppStillActive(appId) {
           }
         } else {
         // 全图 NPC + 详细资料（世界观 + 世界书合并）
+        if (npcBrief) {
+          // brief 模式：世界观 NPC 只发速查表，不发详细资料
+          try {
+            const quickRef = NPC.formatQuickRef();
+            if (quickRef) parts.push(quickRef);
+          } catch(_) {}
+          // 世界书 NPC 照发全量（通常不多且没简介字段）
+          if (bookExtra.globalNpcs.length > 0) {
+            const lines = bookExtra.globalNpcs.map(npc => {
+              let d = npc.name || '未命名';
+              if (npc.aliases) d += `（别名：${npc.aliases}）`;
+              if (npc.detail) d += `\n${npc.detail}`;
+              return d;
+            });
+            parts.push('【世界书角色】\n' + lines.join('\n---\n'));
+          }
+        } else {
+        // 完整模式：全图 NPC + 详细资料（世界观 + 世界书合并）
         const allNpcs = [];
         const collectNpc = (npc, regionName) => {
           let desc = `${npc.name || '未命名'}`;
@@ -636,6 +655,7 @@ function _isAppStillActive(appId) {
           }
         }
         if (allNpcs.length > 0) parts.push('【NPC列表与详细资料】\n' + allNpcs.join('\n---\n'));
+        }
 
         // 节日设定（世界观 + 世界书合并）
         const allFest = [...(wv.festivals || []), ...bookExtra.festivals];
@@ -7072,7 +7092,7 @@ async function _chatRequestReply(contactId) {
 
     // ② 基础世界观 + 速查表 + ③ 主线最近10轮（_buildFullContext 已含）
     let fullCtx = '';
-    try { fullCtx = await _buildFullContext(); } catch(_) {}
+    try { fullCtx = await _buildFullContext({ npcBrief: true }); } catch(_) {}
 
     // ④ 手机内最近20条聊天记录
     const recent = thread.slice(-20);

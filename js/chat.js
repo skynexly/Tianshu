@@ -721,7 +721,44 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
         }
         // 强调当前时间，防止剧情描写与状态栏时间矛盾
         if (curStatus?.time) {
-          _recentStatusParts.push(`【当前剧情时间】${curStatus.time}\n这是本轮剧情开始时的绝对时间。你的正文描写（光线、活动、氛围等）必须符合这个时间段。你在status中输出的时间增量将基于此时间累加。`);
+          // 计算当前时段
+          let periodLabel = '';
+          let periodDesc = '';
+          try {
+            if (typeof Calendar !== 'undefined' && Calendar.getTimePeriod && Calendar.parseAbsoluteTime) {
+              const _tp = Calendar.parseAbsoluteTime(curStatus.time);
+              if (_tp) {
+                let _calRules = null;
+                try {
+                  const _c = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+                  const _wId = _c?.worldviewId;
+                  const _wv = _wId ? await DB.get('worldviews', _wId) : null;
+                  _calRules = _wv?.gameplay?.calendarSystem || null;
+                } catch(_) {}
+                const pInfo = Calendar.getTimePeriod(_tp.hour, _calRules);
+                if (pInfo) { periodLabel = pInfo.name; periodDesc = pInfo.desc || ''; }
+              }
+            }
+          } catch(_) {}
+          let timePrompt = `【当前剧情时间】${curStatus.time}${periodLabel ? '（' + periodLabel + (periodDesc ? '：' + periodDesc : '') + '）' : ''}\n这是本轮剧情开始时的绝对时间。你的正文描写（光线、活动、氛围等）必须符合这个时间段。你在status中输出的时间增量将基于此时间累加。`;
+
+          // 跨时段检测：读上一轮存的 pending 标记
+          if (curStatus._pendingPeriodTransition) {
+            const pt = curStatus._pendingPeriodTransition;
+            timePrompt += `\n\n【时段转换】时间已从「${pt.from}」推进到「${pt.to}」${pt.toDesc ? '（' + pt.toDesc + '）' : ''}。\n本轮正文必须以1-2句环境过渡描写开头，体现时间流逝带来的变化（光线/温度/声音/人群活动等），然后再继续剧情。禁止忽略时段变化。`;
+            // 清除标记（已注入，不重复）
+            try { delete curStatus._pendingPeriodTransition; await Conversations.setStatusBar(curStatus); } catch(_) {}
+          }
+
+          // 跨季节检测：读上一轮存的 pending 标记
+          if (curStatus._pendingSeasonTransition) {
+            const st = curStatus._pendingSeasonTransition;
+            timePrompt += `\n\n【季节转换】季节已从「${st.from}」进入「${st.to}」${st.toWeather ? '（' + st.toWeather + '）' : ''}。\n本轮正文须体现季节变化对环境的影响（植被/气温/衣着/风向等），然后再继续剧情。`;
+            // 清除标记
+            try { delete curStatus._pendingSeasonTransition; await Conversations.setStatusBar(curStatus); } catch(_) {}
+          }
+
+          _recentStatusParts.push(timePrompt);
         }
       } catch(e) {}
     }
@@ -1997,6 +2034,7 @@ const msgEl = appendMessage(aiMsg, true, true);
                       if (!result.parseError) {
                         merged.time = result.timeStr;
                         if (result.season) merged.season = result.season.name;
+                        if (result.timePeriod) merged.timePeriod = result.timePeriod.name;
                       } else {
                         // 解析失败：通常是 currentTimeStr 缺日期（如纯 "00:00"），
                         // 导致增量加不上去、时间卡死。尝试用现实日期把纯时分补成
@@ -2012,6 +2050,7 @@ const msgEl = appendMessage(aiMsg, true, true);
                             if (!_r2.parseError) {
                               merged.time = _r2.timeStr;
                               if (_r2.season) merged.season = _r2.season.name;
+                              if (_r2.timePeriod) merged.timePeriod = _r2.timePeriod.name;
                               recovered = true;
                             }
                           }
@@ -2033,11 +2072,45 @@ const msgEl = appendMessage(aiMsg, true, true);
                       } catch(_) {}
                       const result = Calendar.processTimeField(merged.time, merged.time, calRules);
                       if (!result.parseError && result.season) merged.season = result.season.name;
+                      if (!result.parseError && result.timePeriod) merged.timePeriod = result.timePeriod.name;
                     } catch(_) {}
                   }
                   // 天气限制5字
                   if (merged.weather && merged.weather.length > 5) {
                     merged.weather = merged.weather.slice(0, 5);
+                  }
+                  // 跨时段检测：oldStatus.timePeriod vs merged.timePeriod
+                  if (merged.timePeriod && oldStatus?.timePeriod && merged.timePeriod !== oldStatus.timePeriod) {
+                    // 存待注入标记，下一轮发送时读取
+                    try {
+                      let _tpDesc = '';
+                      if (typeof Calendar !== 'undefined' && Calendar.getTimePeriod && Calendar.parseAbsoluteTime) {
+                        const _tpObj = Calendar.parseAbsoluteTime(merged.time);
+                        if (_tpObj) {
+                          let _cr = null;
+                          try { const _cv = Conversations.getList().find(c => c.id === Conversations.getCurrent()); _cr = _cv?.worldviewId ? (await DB.get('worldviews', _cv.worldviewId))?.gameplay?.calendarSystem : null; } catch(_) {}
+                          const _pi = Calendar.getTimePeriod(_tpObj.hour, _cr);
+                          if (_pi) _tpDesc = _pi.desc || '';
+                        }
+                      }
+                      merged._pendingPeriodTransition = { from: oldStatus.timePeriod, to: merged.timePeriod, toDesc: _tpDesc };
+                    } catch(_) {}
+                  }
+                  // 跨季节检测：oldStatus.season vs merged.season
+                  if (merged.season && oldStatus?.season && merged.season !== oldStatus.season) {
+                    try {
+                      let _sWeather = '';
+                      if (typeof Calendar !== 'undefined' && Calendar.getSeason && Calendar.parseAbsoluteTime) {
+                        const _tpObj2 = Calendar.parseAbsoluteTime(merged.time);
+                        if (_tpObj2) {
+                          let _cr2 = null;
+                          try { const _cv2 = Conversations.getList().find(c => c.id === Conversations.getCurrent()); _cr2 = _cv2?.worldviewId ? (await DB.get('worldviews', _cv2.worldviewId))?.gameplay?.calendarSystem : null; } catch(_) {}
+                          const _si = Calendar.getSeason(_tpObj2.month, _cr2);
+                          if (_si) _sWeather = _si.weather || '';
+                        }
+                      }
+                      merged._pendingSeasonTransition = { from: oldStatus.season, to: merged.season, toWeather: _sWeather };
+                    } catch(_) {}
                   }
                   if (oldStatus?.heartSim) merged.heartSim = oldStatus.heartSim;
                   if (oldStatus?.customAttrs) merged.customAttrs = oldStatus.customAttrs;

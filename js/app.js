@@ -175,12 +175,12 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v691.1';
-      const CHANGELOG = `【v691.1 更新内容】
-· 修复：世界观开场时间填写后未正确保存（历法保存会用旧快照覆盖开场时间）
-· 修复：开场时间格式不完整（如纯时分）导致每轮增量时间无法累加、时间卡在开场值
-· 修复：新建对话时自动规范化开场时间为完整格式，旧的坏数据可自愈
-· 修复：手动编辑状态栏时间时自动标准化格式，避免后续增量解析失败`;
+    const APP_VERSION = 'v691.2';
+      const CHANGELOG = `【v691.2 更新内容】
+· 修复：历法系统多项 Bug（开场时间保存丢失、一位分钟解析失败、星期计算错误）
+· 新增：时段系统（8段默认定义 + 环境描述），跨时段/跨季节时自动注入环境过渡描写
+· 优化：状态栏时间增量累加逻辑，旧格式数据可自愈
+· 优化：线上聊天 NPC 资料精简为速查表，减少 token 消耗`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

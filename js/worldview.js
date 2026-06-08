@@ -4994,8 +4994,31 @@ function _ensureCalendarSystem(w) {
         { name: '夏', months: [6, 7, 8], weather: '炎热潮湿' },
         { name: '秋', months: [9, 10, 11], weather: '凉爽干燥' },
         { name: '冬', months: [12, 1, 2], weather: '寒冷' }
+      ],
+      timePeriods: [
+        { name: '凌晨', startHour: 0, desc: '天色未明，万籁俱寂' },
+        { name: '早晨', startHour: 5, desc: '天色渐亮，日光初照' },
+        { name: '上午', startHour: 8, desc: '日光明亮，正是活动时间' },
+        { name: '中午', startHour: 11, desc: '日头正盛，光线最强' },
+        { name: '下午', startHour: 14, desc: '日光偏斜，暑气渐消' },
+        { name: '傍晚', startHour: 18, desc: '太阳落山，天色渐暗' },
+        { name: '夜晚', startHour: 20, desc: '天色已暗，灯火亮起' },
+        { name: '深夜', startHour: 23, desc: '夜深人静，一片沉寂' }
       ]
     };
+  }
+  // 兼容旧数据：已有历法但缺 timePeriods 时补上默认值
+  if (!gp.calendarSystem.timePeriods || gp.calendarSystem.timePeriods.length === 0) {
+    gp.calendarSystem.timePeriods = [
+      { name: '凌晨', startHour: 0, desc: '天色未明，万籁俱寂' },
+      { name: '早晨', startHour: 5, desc: '天色渐亮，日光初照' },
+      { name: '上午', startHour: 8, desc: '日光明亮，正是活动时间' },
+      { name: '中午', startHour: 11, desc: '日头正盛，光线最强' },
+      { name: '下午', startHour: 14, desc: '日光偏斜，暑气渐消' },
+      { name: '傍晚', startHour: 18, desc: '太阳落山，天色渐暗' },
+      { name: '夜晚', startHour: 20, desc: '天色已暗，灯火亮起' },
+      { name: '深夜', startHour: 23, desc: '夜深人静，一片沉寂' }
+    ];
   }
   return gp.calendarSystem;
 }
@@ -5076,6 +5099,29 @@ function _buildCalendarEditorHTML(cal) {
     </div>
   `).join('');
 
+  // 时段卡片
+  const periods = cal.timePeriods || [];
+  const periodCards = periods.map((p, i) => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg-secondary)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <input type="text" value="${Utils.escapeHtml(p.name || '')}" placeholder="时段名" maxlength="10"
+          style="width:60px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
+          oninput="Worldview._calSetPeriodName(${i}, this.value)">
+        <input type="number" value="${p.startHour ?? 0}" min="0" max="23" placeholder="起始时"
+          style="width:55px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
+          oninput="Worldview._calSetPeriodHour(${i}, this.value)">
+        <span style="font-size:11px;color:var(--text-secondary)">时起</span>
+        <button type="button" onclick="Worldview._calRemovePeriod(${i})" style="border:none;background:none;color:var(--text-secondary);cursor:pointer;font-size:14px;padding:2px 4px" title="删除">×</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:11px;color:var(--text-secondary)">描述</span>
+        <input type="text" value="${Utils.escapeHtml(p.desc || '')}" placeholder="该时段的环境特征" maxlength="30"
+          style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
+          oninput="Worldview._calSetPeriodDesc(${i}, this.value)">
+      </div>
+    </div>
+  `).join('');
+
   const totalDays = cal.daysPerMonth.reduce((a, b) => a + b, 0);
 
   return `
@@ -5140,6 +5186,19 @@ function _buildCalendarEditorHTML(cal) {
           ${seasonCards}
         </div>
         <button type="button" onclick="Worldview._calAddSeason()" style="margin-top:4px;padding:5px 12px;border:1px dashed var(--border);border-radius:6px;background:none;color:var(--accent);cursor:pointer;font-size:11px">+ 添加季节</button>
+      </div>
+
+      <!-- 时段设定 -->
+      <div style="margin-bottom:24px">
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          时段设定
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px">定义一天中的时间段（按起始小时升序）。跨段时会自动提醒AI进行环境描写过渡。</div>
+        <div id="cal-period-list">
+          ${periodCards}
+        </div>
+        <button type="button" onclick="Worldview._calAddPeriod()" style="margin-top:4px;padding:5px 12px;border:1px dashed var(--border);border-radius:6px;background:none;color:var(--accent);cursor:pointer;font-size:11px">+ 添加时段</button>
       </div>
 
       <!-- 年设定 -->
@@ -5315,6 +5374,56 @@ async function _calRemoveSeason(idx) {
   _calSaveAndRefresh();
 }
 
+// ===== 时段操作 =====
+
+async function _calSetPeriodName(idx, val) {
+  const w = await _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  if (!cal.timePeriods) cal.timePeriods = [];
+  if (cal.timePeriods[idx]) cal.timePeriods[idx].name = val;
+  await _saveEditingWV(w);
+}
+
+async function _calSetPeriodHour(idx, val) {
+  const w = await _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  if (!cal.timePeriods) cal.timePeriods = [];
+  if (cal.timePeriods[idx]) {
+    cal.timePeriods[idx].startHour = Math.max(0, Math.min(23, parseInt(val) || 0));
+    // 按 startHour 升序排列
+    cal.timePeriods.sort((a, b) => a.startHour - b.startHour);
+  }
+  await _saveEditingWV(w);
+  _calSaveAndRefresh();
+}
+
+async function _calSetPeriodDesc(idx, val) {
+  const w = await _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  if (!cal.timePeriods) cal.timePeriods = [];
+  if (cal.timePeriods[idx]) cal.timePeriods[idx].desc = val;
+  await _saveEditingWV(w);
+}
+
+async function _calAddPeriod() {
+  const w = await _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  if (!cal.timePeriods) cal.timePeriods = [];
+  cal.timePeriods.push({ name: '', startHour: 0, desc: '' });
+  cal.timePeriods.sort((a, b) => a.startHour - b.startHour);
+  await _saveEditingWV(w);
+  _calSaveAndRefresh();
+}
+
+async function _calRemovePeriod(idx) {
+  const w = await _getEditingWV(); if (!w) return;
+  const cal = _ensureCalendarSystem(w);
+  if (!cal.timePeriods) return;
+  cal.timePeriods.splice(idx, 1);
+  await _saveEditingWV(w);
+  _calSaveAndRefresh();
+}
+
 async function _calReset() {
   const w = await _getEditingWV(); if (!w) return;
   const gp = _ensureGameplay(w);
@@ -5392,6 +5501,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     openCalendarEditor, closeCalendarEditor,
     _onCalWeekDayChange, _calAddWeekDay, _calRemoveWeekDay, _calToggleDayType, _calSetMonthMode, _calSetUniformDays, _calSetMonthDays, _calAddMonth, _calRemoveMonth,
     _calSetSeasonName, _calSetSeasonMonths, _calSetSeasonWeather, _calAddSeason, _calRemoveSeason, _calReset,
+    _calSetPeriodName, _calSetPeriodHour, _calSetPeriodDesc, _calAddPeriod, _calRemovePeriod,
     _onStartTimeChange,
     _tryExitEdit,
     _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards,

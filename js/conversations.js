@@ -291,11 +291,12 @@ async function init() {
             region: '', location: '', time: initTime,
             weather: '', scene: '', playerOutfit: '', playerPosture: '', npcs: []
           };
-          // 自动计算初始季节（有历法用历法规则，没有用默认四季）
+          // 自动计算初始季节和时段（有历法用历法规则，没有用默认）
           try {
             if (typeof Calendar !== 'undefined') {
               const result = Calendar.processTimeField(initTime, initTime, wv?.gameplay?.calendarSystem || null);
               if (result.season) conv.statusBar.season = result.season.name;
+              if (result.timePeriod) conv.statusBar.timePeriod = result.timePeriod;
             }
           } catch(_) {}
         }
