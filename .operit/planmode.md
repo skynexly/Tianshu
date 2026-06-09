@@ -1,91 +1,55 @@
-## 对话级 gameplay 覆盖（属性/任务/事件配置可对话内修改）
+## 配送时间系统实现计划（更新版）
 
-### 核心机制
+### 概述
+下单后自动生成随机配送时长（饿了咪15-45分钟，桃宝2-5天），存下单时游戏时间原始字符串，每次打开手机/渲染订单时用 `Calendar.parseAbsoluteTime` 解析当前时间和下单时间算分钟差，判断是否到货。到货后注入系统提示词。用户可在世界观 phoneApps 配置中自定义配送时间范围。
 
-**存储方式：整体复制（convGameplay）**
+### Step 1：时间差计算工具函数（phone.js）
+- `_gameTimeToMinutes(timeStr)`：用 `Calendar.parseAbsoluteTime` 解析时间字符串为 {year,month,day,hour,minute} 对象，转成"从公元0年起的总分钟数"（按每月30天、每年360天简化，够用于差值计算）；解析失败 fallback 到 `_parsePhoneTimeScore` 拆解
+- `_getDeliveryRemaining(order)`：计算一个订单的剩余分钟数 = `deliveryMinutes - (当前游戏总分钟 - 下单游戏总分钟)`，负数表示已送达
+- `_formatDeliveryRemaining(minutes)`：格式化剩余时间为"约x天x小时"或"约x分钟"
 
-- 对话对象 `conv` 上新增字段 `convGameplay`（初始为 `null`/不存在）
-- 当用户首次在对话里编辑任何 gameplay 配置时，从当前绑定的世界观完整深拷贝 `wv.gameplay` → `conv.convGameplay`
-- 之后所有读取 gameplay 配置的地方优先读 `conv.convGameplay`，如果没有再 fallback 到 `wv.gameplay`
-- 世界观原件不受影响，对话之间互相隔离
+### Step 2：配送时间配置（phone.js - `_shopMeta` / `DEFAULT_SHOP_CFG`）
+- `DEFAULT_SHOP_CFG` 中新增默认配送配置：
+  - takeout: `{ deliveryMin: 15, deliveryMax: 45, deliveryUnit: 'min' }`
+  - shop: `{ deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day' }`
+- 用户可通过世界观 phoneApps 的 takeout/shop 配置覆盖：
+  - `deliveryMin`：最小配送时间（数字）
+  - `deliveryMax`：最大配送时间（数字）
+  - `deliveryUnit`：'min' 或 'day'
+- `_getShopCfg(kind)` 合并时一并合并这三个字段
+- 没填就用默认值
 
-**读取优先级（需要改动的地方）：**
+### Step 3：数据结构改造（phone.js - `_shopCreateOrder`）
+- 下单时在 order 对象新增：
+  - `deliveryMinutes`：随机配送时长（根据 cfg 的 min/max/unit 生成，unit='day' 时乘以1440转分钟）
+  - `orderGameTime`：下单时状态栏原始时间字符串
+  - `status`：'delivering'（初始）
+- 如果下单时游戏时间为空（状态栏没时间），不生成配送信息，保持旧行为
+- 下单时 toast 显示"预计xx后送达"
+- 修改 `_log` 文案：去掉"配送时间由你在剧情中自然安排"，改为"预计{格式化时间}后送达"
 
-| 模块 | 原来读 | 改后读 |
-|---|---|---|
-| `StatusBar._getTaskConfig()` | `wv.gameplay.taskSystem` | `conv.convGameplay?.taskSystem ?? wv.gameplay.taskSystem` |
-| `StatusBar._renderGlobalAttrs()` | `wv.gameplay.globalAttrs` | `conv.convGameplay?.globalAttrs ?? wv.gameplay.globalAttrs` |
-| `StatusBar._renderCharacterAttrs()` | `wv.gameplay.characterAttrs` | `conv.convGameplay?.characterAttrs ?? wv.gameplay.characterAttrs` |
-| `StatusBar._getCustomAttrPromptData()` | `wv.gameplay.globalAttrs` / `characterAttrs` | 同上 |
-| `StatusBar.formatCustomAttrsFormatPrompt()` | 同上 | 同上 |
-| `StatusBar.applyCustomAttrsDelta()` | `wv.gameplay.globalAttrs` / `characterAttrs` | 同上 |
-| `chat.js` 事件触发条件 | `wv.gameplay.characterAttrs` | 同上 |
-| `chat.js` 事件列表 | `currentWv.events` | `conv.convEvents ?? currentWv.events`（事件也做对话级） |
-| `StatusBar.taskFormatForPrompt()` | `wv.gameplay.taskSystem` | 同上 |
+### Step 4：订单列表 UI 改造（phone.js - 订单渲染处）
+- 每张订单卡片显示配送状态：
+  - status='delivering' 且剩余>0：显示"配送中 · 约{剩余时间}后到达"（橙色文字）
+  - status='delivering' 且剩余<=0：自动标记为 'delivered'，显示"已送达 ✓"（绿色文字）
+  - status='delivered'：显示"已送达 ✓"（绿色文字）
+  - 无 deliveryMinutes 的旧订单：不显示配送状态（兼容）
+- 打开手机/进入订单页时实时计算剩余时间
 
-**核心辅助函数（status_bar.js）：**
-```js
-async function _getConvGameplay() {
-  const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
-  if (conv?.convGameplay) return conv.convGameplay;
-  const wv = await _getCurrentWorldview();
-  return wv?.gameplay || null;
-}
-```
+### Step 5：到货检测与提示词注入（chat.js）
+- 在 chat.js 每轮发送前（和一起听注入同位置附近），调用 `Phone._getDeliveryPrompts()`
+- 该函数遍历所有 delivering 订单，检测是否到达：
+  - 到达 → 标记 status='delivered'，持久化，返回提示词数组
+  - 提示词格式：`【外卖/快递已送达】{{user}}在{平台}下单的"{商品名}"{目标信息}已送达。请在剧情中自然加入收货情节（拆快递/拿外卖/递给对方等），不要复述本提示。`
+- 注入位置：system 消息，和一起听提示词注入方式一致
+- 每个订单只触发一次（status 变更后不再触发）
 
----
+### Step 6：兼容性处理
+- `Calendar.parseAbsoluteTime` 不可用或解析失败 → fallback 用 `_parsePhoneTimeScore` 拆出年月日时分做差值
+- 下单时游戏时间为空 → 不生成配送时间，`_log` 保持旧文案"配送时间由你在剧情中自然安排"
+- 旧订单无 `deliveryMinutes` 字段 → 订单卡片不显示配送状态，不触发到货检测
 
-### 编辑入口
-
-在对话设置的"功能" tab 里，现有的"管理事件"按钮和"重置任务"按钮旁边/下方，增加：
-
-1. **"编辑属性配置"按钮** — 打开属性编辑弹窗（全局属性 + 角色属性的完整编辑面板，和世界观里的体验一致）
-2. **"编辑任务配置"按钮** — 打开任务阶段编辑弹窗（阶段列表 + 任务类型 + 奖励配置）
-3. **"编辑事件列表"按钮** — 打开事件编辑弹窗（事件增删改，对话级副本）
-
-首次点击任意编辑按钮时：
-- 如果 `conv.convGameplay` 不存在，弹确认："将从世界观复制一份配置到当前对话，之后修改只影响本对话。继续？"
-- 用户确认后深拷贝 `wv.gameplay` → `conv.convGameplay`（事件单独：`wv.events` → `conv.convEvents`）
-- 然后打开编辑面板
-
-**编辑面板实现方式：**
-- 复用世界观里已有的渲染/保存逻辑（`_renderAttrRows`、`_renderTaskSystem` 等），但保存目标从 `DB.put('worldviews', w)` 变为写 `conv.convGameplay` 然后 `Conversations.saveList()`
-- 可以在现有 worldview.js 函数基础上加一个 `target` 参数区分写入目标，或者对话级编辑单独实现一套简化版
-
----
-
-### 任务进度冲突处理
-
-- 保存任务配置前检查 `conv.statusBar.taskSystem.active` 是否有活跃任务
-- 如果有，弹窗提示："当前有进行中的任务，修改配置可能导致冲突。建议先重置任务进度。"
-- 提供"重置并保存"和"仅保存（保留现有进度）"两个选项
-- 不强制重置，选择权交给用户
-
----
-
-### 事件对话级覆盖
-
-- `conv` 新增字段 `convEvents`（数组，初始不存在）
-- 读取事件列表时：`conv.convEvents ?? currentWv.events`
-- 编辑事件弹窗里可以增删改事件条目（和世界观事件编辑一样的体验）
-- 事件状态 `conv.eventStates` 保持不变（本来就是对话级的）
-
----
-
-### 文件改动清单
-
-| 文件 | 改动 |
-|---|---|
-| **status_bar.js** | 新增 `_getConvGameplay()` 辅助函数；所有读 `wv.gameplay` 的地方改为优先读 `convGameplay` |
-| **chat.js** | 事件列表读取加 `conv.convEvents` 优先级；对话设置功能 tab 加编辑按钮的 onclick |
-| **index.html** | 对话设置功能 tab 加"编辑属性配置"/"编辑任务配置"/"编辑事件列表"三个按钮；对应的编辑弹窗 HTML |
-| **worldview.js 或 新文件** | 对话级 gameplay 编辑面板的渲染和保存逻辑（复用或简化世界观已有代码） |
-
----
-
-### 注意事项
-
-- 深拷贝用 `JSON.parse(JSON.stringify(...))`
-- `convGameplay` 和 `convEvents` 存在 conv 对象上，会随 `Conversations.saveList()` 持久化
-- 对话设置里加一个"恢复世界观默认"按钮（删除 `convGameplay` / `convEvents`，回退到读世界观原件）
-- 世界观编辑页不受影响，继续写 `wv.gameplay`
+### 文件改动
+- `js/phone.js`：工具函数 + `DEFAULT_SHOP_CFG` 新增配送配置 + `_shopCreateOrder` 改造 + 订单渲染改造 + 导出 `_getDeliveryPrompts`
+- `js/chat.js`：注入检测逻辑（1处）
+- 版本号升级

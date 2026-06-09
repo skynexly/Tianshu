@@ -248,6 +248,27 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
     raw = raw.replace(prisonAllMatch[0], '').trim();
   }
 
+  // 一起听：接受/拒绝邀请 marker
+  // 形如 ```listen_together\n{"accept":true}``` 或 ```listen_together\n{"accept":false,"reason":"..."}```
+  const listenAcceptMatch = raw.match(/```listen_together\s*([\s\S]*?)```/i);
+  if (listenAcceptMatch) {
+    try {
+      const laContent = (listenAcceptMatch[1] || '').trim();
+      if (laContent && laContent.startsWith('{')) {
+        result.listenAccept = JSON.parse(laContent);
+      }
+    } catch(_) { result.listenAccept = { accept: false, reason: '解析失败' }; }
+    raw = raw.replace(listenAcceptMatch[0], '').trim();
+  }
+
+  // 一起听：留言 marker
+  // 形如 ```listen_msg\n留言内容```
+  const listenMsgMatch = raw.match(/```listen_msg\s*([\s\S]*?)```/i);
+  if (listenMsgMatch) {
+    result.listenMsg = (listenMsgMatch[1] || '').trim();
+    raw = raw.replace(listenMsgMatch[0], '').trim();
+  }
+
     // 清理「第X部分 — XXX：」「第X部分 — XXX（...）：」这类格式标签行
     // 第二部分被尾部切割顺带去掉了，但 status 等代码块被提前替换后会留下「第三部分 — 状态面板：」孤儿，统一过滤
     raw = raw.replace(/^[ \t]*第[一二三四五六七八九十]+部分\s*[—\-－]\s*[^\n]*$/gm, '').trim();

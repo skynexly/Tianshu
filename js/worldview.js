@@ -822,8 +822,14 @@ function _syncBuiltinRestoreButton(w) {
       w.phoneApps.forum = w.phoneApps.forum || { name: '', desc: '' };
       w.phoneApps.takeout.name = document.getElementById('wv-takeout-name')?.value || '';
       w.phoneApps.takeout.desc = document.getElementById('wv-takeout-desc')?.value || '';
+      w.phoneApps.takeout.deliveryMin = document.getElementById('wv-takeout-deliveryMin')?.value || '';
+      w.phoneApps.takeout.deliveryMax = document.getElementById('wv-takeout-deliveryMax')?.value || '';
+      w.phoneApps.takeout.deliveryUnit = document.getElementById('wv-takeout-deliveryUnit')?.value || 'min';
       w.phoneApps.shop.name = document.getElementById('wv-shop-name')?.value || '';
       w.phoneApps.shop.desc = document.getElementById('wv-shop-desc')?.value || '';
+      w.phoneApps.shop.deliveryMin = document.getElementById('wv-shop-deliveryMin')?.value || '';
+      w.phoneApps.shop.deliveryMax = document.getElementById('wv-shop-deliveryMax')?.value || '';
+      w.phoneApps.shop.deliveryUnit = document.getElementById('wv-shop-deliveryUnit')?.value || 'day';
       w.phoneApps.forum.name = document.getElementById('wv-forum-name')?.value || '';
       w.phoneApps.forum.desc = document.getElementById('wv-forum-desc')?.value || '';
       const skinEl = document.getElementById('wv-statusbar-skin');
@@ -870,7 +876,7 @@ function _syncBuiltinRestoreButton(w) {
 
   function _attachWVAutoSave() {
     // 主编辑页
-    ['wv-name','wv-description','wv-setting','wv-currency-name','wv-currency-desc','wv-takeout-name','wv-takeout-desc','wv-shop-name','wv-shop-desc','wv-forum-name','wv-forum-desc','wv-statusbar-skin','wv-start-time','wv-start-plot','wv-start-plot-rounds','wv-start-message'].forEach(id => {
+    ['wv-name','wv-description','wv-setting','wv-currency-name','wv-currency-desc','wv-takeout-name','wv-takeout-desc','wv-shop-name','wv-shop-desc','wv-forum-name','wv-forum-desc','wv-statusbar-skin','wv-start-time','wv-start-plot','wv-start-plot-rounds','wv-start-message','wv-takeout-deliveryMin','wv-takeout-deliveryMax','wv-takeout-deliveryUnit','wv-shop-deliveryMin','wv-shop-deliveryMax','wv-shop-deliveryUnit'].forEach(id => {
       const el = document.getElementById(id);
       if (el) {
         el.removeEventListener('input', _wvAutoSave);
@@ -990,10 +996,16 @@ function _syncBuiltinRestoreButton(w) {
     const _paTk = _pa.takeout || {};
     const _paSh = _pa.shop || {};
     const _paFm = _pa.forum || {};
-    const _tkN = document.getElementById('wv-takeout-name'); if (_tkN) _tkN.value = _paTk.name || '';
-    const _tkD = document.getElementById('wv-takeout-desc'); if (_tkD) _tkD.value = _paTk.desc || '';
-    const _shN = document.getElementById('wv-shop-name'); if (_shN) _shN.value = _paSh.name || '';
-    const _shD = document.getElementById('wv-shop-desc'); if (_shD) _shD.value = _paSh.desc || '';
+const _tkN = document.getElementById('wv-takeout-name'); if (_tkN) _tkN.value = _paTk.name || '';
+      const _tkD = document.getElementById('wv-takeout-desc'); if (_tkD) _tkD.value = _paTk.desc || '';
+      const _tkDMin = document.getElementById('wv-takeout-deliveryMin'); if (_tkDMin) _tkDMin.value = _paTk.deliveryMin || '';
+      const _tkDMax = document.getElementById('wv-takeout-deliveryMax'); if (_tkDMax) _tkDMax.value = _paTk.deliveryMax || '';
+      const _tkDUnit = document.getElementById('wv-takeout-deliveryUnit'); if (_tkDUnit) _tkDUnit.value = _paTk.deliveryUnit || 'min';
+      const _shN = document.getElementById('wv-shop-name'); if (_shN) _shN.value = _paSh.name || '';
+      const _shD = document.getElementById('wv-shop-desc'); if (_shD) _shD.value = _paSh.desc || '';
+      const _shDMin = document.getElementById('wv-shop-deliveryMin'); if (_shDMin) _shDMin.value = _paSh.deliveryMin || '';
+      const _shDMax = document.getElementById('wv-shop-deliveryMax'); if (_shDMax) _shDMax.value = _paSh.deliveryMax || '';
+      const _shDUnit = document.getElementById('wv-shop-deliveryUnit'); if (_shDUnit) _shDUnit.value = _paSh.deliveryUnit || 'day';
     const _fmN = document.getElementById('wv-forum-name'); if (_fmN) _fmN.value = _paFm.name || '';
     const _fmD = document.getElementById('wv-forum-desc'); if (_fmD) _fmD.value = _paFm.desc || '';
     const _skin = document.getElementById('wv-statusbar-skin');

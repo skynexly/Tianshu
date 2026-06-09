@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=140">
-<link rel="stylesheet" href="css/phone.css?v=17">
+<link rel="stylesheet" href="css/phone.css?v=52">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
 </head>
@@ -3165,11 +3165,13 @@ NPC
               <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">短时效商城 <span style="color:var(--text-secondary);opacity:.7">（默认：饿了咪·外卖）</span></div>
               <label style="margin-bottom:8px">商城名称<input type="text" id="wv-takeout-name" placeholder="例如：灵厨到家 / 补给空投"></label>
               <label>商城描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这家卖什么）</span><div style="position:relative;width:100%"><textarea id="wv-takeout-desc" class="auto-resize-textarea" rows="2" placeholder="例如：修真界即时灵厨外送，卖餐食、茶水、灵丹小点，短时效到手" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-takeout-desc','短时效商城描述')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
+              <div style="margin-top:8px"><span style="font-size:11px;color:var(--text-secondary)">配送时间（留空用默认15-45分钟）</span><div style="display:flex;align-items:center;gap:6px;margin-top:4px"><input type="number" id="wv-takeout-deliveryMin" placeholder="最小" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:12px"> ~ <input type="number" id="wv-takeout-deliveryMax" placeholder="最大" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:12px"><select id="wv-takeout-deliveryUnit" style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:12px"><option value="min">分钟</option><option value="day">天</option></select></div></div>
             </div>
             <div style="background:var(--bg-tertiary);padding:10px;border-radius:8px;margin-bottom:14px">
               <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">长时效商城 <span style="color:var(--text-secondary);opacity:.7">（默认：桃宝·网购）</span></div>
               <label style="margin-bottom:8px">商城名称<input type="text" id="wv-shop-name" placeholder="例如：天机阁 / 主神商城"></label>
               <label>商城描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这家卖什么）</span><div style="position:relative;width:100%"><textarea id="wv-shop-desc" class="auto-resize-textarea" rows="2" placeholder="例如：修真界网购平台，卖法宝、丹药、符箓、灵草等长时效物品" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-shop-desc','长时效商城描述')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
+              <div style="margin-top:8px"><span style="font-size:11px;color:var(--text-secondary)">配送时间（留空用默认2-5天）</span><div style="display:flex;align-items:center;gap:6px;margin-top:4px"><input type="number" id="wv-shop-deliveryMin" placeholder="最小" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:12px"> ~ <input type="number" id="wv-shop-deliveryMax" placeholder="最大" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:12px"><select id="wv-shop-deliveryUnit" style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:12px"><option value="day">天</option><option value="min">分钟</option></select></div></div>
             </div>
 
             <div style="font-size:13px;font-weight:bold;color:var(--text);margin:6px 0 6px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg> 信息载体 <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（替换默认的"论坛"）</span></div>
@@ -3839,7 +3841,7 @@ const GameLog = (() => {
   return { log, toggle, clear, render };
 })();
 </script>
-<script src="js/db.js"></script>
+<script src="js/db.js?v=11"></script>
 <script src="js/utils.js"></script>
 <script src="js/markdown.js"></script>
 <script src="js/api.js"></script>
@@ -3851,7 +3853,7 @@ const GameLog = (() => {
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=47"></script>
-<script src="js/worldview.js?v=20"></script>
+<script src="js/worldview.js?v=21"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js"></script>
@@ -3875,10 +3877,11 @@ const GameLog = (() => {
 <script src="js/backstage.js"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=7"></script>
-<script src="js/status_bar.js?v=19"></script>
+<script src="js/status_bar.js?v=21"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/worldvoice.js?v=3"></script>
-<script src="js/phone.js?v=94"></script>
+<script src="js/music.js?v=3"></script>
+<script src="js/phone.js?v=172"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -4330,7 +4333,7 @@ document.addEventListener('click', (e) => {
 
 <!-- 全屏输入弹窗 -->
 <div id="fullscreen-input-modal" class="modal hidden" style="align-items:stretch;padding:0;background:var(--bg)">
-  <div style="display:flex;flex-direction:column;width:100%;height:100%;background:var(--bg-secondary);padding:16px;box-sizing:border-box">
+  <div style="display:flex;flex-direction:column;width:100%;height:100%;background:var(--bg-secondary);padding:16px;padding-top:max(16px, env(safe-area-inset-top, 16px));box-sizing:border-box">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
       <span id="fullscreen-input-title" style="font-size:16px;font-weight:bold;color:var(--text)"></span>
       <button onclick="Utils.closeFullscreen()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">完成</button>

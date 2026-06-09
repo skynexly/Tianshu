@@ -1520,6 +1520,45 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
       }
     } catch(_) {}
 
+    // 一起听：邀请提示词注入（pending 状态时，每轮都注入直到 AI 回标记）
+    try {
+      if (typeof Phone !== 'undefined' && Phone._ltGetPendingPrompt) {
+        const _ltPrompt = Phone._ltGetPendingPrompt();
+        if (_ltPrompt) {
+          const insertIdx = apiMessages.length - 1;
+          if (insertIdx >= 0) {
+            apiMessages.splice(insertIdx, 0, { role: 'system', content: _ltPrompt });
+          }
+        }
+      }
+    } catch(_) {}
+
+    // 一起听：进行中提示词注入（active 状态、线下、有在播歌时，每轮注入当前歌信息）
+    try {
+      if (typeof Phone !== 'undefined' && Phone._ltGetActivePrompt) {
+        const _ltActive = Phone._ltGetActivePrompt();
+        if (_ltActive) {
+          const insertIdx = apiMessages.length - 1;
+          if (insertIdx >= 0) {
+            apiMessages.splice(insertIdx, 0, { role: 'system', content: _ltActive });
+          }
+        }
+      }
+    } catch(_) {}
+
+    // 配送到货提示词注入
+    try {
+      if (typeof Phone !== 'undefined' && Phone._getDeliveryPrompts) {
+        const _deliveryPrompts = await Phone._getDeliveryPrompts();
+        if (_deliveryPrompts && _deliveryPrompts.length > 0) {
+          const insertIdx = apiMessages.length - 1;
+          if (insertIdx >= 0) {
+            apiMessages.splice(insertIdx, 0, { role: 'system', content: _deliveryPrompts.join('\n') });
+          }
+        }
+      }
+    } catch(_) {}
+
     // 手机聊天记录注入：当用户提到线上聊天相关关键词时，注入在场角色的聊天记录
     try {
       const _lastUserContent = (apiMessages.filter(m => m.role === 'user').pop()?.content || '').toLowerCase();
@@ -2194,6 +2233,20 @@ const msgEl = appendMessage(aiMsg, true, true);
                 }
               }
             } catch(e) { console.warn('[Chat] homecoming 触发检测失败', e); }
+
+            // 一起听：处理接受/拒绝标记
+            try {
+              if (parsed.listenAccept && typeof Phone !== 'undefined' && Phone._ltHandleAccept) {
+                await Phone._ltHandleAccept(parsed.listenAccept);
+              }
+            } catch(e) { console.warn('[Chat] listenAccept 处理失败', e); }
+
+            // 一起听：处理留言标记（线下公放/耳机共享）
+            try {
+              if (parsed.listenMsg && typeof Phone !== 'undefined' && Phone._ltHandleMsg) {
+                await Phone._ltHandleMsg(parsed.listenMsg);
+              }
+            } catch(e) { console.warn('[Chat] listenMsg 处理失败', e); }
 
             try {
               const finalStatus = Conversations.getStatusBar();

@@ -857,6 +857,15 @@ async function saveEdit() {
             } catch(_) {}
             const formatted = Calendar.format(parsed, calRules);
             if (formatted) val = formatted;
+            // 手动改时间后同步重算季节/时段（与 AI 输出后的逻辑对齐）
+            try {
+              const r = Calendar.processTimeField(val, val, calRules);
+              if (r && !r.parseError) {
+                if (r.timeStr) val = r.timeStr;
+                if (r.season) _currentStatus.season = r.season.name;
+                if (r.timePeriod) _currentStatus.timePeriod = r.timePeriod.name;
+              }
+            } catch(_) {}
           } catch(_) {}
         }
       }
@@ -880,6 +889,15 @@ async function saveEdit() {
             } catch(_) {}
             const formatted = Calendar.format ? Calendar.format(parsed, calRules) : null;
             if (formatted) timeVal = formatted;
+            // 手动改时间后同步重算季节/时段（与 AI 输出后的逻辑对齐）
+            try {
+              const r = Calendar.processTimeField(timeVal, timeVal, calRules);
+              if (r && !r.parseError) {
+                if (r.timeStr) timeVal = r.timeStr;
+                if (r.season) _currentStatus.season = r.season.name;
+                if (r.timePeriod) _currentStatus.timePeriod = r.timePeriod.name;
+              }
+            } catch(_) {}
           } catch(_) {}
         }
       }
