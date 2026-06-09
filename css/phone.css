@@ -3005,6 +3005,115 @@ background: transparent !important;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
+/* 视图切换按钮（标题栏右上角） */
+.phone-ledger-viewbtn {
+  width: 36px; height: 36px;
+  background: none; border: none;
+  color: var(--text); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; line-height: 0;
+}
+/* 日历视图 */
+.phone-ledger-cal-month {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 4px 0 12px;
+}
+.phone-ledger-cal-grid {
+  display: grid;
+  gap: 4px;
+}
+.phone-ledger-cal-wd {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  padding-bottom: 4px;
+}
+.phone-ledger-cal-cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background .12s;
+}
+.phone-ledger-cal-cell.empty { cursor: default; }
+.phone-ledger-cal-cell.sel { background: var(--accent); }
+.phone-ledger-cal-cell.sel .phone-ledger-cal-day { color: #111; font-weight: 700; }
+.phone-ledger-cal-day {
+  font-size: 13px;
+  color: var(--text);
+}
+.phone-ledger-cal-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  margin-top: 2px;
+}
+.phone-ledger-cal-dot.in { background: #22c55e; }
+.phone-ledger-cal-dot.out { background: #ef4444; }
+.phone-ledger-cal-detail {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.phone-ledger-cal-detail-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+/* 年视图 */
+.phone-ledger-year-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.phone-ledger-year-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+}
+.phone-ledger-year-row.cur {
+  border-color: var(--accent);
+}
+.phone-ledger-year-m {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  width: 40px;
+  flex-shrink: 0;
+}
+.phone-ledger-year-io {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.phone-ledger-year-io .in { color: #22c55e; }
+.phone-ledger-year-io .out { color: #ef4444; }
+.phone-ledger-year-sur {
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.phone-ledger-year-sur.in { color: #22c55e; }
+.phone-ledger-year-sur.out { color: #ef4444; }
+.phone-shell.has-custom-wallpaper .phone-ledger-year-row {
+  background-color: rgba(255,255,255,0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
 
 /* ===== 音乐播放器卡片 ===== */
 .phone-music-card {
@@ -3026,6 +3135,7 @@ background: transparent !important;
 }
 .phone-music-empty-icon { opacity: 0.5; }
 .phone-music-empty-text { font-size: 13px; }
+.phone-music-controls-disabled .phone-music-ctrl { opacity: 0.4; }
 .phone-music-top { display: flex; align-items: center; gap: 10px; }
 .phone-music-cover {
   width: 44px; height: 44px; border-radius: 10px; overflow: hidden; flex-shrink: 0;

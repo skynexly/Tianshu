@@ -1291,6 +1291,8 @@ async function openApp(appId) {
  document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-forum-detail-mode');
  document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-home-mode');
  document.getElementById('phone-back-btn')?.classList.remove('hidden');
+ // 清空标题栏右上角（各 App 自行按需重填，避免上一个 App 的按钮残留）
+ { const _hr = document.getElementById('phone-header-right'); if (_hr) _hr.innerHTML = ''; }
 
     const phoneData = await _getPhoneData();
     if (!phoneData) { UI.showToast('无法获取手机数据', 1500); return; }
@@ -1443,6 +1445,8 @@ async function _walletRemoveCurrency(attrId) {
 
 // ===== 记账 App =====
 let _ledgerCurTab = null; // 当前查看的货币 id（null=自动取第一个）
+let _ledgerView = 'month'; // 'month' | 'calendar' | 'year'
+let _ledgerCalDay = null; // 日历视图中选中的日（null=未选中）
 
 // 余额 diff 兜底：对比当前余额和上次快照，差额补一条「未知变动」
 async function _ledgerReconcile() {
@@ -1523,8 +1527,42 @@ async function _renderLedger(pd) {
       ${infos.map(c => `<div class="phone-ledger-curtab ${c.id === _ledgerCurTab ? 'active' : ''}" onclick="Phone._ledgerSwitchCur('${Utils.escapeHtml(c.id)}')">${Utils.escapeHtml(c.name)}</div>`).join('')}
     </div>` : '';
 
-  // 本月收支汇总
   const ledger = (pd.ledger || []).filter(e => e.currencyId === _ledgerCurTab);
+
+  // 右上角视图循环切换图标
+  const viewIcon = { month: 'calendar', calendar: 'chartYear', year: 'chartMonth' };
+  const viewTitle = { month: '月视图（点切日历）', calendar: '日历视图（点切年）', year: '年视图（点切月）' };
+  const headerRight = document.getElementById('phone-header-right');
+  if (headerRight) {
+    headerRight.innerHTML = `<button class="phone-ledger-viewbtn" title="${viewTitle[_ledgerView]}" onclick="Phone._ledgerCycleView()">${_ledgerViewSvg(viewIcon[_ledgerView])}</button>`;
+  }
+
+  let viewHtml;
+  if (_ledgerView === 'calendar') viewHtml = _ledgerRenderCalendarView(ledger, curInfo);
+  else if (_ledgerView === 'year') viewHtml = _ledgerRenderYearView(ledger, curInfo);
+  else viewHtml = _ledgerRenderMonthView(ledger, curInfo);
+
+  body.innerHTML = `
+    <div class="phone-ledger-wrap">
+      ${curTabs}
+      ${viewHtml}
+      <button class="phone-ledger-add-btn" onclick="Phone._ledgerAddManual()">+ 手动记一笔</button>
+    </div>`;
+}
+
+// 视图切换图标
+function _ledgerViewSvg(name) {
+  const c = 'viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  const M = {
+    calendar: `<svg ${c}><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
+    chartYear: `<svg ${c}><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>`,
+    chartMonth: `<svg ${c}><path d="M3 3v18h18"></path><path d="M7 14l4-4 3 3 5-6"></path></svg>`,
+  };
+  return M[name] || '';
+}
+
+// 月视图（原逻辑）
+function _ledgerRenderMonthView(ledger, curInfo) {
   const cur = _getGameTime();
   const curParsed = (cur && typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) ? Calendar.parseAbsoluteTime(cur) : null;
   let monthIn = 0, monthOut = 0;
@@ -1537,42 +1575,169 @@ async function _renderLedger(pd) {
   }
   const monthSurplus = monthIn - monthOut;
 
-  // 账目列表（按时间倒序）
-  const sorted = ledger.slice().sort((a, b) => {
-    const sa = _gameTimeToMinutes(a.time) || 0, sb = _gameTimeToMinutes(b.time) || 0;
-    return sb - sa;
+  // 本月账目列表（按时间倒序）
+  const monthLedger = ledger.filter(e => {
+    const p = (typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) ? Calendar.parseAbsoluteTime(e.time) : null;
+    return p && curParsed && p.year === curParsed.year && p.month === curParsed.month;
   });
-  const listHtml = sorted.length ? sorted.map(e => {
-    const isIn = e.amount >= 0;
-    const amtText = (isIn ? '+' : '') + e.amount;
-    const head = e.platform ? `${Utils.escapeHtml(e.platform)} · ${Utils.escapeHtml(e.note || e.category)}`
-      : (e.counterparty ? `${Utils.escapeHtml(e.category)} · ${Utils.escapeHtml(e.counterparty)}`
-      : Utils.escapeHtml(e.note || e.category || '记录'));
-    const sub = [e.category, _formatPhoneTime(e.time || '')].filter(Boolean).map(Utils.escapeHtml).join(' · ');
-    return `<div class="phone-ledger-item" onclick="Phone._ledgerEditEntry('${e.id}')">
-      <div class="phone-ledger-item-main">
-        <div class="phone-ledger-item-title">${head}</div>
-        <div class="phone-ledger-item-sub">${sub}</div>
-      </div>
-      <div class="phone-ledger-item-amt ${isIn ? 'in' : 'out'}">${Utils.escapeHtml(amtText)}</div>
-    </div>`;
-  }).join('') : '<div style="text-align:center;color:var(--text-secondary);font-size:13px;padding:30px 0;opacity:0.7">本货币暂无账目</div>';
+  const sorted = monthLedger.slice().sort((a, b) => (_gameTimeToMinutes(b.time) || 0) - (_gameTimeToMinutes(a.time) || 0));
+  const listHtml = sorted.length ? sorted.map(_ledgerItemHtml).join('')
+    : '<div style="text-align:center;color:var(--text-secondary);font-size:13px;padding:30px 0;opacity:0.7">本月暂无账目</div>';
 
-  body.innerHTML = `
-    <div class="phone-ledger-wrap">
-      ${curTabs}
-      <div class="phone-ledger-summary">
-        <div class="phone-ledger-sum-title">${Utils.escapeHtml(curInfo.name)} · 本月</div>
-        <div class="phone-ledger-sum-row">
-          <div class="phone-ledger-sum-cell"><div class="phone-ledger-sum-label">收入</div><div class="phone-ledger-sum-val in">+${monthIn}</div></div>
-          <div class="phone-ledger-sum-cell"><div class="phone-ledger-sum-label">支出</div><div class="phone-ledger-sum-val out">-${monthOut}</div></div>
-          <div class="phone-ledger-sum-cell"><div class="phone-ledger-sum-label">结余</div><div class="phone-ledger-sum-val ${monthSurplus < 0 ? 'out' : 'in'}">${monthSurplus >= 0 ? '+' : ''}${monthSurplus}</div></div>
-        </div>
-        <div class="phone-ledger-sum-bal">当前余额 ${Utils.escapeHtml(String(curInfo.balance))}</div>
+  return `
+    <div class="phone-ledger-summary">
+      <div class="phone-ledger-sum-title">${Utils.escapeHtml(curInfo.name)} · 本月</div>
+      <div class="phone-ledger-sum-row">
+        <div class="phone-ledger-sum-cell"><div class="phone-ledger-sum-label">收入</div><div class="phone-ledger-sum-val in">+${monthIn}</div></div>
+        <div class="phone-ledger-sum-cell"><div class="phone-ledger-sum-label">支出</div><div class="phone-ledger-sum-val out">-${monthOut}</div></div>
+        <div class="phone-ledger-sum-cell"><div class="phone-ledger-sum-label">结余</div><div class="phone-ledger-sum-val ${monthSurplus < 0 ? 'out' : 'in'}">${monthSurplus >= 0 ? '+' : ''}${monthSurplus}</div></div>
       </div>
-      <div class="phone-ledger-list">${listHtml}</div>
-      <button class="phone-ledger-add-btn" onclick="Phone._ledgerAddManual()">+ 手动记一笔</button>
+      <div class="phone-ledger-sum-bal">当前余额 ${Utils.escapeHtml(String(curInfo.balance))}</div>
+    </div>
+    <div class="phone-ledger-list">${listHtml}</div>`;
+}
+
+// 单条账目 HTML
+function _ledgerItemHtml(e) {
+  const isIn = e.amount >= 0;
+  const amtText = (isIn ? '+' : '') + e.amount;
+  const head = e.platform ? `${Utils.escapeHtml(e.platform)} · ${Utils.escapeHtml(e.note || e.category)}`
+    : (e.counterparty ? `${Utils.escapeHtml(e.category)} · ${Utils.escapeHtml(e.counterparty)}`
+    : Utils.escapeHtml(e.note || e.category || '记录'));
+  const sub = [e.category, _formatPhoneTime(e.time || '')].filter(Boolean).map(Utils.escapeHtml).join(' · ');
+  return `<div class="phone-ledger-item" onclick="Phone._ledgerEditEntry('${e.id}')">
+    <div class="phone-ledger-item-main">
+      <div class="phone-ledger-item-title">${head}</div>
+      <div class="phone-ledger-item-sub">${sub}</div>
+    </div>
+    <div class="phone-ledger-item-amt ${isIn ? 'in' : 'out'}">${Utils.escapeHtml(amtText)}</div>
+  </div>`;
+}
+
+// 日历视图：复用历法格子，有消费的天打小点，点某天展开当天明细
+function _ledgerRenderCalendarView(ledger, curInfo) {
+  const cur = _getGameTime();
+  const curParsed = (cur && typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) ? Calendar.parseAbsoluteTime(cur) : null;
+  if (!curParsed) return '<div style="text-align:center;color:var(--text-secondary);font-size:13px;padding:30px 0;opacity:0.7">无法获取当前时间</div>';
+
+  let rules = null;
+  try { rules = _getCalRulesCached(); } catch(_) {}
+  const monthsPerYear = rules?.monthsPerYear || 12;
+  const dpm = rules?.daysPerMonth || [];
+  const daysInMonth = dpm.length ? (dpm[(curParsed.month - 1) % dpm.length] || 30) : 30;
+  const weekNames = (rules?.weekDayNames && rules.weekDayNames.length) ? rules.weekDayNames : ['一','二','三','四','五','六','日'];
+  const daysPerWeek = weekNames.length;
+
+  // 当月每天净额
+  const dayNet = {};
+  for (const e of ledger) {
+    const p = (typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) ? Calendar.parseAbsoluteTime(e.time) : null;
+    if (!p) continue;
+    if (p.year === curParsed.year && p.month === curParsed.month) {
+      dayNet[p.day] = (dayNet[p.day] || 0) + (+e.amount || 0);
+    }
+  }
+
+  // 当月第一天是星期几（用历法推算）
+  let firstWeekIdx = 0;
+  try {
+    if (typeof Calendar !== 'undefined' && Calendar.getWeekDay) {
+      const wd = Calendar.getWeekDay({ year: curParsed.year, month: curParsed.month, day: 1, hour: 0, minute: 0 }, rules);
+      const idx = weekNames.indexOf(wd);
+      if (idx >= 0) firstWeekIdx = idx;
+    }
+  } catch(_) {}
+
+  const weekHead = weekNames.map(n => `<div class="phone-ledger-cal-wd">${Utils.escapeHtml(n)}</div>`).join('');
+  let cells = '';
+  for (let i = 0; i < firstWeekIdx; i++) cells += '<div class="phone-ledger-cal-cell empty"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const net = dayNet[d];
+    const hasData = net !== undefined;
+    const isSel = _ledgerCalDay === d;
+    const dot = hasData ? `<div class="phone-ledger-cal-dot ${net < 0 ? 'out' : 'in'}"></div>` : '';
+    cells += `<div class="phone-ledger-cal-cell ${isSel ? 'sel' : ''}" onclick="Phone._ledgerCalPick(${d})">
+      <span class="phone-ledger-cal-day">${d}</span>${dot}
     </div>`;
+  }
+
+  // 选中某天的明细
+  let dayDetail = '';
+  if (_ledgerCalDay) {
+    const dayLedger = ledger.filter(e => {
+      const p = (typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) ? Calendar.parseAbsoluteTime(e.time) : null;
+      return p && p.year === curParsed.year && p.month === curParsed.month && p.day === _ledgerCalDay;
+    }).sort((a, b) => (_gameTimeToMinutes(b.time) || 0) - (_gameTimeToMinutes(a.time) || 0));
+    const detailList = dayLedger.length ? dayLedger.map(_ledgerItemHtml).join('')
+      : '<div style="text-align:center;color:var(--text-secondary);font-size:12px;padding:20px 0;opacity:0.7">这天没有消费记录</div>';
+    dayDetail = `<div class="phone-ledger-cal-detail">
+      <div class="phone-ledger-cal-detail-title">${curParsed.month}月${_ledgerCalDay}日</div>
+      ${detailList}
+    </div>`;
+  }
+
+  return `
+    <div class="phone-ledger-cal-month">${curParsed.year}年 ${curParsed.month}月</div>
+    <div class="phone-ledger-cal-grid" style="grid-template-columns:repeat(${daysPerWeek},1fr)">
+      ${weekHead}
+      ${cells}
+    </div>
+    ${dayDetail}`;
+}
+
+// 年视图：按历法每月一行，显示收支结余 + 年度总计
+function _ledgerRenderYearView(ledger, curInfo) {
+  const cur = _getGameTime();
+  const curParsed = (cur && typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) ? Calendar.parseAbsoluteTime(cur) : null;
+  if (!curParsed) return '<div style="text-align:center;color:var(--text-secondary);font-size:13px;padding:30px 0;opacity:0.7">无法获取当前时间</div>';
+
+  let rules = null;
+  try { rules = _getCalRulesCached(); } catch(_) {}
+  const monthsPerYear = rules?.monthsPerYear || 12;
+
+  // 每月统计
+  const mIn = {}, mOut = {};
+  let yearIn = 0, yearOut = 0;
+  for (const e of ledger) {
+    const p = (typeof Calendar !== 'undefined' && Calendar.parseAbsoluteTime) ? Calendar.parseAbsoluteTime(e.time) : null;
+    if (!p || p.year !== curParsed.year) continue;
+    if (e.amount >= 0) { mIn[p.month] = (mIn[p.month] || 0) + e.amount; yearIn += e.amount; }
+    else { mOut[p.month] = (mOut[p.month] || 0) + (-e.amount); yearOut += (-e.amount); }
+  }
+  const yearSurplus = yearIn - yearOut;
+
+  let rows = '';
+  for (let m = 1; m <= monthsPerYear; m++) {
+    const inc = mIn[m] || 0, out = mOut[m] || 0, sur = inc - out;
+    const isCur = m === curParsed.month;
+    rows += `<div class="phone-ledger-year-row ${isCur ? 'cur' : ''}">
+      <div class="phone-ledger-year-m">${m}月</div>
+      <div class="phone-ledger-year-io"><span class="in">+${inc}</span> / <span class="out">-${out}</span></div>
+      <div class="phone-ledger-year-sur ${sur < 0 ? 'out' : 'in'}">${sur >= 0 ? '+' : ''}${sur}</div>
+    </div>`;
+  }
+
+  return `
+    <div class="phone-ledger-summary">
+      <div class="phone-ledger-sum-title">${Utils.escapeHtml(curInfo.name)} · ${curParsed.year}年</div>
+      <div class="phone-ledger-sum-row">
+        <div class="phone-ledger-sum-cell"><div class="phone-ledger-sum-label">年收入</div><div class="phone-ledger-sum-val in">+${yearIn}</div></div>
+        <div class="phone-ledger-sum-cell"><div class="phone-ledger-sum-label">年支出</div><div class="phone-ledger-sum-val out">-${yearOut}</div></div>
+        <div class="phone-ledger-sum-cell"><div class="phone-ledger-sum-label">年结余</div><div class="phone-ledger-sum-val ${yearSurplus < 0 ? 'out' : 'in'}">${yearSurplus >= 0 ? '+' : ''}${yearSurplus}</div></div>
+      </div>
+    </div>
+    <div class="phone-ledger-year-list">${rows}</div>`;
+}
+
+function _ledgerCycleView() {
+  _ledgerView = _ledgerView === 'month' ? 'calendar' : (_ledgerView === 'calendar' ? 'year' : 'month');
+  _ledgerCalDay = null;
+  _getPhoneData().then(pd => _renderLedger(pd));
+}
+
+function _ledgerCalPick(day) {
+  _ledgerCalDay = (_ledgerCalDay === day) ? null : day;
+  _getPhoneData().then(pd => _renderLedger(pd));
 }
 
 function _ledgerSwitchCur(id) {
@@ -2076,10 +2241,30 @@ function _renderMusicCardInner() {
   const prog = (typeof Music !== 'undefined') ? Music.getProgress() : { ratio: 0, curText: '0:00', durText: '0:00' };
 
   if (!tracks.length) {
-    return `<div class="phone-music-empty" onclick="Phone._openMusicLibrary()">
-      <div class="phone-music-empty-icon">${_musicSvg('list')}</div>
-      <div class="phone-music-empty-text">点击添加音乐</div>
-    </div>`;
+    return `
+    <div class="phone-music-top" onclick="Phone._openMusicLibrary()">
+      <div class="phone-music-cover"><div class="phone-music-cover-ph">${_musicSvg('list')}</div></div>
+      <div class="phone-music-meta">
+        <div class="phone-music-title">未添加音乐</div>
+        <div class="phone-music-artist">点击添加</div>
+      </div>
+    </div>
+    <div class="phone-music-progress">
+      <div class="phone-music-bar">
+        <div class="phone-music-bar-fill" style="width:0%"></div>
+        <div class="phone-music-bar-dot" style="left:0%"></div>
+      </div>
+    </div>
+    <div class="phone-music-times">
+      <span>0:00</span>
+      <span>0:00</span>
+    </div>
+    <div class="phone-music-controls phone-music-controls-disabled">
+      <button class="phone-music-ctrl" onclick="Phone._openMusicLibrary()">${_musicSvg('prev')}</button>
+      <button class="phone-music-ctrl phone-music-play" onclick="Phone._openMusicLibrary()">${_musicSvg('playBig')}</button>
+      <button class="phone-music-ctrl" onclick="Phone._openMusicLibrary()">${_musicSvg('nextTrack')}</button>
+    </div>
+  `;
   }
 
   const title = t ? Utils.escapeHtml(t.title || '未命名') : '未播放';
@@ -13489,7 +13674,7 @@ async function buildHeartsimServiceChatForBackstage() {
   _onPagesScroll,
   _openDeliveryOrders,
   // 记账 App
-  _renderLedger, _ledgerSwitchCur, _ledgerEditEntry, _ledgerAddManual,
+  _renderLedger, _ledgerSwitchCur, _ledgerEditEntry, _ledgerAddManual, _ledgerCycleView, _ledgerCalPick,
     // 聊天 App
   _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _onChatSettingsPhoneDownToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openChatOrderPicker, _sendChatOrder, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
   ingestChatMessages, getChatHistoryForNPCs,
