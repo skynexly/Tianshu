@@ -262,6 +262,21 @@ function apply(cfg) {
     s.setProperty('--chat-bg-image', _resolveChatBgImage(cfg.chatBgImage));
 
     // 字体
+    const BUILTIN_FONTS = {
+      system: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', url: null },
+      kai: { family: '"Ma Shan Zheng", cursive', url: 'https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap' },
+      song: { family: '"ZCOOL XiaoWei", serif', url: 'https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap' },
+      rounded: { family: '"ZCOOL QingKe HuangYou", sans-serif', url: 'https://fonts.googleapis.com/css2?family=ZCOOL+QingKe+HuangYou&display=swap' },
+      mono: { family: '"Noto Sans KR", sans-serif', url: 'https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap' }
+    };
+    function _loadGoogleFont(url) {
+      if (!url) return;
+      if (document.querySelector('link[href="' + url + '"]')) return;
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = url;
+      document.head.appendChild(link);
+    }
     if (cfg.fontMode === 'custom') {
       DB.get('settings', 'customFontData').then(rec => {
         if (rec && rec.value) {
@@ -274,6 +289,10 @@ function apply(cfg) {
           } catch(e) {}
         }
       }).catch(() => {});
+    } else if (BUILTIN_FONTS[cfg.fontMode]) {
+      const f = BUILTIN_FONTS[cfg.fontMode];
+      _loadGoogleFont(f.url);
+      s.setProperty('--font-family', f.family);
     } else {
       s.removeProperty('--font-family');
     }

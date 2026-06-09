@@ -979,8 +979,9 @@ function _extractJsonArrayText(content) {
   wallet: `<svg ${common}><rect x="2" y="6" width="20" height="14" rx="2"></rect><path d="M16 12h2v2h-2z"></path><path d="M2 10h20"></path></svg>`,
  ledger: `<svg ${common}><path d="M5 3h12a2 2 0 0 1 2 2v16l-3-2-3 2-3-2-3 2V5a2 2 0 0 1 2-2z"></path><line x1="9" y1="8" x2="14" y2="8"></line><line x1="9" y1="12" x2="14" y2="12"></line></svg>`,
   calendar: `<svg ${common}><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><rect x="8" y="14" width="2" height="2"></rect><rect x="13" y="14" width="2" height="2"></rect></svg>`,
- mail: `<svg ${common}><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>`
- };
+    mail: `<svg ${common}><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>`,
+    radio: `<svg ${common}><path d="M16 3 7 7"></path><rect x="3" y="7" width="18" height="14" rx="2"></rect><circle cx="8" cy="14" r="3"></circle><line x1="16" y1="12" x2="18" y2="12"></line><line x1="16" y1="16" x2="18" y2="16"></line></svg>`
+  };
  return `<span class="phone-icon-glyph phone-icon-${type}">${icons[type] || ''}</span>`;
 }
 function _uiIcon(type, size = 16) {
@@ -1057,6 +1058,7 @@ document.getElementById('phone-back-btn')?.classList.add('hidden');
         { id: 'calendar', icon: 'calendar', name: '日历' },
         { id: 'settings', icon: 'gear', name: '设置' },
         { id: 'email', icon: 'mail', name: '邮箱' },
+        { id: 'radio', icon: 'radio', name: '电台' },
       ];
       // 小组件页底部 app
       const widgetApps = [
@@ -1282,6 +1284,7 @@ async function openApp(appId) {
   } catch(_) {}
   // 未完成的APP：直接拦截，不进入APP模式
   if (appId === 'email') { UI.showToast('邮箱开发中...', 1500); return; }
+    if (appId === 'radio') { UI.showToast('电台开发中...', 1500); return; }
   // 记住当前页面滚动位置，返回时恢复
   try {
     const pages = document.getElementById('phone-pages');
@@ -2007,9 +2010,9 @@ function _refreshAnniversaryCard() {
     const anni = pd?.anniversary;
     if (!anni || !anni.day || !anni.month) {
       // 没设置纪念日：显示占位
-      el.style.backgroundImage = '';
-      el.innerHTML = `<div class="phone-anniversary-card-text" style="color:var(--text-secondary);text-shadow:none;font-size:12px;opacity:0.6">点击设置<br>纪念日</div>`;
-      return;
+    el.style.backgroundImage = '';
+        el.innerHTML = `<div class="phone-anniversary-card-text" style="color:var(--text);font-size:12px;opacity:0.55">点击设置<br>纪念日</div>`;
+        return;
     }
     // 有背景图
     if (anni.image) {
@@ -2038,7 +2041,7 @@ function _refreshAnniversaryCard() {
     const titleText = anni.title ? Utils.escapeHtml(anni.title) : '';
     el.innerHTML = `<div class="phone-anniversary-card-text">${titleText ? `<div class="phone-anniversary-card-title">${titleText}</div>` : ''}${dayText}</div>`;
   } catch(_) {
-    el.innerHTML = `<div class="phone-anniversary-card-text" style="color:var(--text-secondary);text-shadow:none;font-size:12px;opacity:0.6">点击设置<br>纪念日</div>`;
+    el.innerHTML = `<div class="phone-anniversary-card-text" style="color:var(--text);font-size:12px;opacity:0.55">点击设置<br>纪念日</div>`;
   }
 }
 // ===== 配送小组件（小组件页）=====

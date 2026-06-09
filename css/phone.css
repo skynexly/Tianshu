@@ -2347,7 +2347,7 @@ background: transparent !important;
   margin: 20px 0 0;
   padding: 14px 16px 12px;
   border-radius: 18px;
-  background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.14) 100%), rgba(255,255,255,0.13);
+  background: linear-gradient(to top, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 55%), linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.14) 100%), rgba(255,255,255,0.2);
   border: 1px solid rgba(255,255,255,0.2);
   box-shadow: 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.24);
   cursor: pointer;
@@ -2691,7 +2691,7 @@ background: transparent !important;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-top: 20px;
+  margin-top: 20.5px;
 }
 .phone-widget-apps {
   margin-top: 24px;
@@ -2706,8 +2706,10 @@ background: transparent !important;
   aspect-ratio: 1 / 1;
   max-width: 50%;
   border-radius: 18px;
-  background: rgba(255,255,255,0.45);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08);
+  background: linear-gradient(to top, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 55%), linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.14) 100%), rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.24);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.22);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -2726,8 +2728,10 @@ background: transparent !important;
 .phone-dw-mini {
   flex: 1;
   border-radius: 18px;
-  background: rgba(255,255,255,0.45);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08);
+  background: linear-gradient(to top, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 55%), linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.14) 100%), rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.24);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.22);
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -2739,8 +2743,8 @@ background: transparent !important;
 .phone-dw-mini:active { transform: scale(0.97); }
 .phone-dw-mini-label {
   font-size: 11px;
-  color: var(--text-secondary);
-  opacity: 0.7;
+  color: var(--text);
+  opacity: 0.55;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2758,14 +2762,14 @@ background: transparent !important;
 .phone-dw-mini-empty {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-secondary);
-  opacity: 0.5;
+  color: var(--text);
+  opacity: 0.55;
 }
 .phone-dw-express-name {
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
-  opacity: 0.75;
+  opacity: 0.55;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2788,13 +2792,13 @@ background: transparent !important;
   font-size: 18px;
   font-weight: 700;
   line-height: 1.3;
-  color: var(--text-secondary);
-  opacity: 0.5;
+  color: var(--text);
+  opacity: 0.55;
 }
 .phone-dw-express-foot {
   font-size: 11px;
-  color: var(--text-secondary);
-  opacity: 0.65;
+  color: var(--text);
+  opacity: 0.55;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2802,8 +2806,10 @@ background: transparent !important;
 /* 外卖长条进度卡片 */
 .phone-dw-takeout {
   border-radius: 18px;
-  background: rgba(255,255,255,0.45);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08);
+  background: linear-gradient(to top, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 55%), linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.14) 100%), rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.24);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.22);
   padding: 14px 16px 15px;
   display: flex;
   flex-direction: column;
@@ -2846,15 +2852,35 @@ background: transparent !important;
 }
 .phone-dw-bar-foot {
   font-size: 11px;
-  color: var(--text-secondary);
-  opacity: 0.65;
+  color: var(--text);
+  opacity: 0.55;
 }
+/* 遮罩模式：配送卡片照搬日历 banner 风格（去毛玻璃，用渐变+边框+inset高光+阴影） */
 .phone-shell.has-custom-wallpaper .phone-dw-express,
 .phone-shell.has-custom-wallpaper .phone-dw-takeout,
 .phone-shell.has-custom-wallpaper .phone-dw-mini {
-  background-color: rgba(255,255,255,0.1);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: linear-gradient(to top, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 55%), linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.14) 100%), rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.24);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.22);
+}
+/* 遮罩模式：次要文字提亮为白、去掉过低透明度，保证可读 */
+.phone-shell.has-custom-wallpaper .phone-dw-express-name,
+.phone-shell.has-custom-wallpaper .phone-dw-express-unit,
+.phone-shell.has-custom-wallpaper .phone-dw-express-empty,
+.phone-shell.has-custom-wallpaper .phone-dw-express-foot,
+.phone-shell.has-custom-wallpaper .phone-dw-mini-label,
+.phone-shell.has-custom-wallpaper .phone-dw-mini-empty,
+.phone-shell.has-custom-wallpaper .phone-dw-bar-name,
+.phone-shell.has-custom-wallpaper .phone-dw-bar-foot {
+  color: rgba(255,255,255,0.9);
+  opacity: 1;
+}
+/* 遮罩模式：进度条轨道提亮，避免在暗底上看不见 */
+.phone-shell.has-custom-wallpaper .phone-dw-bar-track {
+  background: rgba(255,255,255,0.2);
 }
 
 /* ===== 记账 App ===== */
@@ -3119,15 +3145,19 @@ background: transparent !important;
 .phone-music-card {
   margin-top: 12px;
   border-radius: 16px;
-  background: rgba(255,255,255,0.55);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: linear-gradient(to top, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 55%), linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.14) 100%), rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.2);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.22);
   padding: 12px 14px 10px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.24);
   width: 74%;
 }
 .phone-shell.has-custom-wallpaper .phone-music-card {
   background: rgba(255,255,255,0.12);
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 .phone-music-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;

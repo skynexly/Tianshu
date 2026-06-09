@@ -175,13 +175,15 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v693.0';
-const CHANGELOG = `【v693.0 更新内容】
+    const APP_VERSION = 'v693.1';
+const CHANGELOG = `【v693.1 更新内容】
 · 新增：音乐播放器，实现一起听功能
 · 新增：论坛发帖支持选择相册图片
 · 新增：商城配送时间功能
 · 新增：记账 APP
+· 新增：可选字体（衬线/无衬线/楷体/小薇/圆体/思源/自定义）
 · 优化：修改了手机的 UI 布局
+· 优化：调整了手机 UI（小组件卡片适配深色模式）
 · 修复：部分 Bug`;
     const SEEN_KEY = 'changelog_seen_version';
 

@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=140">
-<link rel="stylesheet" href="css/phone.css?v=54">
+<link rel="stylesheet" href="css/phone.css?v=65">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
 </head>
@@ -2827,9 +2827,14 @@
               <!-- 字体设置 -->
               <div class="settings-card" style="padding:12px;display:flex;flex-direction:column;gap:10px">
                 <div style="font-size:12px;color:var(--text-secondary);font-weight:600;letter-spacing:.05em">字体</div>
-                <div style="display:flex;gap:6px">
-                  <button type="button" class="th-font-btn" data-font="default" onclick="Theme.setFontMode('default')" style="flex:1;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#111;font-weight:600;cursor:pointer;font-size:12px">默认</button>
-                  <button type="button" class="th-font-btn" data-font="custom" onclick="Theme.setFontMode('custom')" style="flex:1;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">自定义</button>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                  <button type="button" class="th-font-btn" data-font="default" onclick="Theme.setFontMode('default')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#111;font-weight:600;cursor:pointer;font-size:12px">衬线</button>
+                  <button type="button" class="th-font-btn" data-font="system" onclick="Theme.setFontMode('system')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">无衬线</button>
+                  <button type="button" class="th-font-btn" data-font="kai" onclick="Theme.setFontMode('kai')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">楷体</button>
+                  <button type="button" class="th-font-btn" data-font="song" onclick="Theme.setFontMode('song')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">小薇</button>
+                  <button type="button" class="th-font-btn" data-font="rounded" onclick="Theme.setFontMode('rounded')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">圆体</button>
+                  <button type="button" class="th-font-btn" data-font="mono" onclick="Theme.setFontMode('mono')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">思源</button>
+                  <button type="button" class="th-font-btn" data-font="custom" onclick="Theme.setFontMode('custom')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">自定义</button>
                 </div>
                 <div id="th-font-upload-area" style="display:none;align-items:center;gap:8px">
                   <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:13px;color:var(--text)">
@@ -3852,7 +3857,7 @@ const GameLog = (() => {
 <script src="js/memory.js"></script>
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
-<script src="js/statusbar_theme.js?v=47"></script>
+<script src="js/statusbar_theme.js?v=52"></script>
 <script src="js/worldview.js?v=21"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
@@ -3881,7 +3886,7 @@ const GameLog = (() => {
 <script src="js/ambient.js?v=1"></script>
 <script src="js/worldvoice.js?v=3"></script>
 <script src="js/music.js?v=3"></script>
-<script src="js/phone.js?v=174"></script>
+<script src="js/phone.js?v=176"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -3900,7 +3905,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js"></script>
-<script src="js/app.js?v=94"></script>
+<script src="js/app.js?v=95"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
