@@ -3385,7 +3385,10 @@ function closeKnowledgeModal() {
 
     const appendSys = `你是一个文字冒险游戏的世界观事件链续写设计师。请根据已有事件链的最后一个事件，继续向后生成新的链式事件。\n\n这些事件属于"世界观级事件链"的追加内容，必须延续原链条，而不是重新开一条新链。\n\n续写规则：\n- 你必须读取已有事件链，尤其是最后一个事件。\n- 新生成的第一个事件，其 keys 必须包含"已有事件链最后一个事件的 completeKey"。\n- 后续新事件继续按链式规则衔接：每个事件的 keys 必须包含上一个新事件的 completeKey。\n- 新事件必须承接原链条已经推进到的局面，不能回到开头，不能另起炉灶。\n- 可以扩大矛盾、引入新角色或势力、揭露更深层原因、推进到下一阶段危机，但必须与原链条和世界观设定有关。\n- 不要重复已有事件链中已经发生过的环节。\n\n每个事件需要包含：name、keys、completeKey（唯一，不与已有重复）、finishRule、content（舞台布景与剧情压力，不写角色具体反应）。\n${commonFields}\n\n输出纯 JSON 数组。`;
 
-    const baseUser = `${prompt ? '## 用户额外需求\n' + prompt + '\n\n' : ''}## 世界观设定\n${settingText || '（未提供）'}\n\n${regionNames.length ? '## 地区\n' + regionNames.join('、') + '\n\n' : ''}${factionNames.length ? '## 势力\n' + factionNames.join('、') + '\n\n' : ''}${npcNames.length ? '## 重要NPC\n' + npcNames.join('、') + '\n\n' : ''}${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents.join('、') + '\n\n' : ''}${existingChains.length ? '## 已有事件链（不要重复）\n' + existingChains.join('、') + '\n\n' : ''}`;
+    const baseCtx = (typeof WvGenerator !== 'undefined' && WvGenerator._buildWorldContext)
+      ? WvGenerator._buildWorldContext(w, '', settingText)
+      : `## 世界观设定\n${settingText || '（未提供）'}`;
+    const baseUser = `${prompt ? '## 用户额外需求\n' + prompt + '\n\n' : ''}${baseCtx}\n\n${existingEvents.length ? '## 已有事件（不要重复）\n' + existingEvents.join('、') + '\n\n' : ''}${existingChains.length ? '## 已有事件链（不要重复）\n' + existingChains.join('、') + '\n\n' : ''}`;
 
     let sysPrompt = standaloneSys;
     let userMsg = `请生成 ${count} 个世界观级独立事件。\n\n${baseUser}`;
@@ -5557,7 +5560,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     _calSetPeriodName, _calSetPeriodHour, _calSetPeriodDesc, _calAddPeriod, _calRemovePeriod,
     _onStartTimeChange,
     _tryExitEdit,
-    _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards,
+    _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards, _fillStartTimeFields,
 editLorebookDescription,
     addFestival, editFestival, saveFestivalFromModal, deleteFestivalFromModal, closeFestivalModal,
   addCustom, editCustom, saveCustomFromModal, deleteCustomFromModal, closeCustomModal,

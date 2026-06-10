@@ -1051,6 +1051,273 @@ const SingleCard = (() => {
     exitSortMode();
   }
 
+  // ===== AI 写卡助手（单人卡）=====
+  let _aiGenAbort = null;
+
+  function openAiGen() {
+    const modal = document.getElementById('sc-gen-modal');
+    const body = document.getElementById('sc-gen-body');
+    if (!modal || !body) { UI.showToast('弹窗加载失败', 1500); return; }
+    body.innerHTML = `
+      <div class="wv-gen-field">
+        <label class="wv-gen-label">你想要什么样的角色卡？ *</label>
+        <textarea id="sc-gen-prompt" rows="4" placeholder="例如：高岭之花的剑道部学姐，外冷内热；或者毒舌但护短的便利店店长" class="wv-gen-textarea"></textarea>
+      </div>
+      <div class="wv-gen-field">
+        <label class="wv-gen-label">你想和 Ta 怎样相遇？（可选）</label>
+        <textarea id="sc-gen-meet" rows="3" placeholder="留空则由 AI 自由设计开场。例如：在深夜便利店打烊前撞见" class="wv-gen-textarea"></textarea>
+      </div>
+      <div class="wv-gen-field">
+        <label class="wv-gen-label">设定字数（≤5000）</label>
+        <input id="sc-gen-words" type="number" min="200" max="5000" step="100" value="800" class="wv-gen-input">
+      </div>
+      <div id="sc-gen-status" class="wv-gen-status" style="display:none"></div>
+      <div class="wv-gen-actions">
+        <button id="sc-gen-cancel" class="wv-gen-btn">取消</button>
+        <button id="sc-gen-submit" class="wv-gen-btn primary">生成</button>
+      </div>`;
+    modal.classList.remove('hidden');
+    const cancelBtn = document.getElementById('sc-gen-cancel');
+    const submitBtn = document.getElementById('sc-gen-submit');
+    if (cancelBtn) cancelBtn.onclick = closeAiGen;
+    if (submitBtn) submitBtn.onclick = _runAiGen;
+  }
+
+  function closeAiGen() {
+    if (_aiGenAbort) { try { _aiGenAbort.abort(); } catch(_) {} _aiGenAbort = null; }
+    const modal = document.getElementById('sc-gen-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function _setAiGenLoading(on, msg) {
+    const status = document.getElementById('sc-gen-status');
+    const btn = document.getElementById('sc-gen-submit');
+    if (status) {
+      status.style.display = on ? '' : 'none';
+      status.innerHTML = on ? `<span class="wv-gen-spinner"></span>${msg || ''}` : '';
+    }
+    if (btn) btn.disabled = on;
+  }
+
+  async function _runAiGen() {
+    const prompt = (document.getElementById('sc-gen-prompt')?.value || '').trim();
+    const meet = (document.getElementById('sc-gen-meet')?.value || '').trim();
+    const wordCount = Math.min(5000, Math.max(200, parseInt(document.getElementById('sc-gen-words')?.value) || 800));
+    if (!prompt) { UI.showToast('先描述一下你想要的角色', 1800); return; }
+    _setAiGenLoading(true, '正在生成角色卡…');
+    try {
+      _aiGenAbort = new AbortController();
+      const card = await _aiGenerateCard({ prompt, meet, wordCount, signal: _aiGenAbort.signal });
+      _setAiGenLoading(false);
+      closeAiGen();
+      // 生成完进入新建面板并填充，用户可微调后手动保存
+      _editingId = null;
+      _openEditPanel({
+        name: card.name || '',
+        aliases: card.aliases || '',
+        onlineName: card.onlineName || '',
+        detail: card.detail || '',
+        firstMes: card.firstMes || '',
+        mesExample: card.mesExample || '',
+        avatar: '',
+        extEnabled: true
+      });
+      UI.showToast('已生成，检查后点保存', 2200);
+    } catch (e) {
+      _setAiGenLoading(false);
+      if (e && e.name === 'AbortError') return;
+      UI.showToast('生成失败: ' + (e?.message || e), 3000);
+    }
+  }
+
+  // 实际调用 AI 生成
+  function _scParseJSON(text) {
+    let cleaned = (text || '').trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/```\s*$/, '').trim();
+    }
+    try { return JSON.parse(cleaned); } catch(_) {}
+    // 兜底：抓第一个 { 到最后一个 }
+    const first = cleaned.indexOf('{');
+    const last = cleaned.lastIndexOf('}');
+    if (first !== -1 && last !== -1 && last > first) {
+      try { return JSON.parse(cleaned.slice(first, last + 1)); } catch(_) {}
+    }
+    throw new Error('AI 返回内容无法解析为 JSON');
+  }
+
+  const _SC_GEN_SYS = `你是一位资深的角色卡设计师，为一款叙事型文字对话游戏创作"单人角色卡"。用户会用一句话描述想要的角色，你需要把它扩写成一张立体、可扮演、有真人感的角色卡，并以严格的 JSON 返回。
+
+# 输出格式（严格 JSON，不要任何额外文字、不要 markdown 代码块）
+{
+  "name": "角色姓名",
+  "aliases": "代号/别称，没有则空字符串",
+  "onlineName": "网名/社交媒体昵称，没有则空字符串",
+  "detail": "详细设定，见下方规范",
+  "firstMes": "开场白，见下方规范",
+  "mesExample": "对话样例，见下方规范"
+}
+
+# detail（详细设定）内容规范
+detail 是一段结构化的角色设定文本，用小标题分段组织。包含以下维度——标【必填】的无论字数多少都要写；其余项目根据字数预算灵活取舍，字数充裕时尽量全部写到：
+
+【基础信息·必填】性别；年龄；社会位置（在社会中和家庭中分别是什么身份，如贵族后代/组织成员/家中老几/某群体的边缘人）；职业（什么职业、什么职位；或学生——什么学历、哪个方向）
+【背景】出身【必填】（怎样的家庭、家庭财力、还是孤儿）；成长环境（童年由谁教导，双亲/家庭教师/放养/机构）；成就与荣誉（不论大小，哪怕只是斗蛐蛐获胜）；转折事件（对 Ta 造成重大影响、导致成长或转变的事）；近况【必填】（最近在做什么，行程和事务）
+【外貌】发型/发色/瞳色【必填】；身高/体格身材【必填】；特征（痣、胎记、疤痕并说明来源、桃花眼、精灵耳、异色瞳等）；气质（优雅、清冷、稳重、痞气、慵懒等）；气味（是否用香水、偏好哪种味道，或衣服是什么味道，还是更喜欢保持干净清爽无味）
+【穿衣风格】正式/娱乐/休闲场合分别穿什么；喜欢的风格（舒适还是体面，花哨还是简约）；饰品偏好（戴不戴、什么类型、什么时候戴/摘）
+【性格·必填】表层性格（对外形象，对关系不深的人的态度）；深层性格（表层之下的真实驱动力，如温文尔雅是保守软弱还是掩饰狠辣的保护色）；阴暗面（心底最见不得光、几乎不宣之于口的想法）；创伤（被内化为人格一部分的伤口，要追问成因：为什么永远充满秩序感？焦虑从何而来？为什么对一切游刃有余？是否解离、为何解离）
+【语言习惯】说话语气（温和/尖锐/懒散/正式）；口头禅或高频用词；语速节奏（话多/话少/只说必要的）；方言或外语夹杂
+【习惯与小动作】无意识动作（转笔、揉眉心、咬指甲、摸耳朵）；日常习惯（早起/晚睡、烟酒茶、运动频率）；紧张/放松/生气时的身体语言
+【关系模式】对陌生人/熟人/亲近的人的态度差异；依恋类型（安全/回避/焦虑/恐惧）；社交主动性（主动搭话还是等人来找）
+【喜好与爱好】喜好（口味、动物、电影、音乐、书籍、哲学偏好）；爱好（与是否擅长无关，只是喜欢做的事）；能力（真正擅长的部分）
+【排斥与雷区】讨厌（忌口、不喜欢的事物类型）；雷区（被触及会真正不悦的部分，需说明原因）
+【目标与理想·必填】目标（当下想做的事，朝什么方向努力）；理想（难以企及但追逐的美好愿景）
+
+## 字数预算与取舍（按用户给定的设定字数）
+- ≤1000 字：重点写外貌 + 表层/深层性格 + 背景核心事件 + 语言习惯概要，其余必填项简短带过，非必填可省略。
+- 1000–2500 字：在上面基础上补充穿衣风格、喜好爱好、关系模式、习惯与小动作。
+- 2500–5000 字：全维度展开，创伤、阴暗面、雷区、目标理想全部写透。
+
+# 写作要求
+1. 真人感优先：不要完美无缺，不要玛丽苏/杰克苏。要有缺陷、有矛盾、有不合逻辑但合情理之处。一个人可以同时聪明又在某些事上愚蠢到可笑。
+2. 逻辑自洽：性格、背景、创伤、目标之间要有因果链。每个特征都应能追溯到经历——表层性格是深层性格的外壳，深层性格是创伤的产物。
+3. 具体优于抽象：不要写"Ta 很温柔"，要写具体行为。不要"喜欢音乐"，要写"手机里存了三百多首后摇，但从不在人前用外放"。
+4. 微小细节建立真实：越是微小、无用的细节越能让角色立体（冰箱里常年放什么、走路看地面还是抬头、钥匙挂哪个口袋）。
+5. 不预设与用户的关系：detail 里不要出现"用户""玩家"字眼，角色设定独立于任何交互对象。与用户的初始关系由 firstMes 的场景暗示。
+
+# firstMes（开场白）规范
+- 用第三人称叙述流（"他靠在吧台后面，听见门铃响才懒懒抬眼……"），不要用第一人称。
+- 一段场景描写，着重刻画环境、气氛，以及角色自身的外貌、动作、神态、台词（台词用引号）。
+- 【硬性要求】绝对禁止描写用户（"你"）的任何东西——不写用户的语言、动作、神态、心理、反应、所处姿势，连"你推门而入""你愣住了"这类都不允许。开场白只呈现角色和场景，把一切反应空间完全留给用户自己发挥。
+- 要建立氛围和初始的关系距离感，但这种距离感通过角色的姿态和环境来体现，而非通过描写用户。
+- 如果用户提供了"相遇场景"，以此为基础写；没提供就自由设计一个贴合角色的开场。
+
+# mesExample（对话样例）规范
+- 写 2-3 轮示范对话，用清晰的对话格式（每轮标明是用户发言还是角色发言，例如以「用户：」「角色：」开头）。
+- 「用户：」那行写一句简短的示范输入即可；「角色：」那部分同样不要替用户描写动作、神态、心理。
+- 尽量涵盖多种场景与情绪状态，如商务/正式场景、私下/亲近场景，以及不悦、兴奋等不同情绪下的说话方式，让 AI 学到角色在不同情境的口吻切换。
+- 对话样例只写台词本身，不要加动作描写（不写"（他笑了笑）"这类），纯粹展示角色的说话风格、语气、习惯用词。
+- 要能体现表层性格与深层性格的差异（如嘴上毒舌但本意关切）。
+
+务必返回合法 JSON，所有字符串内的换行用 \\n 转义。`;
+
+  async function _aiGenerateCard(opts) {
+    const { prompt, meet, wordCount, signal } = opts;
+    const parts = [];
+    parts.push(`【想要的角色】\n${prompt}`);
+    if (meet) parts.push(`【希望的相遇场景】\n${meet}`);
+    else parts.push(`【希望的相遇场景】\n未指定，请你自由设计一个贴合角色的开场。`);
+    parts.push(`【detail 设定字数】约 ${wordCount} 字（上限 5000）。按字数预算规范取舍内容。`);
+    const userMsg = parts.join('\n\n');
+    const raw = await API.generate(_SC_GEN_SYS, userMsg, { signal, maxTokens: Math.min(32000, wordCount * 4 + 4000) });
+    const data = _scParseJSON(raw);
+    if (!data || (!data.name && !data.detail)) throw new Error('AI 返回内容不完整');
+    return data;
+  }
+
+  // ===== 编辑页内联 AI 生成（只重写指定字段，参考全部已填信息）=====
+
+  // 收集当前编辑框里的全部信息，作为给 AI 的参考资料
+  function _collectCurrentCardCtx() {
+    const g = (id) => (document.getElementById(id)?.value || '').trim();
+    const parts = [];
+    const name = g('sc-panel-name');
+    const aliases = g('sc-panel-aliases');
+    const onlineName = g('sc-panel-onlinename');
+    const detail = g('sc-panel-detail');
+    const firstMes = g('sc-panel-firstmes');
+    const mesExample = g('sc-panel-mesexample');
+    if (name) parts.push(`姓名：${name}`);
+    if (aliases) parts.push(`代号/别称：${aliases}`);
+    if (onlineName) parts.push(`网名：${onlineName}`);
+    if (detail) parts.push(`【详细设定】\n${detail}`);
+    if (firstMes) parts.push(`【开场白】\n${firstMes}`);
+    if (mesExample) parts.push(`【对话样例】\n${mesExample}`);
+    return parts.join('\n\n');
+  }
+
+  // 通用：弹需求输入 → 调 AI → 只回填 targetField
+  async function _inlineGen(opts) {
+    // opts: { targetField, fieldLabel, targetElId, promptTitle, promptHint, sysPrompt, fieldKey }
+    const ctx = _collectCurrentCardCtx();
+    const reqRaw = await UI.showSimpleInput(
+      `${opts.promptTitle}\n${opts.promptHint}`,
+      '',
+      { allowEmpty: true, multiline: true, rows: 5, minHeight: '140px' }
+    );
+    if (reqRaw === null) return; // 取消
+    const req = (reqRaw || '').trim();
+    const targetEl = document.getElementById(opts.targetElId);
+    if (!targetEl) return;
+    UI.showToast(`正在生成${opts.fieldLabel}…`, 60000);
+    try {
+      const userParts = [];
+      if (ctx) userParts.push(`## 当前角色卡已有信息（作为参考，保持一致）\n${ctx}`);
+      else userParts.push(`（当前角色卡尚未填写其它信息，请根据下面的要求自由发挥）`);
+      if (req) userParts.push(`## 本次要求\n${req}`);
+      userParts.push(`## 任务\n${opts.taskLine}`);
+      const userMsg = userParts.join('\n\n');
+      const raw = await API.generate(opts.sysPrompt, userMsg, { maxTokens: opts.maxTokens || 8000 });
+      let out = (raw || '').trim();
+      // 这几个字段是纯文本，去掉可能的 markdown 代码块包裹
+      if (out.startsWith('```')) out = out.replace(/^```\w*\s*/, '').replace(/```\s*$/, '').trim();
+      // 如果 AI 误返回 JSON，尝试取出对应字段
+      if (out.startsWith('{')) {
+        try { const j = JSON.parse(out); if (j && typeof j[opts.fieldKey] === 'string') out = j[opts.fieldKey]; } catch(_) {}
+      }
+      if (!out) throw new Error('AI 返回为空');
+      targetEl.value = out;
+      targetEl.style.height = 'auto';
+      targetEl.style.height = targetEl.scrollHeight + 'px';
+      // 触发自动保存
+      targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+      UI.showToast(`${opts.fieldLabel}已生成`, 1800);
+    } catch (e) {
+      UI.showToast(`生成失败：${e?.message || e}`, 3000);
+    }
+  }
+
+  const _SC_DETAIL_SYS = `你是一位资深的角色卡设计师。用户正在编辑一张单人角色卡，需要你重写或填充【详细设定】这一段。\n\n` +
+    _SC_GEN_SYS.split('# detail（详细设定）内容规范')[1].split('# firstMes')[0].replace(/^/, '# 详细设定内容规范') +
+    `\n\n# 输出要求\n- 只输出【详细设定】这一段正文本身，不要 JSON、不要 markdown 代码块、不要任何额外说明。\n- 必须与用户已有信息（姓名、开场白、对话样例等）保持一致，不要矛盾。\n- 用小标题分段组织，遵循上面的维度规范与必填项要求。`;
+
+  const _SC_FIRSTMES_SYS = `你是一位资深的角色卡设计师，为叙事型文字对话游戏写角色的【开场白】（firstMes）。\n\n` +
+    `# 开场白规范\n- 用第三人称叙述流（"他靠在吧台后面，听见门铃响才懒懒抬眼……"），不要用第一人称。\n- 一段场景描写，着重刻画环境、气氛，以及角色自身的外貌、动作、神态、台词（台词用引号）。\n- 【硬性要求】绝对禁止描写用户（"你"）的任何东西——不写用户的语言、动作、神态、心理、反应、所处姿势，连"你推门而入""你愣住了"这类都不允许。开场白只呈现角色和场景，把一切反应空间完全留给用户。\n- 要建立氛围和初始的关系距离感，但这种距离感通过角色的姿态和环境体现，而非通过描写用户。\n\n# 输出要求\n- 只输出开场白正文本身，不要 JSON、不要 markdown、不要额外说明。\n- 必须贴合角色卡已有的详细设定（外貌、性格、近况等），不要矛盾。`;
+
+  const _SC_MESEXAMPLE_SYS = `你是一位资深的角色卡设计师，为叙事型文字对话游戏写角色的【对话样例】（mesExample），用于教 AI 学习角色的说话风格。\n\n` +
+    `# 对话样例规范\n- 写 2-3 轮示范对话，用清晰的对话格式（每轮标明是用户发言还是角色发言，例如以「用户：」「角色：」开头）。\n- 「用户：」那行写一句简短的示范输入即可；「角色：」那部分不要替用户描写动作、神态、心理。\n- 尽量涵盖多种场景与情绪状态，如商务/正式场景、私下/亲近场景，以及不悦、兴奋等不同情绪下的说话方式，让 AI 学到角色在不同情境的口吻切换。\n- 对话样例只写台词本身，不要加动作描写（不写"（他笑了笑）"这类），纯粹展示角色的说话风格、语气、习惯用词。\n- 要能体现表层性格与深层性格的差异（如嘴上毒舌但本意关切）。\n\n# 输出要求\n- 只输出对话样例正文本身，不要 JSON、不要 markdown、不要额外说明。\n- 必须贴合角色卡已有的详细设定（性格、语言习惯等），不要矛盾。`;
+
+  function inlineGenDetail() {
+    return _inlineGen({
+      fieldLabel: '详细设定', targetElId: 'sc-panel-detail', fieldKey: 'detail',
+      promptTitle: 'AI 生成详细设定',
+      promptHint: '描述/补充你想要的角色（已有信息会作为参考一起发给 AI）。留空则在已有信息基础上自由补全。',
+      sysPrompt: _SC_DETAIL_SYS,
+      taskLine: '请重写或填充这张卡的【详细设定】，与已有信息保持一致。',
+      maxTokens: 16000
+    });
+  }
+  function inlineGenFirstMes() {
+    return _inlineGen({
+      fieldLabel: '开场白', targetElId: 'sc-panel-firstmes', fieldKey: 'firstMes',
+      promptTitle: 'AI 生成开场白',
+      promptHint: '描述你想要的相遇场景/开场氛围（已有角色信息会作为参考）。留空则由 AI 自由设计。',
+      sysPrompt: _SC_FIRSTMES_SYS,
+      taskLine: '请写这张卡的【开场白】，第三人称叙述流，禁止描写用户的任何反应。',
+      maxTokens: 4000
+    });
+  }
+  function inlineGenMesExample() {
+    return _inlineGen({
+      fieldLabel: '对话样例', targetElId: 'sc-panel-mesexample', fieldKey: 'mesExample',
+      promptTitle: 'AI 生成对话样例',
+      promptHint: '描述你想强调的说话风格/场景（已有角色信息会作为参考）。留空则由 AI 自由发挥。',
+      sysPrompt: _SC_MESEXAMPLE_SYS,
+      taskLine: '请写这张卡的【对话样例】，涵盖多种场景和情绪，只写台词不写动作描写。',
+      maxTokens: 6000
+    });
+  }
+
   return {
     getAll, get, save, remove,
     renderList, create, edit, quickCreateConversation,
@@ -1068,6 +1335,8 @@ openLorebookPicker,
     toggleManageMode, exitManageMode, toggleSelectAll, _onCardClick,
     exportSelected, batchClone, batchDelete,
     toggleSortMode, exitSortMode, saveSortOrder,
+    openAiGen, closeAiGen,
+    inlineGenDetail, inlineGenFirstMes, inlineGenMesExample,
     getNpcAvatar, setNpcAvatar
   };
 })();

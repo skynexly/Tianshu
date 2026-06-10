@@ -479,6 +479,9 @@
                   <div class="custom-dropdown-item" onclick="SingleCard.toggleMenu();SingleCard.create()">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg> 新建
                   </div>
+                  <div class="custom-dropdown-item" onclick="SingleCard.toggleMenu();SingleCard.openAiGen()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16v5"/><path d="M16 14l-4 2-4-2"/><path d="M12 2l8 4v6l-8 4-8-4V6l8-4z"/></svg> AI 写卡助手
+                  </div>
                   <div class="custom-dropdown-item" onclick="SingleCard.toggleMenu();SingleCard.toggleManageMode()">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> 批量选择
                   </div>
@@ -1508,6 +1511,13 @@
           </div>
           <div style="display:flex;flex-direction:column;gap:8px">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span style="font-size:14px;color:var(--text)">气泡时间戳</span>
+              <div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+                <button type="button" id="cs-bubble-time-real" onclick="Chat.setBubbleTimeMode('real')" style="padding:6px 14px;background:var(--accent);color:#111;border:none;font-size:12px;cursor:pointer">现实时间</button>
+                <button type="button" id="cs-bubble-time-game" onclick="Chat.setBubbleTimeMode('game')" style="padding:6px 14px;background:transparent;color:var(--text-secondary);border:none;border-left:1px solid var(--border);font-size:12px;cursor:pointer">游戏时间</button>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
               <span style="font-size:14px;color:var(--text)">对话背景图</span>
               <div style="display:flex;gap:8px;align-items:center">
                 <button type="button" onclick="Chat._onConvBgPicked()" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer">
@@ -2142,17 +2152,20 @@
       <!-- 详细设定 -->
       <div class="form-group">
         <span class="form-label">详细设定</span>
-        <textarea id="sc-panel-detail" placeholder="外貌、性格、背景、关系、能力……" rows="8" style="min-height:160px;line-height:1.6;resize:vertical"></textarea>
+        <div style="position:relative;width:100%"><textarea id="sc-panel-detail" placeholder="外貌、性格、背景、关系、能力……" rows="8" style="min-height:160px;line-height:1.6;resize:vertical;padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('sc-panel-detail','详细设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div>
+        <button type="button" onclick="SingleCard.inlineGenDetail()" class="ai-action-btn" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:6px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></svg>AI 生成</button>
       </div>
       <!-- 开场白 -->
       <div class="form-group">
         <span class="form-label">开场白 <span style="font-size:11px;opacity:0.7;font-weight:normal">（新建对话时角色的第一句话）</span></span>
-        <textarea id="sc-panel-firstmes" placeholder="可选。例如：你来啦？刚好缺个人陪我喝酒。" rows="3" style="line-height:1.6;resize:vertical"></textarea>
+        <div style="position:relative;width:100%"><textarea id="sc-panel-firstmes" placeholder="可选。例如：你来啦？刚好缺个人陪我喝酒。" rows="3" style="line-height:1.6;resize:vertical;padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('sc-panel-firstmes','开场白')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div>
+        <button type="button" onclick="SingleCard.inlineGenFirstMes()" class="ai-action-btn" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:6px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></svg>AI 生成</button>
       </div>
       <!-- 对话样例 -->
       <div class="form-group">
         <span class="form-label">对话样例 <span style="font-size:11px;opacity:0.7;font-weight:normal">（教 AI 说话风格，会注入提示词）</span></span>
-        <textarea id="sc-panel-mesexample" placeholder="可选。可写若干轮示范对话。" rows="4" style="line-height:1.6;resize:vertical"></textarea>
+        <div style="position:relative;width:100%"><textarea id="sc-panel-mesexample" placeholder="可选。可写若干轮示范对话。" rows="4" style="line-height:1.6;resize:vertical;padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('sc-panel-mesexample','对话样例')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div>
+        <button type="button" onclick="SingleCard.inlineGenMesExample()" class="ai-action-btn" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:6px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></svg>AI 生成</button>
       </div>
       <!-- 作者 -->
       <div class="form-group">
@@ -3858,20 +3871,20 @@ const GameLog = (() => {
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=53"></script>
-<script src="js/worldview.js?v=21"></script>
+<script src="js/worldview.js?v=22"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js"></script>
 <script src="js/conv_gameplay.js?v=3"></script>
-<script src="js/wv-generator.js?v=3"></script>
-<script src="js/single_card.js"></script>
+<script src="js/wv-generator.js?v=7"></script>
+<script src="js/single_card.js?v=8"></script>
 <script src="js/attached-chars.js"></script>
 <script src="js/single_mode.js?v=2"></script>
 <script src="js/character.js?v=2"></script>
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=5"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=20"></script>
+<script src="js/chat.js?v=21"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -3905,7 +3918,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js"></script>
-<script src="js/app.js?v=95"></script>
+<script src="js/app.js?v=96"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
@@ -4294,8 +4307,21 @@ document.addEventListener('click', (e) => {
 </button>
 </div>
 <div id="wv-gen-body" class="wv-gen-body"></div>
-</div>
-</div>
+    </div>
+  </div>
+
+  <!-- 单人卡 AI 写卡助手弹窗 -->
+  <div id="sc-gen-modal" class="modal hidden">
+    <div class="modal-content wv-gen-modal-card">
+      <div class="wv-gen-head">
+        <div class="wv-gen-title-wrap"><div class="wv-gen-orb"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></svg></div><div><div class="wv-gen-title">AI 写卡助手</div></div></div>
+        <button class="btn-icon" onclick="SingleCard.closeAiGen()" style="width:32px;height:32px;padding:4px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="sc-gen-body" class="wv-gen-body"></div>
+    </div>
+  </div>
 
 <div id="wv-custom-modal" class="modal hidden">
 <div class="modal-content">

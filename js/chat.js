@@ -3685,11 +3685,19 @@ exitMultiSelect();
 
   function buildAIMessageHTML(parsed, msg) {
     let html = '';
-// 气泡顶部：世界观名 + 真实时间戳（装饰 + 实用）
+// 气泡顶部：世界观名 + 时间戳（现实/游戏，由全局开关决定）
     if (msg && msg.timestamp) {
       const d = new Date(msg.timestamp);
       const pad = n => String(n).padStart(2, '0');
-      const tsStr = `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      const realStr = `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      // 游戏时间：取该条消息的状态栏快照绝对时间（不是增量）；缺失则回退现实时间
+      let tsStr = realStr;
+      let mode = 'real';
+      try { mode = localStorage.getItem('skynex_bubbleTimeMode') || 'real'; } catch(_) {}
+      if (mode === 'game') {
+        const gameTime = (msg.statusSnapshot && msg.statusSnapshot.time) ? String(msg.statusSnapshot.time).trim() : '';
+        if (gameTime) tsStr = gameTime;
+      }
       const wvPart = _currentWvName ? `<span class="msg-meta-wv">「${Utils.escapeHtml(_currentWvName)}」</span>` : '';
       html += `<div class="msg-meta"><span class="msg-meta-dot">●</span>${wvPart}<span class="msg-meta-ts">${tsStr}</span></div>`;
     }
@@ -5640,6 +5648,8 @@ bgImage: conv?.convBgImage || '',
     document.getElementById('cs-backstage').checked = s.backstage;
     const ta = document.getElementById('cs-time-aware');
     if (ta) ta.checked = s.timeAware;
+    // 气泡时间戳模式（全局开关）同步高亮
+    try { _syncBubbleTimeModeUI(); } catch(_) {}
     // v687.14：电量/天气感知
     const ba = document.getElementById('cs-battery-aware');
     if (ba) ba.checked = s.batteryAware;
@@ -6636,6 +6646,29 @@ async function applyLorebooksToWorldview() {
     if (typeof Ambient !== 'undefined') Ambient.setMode(val);
   }
 
+  // ===== 气泡时间戳显示模式（全局，现实/游戏二选一）=====
+  function getBubbleTimeMode() {
+    try { return localStorage.getItem('skynex_bubbleTimeMode') || 'real'; } catch(_) { return 'real'; }
+  }
+  function _syncBubbleTimeModeUI() {
+    const mode = getBubbleTimeMode();
+    const realBtn = document.getElementById('cs-bubble-time-real');
+    const gameBtn = document.getElementById('cs-bubble-time-game');
+    if (realBtn && gameBtn) {
+      const on = (b) => { b.style.background = 'var(--accent)'; b.style.color = '#111'; };
+      const off = (b) => { b.style.background = 'transparent'; b.style.color = 'var(--text-secondary)'; };
+      if (mode === 'game') { on(gameBtn); off(realBtn); } else { on(realBtn); off(gameBtn); }
+    }
+  }
+  function setBubbleTimeMode(mode) {
+    const m = (mode === 'game') ? 'game' : 'real';
+    try { localStorage.setItem('skynex_bubbleTimeMode', m); } catch(_) {}
+    // 清掉所有消息的渲染缓存，让 renderAll 用新模式重渲染时间戳
+    try { (messages || []).forEach(msg => { try { delete msg._cachedFullHTML; } catch(_) {} }); } catch(_) {}
+    _syncBubbleTimeModeUI();
+    try { renderAll(); } catch(_) {}
+  }
+
   return {
     loadHistory, send, cancelRequest, editMessage, saveEdit,
     createBranch, switchBranch, regenerate,
@@ -6660,6 +6693,7 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     _toggleThink,
     generateSuggestions, _pickSuggestion, refreshSuggestions, _cancelSuggestConfirm, _okSuggestConfirm,
     openConvSettingsModal, saveConvSettings, closeConvSettingsModal, _switchCsTab,
+    setBubbleTimeMode, getBubbleTimeMode,
     openDirectiveModal, closeDirectiveModal, saveDirective, clearDirective, _getConvSettings,
     isRetryDisabled,
     openEventManagerModal, closeEventManagerModal, resetEventState, switchEventManagerTab,

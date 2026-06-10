@@ -114,6 +114,7 @@ setting 使用 Markdown 格式，包含：
 - identity（string）：**身份地位**，社会阶层或公开标签，例如"贵族""平民""王室次子""通缉犯""转校生""市议员的女儿"。和 profession 是不同维度——profession 是"干什么"，identity 是"是谁/什么身份"。
 - faction（string）：所属势力名称（对应已有势力，无势力则留空）
 - region（string）：所属地区名称（无地区则留空——归为全图角色）
+- summary（string）：速查简介，格式固定为「性别·年龄·发色瞳色·身份职业·性格」，例如"男·26岁·黑发金瞳·白氏集团董事长·冷漠强势"或"女·19岁·棕发棕瞳·大学新生·温柔内敛"。身份职业尽量简短（10字以内），性格8字以内。
 - detail（string）：角色详细设定，目标约 ##WORD_COUNT## 字
 
 detail 使用 Markdown 格式，包含：
@@ -169,11 +170,12 @@ detail 使用 Markdown 格式，包含：
   function _npcAliases(n) {
     return (n.aliases || n.alias || '').trim();
   }
-  // summary：速查表，一行简短信息（gender·age·profession·identity 拼接）
-  function _npcSummary(n) {
-    const parts = [n.gender, n.age, n.profession, n.identity || n.description].filter(Boolean);
-    return parts.join(' · ');
-  }
+  // summary：速查表，优先用 AI 返回的 summary 字段，没有时从 gender·age·profession·identity 拼接
+function _npcSummary(n) {
+  if (n.summary?.trim()) return n.summary.trim();
+  const parts = [n.gender, n.age, n.profession, n.identity || n.description].filter(Boolean);
+  return parts.join(' · ');
+}
   // v687.41j：detail 头部追加 markdown 元信息块（性别/年龄/职业/身份）
   // 让世界书（无 summary）也能直接看到角色基础信息
   function _npcMetaBlock(n) {
@@ -221,11 +223,63 @@ detail 使用 Markdown 格式，包含：
   }
 
   // v632.1：从 worldview 或 lorebook 取 setting；世界书没有 setting 字段时用 description 兜底
-  function _getEditingSetting(w) {
-    return (w?.setting || w?.description || '').trim();
-  }
+function _getEditingSetting(w) {
+  return (w?.setting || w?.description || '').trim();
+}
 
-  function _parseJSON(text) {
+// 组装完整世界上下文，供所有 inline 生成函数使用
+// overrideSetting：可选，覆盖 w.setting（用于 DOM 中未保存的最新值）
+function _buildWorldContext(w, taskHint, overrideSetting) {
+  const parts = [];
+  // 1. 世界观设定
+  const setting = overrideSetting !== undefined ? overrideSetting : _getEditingSetting(w);
+  if (setting) parts.push(`## 世界观设定\n${setting}`);
+  // 2. 历法（有才加）
+  const cal = w?.gameplay?.calendarSystem;
+  if (cal) {
+    const calLines = [];
+    const dpm = Array.isArray(cal.daysPerMonth) ? cal.daysPerMonth : [];
+    if (cal.monthsPerYear) {
+      const monthStrs = Array.from({ length: cal.monthsPerYear }, (_, i) => {
+        const d = typeof dpm[i] === 'number' ? dpm[i] : (cal.uniformDaysPerMonth || '?');
+        return `第${i + 1}月（${d}天）`;
+      });
+      calLines.push(`月份共 ${cal.monthsPerYear} 个：${monthStrs.join('、')}`);
+    }
+    if (Array.isArray(cal.weekDayNames) && cal.weekDayNames.length) {
+      calLines.push(`每周 ${cal.daysPerWeek || cal.weekDayNames.length} 天：${cal.weekDayNames.join('、')}`);
+    }
+    if (Array.isArray(cal.seasons) && cal.seasons.length) {
+      calLines.push(`季节：${cal.seasons.map(s => `${s.name}（${Array.isArray(s.months) ? s.months.join('、') : ''}月）`).join('、')}`);
+    }
+    if (calLines.length) parts.push(`## 历法\n${calLines.join('\n')}`);
+  }
+  // 3. 地区→势力→NPC（NPC 只发 summary）
+  const regions = w?.regions || [];
+  if (regions.length) {
+    const regLines = [];
+    for (const r of regions) {
+      regLines.push(`- **${r.name}**${r.summary ? '：' + r.summary : ''}`);
+      for (const f of (r.factions || [])) {
+        regLines.push(`  └ **${f.name}**${f.summary ? '：' + f.summary : ''}`);
+        const npcs = (f.npcs || []).filter(n => n && n.name);
+        if (npcs.length) regLines.push(`    角色：${npcs.map(n => n.name + (n.summary ? `（${n.summary}）` : '')).join('、')}`);
+      }
+    }
+    parts.push(`## 地区与势力结构\n${regLines.join('\n')}`);
+  }
+  // 4. 常驻角色（name + summary）
+  const globals = (w?.globalNpcs || []).filter(n => n && n.name);
+  if (globals.length) parts.push(`## 常驻角色\n${globals.map(n => `- ${n.name}${n.summary ? '：' + n.summary : ''}`).join('\n')}`);
+  // 5. 世界书条目
+  const knowledges = (w?.knowledges || []).filter(k => k && k.enabled !== false && k.content);
+  if (knowledges.length) parts.push(`## 世界书条目\n${knowledges.map(k => `### ${k.name || '未命名'}\n${k.content}`).join('\n\n')}`);
+  // 6. 当前任务
+  if (taskHint) parts.push(`## 当前任务\n${taskHint}`);
+  return parts.join('\n\n');
+}
+
+function _parseJSON(text) {
     _lastRawOutput = text || '';
     let cleaned = (text || '').trim();
     // 去掉 markdown 代码块包裹
@@ -1113,20 +1167,22 @@ name: npc.name || '',
   }
 
   /** 开场内联生成 */
-  async function inlineOpening() {
-    const settingEl = document.getElementById('wv-setting');
-    const setting = settingEl?.value?.trim() || '';
-    if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+async function inlineOpening() {
+  const settingEl = document.getElementById('wv-setting');
+  const setting = settingEl?.value?.trim() || '';
+  if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+  const w = await Worldview._getEditingWV();
 
-    const prompt = await _promptText('AI 生成开场', '对开场有什么要求？留空则由 AI 自由发挥\n如：从选灵根开始、酒馆偶遇…', '');
-    if (prompt === null) return;
+  const prompt = await _promptText('AI 生成开场', '对开场有什么要求？留空则由 AI 自由发挥\n如：从选灵根开始、酒馆偶遇…', '');
+  if (prompt === null) return;
 
-    UI.showToast('正在生成开场…', 60000);
-    try {
-      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + '## 世界观设定\n' + setting;
+  UI.showToast('正在生成开场…', 60000);
+  try {
+    const ctx = _buildWorldContext(w, '生成本世界观的开场内容（startTime / startPlot / startMessage）', setting);
+    const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + ctx;
       const raw = await API.generate(PROMPTS.step5, userMsg);
       const data = _parseJSON(raw);
-      if (data.startTime) { const el = document.getElementById('wv-start-time'); if (el) el.value = data.startTime; }
+      if (data.startTime) { const el = document.getElementById('wv-start-time'); if (el) { el.value = data.startTime; if (typeof Worldview !== 'undefined' && Worldview._fillStartTimeFields) Worldview._fillStartTimeFields(data.startTime); } }
       if (data.startPlot) { const el = document.getElementById('wv-start-plot'); if (el) { el.value = data.startPlot; el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }
       if (data.startMessage) { const el = document.getElementById('wv-start-message'); if (el) { el.value = data.startMessage; el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }
       UI.showToast('开场已生成，可继续编辑', 2000);
@@ -1140,6 +1196,7 @@ name: npc.name || '',
     const settingEl = document.getElementById('wv-setting');
     const setting = settingEl?.value?.trim() || '';
     if (!setting) { UI.showToast('请先填写世界观设定', 1500); return; }
+    const w = await Worldview._getEditingWV();
 
     await _openInlineGenModal({
       icon: 'globe',
@@ -1152,7 +1209,8 @@ name: npc.name || '',
       loadingMsg: '正在生成地区…'
     }, async ({ prompt, count, wordCount, signal }) => {
       const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', wordCount).replace('##EXISTING_REGIONS##', '');
-      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + `生成 ${count} 个地区。\n\n## 世界观设定\n` + setting;
+      const ctx = _buildWorldContext(w, `为当前世界观新增 ${count} 个地区`, setting);
+      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + `生成 ${count} 个地区。\n\n` + ctx;
       const raw = await API.generate(sysPrompt, userMsg, { signal });
       const regions = _parseJSON(raw);
       const arr = Array.isArray(regions) ? regions : (regions.regions || []);
@@ -1195,7 +1253,8 @@ name: npc.name || '',
       loadingMsg: '正在生成势力…'
     }, async ({ prompt, count, wordCount, signal }) => {
       const sysPrompt = PROMPTS.step3.replace('##WORD_COUNT##', wordCount);
-      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为地区「${regName}」生成 ${count} 个势力。\n\n## 世界观设定\n${w.setting || ''}\n\n## 当前地区\n${regName}\n${document.getElementById('wv-reg-detail')?.value || ''}`;
+      const ctx = _buildWorldContext(w, `为地区「${regName}」新增 ${count} 个势力`);
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为地区「${regName}」生成 ${count} 个势力。\n\n${ctx}\n\n## 当前地区详情\n${document.getElementById('wv-reg-detail')?.value || ''}`;
       const raw = await API.generate(sysPrompt, userMsg, { signal, maxTokens: 16000 });
       const data = _parseJSON(raw);
       const arr = _normalizeArray(data, 'factions');
@@ -1227,7 +1286,9 @@ name: npc.name || '',
       loadingMsg: '正在生成角色…'
     }, async ({ prompt, count, wordCount, signal }) => {
       const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
-      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为势力「${facName}」生成 ${count} 个角色。角色 region/faction 字段必须对应当前地区和势力。\n\n## 世界观设定\n${w.setting || ''}\n\n## 当前势力\n${facName}\n${document.getElementById('wv-fac-detail')?.value || ''}`;
+      const facDetail = document.getElementById('wv-fac-detail')?.value || '';
+      const ctx = _buildWorldContext(w, `为势力「${facName}」新增 ${count} 个角色，角色的 region/faction 字段必须对应当前地区和势力`);
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为势力「${facName}」生成 ${count} 个角色。角色 region/faction 字段必须对应当前地区和势力。\n\n${ctx}\n\n## 当前势力详情\n${facDetail}`;
       const raw = await API.generate(sysPrompt, userMsg, { signal, maxTokens: 18000 });
       const data = _parseJSON(raw);
       const arr = _normalizeArray(data, 'npcs');
@@ -1263,15 +1324,10 @@ name: npc.name || '',
       loadingMsg: '正在生成角色…'
     }, async ({ prompt, count, wordCount, signal }) => {
       const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
-    const dedupeNpcs = _collectAllNpcNames(w);
-    const dedupeHint = _buildNpcDedupeHint(dedupeNpcs);
-    // 世界书条目作为参考上下文
-    let knowledgeHint = '';
-    try {
-      const knowledges = (w?.knowledges || []).filter(k => k && k.enabled !== false && k.content);
-      if (knowledges.length) knowledgeHint = `\n\n## 世界书条目（参考）\n${knowledges.map(k => `### ${k.name || '未命名'}\n${k.content}`).join('\n\n')}`;
-    } catch(_) {}
-    const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + `生成 ${count} 个角色。所有角色都是常驻角色（不归属地区）。\n\n## 世界观设定\n` + setting + dedupeHint + knowledgeHint;
+      const dedupeNpcs = _collectAllNpcNames(w);
+      const dedupeHint = _buildNpcDedupeHint(dedupeNpcs);
+      const ctx = _buildWorldContext(w, `为当前世界观新增 ${count} 个常驻角色（不归属任何地区）`);
+      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + `生成 ${count} 个角色。所有角色都是常驻角色（不归属地区）。\n\n` + ctx + dedupeHint;
       const raw = await API.generate(sysPrompt, userMsg, { signal });
       const npcs = _parseJSON(raw);
       const arr = Array.isArray(npcs) ? npcs : (npcs.npcs || []);
@@ -1316,7 +1372,10 @@ name: npc.name || '',
       loadingMsg: `正在为「${name}」生成设定…`
     }, async ({ prompt, wordCount, signal }) => {
       const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', wordCount).replace('##EXISTING_REGIONS##', '');
-      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}仅生成 1 个地区「${name}」的详细设定。\n\n## 世界观设定\n${setting}`;
+      const existingDetail = document.getElementById('wv-reg-detail')?.value?.trim() || '';
+      const ctx = _buildWorldContext(w, `填充地区「${name}」的详细设定${existingDetail ? '（已有部分内容，请参考并扩充）' : ''}`);
+      const targetInfo = existingDetail ? `\n\n## 「${name}」已有内容（参考并扩充）\n${existingDetail}` : '';
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}仅生成 1 个地区「${name}」的详细设定。\n\n${ctx}${targetInfo}`;
       const raw = await API.generate(sysPrompt, userMsg, { signal });
       _lastRawOutput = raw;
       const arr = _parseJSON(raw);
@@ -1349,7 +1408,10 @@ name: npc.name || '',
       loadingMsg: `正在为「${name}」生成设定…`
     }, async ({ prompt, wordCount, signal }) => {
       const sysPrompt = PROMPTS.step3.replace('##WORD_COUNT##', wordCount);
-      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}仅生成 1 个势力「${name}」的详细设定。\n\n## 世界观设定\n${setting}`;
+      const existingDetail = document.getElementById('wv-fac-detail')?.value?.trim() || '';
+      const ctx = _buildWorldContext(w, `填充势力「${name}」的详细设定${existingDetail ? '（已有部分内容，请参考并扩充）' : ''}`);
+      const targetInfo = existingDetail ? `\n\n## 「${name}」已有内容（参考并扩充）\n${existingDetail}` : '';
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}仅生成 1 个势力「${name}」的详细设定。\n\n${ctx}${targetInfo}`;
       const raw = await API.generate(sysPrompt, userMsg, { signal });
       _lastRawOutput = raw;
       const arr = _parseJSON(raw);
@@ -1381,12 +1443,15 @@ defaults: { count: 1, wordCount: 500 },
 limits: { count: [1, 1], wordCount: [200, 1500] },
 loadingMsg: `正在为「${name}」生成设定…`
 }, async ({ prompt, wordCount, signal }) => {
-const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
-const identity = document.getElementById('wv-npc-summary')?.value?.trim() || '';
-// 防撞名：把当前 NPC 排除在外，其余全列
-const dedupeNpcs = _collectAllNpcNames(w).filter(n => n.name !== name);
-const dedupeHint = _buildNpcDedupeHint(dedupeNpcs);
-const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}仅生成 1 个角色「${name}」${identity ? '（' + identity + '）' : ''}的详细设定。\n\n## 世界观设定\n${setting}${dedupeHint}`;
+    const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
+    const identity = document.getElementById('wv-npc-summary')?.value?.trim() || '';
+    const existingDetail = document.getElementById('wv-npc-detail')?.value?.trim() || '';
+    // 防撞名：把当前 NPC 排除在外，其余全列
+    const dedupeNpcs = _collectAllNpcNames(w).filter(n => n.name !== name);
+    const dedupeHint = _buildNpcDedupeHint(dedupeNpcs);
+    const ctx = _buildWorldContext(w, `填充角色「${name}」${identity ? '（' + identity + '）' : ''}的详细设定${existingDetail ? '（已有部分内容，请参考并扩充）' : ''}`);
+    const targetInfo = existingDetail ? `\n\n## 「${name}」已有内容（参考并扩充）\n${existingDetail}` : '';
+    const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}仅生成 1 个角色「${name}」${identity ? '（' + identity + '）' : ''}的详细设定。\n\n${ctx}${dedupeHint}${targetInfo}`;
       const raw = await API.generate(sysPrompt, userMsg, { signal });
       _lastRawOutput = raw;
       const arr = _parseJSON(raw);
@@ -1426,7 +1491,8 @@ if (detail && (n.detail || _npcMetaBlock(n))) { detail.value = _mergeMetaToDetai
     }, async ({ prompt, wordCount, signal }) => {
       const sysPrompt = PROMPTS.step2.replace('##WORD_COUNT##', wordCount).replace('##EXISTING_REGIONS##',
         `\n## 必须对齐的地区\n${empty.map(r => r.name).join('、')}`);
-      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为以下地区生成设定（共 ${empty.length} 个，每个约 ${wordCount} 字）：${empty.map(r => r.name).join('、')}。\n\n## 世界观设定\n${setting}`;
+      const ctx = _buildWorldContext(w, `批量填充以下 ${empty.length} 个空白地区的详细设定：${empty.map(r => r.name).join('、')}`);
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为以下地区生成设定（共 ${empty.length} 个，每个约 ${wordCount} 字）：${empty.map(r => r.name).join('、')}。\n\n${ctx}`;
       const raw = await API.generate(sysPrompt, userMsg, { signal, maxTokens: Math.min(20000, empty.length * wordCount * 4 + 2000) });
       _lastRawOutput = raw;
       const arr = _normalizeArray(_parseJSON(raw), 'regions');
@@ -1467,7 +1533,15 @@ if (!empty.length) { UI.showToast('没有需要填充的角色（所有角色都
     }, async ({ prompt, wordCount, signal }) => {
       const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
       const names = empty.map(n => n.name + (n.summary ? '（' + n.summary + '）' : '')).join('、');
-      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为以下角色生成详细设定（共 ${empty.length} 个，每个约 ${wordCount} 字）：${names}。所有角色都是常驻角色。\n\n## 世界观设定\n${setting}`;
+      const ctx = _buildWorldContext(w, `批量填充以下 ${empty.length} 个空白常驻角色的详细设定：${names}`);
+      // 每个待填角色附上已有的部分信息（name/aliases/summary）
+      const targetsInfo = empty.map(n => {
+        const lines = [`- 姓名：${n.name}`];
+        if (n.aliases?.trim()) lines.push(`  别称：${n.aliases}`);
+        if (n.summary?.trim()) lines.push(`  速查：${n.summary}`);
+        return lines.join('\n');
+      }).join('\n');
+      const userMsg = `${prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : ''}为以下角色生成详细设定（共 ${empty.length} 个，每个约 ${wordCount} 字）。所有角色都是常驻角色。\n\n${ctx}\n\n## 待填充角色清单\n${targetsInfo}`;
       const raw = await API.generate(sysPrompt, userMsg, { signal, maxTokens: Math.min(20000, empty.length * wordCount * 4 + 2000) });
       _lastRawOutput = raw;
       const arr = _normalizeArray(_parseJSON(raw), 'npcs');
@@ -1512,6 +1586,7 @@ if (!empty.length) { UI.showToast('没有需要填充的角色（所有角色都
     inlineFillFaction,
     inlineFillNpc,
     inlineFillAllRegions,
-    inlineFillAllGlobalNpcs
+    inlineFillAllGlobalNpcs,
+    _buildWorldContext
   };
 })();
