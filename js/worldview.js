@@ -663,32 +663,55 @@ async function reapplyStatusBarSkin() {
   } catch(e) { console.warn('[reapplyStatusBarSkin]', e); }
 }
 
-// 渲染状态栏风格下拉框选项
+// 渲染状态栏风格下拉框选项（自定义下拉组件版）
 function _renderStatusBarSkinOptions() {
-  const select = document.getElementById('wv-statusbar-skin');
-  if (!select) return;
-  
-  // 预设选项
-  let html = '<option value="neumorph">拟态风格</option>';
-  html += '<option value="terminal">终端风格</option>';
-  
-  // 自定义主题
+  const input = document.getElementById('wv-statusbar-skin');
+  if (!input) return;
+  // 收集所有可选项存到 _skinOptions 供下拉使用
+  _skinOptions = [
+    { value: 'neumorph', label: '拟态风格' },
+    { value: 'terminal', label: '终端风格' }
+  ];
   if (window.StatusBarTheme) {
     const customThemes = StatusBarTheme.getAll();
-    console.log('[WV] _renderStatusBarSkinOptions: customThemes=', customThemes.length, customThemes.map(t => t.name));
-    if (customThemes.length === 0) console.log('[WV] 无自定义状态栏主题');
-    if (customThemes.length > 0) {
-      html += '<optgroup label="自定义主题">';
-      customThemes.forEach(t => {
-        html += `<option value="${t.id}">${t.name}</option>`;
-      });
-      html += '</optgroup>';
-    }
-  } else {
-    console.warn('[WV] _renderStatusBarSkinOptions: window.StatusBarTheme 未定义!');
+    customThemes.forEach(t => {
+      _skinOptions.push({ value: t.id, label: t.name });
+    });
   }
-  
-  select.innerHTML = html;
+}
+let _skinOptions = [];
+
+function _toggleSkinDropdown() {
+  const dropdown = document.getElementById('wv-statusbar-skin-dropdown');
+  if (!dropdown) return;
+  const isHidden = dropdown.classList.contains('hidden');
+  if (isHidden) {
+    const curVal = document.getElementById('wv-statusbar-skin')?.value || 'neumorph';
+    dropdown.innerHTML = _skinOptions.map(o =>
+      `<div class="custom-dropdown-item${o.value === curVal ? ' active' : ''}" onclick="Worldview._selectSkin('${Utils.escapeHtml(o.value)}')">${Utils.escapeHtml(o.label)}</div>`
+    ).join('');
+    dropdown.classList.remove('hidden');
+    setTimeout(() => {
+      document.addEventListener('click', function _close(e) {
+        if (!dropdown.contains(e.target) && !e.target.closest('#wv-statusbar-skin-btn')) {
+          dropdown.classList.add('hidden');
+          document.removeEventListener('click', _close);
+        }
+      });
+    }, 0);
+  } else {
+    dropdown.classList.add('hidden');
+  }
+}
+
+function _selectSkin(val) {
+  const input = document.getElementById('wv-statusbar-skin');
+  const label = document.getElementById('wv-statusbar-skin-label');
+  const dropdown = document.getElementById('wv-statusbar-skin-dropdown');
+  if (input) { input.value = val; input.dispatchEvent(new Event('change')); }
+  const opt = _skinOptions.find(o => o.value === val);
+  if (label && opt) label.textContent = opt.label;
+  if (dropdown) dropdown.classList.add('hidden');
 }
 
 function _syncBuiltinRestoreButton(w) {
@@ -1012,7 +1035,16 @@ const _tkN = document.getElementById('wv-takeout-name'); if (_tkN) _tkN.value = 
     if (_skin) {
       _renderStatusBarSkinOptions(); // 渲染选项（包含自定义主题）
       _skin.value = w.statusBarSkin || 'terminal';
-      _skin.disabled = _isBuiltinWorldview(w);
+      // 同步 label 显示
+      const _skinLabel = document.getElementById('wv-statusbar-skin-label');
+      const _skinOpt = _skinOptions.find(o => o.value === _skin.value);
+      if (_skinLabel && _skinOpt) _skinLabel.textContent = _skinOpt.label;
+      // disabled 态：内置世界观禁止改
+      const _skinBtn = document.getElementById('wv-statusbar-skin-btn');
+      if (_skinBtn) {
+        if (_isBuiltinWorldview(w)) { _skinBtn.style.opacity = '0.5'; _skinBtn.style.pointerEvents = 'none'; }
+        else { _skinBtn.style.opacity = ''; _skinBtn.style.pointerEvents = ''; }
+      }
     }
     document.getElementById('wv-start-time').value = w.startTime || '';
     // 缓存当前编辑世界观的历法规则（供开场时间星期计算用）
@@ -5572,6 +5604,7 @@ toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, sele
     toggleScopeDropdown,
     selectWorldview,
     reapplyStatusBarSkin,
+    _toggleSkinDropdown, _selectSkin,
     toggleThemeDropdown, selectTheme,
     openDefaultThemePicker, closeDefaultThemePicker, pickDefaultTheme,
     restoreCurrentWorldview: _restoreCurrentWorldview,

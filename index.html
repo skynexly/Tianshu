@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=140">
-<link rel="stylesheet" href="css/phone.css?v=66">
+<link rel="stylesheet" href="css/phone.css?v=77">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
 </head>
@@ -1384,11 +1384,23 @@
             </span>
           </label>
           <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">允许 AI 插入 QQ/微信式线上消息气泡</span>
-          <div style="display:flex;align-items:center;gap:10px;margin-top:-4px">
-            <span style="font-size:13px;color:var(--text);white-space:nowrap">正文字数</span>
-            <input type="number" id="cs-reply-wordcount" value="800" min="200" max="3000" step="100" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;text-align:center">
-            <span style="font-size:11px;color:var(--text-secondary)">字（建议 400-1500）</span>
-          </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:-4px">
+                <span style="font-size:13px;color:var(--text);white-space:nowrap">正文字数</span>
+                <input type="number" id="cs-reply-wordcount" value="800" min="200" max="3000" step="100" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;text-align:center">
+                <span style="font-size:11px;color:var(--text-secondary)">字（建议 400-1500）</span>
+              </div>
+              <div style="margin-top:4px">
+                <span style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">时间格式</span>
+                <div style="position:relative">
+                  <input type="hidden" id="cs-time-format" value="delta">
+                  <button type="button" id="cs-time-format-btn" class="custom-select-btn" style="font-size:13px;padding:8px 10px" onclick="Chat._toggleTimeFormatDropdown()">
+                    <span id="cs-time-format-label" style="flex:1;text-align:left">增量（+1h20min，系统累加）</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.7"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  <div id="cs-time-format-dropdown" class="custom-dropdown hidden" style="max-height:200px;overflow-y:auto"></div>
+                </div>
+                <span style="font-size:11px;color:var(--text-secondary);margin-top:4px;display:block">控制 AI 在 status 里输出时间的方式。增量更省字；绝对时间更直观</span>
+              </div>
           <!-- v687.34：AI行为约束 -->
           <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em;margin-top:8px">AI行为约束</div>
           <span style="font-size:11px;color:var(--text-secondary);margin-top:-12px">开启后将在每轮系统提示中注入对应约束，仅对当前对话生效</span>
@@ -1512,9 +1524,12 @@
           <div style="display:flex;flex-direction:column;gap:8px">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
               <span style="font-size:14px;color:var(--text)">气泡时间戳</span>
-              <div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-                <button type="button" id="cs-bubble-time-real" onclick="Chat.setBubbleTimeMode('real')" style="padding:6px 14px;background:var(--accent);color:#111;border:none;font-size:12px;cursor:pointer">现实时间</button>
-                <button type="button" id="cs-bubble-time-game" onclick="Chat.setBubbleTimeMode('game')" style="padding:6px 14px;background:transparent;color:var(--text-secondary);border:none;border-left:1px solid var(--border);font-size:12px;cursor:pointer">游戏时间</button>
+              <div style="position:relative;min-width:140px">
+                <button type="button" id="cs-bubble-time-btn" class="custom-select-btn" style="font-size:12px;padding:6px 10px" onclick="Chat._toggleBubbleTimeDropdown()">
+                  <span id="cs-bubble-time-label" style="flex:1;text-align:left">现实时间</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.7"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div id="cs-bubble-time-dropdown" class="custom-dropdown hidden" style="max-height:160px;overflow-y:auto;right:0;left:auto;min-width:140px"></div>
               </div>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -1657,12 +1672,16 @@
   <span id="cs-ambient-volume-label" style="font-size:11px;color:var(--text-secondary);width:30px;text-align:right">50%</span>
 </div>
 <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-  <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">模式</span>
-  <select id="cs-ambient-mode" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px" onchange="Chat._onAmbientMode(this.value)">
-    <option value="loop">持续循环</option>
-    <option value="short">触发短播（20-30秒）</option>
-  </select>
-</div>
+              <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">模式</span>
+              <div style="position:relative;flex:1">
+                <input type="hidden" id="cs-ambient-mode" value="loop">
+                <button type="button" id="cs-ambient-mode-btn" class="custom-select-btn" style="font-size:12px;padding:6px 10px" onclick="Chat._toggleAmbientModeDropdown()">
+                  <span id="cs-ambient-mode-label" style="flex:1;text-align:left">持续循环</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.7"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div id="cs-ambient-mode-dropdown" class="custom-dropdown hidden" style="max-height:160px;overflow-y:auto"></div>
+              </div>
+            </div>
 
 <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
 <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em;margin-bottom:12px">认知系统</div>
@@ -2998,10 +3017,14 @@
               状态栏布局
             </div>
             <label style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;color:var(--text);font-size:13px">状态栏风格
-              <select id="wv-statusbar-skin" style="width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px">
-                <option value="neumorph">拟态风格</option>
-                <option value="terminal">终端风格</option>
-              </select>
+              <div style="position:relative">
+                <input type="hidden" id="wv-statusbar-skin" value="neumorph">
+                <button type="button" id="wv-statusbar-skin-btn" class="custom-select-btn" style="font-size:13px;padding:9px 10px" onclick="Worldview._toggleSkinDropdown()">
+                  <span id="wv-statusbar-skin-label" style="flex:1;text-align:left">拟态风格</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.7"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div id="wv-statusbar-skin-dropdown" class="custom-dropdown hidden" style="max-height:200px;overflow-y:auto"></div>
+              </div>
             </label>
           </div>
 
@@ -3860,7 +3883,7 @@ const GameLog = (() => {
 })();
 </script>
 <script src="js/db.js?v=11"></script>
-<script src="js/utils.js"></script>
+<script src="js/utils.js?v=1"></script>
 <script src="js/markdown.js"></script>
 <script src="js/api.js"></script>
 <script src="js/time-awareness.js"></script>
@@ -3871,7 +3894,7 @@ const GameLog = (() => {
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=53"></script>
-<script src="js/worldview.js?v=22"></script>
+<script src="js/worldview.js?v=23"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js"></script>
@@ -3884,7 +3907,7 @@ const GameLog = (() => {
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=5"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=21"></script>
+<script src="js/chat.js?v=32"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -3899,7 +3922,7 @@ const GameLog = (() => {
 <script src="js/ambient.js?v=1"></script>
 <script src="js/worldvoice.js?v=3"></script>
 <script src="js/music.js?v=3"></script>
-<script src="js/phone.js?v=177"></script>
+<script src="js/phone.js?v=212"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>

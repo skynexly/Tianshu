@@ -248,6 +248,12 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
     raw = raw.replace(prisonAllMatch[0], '').trim();
   }
 
+  // 来电标记：```call 块从正文中剥离（前端已在流式结束后单独检测并触发来电）
+  const callBlockMatch = raw.match(/```call\s*\n?([\s\S]*?)```/i);
+  if (callBlockMatch) {
+    raw = raw.replace(callBlockMatch[0], '').trim();
+  }
+
   // 一起听：接受/拒绝邀请 marker
   // 形如 ```listen_together\n{"accept":true}``` 或 ```listen_together\n{"accept":false,"reason":"..."}```
   const listenAcceptMatch = raw.match(/```listen_together\s*([\s\S]*?)```/i);

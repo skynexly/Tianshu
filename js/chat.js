@@ -191,8 +191,15 @@ const Chat = (() => {
   let worldviewPrompt = '';
 
   // 输出格式指令（字数由对话设置控制）
-  function _getOutputFormatPrompt(wordCount) {
+  function _getOutputFormatPrompt(wordCount, timeFormat) {
     const wc = wordCount || 800;
+    const isAbs = timeFormat === 'absolute';
+    const timeFieldDesc = isAbs
+      ? '（当前绝对时间，格式为"YYYY年M月D日 星期X HH:mm"，如"2065年3月27日 星期五 15:02"；按本轮剧情实际经过的时长，在上一轮时间基础上往后推算出新的完整时间。禁止写增量）'
+      : '（时间推进量，用增量格式表示本轮剧情相对上一轮过了多久，如"+30min""+2h""+1d""+3d12h"；必须考虑用户行为和正文描写所消耗的时间，合理估算。若时间没有变化写"+0min"。特殊情况如闪回可用"-1h"。禁止写绝对日期）';
+    const timeRule = isAbs
+      ? '**时间**写完整的绝对时间（如"2065年3月27日 星期五 15:02"），按本轮相对上轮经过的时长往后推算。需综合考虑用户行为耗时+正文描写的时间流逝。照抄上一轮时间并加上经过的时长即可。'
+      : '**时间**用增量格式（如"+30min""+2h""+1d"），表示本轮相对上轮过了多久。需综合考虑用户行为耗时+正文描写的时间流逝。前端会自动计算绝对日期，你无需关心当前是几号星期几。';
     return `你的回复必须严格遵循以下格式。
 
 **括号内为解释说明，不要将括号内内容输出到正文**。
@@ -225,7 +232,7 @@ const Chat = (() => {
 
 \`\`\`status
 地点：（当前所在地点，格式为"大地点｜小地点"，如"天枢城·东区｜某街道·某建筑·某房间"；必须使用世界观实际地名，禁止照抄此示例）
-时间：（时间推进量，用增量格式表示本轮剧情相对上一轮过了多久，如"+30min""+2h""+1d""+3d12h"；必须考虑用户行为和正文描写所消耗的时间，合理估算。若时间没有变化写"+0min"。特殊情况如闪回可用"-1h"。禁止写绝对日期）
+时间：${timeFieldDesc}
 天气：（当前天气和温度，如"晴朗 22℃"；只写天气和温度，不写体感）
 场景：（当前场景的环境描写，1-3句话，如"夜风将窗帘吹得噼啪作响，室内只开了一盏台灯，桌上有半杯冷掉的咖啡。"）
 用户角色-{{user}}-衣着：（用户角色当前穿的衣服饰品，如"白色睡裙，裙摆坠着荷叶边；颈部一条蓝宝石项链"；字段中的{{user}}应替换为用户角色姓名）
@@ -237,7 +244,7 @@ const Chat = (() => {
 状态面板规则：
 1. **每轮都必须完整输出 status 代码块**，即使所有字段都没变化。未变化的字段直接抄上一轮的内容。
 2. **地点**必须用世界观实际地区名，不要编造；格式为"大地点｜小地点"，用全角竖线分隔。根据{{user}}的身份和剧情决定地点，禁止照抄示例中的地名。
-3. **时间**用增量格式（如"+30min""+2h""+1d"），表示本轮相对上轮过了多久。需综合考虑用户行为耗时+正文描写的时间流逝。前端会自动计算绝对日期，你无需关心当前是几号星期几。
+3. ${timeRule}
 4. **天气**只写天气和温度，不写体感。
 5. 在场的每个角色各写两行（衣着+姿势），格式严格为 \`角色-<名字>-衣着：xxx\` 和 \`角色-<名字>-姿势：xxx\`。不在场的角色不要写。为兼容旧格式，系统仍可识别 \`NPC-<名字>-衣着/姿势\`，但你本轮输出应优先使用 \`角色-<名字>-...\`。
 6. 用户角色的衣着/姿势格式为 \`用户角色-<名字>-衣着：xxx\` 和 \`用户角色-<名字>-姿势：xxx\`，其中 \`<名字>\` 必须替换为用户角色姓名；禁止写成"玩家衣着/玩家姿势"。
@@ -553,8 +560,8 @@ const Chat = (() => {
     let s = raw;
     // 1. 剥离 <think>/<thinking> 思考链
     s = s.replace(/<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi, '');
-    // 2. 剥离所有系统格式代码块（status/relation/task/tasks/custom-attrs/chat/phone-lock/homecoming/prison-all）
-  s = s.replace(/```(?:status|relation|tasks?|custom-attrs|chat|phone-lock|homecoming|prison-all)\s*\n?[\s\S]*?```/gi, '');
+    // 2. 剥离所有系统格式代码块（status/relation/task/tasks/custom-attrs/chat/phone-lock/homecoming/call/prison-all）
+  s = s.replace(/```(?:status|relation|tasks?|custom-attrs|chat|phone-lock|homecoming|call|prison-all)\s*\n?[\s\S]*?```/gi, '');
     // 3. 剥离"第X部分 — XXX："格式标签行
     s = s.replace(/^[ \t]*第[一二三四五六七八九十]+部分\s*[—\-－]\s*[^\n]*$/gm, '');
     // 4. 清理残留的孤儿分隔符和多余空行
@@ -696,7 +703,7 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
 
     // 2. 输出格式 — 非文游模式或关闭回复格式时跳过
     if (isGameMode && convSettings.format) {
-      systemParts.push(_getOutputFormatPrompt(convSettings.replyWordCount));
+      systemParts.push(_getOutputFormatPrompt(convSettings.replyWordCount, convSettings.timeFormat));
       // 线上消息气泡：用户开关开启 且 不是心动模拟（心动模拟世界观自带说明）
       if (convSettings.onlineChat && document.body.getAttribute('data-worldview') !== '心动模拟') {
         systemParts.push(ONLINE_CHAT_BLOCK_PROMPT);
@@ -753,7 +760,12 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
               }
             }
           } catch(_) {}
-          let timePrompt = `【当前剧情时间】${curStatus.time}${periodLabel ? '（' + periodLabel + (periodDesc ? '：' + periodDesc : '') + '）' : ''}\n这是本轮剧情开始时的绝对时间。你的正文描写（光线、活动、氛围等）必须符合这个时间段。你在status中输出的时间增量将基于此时间累加。`;
+          let timePrompt = `【当前剧情时间】${curStatus.time}${periodLabel ? '（' + periodLabel + (periodDesc ? '：' + periodDesc : '') + '）' : ''}\n这是本轮剧情开始时的绝对时间。你的正文描写（光线、活动、氛围等）必须符合这个时间段。`;
+          if (convSettings.timeFormat === 'absolute') {
+            timePrompt += `\n你在 status 中输出 time 时，请写**完整的绝对时间**（格式与上面一致，如"${curStatus.time}"），按本轮剧情实际经过的时长在此基础上往后推算，不要写增量。`;
+          } else {
+            timePrompt += `\n你在 status 中输出 time 时，请写**时间增量**（如 +5min、+1h20min、+3d），系统会基于上面的当前时间自动累加，不要写完整日期。`;
+          }
 
           // 跨时段检测：读上一轮存的 pending 标记
           if (curStatus._pendingPeriodTransition) {
@@ -1118,9 +1130,12 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
     }
 
     // 7a. 生图模式（对话设置里开关控制）
-    if (convSettings.imgGen) {
-      systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念');
-    }
+  if (convSettings.imgGen) {
+    systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念');
+  }
+
+  // 7b. 来电能力：角色可以主动给玩家打语音/视频电话
+  systemParts.push('[来电能力]\n当剧情中某个角色主动给玩家打语音或视频电话时，你可以在回复末尾输出一个 ```call 代码块来触发来电界面。玩家会在手机上看到来电响铃，可以选择接听或拒接。\n\n格式：\n```call\n{"mode":"voice 或 video","name":"角色名","firstLine":"接通后的第一段内容。格式要求：台词行以 > 开头，描述行不加前缀；台词行尾标时间 [HH:MM]；可以描述+台词组合，如：电话那头传来低沉的笑声。\\n> 怎么这个点才回来？ [12:50]"}\n```\n\n语音还是视频，按角色此刻的动机选：\n- voice（语音）：日常联系、交代事情、随口说两句、报平安、不方便露脸或所在环境不适合开视频时。多数情况用语音。\n- video（视频）：很想见到玩家、思念、想亲眼确认玩家的状态/安全/情绪、需要面对面把话说清楚、或想让玩家看到自己这边的画面时。视频更亲密、更郑重，别滥用。\n\n规则：\n- 只有剧情中角色确实有打电话的动机时才使用，不要无理由触发\n- mode 只能是 "voice" 或 "video"，并与上面的动机相符\n- name 必须是角色的确切名字\n- firstLine 是对方接起后立刻说的话，用叙述流格式（描述行不加前缀，台词行以 > 开头并在行尾标 [HH:MM]），至少包含一句台词（> 开头），且要体现这通电话的来意\n- 代码块放在回复末尾，不要在正文中穿插\n- 一条回复里最多一个 ```call 块');
 
       // 8. 心动模拟：累计状态注入
       // 已返航后，停止注入心动模拟的状态/任务/好感数据，改为注入"已回家"提示
@@ -1689,9 +1704,15 @@ isStreaming = true;
       const _pdPending = Phone.getPendingPhoneDown();
       if (_pdPending) {
         Phone.clearPendingPhoneDown();
-        let pdContext = `【手机打断事件】${_pdPending.contactName}打断了{{user}}看手机，请描写${_pdPending.contactName}打断后的线下场景。照常输出状态块。\n时间增量请从当前状态栏时间继续往前推进（手机聊天的时间消耗已自动同步到状态栏）。`;
-        if (_pdPending.actionLog) {
-          pdContext += `\n\n以下是{{user}}本轮在手机上的操作（含聊天内容）：\n${typeof _pdPending.actionLog === 'string' ? _pdPending.actionLog : _pdPending.actionLog.join('\n')}`;
+        let pdContext;
+        if (_pdPending.fromCall) {
+          // 通话挂断触发：actionLog 里已经是完整的通话结束事件上下文
+          pdContext = typeof _pdPending.actionLog === 'string' ? _pdPending.actionLog : _pdPending.actionLog.join('\n');
+        } else {
+          pdContext = `【手机打断事件】${_pdPending.contactName}打断了{{user}}看手机，请描写${_pdPending.contactName}打断后的线下场景。照常输出状态块。\n时间增量请从当前状态栏时间继续往前推进（手机聊天的时间消耗已自动同步到状态栏）。`;
+          if (_pdPending.actionLog) {
+            pdContext += `\n\n以下是{{user}}本轮在手机上的操作（含聊天内容）：\n${typeof _pdPending.actionLog === 'string' ? _pdPending.actionLog : _pdPending.actionLog.join('\n')}`;
+          }
         }
         userContentForAPI = pdContext;
       }
@@ -1980,7 +2001,9 @@ const msgEl = appendMessage(aiMsg, true, true);
           aiMsg.content = merged;
           let renderContent = merged;
           renderContent = renderContent.replace(/```homecoming\s*[\s\S]*?```/gi, '');
-          renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
+        renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
+        renderContent = renderContent.replace(/```call\s*[\s\S]*?```/gi, '');
+        renderContent = renderContent.replace(/```call[\s\S]*$/i, '');
           renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
           contentEl.innerHTML = Markdown.render(renderContent);
           if (convSettings.stream) contentEl.classList.add('streaming-cursor');
@@ -2295,6 +2318,17 @@ const msgEl = appendMessage(aiMsg, true, true);
             if (convSettings.imgGen && /\[IMG:\s*[^\]]+\]/i.test(fullContent)) {
               _processImgTags(aiMsg.id, fullContent).catch(e => console.warn('[Chat] 生图标记处理失败', e));
             }
+
+            // 主线来电：检测 ```call 代码块，触发手机来电界面
+            // 延迟 1.5s 等主线消息渲染完毕后再弹来电
+            try {
+              if (typeof Phone !== 'undefined' && Phone.handleMainlineCallTag
+                  && /```call[\s\S]*?```/.test(fullContent)) {
+                setTimeout(() => {
+                  try { Phone.handleMainlineCallTag(fullContent); } catch(_) {}
+                }, 1500);
+              }
+            } catch(e) { console.warn('[Chat] 来电标记处理失败', e); }
 
             resolve();
           } catch(e) {
@@ -5275,6 +5309,7 @@ bgImage: conv?.convBgImage || '',
     toolsHistory: !!conv?.convToolsHistory,        // 默认关（历史搜索工具）
         autoExtract: conv?.convAutoExtract !== false,  // 默认开（自动记忆提取）
       replyWordCount: conv?.convReplyWordCount || 800,  // 默认800字
+      timeFormat: conv?.convTimeFormat || 'delta',       // 时间输出格式：'delta'(增量,默认) | 'absolute'(绝对时间)
       directive: conv?.convDirective || '',              // 剧情引导内容
       directiveRemaining: conv?.convDirectiveRemaining || 0, // 剩余轮数
       directiveTotal: conv?.convDirectiveTotal || 0,      // 原始设定轮数
@@ -5667,7 +5702,11 @@ bgImage: conv?.convBgImage || '',
       const ambVolLabel = document.getElementById('cs-ambient-volume-label');
       if (ambVolLabel) ambVolLabel.textContent = (conv?.convAmbientVolume ?? 50) + '%';
       const ambModeEl = document.getElementById('cs-ambient-mode');
-      if (ambModeEl) ambModeEl.value = conv?.convAmbientMode || 'loop';
+    if (ambModeEl) {
+      ambModeEl.value = conv?.convAmbientMode || 'loop';
+      const ambModeLabel = document.getElementById('cs-ambient-mode-label');
+      if (ambModeLabel) ambModeLabel.textContent = ambModeEl.value === 'short' ? '触发短播（20-30秒）' : '持续循环';
+    }
     } catch(_) {}
     const oc = document.getElementById('cs-online-chat');
     if (oc) oc.checked = s.onlineChat;
@@ -5735,6 +5774,12 @@ bgImage: conv?.convBgImage || '',
     // 正文字数
     const wcOpenEl = document.getElementById('cs-reply-wordcount');
     if (wcOpenEl) wcOpenEl.value = s.replyWordCount || 800;
+    const tfEl = document.getElementById('cs-time-format');
+    if (tfEl) {
+      tfEl.value = s.timeFormat || 'delta';
+      const label = document.getElementById('cs-time-format-label');
+      if (label) label.textContent = s.timeFormat === 'absolute' ? '绝对时间（完整日期时间）' : '增量（+1h20min，系统累加）';
+    }
     // v687.34：AI行为约束
     const ceEl = document.getElementById('cs-constraint-echo');
     if (ceEl) ceEl.checked = s.constraintEcho;
@@ -5818,6 +5863,8 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     // 正文字数
     const wcEl = document.getElementById('cs-reply-wordcount');
     if (wcEl) conv.convReplyWordCount = parseInt(wcEl.value) || 800;
+    const tfSaveEl = document.getElementById('cs-time-format');
+    if (tfSaveEl) conv.convTimeFormat = (tfSaveEl.value === 'absolute') ? 'absolute' : 'delta';
     // v687.34：AI行为约束
     const ceSaveEl = document.getElementById('cs-constraint-echo');
     if (ceSaveEl) conv.convConstraintEcho = ceSaveEl.checked;
@@ -6644,20 +6691,115 @@ async function applyLorebooksToWorldview() {
 
   function _onAmbientMode(val) {
     if (typeof Ambient !== 'undefined') Ambient.setMode(val);
+    const label = document.getElementById('cs-ambient-mode-label');
+    if (label) label.textContent = val === 'short' ? '触发短播（20-30秒）' : '持续循环';
+  }
+
+  const _AMBIENT_MODE_OPTIONS = [
+    { value: 'loop', label: '持续循环' },
+    { value: 'short', label: '触发短播（20-30秒）' }
+  ];
+  function _toggleAmbientModeDropdown() {
+    const dropdown = document.getElementById('cs-ambient-mode-dropdown');
+    if (!dropdown) return;
+    const isHidden = dropdown.classList.contains('hidden');
+    if (isHidden) {
+      const curVal = document.getElementById('cs-ambient-mode')?.value || 'loop';
+      dropdown.innerHTML = _AMBIENT_MODE_OPTIONS.map(o =>
+        `<div class="custom-dropdown-item${o.value === curVal ? ' active' : ''}" onclick="Chat._selectAmbientMode('${o.value}')">${Utils.escapeHtml(o.label)}</div>`
+      ).join('');
+      dropdown.classList.remove('hidden');
+      setTimeout(() => {
+        document.addEventListener('click', function _close(e) {
+          if (!dropdown.contains(e.target) && !e.target.closest('#cs-ambient-mode-btn')) {
+            dropdown.classList.add('hidden');
+            document.removeEventListener('click', _close);
+          }
+        });
+      }, 0);
+    } else {
+      dropdown.classList.add('hidden');
+    }
+  }
+  function _selectAmbientMode(val) {
+    const input = document.getElementById('cs-ambient-mode');
+    if (input) input.value = val;
+    _onAmbientMode(val);
+    const dropdown = document.getElementById('cs-ambient-mode-dropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+  }
+
+  // 时间格式自定义下拉
+  const _TIME_FORMAT_OPTIONS = [
+    { value: 'delta', label: '增量（+1h20min，系统累加）' },
+    { value: 'absolute', label: '绝对时间（完整日期时间）' }
+  ];
+  function _toggleTimeFormatDropdown() {
+    const dropdown = document.getElementById('cs-time-format-dropdown');
+    if (!dropdown) return;
+    const isHidden = dropdown.classList.contains('hidden');
+    if (isHidden) {
+      const curVal = document.getElementById('cs-time-format')?.value || 'delta';
+      dropdown.innerHTML = _TIME_FORMAT_OPTIONS.map(o =>
+        `<div class="custom-dropdown-item${o.value === curVal ? ' active' : ''}" onclick="Chat._selectTimeFormat('${o.value}')">${Utils.escapeHtml(o.label)}</div>`
+      ).join('');
+      dropdown.classList.remove('hidden');
+      setTimeout(() => {
+        document.addEventListener('click', function _close(e) {
+          if (!dropdown.contains(e.target) && !e.target.closest('#cs-time-format-btn')) {
+            dropdown.classList.add('hidden');
+            document.removeEventListener('click', _close);
+          }
+        });
+      }, 0);
+    } else {
+      dropdown.classList.add('hidden');
+    }
+  }
+  function _selectTimeFormat(val) {
+    const input = document.getElementById('cs-time-format');
+    const label = document.getElementById('cs-time-format-label');
+    const dropdown = document.getElementById('cs-time-format-dropdown');
+    if (input) input.value = val;
+    const opt = _TIME_FORMAT_OPTIONS.find(o => o.value === val);
+    if (label && opt) label.textContent = opt.label;
+    if (dropdown) dropdown.classList.add('hidden');
   }
 
   // ===== 气泡时间戳显示模式（全局，现实/游戏二选一）=====
+  const _BUBBLE_TIME_OPTIONS = [
+    { value: 'real', label: '现实时间' },
+    { value: 'game', label: '游戏时间' }
+  ];
   function getBubbleTimeMode() {
     try { return localStorage.getItem('skynex_bubbleTimeMode') || 'real'; } catch(_) { return 'real'; }
   }
   function _syncBubbleTimeModeUI() {
     const mode = getBubbleTimeMode();
-    const realBtn = document.getElementById('cs-bubble-time-real');
-    const gameBtn = document.getElementById('cs-bubble-time-game');
-    if (realBtn && gameBtn) {
-      const on = (b) => { b.style.background = 'var(--accent)'; b.style.color = '#111'; };
-      const off = (b) => { b.style.background = 'transparent'; b.style.color = 'var(--text-secondary)'; };
-      if (mode === 'game') { on(gameBtn); off(realBtn); } else { on(realBtn); off(gameBtn); }
+    const label = document.getElementById('cs-bubble-time-label');
+    const opt = _BUBBLE_TIME_OPTIONS.find(o => o.value === mode);
+    if (label && opt) label.textContent = opt.label;
+  }
+  function _toggleBubbleTimeDropdown() {
+    const dropdown = document.getElementById('cs-bubble-time-dropdown');
+    if (!dropdown) return;
+    const isHidden = dropdown.classList.contains('hidden');
+    if (isHidden) {
+      const curVal = getBubbleTimeMode();
+      dropdown.innerHTML = _BUBBLE_TIME_OPTIONS.map(o =>
+        `<div class="custom-dropdown-item${o.value === curVal ? ' active' : ''}" onclick="Chat.setBubbleTimeMode('${o.value}')">${Utils.escapeHtml(o.label)}</div>`
+      ).join('');
+      dropdown.classList.remove('hidden');
+      setTimeout(() => {
+        document.addEventListener('click', function _close(e) {
+          if (!dropdown.contains(e.target) && !e.target.closest('#cs-bubble-time-btn')) {
+            dropdown.classList.add('hidden');
+            document.removeEventListener('click', _close);
+          }
+        });
+      }, 0);
+    } else {
+      dropdown.classList.add('hidden');
     }
   }
   function setBubbleTimeMode(mode) {
@@ -6666,6 +6808,9 @@ async function applyLorebooksToWorldview() {
     // 清掉所有消息的渲染缓存，让 renderAll 用新模式重渲染时间戳
     try { (messages || []).forEach(msg => { try { delete msg._cachedFullHTML; } catch(_) {} }); } catch(_) {}
     _syncBubbleTimeModeUI();
+    // 关闭下拉
+    const dropdown = document.getElementById('cs-bubble-time-dropdown');
+    if (dropdown) dropdown.classList.add('hidden');
     try { renderAll(); } catch(_) {}
   }
 
@@ -6711,6 +6856,12 @@ openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
     _renderMcpList, _openMcpAddModal, _closeMcpAddModal, _onMcpAuthTypeChange, _saveMcpServer,
     _toggleMcpServer, _removeMcpServer, _rediscoverMcpServer,
     // 环境音控制
-    _onAmbientToggle, _onAmbientVolume, _onAmbientMode
+    _onAmbientToggle, _onAmbientVolume, _onAmbientMode,
+    // 时间格式下拉
+    _toggleTimeFormatDropdown, _selectTimeFormat,
+    // 气泡时间戳下拉
+    _toggleBubbleTimeDropdown,
+    // 环境音模式下拉
+    _toggleAmbientModeDropdown, _selectAmbientMode
   };
 })();
