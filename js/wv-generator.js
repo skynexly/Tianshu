@@ -786,6 +786,15 @@ ${_stepIntro('users', '第 4 步 · 角色', '为每个势力生成 NPC 角色')
         let sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
         const ctxParts = [`## 世界观设定\n${s1.setting || ''}`];
         if (regions.length) ctxParts.push(`## 地区\n${regions.map(r => `- ${_regionBrief(r)}`).join('\n')}`);
+        // 世界书条目作为参考上下文
+        try {
+          const wNow = await Worldview._getEditingWV();
+          const knowledges = (wNow?.knowledges || []).filter(k => k && k.enabled !== false && k.content);
+          if (knowledges.length) ctxParts.push(`## 世界书条目\n${knowledges.map(k => `### ${k.name || '未命名'}\n${k.content}`).join('\n\n')}`);
+          // 世界书已有 NPC 作为参考
+          const existingNpcs = (wNow?.globalNpcs || []).filter(n => n && n.name);
+          if (existingNpcs.length) ctxParts.push(`## 世界书已有角色（参考风格，不要重复生成）\n${existingNpcs.map(n => `- **${n.name}**${n.summary ? '（' + n.summary + '）' : ''}${n.detail ? '：' + n.detail.substring(0, 200) + (n.detail.length > 200 ? '…' : '') : ''}`).join('\n')}`);
+        } catch(_) {}
         const regionHint = regions.length ? `\n每个角色的 region 字段必须从以下地区中选一个：${regions.map(r => '「' + r.name + '」').join('、')}。` : '';
         const userMsg = `${userPrompt ? '用户要求：' + userPrompt + '\n\n' : ''}生成 ${count} 个角色。${regionHint}\n\n${ctxParts.join('\n\n')}`;
         const raw = await API.generate(sysPrompt, userMsg, { signal: _abortCtrl.signal, maxTokens: Math.min(32000, count * wordCount * 4 + 2000) });
@@ -830,7 +839,14 @@ const allExistingNames = [...new Set([...existingFromWv, ...existingNpcNames])];
 const dedupeHint = allExistingNames.length > 0
 ? `\n\n## 已有角色（不要重名，也不要近似名）\n${allExistingNames.join('、')}`
 : '';
-          const userMsg = `${userPrompt ? '用户要求：' + userPrompt + '\n\n' : ''}为势力「${t.faction.name}」（位于地区「${t.region}」）生成 ${count} 个角色。每个角色的 region 必须是「${t.region}」、faction 必须是「${t.faction.name}」。\n\n## 世界观设定\n${s1.setting || ''}\n\n## 当前势力\n### ${t.faction.name}（${t.region}）\n${facDetail}${dedupeHint}`;
+          // 世界书条目作为参考上下文
+          let knowledgeHint = '';
+          try {
+            const wNow = await Worldview._getEditingWV();
+            const knowledges = (wNow?.knowledges || []).filter(k => k && k.enabled !== false && k.content);
+            if (knowledges.length) knowledgeHint = `\n\n## 世界书条目\n${knowledges.map(k => `### ${k.name || '未命名'}\n${k.content}`).join('\n\n')}`;
+          } catch(_) {}
+          const userMsg = `${userPrompt ? '用户要求：' + userPrompt + '\n\n' : ''}为势力「${t.faction.name}」（位于地区「${t.region}」）生成 ${count} 个角色。每个角色的 region 必须是「${t.region}」、faction 必须是「${t.faction.name}」。\n\n## 世界观设定\n${s1.setting || ''}\n\n## 当前势力\n### ${t.faction.name}（${t.region}）\n${facDetail}${dedupeHint}${knowledgeHint}`;
           const raw = await API.generate(sysPrompt, userMsg, { signal: _abortCtrl.signal, maxTokens: Math.min(20000, count * wordCount * 4 + 2000) });
           const data = _parseJSON(raw);
           const arr = _normalizeArray(data, 'npcs');
@@ -1247,9 +1263,15 @@ name: npc.name || '',
       loadingMsg: '正在生成角色…'
     }, async ({ prompt, count, wordCount, signal }) => {
       const sysPrompt = PROMPTS.step4.replace('##WORD_COUNT##', wordCount);
-      const dedupeNpcs = _collectAllNpcNames(w);
-      const dedupeHint = _buildNpcDedupeHint(dedupeNpcs);
-      const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + `生成 ${count} 个角色。所有角色都是常驻角色（不归属地区）。\n\n## 世界观设定\n` + setting + dedupeHint;
+    const dedupeNpcs = _collectAllNpcNames(w);
+    const dedupeHint = _buildNpcDedupeHint(dedupeNpcs);
+    // 世界书条目作为参考上下文
+    let knowledgeHint = '';
+    try {
+      const knowledges = (w?.knowledges || []).filter(k => k && k.enabled !== false && k.content);
+      if (knowledges.length) knowledgeHint = `\n\n## 世界书条目（参考）\n${knowledges.map(k => `### ${k.name || '未命名'}\n${k.content}`).join('\n\n')}`;
+    } catch(_) {}
+    const userMsg = (prompt.trim() ? '用户要求：' + prompt.trim() + '\n\n' : '') + `生成 ${count} 个角色。所有角色都是常驻角色（不归属地区）。\n\n## 世界观设定\n` + setting + dedupeHint + knowledgeHint;
       const raw = await API.generate(sysPrompt, userMsg, { signal });
       const npcs = _parseJSON(raw);
       const arr = Array.isArray(npcs) ? npcs : (npcs.npcs || []);
