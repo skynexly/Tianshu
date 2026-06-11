@@ -3949,3 +3949,657 @@ background: transparent !important;
 .phone-call-refresh-corner.spinning { pointer-events: none; }
 .phone-call-refresh-corner.spinning svg { animation: phoneCallSpin .8s linear infinite; }
 @keyframes phoneCallSpin { to { transform: rotate(360deg); } }
+
+/* ===== 电台 App ===== */
+.phone-radio-home { padding: 14px 14px 24px; }
+.phone-radio-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.phone-radio-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 18px 12px 16px;
+  border-radius: 18px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.phone-radio-card:active { transform: scale(0.97); }
+.phone-radio-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.10); }
+.phone-radio-card-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.phone-radio-card-icon svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.30)); }
+.phone-radio-card-icon-add {
+  background: var(--bg-tertiary);
+  border: 1px dashed var(--border);
+  box-shadow: none;
+}
+.phone-radio-card-name { font-size: 14px; font-weight: 650; color: var(--text); }
+.phone-radio-card-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.phone-radio-card-add .phone-radio-card-name,
+.phone-radio-card-add .phone-radio-card-desc { color: var(--text-secondary); }
+
+/* 频道空状态 */
+.phone-radio-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 30px 24px;
+  text-align: center;
+}
+.phone-radio-onair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.phone-radio-onair-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+.phone-radio-onair.off .phone-radio-onair-dot { background: #888; opacity: .5; }
+.phone-radio-onair:not(.off) { color: #e0464b; border-color: color-mix(in srgb, #e0464b 40%, var(--border)); }
+.phone-radio-onair:not(.off) .phone-radio-onair-dot { background: #e0464b; animation: phoneRadioBlink 1.2s ease-in-out infinite; }
+@keyframes phoneRadioBlink { 50% { opacity: .3; } }
+.phone-radio-mic {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-secondary));
+  border: 1px solid var(--border);
+}
+.phone-radio-mic svg { width: 40px; height: 40px; opacity: .7; }
+/* 圆环长按调频器 */
+.phone-radio-tuner {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  margin-top: -10px;
+}
+.phone-radio-tuner-ring { display: block; filter: drop-shadow(inset 0 2px 4px rgba(0,0,0,0.3)); }
+.phone-radio-tuner-track { stroke: rgba(128,128,128,0.22); filter: url(#none); }
+.phone-radio-tuner-ring { filter: drop-shadow(0 2px 6px rgba(0,0,0,0.25)); }
+.phone-radio-tuner-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.phone-radio-tuner-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-secondary));
+  border: 1px solid var(--border);
+  transition: transform .2s ease;
+  cursor: pointer;
+}
+.phone-radio-tuner-icon svg { width: 28px; height: 28px; stroke: var(--accent); opacity: .9; }
+.phone-radio-tuner-hint { font-size: 12px; color: var(--text-secondary); letter-spacing: .04em; margin-top: 6px; }
+.phone-radio-tuner.holding .phone-radio-tuner-icon { transform: scale(1.08); }
+/* 电波跳动动画（加载态） */
+.phone-radio-wave {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.phone-radio-wave span {
+  display: block;
+  width: 4px;
+  border-radius: 3px;
+  background: var(--accent);
+  animation: radioWaveJump .8s ease-in-out infinite;
+}
+.phone-radio-wave span:nth-child(1) { height: 14px; animation-delay: 0s; }
+.phone-radio-wave span:nth-child(2) { height: 22px; animation-delay: .1s; }
+.phone-radio-wave span:nth-child(3) { height: 30px; animation-delay: .2s; }
+.phone-radio-wave span:nth-child(4) { height: 22px; animation-delay: .3s; }
+.phone-radio-wave span:nth-child(5) { height: 14px; animation-delay: .4s; }
+@keyframes radioWaveJump {
+  0%, 100% { transform: scaleY(0.5); opacity: .5; }
+  50% { transform: scaleY(1.2); opacity: 1; }
+}
+.phone-radio-tuner.loading { pointer-events: none; }
+
+/* 杂志式封面卡片 + 控制栏 */
+.phone-radio-deck {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 24px 18px 12px;
+  gap: 18px;
+}
+.phone-radio-stack {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+}
+.phone-radio-stack.has-next::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  right: -8px;
+  bottom: -10px;
+  left: 8px;
+  border-radius: 18px;
+  background: var(--bg-secondary);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+  z-index: 0;
+}
+.phone-radio-prog-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 360px;
+  box-sizing: border-box;
+  padding: 14px 14px 18px;
+  border-radius: 18px;
+  background: var(--bg-secondary);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* FM 数字，居中 */
+.phone-radio-fm {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+/* 大横封面 */
+.phone-radio-cover {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  flex-shrink: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--accent), var(--decoration));
+}
+.phone-radio-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* 标题 + 标签 一行 */
+.phone-radio-prog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+.phone-radio-prog-name { font-size: 19px; font-weight: 700; color: var(--text); text-align: left; min-width: 0; }
+.phone-radio-prog-tags { display: flex; gap: 5px; flex-wrap: wrap; flex-shrink: 0; }
+.phone-radio-card-tag {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-tertiary));
+  color: var(--accent);
+  font-weight: 600;
+}
+.phone-radio-prog-host { font-size: 12px; color: var(--text-secondary); text-align: left; }
+.phone-radio-prog-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  text-align: left;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* 正在播·本期节目名（副信息，贴卡片底部） */
+.phone-radio-prog-now {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone-radio-now-tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-tertiary));
+  color: var(--accent);
+}
+.phone-radio-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.phone-radio-ctrl-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform .1s;
+}
+.phone-radio-ctrl-btn:active { transform: scale(0.9); }
+.phone-radio-ctrl-btn:disabled { opacity: .3; pointer-events: none; }
+.phone-radio-play-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #111;
+  cursor: pointer;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 40%, transparent);
+  transition: transform .1s;
+}
+.phone-radio-play-btn svg { margin-left: 2px; }
+.phone-radio-play-btn:active { transform: scale(0.95); }
+.phone-radio-counter { font-size: 11px; color: var(--text-secondary); }
+/* 圆点指示器 */
+.phone-radio-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 8px;
+  margin: 2px 0;
+}
+.phone-radio-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-secondary) 35%, transparent);
+  transition: all .2s;
+}
+.phone-radio-dot.active {
+  width: 18px;
+  border-radius: 4px;
+  background: var(--accent);
+}
+.phone-radio-dot.edge {
+  width: 4px;
+  height: 4px;
+  opacity: .5;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-dot { background: rgba(255,255,255,0.35); }
+.phone-shell.has-custom-wallpaper .phone-radio-dot.active { background: #fff; }
+/* 控制栏卡片：包裹播放/切换三键 + 计数器 */
+.phone-radio-ctrl-card {
+  width: 100%;
+  max-width: 320px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 18px;
+  background: var(--bg-secondary);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+}
+/* 删除此频道长条按钮 */
+.phone-radio-delete-btn {
+  width: 100%;
+  max-width: 320px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: 14px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .1s, color .15s;
+}
+.phone-radio-delete-btn:active { transform: scale(0.98); color: var(--error); }
+/* 重新调频长条按钮 */
+.phone-radio-retune-btn {
+  width: 100%;
+  max-width: 320px;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+  transition: transform .1s;
+}
+.phone-radio-retune-btn:active { transform: scale(0.98); }
+.phone-radio-retune-btn.loading { pointer-events: none; }
+.phone-radio-retune-label { display: inline-flex; align-items: center; gap: 6px; }
+/* 内联电波动画（按钮里，无绝对定位） */
+.phone-radio-wave-inline {
+  position: static;
+  inset: auto;
+  height: 26px;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-retune-btn {
+  background: rgba(18, 20, 28, 0.38);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+}
+
+/* 遮罩适配 */
+.phone-shell.has-custom-wallpaper .phone-radio-prog-card {
+  background: rgba(18, 20, 28, 0.38) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.phone-shell.has-custom-wallpaper .phone-radio-prog-name,
+.phone-shell.has-custom-wallpaper .phone-radio-prog-now { color: rgba(255,255,255,0.96) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-prog-host,
+.phone-shell.has-custom-wallpaper .phone-radio-prog-desc,
+.phone-shell.has-custom-wallpaper .phone-radio-counter { color: rgba(255,255,255,0.7) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-stack.has-next::after {
+  background: rgba(18, 20, 28, 0.25) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-ctrl-btn { border-color: rgba(255,255,255,0.22); color: #fff; }
+.phone-shell.has-custom-wallpaper .phone-radio-ctrl-card {
+  background: rgba(18, 20, 28, 0.38);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.phone-shell.has-custom-wallpaper .phone-radio-delete-btn { color: rgba(255,255,255,0.66); }
+.phone-shell.has-custom-wallpaper .phone-radio-tuner-track { stroke: rgba(255,255,255,0.15); }
+.phone-shell.has-custom-wallpaper .phone-radio-tuner-icon {
+  background: rgba(18, 20, 28, 0.35);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.phone-shell.has-custom-wallpaper .phone-radio-tuner-icon svg { stroke: #fff; }
+.phone-radio-empty-title { font-size: 16px; font-weight: 700; color: var(--text); }
+.phone-radio-empty-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; max-width: 220px; }
+.phone-radio-tune-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 9px 20px;
+  border: none;
+  border-radius: 22px;
+  background: var(--accent);
+  color: #111;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .12s ease;
+}
+.phone-radio-tune-btn:active { transform: scale(0.95); }
+.phone-radio-deck { padding: 16px; }
+/* 分类表单 — 图标选择器 */
+.radio-cat-icon-pick {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform .1s ease, border-color .1s ease;
+}
+.radio-cat-icon-pick svg { width: 22px; height: 22px; stroke: var(--text-secondary); }
+.radio-cat-icon-pick:active { transform: scale(0.92); }
+.radio-cat-icon-pick.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.radio-cat-icon-pick.active svg { stroke: #fff; }
+
+/* 电台 — 遮罩（自定义壁纸）模式适配：深色玻璃卡片 + 白字 */
+.phone-shell.has-custom-wallpaper .phone-radio-card {
+  background: rgba(18, 20, 28, 0.35) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-card-name { color: rgba(255, 255, 255, 0.96) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-card-desc { color: rgba(255, 255, 255, 0.66) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-card-icon-add {
+  background: rgba(255, 255, 255, 0.10) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-card-add .phone-radio-card-name,
+.phone-shell.has-custom-wallpaper .phone-radio-card-add .phone-radio-card-desc { color: rgba(255, 255, 255, 0.66) !important; }
+/* 空状态页 */
+.phone-shell.has-custom-wallpaper .phone-radio-onair {
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-mic {
+  background: rgba(18, 20, 28, 0.35) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-mic svg { stroke: #fff !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-empty-title { color: rgba(255, 255, 255, 0.96) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-empty-desc { color: rgba(255, 255, 255, 0.66) !important; }
+
+/* ===== 电台详情页（整页 overlay）===== */
+.phone-radio-detail {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.phone-radio-detail-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.phone-radio-detail-back {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+}
+.phone-radio-detail-headinfo { flex: 1; min-width: 0; }
+.phone-radio-detail-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone-radio-detail-fm {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  color: var(--accent);
+}
+.phone-radio-detail-avatar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--accent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.phone-radio-detail-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.phone-radio-detail-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+.phone-radio-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 16px 32px;
+}
+.phone-radio-detail-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding-bottom: 18px;
+  margin-bottom: 18px;
+  border-bottom: 1px dashed var(--border);
+}
+.phone-radio-detail-show { font-size: 18px; font-weight: 700; color: var(--text); }
+.phone-radio-detail-tags { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.phone-radio-detail-host { font-size: 12px; color: var(--text-secondary); }
+.phone-radio-detail-dur { font-size: 12px; color: var(--accent); font-weight: 600; }
+/* 叙述行：居中圆角小卡片（学通话） */
+.phone-radio-narr {
+  align-self: center;
+  max-width: 92%;
+  margin: 12px auto;
+  padding: 8px 16px;
+  border-radius: 14px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.7;
+  text-align: center;
+}
+/* 台词气泡 */
+.phone-radio-line {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0;
+  align-items: flex-end;
+}
+.phone-radio-line-avatar {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+.phone-radio-line-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.phone-radio-line-avatar-fallback,
+.phone-radio-line-avatar-guest {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+.phone-radio-line.is-host .phone-radio-line-avatar-fallback { background: var(--accent); }
+.phone-radio-line.is-guest .phone-radio-line-avatar-guest { background: var(--decoration); }
+.phone-radio-line-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; max-width: 78%; }
+.phone-radio-line-name { font-size: 11px; color: var(--text-secondary); padding-left: 2px; }
+.phone-radio-line-bubble {
+  padding: 9px 13px;
+  border-radius: 4px 16px 16px 16px;
+  background: var(--bg-secondary);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.65;
+  word-break: break-word;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.phone-radio-line.is-guest .phone-radio-line-bubble {
+  background: color-mix(in srgb, var(--decoration) 12%, var(--bg-secondary));
+}
+.phone-radio-detail-interact:empty { display: none; }
+.phone-radio-detail-end {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 28px;
+  letter-spacing: .1em;
+}

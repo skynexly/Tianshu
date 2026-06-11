@@ -1005,6 +1005,11 @@ function _syncBuiltinRestoreButton(w) {
     return;
     }
 
+    // 关键修复：无论后续数据填充是否出错，先把内容区切到 basic tab 显示出来，
+    // 避免某个 getElementById 拿到 null 抛异常导致 switchEditTab 不执行、整页只剩标题+Tab。
+    try { switchEditTab('basic'); } catch(_) {}
+
+    try {
     _syncBuiltinRestoreButton(w);
     
     // 基础设定
@@ -1086,8 +1091,48 @@ _renderGlobalNpcs(w.globalNpcs || []);
 _renderGameplayAttrs(w);
 // 历法系统卡片标签
 _updateCalendarCardLabel();
+    } catch (e) {
+      // 数据填充中途出错也不影响内容区显示（已在前面先切到 basic tab）
+      console.warn('[Worldview] _loadEditForm 填充部分字段失败', e);
+    }
 
-switchEditTab('basic');
+ switchEditTab('basic');
+
+    // 自愈兜底：切主题等外部状态可能让 tab 内容容器渲染高度为 0（表现为"只剩标题和 Tab"）。
+    // 进面板后检测一次，若内容区高度异常，强制清除隐藏状态并重切，避免必须手动刷新。
+    requestAnimationFrame(() => {
+      try {
+        const basic = document.getElementById('wv-edit-tab-basic');
+        if (!basic) return;
+        const visible = basic.offsetHeight > 0 && !basic.classList.contains('hidden');
+        if (!visible) {
+          // 1) 清掉从 tab 内容到面板根的整条祖先链上的内联可见性样式 + hidden 类
+          const clearVis = (el) => {
+            if (!el) return;
+            el.classList.remove('hidden');
+            ['opacity','transform','display','visibility','height','max-height'].forEach(p => el.style.removeProperty(p));
+          };
+          document.querySelectorAll('.wv-edit-tab-content').forEach(clearVis);
+          let node = basic;
+          const panel = document.getElementById('panel-worldview-edit');
+          while (node && node !== panel) { clearVis(node); node = node.parentElement; }
+          clearVis(panel);
+          switchEditTab('basic');
+          // 2) 诊断：把修复前各层状态记到面板 dataset，便于无控制台时排查
+          try {
+            const probe = [];
+            let n2 = document.getElementById('wv-edit-tab-basic');
+            const panel2 = document.getElementById('panel-worldview-edit');
+            while (n2 && n2 !== panel2.parentElement) {
+              const cs = getComputedStyle(n2);
+              probe.push((n2.id || n2.className || n2.tagName) + ':h' + n2.offsetHeight + ',op' + cs.opacity + ',d' + cs.display + ',v' + cs.visibility);
+              n2 = n2.parentElement;
+            }
+            if (panel2) panel2.dataset.blankProbe = probe.join(' | ');
+          } catch(_) {}
+        }
+      } catch(_) {}
+    });
     // 绑定主编辑页自动保存
     requestAnimationFrame(_attachWVAutoSave);
 
@@ -5644,6 +5689,9 @@ toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, sele
       if (typeof LorebookUI !== 'undefined') LorebookUI.renderList();
     } else {
       _play(wvPane, 'left');
+      // 与 char/lb 分支保持一致：切回世界观 Tab 时也重渲列表，
+      // 避免外部状态（如切主题）影响后内容区为空、需刷新才回来
+      try { load(); } catch(_) {}
     }
   }
   };

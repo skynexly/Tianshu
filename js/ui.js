@@ -489,7 +489,7 @@ if (phoneFab && name !== 'chat') {
     }
     if (name === 'character') { Character.load(); if (typeof Character.exitManageMode === 'function') Character.exitManageMode(); }
     if (name === 'gaiden') { await Gaiden.ensureLoaded(); Gaiden.renderList(); }
-    if (name === 'worldview') { await Worldview.load(); }
+    if (name === 'worldview') { await Worldview.load(); if (typeof Worldview.switchWorldTab === 'function') Worldview.switchWorldTab('wv'); }
     if (name === 'settings') { Settings.load(); Prompts.render(); }
   }
 

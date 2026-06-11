@@ -256,6 +256,29 @@ const SingleCard = (() => {
         ta.style.height = ta.scrollHeight + 'px';
       }
     }, 50);
+
+    // 自愈兜底：切主题等外部状态可能让 tab 内容容器渲染高度为 0（表现为"只剩标题和 Tab"）。
+    // 与世界观编辑页同款修复：进面板后检测一次，若内容区不可见，强制清除整条祖先链的隐藏状态并重切。
+    requestAnimationFrame(() => {
+      try {
+        const basic = document.getElementById('sc-edit-tab-basic');
+        if (!basic) return;
+        const visible = basic.offsetHeight > 0 && !basic.classList.contains('hidden');
+        if (!visible) {
+          const clearVis = (el) => {
+            if (!el) return;
+            el.classList.remove('hidden');
+            ['opacity','transform','display','visibility','height','max-height'].forEach(p => el.style.removeProperty(p));
+          };
+          document.querySelectorAll('.sc-edit-tab-content').forEach(clearVis);
+          const panel = document.getElementById('panel-single-card-edit');
+          let node = basic;
+          while (node && node !== panel) { clearVis(node); node = node.parentElement; }
+          clearVis(panel);
+          switchEditTab('basic');
+        }
+      } catch(_) {}
+    });
   }
 
   function switchEditTab(name) {

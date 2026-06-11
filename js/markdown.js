@@ -11,7 +11,12 @@ const Markdown = (() => {
     const codeBlocks = [];
     let processed = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
       const idx = codeBlocks.length;
-      codeBlocks.push(`<pre><code class="lang-${lang}">${esc(code)}</code></pre>`);
+      // html/svg/xml 围栏：作为真实 HTML 渲染（气泡富文本排版），不转义、不包 <pre>
+      if (/^(html|svg|xml)$/i.test(lang)) {
+        codeBlocks.push(code);
+      } else {
+        codeBlocks.push(`<pre><code class="lang-${lang}">${esc(code)}</code></pre>`);
+      }
       return `\x00CB${idx}\x00`;
     });
 

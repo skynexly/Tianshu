@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=140">
-<link rel="stylesheet" href="css/phone.css?v=77">
+<link rel="stylesheet" href="css/phone.css?v=99">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
 </head>
@@ -1377,6 +1377,20 @@
           </label>
           <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后不再发送内置回复格式提示词，AI回复仅做Markdown渲染</span>
           <label class="circle-check-label">
+            <span class="circle-check-text">过滤历史HTML<br><span style="font-size:11px;color:var(--text-secondary)">发请求时剔除AI历史回复里的HTML标签，省token、降噪。不影响存档和气泡显示</span></span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-strip-history-html" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <label class="circle-check-label">
+            <span class="circle-check-text">过滤时保留文字<br><span style="font-size:11px;color:var(--text-secondary)">开：只剥标签留文字（红字→红字）。关：标签连内容一起删。仅在上一项开启时生效</span></span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-strip-html-keeptext" class="circle-check" checked>
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <label class="circle-check-label">
             <span class="circle-check-text">线上消息气泡</span>
             <span style="position:relative;display:inline-flex">
               <input type="checkbox" id="cs-online-chat" class="circle-check">
@@ -1426,12 +1440,19 @@
             </span>
           </label>
           <label class="circle-check-label">
-            <span class="circle-check-text">角色能力边界<br><span style="font-size:11px;color:var(--text-secondary)">约束角色能力和人脉不超出设定范围</span></span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-constraint-ability" class="circle-check">
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
+<span class="circle-check-text">角色能力边界<br><span style="font-size:11px;color:var(--text-secondary)">约束角色能力和人脉不超出设定范围</span></span>
+<span style="position:relative;display:inline-flex">
+<input type="checkbox" id="cs-constraint-ability" class="circle-check">
+<span class="circle-check-ui"></span>
+</span>
+</label>
+<label class="circle-check-label">
+<span class="circle-check-text">角色自主性<br><span style="font-size:11px;color:var(--text-secondary)">角色保有独立的生活与判断，亲近需循序渐进</span></span>
+<span style="position:relative;display:inline-flex">
+<input type="checkbox" id="cs-constraint-autonomy" class="circle-check">
+<span class="circle-check-ui"></span>
+</span>
+</label>
           <label class="circle-check-label">
             <span class="circle-check-text">时间流逝提醒<br><span style="font-size:11px;color:var(--text-secondary)">提醒AI合理推进剧情时间，事务耗时不压缩</span></span>
             <span style="position:relative;display:inline-flex">
@@ -3892,7 +3913,7 @@ const GameLog = (() => {
 </script>
 <script src="js/db.js?v=11"></script>
 <script src="js/utils.js?v=1"></script>
-<script src="js/markdown.js"></script>
+<script src="js/markdown.js?v=2"></script>
 <script src="js/api.js"></script>
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
@@ -3901,21 +3922,21 @@ const GameLog = (() => {
 <script src="js/memory.js"></script>
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
-<script src="js/statusbar_theme.js?v=53"></script>
-<script src="js/worldview.js?v=23"></script>
+<script src="js/statusbar_theme.js?v=54"></script>
+<script src="js/worldview.js?v=26"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js"></script>
 <script src="js/conv_gameplay.js?v=3"></script>
 <script src="js/wv-generator.js?v=7"></script>
-<script src="js/single_card.js?v=8"></script>
+<script src="js/single_card.js?v=9"></script>
 <script src="js/attached-chars.js"></script>
 <script src="js/single_mode.js?v=2"></script>
 <script src="js/character.js?v=2"></script>
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=5"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=33"></script>
+<script src="js/chat.js?v=38"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -3930,13 +3951,14 @@ const GameLog = (() => {
 <script src="js/ambient.js?v=1"></script>
 <script src="js/worldvoice.js?v=3"></script>
 <script src="js/music.js?v=3"></script>
-<script src="js/phone.js?v=213"></script>
+<script src="js/radio-covers.js?v=1"></script>
+<script src="js/phone.js?v=242"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
-<script src="js/ui.js?v=3"></script>
+<script src="js/ui.js?v=4"></script>
 <script src="js/data-mgr.js"></script>
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>

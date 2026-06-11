@@ -309,6 +309,9 @@ heartsimServiceMessages: [],
   //   lastTrackId: null  // 上一首歌 id（用于切歌日志）
   // }
   listenTogetherHistory: [], // 历史记录 [{mode, target, startTime, endTime, duration, playlist, messages}]
+  // 电台 App
+  radioChannels: null,   // 频道列表（null=未初始化，首次打开填默认5个）[{id, name, desc, icon, djName, relatedNpcs:[], isDefault}]
+  radioPrograms: {},     // 各频道的节目单缓存 { channelId: [{id, title, summary, dj, interact, time, content?}] }
   };
    }
 
@@ -1288,9 +1291,9 @@ async function openApp(appId) {
       return;
     }
   } catch(_) {}
-  // 未完成的APP：直接拦截，不进入APP模式
-  if (appId === 'email') { UI.showToast('邮箱开发中...', 1500); return; }
-    if (appId === 'radio') { UI.showToast('电台开发中...', 1500); return; }
+// 未完成的APP：直接拦截，不进入APP模式
+      if (appId === 'email') { UI.showToast('邮箱开发中...', 1500); return; }
+      if (appId === 'radio') { UI.showToast('电台开发中...', 1500); return; }
   // 记住当前页面滚动位置，返回时恢复
   try {
     const pages = document.getElementById('phone-pages');
@@ -1322,6 +1325,7 @@ async function openApp(appId) {
  case 'camera': _renderCamera(phoneData); break;
  case 'heartsim_app': _renderHeartSimApp(phoneData); break;
  case 'ledger': _renderLedger(phoneData); break;
+ case 'radio': _renderRadio(phoneData); break;
  }
  document.getElementById('phone-back-btn')?.classList.remove('hidden');
  };
@@ -4556,7 +4560,820 @@ function _refreshCalBanner() {
   } catch(_) { el.style.display = 'none'; }
 }
 
-// ===== 日历 App =====
+// ===== 电台 App =====
+  // 默认预设分类（首次打开时写入 phoneData）
+  // 分类决定整体基调和播出时间；台/节目在后续步骤生成
+  const _RADIO_DEFAULT_CATEGORIES = [
+    { id: 'news',    name: '晚间新闻', icon: 'news',    airStart: '18:30', airEnd: '21:00', allDay: false, desc: '时政、社会与本地动态。可生成国家级、地方级，乃至街头巷尾的社区级电台，方向多样。', isDefault: true },
+    { id: 'emotion', name: '深夜情感', icon: 'emotion', airStart: '22:00', airEnd: '02:00', allDay: false, desc: '听众来信、情感倾诉与深夜陪伴。可生成治愈系、夜话系、犀利点评系等不同风格的台。', isDefault: true },
+    { id: 'ghost',   name: '都市怪谈', icon: 'ghost',   airStart: '21:00', airEnd: '04:00', allDay: false, desc: '灵异志怪、都市传说与悬疑故事。可生成单元短篇、听众投稿、实地探访等方向。', isDefault: true },
+    { id: 'chat',    name: '闲聊电台', icon: 'talk',    airStart: '', airEnd: '', allDay: true,  desc: '杂谈、吐槽与生活碎碎念。可生成脱口秀、播客闲聊、深夜碎语等各种轻松风格。', isDefault: true },
+    { id: 'music',   name: '音乐漫谈', icon: 'music',   airStart: '', airEnd: '', allDay: true,  desc: '音乐推荐与歌曲背后的故事。可生成怀旧金曲、独立音乐、主题歌单等方向。', isDefault: true },
+  ];
+
+  // ===== 标签池（按分类隔离）=====
+  // 每个标签是「写作指导 guide + 数据源 dataSource + 互动倾向 interactHint」三件套。
+  // - name/desc：预览阶段喂给 AI（让它判断某个台该挂哪个标签）
+  // - guide：详情阶段喂给 AI（怎么写这档节目，逐个精写，留空表示走通用写法）
+  // - dataSource：详情阶段按此注入额外数据（'' = 无额外数据，纯生成）
+  // - interactHint：互动倾向 none/vote/request/lottery/call
+  const _RADIO_TAGS = {
+    news: [
+      { name: '时政要闻', desc: '国家大事、政策、经济、国际、灾害、领导人动向、国家级文化活动、反腐反黑', guide: `你正在生成「时政要闻」类电台节目。这是一档严肃正经的新闻播报，主播口吻沉稳、客观、字正腔圆，像正式的晚间新闻联播。
+
+内容方向（任选其一或组合，符合当前世界观）：
+- 政策法规变动、经济数据与发展动态
+- 国际关系、外交动向、国际局势
+- 重大灾害事故及救援、应急通报
+- 重要人物（领导人、重要官员）的公开动向与讲话
+- 国家级文化/体育大型活动（类比春晚、奥运会级别）
+- 反腐倡廉、扫黑除恶等专项行动通报
+
+写法要求：
+- 用"播报"语气，不是闲聊。每条新闻简明扼要，可分条播报多则。
+- 信息要具体：给出地点、机构、数字、时间等细节，营造真实感。
+- 紧扣当前世界观设定：现代都市就是现实新闻质感，古风世界就是朝堂邸报/告示，赛博世界就是全息政务播报，自动适配。
+- 不编造与主线角色相关的剧情新闻，除非世界观/剧情明确支持。
+- 保持中立客观，不带主播个人情绪和吐槽。
+- 生成 3-4 条，每条新闻 400-500 字
+- 时长：30 分钟左右`, dataSource: '', interactHint: 'none' },
+      { name: '地方快报', desc: '地方案件、本地政策、本地文娱、科教', guide: '', dataSource: 'region', interactHint: '' },
+      { name: '社区简讯', desc: '街坊邻里、街头斗殴、家庭伦理、交通事故、社区通知', guide: '', dataSource: '', interactHint: '' },
+      { name: '领域专线', desc: '垂直圈子新闻（学术/二次元/时尚/科技等）、技术、圈内八卦、派系论战', guide: '', dataSource: '', interactHint: '' },
+      { name: '娱乐头条', desc: '明星网红八卦、狗仔爆料、粉圈吃瓜、影视进度、趣味新闻', guide: '', dataSource: '', interactHint: '' },
+    ],
+    emotion: [
+      { name: '深夜来信', desc: '读听众来信、情感倾诉，主播温柔回应陪伴', guide: '', dataSource: '', interactHint: '' },
+      { name: '连线夜话', desc: '与听众电话连线，倾听并对话，互动感强', guide: '', dataSource: '', interactHint: 'call' },
+      { name: '狗血剧场', desc: '离奇情感纠葛、出轨劈腿、伦理大瓜，戏剧张力拉满', guide: '', dataSource: '', interactHint: '' },
+      { name: '犀利锐评', desc: '主播一针见血点评情感问题，毒舌不留情', guide: '', dataSource: '', interactHint: '' },
+      { name: '情感咨询', desc: '专业向情感答疑，给方法和建议', guide: '', dataSource: '', interactHint: '' },
+      { name: '关系树洞', desc: '匿名倾诉树洞，不评判只倾听', guide: '', dataSource: '', interactHint: '' },
+      { name: '成长电波', desc: '自我成长、治愈疗愈、温暖向上', guide: '', dataSource: '', interactHint: '' },
+    ],
+    ghost: [
+      { name: '今夜鬼话', desc: '单元短篇灵异故事，一期一个', guide: '', dataSource: '', interactHint: '' },
+      { name: '长夜连载', desc: '长篇怪谈连载，分集播出，留悬念', guide: '', dataSource: '', interactHint: '' },
+      { name: '诡异夜话', desc: '主播闲谈式讲述怪事，氛围渗人', guide: '', dataSource: '', interactHint: '' },
+      { name: '怪谈解密', desc: '拆解都市传说背后的真相/科学解释', guide: '', dataSource: '', interactHint: '' },
+      { name: '悬案重启', desc: '重提悬而未决的案件/失踪/灵异事件', guide: '', dataSource: '', interactHint: '' },
+      { name: '志怪录', desc: '古风志怪、山野奇谈、聊斋式故事', guide: '', dataSource: '', interactHint: '' },
+      { name: '现场探险', desc: '实地探访凶宅/废墟/禁地的纪实', guide: '', dataSource: '', interactHint: '' },
+      { name: '玄占阁', desc: '占卜、风水、玄学、塔罗等神秘话题', guide: '', dataSource: '', interactHint: '' },
+    ],
+    chat: [
+      { name: '欢乐脱口秀', desc: '段子、吐槽、抖包袱，纯逗乐', guide: '', dataSource: '', interactHint: '' },
+      { name: '热点圆桌', desc: '聊近期热点话题，多人讨论', guide: '', dataSource: 'forum', interactHint: '' },
+      { name: '路况电台', desc: '播报天气、路况、出行提醒，贴合当下', guide: '', dataSource: 'status', interactHint: '' },
+      { name: '领域杂谈', desc: '某个兴趣领域的轻松闲聊（游戏/影视/数码等）', guide: '', dataSource: '', interactHint: '' },
+      { name: '生活吐槽', desc: '打工人日常、生活槽点、社会现象吐槽', guide: '', dataSource: '', interactHint: '' },
+      { name: '连麦电波', desc: '与听众连麦闲聊，互动陪伴', guide: '', dataSource: '', interactHint: 'call' },
+    ],
+    music: [
+      { name: '随心点播', desc: '听众点歌+主播播放，随机歌单', guide: '', dataSource: 'playlist', interactHint: 'request' },
+      { name: '原声专题', desc: '影视/游戏原声带专题，配故事背景', guide: '', dataSource: '', interactHint: '' },
+      { name: '音乐人志', desc: '聊某个音乐人/乐队的故事与作品', guide: '', dataSource: '', interactHint: '' },
+      { name: '类别专栏', desc: '某音乐类别专题（摇滚/民谣等），推歌+讨论', guide: '', dataSource: '', interactHint: '' },
+      { name: '乐评现场', desc: '乐迷推歌+专业/主观双视角点评，通常两人配合', guide: '', dataSource: '', interactHint: '' },
+    ],
+  };
+
+  // 取某分类的标签池（预设分类返回 _RADIO_TAGS，自定义分类暂无标签）
+  function _radioTagsOf(catId) { return _RADIO_TAGS[catId] || []; }
+
+  // 生成一批互不重复的 FM 频率（87.0–108.0，保留一位小数）
+  function _radioGenFmList(n) {
+    const set = new Set();
+    let guard = 0;
+    while (set.size < n && guard < 2000) {
+      guard++;
+      const v = (Math.round((87 + Math.random() * 21) * 10) / 10).toFixed(1);
+      set.add(v);
+    }
+    return Array.from(set);
+  }
+
+  // 圆点指示器：当前 idx 高亮。台数 >9 时用滑动窗口，两端用缩小点表示还有更多
+  function _radioDotsHtml(idx, total) {
+    if (!total || total <= 1) return '';
+    const MAX = 9;
+    let dots = [];
+    if (total <= MAX) {
+      for (let i = 0; i < total; i++) dots.push(i);
+    } else {
+      // 当前点居中的窗口
+      let start = Math.max(0, Math.min(idx - Math.floor(MAX / 2), total - MAX));
+      for (let i = start; i < start + MAX; i++) dots.push(i);
+    }
+    return dots.map(i => {
+      let cls = 'phone-radio-dot';
+      if (i === idx) cls += ' active';
+      // 窗口边缘且不是真正的首尾时，缩小表示还有更多
+      const isEdge = total > MAX && ((i === dots[0] && i !== 0) || (i === dots[dots.length - 1] && i !== total - 1));
+      if (isEdge) cls += ' edge';
+      return `<span class="${cls}"></span>`;
+    }).join('');
+  }
+
+  // 可供自定义分类选择的图标清单
+  const _RADIO_ICON_CHOICES = ['news','emotion','ghost','talk','music','mic','star','book','tower','clock','heart','coffee'];
+
+  // 分类圆形图标的 SVG（白色描边）
+  function _radioChannelSvg(icon) {
+    const common = 'viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+    const map = {
+      news:    `<svg ${common}><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>`,
+      emotion: `<svg ${common}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>`,
+      ghost:   `<svg ${common}><path d="M9 10h.01"/><path d="M15 10h.01"/><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"/></svg>`,
+      talk:    `<svg ${common}><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>`,
+      music:   `<svg ${common}><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
+      mic:     `<svg ${common}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`,
+      star:    `<svg ${common}><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`,
+      book:    `<svg ${common}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
+      tower:   `<svg ${common}><path d="M4.93 19.07a10 10 0 0 1 0-14.14"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><circle cx="12" cy="12" r="2"/><path d="M12 14v8"/></svg>`,
+      clock:   `<svg ${common}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+      heart:   `<svg ${common}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>`,
+      coffee:  `<svg ${common}><path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h12z"/><path d="M16 8h2a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-2"/></svg>`,
+      random:  `<svg ${common}><path d="M18 4l3 3-3 3"/><path d="M18 20l3-3-3-3"/><path d="M3 7h3a5 5 0 0 1 5 5 5 5 0 0 0 5 5h5"/><path d="M3 17h3a5 5 0 0 0 5-5"/></svg>`,
+    };
+    return map[icon] || map.mic;
+  }
+
+  // 播出时间的可读文案
+  function _radioAirTimeText(cat) {
+    if (!cat || cat.allDay || (!cat.airStart && !cat.airEnd)) return '全天播出';
+    return `${cat.airStart || '00:00'} - ${cat.airEnd || '24:00'} 播出`;
+  }
+
+  // 确保分类已初始化
+  function _ensureRadioCategories(pd) {
+    if (!Array.isArray(pd.radioCategories)) {
+      pd.radioCategories = _RADIO_DEFAULT_CATEGORIES.map(c => ({ ...c }));
+    }
+    if (!pd.radioPrograms || typeof pd.radioPrograms !== 'object') pd.radioPrograms = {};
+    return pd;
+  }
+
+  // 电台首页：两列分类卡片网格
+  async function _renderRadio(pd) {
+    const body = document.getElementById('phone-body');
+    document.getElementById('phone-title').textContent = '电台';
+    _applyWallpaper(pd);
+    _ensureRadioCategories(pd);
+
+    const cats = pd.radioCategories || [];
+    const cards = cats.map(cat => `
+      <div class="phone-radio-card" onclick="Phone._radioOpenCategory('${Utils.escapeHtml(cat.id)}')">
+        <div class="phone-radio-card-icon">${_radioChannelSvg(cat.icon)}</div>
+        <div class="phone-radio-card-name">${Utils.escapeHtml(cat.name)}</div>
+        <div class="phone-radio-card-desc">${Utils.escapeHtml(_radioAirTimeText(cat))}</div>
+      </div>`).join('');
+
+    // 随机卡 + 添加分类卡
+    const randomCard = `
+      <div class="phone-radio-card" onclick="Phone._radioOpenRandom()">
+        <div class="phone-radio-card-icon">${_radioChannelSvg('random')}</div>
+        <div class="phone-radio-card-name">随机频道</div>
+        <div class="phone-radio-card-desc">随便听听，今晚有什么</div>
+      </div>`;
+    const addCard = `
+      <div class="phone-radio-card phone-radio-card-add" onclick="Phone._radioAddCategory()">
+        <div class="phone-radio-card-icon phone-radio-card-icon-add">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <div class="phone-radio-card-name">添加分类</div>
+        <div class="phone-radio-card-desc">自定义一个新类别</div>
+      </div>`;
+
+    body.innerHTML = `
+      <div class="phone-radio-home">
+        <div class="phone-radio-grid">
+          ${cards}
+          ${randomCard}
+          ${addCard}
+        </div>
+      </div>`;
+  }
+
+  // 打开某个分类（节目单页）
+  async function _radioOpenCategory(catId) {
+    const pd = await _getPhoneData();
+    _ensureRadioCategories(pd);
+    const cat = (pd.radioCategories || []).find(c => c.id === catId);
+    if (!cat) { UI.showToast('分类不存在', 1500); return; }
+    _pushNav(() => _renderRadioCategory(pd, catId));
+    _renderRadioCategory(pd, catId);
+  }
+
+  async function _radioOpenRandom() {
+    const pd = await _getPhoneData();
+    _ensureRadioCategories(pd);
+    const list = pd.radioCategories || [];
+    if (!list.length) { UI.showToast('还没有分类', 1500); return; }
+    const cat = list[Math.floor(Math.random() * list.length)];
+    _radioOpenCategory(cat.id);
+  }
+
+  // 分类节目单页
+  function _renderRadioCategory(pd, catId) {
+    const body = document.getElementById('phone-body');
+    const cat = (pd.radioCategories || []).find(c => c.id === catId);
+    if (!cat) return;
+    document.getElementById('phone-title').textContent = cat.name;
+
+    // 标题栏右上角：自定义分类可编辑
+    const hr = document.getElementById('phone-header-right');
+    if (hr) {
+      hr.innerHTML = cat.isDefault ? '' : `<span onclick="Phone._radioEditCategory('${Utils.escapeHtml(cat.id)}')" style="cursor:pointer;color:var(--text-secondary)" title="编辑分类">${_uiIcon('edit', 18)}</span>`;
+    }
+
+    const programs = (pd.radioPrograms && pd.radioPrograms[catId]) || [];
+
+    if (programs.length === 0) {
+      // 空状态：麦克风灯灭 + 刷新
+      body.innerHTML = `
+        <div class="phone-radio-empty">
+          <div class="phone-radio-tuner" id="phone-radio-tuner">
+            <svg class="phone-radio-tuner-ring" viewBox="0 0 120 120" width="220" height="220">
+              <defs>
+                <linearGradient id="radioTuneGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="var(--accent)"/>
+                  <stop offset="100%" stop-color="var(--decoration)"/>
+                </linearGradient>
+              </defs>
+              <circle class="phone-radio-tuner-track" cx="60" cy="60" r="52" fill="none" stroke-width="9"/>
+              <circle id="phone-radio-tuner-prog" cx="60" cy="60" r="52" fill="none" stroke="url(#radioTuneGrad)" stroke-width="9" stroke-linecap="round" transform="rotate(-90 60 60)" stroke-dasharray="326.726" stroke-dashoffset="326.726"/>
+            </svg>
+          </div>
+          <div class="phone-radio-tuner-icon" id="phone-radio-tuner-icon">${_radioChannelSvg('mic')}</div>
+          <div class="phone-radio-tuner-hint" id="phone-radio-tuner-hint">长按调频</div>
+          <div class="phone-radio-empty-desc">${Utils.escapeHtml(_radioAirTimeText(cat))}</div>
+        </div>`;
+      // 绑定长按蓄力
+      _radioBindTuner(catId);
+      return;
+    }
+
+    // 有节目单：杂志式封面卡片 + 底部播放器控制栏
+    let _radioCardIdx = 0;
+    const renderCard = (idx) => {
+      const p = programs[idx];
+      if (!p) return '';
+      const tags = (p.tags || []).map(t => `<span class="phone-radio-card-tag">${Utils.escapeHtml(t)}</span>`).join('');
+      const guest = p.guest ? ` · 嘉宾 ${Utils.escapeHtml(p.guest)}` : '';
+      const fm = p.fm ? `<div class="phone-radio-fm">FM ${Utils.escapeHtml(String(p.fm))}</div>` : '';
+      const cover = p.cover
+        ? `<img src="${Utils.escapeHtml(p.cover)}" alt="">`
+        : '';
+      return `
+        <div class="phone-radio-prog-card">
+          ${fm}
+          <div class="phone-radio-cover">${cover}</div>
+          <div class="phone-radio-prog-head">
+            <div class="phone-radio-prog-name">${Utils.escapeHtml(p.name || '未命名电台')}</div>
+            <div class="phone-radio-prog-tags">${tags}</div>
+          </div>
+          <div class="phone-radio-prog-host">主播 ${Utils.escapeHtml(p.dj || '匿名')}${guest}</div>
+        <div class="phone-radio-prog-desc">${Utils.escapeHtml(p.intro || '')}</div>
+        ${p.showName ? `<div class="phone-radio-prog-now"><span class="phone-radio-now-tag">正在播</span>${Utils.escapeHtml(p.showName)}</div>` : ''}
+      </div>`;
+    };
+
+    const hasNext = programs.length > 1;
+    body.innerHTML = `
+      <div class="phone-radio-deck">
+        <div class="phone-radio-stack${hasNext ? ' has-next' : ''}" id="phone-radio-stack">
+          ${renderCard(0)}
+        </div>
+        <div class="phone-radio-dots" id="phone-radio-dots">${_radioDotsHtml(0, programs.length)}</div>
+        <button class="phone-radio-retune-btn" id="phone-radio-retune">
+          <span class="phone-radio-retune-label">${_uiIcon('refresh', 15)} 重新调频</span>
+          <span class="phone-radio-wave phone-radio-wave-inline" style="display:none">
+            <span></span><span></span><span></span><span></span><span></span>
+          </span>
+        </button>
+        <div class="phone-radio-ctrl-card">
+          <div class="phone-radio-controls">
+            <button class="phone-radio-ctrl-btn" id="phone-radio-prev" ${programs.length <= 1 ? 'disabled' : ''}>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <button class="phone-radio-play-btn" id="phone-radio-play">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <button class="phone-radio-ctrl-btn" id="phone-radio-next" ${programs.length <= 1 ? 'disabled' : ''}>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+        <button class="phone-radio-delete-btn" id="phone-radio-delete">
+          ${_uiIcon('trash', 15)} 删除此频道
+        </button>
+      </div>`;
+
+    // 控制栏事件
+    const stack = document.getElementById('phone-radio-stack');
+    const dots = document.getElementById('phone-radio-dots');
+    const prevBtn = document.getElementById('phone-radio-prev');
+    const nextBtn = document.getElementById('phone-radio-next');
+    const playBtn = document.getElementById('phone-radio-play');
+    const retuneBtn = document.getElementById('phone-radio-retune');
+
+    const updateCard = () => {
+      if (stack) { stack.innerHTML = renderCard(_radioCardIdx); stack.classList.toggle('has-next', _radioCardIdx < programs.length - 1); }
+      if (dots) dots.innerHTML = _radioDotsHtml(_radioCardIdx, programs.length);
+    };
+    if (prevBtn) prevBtn.onclick = () => { if (_radioCardIdx > 0) { _radioCardIdx--; updateCard(); } };
+    if (nextBtn) nextBtn.onclick = () => { if (_radioCardIdx < programs.length - 1) { _radioCardIdx++; updateCard(); } };
+    if (playBtn) playBtn.onclick = async () => {
+      const p = programs[_radioCardIdx];
+      if (!p) return;
+      const ok = await UI.showConfirm('开播', `即将收听「${p.name || '电台'}」，确认？`);
+      if (ok) _radioOpenDetail(catId, _radioCardIdx);
+    };
+    if (retuneBtn) retuneBtn.onclick = async () => {
+      const ok = await UI.showConfirm('重新调频', '将重新搜索这个分类的电台节目，确认？');
+      if (!ok) return;
+      // 按钮切换到加载态：文字隐藏，电波动画显示
+      retuneBtn.classList.add('loading');
+      const label = retuneBtn.querySelector('.phone-radio-retune-label');
+      const wave = retuneBtn.querySelector('.phone-radio-wave-inline');
+      if (label) label.style.display = 'none';
+      if (wave) wave.style.display = 'flex';
+      await _radioGenerate(catId);
+    };
+    const deleteBtn = document.getElementById('phone-radio-delete');
+    if (deleteBtn) deleteBtn.onclick = async () => {
+      const p = programs[_radioCardIdx];
+      if (!p) return;
+      const ok = await UI.showConfirm('删除频道', `确定删除「${p.name || '这个频道'}」吗？`);
+      if (!ok) return;
+      const pd2 = await _getPhoneData();
+      const arr = (pd2.radioPrograms && pd2.radioPrograms[catId]) || [];
+      arr.splice(_radioCardIdx, 1);
+      if (_radioCardIdx >= arr.length) _radioCardIdx = Math.max(0, arr.length - 1);
+      await _savePhoneData();
+      _renderRadioCategory(pd2, catId);
+    };
+    // 标题栏右上角：仅自定义分类显示编辑按钮（刷新已移到卡片下方）
+    const hr2 = document.getElementById('phone-header-right');
+    if (hr2) {
+      hr2.innerHTML = cat.isDefault ? '' : `<span onclick="Phone._radioEditCategory('${Utils.escapeHtml(cat.id)}')" style="cursor:pointer;color:var(--text-secondary)" title="编辑分类">${_uiIcon('edit', 18)}</span>`;
+    }
+  }
+
+  // 长按蓄力调频：1.2s 填满圆环触发刷新，松手回弹
+  function _radioBindTuner(catId) {
+    const tuner = document.getElementById('phone-radio-tuner');
+    const icon = document.getElementById('phone-radio-tuner-icon');
+    const prog = document.getElementById('phone-radio-tuner-prog');
+    const hint = document.getElementById('phone-radio-tuner-hint');
+    if (!tuner || !prog) return;
+    const CIRC = 326.726; // 2πr, r=52
+    const DURATION = 1200;
+    let rafId = null, startTs = 0, holding = false, fired = false;
+
+    const setProgress = (p) => { prog.setAttribute('stroke-dashoffset', String(CIRC * (1 - p))); };
+
+    const tick = (ts) => {
+      if (!holding) return;
+      if (!startTs) startTs = ts;
+      const p = Math.min(1, (ts - startTs) / DURATION);
+      setProgress(p);
+      if (p >= 1) {
+        if (!fired) { fired = true; holding = false; _radioRefresh(catId); }
+        return;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+
+    const start = (e) => {
+      if (fired) return;
+      e.preventDefault();
+      holding = true; startTs = 0;
+      tuner.classList.add('holding');
+      if (hint) hint.textContent = '调频中…';
+      rafId = requestAnimationFrame(tick);
+    };
+    const cancel = () => {
+      if (!holding || fired) return;
+      holding = false;
+      if (rafId) cancelAnimationFrame(rafId);
+      tuner.classList.remove('holding');
+      if (hint) hint.textContent = '长按调频';
+      // 回弹归零
+      prog.style.transition = 'stroke-dashoffset .25s ease';
+      setProgress(0);
+      setTimeout(() => { if (prog) prog.style.transition = ''; }, 280);
+    };
+
+    // 圆环和麦克风按钮都可触发
+    [tuner, icon].forEach(el => {
+      if (!el) return;
+      el.addEventListener('mousedown', start);
+      el.addEventListener('touchstart', start, { passive: false });
+    });
+    document.addEventListener('mouseup', cancel);
+    document.addEventListener('touchend', cancel);
+    document.addEventListener('touchcancel', cancel);
+  }
+
+  // 刷新分类节目单（空状态长按圆环触发）：先做圆环加载态，再生成
+  async function _radioRefresh(catId) {
+    // 切换到加载态：圆环中心显示电波动画
+    const tuner = document.getElementById('phone-radio-tuner');
+    if (tuner) {
+      tuner.classList.add('loading');
+      tuner.innerHTML = `
+        <svg class="phone-radio-tuner-ring" viewBox="0 0 120 120" width="220" height="220">
+          <defs>
+            <linearGradient id="radioTuneGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="var(--accent)"/>
+              <stop offset="100%" stop-color="var(--decoration)"/>
+            </linearGradient>
+          </defs>
+          <circle class="phone-radio-tuner-track" cx="60" cy="60" r="52" fill="none" stroke-width="9"/>
+          <circle cx="60" cy="60" r="52" fill="none" stroke="url(#radioTuneGrad)" stroke-width="9" stroke-linecap="round" transform="rotate(-90 60 60)" stroke-dasharray="326.726" stroke-dashoffset="0"/>
+        </svg>
+        <div class="phone-radio-wave">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>`;
+    }
+    const hint = document.getElementById('phone-radio-tuner-hint');
+    if (hint) hint.textContent = '正在搜索电波…';
+    await _radioGenerate(catId);
+  }
+
+  // 构建 NPC 索引：把每个 NPC 的 name/别称(aliases)/网名(onlineName) 所有写法都归一到其 id
+  // 返回 { aliasToId: Map(马甲 -> id), idToName: Map(id -> 主名) }
+  async function _radioBuildNpcIndex() {
+    const aliasToId = new Map();
+    const idToName = new Map();
+    const splitNames = (s) => String(s || '').split(/[,，、\s]+/).map(t => t.trim()).filter(Boolean);
+    const addNpc = (n) => {
+      if (!n || !n.name) return;
+      const id = n.id || n.name; // 没 id 退化用 name 当 key
+      idToName.set(id, n.name);
+      [n.name, ...splitNames(n.aliases), ...splitNames(n.onlineName)].forEach(nm => {
+        const t = String(nm || '').trim();
+        if (t && !aliasToId.has(t)) aliasToId.set(t, id);
+      });
+    };
+    try {
+      const wv = await Worldview.getCurrent();
+      if (wv) {
+        (wv.globalNpcs || []).forEach(addNpc);
+        (wv.regions || []).forEach(r => {
+          (r.npcs || []).forEach(addNpc);
+          (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc));
+        });
+      }
+    } catch(_) {}
+    return { aliasToId, idToName };
+  }
+
+  // 生成分类节目单（核心逻辑，空状态与重新调频共用）
+  async function _radioGenerate(catId) {
+    const pd = await _getPhoneData();
+    _ensureRadioCategories(pd);
+    if (!pd.radioPrograms) pd.radioPrograms = {};
+    const cat = (pd.radioCategories || []).find(c => c.id === catId);
+    if (!cat) { UI.showToast('分类不存在', 1500); return; }
+
+    // 功能模型配置
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) {
+      UI.showToast('请先配置功能模型', 1800);
+      _renderRadioCategory(pd, catId);
+      return;
+    }
+
+    // 标签池（随机分类则合并全部标签）
+    const isRandom = !!cat.isRandom;
+    let tagList = [];
+    if (isRandom) {
+      Object.keys(_RADIO_TAGS).forEach(k => { tagList = tagList.concat(_RADIO_TAGS[k]); });
+    } else {
+      tagList = _radioTagsOf(catId);
+    }
+    const tagNames = tagList.map(t => t.name);
+    const tagLines = tagList.map(t => `- ${t.name}：${t.desc}`).join('\n');
+
+    // 全量资料包（含世界观详细数据 + 主线最近10轮）
+    let wvPrompt = '';
+    try { wvPrompt = await _buildFullContext({ npcBrief: false }); } catch(_) {}
+
+    // NPC 索引（别名归一）+ 避让名单：radioRecentNpcs 存的是 NPC id，展示时翻译成主名
+    const npcIndex = await _radioBuildNpcIndex();
+    const recentIds = Array.isArray(pd.radioRecentNpcs) ? pd.radioRecentNpcs : [];
+    const recentNames = recentIds.map(id => npcIndex.idToName.get(id)).filter(Boolean);
+    const avoidLine = recentNames.length
+      ? `\n- 以下世界观角色近期已在其他电台频繁出场，若要安排真实角色，请优先选用名单之外的人，避免同一个人到处串台：${recentNames.join('、')}`
+      : '';
+
+    const sysPrompt = `你是电台节目策划系统。根据以下分类信息与世界观资料，生成 6-8 个风格各异的电台预览（数量你自己定）。
+
+【分类】${cat.name}
+【分类方向】${cat.desc || ''}
+【可用标签】
+${tagLines || '（无限定标签，自由发挥）'}
+
+每个电台输出以下字段，严格使用 JSON 数组格式，不能返回 Markdown，不能返回代码块，不能解释，必须以 [ 开头、以 ] 结尾：
+[
+  {
+    "name": "电台名称（简短有特色，2-6字）",
+    "dj": "主播名（可自由虚构化名，2-3字，有个性）",
+    "guest": "嘉宾名（可选，可自由虚构化名，没有就留空字符串）",
+    "tags": ["标签名（从可用标签里选，1-2个）"],
+    "concept": "频道核心概念（150字以上。描述这档节目的风格定位、内容方向、主播人设、目标受众。用户不可见，仅供后续生成详情使用）",
+    "intro": "频道简介（1-2句话，面向听众的频道介绍/广告语，说明这个台长期是干嘛的，用户可见）",
+    "showName": "当前节目名（本期主题，简短有钩子）",
+    "coverKeyword": "封面关键词（1-3个英文词，用于搜索配图，如 city night / horror fog / coffee chat）"
+  }
+]
+
+要求：
+- 6-8 个电台之间风格差异要明显（不同主播调性、不同内容侧重）
+- tags 只能从【可用标签】里选，每个电台选 1-2 个；标签可以重复，靠 concept 拉开差异
+- 整批电台中，至多安排 1 个世界观里的真实角色出任某档节目的主持人或嘉宾，且必须贴合该角色的人设与身份；其余主持人/嘉宾一律用虚构化名，不要硬塞角色${avoidLine}
+- concept 要足够详细，后续 AI 靠它来写完整节目
+- coverKeyword 用能代表节目氛围的英文短词
+- 只输出 JSON，不要多余解释
+
+${wvPrompt}`;
+
+    let raw;
+    try {
+      raw = await _phoneJsonArrayWithRetry({
+        label: '电台预览', url, key, model,
+        temperature: 0.95, max_tokens: 4096,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: `请为「${cat.name}」分类生成一批电台预览。` }
+        ]
+      });
+    } catch (e) {
+      console.error('[电台预览]', e);
+      UI.showToast('生成失败，请重试', 1800);
+      _renderRadioCategory(pd, catId);
+      return;
+    }
+
+    // 规范化：过滤非法标签、补 FM、配封面
+    const validNames = new Set(tagNames);
+    const list = (Array.isArray(raw) ? raw : []).filter(p => p && p.name).map(p => {
+      let tags = Array.isArray(p.tags) ? p.tags.filter(t => validNames.has(t)) : [];
+      if (tags.length === 0 && tagNames.length) tags = [tagNames[0]];
+      return {
+        name: String(p.name).slice(0, 12),
+        dj: String(p.dj || '匿名').slice(0, 8),
+        guest: String(p.guest || '').slice(0, 8),
+        tags: tags.slice(0, 2),
+        concept: String(p.concept || ''),
+        intro: String(p.intro || '').slice(0, 80),
+        showName: String(p.showName || '').slice(0, 30),
+        coverKeyword: String(p.coverKeyword || ''),
+        cover: '',
+        hook: ''
+      };
+    });
+    if (list.length === 0) {
+      UI.showToast('生成结果为空，请重试', 1800);
+      _renderRadioCategory(pd, catId);
+      return;
+    }
+
+    // FM 频率：前端生成，批内去重
+    const fmList = _radioGenFmList(list.length);
+    // 封面：暂用预设 base64 循环兜底（后续接 Unsplash 用 coverKeyword）
+    const covers = (typeof _RADIO_COVERS !== 'undefined' && _RADIO_COVERS.length) ? _RADIO_COVERS : [];
+    list.forEach((p, i) => {
+      p.fm = fmList[i] || '';
+      p.cover = covers.length ? covers[i % covers.length] : '';
+    });
+
+    // 更新避让名单：把这批里命中真实 NPC 的主播/嘉宾归一成 id，记进 radioRecentNpcs（去重，上限15）
+    try {
+      const usedIds = [];
+      list.forEach(p => {
+        [p.dj, p.guest].forEach(nm => {
+          const n = (nm || '').trim();
+          const id = n && npcIndex.aliasToId.get(n);
+          if (id && !usedIds.includes(id)) usedIds.push(id);
+        });
+      });
+      if (usedIds.length) {
+        let recent = Array.isArray(pd.radioRecentNpcs) ? pd.radioRecentNpcs.slice() : [];
+        recent = usedIds.concat(recent.filter(id => !usedIds.includes(id)));
+        if (recent.length > 15) recent = recent.slice(0, 15);
+        pd.radioRecentNpcs = recent;
+      }
+    } catch(_) {}
+
+    pd.radioPrograms[catId] = list;
+    await _savePhoneData();
+    _log(`电台「${cat.name}」刷新了 ${list.length} 个台：${list.map(p => p.name).join('、')}`);
+    if (!_isAppStillActive('radio')) {
+      UI.showToast('电台刷新完成', 1500);
+      return;
+    }
+    _renderRadioCategory(pd, catId);
+  }
+
+  // ===== 电台详情页（整页 overlay）=====
+  // 临时假正文，用于先跑通详情 UI（后续替换为 AI 生成）
+  const _RADIO_FAKE_BODY = `午夜的电波带着轻微的电流声，舒缓的钢琴垫乐缓缓淡入。
+> 林岸：各位听众朋友晚上好，这里是晚间新闻，我是主播林岸。今天是个不太平静的夜晚。
+垫乐渐渐收起，翻动稿纸的声音很轻。
+> 林岸：先来看今天的头条。市政厅今晚发布通告，城东新区的规划调整方案正式进入公示阶段。
+> 老王：补充一句，这次调整涉及三个街区的居民安置，我手头拿到的细则显示，补偿标准比上一轮提高了不少。
+演播室里短暂的沉默，能听见杯子轻放在桌面的声音。
+> 林岸：是的，这也是为什么今晚很多市民守在收音机前。我们会持续跟进这件事的后续。
+> 老王：希望相关部门能把信息公开做得更透明一些，别让大家靠猜。
+垫乐重新浮起，节目进入下一个环节。`;
+
+  async function _radioOpenDetail(catId, idx) {
+    const pd = await _getPhoneData();
+    const programs = (pd.radioPrograms && pd.radioPrograms[catId]) || [];
+    const p = programs[idx];
+    if (!p) { UI.showToast('节目不存在', 1500); return; }
+
+    // 头部圆形头像：有封面用封面，否则主题色底
+    const avatarHtml = p.cover
+      ? `<img src="${Utils.escapeHtml(p.cover)}" alt="">`
+      : `<div class="phone-radio-detail-avatar-fallback">${Utils.escapeHtml((p.name || '电')[0])}</div>`;
+
+    const fmText = p.fm ? `FM ${Utils.escapeHtml(String(p.fm))}` : '';
+    const hostLine = `主播 ${Utils.escapeHtml(p.dj || '匿名')}${p.guest ? ` · 嘉宾 ${Utils.escapeHtml(p.guest)}` : ''}`;
+    const tags = (p.tags || []).map(t => `<span class="phone-radio-card-tag">${Utils.escapeHtml(t)}</span>`).join('');
+
+    // 正文：暂用假数据（后续接 AI）
+    const bodyRaw = p._body || _RADIO_FAKE_BODY;
+    const duration = p._duration || '约 30 分钟';
+    const segHtml = _radioRenderSegments(bodyRaw, p);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'phone-radio-detail';
+    overlay.innerHTML = `
+      <div class="phone-radio-detail-head">
+        <button class="phone-radio-detail-back" id="phone-radio-detail-back">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+        </button>
+        <div class="phone-radio-detail-headinfo">
+          <div class="phone-radio-detail-name">${Utils.escapeHtml(p.name || '电台')}</div>
+          <div class="phone-radio-detail-fm">${fmText}</div>
+        </div>
+        <div class="phone-radio-detail-avatar">${avatarHtml}</div>
+      </div>
+      <div class="phone-radio-detail-scroll">
+        <div class="phone-radio-detail-meta">
+          <div class="phone-radio-detail-show">${Utils.escapeHtml(p.showName || '本期节目')}</div>
+          <div class="phone-radio-detail-tags">${tags}</div>
+          <div class="phone-radio-detail-host">${hostLine}</div>
+          <div class="phone-radio-detail-dur">⏱ ${Utils.escapeHtml(duration)}</div>
+        </div>
+        <div class="phone-radio-detail-body">${segHtml}</div>
+        <div class="phone-radio-detail-interact" id="phone-radio-detail-interact">
+          <!-- 互动玩法占位：投票/点歌/抽奖/连线 -->
+        </div>
+        <div class="phone-radio-detail-end">— 本期节目结束 —</div>
+      </div>`;
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+    const back = overlay.querySelector('#phone-radio-detail-back');
+    if (back) back.onclick = () => overlay.remove();
+  }
+
+  // 把节目正文渲染成 叙述卡片 + 台词气泡（主播用封面头像，嘉宾用固定头像）
+  function _radioRenderSegments(raw, prog) {
+    const segs = _parseRadioReply(raw);
+    const djName = (prog && prog.dj) || '';
+    const coverImg = (prog && prog.cover) || '';
+    let html = '';
+    for (const seg of segs) {
+      if (seg.kind === 'desc') {
+        html += `<div class="phone-radio-narr">${Utils.escapeHtml(seg.text)}</div>`;
+      } else {
+        // 判断说话人是主播还是嘉宾
+        const isHost = !seg.speaker || seg.speaker === djName;
+        const avatar = isHost
+          ? (coverImg ? `<img src="${Utils.escapeHtml(coverImg)}" alt="">` : `<div class="phone-radio-line-avatar-fallback">${Utils.escapeHtml((djName || '主')[0])}</div>`)
+          : `<div class="phone-radio-line-avatar-guest">${_radioGuestAvatar()}</div>`;
+        const name = seg.speaker || djName || '主播';
+        html += `
+          <div class="phone-radio-line ${isHost ? 'is-host' : 'is-guest'}">
+            <div class="phone-radio-line-avatar">${avatar}</div>
+            <div class="phone-radio-line-main">
+              <div class="phone-radio-line-name">${Utils.escapeHtml(name)}</div>
+              <div class="phone-radio-line-bubble">${Utils.escapeHtml(seg.text)}</div>
+            </div>
+          </div>`;
+      }
+    }
+    return html;
+  }
+
+  // 添加自定义分类
+  function _radioAddCategory() {
+    _radioCategoryForm(null);
+  }
+
+  // 编辑自定义分类
+  async function _radioEditCategory(catId) {
+    const pd = await _getPhoneData();
+    const cat = (pd.radioCategories || []).find(c => c.id === catId);
+    if (!cat) { UI.showToast('分类不存在', 1500); return; }
+    if (cat.isDefault) { UI.showToast('预设分类不可编辑', 1500); return; }
+    _radioCategoryForm(cat);
+  }
+
+  // 分类编辑表单（新建/编辑共用）。cat 为 null 时为新建
+  function _radioCategoryForm(cat) {
+    const isEdit = !!cat;
+    const cur = cat || { name: '', icon: 'mic', airStart: '', airEnd: '', allDay: true, desc: '' };
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+
+    const iconBtns = _RADIO_ICON_CHOICES.map(ic => `
+      <div class="radio-cat-icon-pick${ic === cur.icon ? ' active' : ''}" data-icon="${ic}" onclick="(function(el){el.parentNode.querySelectorAll('.radio-cat-icon-pick').forEach(n=>n.classList.remove('active'));el.classList.add('active');})(this)">
+        ${_radioChannelSvg(ic)}
+      </div>`).join('');
+
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">${isEdit ? '编辑分类' : '新建分类'}</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">分类名称</label>
+        <input id="radio-cat-name" type="text" maxlength="12" value="${Utils.escapeHtml(cur.name)}" placeholder="例如：午夜电波" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">图标</label>
+        <div id="radio-cat-icons" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${iconBtns}</div>
+
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer">
+          <input id="radio-cat-allday" type="checkbox" ${cur.allDay ? 'checked' : ''} style="accent-color:var(--accent)" onchange="document.getElementById('radio-cat-times').style.display=this.checked?'none':'flex'">
+          全天播出
+        </label>
+        <div id="radio-cat-times" style="display:${cur.allDay ? 'none' : 'flex'};align-items:center;gap:8px;margin-bottom:14px">
+          <input id="radio-cat-start" type="time" value="${Utils.escapeHtml(cur.airStart || '20:00')}" style="flex:1;padding:8px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px">
+          <span style="color:var(--text-secondary)">至</span>
+          <input id="radio-cat-end" type="time" value="${Utils.escapeHtml(cur.airEnd || '23:00')}" style="flex:1;padding:8px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px">
+        </div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">分类描述</label>
+        <textarea id="radio-cat-desc" rows="4" placeholder="描述这个分类大概播什么，给 AI 多样的生成方向" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:18px">${Utils.escapeHtml(cur.desc || '')}</textarea>
+
+        <div style="display:flex;gap:10px">
+          <button id="radio-cat-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="radio-cat-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${isEdit ? '保存' : '创建'}</button>
+        </div>
+        ${isEdit ? `<button id="radio-cat-delete" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:10px;background:none;color:#e0464b;font-size:13px;cursor:pointer">删除此分类</button>` : ''}
+      </div>`;
+
+    mask.querySelector('#radio-cat-cancel').onclick = () => document.body.removeChild(mask);
+    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+
+    mask.querySelector('#radio-cat-save').onclick = async () => {
+      const name = mask.querySelector('#radio-cat-name').value.trim();
+      if (!name) { UI.showToast('请填写分类名称', 1500); return; }
+      const icon = (mask.querySelector('#radio-cat-icons .radio-cat-icon-pick.active') || {}).dataset?.icon || 'mic';
+      const allDay = mask.querySelector('#radio-cat-allday').checked;
+      const airStart = allDay ? '' : mask.querySelector('#radio-cat-start').value;
+      const airEnd = allDay ? '' : mask.querySelector('#radio-cat-end').value;
+      const desc = mask.querySelector('#radio-cat-desc').value.trim();
+
+      const pd = await _getPhoneData();
+      _ensureRadioCategories(pd);
+      if (isEdit) {
+        const target = pd.radioCategories.find(c => c.id === cat.id);
+        if (target) { target.name = name; target.icon = icon; target.allDay = allDay; target.airStart = airStart; target.airEnd = airEnd; target.desc = desc; }
+      } else {
+        pd.radioCategories.push({ id: 'cat_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, icon, allDay, airStart, airEnd, desc, isDefault: false });
+      }
+      await _savePhoneData();
+      document.body.removeChild(mask);
+      _renderRadio(pd);
+    };
+
+    if (isEdit) {
+      mask.querySelector('#radio-cat-delete').onclick = async () => {
+        const ok = await UI.showConfirm('删除分类', `确定删除「${cat.name}」分类吗？该分类下已生成的节目也会一并清除。`);
+        if (!ok) return;
+        const pd = await _getPhoneData();
+        pd.radioCategories = (pd.radioCategories || []).filter(c => c.id !== cat.id);
+        if (pd.radioPrograms) delete pd.radioPrograms[cat.id];
+        await _savePhoneData();
+        document.body.removeChild(mask);
+        _renderRadio(pd);
+      };
+    }
+
+    document.body.appendChild(mask);
+  }
+
+  // ===== 日历 App =====
 let _calViewYear = 0, _calViewMonth = 0, _calSelectedDay = 0;
 
 async function _renderCalendar(pd) {
@@ -8380,7 +9197,7 @@ async function _composeShootText() {
   const youParts = [];
   if (sb.playerOutfit && String(sb.playerOutfit).trim()) youParts.push(String(sb.playerOutfit).trim());
   if (sb.playerPosture && String(sb.playerPosture).trim()) youParts.push(String(sb.playerPosture).trim());
-  if (youParts.length) lines.push(youLabel + '：' + youParts.join('，'));
+  if (youParts.length) lines.push(youLabel + '：' + youParts.join(' '));
   // NPC（全列）
   const npcs = Array.isArray(sb.npcs) ? sb.npcs : [];
   npcs.forEach(n => {
@@ -8388,7 +9205,7 @@ async function _composeShootText() {
     const parts = [];
     if (n.outfit && String(n.outfit).trim()) parts.push(String(n.outfit).trim());
     if (n.posture && String(n.posture).trim()) parts.push(String(n.posture).trim());
-    if (parts.length) lines.push(String(n.name) + '：' + parts.join('，'));
+    if (parts.length) lines.push(String(n.name) + '：' + parts.join(' '));
   });
    return lines.join('\n');
  }
@@ -8708,7 +9525,7 @@ function _renderChatThread(pd, contactId) {
 
         // 语音气泡
         if (m.type === 'voice') {
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0;max-width:70%">
               <div onclick="Phone._playVoice('${m.id}')" style="padding:10px 14px;border-radius:18px;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer;${mine ? 'flex-direction:row-reverse' : ''}">
@@ -8734,7 +9551,7 @@ function _renderChatThread(pd, contactId) {
           const claimBar = (!mine)
             ? `<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:${claimed ? 'var(--text-secondary)' : 'var(--accent)'};${claimed ? 'opacity:0.7' : 'cursor:pointer'}" ${claimed ? '' : `onclick="Phone._claimTransfer('${Utils.escapeHtml(contact.id)}','${m.id}')"`}>${claimed ? '已收取' : '点击收取'}</div>`
             : '';
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
@@ -8754,7 +9571,7 @@ function _renderChatThread(pd, contactId) {
 
         // 位置气泡
         if (m.type === 'location') {
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div onclick="Phone._showChatLocationDetail('${Utils.escapeHtml(m.location || '')}','${Utils.escapeHtml(m.address || '')}')" style="width:200px;border-radius:14px;overflow:hidden;cursor:pointer;background:var(--bg-tertiary)">
@@ -8776,7 +9593,7 @@ function _renderChatThread(pd, contactId) {
 
         // 订单气泡
         if (m.type === 'order') {
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div onclick="Phone._showOrderDetail('${Utils.escapeHtml(m.orderName || '')}','${Utils.escapeHtml(String(m.orderPrice || ''))}','${Utils.escapeHtml(m.orderShop || '')}','${Utils.escapeHtml(m.orderPlatform || '')}')" style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);cursor:pointer">
@@ -8801,7 +9618,7 @@ function _renderChatThread(pd, contactId) {
 
     // 地点链接气泡
         if (m.type === 'map_place') {
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
@@ -8824,7 +9641,7 @@ function _renderChatThread(pd, contactId) {
           const coverEl = m.musicCover
             ? `<img src="${Utils.escapeHtml(m.musicCover)}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
             : `<div style="width:44px;height:44px;border-radius:8px;background:var(--bg-secondary);flex-shrink:0;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="var(--text-secondary)"><path d="M9 18V5l12-2v13M9 18c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3zM21 16c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3z"/></svg></div>`;
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="music_card" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="music_card" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
@@ -8850,7 +9667,7 @@ function _renderChatThread(pd, contactId) {
           const coverEl = m.musicCover
             ? `<img src="${Utils.escapeHtml(m.musicCover)}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
             : `<div style="width:44px;height:44px;border-radius:8px;background:var(--bg-secondary);flex-shrink:0;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="var(--text-secondary)"><path d="M9 18V5l12-2v13M9 18c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3zM21 16c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3z"/></svg></div>`;
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="listen_invite" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="listen_invite" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
@@ -8873,7 +9690,7 @@ function _renderChatThread(pd, contactId) {
 
         // 一起听·结束卡片
         if (m.type === 'listen_end') {
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="listen_end" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="listen_end" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
@@ -8889,7 +9706,7 @@ function _renderChatThread(pd, contactId) {
 
         // 商品卡片气泡
         if (m.type === 'product') {
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
@@ -8915,7 +9732,7 @@ function _renderChatThread(pd, contactId) {
         // 论坛帖子气泡（摘要截图 / 详情链接）
         if (m.type === 'forum_card' || m.type === 'forum_detail') {
           const isDetail = m.type === 'forum_detail';
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
@@ -8945,7 +9762,7 @@ function _renderChatThread(pd, contactId) {
             : isAiImage
               ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="生成的图片" />`
               : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div>`;
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div class="phone-camera-polaroid" onclick="Phone._showChatPhotoDetail('${contactId}', '${m.id}')" style="opacity:1;margin:0;width:150px;min-height:150px;transform:none;cursor:pointer">
@@ -8956,7 +9773,7 @@ function _renderChatThread(pd, contactId) {
           </div>`;
         }
 
-        return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
           <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
           <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
             <div style="max-width:100%;padding:8px 12px;border-radius:18px;${mine ? 'border-bottom-right-radius:4px' : 'border-bottom-left-radius:4px'};font-size:14px;line-height:1.5;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};word-break:break-word">${Utils.escapeHtml(m.text || '')}</div>
@@ -9276,7 +10093,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
     
     // 语音气泡
     if (m.type === 'voice') {
-      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
         <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0;max-width:70%">
           <div onclick="Phone._playVoice('${m.id}')" style="padding:10px 14px;border-radius:18px;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer;${mine ? 'flex-direction:row-reverse' : ''}">
@@ -9302,7 +10119,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
           const claimBar = (!mine)
             ? `<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:${claimed ? 'var(--text-secondary)' : 'var(--accent)'};${claimed ? 'opacity:0.7' : 'cursor:pointer'}" ${claimed ? '' : `onclick="Phone._claimTransfer('${Utils.escapeHtml(contact.id)}','${m.id}')"`}>${claimed ? '已收取' : '点击收取'}</div>`
             : '';
-          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
@@ -9322,7 +10139,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
 
     // 位置气泡
     if (m.type === 'location') {
-      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
         <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div onclick="Phone._showChatLocationDetail('${Utils.escapeHtml(m.location || '')}','${Utils.escapeHtml(m.address || '')}')" style="width:200px;border-radius:14px;overflow:hidden;cursor:pointer;background:var(--bg-tertiary)">
@@ -9345,7 +10162,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
 
     // 订单气泡
     if (m.type === 'order') {
-      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
         <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div onclick="Phone._showOrderDetail('${Utils.escapeHtml(m.orderName || '')}','${Utils.escapeHtml(String(m.orderPrice || ''))}','${Utils.escapeHtml(m.orderShop || '')}','${Utils.escapeHtml(m.orderPlatform || '')}')" style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);cursor:pointer">
@@ -9369,7 +10186,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
 
     // 地点链接气泡
     if (m.type === 'map_place') {
-      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
         <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
@@ -9389,7 +10206,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
 
     // 商品卡片气泡
     if (m.type === 'product') {
-      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
         <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
@@ -9414,7 +10231,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
 
     // 商品卡片气泡
     if (m.type === 'product') {
-      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
         <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
@@ -9440,7 +10257,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
     // 论坛帖子气泡（摘要截图 / 详情链接）
     if (m.type === 'forum_card' || m.type === 'forum_detail') {
       const isDetail = m.type === 'forum_detail';
-      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="${mine ? 'align-items:flex-end' : 'align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
         <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
@@ -9476,7 +10293,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
         </div>
       `;
       
-      const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
         <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           ${photoHtml}
@@ -9486,7 +10303,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
       return bubbleHtml;
     }
     
-const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer${mine ? ';align-items:flex-end' : ';align-items:flex-start'};display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
           <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
           <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
             <div style="max-width:100%;padding:8px 12px;border-radius:18px;${mine ? 'border-bottom-right-radius:4px' : 'border-bottom-left-radius:4px'};font-size:14px;line-height:1.5;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};word-break:break-word">${Utils.escapeHtml(m.text || '')}</div>
@@ -10846,7 +11663,7 @@ ${sensoryRule}
    - 重要：描述段绝对不要加 > 前缀，台词段必须加 > 前缀，这是唯一的区分标识。
 3. 你只演「${contact.name}」这一方，但可以一次连续输出多段——像真人打电话那样，一句话没说完接着说、停顿后又补一句、自问自答。可以「描述段→台词段→描述段→台词段」交替。绝对不要替玩家说话、不要描写玩家的任何反应。
 4. 符合角色当下状态：先想这个角色此刻在哪、在做什么，据此决定接电话/视频的语气和反应（刚睡醒/在忙/在外面/独自一人）。
-5. 不要输出 JSON、不要用代码块、不要加任何前后缀说明，直接输出这段通话叙述正文。
+5. 不要输出 JSON、不要用代码块、不要加任何前后缀说明，直接输出这段通话叙述正文。绝对禁止输出主线剧情才有的结构化内容：不要出现 \`\`\`relation、\`\`\`task 等代码块或任何键值对数据，不要在台词或描述末尾加 [时间] 时间戳标注。这里只是一通电话，只有声音的描述段和台词段。
 6. 如果角色想要主动结束这通电话，在回复的最末尾追加标记（仅标记，不要加其他文字）：
    - [HANGUP]：正常挂断（说了再见、聊到了自然结尾、或有充分的告别理由）。角色不在玩家身边，或在身边但不需要转为线下互动时使用。
    - [HANGUP:BUSY]：不方便接听而挂断（在开会、执行任务、在图书馆/安静场合、紧急情况等）。挂断后前端会自动触发一条线上消息，让角色补发文字解释原因（如"不好意思在开会，待会联系你"）。
@@ -11348,9 +12165,62 @@ function _callDoSend() {
 // 解析 AI 通话回复：拆成「描述段」和「台词段（带时间）」
 // 规则：以 > 开头的行 = 台词气泡，其他行 = 描述卡片
 // 返回 [{ kind:'desc'|'line', text, time }]
-function _parseCallReply(raw) {
-  const segs = [];
-  if (!raw) return segs;
+// ===== 电台详情：解析 + 渲染 =====
+  // 解析电台节目正文。规则：
+  //   叙述行（不以 > 开头）= 描述卡片
+  //   台词行（> 说话人：内容）= 台词气泡，提取说话人名
+  //   兼容台词行只有 > 内容（无说话人）的情况，speaker 留空
+  // 返回 [{ kind:'desc'|'line', speaker, text }]
+  function _parseRadioReply(raw) {
+    const segs = [];
+    if (!raw) return segs;
+    raw = _stripMainlineArtifacts(raw);
+    if (!raw) return segs;
+    // 非行首的 > 前插换行，确保能识别
+    let normalized = String(raw).replace(/([^\n])(\s*>\s)/g, '$1\n>');
+    const lines = normalized.split(/\n+/).map(s => s.trim()).filter(Boolean);
+    for (let line of lines) {
+      if (/^>\s*/.test(line)) {
+        let body = line.replace(/^>\s*/, '').trim();
+        let speaker = '';
+        // 匹配「说话人：内容」（中英文冒号），说话人不含标点、不超过10字
+        const m = body.match(/^([^：:，。！？\s]{1,10})\s*[：:]\s*(.+)$/);
+        if (m) { speaker = m[1].trim(); body = m[2].trim(); }
+        body = body.replace(/^[""\u201C]/, '').replace(/[""\u201D]$/, '').trim();
+        if (body) segs.push({ kind: 'line', speaker, text: body });
+      } else {
+        let text = line.replace(/^[""\u201C]/, '').replace(/[""\u201D]$/, '').trim();
+        segs.push({ kind: 'desc', speaker: '', text: text || line });
+      }
+    }
+    return segs;
+  }
+
+  // 默认嘉宾头像（固定的圆形 SVG：话筒/访客感）
+  function _radioGuestAvatar() {
+    return `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`;
+  }
+
+// 清洗 AI 回复里混入的主线结构化产物（代码块/JSON 块/残留 marker）
+  // 用于通话、电台等"纯叙述"场景，防止主线格式泄漏到正文
+  function _stripMainlineArtifacts(raw) {
+    if (!raw) return '';
+    let s = String(raw);
+    // 去掉 ```xxx ... ``` 代码块（relation/task/status 等，含未闭合的尾部块）
+    s = s.replace(/```[\s\S]*?```/g, '');
+    s = s.replace(/```[a-zA-Z]*[\s\S]*$/g, '');
+    // 去掉裸露的 relation/task/status 等结构标签行
+    s = s.replace(/^\s*(relation|task|status|tasks|affinity|darkness)\s*[:：]?\s*$/gim, '');
+    // 去掉明显的 JSON 对象/数组块（整行就是 { } 或 [ ] 包裹的结构化数据）
+    s = s.replace(/^\s*[\[{][\s\S]*?[\]}]\s*$/gm, (m) => (/["']?(affinity|darkness|task_|status|type)["']?\s*[:：]/.test(m) ? '' : m));
+    return s.trim();
+  }
+
+  function _parseCallReply(raw) {
+    const segs = [];
+    if (!raw) return segs;
+    raw = _stripMainlineArtifacts(raw);
+    if (!raw) return segs;
   // 预处理：firstLine 可能是 JSON 单行字符串，> 出现在行中间
   // 在非行首的 > 前面插入换行，使其能被正确识别为台词行
   let normalized = raw.replace(/([^\n])(\s*>\s)/g, '$1\n>');
@@ -11436,7 +12306,7 @@ function _renderCallSegments(raw) {
     // 解析不出结构就整段当描述卡片兜底
     const el = document.createElement('div');
     el.className = 'phone-call-desc-card';
-    el.textContent = raw.trim();
+    el.textContent = _stripMainlineArtifacts(raw) || raw.trim();
     appendDelayed(el);
   } else {
     for (const seg of segs) {
@@ -11595,7 +12465,7 @@ async function _showCallRecord(contactId, msgId) {
       // AI 回复用解析
       const segs = _parseCallReply(r.text);
       if (segs.length === 0) {
-        contentHtml += `<div style="align-self:center;max-width:90%;padding:8px 16px;border-radius:18px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12.5px;text-align:center;line-height:1.6;word-break:break-word;white-space:pre-wrap">${Utils.escapeHtml(r.text)}</div>`;
+        contentHtml += `<div style="align-self:center;max-width:90%;padding:8px 16px;border-radius:18px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12.5px;text-align:center;line-height:1.6;word-break:break-word;white-space:pre-wrap">${Utils.escapeHtml(_stripMainlineArtifacts(r.text) || (r.text || ''))}</div>`;
       } else {
         for (const seg of segs) {
           if (seg.kind === 'desc') {
@@ -14791,7 +15661,9 @@ async function buildHeartsimServiceChatForBackstage() {
   _onPagesScroll,
   _openDeliveryOrders,
   // 记账 App
-  _renderLedger, _ledgerSwitchCur, _ledgerEditEntry, _ledgerAddManual, _ledgerCycleView, _ledgerCalPick,
+ _renderLedger, _ledgerSwitchCur, _ledgerEditEntry, _ledgerAddManual, _ledgerCycleView, _ledgerCalPick,
+ // 电台 App
+ _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _radioAddCategory, _radioEditCategory,
     // 聊天 App
   _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _onChatSettingsCallAutoPlayToggle, _onChatSettingsPhoneDownToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openChatOrderPicker, _sendChatOrder, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
   ingestChatMessages, getChatHistoryForNPCs,

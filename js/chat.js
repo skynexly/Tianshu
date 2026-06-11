@@ -570,7 +570,34 @@ const Chat = (() => {
     return s.trim();
   }
 
-  // v687.33：心动模拟返航后"继续日常"模式的世界观设定（硬编码，仅心动模拟有此机制）
+  // 过滤 AI 历史消息里的 HTML（发请求时降噪 + 省 token，不动存档原文）
+  // keepText=true：剥标签留文字（<span style>红字</span> → 红字）
+  // keepText=false：标签连内容一起删
+  function _stripHistoryHtml(raw, keepText) {
+    if (!raw) return raw;
+    let s = raw;
+    // 1. 先处理 ```html / ```svg / ```xml 围栏块
+    s = s.replace(/```(?:html|svg|xml)\s*\n?([\s\S]*?)```/gi, (_, inner) => {
+      if (!keepText) return '';
+      // 剥掉围栏内的标签，留文字
+      return inner.replace(/<[^>]+>/g, '').trim();
+    });
+    // 2. 再处理裸写的行内/块级 HTML 标签
+    if (keepText) {
+      // 去掉 script/style 整段（含内容，避免脚本文本残留）
+      s = s.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
+      // 剥掉剩余成对/自闭合标签，保留可见文字
+      s = s.replace(/<\/?[a-zA-Z][^>]*>/g, '');
+    } else {
+      // 整段删：成对标签连内容一起删，再清自闭合/孤立标签
+      s = s.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
+      s = s.replace(/<([a-zA-Z][\w-]*)\b[^>]*>[\s\S]*?<\/\1>/g, '');
+      s = s.replace(/<\/?[a-zA-Z][^>]*>/g, '');
+    }
+    // 清理过滤后残留的多余空行
+    s = s.replace(/\n{3,}/g, '\n\n');
+    return s.trim();
+  }
   const _HS_HOMECOMING_WORLD_SETTING = `【返航后·世界观设定】
 
 这是一个与现实世界几乎完全一致的当代世界。科技水平、社会制度、文化背景、地理格局均与当今现实相同。没有超自然现象，没有异世界，没有任何违反常识的事物存在。
@@ -1090,6 +1117,9 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
     if (convSettings.constraintAbility) {
       systemParts.push('角色并非无所不能，任何角色都存在不擅长的领域。在角色设定没有特别说明的情况下，一位医生通常不会擅长赌博，一位富二代通常不会电器维修，一位C级异能者无法打败A级异能者。在遭遇以角色的身份、能力无法处理的情况下，需要自然描写出角色自身对其无能为力、或寻求他人/外物的帮助的情况。且同样需要注意角色的社交圈范围是否符合角色身份，例如街头混混认识大学教授的概率很低，但可能认识酒吧驻唱。');
     }
+    if (convSettings.constraintAutonomy) {
+      systemParts.push('<rules:角色独立性>\n\n- 一切角色都有自己的生活、目标、理想，角色大部分时间都应当在处理自己的事务，而不是无条件出现在{{user}}身边，不应该无时无刻关注{{user}}的行动，{{user}}不是世界中心。\n- 角色应该为了自己的事业、兴趣爱好、理想而行动，应当关注角色自己的成长弧光与发展，需要保持角色的自主性和独立性。\n- 角色应当有属于自己的判断和思考，不应该无条件顺从{{user}}，可以适当拒绝和谈判。\n- 角色与{{user}}之间的感情应当有一个逐渐升温的过程，而非一蹴而就，真正的感情应该有深度的连接，而不是毫无道理的吸引。保持暧昧张力，而不是过早交付的深情。\n- 可以有脆弱或敏感的时候，但不能持续陷入这种状态中，角色的情绪并非一成不变，大部分情况下理应拥有自尊，而非卑微绝望，更不能盲目狂热。\n\n</rules:角色独立性>');
+    }
     if (convSettings.constraintGender) {
       systemParts.push('全程性别平等。不使用冠夫姓称呼（如"X太太""X夫人"），直接用本名或平等昵称。不默认性别分工（家务归女性、决策归男性），不使用"大姨妈""你那个"等羞耻化表达，直接说月经/生理期。角色的能力、地位、选择不受性别限制。');
     }
@@ -1193,7 +1223,15 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
         if (!_hsHomecoming && typeof StatusBar !== 'undefined' && StatusBar.hsCheckClearCondition) {
           const check = StatusBar.hsCheckClearCondition();
           if (check && check.passed) {
-            systemParts.push('[心动模拟·返航触发协议]\n玩家已达成回家条件。返航分为两种情况：\n\n**独自返航**：当玩家在剧情里真正回到自己原本的世界、彻底从心动模拟中醒来后，请在该轮回复的最末尾追加一个空的 ```homecoming``` 代码块作为信号——前端识别到该信号后会接管展示返航过场动画。在那一轮之前请正常推进剧情，玩家可能还有未完成的事情想交代；不要在尚未真正"回到家中醒来"之前提前输出该 marker。\n\n**共同返航**：如果玩家通过心跳悦动059协助签署了心动目标认领协议，要带着某位心动目标一起离开，则在签署协议完成的那一轮回复末尾立即输出带 companion 的 homecoming 代码块：```homecoming\n{"companion":"角色名"}\n```\n前端会识别为"共同返航"，不触发返航动画，直接进入两人在现实世界的生活。不需要等到"回到家醒来"——签完协议就是触发点。\n\n如果上下文中存在过返航相关的剧情描写，但你没有找到实际输出过的 ```homecoming``` 代码块，说明玩家回溯了剧情，返航流程需要重新走一次——请当作之前的返航从未发生过，重新推进。');
+            _recentStatusParts.push('[心动模拟·返航触发协议]\n玩家已达成回家条件。返航分为两种情况：\n\n**独自返航**：当玩家在剧情里真正回到自己原本的世界、彻底从心动模拟中醒来后，请在该轮回复的最末尾追加一个空的 ```homecoming``` 代码块作为信号——前端识别到该信号后会接管展示返航过场动画。在那一轮之前请正常推进剧情，玩家可能还有未完成的事情想交代；不要在尚未真正"回到家中醒来"之前提前输出该 marker。\n\n**共同返航**：如果玩家通过心跳悦动059协助签署了心动目标认领协议，要带着某位心动目标一起离开，则在签署协议完成的那一轮回复末尾立即输出带 companion 的 homecoming 代码块：```homecoming\n{"companion":"角色名"}\n```\n前端会识别为"共同返航"，不触发返航动画，直接进入两人在现实世界的生活。不需要等到"回到家醒来"——签完协议就是触发点。\n\n如果上下文中存在过返航相关的剧情描写，但你没有找到实际输出过的 ```homecoming``` 代码块，说明玩家回溯了剧情，返航流程需要重新走一次——请当作之前的返航从未发生过，重新推进。');
+          } else if (check && !check.passed) {
+            const rs = Array.isArray(check.reasons) ? check.reasons : [];
+            // 仅在确实处于心动模拟语境（非"无世界观/无数据"）时注入未达标约束
+            const inHs = !rs.some(r => /非心动模拟|无心动模拟数据/.test(r));
+            if (inHs) {
+              const diff = rs.length ? `当前距离回家还差：\n- ${rs.join('\n- ')}` : '当前尚未达成回家条件。';
+              _recentStatusParts.push('[心动模拟·回家条件状态（硬性约束）]\n回家/通关条件由系统根据上面的好感/黑化/积分数值判定，不由你判断。' + diff + '\n\n在条件正式达成之前：绝对禁止暗示、宣布或让任何角色说出"已经可以回家了""通关了""返航通道开启"之类的话；不要输出 ```homecoming``` 代码块；不要演绎传送/返航相关剧情。请正常推进当前心动模拟世界的日常剧情。只有当系统后续明确通知条件达成时，才可以进入返航流程。');
+            }
           }
         }
       } catch(_) {}
@@ -1247,12 +1285,20 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
         }
       }
     }
-    let historyForAPI = _visibleMsgs.map((m, idx) => ({
-      role: m.role,
-      content: m.role === 'assistant' && !_recentAiIndices.has(idx)
-        ? _stripFormatBlocks(m.content)
-        : (m.contentForAPI || m.content)
-    }));
+let historyForAPI = _visibleMsgs.map((m, idx) => ({
+        role: m.role,
+        content: m.role === 'assistant' && !_recentAiIndices.has(idx)
+          ? _stripFormatBlocks(m.content)
+          : (m.contentForAPI || m.content)
+      }));
+      // 发请求时过滤 AI 历史里的 HTML（对话设置·输出·回复格式 开关控制，只动副本不动存档原文）
+      if (convSettings.stripHistoryHtml) {
+        historyForAPI = historyForAPI.map(m =>
+          m.role === 'assistant'
+            ? { ...m, content: _stripHistoryHtml(m.content, convSettings.stripHtmlKeepText) }
+            : m
+        );
+      }
     // 时间感知开启时，给用户消息拼时间戳前缀
     if (convSettings.timeAware && window.TimeAwareness) {
  try {
@@ -5287,6 +5333,8 @@ if (!gp) return null;
       stream: conv?.convStream !== false,      // 默认开
       gameMode: conv?.convGameMode !== false,   // 默认开
       format: conv?.convFormat !== false,       // 默认开
+      stripHistoryHtml: !!conv?.convStripHistoryHtml,    // 发请求时过滤 AI 历史里的 HTML（默认关）
+      stripHtmlKeepText: conv?.convStripHtmlKeepText !== false,  // 过滤时保留文字（剥标签留内容，默认开）
       disableRetry: !!conv?.convDisableRetry,   // 默认关（关闭自动重试）
       backstage: !!conv?.backstageEnabled,      // 默认关
       timeAware: !!conv?.convTimeAware,         // 默认关
@@ -5321,6 +5369,7 @@ bgImage: conv?.convBgImage || '',
       constraintSublime: !!conv?.convConstraintSublime,   // 防止升华收束（默认关）
       constraintGodView: !!conv?.convConstraintGodView,   // 信息传播规则（默认关）
       constraintAbility: !!conv?.convConstraintAbility,   // 角色能力边界（默认关）
+      constraintAutonomy: !!conv?.convConstraintAutonomy,  // 角色自主性·防围着玩家转（默认关）
       constraintTimeFlow: conv?.convConstraintTimeFlow !== false,  // 时间流逝感知（默认开）
       constraintGender: !!conv?.convConstraintGender,      // 去刻板表达（默认关）
     };
@@ -5680,8 +5729,12 @@ bgImage: conv?.convBgImage || '',
     const s = _getConvSettings();
     document.getElementById('cs-stream').checked = s.stream;
     document.getElementById('cs-gamemode').checked = s.gameMode;
-    document.getElementById('cs-format').checked = s.format;
-    const dr = document.getElementById('cs-disable-retry');
+document.getElementById('cs-format').checked = s.format;
+      const shhEl = document.getElementById('cs-strip-history-html');
+      if (shhEl) shhEl.checked = s.stripHistoryHtml;
+      const shktEl = document.getElementById('cs-strip-html-keeptext');
+      if (shktEl) shktEl.checked = s.stripHtmlKeepText;
+      const dr = document.getElementById('cs-disable-retry');
     if (dr) dr.checked = s.disableRetry;
     document.getElementById('cs-backstage').checked = s.backstage;
     const ta = document.getElementById('cs-time-aware');
@@ -5795,6 +5848,8 @@ bgImage: conv?.convBgImage || '',
     if (cgEl) cgEl.checked = s.constraintGodView;
     const caEl = document.getElementById('cs-constraint-ability');
     if (caEl) caEl.checked = s.constraintAbility;
+    const cauEl = document.getElementById('cs-constraint-autonomy');
+    if (cauEl) cauEl.checked = s.constraintAutonomy;
     const ctEl = document.getElementById('cs-constraint-timeflow');
     if (ctEl) ctEl.checked = s.constraintTimeFlow;
     const cgenEl = document.getElementById('cs-constraint-gender');
@@ -5807,8 +5862,12 @@ bgImage: conv?.convBgImage || '',
     if (!conv) return;
     conv.convStream = document.getElementById('cs-stream').checked;
     conv.convGameMode = document.getElementById('cs-gamemode').checked;
-    conv.convFormat = document.getElementById('cs-format').checked;
-    const drEl = document.getElementById('cs-disable-retry');
+conv.convFormat = document.getElementById('cs-format').checked;
+      const shhSaveEl = document.getElementById('cs-strip-history-html');
+      if (shhSaveEl) conv.convStripHistoryHtml = shhSaveEl.checked;
+      const shktSaveEl = document.getElementById('cs-strip-html-keeptext');
+      if (shktSaveEl) conv.convStripHtmlKeepText = shktSaveEl.checked;
+      const drEl = document.getElementById('cs-disable-retry');
     if (drEl) {
       conv.convDisableRetry = !!drEl.checked;
       try { localStorage.setItem('skynex_lastDisableRetry', drEl.checked ? '1' : '0'); } catch(_) {}
@@ -5882,6 +5941,8 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     if (cgSaveEl) conv.convConstraintGodView = cgSaveEl.checked;
     const caSaveEl = document.getElementById('cs-constraint-ability');
     if (caSaveEl) conv.convConstraintAbility = caSaveEl.checked;
+    const cauSaveEl = document.getElementById('cs-constraint-autonomy');
+    if (cauSaveEl) conv.convConstraintAutonomy = cauSaveEl.checked;
     const ctSaveEl = document.getElementById('cs-constraint-timeflow');
     if (ctSaveEl) conv.convConstraintTimeFlow = ctSaveEl.checked;
     const cgenSaveEl = document.getElementById('cs-constraint-gender');

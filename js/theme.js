@@ -67,9 +67,7 @@ const Theme = (() => {
       statusBarCardOpacity: 0.16596289801120573,
       glassEnabled: false,
       aiBubbleRender: true,
-      fontMode: "default",
-customFontData: null,
-msgFontSize: 13.5,
+      msgFontSize: 13.5,
     },
     '暖棕': {
       bg:                    '#120d08',
@@ -611,10 +609,10 @@ async function applyCustomPreset(name) {
     const old = load();
     editingCustomName = name;
     cfg.customPresetName = name;
-    // 保留字体设置
-    if (!cfg.fontMode) cfg.fontMode = old.fontMode || 'default';
+    // 保留字体设置（字体独立于主题，无条件保留当前值）
+    cfg.fontMode = old.fontMode || 'default';
     // 保留正文字号（v681.3.2）
-    if (cfg.msgFontSize == null) cfg.msgFontSize = old.msgFontSize ?? 13.5;
+    cfg.msgFontSize = old.msgFontSize ?? 13.5;
     const nameInput = document.getElementById('th-custom-name');
 if (nameInput) nameInput.value = name;
 withThemeFade(() => {
@@ -641,11 +639,11 @@ function activateCustomPreset(name, silent = false) {
      if (!cfg) return;
      const old = load();
      cfg.customPresetName = name;
-     // 保留字体设置
-     if (!cfg.fontMode) cfg.fontMode = old.fontMode || 'default';
-     // 保留正文字号（v681.3.2）
-     if (cfg.msgFontSize == null) cfg.msgFontSize = old.msgFontSize ?? 13.5;
-     editingCustomName = null;
+    // 保留字体设置（字体独立于主题，无条件保留当前值）
+    cfg.fontMode = old.fontMode || 'default';
+    // 保留正文字号（v681.3.2）
+    cfg.msgFontSize = old.msgFontSize ?? 13.5;
+    editingCustomName = null;
 const nameInput = document.getElementById('th-custom-name');
  if (nameInput) nameInput.value = name;
  withThemeFade(() => {
