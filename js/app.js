@@ -175,7 +175,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v695.0';
+    const APP_VERSION = 'v695.1';
 const CHANGELOG = `【v695.0 更新内容】
 
 新增功能

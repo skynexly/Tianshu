@@ -1468,6 +1468,14 @@
             </span>
           </label>
           <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">需先在「设置 → 功能模型 → 语音模型」配置 MiniMax API Key</span>
+          <label class="circle-check-label">
+            <span class="circle-check-text">来电能力</span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-call-enabled" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">允许主线角色主动给玩家打语音/视频电话，不适用于古风等无电话世界观</span>
           <div id="cs-voice-options" style="display:none;flex-direction:column;gap:10px;margin-top:-4px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
             <div>
               <div style="font-size:13px;color:var(--text);margin-bottom:6px">音色名（voice_id）</div>
@@ -3907,7 +3915,7 @@ const GameLog = (() => {
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=5"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=32"></script>
+<script src="js/chat.js?v=33"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -3922,7 +3930,7 @@ const GameLog = (() => {
 <script src="js/ambient.js?v=1"></script>
 <script src="js/worldvoice.js?v=3"></script>
 <script src="js/music.js?v=3"></script>
-<script src="js/phone.js?v=212"></script>
+<script src="js/phone.js?v=213"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>

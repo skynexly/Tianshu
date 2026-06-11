@@ -1134,8 +1134,10 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
     systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念');
   }
 
-  // 7b. 来电能力：角色可以主动给玩家打语音/视频电话
-  systemParts.push('[来电能力]\n当剧情中某个角色主动给玩家打语音或视频电话时，你可以在回复末尾输出一个 ```call 代码块来触发来电界面。玩家会在手机上看到来电响铃，可以选择接听或拒接。\n\n格式：\n```call\n{"mode":"voice 或 video","name":"角色名","firstLine":"接通后的第一段内容。格式要求：台词行以 > 开头，描述行不加前缀；台词行尾标时间 [HH:MM]；可以描述+台词组合，如：电话那头传来低沉的笑声。\\n> 怎么这个点才回来？ [12:50]"}\n```\n\n语音还是视频，按角色此刻的动机选：\n- voice（语音）：日常联系、交代事情、随口说两句、报平安、不方便露脸或所在环境不适合开视频时。多数情况用语音。\n- video（视频）：很想见到玩家、思念、想亲眼确认玩家的状态/安全/情绪、需要面对面把话说清楚、或想让玩家看到自己这边的画面时。视频更亲密、更郑重，别滥用。\n\n规则：\n- 只有剧情中角色确实有打电话的动机时才使用，不要无理由触发\n- mode 只能是 "voice" 或 "video"，并与上面的动机相符\n- name 必须是角色的确切名字\n- firstLine 是对方接起后立刻说的话，用叙述流格式（描述行不加前缀，台词行以 > 开头并在行尾标 [HH:MM]），至少包含一句台词（> 开头），且要体现这通电话的来意\n- 代码块放在回复末尾，不要在正文中穿插\n- 一条回复里最多一个 ```call 块');
+// 7b. 来电能力：角色可以主动给玩家打语音/视频电话（开关控制，默认开）
+    if (convSettings.callEnabled) {
+      systemParts.push('[来电能力]\n当剧情中某个角色主动给玩家打语音或视频电话时，你可以在回复末尾输出一个 ```call 代码块来触发来电界面。玩家会在手机上看到来电响铃，可以选择接听或拒接。\n\n格式：\n```call\n{"mode":"voice 或 video","name":"角色名","firstLine":"接通后的第一段内容。格式要求：台词行以 > 开头，描述行不加前缀；台词行尾标时间 [HH:MM]；可以描述+台词组合，如：电话那头传来低沉的笑声。\\n> 怎么这个点才回来？ [12:50]"}\n```\n\n语音还是视频，按角色此刻的动机选：\n- voice（语音）：日常联系、交代事情、随口说两句、报平安、不方便露脸或所在环境不适合开视频时。多数情况用语音。\n- video（视频）：很想见到玩家、思念、想亲眼确认玩家的状态/安全/情绪、需要面对面把话说清楚、或想让玩家看到自己这边的画面时。视频更亲密、更郑重，别滥用。\n\n规则：\n- 只有剧情中角色确实有打电话的动机时才使用，不要无理由触发\n- mode 只能是 "voice" 或 "video"，并与上面的动机相符\n- name 必须是角色的确切名字\n- firstLine 是对方接起后立刻说的话，用叙述流格式（描述行不加前缀，台词行以 > 开头并在行尾标 [HH:MM]），至少包含一句台词（> 开头），且要体现这通电话的来意\n- 代码块放在回复末尾，不要在正文中穿插\n- 一条回复里最多一个 ```call 块');
+    }
 
       // 8. 心动模拟：累计状态注入
       // 已返航后，停止注入心动模拟的状态/任务/好感数据，改为注入"已回家"提示
@@ -2319,16 +2321,16 @@ const msgEl = appendMessage(aiMsg, true, true);
               _processImgTags(aiMsg.id, fullContent).catch(e => console.warn('[Chat] 生图标记处理失败', e));
             }
 
-            // 主线来电：检测 ```call 代码块，触发手机来电界面
-            // 延迟 1.5s 等主线消息渲染完毕后再弹来电
-            try {
-              if (typeof Phone !== 'undefined' && Phone.handleMainlineCallTag
-                  && /```call[\s\S]*?```/.test(fullContent)) {
-                setTimeout(() => {
-                  try { Phone.handleMainlineCallTag(fullContent); } catch(_) {}
-                }, 1500);
-              }
-            } catch(e) { console.warn('[Chat] 来电标记处理失败', e); }
+            // 主线来电：检测 ```call 代码块，触发手机来电界面（受开关控制）
+    // 延迟 3s 等主线消息渲染完毕后再弹来电
+    try {
+      if (convSettings.callEnabled && typeof Phone !== 'undefined' && Phone.handleMainlineCallTag
+        && /```call[\s\S]*?```/.test(fullContent)) {
+        setTimeout(() => {
+          try { Phone.handleMainlineCallTag(fullContent); } catch(_) {}
+        }, 3000);
+      }
+    } catch(e) { console.warn('[Chat] 来电标记处理失败', e); }
 
             resolve();
           } catch(e) {
@@ -5303,6 +5305,7 @@ if (!gp) return null;
       },
 bgImage: conv?.convBgImage || '',
         imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
+    callEnabled: conv?.convCallEnabled !== false, // 默认开（来电能力）
     toolsMemory: !!conv?.convToolsMemory,          // 默认关（记忆类工具）
     toolsWorldview: !!conv?.convToolsWorldview,    // 默认关（世界观查询工具）
     toolsEdit: !!conv?.convToolsEdit,              // 默认关（AI 编辑设定/单人卡，高风险）
@@ -5759,6 +5762,9 @@ bgImage: conv?.convBgImage || '',
     // 生图模式
     const igEl = document.getElementById('cs-imggen');
     if (igEl) igEl.checked = s.imgGen;
+    // 来电能力
+    const callEl = document.getElementById('cs-call-enabled');
+    if (callEl) callEl.checked = s.callEnabled;
     // 工具调用
     const toolsMemEl = document.getElementById('cs-tools-memory');
     if (toolsMemEl) toolsMemEl.checked = s.toolsMemory;
@@ -5829,6 +5835,8 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     if (ocEl) conv.convOnlineChat = ocEl.checked;
     const igSaveEl = document.getElementById('cs-imggen');
     if (igSaveEl) conv.convImgGen = igSaveEl.checked;
+    const callSaveEl = document.getElementById('cs-call-enabled');
+    if (callSaveEl) conv.convCallEnabled = callSaveEl.checked;
     const toolsMemSaveEl = document.getElementById('cs-tools-memory');
     if (toolsMemSaveEl) conv.convToolsMemory = toolsMemSaveEl.checked;
     const toolsWvSaveEl = document.getElementById('cs-tools-worldview');

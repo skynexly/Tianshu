@@ -13217,6 +13217,26 @@ _renderMemo(pd);
       }).join('\n---\n'));
     }
 
+    // 10. 最近2条一起听记录
+    const ltHist = (pd.listenTogetherHistory || []).slice(-2).reverse();
+    if (ltHist.length > 0) {
+      parts.push('【一起听记录（最近2次）】\n' + ltHist.map(h => {
+        const modeMap = { broadcast: '公放', earphone: '耳机共享', online: '线上' };
+        const modeStr = modeMap[h.mode] || h.mode || '未知';
+        const targetName = (h.target && h.target.name) || '未知';
+        let s = `- 模式：${modeStr}，对象：${targetName}`;
+        if (h.startTime) s += `，开始：${h.startTime}`;
+        if (h.endTime) s += `，结束：${h.endTime}`;
+        if (h.playlist && h.playlist.length > 0) {
+          s += `\n  播放列表：${h.playlist.map(t => `${t.title || '?'}${t.artist ? ' - ' + t.artist : ''}`).join('、')}`;
+        }
+        if (h.messages && h.messages.length > 0) {
+          s += `\n  留言：${h.messages.map(m => `${m.from || '?'}：${m.content || ''}`).join('；')}`;
+        }
+        return s;
+      }).join('\n'));
+    }
+
     return parts.length > 0 ? '[以下是用户手机中的内容]\n\n' + parts.join('\n\n') : '';
   }
 
