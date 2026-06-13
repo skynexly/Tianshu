@@ -275,6 +275,18 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
     raw = raw.replace(listenMsgMatch[0], '').trim();
   }
 
+  // 游鱼购买标记：```youyu_buy\n{"id":"...","buyer":"...","delivery":"...","eta":N}```
+  const youyuBuyMatch = raw.match(/```youyu_buy\s*([\s\S]*?)```/i);
+  if (youyuBuyMatch) {
+    try {
+      const ybContent = (youyuBuyMatch[1] || '').trim();
+      if (ybContent && ybContent.startsWith('{')) {
+        result.youyuBuy = JSON.parse(ybContent);
+      }
+    } catch(_) {}
+    raw = raw.replace(youyuBuyMatch[0], '').trim();
+  }
+
     // 清理「第X部分 — XXX：」「第X部分 — XXX（...）：」这类格式标签行
     // 第二部分被尾部切割顺带去掉了，但 status 等代码块被提前替换后会留下「第三部分 — 状态面板：」孤儿，统一过滤
     raw = raw.replace(/^[ \t]*第[一二三四五六七八九十]+部分\s*[—\-－]\s*[^\n]*$/gm, '').trim();

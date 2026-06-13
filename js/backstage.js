@@ -517,7 +517,6 @@ const headFull = head + (n.onlineName ? `（网名：${n.onlineName}）` : '');
         if (hsAppText) systemParts.push(hsAppText);
       }
     } catch(e) {}
-
     // 心动模拟 APP 客服对话记录（仅后台可见，含 ★ 新增标记）
     try {
       if (typeof Phone !== 'undefined' && Phone.buildHeartsimServiceChatForBackstage) {
@@ -525,6 +524,15 @@ const headFull = head + (n.onlineName ? `（网名：${n.onlineName}）` : '');
         if (hsChatText) systemParts.push(hsChatText);
       }
     } catch(e) {}
+
+    // 全局：玩家正在播放的歌（仅播放中，无条件同步，仅后台可见）
+    try {
+      if (typeof Phone !== 'undefined' && Phone.buildNowPlayingForBackstage) {
+        const nowPlayingText = Phone.buildNowPlayingForBackstage();
+        if (nowPlayingText) systemParts.push(nowPlayingText);
+      }
+    } catch(e) {}
+
 
     // 全局：手机操作日志（后台独立队列，与主线互不干扰）
     try {

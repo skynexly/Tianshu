@@ -1315,7 +1315,7 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
  if (isHeartSimConv) {
  const idx = [...historyForAPI].map((m, i) => ({ m, i })).reverse().find(x => x.m.role === 'user')?.i;
  if (idx !== undefined) {
- const hsRule = `[心动模拟·本轮数值规则]\nrelation只记录本轮实际发生变化的心动目标，表示本轮增量，不是当前总值。\naffinity 与 darkness 每次单项变动必须在 -5 到5之间；没有在本轮直接互动、被明确影响或受到明确剧情刺激的目标，不要写入 relation。\n禁止为了推进进度而批量给所有心动目标加分。
+ const hsRule = `[心动模拟·本轮数值规则]\nrelation只记录本轮实际发生变化的心动目标，表示本轮增量，不是当前总值。\naffinity（好感）每次单项变动必须在 -2 到 2 之间；darkness（黑化）每次单项变动必须在 -5 到 5 之间；没有在本轮直接互动、被明确影响或受到明确剧情刺激的目标，不要写入 relation。\n禁止为了推进进度而批量给所有心动目标加分。
 任务更新规则：tasks 只表示本轮任务变更，不是完整任务历史；当前仍有 active 任务时，本轮只能把现有任务标记为 active/done/skipped，禁止发布新的 active 任务；done/skipped 是结算事件，系统加减积分后会从任务栏移除，不需要下一轮继续输出；当任务栏没有 active 任务时，下一轮才允许发布新一批 active 任务，同一批最多3个。`;
  historyForAPI[idx] = { ...historyForAPI[idx], content: `${hsRule}\n\n${historyForAPI[idx].content}` };
  }
@@ -1463,7 +1463,8 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
           }
         }
       }
-      // ===== 日历日程提醒（用户自建事项，当天首次触发） =====
+      // ===== 日历日程提醒（用户自建事项） =====
+      // 生日/节日：提前一天提醒一次 + 当天每轮都提醒；其他类型：当天首次提醒一次
       try {
         const _calConv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
         const _calPd = _calConv?.phoneData;
@@ -1473,33 +1474,79 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
           if (_calTime) {
             const _todayKey = `${_calTime.year}-${_calTime.month}-${_calTime.day}`;
             _calPd.calendarReminded = _calPd.calendarReminded || {};
-            const _todayEvents = _calPd.calendarEvents.filter(ev => {
-              if (ev.fromWv) return false; // 世界观节日走原有机制
+            // 取历法规则（自定义历法世界观需要，默认走公历）
+            let _calRules = null;
+            try {
+              const _calWvId = _calConv?.worldviewId || _calConv?.singleWorldviewId;
+              const _calWv = _calWvId ? await DB.get('worldviews', _calWvId) : null;
+              _calRules = _calWv?.gameplay?.calendarSystem || _calConv?.convGameplay?.calendarSystem || null;
+            } catch(_) {}
+
+            // 计算"明天"的日期（用于提前一天提醒）
+            let _tomorrow = null;
+            try {
+              _tomorrow = Calendar.addDelta(_calTime, { days: 1 }, _calRules);
+            } catch(_) {
+              const _d = new Date(_calTime.year, _calTime.month - 1, _calTime.day + 1);
+              _tomorrow = { year: _d.getFullYear(), month: _d.getMonth() + 1, day: _d.getDate() };
+            }
+
+            // 某事件是否命中某个目标日期（考虑 repeat + duration）
+            const _hitsDate = (ev, t) => {
+              if (!t) return false;
               let match = false;
               if (ev.repeat === 'monthly') match = true;
-              else if (ev.repeat === 'yearly') match = (ev.month === _calTime.month);
-              else match = (ev.month === _calTime.month && (!ev.year || ev.year === _calTime.year));
+              else if (ev.repeat === 'yearly') match = (ev.month === t.month);
+              else match = (ev.month === t.month && (!ev.year || ev.year === t.year));
               if (!match) return false;
               const dur = Math.max(1, ev.duration || 1);
-              return _calTime.day >= ev.day && _calTime.day < ev.day + dur;
-            });
-            // 过滤已提醒过的
-            const _unreminded = _todayEvents.filter(ev => !_calPd.calendarReminded[`${_todayKey}_${ev.id}`]);
-            if (_unreminded.length > 0) {
-              const _calTypeNames = { birthday: '生日', todo: '待办', period: '经期', holiday: '节日', note: '备忘' };
-              const _lines = _unreminded.map(ev => {
-                const tn = _calTypeNames[ev.type] || '事项';
-                return `· ${tn}：${ev.title}${ev.note ? '（' + ev.note + '）' : ''}`;
-              });
-              const _calPrompt = `【今日日程提醒】\n${_lines.join('\n')}\n请在本轮剧情中描述{{user}}的手机震动并弹出日程提醒。若当前{{user}}无法查看手机，请以旁白方式简短提及。`;
-              // 注入到 systemTop 位置
+              return t.day >= ev.day && t.day < ev.day + dur;
+            };
+
+            const _calTypeNames = { birthday: '生日', todo: '待办', period: '经期', holiday: '节日', note: '备忘' };
+            const _todayLines = [];   // 当天提醒（生日/节日每轮、其他首次）
+            const _aheadLines = [];   // 提前一天提醒（仅生日/节日，去重）
+
+            for (const ev of _calPd.calendarEvents) {
+              if (ev.fromWv) continue; // 世界观节日走原有机制
+              const _isBirthFest = (ev.type === 'birthday' || ev.type === 'holiday');
+              const _tn = _calTypeNames[ev.type] || '事项';
+              const _line = `· ${_tn}：${ev.title}${ev.note ? '（' + ev.note + '）' : ''}`;
+
+              if (_hitsDate(ev, _calTime)) {
+                // 今天命中
+                if (_isBirthFest) {
+                  // 生日/节日：当天每轮都提醒，不去重
+                  _todayLines.push(_line);
+                } else {
+                  // 其他类型：当天首次提醒一次
+                  if (!_calPd.calendarReminded[`${_todayKey}_${ev.id}`]) {
+                    _todayLines.push(_line);
+                    _calPd.calendarReminded[`${_todayKey}_${ev.id}`] = true;
+                  }
+                }
+              } else if (_isBirthFest && _hitsDate(ev, _tomorrow)) {
+                // 明天是生日/节日：提前一天提醒一次（去重）
+                const _aheadFlag = `ahead_${_todayKey}_${ev.id}`;
+                if (!_calPd.calendarReminded[_aheadFlag]) {
+                  _aheadLines.push(`· ${_tn}：${ev.title}${ev.note ? '（' + ev.note + '）' : ''}（明天）`);
+                  _calPd.calendarReminded[_aheadFlag] = true;
+                }
+              }
+            }
+
+            const _calBlocks = [];
+            if (_aheadLines.length > 0) {
+              _calBlocks.push(`【明日日程提醒】\n${_aheadLines.join('\n')}\n请在本轮剧情中自然地让{{user}}收到手机的提前提醒。`);
+            }
+            if (_todayLines.length > 0) {
+              _calBlocks.push(`【今日日程提醒】\n${_todayLines.join('\n')}\n请在本轮剧情中描述{{user}}的手机震动并弹出日程提醒。若当前{{user}}无法查看手机，请以旁白方式简短提及。\n其中生日、节日是重要日子，应在当天的剧情里予以体现（如祝福、庆祝、相关互动）；若本日剧情中已经充分体现过，可自然淡化、不必每轮重复强调。`);
+            }
+            if (_calBlocks.length > 0) {
+              const _calPrompt = _calBlocks.join('\n\n');
               let _calInsertIdx = apiMessages.findIndex(m => m.role !== 'system');
               if (_calInsertIdx === -1) _calInsertIdx = apiMessages.length;
               apiMessages.splice(_calInsertIdx, 0, { role: 'system', content: _calPrompt });
-              // 标记已提醒
-              for (const ev of _unreminded) {
-                _calPd.calendarReminded[`${_todayKey}_${ev.id}`] = true;
-              }
               try { await Conversations.saveList(); } catch(_) {}
             }
           }
@@ -2318,6 +2365,13 @@ const msgEl = appendMessage(aiMsg, true, true);
                 await Phone._ltHandleMsg(parsed.listenMsg);
               }
             } catch(e) { console.warn('[Chat] listenMsg 处理失败', e); }
+
+            // 游鱼购买标记处理
+            try {
+              if (parsed.youyuBuy && typeof Phone !== 'undefined' && Phone._youyuHandleBuy) {
+                await Phone._youyuHandleBuy(parsed.youyuBuy);
+              }
+            } catch(e) { console.warn('[Chat] youyuBuy 处理失败', e); }
 
             try {
               const finalStatus = Conversations.getStatusBar();
@@ -6901,7 +6955,7 @@ async function applyLorebooksToWorldview() {
 manualExtractMemory, manualSummary,
 enterMultiSelect, exitMultiSelect, toggleMultiSelect, selectAllMulti,
 multiExtractMemory, multiExportImage, isMultiSelectMode,
-    setWorldVoiceAttach, collectMessage,
+    setWorldVoiceAttach, hasPendingWorldVoice: () => !!pendingWorldVoice, collectMessage,
     searchMessages, toggleSearchBar, renderQuickSwitches, renderAll,
     scrollToBottom, updateScrollBtn,
     _toggleThink,

@@ -1443,13 +1443,13 @@ async function taskConfirmSkipTask() {
     }
   }
 
-  function _clampHSDiff(v) {
- const n = Number(v);
- if (!Number.isFinite(n)) return 0;
- const clamped = Math.max(-5, Math.min(5, n));
- if (clamped !== n) console.warn(`[HeartSim] relation数值超过单次±5，已修正：${n} -> ${clamped}`);
- return clamped;
-}
+function _clampHSDiff(v, max = 5) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 0;
+    const clamped = Math.max(-max, Math.min(max, n));
+    if (clamped !== n) console.warn(`[HeartSim] relation数值超过单次±${max}，已修正：${n} -> ${clamped}`);
+    return clamped;
+  }
 
 function hsApplyRelation(relationObj) {
     const hs = _getHS();
@@ -1459,21 +1459,21 @@ function hsApplyRelation(relationObj) {
       if (!name || !data) continue;
       let t = hs.targets.find(x => x.name === name);
       if (!t) {
-        t = { name, baseFavor: 40, favor: 0, dark: 0 };
+        t = { name, baseFavor: 20, favor: 0, dark: 30 };
         hs.targets.push(t);
         changed = true;
       }
       const affinityRaw = data.affinity ?? data.favor ?? data.favour;
       const darknessRaw = data.darkness ?? data.dark;
       if (affinityRaw !== undefined) {
-        const affinity = _clampHSDiff(affinityRaw);
+        const affinity = _clampHSDiff(affinityRaw, 2);
         if (affinity !== 0) {
           t.favor = Math.max(-t.baseFavor, Math.min(100 - t.baseFavor, (t.favor || 0) + affinity));
           changed = true;
         }
       }
       if (darknessRaw !== undefined) {
-        const darkness = _clampHSDiff(darknessRaw);
+        const darkness = _clampHSDiff(darknessRaw, 5);
         if (darkness !== 0) {
           t.dark = Math.max(0, Math.min(100, (t.dark || 0) + darkness));
           changed = true;
@@ -1786,7 +1786,7 @@ function hsApplyRelation(relationObj) {
  const hs = _getHS();
  if (!hs) return;
  if (hs.targets.find(t => t.name === name.trim())) { UI.showToast('已存在'); return; }
- hs.targets.push({ name: name.trim(), baseFavor:40, favor:0, dark:0 });
+ hs.targets.push({ name: name.trim(), baseFavor:20, favor:0, dark:30 });
  _saveHS();
  _renderHS();
  }
@@ -1986,7 +1986,7 @@ if (Array.isArray(hs.tasks)) {
       // 计算每位的最终好感度
       const withFavor = targets.map(t => ({
         name: t.name || '未命名',
-        favor: Math.max(0, Math.min(100, (Number(t.baseFavor)||40) + (Number(t.favor)||0))),
+        favor: Math.max(0, Math.min(100, (Number(t.baseFavor)||20) + (Number(t.favor)||0))),
         dark: Math.max(0, Math.min(100, Number(t.dark)||0)),
       }));
 
@@ -2057,7 +2057,7 @@ if (Array.isArray(hs.tasks)) {
     lines.push('心动目标：');
     if (targets.length) {
       targets.forEach(t => {
-        const base = Number.isFinite(Number(t.baseFavor)) ? Number(t.baseFavor) : 40;
+        const base = Number.isFinite(Number(t.baseFavor)) ? Number(t.baseFavor) : 20;
         const diff = Number.isFinite(Number(t.favor)) ? Number(t.favor) : 0;
         const favor = Math.max(0, Math.min(100, base + diff));
         const dark = Math.max(0, Math.min(100, Number.isFinite(Number(t.dark)) ? Number(t.dark) : 0));

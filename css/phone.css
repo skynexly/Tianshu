@@ -255,7 +255,7 @@
   gap: 12px;
   margin: 0 4px 10px;
   padding: 10px 12px;
-  border-radius: 18px;
+  border-radius: 28px;
   background:
     linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.14) 100%),
     rgba(255,255,255,0.15);
@@ -314,8 +314,8 @@
 .phone-profile-bio:focus { background: rgba(255,255,255,0.14); opacity: 1; }
 .phone-profile-avatar {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   background:
     linear-gradient(145deg, rgba(255,255,255,0.34), rgba(255,255,255,0.12));
@@ -686,6 +686,20 @@
  font-size: 10px;
  line-height: 1.3;
 }
+/* 全部订单聚合页：来源徽章配色 */
+.phone-delivery-src-feiniao,
+.phone-delivery-src-youyu,
+.phone-delivery-src-shop,
+ .phone-delivery-src-takeout {
+ padding: 1px 7px;
+ border-radius: 999px;
+ font-weight: 600;
+ color: #fff !important;
+}
+.phone-delivery-src-feiniao { background: #5b8def; }
+.phone-delivery-src-youyu { background: #2bb3a3; }
+.phone-delivery-src-shop { background: #f08a3c; }
+.phone-delivery-src-takeout { background: #e0574a; }
 .phone-shell.has-custom-wallpaper .phone-map-result-card {
  background: rgba(18, 20, 28, 0.30) !important;
  border-color: rgba(255, 255, 255, 0.24) !important;
@@ -2662,6 +2676,82 @@ background: transparent !important;
   transition: transform .1s;
 }
 .phone-anniversary-card:active { transform: scale(0.97); }
+
+/* ===== 番茄钟卡片 ===== */
+.phone-tomato-card {
+  flex: 1;
+  border-radius: 16px;
+  background: linear-gradient(to top, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 55%), linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.14) 100%), rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.24);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.22);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  transition: transform .1s;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.phone-tomato-card:active { transform: scale(0.97); }
+@keyframes tomatoSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.phone-tomato-svg-spin {
+  animation: tomatoSpin 10s linear infinite;
+  transform-origin: center;
+}
+.phone-tomato-clock {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+.phone-tomato-label {
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.6;
+  margin-top: 6px;
+}
+.phone-tomato-ring {
+  width: 80px;
+  height: 80px;
+  position: relative;
+}
+.phone-tomato-ring svg {
+  transform: rotate(-90deg);
+}
+.phone-tomato-ring-time {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.phone-tomato-clock-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+.phone-tomato-goal {
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.7;
+  margin-top: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .phone-anniversary-card-text {
   color: #fff;
   font-weight: 700;
@@ -2718,6 +2808,15 @@ background: transparent !important;
   cursor: pointer;
 }
 .phone-dw-express:active { transform: scale(0.97); }
+.phone-dw-express.has-bg .phone-dw-express-name,
+.phone-dw-express.has-bg .phone-dw-express-num,
+.phone-dw-express.has-bg .phone-dw-express-unit,
+.phone-dw-express.has-bg .phone-dw-express-empty,
+.phone-dw-express.has-bg .phone-dw-express-foot {
+  color: #fff;
+  opacity: 1;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
 .phone-dw-mini-col {
   flex: 1;
   max-width: 50%;
@@ -2847,9 +2946,300 @@ background: transparent !important;
 .phone-dw-bar-fill {
   height: 100%;
   border-radius: 99px;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), var(--border), var(--accent));
+  background-size: 200% 100%;
+  animation: tomatoBarFlow 3s linear infinite;
   transition: width .4s ease;
 }
+@keyframes tomatoBarFlow {
+  0% { background-position: 0% 0%; }
+  100% { background-position: -200% 0%; }
+}
+/* ===== 番茄钟 App 专注播放器卡片 ===== */
+.phone-tomato-player {
+  background: linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04));
+  border: none;
+  border-radius: 22px;
+  padding: 16px 20px 14px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+}
+.phone-tomato-player-goal {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.7;
+  text-align: left;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.phone-tomato-player-goal.locked { cursor: default; opacity: 0.55; }
+.phone-tomato-player-time {
+  font-size: 56px;
+  font-weight: 200;
+  letter-spacing: 1px;
+  color: var(--text);
+  text-align: left;
+  line-height: 1.1;
+  margin: 8px 0 2px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.phone-tomato-player-time.locked { cursor: default; }
+/* 番茄钟全屏模式：隐藏标题栏 */
+.phone-shell.phone-tomato-mode .phone-header { display: none; }
+.phone-tomato-player-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.phone-tomato-exit {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform .1s, color .15s;
+}
+.phone-tomato-exit:active { transform: scale(0.88); }
+/* 番茄钟邀请陪伴横条卡片 */
+.phone-tomato-companion {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+  cursor: pointer;
+  transition: transform .1s;
+}
+.phone-tomato-companion:active { transform: scale(0.98); }
+/* 遮罩模式：邀请陪伴卡片加边框 */
+.phone-shell.has-custom-wallpaper .phone-tomato-companion {
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.24);
+}
+/* 遮罩模式：时钟指针/刻度变白 */
+.phone-shell.has-custom-wallpaper .tomato-clock-hour,
+.phone-shell.has-custom-wallpaper .tomato-clock-min { stroke: #fff !important; }
+.phone-shell.has-custom-wallpaper .tomato-clock-center { fill: #fff !important; }
+.phone-shell.has-custom-wallpaper .phone-tomato-clock-face circle[fill="var(--accent)"] { fill: rgba(255,255,255,0.7) !important; }
+.phone-tomato-comp-invite {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.phone-tomato-comp-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.phone-tomato-comp-avatar-fallback {
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 600;
+}
+.phone-tomato-comp-text { min-width: 0; flex: 1; }
+.phone-tomato-comp-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.phone-tomato-comp-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  margin-top: 2px;
+}
+.phone-tomato-comp-play {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  color: #111;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform .1s;
+}
+.phone-tomato-comp-play:active { transform: scale(0.9); }
+/* 番茄钟陪伴消息气泡区域 */
+.phone-tomato-comp-msgs {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0 2px;
+}
+.phone-tomato-comp-bubble {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  animation: tomatoBubbleIn 0.3s ease;
+}
+@keyframes tomatoBubbleIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.phone-tomato-comp-bubble-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  padding-left: 4px;
+}
+.phone-tomato-comp-bubble-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  background: var(--bg-tertiary);
+  border-radius: 12px 12px 12px 4px;
+  padding: 8px 12px;
+  max-width: 240px;
+  word-break: break-word;
+}
+/* 番茄钟历史卡片 */
+.phone-tomato-hist-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: transform .12s, background .12s;
+}
+.phone-tomato-hist-card:active {
+  transform: scale(0.97);
+  background: var(--bg-tertiary);
+}
+.phone-tomato-hist-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.phone-tomato-hist-info {
+  flex: 1;
+  min-width: 0;
+}
+.phone-tomato-hist-goal {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone-tomato-hist-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.phone-tomato-hist-date {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+/* 遮罩模式：历史卡片 */
+.phone-shell.has-custom-wallpaper .phone-tomato-hist-card {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+}
+.phone-shell.has-custom-wallpaper .phone-tomato-hist-card:active {
+  background: rgba(255,255,255,0.14);
+}
+.phone-shell.has-custom-wallpaper .phone-tomato-hist-icon {
+  background: rgba(255,255,255,0.1);
+}
+.phone-shell.has-custom-wallpaper .phone-tomato-hist-icon svg {
+  stroke: rgba(255,255,255,0.85) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-tomato-hist-goal {
+  color: rgba(255,255,255,0.92);
+}
+.phone-shell.has-custom-wallpaper .phone-tomato-hist-meta,
+.phone-shell.has-custom-wallpaper .phone-tomato-hist-date {
+  color: rgba(255,255,255,0.6);
+}
+.phone-tomato-player-bar {
+  height: 8px;
+  width: 100%;
+  border-radius: 99px;
+  background: rgba(140,140,140,0.25);
+  overflow: hidden;
+  margin: 10px 0 0;
+}
+.phone-tomato-player-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), var(--border), var(--accent));
+  background-size: 200% 100%;
+  animation: tomatoBarFlow 3s linear infinite;
+  transition: width 1.1s linear;
+}
+.phone-tomato-player-ctrl {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 20px;
+  padding: 0 4px;
+}
+.phone-tomato-player-ctrl button {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity .15s, transform .1s;
+}
+.phone-tomato-player-ctrl button:active { transform: scale(0.88); }
+.phone-tomato-player-ctrl .tomato-btn-side { opacity: 0.55; }
+.phone-tomato-player-ctrl .tomato-btn-step { opacity: 0.85; }
+.phone-tomato-player-ctrl .tomato-btn-main { color: var(--accent); opacity: 1; }
 .phone-dw-bar-foot {
   font-size: 11px;
   color: var(--text);
@@ -3835,6 +4225,23 @@ background: transparent !important;
   transition: background .15s, transform .1s;
 }
 .phone-call-line-play:active { transform: scale(0.88); }
+.phone-call-line-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.16);
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: background .15s, transform .1s;
+}
+.phone-call-line-edit:active { transform: scale(0.88); }
 .phone-call-line-play.playing {
   background: var(--accent, #4a8cff);
   color: #fff;

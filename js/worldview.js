@@ -243,6 +243,14 @@ if (!isHidden && _currentExtSubtab === 'npc') {
     const query = filter.trim().toLowerCase();
     const container = document.getElementById('worldview-list-container');
     if (!container) return;
+
+    // 读取内置世界观待更新标记
+    let pendingMap = {};
+    try {
+      const pendingRaw = await DB.get('gameState', 'builtinPendingUpdate');
+      pendingMap = pendingRaw?.value || {};
+    } catch(_) {}
+
     // 按 sortOrder 排序（没有 sortOrder 的按原顺序）
     const sorted = list.slice().sort((a, b) => {
       const oa = (typeof a.sortOrder === 'number') ? a.sortOrder : 999999;
@@ -269,7 +277,7 @@ if (!isHidden && _currentExtSubtab === 'npc') {
             ${iconHTML}
           </div>
           <div style="flex:1;min-width:0;">
-            <div style="font-size:16px;font-weight:bold;color:var(--accent);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Utils.escapeHtml(w.name)}</div>
+            <div style="font-size:16px;font-weight:bold;color:var(--accent);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Utils.escapeHtml(w.name)}${pendingMap[w.id] ? ' <span onclick="event.stopPropagation();Worldview.applyBuiltinUpdate(\'' + w.id + '\')" style="font-size:11px;font-weight:500;padding:1px 6px;border-radius:4px;background:var(--accent);color:#111;cursor:pointer;vertical-align:middle;margin-left:6px">可更新</span>' : ''}</div>
             <div style="font-size:12px;color:var(--text);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;">
               ${Utils.escapeHtml(w.description || '暂无描述')}
             </div>
@@ -4909,7 +4917,7 @@ async function pickDefaultTheme(value) {
     input.click();
   }
 
-  // 内置世界观自动加载（增量 + 版本更新）
+  // 内置世界观自动加载（增量；已有的不自动覆盖，标记待更新）
   async function _loadBuiltinWorldviews() {
     try {
       const builtinArr = window.__BUILTIN_WORLDVIEWS__;
@@ -4919,30 +4927,30 @@ async function pickDefaultTheme(value) {
       const loaded = await DB.get('gameState', 'builtinLoaded');
       const loadedMap = loaded?.value || {};
 
+      // 待更新列表 { id: newVersion }（本地有旧版但不自动覆盖）
+      const pendingRaw = await DB.get('gameState', 'builtinPendingUpdate');
+      const pendingMap = pendingRaw?.value || {};
+
       let list = await getWorldviewList();
       let newCount = 0;
-      let updateCount = 0;
 
       for (const w of builtinArr) {
         if (!w.id) w.id = 'wv_' + Utils.uuid().slice(0, 8);
         const ver = w._builtinVersion || 1;
         const knownVer = loadedMap[w.id] || 0;
 
-        if (ver <= knownVer) continue; // 已加载过且版本没变
+        if (ver <= knownVer) {
+          // 版本一致或更低，跳过（同时清理可能残留的 pending 标记）
+          if (pendingMap[w.id]) delete pendingMap[w.id];
+          continue;
+        }
 
         const existing = list.find(e => e.id === w.id);
         if (existing) {
-          // 版本更高，覆盖更新
-          existing.name = w.name || existing.name;
-          existing.description = w.description || existing.description;
-          existing.icon = w.icon || existing.icon;
-          existing.iconImage = w.iconImage || existing.iconImage;
-          _migrateToKnowledges(w); // v581
-          await DB.put('worldviews', w);
-          loadedMap[w.id] = ver;
-          updateCount++;
+          // 本地已有旧版——不自动覆盖，仅标记"有可用更新"
+          pendingMap[w.id] = ver;
         } else {
-          // 全新的内置世界观
+          // 全新的内置世界观——静默自动加载
           list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || 'world', iconImage: w.iconImage || '' });
           _migrateToKnowledges(w); // v581
           await DB.put('worldviews', w);
@@ -4951,15 +4959,54 @@ async function pickDefaultTheme(value) {
         }
       }
 
-      if (newCount > 0 || updateCount > 0) {
+      if (newCount > 0) {
         await saveWorldviewList(list);
-        if (newCount) console.log('[Worldview] 新增内置世界观：' + newCount + '个');
-        if (updateCount) console.log('[Worldview] 更新内置世界观：' + updateCount + '个');
+        console.log('[Worldview] 新增内置世界观：' + newCount + '个');
       }
       await DB.put('gameState', { key: 'builtinLoaded', value: loadedMap });
+      await DB.put('gameState', { key: 'builtinPendingUpdate', value: pendingMap });
     } catch(e) {
       console.warn('[Worldview] 加载内置世界观失败:', e);
     }
+  }
+
+  // 手动执行内置世界观更新（玩家点击"更新"按钮后调用）
+  async function applyBuiltinUpdate(wvId) {
+    const builtinArr = window.__BUILTIN_WORLDVIEWS__;
+    if (!builtinArr) return;
+    const w = builtinArr.find(b => b.id === wvId);
+    if (!w) { UI.showToast('未找到该内置世界观数据'); return; }
+
+    const ok = await UI.showConfirm('更新内置世界观', '更新将彻底覆盖当前版本（包括你的所有修改），是否继续？');
+    if (!ok) return;
+
+    const ver = w._builtinVersion || 1;
+    _migrateToKnowledges(w);
+    await DB.put('worldviews', w);
+
+    // 更新 loadedMap + 清除 pending
+    const loaded = await DB.get('gameState', 'builtinLoaded');
+    const loadedMap = loaded?.value || {};
+    loadedMap[wvId] = ver;
+    await DB.put('gameState', { key: 'builtinLoaded', value: loadedMap });
+
+    const pendingRaw = await DB.get('gameState', 'builtinPendingUpdate');
+    const pendingMap = pendingRaw?.value || {};
+    delete pendingMap[wvId];
+    await DB.put('gameState', { key: 'builtinPendingUpdate', value: pendingMap });
+
+    // 刷新列表 UI
+    let list = await getWorldviewList();
+    const existing = list.find(e => e.id === wvId);
+    if (existing) {
+      existing.name = w.name || existing.name;
+      existing.description = w.description || existing.description;
+      existing.icon = w.icon || existing.icon;
+      existing.iconImage = w.iconImage || existing.iconImage;
+      await saveWorldviewList(list);
+    }
+    await load();
+    UI.showToast('已更新到最新版本');
   }
 
   /**
@@ -5615,6 +5662,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     addEvent, editEvent, saveEventFromModal, deleteEventFromModal, closeEventModal, syncEventTriggerTypeUI, addEventAttrCondition, updateEventAttrCondition, removeEventAttrCondition,
     aiGenerateEvents, _doAiGenerateEvents, switchEventTab, addEventChain, addChainNode,
     _onCardClick,
+    applyBuiltinUpdate,
     handleIconImageUpload,
     clearIconImage,
     addRegion, addFaction, addNPC,
