@@ -1099,6 +1099,8 @@ _renderGlobalNpcs(w.globalNpcs || []);
 _renderGameplayAttrs(w);
 // 历法系统卡片标签
 _updateCalendarCardLabel();
+// 手机配置卡片标签
+_updatePhoneAppsLabel();
     } catch (e) {
       // 数据填充中途出错也不影响内容区显示（已在前面先切到 basic tab）
       console.warn('[Worldview] _loadEditForm 填充部分字段失败', e);
@@ -5428,6 +5430,190 @@ async function _onCalWeekDayChange(idx, value) {
   await _saveEditingWV(w);
 }
 
+// ===== 手机配置编辑器 =====
+
+async function _updatePhoneAppsLabel() {
+  const label = document.getElementById('wv-phone-apps-label');
+  if (!label) return;
+  const w = await _getEditingWV();
+  if (!w) { label.textContent = '默认配置'; return; }
+  const pa = w.phoneApps || {};
+  const tkName = (pa.takeout || {}).name || '';
+  const shName = (pa.shop || {}).name || '';
+  const fmName = (pa.forum || {}).name || '';
+  if (!tkName && !shName && !fmName) {
+    label.textContent = '默认配置（饿了咪/桃宝/论坛）';
+  } else {
+    const parts = [];
+    if (tkName) parts.push(tkName);
+    if (shName) parts.push(shName);
+    if (fmName) parts.push(fmName);
+    label.textContent = parts.join(' / ');
+  }
+}
+
+async function openPhoneAppsEditor() {
+  const w = await _getEditingWV();
+  if (!w) { UI.showToast('请先选择世界观', 1200); return; }
+  w.phoneApps = w.phoneApps || { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' } };
+
+  let overlay = document.getElementById('phone-apps-editor-overlay');
+  if (overlay) overlay.remove();
+
+  overlay = document.createElement('div');
+  overlay.id = 'phone-apps-editor-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;animation:sbFadeIn .2s ease-out';
+  overlay.innerHTML = _buildPhoneAppsEditorHTML(w);
+  document.body.appendChild(overlay);
+
+  // 回填数据
+  const pa = w.phoneApps || {};
+  const tk = pa.takeout || {};
+  const sh = pa.shop || {};
+  const fm = pa.forum || {};
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  setVal('pa-takeout-name', tk.name);
+  setVal('pa-takeout-desc', tk.desc);
+  setVal('pa-takeout-deliveryMin', tk.deliveryMin);
+  setVal('pa-takeout-deliveryMax', tk.deliveryMax);
+  const tkUnitEl = document.getElementById('pa-takeout-deliveryUnit'); if (tkUnitEl) tkUnitEl.value = tk.deliveryUnit || 'min';
+  setVal('pa-shop-name', sh.name);
+  setVal('pa-shop-desc', sh.desc);
+  setVal('pa-shop-deliveryMin', sh.deliveryMin);
+  setVal('pa-shop-deliveryMax', sh.deliveryMax);
+  const shUnitEl = document.getElementById('pa-shop-deliveryUnit'); if (shUnitEl) shUnitEl.value = sh.deliveryUnit || 'day';
+  setVal('pa-forum-name', fm.name);
+  setVal('pa-forum-desc', fm.desc);
+}
+
+function _buildPhoneAppsEditorHTML(w) {
+  return `
+<div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between">
+  <div style="display:flex;align-items:center;gap:8px">
+    <button type="button" onclick="Worldview.closePhoneAppsEditor()" style="border:none;background:none;color:var(--text);cursor:pointer;padding:4px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <span style="font-size:16px;font-weight:600;color:var(--text)">手机配置</span>
+  </div>
+  <span style="font-size:12px;color:var(--text-secondary)">仅小手机内使用，不发给主线 AI</span>
+</div>
+<div style="flex:1;overflow-y:auto;padding:16px">
+
+  <!-- 短时效商城 -->
+  <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+    短时效商城
+    <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（默认：饿了咪·外卖）</span>
+  </div>
+  <div style="background:var(--bg-tertiary);padding:12px;border-radius:8px;margin-bottom:16px">
+    <label style="display:block;margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">商城名称</span>
+      <input type="text" id="pa-takeout-name" placeholder="例如：灵厨到家 / 补给空投" style="width:100%;padding:6px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+    </label>
+    <label style="display:block;margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">商城描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这家卖什么）</span></span>
+      <textarea id="pa-takeout-desc" class="auto-resize-textarea" rows="3" placeholder="例如：修真界即时灵厨外送，卖餐食、茶水、灵丹小点，短时效到手" style="width:100%;padding:8px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:60px"></textarea>
+    </label>
+    <div>
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">配送时间 <span style="font-size:11px;color:var(--text-secondary)">（留空用默认15-45分钟）</span></span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="number" id="pa-takeout-deliveryMin" placeholder="最小" style="width:70px;padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+        <span style="color:var(--text-secondary)">~</span>
+        <input type="number" id="pa-takeout-deliveryMax" placeholder="最大" style="width:70px;padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+        <select id="pa-takeout-deliveryUnit" style="padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px"><option value="min">分钟</option><option value="day">天</option></select>
+      </div>
+    </div>
+  </div>
+
+  <!-- 长时效商城 -->
+  <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+    长时效商城
+    <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（默认：桃宝·网购）</span>
+  </div>
+  <div style="background:var(--bg-tertiary);padding:12px;border-radius:8px;margin-bottom:16px">
+    <label style="display:block;margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">商城名称</span>
+      <input type="text" id="pa-shop-name" placeholder="例如：天机阁 / 主神商城" style="width:100%;padding:6px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+    </label>
+    <label style="display:block;margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">商城描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这家卖什么）</span></span>
+      <textarea id="pa-shop-desc" class="auto-resize-textarea" rows="3" placeholder="例如：修真界网购平台，卖法宝、丹药、符箓、灵草等长时效物品" style="width:100%;padding:8px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:60px"></textarea>
+    </label>
+    <div>
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">配送时间 <span style="font-size:11px;color:var(--text-secondary)">（留空用默认2-5天）</span></span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="number" id="pa-shop-deliveryMin" placeholder="最小" style="width:70px;padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+        <span style="color:var(--text-secondary)">~</span>
+        <input type="number" id="pa-shop-deliveryMax" placeholder="最大" style="width:70px;padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+        <select id="pa-shop-deliveryUnit" style="padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px"><option value="day">天</option><option value="min">分钟</option></select>
+      </div>
+    </div>
+  </div>
+
+  <!-- 信息载体 -->
+  <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+    信息载体
+    <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（默认：论坛）</span>
+  </div>
+  <div style="background:var(--bg-tertiary);padding:12px;border-radius:8px">
+    <label style="display:block;margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">载体名称</span>
+      <input type="text" id="pa-forum-name" placeholder="例如：微博 / 小红书 / 茶馆" style="width:100%;padding:6px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+    </label>
+    <label style="display:block">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">载体描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI内容画风、用户群、常见话题）</span></span>
+      <textarea id="pa-forum-desc" class="auto-resize-textarea" rows="3" placeholder="例如：修真界主流信息载体，用户多为各派弟子，常见丹方/剑修吐槽/门派八卦" style="width:100%;padding:8px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:60px"></textarea>
+    </label>
+  </div>
+
+</div>
+</div>`;
+}
+
+async function closePhoneAppsEditor() {
+  // 保存编辑器数据回世界观
+  const w = await _getEditingWV();
+  if (w) {
+    w.phoneApps = w.phoneApps || { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' } };
+    w.phoneApps.takeout = w.phoneApps.takeout || { name: '', desc: '' };
+    w.phoneApps.shop = w.phoneApps.shop || { name: '', desc: '' };
+    w.phoneApps.forum = w.phoneApps.forum || { name: '', desc: '' };
+    const getVal = (id) => document.getElementById(id)?.value || '';
+    w.phoneApps.takeout.name = getVal('pa-takeout-name');
+    w.phoneApps.takeout.desc = getVal('pa-takeout-desc');
+    w.phoneApps.takeout.deliveryMin = getVal('pa-takeout-deliveryMin');
+    w.phoneApps.takeout.deliveryMax = getVal('pa-takeout-deliveryMax');
+    w.phoneApps.takeout.deliveryUnit = getVal('pa-takeout-deliveryUnit') || 'min';
+    w.phoneApps.shop.name = getVal('pa-shop-name');
+    w.phoneApps.shop.desc = getVal('pa-shop-desc');
+    w.phoneApps.shop.deliveryMin = getVal('pa-shop-deliveryMin');
+    w.phoneApps.shop.deliveryMax = getVal('pa-shop-deliveryMax');
+    w.phoneApps.shop.deliveryUnit = getVal('pa-shop-deliveryUnit') || 'day';
+    w.phoneApps.forum.name = getVal('pa-forum-name');
+    w.phoneApps.forum.desc = getVal('pa-forum-desc');
+    // 同步回隐藏字段（供 _collectForm 兼容）
+    const syncHidden = (hid, val) => { const el = document.getElementById(hid); if (el) el.value = val; };
+    syncHidden('wv-takeout-name', w.phoneApps.takeout.name);
+    syncHidden('wv-takeout-desc', w.phoneApps.takeout.desc);
+    syncHidden('wv-takeout-deliveryMin', w.phoneApps.takeout.deliveryMin);
+    syncHidden('wv-takeout-deliveryMax', w.phoneApps.takeout.deliveryMax);
+    syncHidden('wv-takeout-deliveryUnit', w.phoneApps.takeout.deliveryUnit);
+    syncHidden('wv-shop-name', w.phoneApps.shop.name);
+    syncHidden('wv-shop-desc', w.phoneApps.shop.desc);
+    syncHidden('wv-shop-deliveryMin', w.phoneApps.shop.deliveryMin);
+    syncHidden('wv-shop-deliveryMax', w.phoneApps.shop.deliveryMax);
+    syncHidden('wv-shop-deliveryUnit', w.phoneApps.shop.deliveryUnit);
+    syncHidden('wv-forum-name', w.phoneApps.forum.name);
+    syncHidden('wv-forum-desc', w.phoneApps.forum.desc);
+    await _saveEditingWV(w);
+  }
+  const overlay = document.getElementById('phone-apps-editor-overlay');
+  if (overlay) overlay.remove();
+  _updatePhoneAppsLabel();
+}
+
 async function _calAddWeekDay() {
   const w = await _getEditingWV(); if (!w) return;
   const cal = _ensureCalendarSystem(w);
@@ -5680,6 +5866,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     addTaskPhase, deleteTaskPhase, updateTaskPhase, addTaskType, deleteTaskType, updateTaskType, updateTaskPhaseReward,
     openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal, onTaskTypeRewardModeChange, openPhaseRewardModal,
     openCalendarEditor, closeCalendarEditor,
+    openPhoneAppsEditor, closePhoneAppsEditor,
     _onCalWeekDayChange, _calAddWeekDay, _calRemoveWeekDay, _calToggleDayType, _calSetMonthMode, _calSetUniformDays, _calSetMonthDays, _calAddMonth, _calRemoveMonth,
     _calSetSeasonName, _calSetSeasonMonths, _calSetSeasonWeather, _calAddSeason, _calRemoveSeason, _calReset,
     _calSetPeriodName, _calSetPeriodHour, _calSetPeriodDesc, _calAddPeriod, _calRemovePeriod,

@@ -985,6 +985,105 @@ function _findTypeTemplate(config, phaseIndex, typeLabel) {
   return (phase.types || []).find(t => t.label === typeLabel) || null;
 }
 
+// 生成对话级短任务 id（4位 base36，AI 易抄回）
+function _genShortTaskId() {
+  return Math.random().toString(36).slice(2, 6);
+}
+
+// 生成一个在 existingList 中不冲突的短 id（最多重试若干次，兜底用时间戳）
+function _genUniqueTaskId(existingList) {
+  const used = new Set((existingList || []).map(a => _normTaskId(a && a.id)));
+  for (let i = 0; i < 20; i++) {
+    const id = _genShortTaskId();
+    if (!used.has(id)) return id;
+  }
+  // 极端兜底：拼时间戳尾段，几乎不可能再撞
+  return (_genShortTaskId() + Date.now().toString(36).slice(-2));
+}
+
+// 归一化 id：去掉 # 前缀、t_ 前缀、空白，转小写，方便宽松比对
+function _normTaskId(id) {
+  return String(id || '').trim().toLowerCase().replace(/^#/, '').replace(/^t_/, '');
+}
+
+// 归一化任务文本：去掉空白、标点、常见动词修饰词，方便模糊匹配
+function _normTaskText(text) {
+  let s = String(text || '').toLowerCase();
+  // 去掉所有空白和标点符号（含中英文标点）
+  s = s.replace(/[\s\u3000]+/g, '');
+  s = s.replace(/[，。、；：！？「」『』（）()\[\]【】《》<>~·…—\-_,.;:!?"'`]/g, '');
+  // 去掉表示"完成/进行"语义的常见修饰词，避免 AI 改写措辞导致失配
+  s = s.replace(/(完成了|完成|已经|已|去|对|的|进行|了|要|把|将|做完|做)/g, '');
+  return s;
+}
+
+// 字符二元组(bigram)集合，保留词序信息
+function _taskBigrams(s) {
+  const g = new Set();
+  for (let i = 0; i < s.length - 1; i++) g.add(s.slice(i, i + 2));
+  if (s.length === 1) g.add(s);
+  return g;
+}
+
+// 两段任务文本的相似度：包含关系=1，否则取 bigram Jaccard
+function _taskTextSim(t1, t2) {
+  const a = _normTaskText(t1), b = _normTaskText(t2);
+  if (!a || !b) return 0;
+  if (a === b || a.includes(b) || b.includes(a)) return 1;
+  const ga = _taskBigrams(a), gb = _taskBigrams(b);
+  if (!ga.size || !gb.size) return 0;
+  let inter = 0;
+  for (const x of ga) if (gb.has(x)) inter++;
+  return inter / (ga.size + gb.size - inter);
+}
+
+// 文本模糊匹配阈值：低于此值视为不同任务（防误伤）
+const _TASK_SIM_THRESHOLD = 0.4;
+
+// 多级匹配：在 active 任务里找出 AI 这条 t 指向的任务
+// 1) id 精确/宽松  2) text 精确  3) text 模糊（bigram Jaccard）  4) type 唯一兜底
+function _matchActiveTask(activeList, t) {
+  const actives = activeList.filter(a => a && a.status === 'active');
+  if (!actives.length) return null;
+
+  // 1. id 匹配（精确优先，再宽松比对：兼容 AI 带 #、带 t_ 前缀、长短 id）
+  if (t.id) {
+    const tid = _normTaskId(t.id);
+    if (tid) {
+      let hit = actives.find(a => _normTaskId(a.id) === tid);
+      if (!hit) hit = actives.find(a => {
+        const aid = _normTaskId(a.id);
+        return aid && tid && (aid.includes(tid) || tid.includes(aid));
+      });
+      if (hit) return hit;
+    }
+  }
+
+  const text = String(t.text || '').trim();
+  if (text) {
+    // 2. text 精确匹配
+    let hit = actives.find(a => a.text === text);
+    if (hit) return hit;
+
+    // 3. text 模糊匹配：取相似度最高且超过阈值的一条（解决 AI 改写措辞，同时防误伤）
+    let best = null, bestScore = 0;
+    for (const a of actives) {
+      const score = _taskTextSim(text, a.text);
+      if (score > bestScore) { bestScore = score; best = a; }
+    }
+    if (best && bestScore >= _TASK_SIM_THRESHOLD) return best;
+  }
+
+  // 4. type 唯一兜底：该类型在 active 中只剩一条，直接认定
+  const typeLabel = String(t.type || '').trim();
+  if (typeLabel) {
+    const sameType = actives.filter(a => a.type && a.type === typeLabel);
+    if (sameType.length === 1) return sameType[0];
+  }
+
+  return null;
+}
+
 // AI 输出 tasks 后调用——核心结算逻辑
 async function taskApply(tasksArr) {
   // 心动模拟走自己的 hsApplyTasks，这里跳过
@@ -1009,12 +1108,11 @@ async function taskApply(tasksArr) {
   // 1. 处理已有任务的状态变化（done / skipped）
   for (const t of tasksArr) {
     if (!t) continue;
-    const text = String(t.text || '').trim();
     const status = t.status || '';
-    if (!text) continue;
+    // done/skipped 才需要匹配已有任务；active 留到新增阶段处理
+    if (status !== 'done' && status !== 'skipped') continue;
 
-    const existing = ts.active.find(a => (t.id && a.id === t.id) || a.text === text)
-      || ts.active.find(a => a.status === 'active' && t.type && a.type === String(t.type).trim());
+    const existing = _matchActiveTask(ts.active, t);
     if (!existing) continue;
 
     if (status === 'done' && existing.status === 'active') {
@@ -1060,15 +1158,16 @@ async function taskApply(tasksArr) {
     changed = true;
   }
 
-  // 4. 如果任务栏空了，标记下一轮可发布（不是本轮发）
+  // 4. 如果任务栏空了，标记可发布（提示词据此催 AI 补发）
   if (ts.active.length === 0 && !ts.finished && !ts.pendingPublish) {
     ts.pendingPublish = true;
     changed = true;
   }
 
-  // 5. 新增 active 任务（仅当 pendingPublish 已就绪且本轮没有 active）
-  // 注意：这里不处理新增，新增由 AI 在下一轮输出（pendingPublish 标记会在 prompt 里通知 AI）
-  // 但如果 AI 在 pendingPublish 轮提交了新 active，这里接受
+  // 5. 接受 AI 新发布的 active 任务
+  // 闸门：进来时本就无任务（!hadActive），或本轮把任务清空了（length===0 && pendingPublish）。
+  // 这样既支持"同一轮完成整批 + 立即补发下一批"，也支持空栏轮补发；
+  // 但只要清算后还剩活跃任务（批次未清空），就不接受新任务——保留批次锁，防止任务膨胀。
   if (!hadActive || (ts.active.length === 0 && ts.pendingPublish)) {
     let addedCount = 0;
     for (const t of tasksArr) {
@@ -1082,8 +1181,14 @@ async function taskApply(tasksArr) {
       const typeLabel = String(t.type || '').trim();
       const tmpl = _findTypeTemplate(config, ts.phaseIndex, typeLabel);
 
+      // 分配 id：AI 带的先归一化，若为空或与现有 active 冲突则重新生成唯一 id
+      let newId = t.id ? _normTaskId(t.id) : '';
+      if (!newId || ts.active.some(a => _normTaskId(a.id) === newId)) {
+        newId = _genUniqueTaskId(ts.active);
+      }
+
       ts.active.push({
-        id: t.id || ('t_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5)),
+        id: newId,
         text,
         type: typeLabel,
         status: 'active'
@@ -1185,15 +1290,22 @@ async function taskRefreshFromLatestAI() {
   const phase = config.phases[ts.phaseIndex];
   const maxBatch = phase?.batchSize || 3;
 
-  const activeTasks = tasksArr
+  const activeTasks = [];
+  tasksArr
     .filter(t => t && (t.status || 'active') === 'active' && String(t.text || '').trim())
     .slice(0, maxBatch)
-    .map(t => ({
-      id: t.id || ('t_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5)),
-      text: String(t.text).trim(),
-      type: String(t.type || '').trim(),
-      status: 'active'
-    }));
+    .forEach(t => {
+      let newId = t.id ? _normTaskId(t.id) : '';
+      if (!newId || activeTasks.some(a => _normTaskId(a.id) === newId)) {
+        newId = _genUniqueTaskId(activeTasks);
+      }
+      activeTasks.push({
+        id: newId,
+        text: String(t.text).trim(),
+        type: String(t.type || '').trim(),
+        status: 'active'
+      });
+    });
 
   const before = ts.active.length;
   ts.active = activeTasks;
@@ -1220,6 +1332,10 @@ async function taskFormatForPrompt() {
 
   const lines = [];
   lines.push(`【任务系统·当前阶段${phase.name ? '：' + phase.name : ' ' + (ts.phaseIndex + 1)}】`);
+  // 任务栏为空时，把强制补发提示置于本段最前，确保 AI 优先看到
+  if (ts.active.length === 0) {
+    lines.push('⚠️ 当前没有正在活跃的任务。本轮你必须从下方「可用任务类型」中发布新的一批任务（用 ```tasks``` 代码块，status 填 active）。这是硬性要求，不要遗漏，也不要拖到下一轮。');
+  }
   lines.push(`本阶段进度：${ts.doneInPhase}/${phase.totalTasks}`);
   lines.push('');
 
@@ -1241,9 +1357,9 @@ async function taskFormatForPrompt() {
 
   // 当前活跃任务
   if (ts.active.length > 0) {
-    lines.push('当前活跃任务：');
+    lines.push('当前活跃任务（id 在每行行首的方括号内）：');
     ts.active.forEach(a => {
-      lines.push(`- [active] ${a.text}${a.type ? '（类型：' + a.type + '）' : ''}`);
+      lines.push(`- [#${a.id}] ${a.text}${a.type ? '（类型：' + a.type + '）' : ''}`);
     });
     lines.push('');
   }
@@ -1251,19 +1367,12 @@ async function taskFormatForPrompt() {
   // 规则
   lines.push('任务规则：');
   lines.push(`- 从可用类型中选择发布任务，每批最多 ${phase.batchSize || 3} 条。`);
-  lines.push('- 有活跃任务时不发新的，全部完成或跳过后的下一轮才可发布新任务。');
-  lines.push('- 输出格式：```tasks [{"text":"具体任务内容","type":"类型名","status":"active/done/skipped"}] ```');
+  lines.push('- 还有活跃任务时不要发布新任务；一旦本批任务全部完成或跳过、没有任何活跃任务了，请在同一轮立即补发新的一批，不要拖到下一轮。');
+  lines.push('- 输出格式：```tasks [{"id":"任务id","text":"具体任务内容","type":"类型名","status":"active/done/skipped"}] ```');
+  lines.push('- 标记任务为 done/skipped 时，务必带上该任务行首方括号里的 id（例如上面的 #a3f 就填 "id":"a3f"），系统靠 id 精确定位任务。新发布的 active 任务不用填 id，系统会自动分配。');
   lines.push('- AI 输出 type 字段时必须精确使用上面「可用任务类型」中列出的类型名称，不要自创类型名。');
   lines.push('- done/skipped 是结算事件，系统处理后会自动移除，不需要下一轮继续输出。');
   lines.push('- 【重要】标注"由游戏引擎自动结算"的任务奖励属性，引擎会在任务完成时自动增减对应数值，AI 不要在 custom-attrs 代码块中对这些属性重复操作。');
-
-  if (ts.active.length === 0) {
-    if (ts.pendingPublish) {
-      lines.push('- 任务栏已清空，本轮可以发布新一批任务。');
-    } else {
-      lines.push('- 任务栏为空但本轮刚清空，下一轮再发布新任务。');
-    }
-  }
 
   // 自由奖励提示：本轮有任务完成且带自由奖励，追加进 prompt 并清掉
   const freeRewards = ts.pendingFreeRewards;

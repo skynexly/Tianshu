@@ -36,6 +36,234 @@ const ConvGameplay = (() => {
     await Conversations.saveList();
   }
 
+  // ========== 同步世界观功能 ==========
+
+  // 同步属性：完全覆盖或追加模式
+  async function syncAttrsFromWorldview(mode) {
+    const conv = _getConv();
+    if (!conv) return;
+    const wvId = conv.singleWorldviewId || conv.worldviewId || '';
+    const wv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : null;
+    if (!wv || !wv.gameplay) {
+      UI.showToast('当前世界观无属性配置', 2000);
+      return;
+    }
+    const wvGlobal = wv.gameplay.globalAttrs || [];
+    const wvChar = wv.gameplay.characterAttrs || [];
+    if (wvGlobal.length === 0 && wvChar.length === 0) {
+      UI.showToast('世界观属性配置为空', 2000);
+      return;
+    }
+
+    if (mode === 'replace') {
+      // 完全覆盖：清空对话级数据，重置状态栏
+      const msg = '完全覆盖模式将：\n· 清空对话级属性配置\n· 用世界观原件覆盖\n· 重置状态栏数值为初始值\n\n不可撤销，确定继续？';
+      if (!await UI.showConfirm('完全覆盖属性', msg)) return;
+      conv.convGameplay = JSON.parse(JSON.stringify(wv.gameplay));
+      await Conversations.saveList();
+      // 重置状态栏
+      const sb = Conversations.getStatusBar() || {};
+      sb.customAttrs = { global: {}, characters: {} };
+      // 按初始值写入
+      (conv.convGameplay.globalAttrs || []).forEach(a => {
+        if (a && a.id) sb.customAttrs.global[a.id] = a.initial ?? 0;
+      });
+      (conv.convGameplay.characterAttrs || []).forEach(c => {
+        const key = [c?.targetType || '', c?.targetId || '', c?.sourceWorldviewId || ''].join(':');
+        sb.customAttrs.characters[key] = sb.customAttrs.characters[key] || {};
+        (c.attrs || []).forEach(a => {
+          if (a && a.id) sb.customAttrs.characters[key][a.id] = a.initial ?? 0;
+        });
+      });
+      await Conversations.setStatusBar(sb);
+      if (typeof StatusBar !== 'undefined' && StatusBar.refreshFromConv) StatusBar.refreshFromConv();
+      UI.showToast('已完全覆盖属性配置', 2000);
+    } else {
+      // 追加模式：更新已有定义，追加新属性，不动状态栏当前值
+      const msg = '追加覆盖模式将：\n· 更新已有属性的名称/描述/上限\n· 追加世界观新增的属性\n· 保留状态栏当前数值不变\n\n继续？';
+      if (!await UI.showConfirm('追加覆盖属性', msg)) return;
+      if (!conv.convGameplay) conv.convGameplay = { globalAttrs: [], characterAttrs: [], taskSystem: { phases: [] } };
+      if (!Array.isArray(conv.convGameplay.globalAttrs)) conv.convGameplay.globalAttrs = [];
+      if (!Array.isArray(conv.convGameplay.characterAttrs)) conv.convGameplay.characterAttrs = [];
+      
+      // 全局属性：按 id 合并（更新 name/desc/max，不动 initial）
+      const convGlobalIds = new Set(conv.convGameplay.globalAttrs.map(a => a.id));
+      wvGlobal.forEach(wvA => {
+        const exist = conv.convGameplay.globalAttrs.find(a => a.id === wvA.id);
+        if (exist) {
+          exist.name = wvA.name;
+          exist.desc = wvA.desc;
+          exist.max = wvA.max;
+          // initial 不更新，保持对话自定义
+        } else {
+          conv.convGameplay.globalAttrs.push(JSON.parse(JSON.stringify(wvA)));
+        }
+      });
+
+      // 角色属性：按 targetKey 合并
+      const _key = (c) => [c?.targetType || '', c?.targetId || '', c?.sourceWorldviewId || ''].join(':');
+      wvChar.forEach(wvC => {
+        const k = _key(wvC);
+        const exist = conv.convGameplay.characterAttrs.find(c => _key(c) === k);
+        if (exist) {
+          // 更新角色名、来源标签
+          exist.targetName = wvC.targetName;
+          exist.sourceLabel = wvC.sourceLabel;
+          // 按 id 合并属性
+          (wvC.attrs || []).forEach(wvA => {
+            const eA = (exist.attrs || []).find(a => a.id === wvA.id);
+            if (eA) {
+              eA.name = wvA.name;
+              eA.desc = wvA.desc;
+              eA.max = wvA.max;
+            } else {
+              if (!Array.isArray(exist.attrs)) exist.attrs = [];
+              exist.attrs.push(JSON.parse(JSON.stringify(wvA)));
+            }
+          });
+        } else {
+          conv.convGameplay.characterAttrs.push(JSON.parse(JSON.stringify(wvC)));
+        }
+      });
+
+      await Conversations.saveList();
+      // 状态栏：只给新属性写初始值，已有值不动
+      const sb = Conversations.getStatusBar() || {};
+      if (!sb.customAttrs) sb.customAttrs = { global: {}, characters: {} };
+      if (!sb.customAttrs.global) sb.customAttrs.global = {};
+      if (!sb.customAttrs.characters) sb.customAttrs.characters = {};
+      conv.convGameplay.globalAttrs.forEach(a => {
+        if (a && a.id && (sb.customAttrs.global[a.id] === undefined || sb.customAttrs.global[a.id] === null || sb.customAttrs.global[a.id] === '')) {
+          sb.customAttrs.global[a.id] = a.initial ?? 0;
+        }
+      });
+      conv.convGameplay.characterAttrs.forEach(c => {
+        const k = _key(c);
+        if (!sb.customAttrs.characters[k]) sb.customAttrs.characters[k] = {};
+        (c.attrs || []).forEach(a => {
+          if (a && a.id && (sb.customAttrs.characters[k][a.id] === undefined || sb.customAttrs.characters[k][a.id] === null || sb.customAttrs.characters[k][a.id] === '')) {
+            sb.customAttrs.characters[k][a.id] = a.initial ?? 0;
+          }
+        });
+      });
+      await Conversations.setStatusBar(sb);
+      if (typeof StatusBar !== 'undefined' && StatusBar.refreshFromConv) StatusBar.refreshFromConv();
+      UI.showToast('已追加覆盖属性配置', 2000);
+    }
+  }
+
+  // 同步事件：完全覆盖或追加模式
+  async function syncEventsFromWorldview(mode) {
+    const conv = _getConv();
+    if (!conv) return;
+    const wvId = conv.singleWorldviewId || conv.worldviewId || '';
+    const wv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : null;
+    if (!wv || !Array.isArray(wv.events) || wv.events.length === 0) {
+      UI.showToast('当前世界观无事件配置', 2000);
+      return;
+    }
+
+    if (mode === 'replace') {
+      // 完全覆盖：清空对话级事件和进度
+      const msg = '完全覆盖模式将：\n· 清空对话级事件配置\n· 用世界观原件覆盖\n· 清空所有事件进度\n\n不可撤销，确定继续？';
+      if (!await UI.showConfirm('完全覆盖事件', msg)) return;
+      conv.convEvents = JSON.parse(JSON.stringify(wv.events));
+      conv.eventStates = {};
+      await Conversations.saveList();
+      UI.showToast('已完全覆盖事件配置', 2000);
+    } else {
+      // 追加模式：更新已有事件定义，追加新事件，不动进度
+      const msg = '追加覆盖模式将：\n· 更新已有事件的名称/内容/关键词\n· 追加世界观新增的事件\n· 保留事件进度不变\n\n继续？';
+      if (!await UI.showConfirm('追加覆盖事件', msg)) return;
+      if (!Array.isArray(conv.convEvents)) conv.convEvents = [];
+      wv.events.forEach(wvE => {
+        const exist = conv.convEvents.find(e => e.id === wvE.id);
+        if (exist) {
+          // 更新定义，不动进度
+          exist.name = wvE.name;
+          exist.content = wvE.content;
+          exist.keys = wvE.keys;
+          exist.completeKey = wvE.completeKey;
+          exist.triggerType = wvE.triggerType;
+          exist.attrConditions = wvE.attrConditions;
+          exist.chainId = wvE.chainId;
+          exist.chainName = wvE.chainName;
+          exist.chainIndex = wvE.chainIndex;
+        } else {
+          conv.convEvents.push(JSON.parse(JSON.stringify(wvE)));
+        }
+      });
+      await Conversations.saveList();
+      UI.showToast('已追加覆盖事件配置', 2000);
+    }
+  }
+
+  // 同步任务：完全覆盖或追加模式
+  async function syncTasksFromWorldview(mode) {
+    const conv = _getConv();
+    if (!conv) return;
+    const wvId = conv.singleWorldviewId || conv.worldviewId || '';
+    const wv = (wvId && wvId !== '__default_wv__') ? await DB.get('worldviews', wvId) : null;
+    if (!wv || !wv.gameplay || !wv.gameplay.taskSystem || !Array.isArray(wv.gameplay.taskSystem.phases) || wv.gameplay.taskSystem.phases.length === 0) {
+      UI.showToast('当前世界观无任务配置', 2000);
+      return;
+    }
+
+    if (mode === 'replace') {
+      // 完全覆盖：清空对话级任务和进度
+      const msg = '完全覆盖模式将：\n· 清空对话级任务配置\n· 用世界观原件覆盖\n· 清空任务进度\n\n不可撤销，确定继续？';
+      if (!await UI.showConfirm('完全覆盖任务', msg)) return;
+      if (!conv.convGameplay) conv.convGameplay = { globalAttrs: [], characterAttrs: [], taskSystem: { phases: [] } };
+      conv.convGameplay.taskSystem = JSON.parse(JSON.stringify(wv.gameplay.taskSystem));
+      await Conversations.saveList();
+      // 重置任务进度
+      const sb = Conversations.getStatusBar() || {};
+      sb.taskSystem = { phaseIndex: 0, doneInPhase: 0, active: [], pendingPublish: false, finished: false };
+      await Conversations.setStatusBar(sb);
+      if (typeof StatusBar !== 'undefined' && StatusBar.refreshFromConv) StatusBar.refreshFromConv();
+      UI.showToast('已完全覆盖任务配置', 2000);
+    } else {
+      // 追加模式：更新已有阶段定义，追加新阶段，不动进度
+      const msg = '追加覆盖模式将：\n· 更新已有阶段的名称/类型/奖励\n· 追加世界观新增的阶段\n· 保留任务进度不变\n\n继续？';
+      if (!await UI.showConfirm('追加覆盖任务', msg)) return;
+      if (!conv.convGameplay) conv.convGameplay = { globalAttrs: [], characterAttrs: [], taskSystem: { phases: [] } };
+      if (!conv.convGameplay.taskSystem) conv.convGameplay.taskSystem = { phases: [] };
+      if (!Array.isArray(conv.convGameplay.taskSystem.phases)) conv.convGameplay.taskSystem.phases = [];
+      
+      wv.gameplay.taskSystem.phases.forEach(wvP => {
+        const exist = conv.convGameplay.taskSystem.phases.find(p => p.id === wvP.id);
+        if (exist) {
+          // 更新定义
+          exist.name = wvP.name;
+          exist.batchSize = wvP.batchSize;
+          exist.totalTasks = wvP.totalTasks;
+          exist.completionReward = JSON.parse(JSON.stringify(wvP.completionReward || { mode: 'none', attr: '', value: 0, free: '' }));
+          // types 也按 id 合并：更新已有、追加新增、保留对话自定义
+          if (!Array.isArray(exist.types)) exist.types = [];
+          (wvP.types || []).forEach(wvT => {
+            const eT = exist.types.find(t => t.id === wvT.id);
+            if (eT) {
+              // 更新已有类型定义
+              eT.label = wvT.label;
+              eT.desc = wvT.desc;
+              eT.rewardMode = wvT.rewardMode;
+              eT.rewardAttr = wvT.rewardAttr;
+              eT.rewardValue = wvT.rewardValue;
+              eT.rewardFree = wvT.rewardFree;
+            } else {
+              // 追加世界观新增的类型
+              exist.types.push(JSON.parse(JSON.stringify(wvT)));
+            }
+          });
+        } else {
+          conv.convGameplay.taskSystem.phases.push(JSON.parse(JSON.stringify(wvP)));
+        }
+      });
+      await Conversations.saveList();
+      UI.showToast('已追加覆盖任务配置', 2000);
+    }
+  }
+
   // ========== 事件卡片列表 ==========
 
   let _eventsData = [];
@@ -1543,6 +1771,7 @@ ${recentMessages}`;
     debugDump,
     addTaskPhase, deleteTaskPhase, updateTaskPhase, aiGenerateTaskTypes,
     openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal,
-    openPhaseRewardModal, onTaskRewardModeChange
+    openPhaseRewardModal, onTaskRewardModeChange,
+    syncAttrsFromWorldview, syncEventsFromWorldview, syncTasksFromWorldview
   };
 })();

@@ -4879,7 +4879,6 @@ background: transparent !important;
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
 }
 .phone-radio-detail-back {
   flex-shrink: 0;
@@ -4892,6 +4891,17 @@ background: transparent !important;
   align-items: center;
 }
 .phone-radio-detail-headinfo { flex: 1; min-width: 0; }
+.phone-radio-detail-set {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+}
+.phone-radio-detail-set:active { transform: scale(0.9); }
 .phone-radio-detail-name {
   font-size: 16px;
   font-weight: 700;
@@ -4931,28 +4941,116 @@ background: transparent !important;
   min-height: 0;
   overflow-y: auto;
   padding: 18px 16px 32px;
+  position: relative;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 24px), transparent 100%);
 }
 .phone-radio-detail-meta {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  text-align: center;
-  padding-bottom: 18px;
-  margin-bottom: 18px;
-  border-bottom: 1px dashed var(--border);
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  flex-shrink: 0;
+  padding: 8px 16px 8px;
 }
 .phone-radio-detail-show { font-size: 18px; font-weight: 700; color: var(--text); }
-.phone-radio-detail-tags { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.phone-radio-detail-info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.phone-radio-detail-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .phone-radio-detail-host { font-size: 12px; color: var(--text-secondary); }
 .phone-radio-detail-dur { font-size: 12px; color: var(--accent); font-weight: 600; }
+/* 段落逐条浮现 */
+.phone-radio-detail-body [data-seg-idx] {
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.phone-radio-detail-body [data-seg-idx].seg-hidden {
+  opacity: 0;
+  transform: translateY(16px);
+}
+.phone-radio-detail-end.seg-hidden { opacity: 0; }
+.phone-radio-detail-end { transition: opacity 0.5s ease; }
+/* 未播提示：居中小字 */
+.phone-radio-detail-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 13px;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+.phone-radio-detail-hint.hint-hidden { opacity: 0; }
+/* 互动卡片：读留言 */
+.phone-radio-interact {
+  align-self: center;
+  max-width: 94%;
+  margin: 14px auto;
+  padding: 16px 18px;
+  border-radius: 14px;
+  text-align: center;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--decoration) 14%, transparent));
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.phone-radio-interact-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.phone-radio-interact-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+.phone-radio-interact-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.phone-radio-interact-btn {
+  padding: 9px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.phone-radio-interact-btn.ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.phone-radio-interact-btn:disabled { opacity: 0.55; cursor: default; }
+/* 互动卡片已完成态 */
+.phone-radio-interact.done,
+.phone-radio-interact.skip {
+  background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
+  border-color: color-mix(in srgb, var(--text-secondary) 25%, transparent);
+}
+.phone-radio-interact.done .phone-radio-interact-desc {
+  color: var(--accent);
+}
+.phone-radio-interact.skip .phone-radio-interact-desc {
+  color: var(--text-tertiary);
+}
 /* 叙述行：居中圆角小卡片（学通话） */
 .phone-radio-narr {
   align-self: center;
   max-width: 92%;
   margin: 12px auto;
   padding: 8px 16px;
-  border-radius: 14px;
+  border-radius: 20px;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   font-size: 12.5px;
@@ -4962,14 +5060,13 @@ background: transparent !important;
 /* 台词气泡 */
 .phone-radio-line {
   display: flex;
-  gap: 10px;
+  flex-direction: column;
   margin: 14px 0;
-  align-items: flex-end;
 }
 .phone-radio-line-avatar {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   overflow: hidden;
 }
@@ -4987,8 +5084,14 @@ background: transparent !important;
 }
 .phone-radio-line.is-host .phone-radio-line-avatar-fallback { background: var(--accent); }
 .phone-radio-line.is-guest .phone-radio-line-avatar-guest { background: var(--decoration); }
-.phone-radio-line-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; max-width: 78%; }
-.phone-radio-line-name { font-size: 11px; color: var(--text-secondary); padding-left: 2px; }
+.phone-radio-line-avatar-guest svg { width: 15px; height: 15px; }
+.phone-radio-line-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.phone-radio-line-name { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
 .phone-radio-line-bubble {
   padding: 9px 13px;
   border-radius: 4px 16px 16px 16px;
@@ -4998,10 +5101,16 @@ background: transparent !important;
   line-height: 1.65;
   word-break: break-word;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  margin-left: 0;
+  max-width: 100%;
 }
 .phone-radio-line.is-guest .phone-radio-line-bubble {
   background: color-mix(in srgb, var(--decoration) 12%, var(--bg-secondary));
+  border-radius: 16px 4px 16px 16px;
 }
+/* 嘉宾整体靠右：头像名字行反向、气泡右对齐 */
+.phone-radio-line.is-guest { align-items: flex-end; }
+.phone-radio-line.is-guest .phone-radio-line-head { flex-direction: row-reverse; }
 .phone-radio-detail-interact:empty { display: none; }
 .phone-radio-detail-end {
   text-align: center;
@@ -5009,4 +5118,363 @@ background: transparent !important;
   color: var(--text-secondary);
   margin-top: 28px;
   letter-spacing: .1em;
+}
+/* 详情页底部播放器（照搬音乐播放器详情） */
+.phone-radio-detail-player {
+  flex-shrink: 0;
+  padding: 12px 20px calc(16px + env(safe-area-inset-bottom));
+  background: var(--bg);
+}
+.phone-radio-player-progress { 
+  padding: 8px 0; 
+  display: flex;
+  justify-content: center;
+}
+/* 频谱动画 */
+.phone-radio-spectrum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 20px;
+  width: 100%;
+}
+.phone-radio-spectrum-bar {
+  display: block;
+  width: 3px;
+  height: 8px;
+  background: linear-gradient(to top, var(--accent), var(--decoration));
+  border-radius: 2px;
+  transform-origin: center;
+}
+.phone-radio-spectrum.playing .phone-radio-spectrum-bar {
+  animation: spectrum-wave 0.8s ease-in-out infinite;
+}
+@keyframes spectrum-wave {
+  0%, 100% { transform: scaleY(0.5); opacity: 0.5; }
+  50% { transform: scaleY(1.4); opacity: 1; }
+}
+.phone-radio-player-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 8px 2px;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-detail-player {
+  background: rgba(18, 20, 28, 0.35);
+}
+
+/* ===== 电台设置页 ===== */
+.phone-radio-set-tabs {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  padding: 4px 16px 10px;
+}
+.phone-radio-set-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 9px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-radius: 12px;
+  transition: all 0.18s;
+}
+.phone-radio-set-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+.phone-radio-set-section { margin-bottom: 18px; }
+.phone-radio-set-cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  background-color: var(--bg-secondary);
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+  overflow: hidden;
+}
+.phone-radio-set-cover-ph {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  font-size: 13px;
+}
+.phone-radio-set-cover-edit {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.phone-radio-set-field {
+  flex: 1;
+  margin-bottom: 16px;
+}
+.phone-radio-set-field-row {
+  display: flex;
+  gap: 12px;
+}
+.phone-radio-set-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 7px;
+}
+.phone-radio-set-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.phone-radio-set-field input,
+.phone-radio-set-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg-secondary);
+  font-family: inherit;
+  resize: none;
+  line-height: 1.5;
+}
+.phone-radio-set-field input:focus,
+.phone-radio-set-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.phone-radio-set-tip {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+}
+.phone-radio-set-save {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  padding: 13px 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
+}
+.phone-radio-set-save:active { transform: scale(0.98); }
+
+/* 历史节目列表 */
+.phone-radio-hist-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 48px 24px;
+  line-height: 1.7;
+}
+.phone-radio-hist-list { display: flex; flex-direction: column; gap: 10px; }
+.phone-radio-hist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+.phone-radio-hist-item:active { transform: scale(0.98); }
+.phone-radio-hist-cover {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--accent);
+}
+.phone-radio-hist-cover-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.phone-radio-hist-cover-ph svg { width: 22px; height: 22px; }
+.phone-radio-hist-info { flex: 1; min-width: 0; }
+.phone-radio-hist-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone-radio-hist-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone-radio-hist-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+.phone-radio-hist-tag {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.phone-radio-hist-time {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+.phone-radio-hist-play {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg, #fff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.phone-radio-hist-play svg { width: 18px; height: 18px; }
+.phone-shell.has-custom-wallpaper .phone-radio-hist-play { background: #fff; color: #222; }
+
+/* 语音朗读区块 */
+.phone-radio-set-voice {
+  margin-bottom: 16px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--bg-secondary);
+}
+.phone-radio-set-voice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.phone-radio-set-voice-body { margin-top: 14px; }
+.phone-radio-set-voice-body .phone-radio-set-field input,
+.phone-radio-set-voice-body .phone-radio-set-field select {
+  background: var(--bg);
+}
+.phone-radio-set-field select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg-secondary);
+  font-family: inherit;
+}
+.phone-radio-engine-tabs {
+  display: flex;
+  gap: 8px;
+}
+.phone-radio-engine-tab {
+  flex: 1;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-secondary);
+  border-radius: 10px;
+  padding: 9px 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.phone-radio-engine-tab.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+/* 开关 */
+.phone-radio-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 26px;
+  flex-shrink: 0;
+}
+.phone-radio-switch input { opacity: 0; width: 0; height: 0; }
+.phone-radio-switch-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 13px;
+  transition: 0.2s;
+}
+.phone-radio-switch-slider::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: 0.2s;
+}
+.phone-radio-switch input:checked + .phone-radio-switch-slider { background: var(--accent); }
+.phone-radio-switch input:checked + .phone-radio-switch-slider::before { transform: translateX(18px); }
+
+/* 角色独立音色区块 */
+.phone-radio-role-block {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bg);
+}
+.phone-radio-role-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.phone-radio-role-block .phone-radio-engine-tabs { margin-bottom: 10px; }
+.phone-radio-voice-pick {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg-secondary);
+  font-family: inherit;
+}
+.phone-radio-voice-pick:focus {
+  outline: none;
+  border-color: var(--accent);
 }

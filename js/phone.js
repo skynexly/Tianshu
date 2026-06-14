@@ -1321,7 +1321,7 @@ async function openApp(appId) {
 // 未完成的APP：直接拦截，不进入APP模式
 if (appId === 'email') { UI.showToast('邮箱开发中...', 1500); return; }
 if (appId === 'radio') { UI.showToast('电台开发中...', 1500); return; }
-  // 记住当前页面滚动位置，返回时恢复
+    // 记住当前页面滚动位置，返回时恢复
   try {
     const pages = document.getElementById('phone-pages');
     if (pages) _lastPageScroll = pages.scrollLeft;
@@ -1996,36 +1996,42 @@ async function _claimTransfer(contactId, msgId) {
 
 // 实际执行收取：加余额 + 标记 + 重渲染
 async function _doClaimTransfer(contactId, msgId, attrId, amount) {
+  const pd = await _getPhoneData();
+  if (!pd) { UI.showToast('数据异常', 1500); return; }
+  const thread = pd?.chatThreads?.[contactId];
+  if (!thread) { UI.showToast('会话不存在', 1500); return; }
+  const msg = thread.find(m => m.id === msgId);
+  if (!msg) { UI.showToast('消息不存在', 1500); return; }
+  if (msg.transferClaimed) { UI.showToast('已收取', 1200); return; }
+
+  const amountNum = parseFloat(amount) || 0;
+  if (amountNum <= 0) { UI.showToast('金额无效', 1500); return; }
+
   try {
-    const sb = Conversations.getStatusBar() || {};
+    // 1. 加余额
+    const sb = Conversations.getStatusBar();
+    if (!sb) { throw new Error('状态栏不存在，请先初始化游戏属性'); }
     if (!sb.customAttrs) sb.customAttrs = {};
     if (!sb.customAttrs.global) sb.customAttrs.global = {};
     const cur = parseFloat(sb.customAttrs.global[attrId] || 0);
-    sb.customAttrs.global[attrId] = cur + (parseFloat(amount) || 0);
+    const newVal = cur + amountNum;
+    sb.customAttrs.global[attrId] = newVal;
     await Conversations.setStatusBar(sb);
     if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
-  } catch(e) {
-    UI.showToast('收取失败：' + (e.message || ''), 2000);
-    return;
-  }
-  // 标记已收取
-  const pd = await _getPhoneData();
-  const thread = pd?.chatThreads?.[contactId];
-  if (thread) {
-    const msg = thread.find(m => m.id === msgId);
-    if (msg) msg.transferClaimed = true;
-  }
-  // 记账：收款（仅绑定货币）
-  try {
+
+    // 2. 标记已收取
+    msg.transferClaimed = true;
+
+    // 3. 记账（收款，仅绑定货币）
     const infos = _getWalletCurrencyInfos();
-    if (pd && infos.some(c => c.id === attrId)) {
+    if (infos.some(c => c.id === attrId)) {
       const _ctName = (pd.chatContacts || []).find(c => c.id === contactId)?.name || contactId;
       pd.ledger = pd.ledger || [];
       pd.ledger.push({
         id: 'le_' + Utils.uuid().slice(0, 8),
         time: _getGameTime() || '',
         currencyId: attrId,
-        amount: Math.abs(parseFloat(amount) || 0),
+        amount: Math.abs(amountNum),
         category: '收款',
         note: '',
         platform: '',
@@ -2035,11 +2041,29 @@ async function _doClaimTransfer(contactId, msgId, attrId, amount) {
       });
       pd.ledger = pd.ledger.slice(-300);
     }
-  } catch(_) {}
-  await _savePhoneData();
-  UI.showToast('已收取', 1500);
-  // 重渲染气泡
-  try { _renderChatThread(pd, contactId); } catch(_) {}
+
+    await _savePhoneData();
+    
+    // 记录操作日志（成功）
+    const _ctName = (pd.chatContacts || []).find(c => c.id === contactId)?.name || contactId;
+    try {
+      const attrDef = (typeof Conversations !== 'undefined' && Conversations.getGlobalAttrs) ? Conversations.getGlobalAttrs().find(a => a.id === attrId) : null;
+      const attrName = attrDef ? attrDef.name : attrId;
+      _log(`收取了来自 ${_ctName} 的转账：${amountNum} ${attrName}`);
+    } catch(_) {}
+    
+    UI.showToast('已收取', 1500);
+    // 重渲染气泡
+    try { _renderChatThread(pd, contactId); } catch(_) {}
+  } catch(e) {
+    // 记录操作日志（失败）
+    const _ctName = (pd.chatContacts || []).find(c => c.id === contactId)?.name || contactId;
+    _log(`[异常] 转账收取失败：来自 ${_ctName} 的 ${amountNum}，错误：${e.message || '未知'}。请检查游戏属性配置和余额状态。`);
+    
+    console.error('[转账收取失败]', e);
+    UI.showToast('收取失败：' + (e.message || '未知错误'), 2000);
+    // 失败时不标记 claimed，用户可以重试
+  }
 }
 
 // ===== 反向交易：char 卖货给 user，user 点击购买 =====
@@ -5484,7 +5508,499 @@ ${wvPrompt}`;
 演播室里短暂的沉默，能听见杯子轻放在桌面的声音。
 > 林岸：是的，这也是为什么今晚很多市民守在收音机前。我们会持续跟进这件事的后续。
 > 老王：希望相关部门能把信息公开做得更透明一些，别让大家靠猜。
+垫乐轻轻流淌，林岸放下稿纸，语气松弛下来。
+> 林岸：节目进行到这里，我们来读几条今晚听众发来的留言吧。
+[[读留言]]
 垫乐重新浮起，节目进入下一个环节。`;
+
+  // ===== 电台朗读控制器（系统 TTS / MiniMax）=====
+  // 只读主播和嘉宾台词，跳过叙述段；主播=第一个开口的人
+  let _radioRepeatMode = 'list';  // 'list' 列表循环 | 'one' 单期循环
+  const _RadioSpeaker = (() => {
+    let _speaking = false;
+    let _abort = false;
+    let _onState = null;
+    let _onSeg = null;   // 段落浮现回调：(segIdx) => void
+    let _onEnd = null;   // 朗读自然结束回调（非中断）
+    let _onInteract = null;  // 互动暂停回调：(segIdx, interactType) => void
+    let _noiseCtx = null;   // Web Audio 底噪上下文
+    let _noiseGain = null;   // 底噪音量节点
+    let _noiseSrc = null;    // 底噪源节点
+    const NOISE_BASE = 0.08;  // 底噪基准音量
+    const NOISE_DUCK = 0.025; // 说话时压低到的音量
+
+    function _systemVoiceByURI(uri) {
+      if (!uri) return null;
+      try {
+        const all = window.speechSynthesis.getVoices() || [];
+        return all.find(v => (v.voiceURI || v.name) === uri) || null;
+      } catch (_) { return null; }
+    }
+
+    function _speakSystemLine(text, voiceURI) {
+      return new Promise((resolve) => {
+        try {
+          const u = new SpeechSynthesisUtterance(text);
+          const v = _systemVoiceByURI(voiceURI);
+          if (v) { u.voice = v; u.lang = v.lang; }
+          else u.lang = 'zh-CN';
+          u.rate = 1.0; u.pitch = 1.0;
+          u.onend = () => resolve();
+          u.onerror = () => resolve();
+          window.speechSynthesis.speak(u);
+        } catch (_) { resolve(); }
+      });
+    }
+
+    // ===== 底噪合成（白噪声 + 低通滤波，模拟电台电流声）=====
+    function _startNoise() {
+      try {
+        if (_noiseCtx) { _noiseCtx.resume(); return; }
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const bufSize = 2 * ctx.sampleRate; // 2秒循环
+        const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        // 白噪声
+        for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+        // 低通滤波：切掉高频，只留闷闷的嘶嘶声
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 1800;
+        filter.Q.value = 0.7;
+        // 音量压到很低（基准）
+        const gain = ctx.createGain();
+        gain.gain.value = NOISE_BASE;
+        // 淡入
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(NOISE_BASE, ctx.currentTime + 0.8);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        src.start();
+        _noiseCtx = ctx;
+        _noiseGain = gain;
+        _noiseSrc = src;
+      } catch (_) {}
+    }
+
+    // ducking：说话时压低底噪
+    function _duckNoise(down) {
+      try {
+        if (_noiseGain && _noiseCtx) {
+          const t = _noiseCtx.currentTime;
+          _noiseGain.gain.cancelScheduledValues(t);
+          _noiseGain.gain.linearRampToValueAtTime(down ? NOISE_DUCK : NOISE_BASE, t + 0.25);
+        }
+      } catch (_) {}
+    }
+
+    function _stopNoise() {
+      try {
+        if (_noiseGain && _noiseCtx) {
+          // 淡出
+          _noiseGain.gain.linearRampToValueAtTime(0, _noiseCtx.currentTime + 0.5);
+          const ctx = _noiseCtx;
+          const src = _noiseSrc;
+          setTimeout(() => {
+            try { src && src.stop(); } catch (_) {}
+            try { ctx && ctx.close(); } catch (_) {}
+          }, 600);
+        }
+      } catch (_) {}
+      _noiseCtx = null;
+      _noiseGain = null;
+      _noiseSrc = null;
+    }
+
+    // 把正文拆成 [{ isHost, text }] 或 [{ isPause, ms }]，台词朗读、叙述按字数停顿
+    function _buildLines(rawBody, prog) {
+      const segs = _parseRadioReply(rawBody);
+      let djName = '';
+      const first = segs.find(s => s.kind !== 'desc' && s.speaker);
+      if (first) djName = first.speaker;
+      if (!djName) djName = (prog && prog.dj) || '';
+      const lines = [];
+      let segIdx = 0;
+      for (const s of segs) {
+        if (!s.text) continue;
+        if (s.kind === 'interact') {
+          // 互动锚点：未完成态才暂停，done/skip 态跳过（卡片仅展示）
+          if (!s.state || s.state === '') {
+            lines.push({ isInteract: true, interact: s.interact || 'mail', segIdx });
+          }
+          // done/skip 态：不进 lines，朗读时直接跳过（段落浮现时卡片照常显示）
+        } else if (s.kind === 'desc') {
+          // 叙述段落：按字数计算停顿时长（每 10 字约 1 秒，最少 1.5 秒，最多 6 秒）
+          const charCount = s.text.replace(/\s/g, '').length;
+          const ms = Math.min(6000, Math.max(1500, Math.round(charCount / 10) * 1000));
+          lines.push({ isPause: true, ms, segIdx });
+        } else {
+          const isHost = !s.speaker || s.speaker === djName;
+          lines.push({ isHost, text: s.text, segIdx });
+        }
+        segIdx++;
+      }
+      return lines;
+    }
+
+    async function start(rawBody, prog, onState, onSeg, onEnd, opts) {
+      stop();
+      opts = opts || {};
+      const startSeg = (typeof opts.startSeg === 'number') ? opts.startSeg : -1;
+      _onState = onState || null;
+      _onSeg = onSeg || null;
+      _onEnd = onEnd || null;
+      _onInteract = opts.onInteract || null;
+      const voice = (prog && prog.voice) || {};
+      const voiceEnabled = !!voice.enabled;
+      const djCfg = (voice.dj && typeof voice.dj === 'object') ? voice.dj : { engine: voice.engine || 'system', voice: voice.dj || '' };
+      const guestCfg = (voice.guest && typeof voice.guest === 'object') ? voice.guest : { engine: voice.engine || 'system', voice: voice.guest || '' };
+      const useNoise = !!voice.noise;
+        const useRadioFx = !!voice.radioEffect;
+      const lines = _buildLines(rawBody, prog);
+      if (!lines.length) { UI.showToast('没有可朗读的台词', 1500); return; }
+
+      _abort = false;
+      _speaking = true;
+      if (_onState) _onState(true);
+
+      let interactSeg = -1, interactType = '';
+
+      try {
+        for (const line of lines) {
+          if (_abort) break;
+          // 恢复播放：跳过已读段（segIdx <= startSeg，含互动锚点本身）
+          if (startSeg >= 0 && typeof line.segIdx === 'number' && line.segIdx <= startSeg) continue;
+          // 互动锚点：浮现按钮卡片，暂停朗读等玩家互动
+          if (line.isInteract) {
+            if (_onSeg && typeof line.segIdx === 'number') { try { _onSeg(line.segIdx); } catch (_) {} }
+            interactSeg = line.segIdx;
+            interactType = line.interact || 'mail';
+            break;
+          }
+          // 通知 UI：当前段落浮现
+          if (_onSeg && typeof line.segIdx === 'number') { try { _onSeg(line.segIdx); } catch (_) {} }
+          // 叙述段落：根据字数停顿
+          if (line.isPause) {
+            if (useNoise) _duckNoise(false);  // 停顿期间恢复底噪
+            await new Promise(r => setTimeout(r, line.ms));
+            continue;
+          }
+          const cfg = line.isHost ? djCfg : guestCfg;
+          const engine = cfg.engine === 'minimax' ? 'minimax' : 'system';
+          const voiceId = cfg.voice || '';
+          if (useNoise) _duckNoise(true);   // 说话时压低底噪
+          if (!voiceEnabled) {
+            // 未启用语音：跳过朗读，短暂停顿模拟阅读节奏
+            if (useNoise) _duckNoise(false);
+            const simMs = Math.min(2000, Math.max(400, Math.round(line.text.length / 10) * 200));
+            await new Promise(r => setTimeout(r, simMs));
+            continue;
+          }
+          if (engine === 'system') {
+            await _speakSystemLine(line.text, voiceId);
+          } else {
+              if (typeof TTS === 'undefined') { UI.showToast('语音模块未加载', 1500); break; }
+              try {
+                // 收音机音效：MiniMax 路径接 Web Audio 带通滤波
+                if (useRadioFx) _startRadioFx();
+                await TTS.speak(line.text, { msgId: 'radio-' + Date.now(), voiceId: voiceId || undefined });
+              } catch (e) {
+                UI.showToast('朗读失败：' + (e && e.message ? e.message : ''), 2000);
+                break;
+              } finally {
+                if (useRadioFx) _stopRadioFx();
+              }
+          }
+          if (useNoise) _duckNoise(false);  // 间隙恢复底噪
+        }
+      } finally {
+        const wasAborted = _abort;
+        _speaking = false;
+        _duckNoise(false);  // 朗读结束恢复底噪
+        if (useRadioFx) _stopRadioFx();
+        if (_onState) { try { _onState(false); } catch (_) {} _onState = null; }
+        _onSeg = null;
+        const endCb = _onEnd;
+        const interactCb = _onInteract;
+        _onEnd = null;
+        _onInteract = null;
+        if (interactSeg >= 0) {
+          // 互动暂停：触发互动回调（不算播完，不进循环）
+          if (interactCb) { try { interactCb(interactSeg, interactType); } catch (_) {} }
+        } else if (!wasAborted && endCb) {
+          // 自然播完（非中断）→ 触发结束回调（循环/下一期）
+          try { endCb(); } catch (_) {}
+        }
+      }
+    }
+
+    function stop() {
+      _abort = true;
+      _speaking = false;
+      _duckNoise(false);  // 中断朗读时恢复底噪
+      try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch (_) {}
+      try { if (typeof TTS !== 'undefined') TTS.stop(); } catch (_) {}
+      if (_onState) { try { _onState(false); } catch (_) {} _onState = null; }
+      _onSeg = null;
+      _onEnd = null;
+      _onInteract = null;
+    }
+
+    function isSpeaking() { return _speaking; }
+
+    // MiniMax 收音机效果：找到当前正在播放的 <audio> 元素，接进带通滤波
+    let _radioFxNode = null;
+    let _radioFxCtx = null;
+    function _startRadioFx() {
+      try {
+        // 找 TTS 播放用的 audio 元素
+        const audio = document.querySelector('audio[src]');
+        if (!audio) return;
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = ctx.createMediaElementSource(audio);
+        // 带通滤波：模拟老收音机的窄频响
+        const bandpass = ctx.createBiquadFilter();
+        bandpass.type = 'bandpass';
+        bandpass.frequency.value = 2200;
+        bandpass.Q.value = 1.2;
+        // 高频去齿声
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 300;
+        // 轻微失真
+        const waveshaper = ctx.createWaveShaper();
+        const nSamples = 44100;
+        const curve = new Float32Array(nSamples);
+        for (let i = 0; i < nSamples; i++) {
+          const x = (i * 2) / nSamples - 1;
+          curve[i] = (Math.PI + 2.5) * x / (Math.PI + 2.5 * Math.abs(x));
+        }
+        waveshaper.curve = curve;
+        // 音量微压
+        const gain = ctx.createGain();
+        gain.gain.value = 0.85;
+        src.connect(bandpass);
+        bandpass.connect(hp);
+        hp.connect(waveshaper);
+        waveshaper.connect(gain);
+        gain.connect(ctx.destination);
+        _radioFxCtx = ctx;
+        _radioFxNode = { src, bandpass, hp, waveshaper, gain };
+      } catch (_) {}
+    }
+    function _stopRadioFx() {
+      try {
+        if (_radioFxCtx) { _radioFxCtx.close(); }
+      } catch (_) {}
+      _radioFxCtx = null;
+      _radioFxNode = null;
+    }
+return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise, startRadioFx: _startRadioFx, stopRadioFx: _stopRadioFx };
+  })();
+
+  // 生成 n 根频谱条（带错开的动画延迟，形成波浪起伏）
+  function _radioSpectrumBars(n) {
+    let html = '';
+    for (let i = 0; i < n; i++) {
+      // 延迟在 0~0.4s 间来回，制造连续波浪
+      const phase = (i % 16);
+      const delay = (phase <= 8 ? phase : 16 - phase) * 0.05;
+      html += `<span class="phone-radio-spectrum-bar" style="animation-delay:${delay}s"></span>`;
+    }
+    return html;
+  }
+
+  // 段落逐条浮现：初始化为"未播"态——隐藏所有段落和结束语，显示中间提示
+  function _radioRevealInit(overlay) {
+    const segs = overlay.querySelectorAll('.phone-radio-detail-body [data-seg-idx]');
+    segs.forEach(el => el.classList.add('seg-hidden'));
+    const hint = overlay.querySelector('.phone-radio-detail-hint');
+    if (hint) hint.classList.remove('hint-hidden');
+  }
+  // 开始播放：隐藏中间提示（段落随朗读逐条浮现）
+  function _radioRevealStart(overlay) {
+    const hint = overlay.querySelector('.phone-radio-detail-hint');
+    if (hint) hint.classList.add('hint-hidden');
+  }
+  // 全部立即显示（朗读自然结束时，把没浮现的也补上、显示结束语）
+  function _radioRevealAll(overlay) {
+    const segs = overlay.querySelectorAll('.phone-radio-detail-body [data-seg-idx]');
+    segs.forEach(el => el.classList.remove('seg-hidden'));
+    const hint = overlay.querySelector('.phone-radio-detail-hint');
+    if (hint) hint.classList.add('hint-hidden');
+  }
+// 让指定索引段落浮现，并滚动到可见
+  function _radioRevealSeg(overlay, idx) {
+    const el = overlay.querySelector(`.phone-radio-detail-body [data-seg-idx="${idx}"]`);
+    if (!el) return;
+    el.classList.remove('seg-hidden');
+    try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+  }
+
+  // ===== 留言玩法 =====
+  // 取玩家默认署名：网名 → 真名 → 空
+  function _radioPlayerName() {
+    try {
+      const mk = (typeof Character !== 'undefined' && Character.getMask) ? Character.getMask() : null;
+      return (mk && (mk.onlineName || mk.name)) || '';
+    } catch (_) { return ''; }
+  }
+  // 取当前地区（状态栏）
+  function _radioCurrentRegion() {
+    try {
+      const sb = Conversations.getStatusBar() || {};
+      return sb.region || sb.location || '';
+    } catch (_) { return ''; }
+  }
+
+  // 留言输入弹窗。返回 Promise<{name, region, content}|null>（取消为 null）
+  function _radioMailInput() {
+    return new Promise((resolve) => {
+      const defName = _radioPlayerName();
+      const defRegion = _radioCurrentRegion();
+      const mask = document.createElement('div');
+      mask.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+          <div style="font-size:15px;font-weight:600;margin-bottom:4px">${_radioMailSvg()}给主播留言</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px">写下你想说的话，主播会在节目里读出来</div>
+
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">署名</label>
+          <input id="radio-mail-name" type="text" maxlength="16" value="${Utils.escapeHtml(defName)}" placeholder="你的昵称" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:12px">
+
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">来自（地区，可选）</label>
+          <input id="radio-mail-region" type="text" maxlength="16" value="${Utils.escapeHtml(defRegion)}" placeholder="例如：城东" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:12px">
+
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">留言内容</label>
+          <textarea id="radio-mail-content" maxlength="300" rows="4" placeholder="想对主播说的话…" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:none;margin-bottom:16px"></textarea>
+
+          <div style="display:flex;gap:10px">
+            <button id="radio-mail-cancel" style="flex:1;padding:10px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer">取消</button>
+            <button id="radio-mail-send" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer">发送</button>
+          </div>
+        </div>`;
+      document.body.appendChild(mask);
+      const close = (val) => { try { mask.remove(); } catch (_) {} resolve(val); };
+      mask.querySelector('#radio-mail-cancel').onclick = () => close(null);
+      mask.addEventListener('click', (e) => { if (e.target === mask) close(null); });
+      mask.querySelector('#radio-mail-send').onclick = () => {
+        const content = (mask.querySelector('#radio-mail-content').value || '').trim();
+        if (!content) { UI.showToast('留言内容不能为空', 1500); return; }
+        const name = (mask.querySelector('#radio-mail-name').value || '').trim() || '匿名听众';
+        const region = (mask.querySelector('#radio-mail-region').value || '').trim();
+        close({ name, region, content });
+      };
+      setTimeout(() => { try { mask.querySelector('#radio-mail-content').focus(); } catch (_) {} }, 100);
+    });
+  }
+
+  // 调 AI 生成"读留言"段落：玩家留言 + AI 现编 1-2 条虚拟听众留言，主播逐条读
+  // 返回正文片段字符串（叙述 + 台词行），失败返回 ''
+  async function _radioGenMailSegment(prog, mail) {
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
+
+    const djName = prog.dj || '主播';
+    const guestName = prog.guest || '';
+    const showName = prog.showName || prog.name || '本期节目';
+    const playerRegion = mail.region ? `，来自${mail.region}` : '';
+
+    const sysPrompt = `你在为一档电台节目「${showName}」生成"读听众留言"的环节正文。
+主播：${djName}${guestName ? `，嘉宾：${guestName}` : ''}。
+
+现在主播要读 2-3 条听众留言，其中第一条是真实玩家的留言，其余 1-2 条由你现编虚构听众（路人，自拟昵称和地区，不要使用世界观里的已知角色）。
+
+玩家留言：
+- 署名：${mail.name}${playerRegion}
+- 内容：${mail.content}
+
+输出格式要求（严格遵守，这是电台叙述流格式）：
+- 叙述行：不加任何前缀，描写演播室氛围、主播翻看留言的动作、语气等。
+- 台词行：以「> 说话人：内容」开头（说话人是主播或嘉宾的名字）。
+- 主播读每条留言时，先自然念出"来自XX的XXX说……"再转述/回应留言内容。
+- 第一条必须读玩家这条（署名"${mail.name}"${mail.region ? `，来自"${mail.region}"` : ''}）。
+- 另外 1-2 条是你现编的虚拟听众，风格各异。
+- 主播要对每条留言有真实、贴合人设的回应。
+- 总长度 200-400 字，节奏自然，像真的在读信。
+- 只输出正文，不要解释、不要 JSON、不要标题。`;
+
+    let raw = '';
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model,
+          temperature: 0.9,
+          max_tokens: 1200,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: '请生成这段读留言的正文。' }
+          ]
+        })
+      });
+      const data = await resp.json();
+      raw = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    } catch (e) {
+      console.error('[读留言生成]', e);
+      return '';
+    }
+    return _stripMainlineArtifacts(raw || '').trim();
+  }
+
+  // 把生成后的正文写回持久化（当前期 histIdx<0 写 program._body；历史期写 history[histIdx].body）
+  async function _radioPersistBody(catId, idx, histIdx, newBody) {
+    try {
+      const pd = await _getPhoneData();
+      const programs = (pd.radioPrograms && pd.radioPrograms[catId]) || [];
+      const prog = programs[idx];
+      if (!prog) return;
+      if (typeof histIdx === 'number' && histIdx >= 0 && Array.isArray(prog.history) && prog.history[histIdx]) {
+        prog.history[histIdx].body = newBody;
+      } else {
+        prog._body = newBody;
+      }
+      await _savePhoneData(pd);
+    } catch (e) { console.warn('[电台正文持久化]', e); }
+  }
+
+  // 互动暂停 → 处理留言玩法：弹窗收集 → 生成 → 替换锚点 → 重渲染 → 从锚点后续播
+  async function _radioHandleMailInteract(overlay, prog, ctx, resumeFn) {
+    const mail = await _radioMailInput();
+    if (!mail) return;  // 取消：保持暂停态，两个按钮还在
+    // 锁定卡片按钮，显示生成中
+    const card = overlay.querySelector(`.phone-radio-detail-body .phone-radio-interact[data-seg-idx]`);
+    const actions = card ? card.querySelector('.phone-radio-interact-actions') : null;
+    const allBtns = card ? card.querySelectorAll('.phone-radio-interact-btn') : [];
+    const descEl = card ? card.querySelector('.phone-radio-interact-desc') : null;
+    allBtns.forEach(b => { b.disabled = true; });
+    if (descEl) descEl.textContent = '主播正在挑选留言…';
+    UI.showToast('主播正在挑选留言…', 1500);
+
+    const segment = await _radioGenMailSegment(prog, mail);
+    if (!segment) {
+      UI.showToast('生成失败，请重试', 1800);
+      allBtns.forEach(b => { b.disabled = false; });
+      if (descEl) descEl.textContent = '主播在等你的留言，要不要参与？';
+      return;
+    }
+    // 把生成的留言段替换掉正文里的 [[读留言]] 锚点（标记为 done + 保留留言正文）
+    const body = prog._body || _RADIO_FAKE_BODY;
+    const newBody = body.replace(/^\s*\[\[\s*读留言\s*\]\]\s*$/m, `[[读留言:done]]\n${segment}`);
+    prog._body = newBody;
+    // 续播交给 resumeFn 处理
+    if (typeof resumeFn === 'function') resumeFn(newBody);
+  }
+
+
 
   async function _radioOpenDetail(catId, idx) {
     const pd = await _getPhoneData();
@@ -5517,36 +6033,799 @@ ${wvPrompt}`;
           <div class="phone-radio-detail-name">${Utils.escapeHtml(p.name || '电台')}</div>
           <div class="phone-radio-detail-fm">${fmText}</div>
         </div>
+        <button class="phone-radio-detail-set" id="phone-radio-detail-set" title="电台设置">
+          ${_uiIcon('settings', 20)}
+        </button>
         <div class="phone-radio-detail-avatar">${avatarHtml}</div>
       </div>
+      <div class="phone-radio-detail-meta">
+        <div class="phone-radio-detail-show">${Utils.escapeHtml(p.showName || '本期节目')}</div>
+        <div class="phone-radio-detail-info-row">
+          <span class="phone-radio-detail-tags">${tags}</span>
+          <span class="phone-radio-detail-host">${hostLine}</span>
+          <span class="phone-radio-detail-dur">⏱ ${Utils.escapeHtml(duration)}</span>
+        </div>
+      </div>
       <div class="phone-radio-detail-scroll">
-        <div class="phone-radio-detail-meta">
-          <div class="phone-radio-detail-show">${Utils.escapeHtml(p.showName || '本期节目')}</div>
-          <div class="phone-radio-detail-tags">${tags}</div>
-          <div class="phone-radio-detail-host">${hostLine}</div>
-          <div class="phone-radio-detail-dur">⏱ ${Utils.escapeHtml(duration)}</div>
-        </div>
+        <div class="phone-radio-detail-hint" id="phone-radio-detail-hint">${p._generating ? '节目准备中…' : '点击播放按钮开始'}</div>
         <div class="phone-radio-detail-body">${segHtml}</div>
-        <div class="phone-radio-detail-interact" id="phone-radio-detail-interact">
-          <!-- 互动玩法占位：投票/点歌/抽奖/连线 -->
+          <div class="phone-radio-detail-interact" id="phone-radio-detail-interact">
+            <!-- 互动玩法占位：投票/点歌/抽奖/连线 -->
+          </div>
         </div>
-        <div class="phone-radio-detail-end">— 本期节目结束 —</div>
+      <div class="phone-radio-detail-player">
+        <div class="phone-radio-player-progress">
+          <div class="phone-radio-spectrum" id="phone-radio-spectrum">${_radioSpectrumBars(40)}</div>
+        </div>
+        <div class="phone-radio-player-controls">
+          <button class="phone-mdetail-ctrl" id="phone-radio-repeat">${_musicSvg('repeatList')}</button>
+          <button class="phone-mdetail-ctrl" id="phone-radio-prev">${_musicSvg('prev')}</button>
+          <button class="phone-mdetail-ctrl phone-mdetail-play" id="phone-radio-play">${_musicSvg('playBig')}</button>
+          <button class="phone-mdetail-ctrl" id="phone-radio-next">${_musicSvg('nextTrack')}</button>
+          <button class="phone-mdetail-ctrl" id="phone-radio-list">${_musicSvg('list')}</button>
+        </div>
       </div>`;
     const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
     shell.appendChild(overlay);
     const back = overlay.querySelector('#phone-radio-detail-back');
+    // 关闭详情页时停止朗读 + 停底噪
+    if (back) back.onclick = () => { _RadioSpeaker.stop(); _RadioSpeaker.stopNoise(); overlay.remove(); };
+    // 进入详情页时启动底噪（如果开关开了）
+    if (p.voice && p.voice.noise) _RadioSpeaker.startNoise();
+    const setBtn = overlay.querySelector('#phone-radio-detail-set');
+    if (setBtn) setBtn.onclick = () => _radioOpenSettings(catId, idx);
+    // 列表按钮：弹出历史节目列表
+    const listBtn = overlay.querySelector('#phone-radio-list');
+    if (listBtn) listBtn.onclick = () => _radioListPopup({ catId, idx, histIdx: -1, total: (p.history || []).length });
+    // 循环模式切换
+    const repeatBtn = overlay.querySelector('#phone-radio-repeat');
+    if (repeatBtn) {
+      repeatBtn.innerHTML = _musicSvg(_radioRepeatMode === 'one' ? 'repeatOne' : 'repeatList');
+      repeatBtn.onclick = () => {
+        _radioRepeatMode = _radioRepeatMode === 'one' ? 'list' : 'one';
+        repeatBtn.innerHTML = _musicSvg(_radioRepeatMode === 'one' ? 'repeatOne' : 'repeatList');
+        UI.showToast(_radioRepeatMode === 'one' ? '单期循环' : '列表循环', 1200);
+      };
+    }
+    // 进入详情页：未播态——隐藏气泡，显示中间提示
+    _radioRevealInit(overlay);
+    // 底部播放器：接系统/MiniMax TTS 朗读主播+嘉宾台词
+    const playBtn = overlay.querySelector('#phone-radio-play');
+    const spectrum = overlay.querySelector('#phone-radio-spectrum');
+    if (playBtn) {
+      // 留言生成成功后：替换锚点正文 → 重渲染 → 从锚点段之后续播
+      const applyMailResult = (segIdx, newBody) => {
+        _radioPersistBody(catId, idx, -1, newBody);
+        const body = overlay.querySelector('.phone-radio-detail-body');
+        if (body) {
+          body.innerHTML = _radioRenderSegments(newBody, p);
+          const allSegs = body.querySelectorAll('[data-seg-idx]');
+          allSegs.forEach(el => {
+            const i = parseInt(el.getAttribute('data-seg-idx'), 10);
+            // segIdx 位置已变成留言第一段，连同之后都隐藏，随朗读浮现
+            if (i >= segIdx) el.classList.add('seg-hidden');
+          });
+        }
+        doPlay(segIdx - 1);
+      };
+      // 续播：互动生成后从指定段之后继续；startSeg<0 表示从头
+      var _interactPaused = false;
+      var doPlay = (startSeg) => {
+        _interactPaused = false;
+        _radioRevealStart(overlay);
+        _RadioSpeaker.start(p._body || bodyRaw, p, (playing) => {
+          playBtn.innerHTML = _musicSvg(playing ? 'pauseBig' : 'playBig');
+          if (spectrum) {
+            if (playing) spectrum.classList.add('playing');
+            else spectrum.classList.remove('playing');
+          }
+          // 只有真正结束（非互动暂停）才全显示
+          if (!playing && !_interactPaused) _radioRevealAll(overlay);
+        }, (segIdx) => {
+          _radioRevealSeg(overlay, segIdx);
+        }, () => {
+          // 一期自然播完：根据循环模式决定下一步
+          if (_radioRepeatMode === 'one') {
+            setTimeout(() => { if (playBtn && !_RadioSpeaker.isSpeaking()) doPlay(-1); }, 600);
+          }
+        }, {
+          startSeg: (typeof startSeg === 'number' ? startSeg : -1),
+          onInteract: (segIdx, type) => {
+            // 互动暂停态：标记（不触发 revealAll），停播放+频谱
+            _interactPaused = true;
+            playBtn.innerHTML = _musicSvg('playBig');
+            if (spectrum) spectrum.classList.remove('playing');
+            // 让互动卡片浮现并滚到中央
+            _radioRevealSeg(overlay, segIdx);
+          }
+        });
+      };
+      playBtn.onclick = () => {
+        if (_RadioSpeaker.isSpeaking()) {
+          _RadioSpeaker.stop();
+          _interactPaused = false;
+          playBtn.innerHTML = _musicSvg('playBig');
+          if (spectrum) spectrum.classList.remove('playing');
+          _radioRevealAll(overlay);
+          return;
+        }
+        doPlay(-1);
+      };
+      // 互动卡片按钮：不留言 / 我要留言（事件委托）
+      const bodyEl = overlay.querySelector('.phone-radio-detail-body');
+      if (bodyEl) {
+        bodyEl.addEventListener('click', (e) => {
+          const ibtn = e.target.closest && e.target.closest('.phone-radio-interact-btn');
+          if (!ibtn || ibtn.disabled) return;
+          const card = ibtn.closest('.phone-radio-interact');
+          const segIdx = card ? parseInt(card.getAttribute('data-seg-idx'), 10) : -1;
+          const act = ibtn.getAttribute('data-act');
+          if (_RadioSpeaker.isSpeaking()) _RadioSpeaker.stop();
+          if (act === 'skip') {
+            // 不留言：标记为 skip 态（卡片保留，重播时显示"主播读了其他听众的留言"）
+            const body0 = p._body || bodyRaw;
+            const newBody = body0.replace(/^\s*\[\[\s*读留言\s*\]\]\s*$/m, '[[读留言:skip]]');
+            p._body = newBody;
+            _radioPersistBody(catId, idx, -1, newBody);
+            // 重渲染（锚点变 skip 态）
+            const b = overlay.querySelector('.phone-radio-detail-body');
+            if (b) {
+              b.innerHTML = _radioRenderSegments(newBody, p);
+              const allSegs = b.querySelectorAll('[data-seg-idx]');
+              allSegs.forEach(el => {
+                const i = parseInt(el.getAttribute('data-seg-idx'), 10);
+                if (i >= segIdx) el.classList.add('seg-hidden');
+              });
+            }
+            doPlay(segIdx - 1);
+            return;
+          }
+          // 我要留言：弹窗（取消则什么都不做，卡片留在原位等玩家再选）
+          _radioHandleMailInteract(overlay, p, { catId, idx, histIdx: -1 }, (newBody) => {
+            applyMailResult(segIdx, newBody);
+          });
+        });
+      }
+    }
+  }
+
+  // ===== 电台设置页（整页 overlay，两 tab：电台信息 / 历史节目）=====
+  // 历史存档时间格式化：MM-DD HH:mm（现实时间，非游戏内历法）
+  function _radioFmtArchiveTime(d) {
+    try {
+      const dt = (d instanceof Date) ? d : new Date(d);
+      if (isNaN(dt.getTime())) return '';
+      const mm = String(dt.getMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      const hh = String(dt.getHours()).padStart(2, '0');
+      const mi = String(dt.getMinutes()).padStart(2, '0');
+      return `${mm}-${dd} ${hh}:${mi}`;
+    } catch (_) { return ''; }
+  }
+  // 获取系统可用嗓音（优先中文）
+  function _radioGetSystemVoices() {
+    try {
+      if (!('speechSynthesis' in window)) return [];
+      const all = window.speechSynthesis.getVoices() || [];
+      const zh = all.filter(v => /zh|cmn|chinese/i.test(v.lang || ''));
+      return (zh.length ? zh : all);
+    } catch (_) { return []; }
+  }
+
+  // 预热系统嗓音（嗓音异步加载，首次 getVoices 常为空；Edge 需轮询）
+  function _radioWarmSystemVoices(timeoutMs = 3000) {
+    return new Promise((resolve) => {
+      try {
+        if (!('speechSynthesis' in window)) { resolve([]); return; }
+        let done = false;
+        let timer = null;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          try { window.speechSynthesis.onvoiceschanged = null; } catch (_) {}
+          if (timer) clearInterval(timer);
+          resolve(_radioGetSystemVoices());
+        };
+        const now = window.speechSynthesis.getVoices() || [];
+        if (now.length) { finish(); return; }
+        window.speechSynthesis.onvoiceschanged = () => {
+          if ((window.speechSynthesis.getVoices() || []).length) finish();
+        };
+        const start = Date.now();
+        timer = setInterval(() => {
+          if ((window.speechSynthesis.getVoices() || []).length) { finish(); return; }
+          if (Date.now() - start > timeoutMs) finish();
+        }, 200);
+      } catch (_) { resolve([]); }
+    });
+  }
+
+  // 渲染单个角色（主播/嘉宾）的引擎切换 + 音色选择
+  function _radioRoleVoiceHtml(role, roleVoice) {
+    const engine = roleVoice.engine === 'minimax' ? 'minimax' : 'system';
+    const label = role === 'dj' ? '主播' : '嘉宾';
+    const engineTabs = `
+      <div class="phone-radio-engine-tabs">
+        <button type="button" class="phone-radio-engine-tab${engine !== 'minimax' ? ' active' : ''}" data-role="${role}" data-engine="system">系统 TTS</button>
+        <button type="button" class="phone-radio-engine-tab${engine === 'minimax' ? ' active' : ''}" data-role="${role}" data-engine="minimax">MiniMax</button>
+      </div>`;
+    let picker;
+    if (engine === 'system') {
+      const voices = _radioGetSystemVoices();
+      const opts = `<option value="">默认音色</option>` + voices.map(v =>
+        `<option value="${Utils.escapeHtml(v.voiceURI || v.name)}" ${roleVoice.voice === (v.voiceURI || v.name) ? 'selected' : ''}>${Utils.escapeHtml(v.name)}（${Utils.escapeHtml(v.lang || '')}）</option>`
+      ).join('');
+      const hint = voices.length ? '' : `<div class="phone-radio-set-tip" style="margin-top:6px">系统语音加载中或未检测到，<a href="javascript:void(0)" class="phone-radio-voice-retry" style="color:var(--accent)">点此重新检测</a>。</div>`;
+      picker = `<select class="phone-radio-voice-pick" data-role="${role}">${opts}</select>${hint}`;
+    } else {
+      picker = `<input type="text" class="phone-radio-voice-pick" data-role="${role}" value="${Utils.escapeHtml(roleVoice.voice || '')}" placeholder="MiniMax 音色 ID，如 male-qn-qingse">`;
+    }
+    return `
+      <div class="phone-radio-role-block" data-role-block="${role}">
+        <div class="phone-radio-role-title">${label}音色</div>
+        ${engineTabs}
+        <div class="phone-radio-role-picker" data-role-picker="${role}">${picker}</div>
+      </div>`;
+  }
+
+  // 渲染主播+嘉宾两个区块
+  function _radioVoicePickersHtml(voice) {
+    const hasMinimax = (voice.dj.engine === 'minimax' || voice.guest.engine === 'minimax');
+    const mmTip = hasMinimax ? `<div class="phone-radio-set-tip" style="margin-top:8px">MiniMax 音色需在「设置 → 功能模型 → 语音模型」配置 API Key。</div>` : '';
+    return _radioRoleVoiceHtml('dj', voice.dj) + _radioRoleVoiceHtml('guest', voice.guest) + mmTip;
+  }
+
+  // 绑定"重新检测系统嗓音"链接（可能在多个角色区块里出现）
+  function _bindVoiceRetry(overlay, p) {
+    overlay.querySelectorAll('.phone-radio-voice-retry').forEach(link => {
+      link.onclick = async (e) => {
+        e.preventDefault();
+        link.textContent = '检测中…';
+        await _radioWarmSystemVoices(3000);
+        const pickers = overlay.querySelector('#phone-radio-voice-pickers');
+        if (pickers) pickers.innerHTML = _radioVoicePickersHtml(p.voice);
+        // 重绑引擎 tab
+        overlay.querySelectorAll('.phone-radio-engine-tab').forEach(tab => {
+          const role = tab.getAttribute('data-role');
+          const eng = tab.getAttribute('data-engine');
+          tab.onclick = () => {
+            if (!role || eng === p.voice[role].engine) return;
+            p.voice[role].engine = eng;
+            p.voice[role].voice = '';
+            const block = overlay.querySelector(`[data-role-block="${role}"]`);
+            if (block) {
+              block.innerHTML = _radioRoleVoiceHtml(role, p.voice[role]);
+              block.querySelectorAll('.phone-radio-engine-tab').forEach(t => { t.onclick = tab.onclick; });
+            }
+          };
+        });
+        _bindVoiceRetry(overlay, p);
+      };
+    });
+  }
+
+  async function _radioOpenSettings(catId, idx) {
+    const pd = await _getPhoneData();
+    const programs = (pd.radioPrograms && pd.radioPrograms[catId]) || [];
+    const p = programs[idx];
+    if (!p) { UI.showToast('节目不存在', 1500); return; }
+
+    // 历史节目：暂用假数据兜底（后续接 AI 生成，每期存一条）
+    if (!Array.isArray(p.history)) {
+      p.history = [{
+        id: 'rh_' + Utils.uuid().slice(0, 8),
+        showName: p.showName || '本期节目',
+        dj: p.dj || '匿名',
+        guest: p.guest || '',
+        tags: (p.tags || []).slice(),
+        cover: p.cover || '',
+        duration: '约 30 分钟',
+        time: _radioFmtArchiveTime(new Date()),
+        body: _RADIO_FAKE_BODY
+      }];
+    }
+
+    if (!p.voice || typeof p.voice !== 'object') {
+      p.voice = { enabled: false, dj: { engine: 'system', voice: '' }, guest: { engine: 'system', voice: '' } };
+    }
+    // 兼容旧结构（engine/dj/guest 为字符串的扁平版）→ 升级为按角色独立
+    if (typeof p.voice.dj !== 'object' || p.voice.dj === null) {
+      const oldEngine = p.voice.engine === 'minimax' ? 'minimax' : 'system';
+      p.voice = {
+        enabled: !!p.voice.enabled,
+        dj: { engine: oldEngine, voice: typeof p.voice.dj === 'string' ? p.voice.dj : '' },
+        guest: { engine: oldEngine, voice: typeof p.voice.guest === 'string' ? p.voice.guest : '' }
+      };
+    }
+    if (typeof p.voice.noise !== 'boolean') p.voice.noise = true;
+    if (typeof p.voice.radioEffect !== 'boolean') p.voice.radioEffect = false;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'phone-radio-detail phone-radio-settings';
+
+    const renderInfoTab = () => {
+      const coverStyle = p.cover ? `background-image:url('${p.cover}')` : '';
+      return `
+        <div class="phone-radio-set-section">
+          <div class="phone-radio-set-cover" id="phone-radio-set-cover" style="${coverStyle}">
+            ${p.cover ? '' : `<div class="phone-radio-set-cover-ph">${_uiIcon('image', 28)}<span>设置封面</span></div>`}
+            <div class="phone-radio-set-cover-edit">${_uiIcon('camera', 16)}</div>
+          </div>
+        </div>
+        <div class="phone-radio-set-field">
+          <label>电台名</label>
+          <input type="text" id="phone-radio-set-name" maxlength="12" value="${Utils.escapeHtml(p.name || '')}" placeholder="电台名称">
+        </div>
+        <div class="phone-radio-set-field">
+          <label>核心概念</label>
+          <textarea id="phone-radio-set-concept" rows="5" placeholder="这档节目的风格定位、内容方向、主播人设、目标受众…">${Utils.escapeHtml(p.concept || '')}</textarea>
+        </div>
+        <div class="phone-radio-set-field-row">
+          <div class="phone-radio-set-field">
+            <label>主播</label>
+            <input type="text" id="phone-radio-set-dj" maxlength="8" value="${Utils.escapeHtml(p.dj || '')}" placeholder="主播名">
+          </div>
+          <div class="phone-radio-set-field">
+            <label>嘉宾<span class="phone-radio-set-hint">（可空）</span></label>
+            <input type="text" id="phone-radio-set-guest" maxlength="8" value="${Utils.escapeHtml(p.guest || '')}" placeholder="嘉宾名">
+          </div>
+        </div>
+        <div class="phone-radio-set-field">
+          <label>本期节目</label>
+          <input type="text" id="phone-radio-set-showname" maxlength="30" value="${Utils.escapeHtml(p.showName || '')}" placeholder="本期节目名">
+        </div>
+        <div class="phone-radio-set-field">
+          <label>节目简介</label>
+          <textarea id="phone-radio-set-intro" rows="2" placeholder="一句话介绍这期节目">${Utils.escapeHtml(p.intro || '')}</textarea>
+        </div>
+        <div class="phone-radio-set-field">
+          <label>下期节目</label>
+          <input type="text" id="phone-radio-set-nextshow" maxlength="30" value="${Utils.escapeHtml(p.nextShow || '')}" placeholder="下期节目名">
+        </div>
+        <div class="phone-radio-set-field">
+          <label>下期预告</label>
+          <textarea id="phone-radio-set-nextpreview" rows="2" placeholder="预告一下下期内容">${Utils.escapeHtml(p.nextPreview || '')}</textarea>
+        </div>
+        <div class="phone-radio-set-tip">已经生成过的内容不会改动，这里的修改将在下次调频生成时生效。</div>
+        <div class="phone-radio-set-voice">
+          <div class="phone-radio-set-voice-head">
+            <span>音效</span>
+          </div>
+          <div class="phone-radio-set-voice-body">
+            <div class="phone-radio-set-voice-head" style="border-bottom:none;padding-bottom:0">
+              <span>背景底噪</span>
+              <label class="phone-radio-switch">
+                <input type="checkbox" id="phone-radio-noise-toggle" ${p.voice.noise ? 'checked' : ''}>
+                <span class="phone-radio-switch-slider"></span>
+              </label>
+            </div>
+            <div class="phone-radio-set-voice-head" style="margin-top:8px;margin-bottom:0">
+              <span>收音机音效</span>
+              <label class="phone-radio-switch">
+                <input type="checkbox" id="phone-radio-fx-toggle" ${p.voice.radioEffect ? 'checked' : ''}>
+                <span class="phone-radio-switch-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="phone-radio-set-voice">
+          <div class="phone-radio-set-voice-head">
+            <span>启用语音朗读</span>
+            <label class="phone-radio-switch">
+              <input type="checkbox" id="phone-radio-voice-toggle" ${p.voice.enabled ? 'checked' : ''}>
+              <span class="phone-radio-switch-slider"></span>
+            </label>
+          </div>
+          <div class="phone-radio-set-voice-body" id="phone-radio-voice-body" style="display:${p.voice.enabled ? 'block' : 'none'}">
+            <div id="phone-radio-voice-pickers">${_radioVoicePickersHtml(p.voice)}</div>
+          </div>
+        </div>
+        <button class="phone-radio-set-save" id="phone-radio-set-save">保存设置</button>`;
+    };
+
+    const renderHistTab = () => {
+      const list = p.history || [];
+      if (!list.length) {
+        return `<div class="phone-radio-hist-empty">还没有历史节目，调频生成后会自动存档。</div>`;
+      }
+      return `<div class="phone-radio-hist-list">${list.map((h, i) => {
+        const cover = h.cover ? `<div class="phone-radio-hist-cover" style="background-image:url('${h.cover.replace(/'/g, '')}')"></div>` : `<div class="phone-radio-hist-cover phone-radio-hist-cover-ph">${_radioChannelSvg('mic')}</div>`;
+        const tags = (h.tags || []).slice(0, 2).map(t => `<span class="phone-radio-hist-tag">${Utils.escapeHtml(t)}</span>`).join('');
+        return `<div class="phone-radio-hist-item" data-hist="${i}">
+          ${cover}
+          <div class="phone-radio-hist-info">
+            <div class="phone-radio-hist-name">${Utils.escapeHtml(h.showName || '本期节目')}</div>
+            <div class="phone-radio-hist-meta">${Utils.escapeHtml(h.dj || '')}${h.guest ? ' · ' + Utils.escapeHtml(h.guest) : ''} · ${Utils.escapeHtml(h.duration || '')}</div>
+            <div class="phone-radio-hist-tags">${tags}<span class="phone-radio-hist-time">${Utils.escapeHtml(/\dT\d|Z$/.test(h.time || '') ? _radioFmtArchiveTime(h.time) : (h.time || ''))}</span></div>
+          </div>
+          <div class="phone-radio-hist-play">${_musicSvg('playBig')}</div>
+        </div>`;
+      }).join('')}</div>`;
+    };
+
+    overlay.innerHTML = `
+      <div class="phone-radio-detail-head">
+        <button class="phone-radio-detail-back" id="phone-radio-set-back">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+        </button>
+        <div class="phone-radio-detail-headinfo">
+          <div class="phone-radio-detail-name">电台设置</div>
+        </div>
+      </div>
+      <div class="phone-radio-set-tabs">
+        <button class="phone-radio-set-tab active" data-tab="info">电台信息</button>
+        <button class="phone-radio-set-tab" data-tab="hist">历史节目</button>
+      </div>
+      <div class="phone-radio-detail-scroll" id="phone-radio-set-body">
+        ${renderInfoTab()}
+      </div>`;
+
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+
+    const back = overlay.querySelector('#phone-radio-set-back');
     if (back) back.onclick = () => overlay.remove();
+
+    const bodyEl = overlay.querySelector('#phone-radio-set-body');
+    const tabs = overlay.querySelectorAll('.phone-radio-set-tab');
+    let curTab = 'info';
+
+    const bindInfoEvents = () => {
+      const coverEl = overlay.querySelector('#phone-radio-set-cover');
+      if (coverEl) coverEl.onclick = () => {
+        const input = document.createElement('input');
+        input.type = 'file'; input.accept = 'image/*';
+        input.onchange = async () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          try {
+            const dataUrl = await _compressWallpaper(file, { maxW: 600, maxH: 600, quality: 0.82 });
+            p.cover = dataUrl;
+            coverEl.style.backgroundImage = `url('${dataUrl}')`;
+            const ph = coverEl.querySelector('.phone-radio-set-cover-ph');
+            if (ph) ph.remove();
+          } catch (e) { UI.showToast('图片处理失败', 1500); }
+        };
+        input.click();
+      };
+      // 语音朗读开关
+      const vToggle = overlay.querySelector('#phone-radio-voice-toggle');
+      const vBody = overlay.querySelector('#phone-radio-voice-body');
+      if (vToggle && vBody) {
+        vToggle.onchange = () => {
+          p.voice.enabled = vToggle.checked;
+          vBody.style.display = vToggle.checked ? 'block' : 'none';
+        };
+      }
+      // 底噪开关
+      const nToggle = overlay.querySelector('#phone-radio-noise-toggle');
+      if (nToggle) {
+        nToggle.onchange = () => { p.voice.noise = nToggle.checked; };
+      }
+      // 收音机音效开关
+      const fToggle = overlay.querySelector('#phone-radio-fx-toggle');
+      if (fToggle) {
+        fToggle.onchange = () => { p.voice.radioEffect = fToggle.checked; };
+      }
+      // 引擎切换：按角色独立切换
+      overlay.querySelectorAll('.phone-radio-engine-tab').forEach(tab => {
+        tab.onclick = () => {
+          const role = tab.getAttribute('data-role');
+          const eng = tab.getAttribute('data-engine');
+          if (!role || eng === p.voice[role].engine) return;
+          p.voice[role].engine = eng;
+          p.voice[role].voice = '';
+          const block = overlay.querySelector(`[data-role-block="${role}"]`);
+          if (block) {
+            block.innerHTML = _radioRoleVoiceHtml(role, p.voice[role]);
+            // 重绑新 block 内的引擎 tab
+            block.querySelectorAll('.phone-radio-engine-tab').forEach(t => { t.onclick = tab.onclick; });
+          }
+        };
+      });
+      // 手动重新检测系统嗓音
+      _bindVoiceRetry(overlay, p);
+      const saveBtn = overlay.querySelector('#phone-radio-set-save');
+      if (saveBtn) saveBtn.onclick = async () => {
+        const name = (overlay.querySelector('#phone-radio-set-name')?.value || '').trim();
+        const concept = (overlay.querySelector('#phone-radio-set-concept')?.value || '').trim();
+        const dj = (overlay.querySelector('#phone-radio-set-dj')?.value || '').trim();
+        const guest = (overlay.querySelector('#phone-radio-set-guest')?.value || '').trim();
+        if (name) p.name = name.slice(0, 12);
+        p.concept = concept;
+        p.showName = (overlay.querySelector('#phone-radio-set-showname')?.value || '').trim().slice(0, 30);
+        p.intro = (overlay.querySelector('#phone-radio-set-intro')?.value || '').trim().slice(0, 80);
+        p.nextShow = (overlay.querySelector('#phone-radio-set-nextshow')?.value || '').trim().slice(0, 30);
+        p.nextPreview = (overlay.querySelector('#phone-radio-set-nextpreview')?.value || '').trim().slice(0, 80);
+        p.dj = dj.slice(0, 8) || '匿名';
+        p.guest = guest.slice(0, 8);
+        // 语音设置
+        p.voice.enabled = !!(overlay.querySelector('#phone-radio-voice-toggle')?.checked);
+        p.voice.noise = !!(overlay.querySelector('#phone-radio-noise-toggle')?.checked);
+        p.voice.radioEffect = !!(overlay.querySelector('#phone-radio-fx-toggle')?.checked);
+        ['dj', 'guest'].forEach(role => {
+          const pick = overlay.querySelector(`.phone-radio-voice-pick[data-role="${role}"]`);
+          if (pick) p.voice[role].voice = (pick.value || '').trim();
+        });
+        await _savePhoneData();
+        UI.showToast('已保存，将在下期生成时生效', 1800);
+        overlay.remove();
+      };
+    };
+
+    const bindHistEvents = () => {
+      overlay.querySelectorAll('.phone-radio-hist-item').forEach(el => {
+        el.onclick = () => {
+          const hi = parseInt(el.getAttribute('data-hist'), 10);
+          _radioPlayHistory(catId, idx, hi);
+        };
+      });
+    };
+
+    bindInfoEvents();
+    // 异步预热系统嗓音：首次 getVoices 为空时，等 voiceschanged 再刷新选择器
+    _radioWarmSystemVoices().then(voices => {
+        if (voices.length && curTab === 'info') {
+          const pickers = overlay.querySelector('#phone-radio-voice-pickers');
+          if (pickers) pickers.innerHTML = _radioVoicePickersHtml(p.voice);
+        }
+    });
+
+    tabs.forEach(tab => {
+      tab.onclick = () => {
+        const t = tab.getAttribute('data-tab');
+        if (t === curTab) return;
+        curTab = t;
+        tabs.forEach(x => x.classList.toggle('active', x === tab));
+        bodyEl.innerHTML = t === 'info' ? renderInfoTab() : renderHistTab();
+        if (t === 'info') bindInfoEvents(); else bindHistEvents();
+      };
+    });
+  }
+
+  // 回放历史节目：用存档正文打开详情页
+  async function _radioPlayHistory(catId, idx, histIdx) {
+    const pd = await _getPhoneData();
+    const programs = (pd.radioPrograms && pd.radioPrograms[catId]) || [];
+    const p = programs[idx];
+    if (!p) { UI.showToast('节目不存在', 1500); return; }
+    const h = (p.history || [])[histIdx];
+    if (!h) { UI.showToast('历史节目不存在', 1500); return; }
+    const snapshot = Object.assign({}, p, {
+      showName: h.showName || p.showName,
+      dj: h.dj || p.dj,
+      guest: h.guest || p.guest,
+      tags: h.tags || p.tags,
+      cover: h.cover || p.cover,
+      _body: h.body || _RADIO_FAKE_BODY,
+      _duration: h.duration || '约 30 分钟'
+    });
+    _radioOpenDetailWith(snapshot, { catId, idx, histIdx, total: (p.history || []).length });
+  }
+
+  // 电台播放列表弹窗：列出所有历史节目，点击切换
+  async function _radioListPopup(ctx) {
+    const pd = await _getPhoneData();
+    const programs = (pd.radioPrograms && pd.radioPrograms[ctx.catId]) || [];
+    const p = programs[ctx.idx];
+    if (!p) { UI.showToast('节目不存在', 1500); return; }
+    const list = p.history || [];
+    if (!list.length) { UI.showToast('暂无历史节目', 1500); return; }
+    const rows = list.map((h, i) => {
+      const active = i === ctx.histIdx;
+      const cls = active ? 'phone-mlist-popup-row active' : 'phone-mlist-popup-row';
+      return `<div class="${cls}" data-hist="${i}">
+        <span class="phone-mlist-popup-title">${Utils.escapeHtml(h.showName || '本期节目')}</span>
+        <span class="phone-mlist-popup-artist">${Utils.escapeHtml(h.dj || '')}${h.guest ? ' · ' + Utils.escapeHtml(h.guest) : ''}</span>
+      </div>`;
+    }).join('');
+    const overlay = document.createElement('div');
+    overlay.className = 'phone-music-sheet-overlay';
+    overlay.innerHTML = `
+      <div class="phone-mlist-popup">
+        <div class="phone-mlist-popup-header">历史节目 · ${list.length} 期</div>
+        <div class="phone-mlist-popup-list">${rows}</div>
+        <button class="phone-music-sheet-btn cancel" data-act="close">关闭</button>
+      </div>`;
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) { close(); return; }
+      if (e.target.closest('[data-act="close"]')) { close(); return; }
+      const row = e.target.closest('.phone-mlist-popup-row');
+      if (row) {
+        const hi = parseInt(row.dataset.hist, 10);
+        close();
+        _RadioSpeaker.stop();
+        _RadioSpeaker.stopNoise();
+        const old = document.querySelector('.phone-radio-detail');
+        if (old) old.remove();
+        _radioPlayHistory(ctx.catId, ctx.idx, hi);
+      }
+    });
+    const host = document.getElementById('phone-modal') || document.body;
+    host.appendChild(overlay);
+    const activeEl = overlay.querySelector('.phone-mlist-popup-row.active');
+    if (activeEl) activeEl.scrollIntoView({ block: 'center' });
+  }
+
+  // 用给定 program 快照渲染详情页（回放专用，不依赖 catId/idx 取数据）
+  function _radioOpenDetailWith(p, ctx) {
+    ctx = ctx || {};
+    const avatarHtml = p.cover
+      ? `<img src="${Utils.escapeHtml(p.cover)}" alt="">`
+      : `<div class="phone-radio-detail-avatar-fallback">${Utils.escapeHtml((p.name || '电')[0])}</div>`;
+    const fmText = p.fm ? `FM ${Utils.escapeHtml(String(p.fm))}` : '';
+    const tags = (p.tags || []).map(t => `<span class="phone-radio-card-tag">${Utils.escapeHtml(t)}</span>`).join('');
+    const hostLine = `主播 ${Utils.escapeHtml(p.dj || '匿名')}${p.guest ? ` · 嘉宾 ${Utils.escapeHtml(p.guest)}` : ''}`;
+    const segHtml = _radioRenderSegments(p._body || _RADIO_FAKE_BODY, p);
+    const duration = p._duration || '约 30 分钟';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'phone-radio-detail';
+    overlay.innerHTML = `
+      <div class="phone-radio-detail-head">
+        <button class="phone-radio-detail-back" id="phone-radio-hplay-back">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+        </button>
+        <div class="phone-radio-detail-headinfo">
+          <div class="phone-radio-detail-name">${Utils.escapeHtml(p.name || '电台')}</div>
+          <div class="phone-radio-detail-fm">${fmText}</div>
+        </div>
+        <div class="phone-radio-detail-avatar">${avatarHtml}</div>
+      </div>
+      <div class="phone-radio-detail-meta">
+        <div class="phone-radio-detail-show">${Utils.escapeHtml(p.showName || '本期节目')}</div>
+        <div class="phone-radio-detail-info-row">
+          <span class="phone-radio-detail-tags">${tags}</span>
+          <span class="phone-radio-detail-host">${hostLine}</span>
+          <span class="phone-radio-detail-dur">⏱ ${Utils.escapeHtml(duration)}</span>
+        </div>
+      </div>
+      <div class="phone-radio-detail-scroll">
+        <div class="phone-radio-detail-hint" id="phone-radio-hplay-hint">点击播放按钮开始</div>
+        <div class="phone-radio-detail-body">${segHtml}</div>
+        <div class="phone-radio-detail-end">— 本期节目结束 —</div>
+      </div>
+      <div class="phone-radio-detail-player">
+        <div class="phone-radio-player-progress">
+          <div class="phone-radio-spectrum" id="phone-radio-hplay-spectrum">${_radioSpectrumBars(40)}</div>
+        </div>
+        <div class="phone-radio-player-controls">
+          <button class="phone-mdetail-ctrl" id="phone-radio-hplay-repeat">${_musicSvg(_radioRepeatMode === 'one' ? 'repeatOne' : 'repeatList')}</button>
+          <button class="phone-mdetail-ctrl" id="phone-radio-hplay-prev">${_musicSvg('prev')}</button>
+          <button class="phone-mdetail-ctrl phone-mdetail-play" id="phone-radio-hplay-play">${_musicSvg('playBig')}</button>
+          <button class="phone-mdetail-ctrl" id="phone-radio-hplay-next">${_musicSvg('nextTrack')}</button>
+          <button class="phone-mdetail-ctrl" id="phone-radio-hplay-list">${_musicSvg('list')}</button>
+        </div>
+      </div>`;
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+    const back = overlay.querySelector('#phone-radio-hplay-back');
+    if (back) back.onclick = () => { _RadioSpeaker.stop(); _RadioSpeaker.stopNoise(); overlay.remove(); };
+    if (p.voice && p.voice.noise) _RadioSpeaker.startNoise();
+    const playBtn = overlay.querySelector('#phone-radio-hplay-play');
+    const spectrum = overlay.querySelector('#phone-radio-hplay-spectrum');
+    // 进入回放页：未播态——隐藏气泡，显示中间提示
+    _radioRevealInit(overlay);
+    // 切到指定历史期
+    const switchTo = (hi) => {
+      if (typeof ctx.catId === 'undefined') return;
+      _RadioSpeaker.stop();
+      _RadioSpeaker.stopNoise();
+      overlay.remove();
+      _radioPlayHistory(ctx.catId, ctx.idx, hi);
+    };
+    // 上一条 / 下一条
+    const prevBtn = overlay.querySelector('#phone-radio-hplay-prev');
+    const nextBtn = overlay.querySelector('#phone-radio-hplay-next');
+    const total = ctx.total || 0;
+    if (prevBtn) prevBtn.onclick = () => {
+      if (typeof ctx.histIdx !== 'number' || total <= 1) { UI.showToast('没有上一期', 1200); return; }
+      const hi = (ctx.histIdx - 1 + total) % total;
+      switchTo(hi);
+    };
+    if (nextBtn) nextBtn.onclick = () => {
+      if (typeof ctx.histIdx !== 'number' || total <= 1) { UI.showToast('没有下一期', 1200); return; }
+      const hi = (ctx.histIdx + 1) % total;
+      switchTo(hi);
+    };
+    // 列表
+    const listBtn = overlay.querySelector('#phone-radio-hplay-list');
+    if (listBtn) listBtn.onclick = () => {
+      if (typeof ctx.catId === 'undefined') { UI.showToast('无历史列表', 1200); return; }
+      _radioListPopup(ctx);
+    };
+    // 循环模式切换
+    const repeatBtn = overlay.querySelector('#phone-radio-hplay-repeat');
+    if (repeatBtn) repeatBtn.onclick = () => {
+      _radioRepeatMode = _radioRepeatMode === 'one' ? 'list' : 'one';
+      repeatBtn.innerHTML = _musicSvg(_radioRepeatMode === 'one' ? 'repeatOne' : 'repeatList');
+      UI.showToast(_radioRepeatMode === 'one' ? '单期循环' : '列表循环', 1200);
+    };
+    if (playBtn) {
+      playBtn.onclick = () => {
+        if (_RadioSpeaker.isSpeaking()) {
+          _RadioSpeaker.stop();
+          playBtn.innerHTML = _musicSvg('playBig');
+          if (spectrum) spectrum.classList.remove('playing');
+          _radioRevealAll(overlay);
+          return;
+        }
+        _radioRevealStart(overlay);
+        _RadioSpeaker.start(p._body || _RADIO_FAKE_BODY, p, (playing) => {
+          playBtn.innerHTML = _musicSvg(playing ? 'pauseBig' : 'playBig');
+          if (spectrum) {
+            if (playing) spectrum.classList.add('playing');
+            else spectrum.classList.remove('playing');
+          }
+          if (!playing) _radioRevealAll(overlay);
+        }, (segIdx) => {
+          _radioRevealSeg(overlay, segIdx);
+        }, () => {
+          // 一期自然播完：根据循环模式决定下一步
+          if (_radioRepeatMode === 'one') {
+            // 单期循环：重播当前期
+            setTimeout(() => { if (playBtn) playBtn.onclick(); }, 600);
+          } else if (total > 1 && typeof ctx.histIdx === 'number') {
+            // 列表循环：切下一期
+            const hi = (ctx.histIdx + 1) % total;
+            setTimeout(() => switchTo(hi), 600);
+          }
+        });
+      };
+    }
+  }
+
+  // 留言信封 SVG 图标
+  function _radioMailSvg() {
+    return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>';
   }
 
   // 把节目正文渲染成 叙述卡片 + 台词气泡（主播用封面头像，嘉宾用固定头像）
   function _radioRenderSegments(raw, prog) {
     const segs = _parseRadioReply(raw);
-    const djName = (prog && prog.dj) || '';
+    // 主播 = 正文里第一个开口说话的人（电台开场白一定是主播）；兜底用 prog.dj
+    let djName = '';
+    const firstLine = segs.find(s => s.kind !== 'desc' && s.speaker);
+    if (firstLine) djName = firstLine.speaker;
+    if (!djName) djName = (prog && prog.dj) || '';
     const coverImg = (prog && prog.cover) || '';
     let html = '';
+    let segIdx = 0;
     for (const seg of segs) {
-      if (seg.kind === 'desc') {
-        html += `<div class="phone-radio-narr">${Utils.escapeHtml(seg.text)}</div>`;
+      if (!seg.text) continue;
+      if (seg.kind === 'interact') {
+        // 互动锚点：读留言卡片（根据 state 显示不同状态）
+        const isDone = seg.state === 'done';
+        const isSkip = seg.state === 'skip';
+        const isPending = !isDone && !isSkip;
+        let cardHtml = '';
+        if (isDone) {
+          cardHtml = `
+            <div class="phone-radio-interact done" data-seg-idx="${segIdx}" data-interact="${Utils.escapeHtml(seg.interact || 'mail')}">
+              <div class="phone-radio-interact-title">${_radioMailSvg()}听众留言时间</div>
+            <div class="phone-radio-interact-desc">你参与了这次留言环节</div>
+            </div>`;
+        } else if (isSkip) {
+          cardHtml = `
+            <div class="phone-radio-interact skip" data-seg-idx="${segIdx}" data-interact="${Utils.escapeHtml(seg.interact || 'mail')}">
+              <div class="phone-radio-interact-title">${_radioMailSvg()}听众留言时间</div>
+              <div class="phone-radio-interact-desc">主播读了其他听众的留言</div>
+            </div>`;
+        } else {
+          cardHtml = `
+            <div class="phone-radio-interact" data-seg-idx="${segIdx}" data-interact="${Utils.escapeHtml(seg.interact || 'mail')}">
+              <div class="phone-radio-interact-title">${_radioMailSvg()}听众留言时间</div>
+              <div class="phone-radio-interact-desc">主播在等你的留言，要不要参与？</div>
+              <div class="phone-radio-interact-actions">
+                <button class="phone-radio-interact-btn ghost" type="button" data-act="skip">不留言</button>
+                <button class="phone-radio-interact-btn" type="button" data-act="mail">我要留言</button>
+              </div>
+            </div>`;
+        }
+        html += cardHtml;
+      } else if (seg.kind === 'desc') {
+        html += `<div class="phone-radio-narr" data-seg-idx="${segIdx}">${Utils.escapeHtml(seg.text)}</div>`;
       } else {
         // 判断说话人是主播还是嘉宾
         const isHost = !seg.speaker || seg.speaker === djName;
@@ -5555,14 +6834,15 @@ ${wvPrompt}`;
           : `<div class="phone-radio-line-avatar-guest">${_radioGuestAvatar()}</div>`;
         const name = seg.speaker || djName || '主播';
         html += `
-          <div class="phone-radio-line ${isHost ? 'is-host' : 'is-guest'}">
-            <div class="phone-radio-line-avatar">${avatar}</div>
-            <div class="phone-radio-line-main">
+          <div class="phone-radio-line ${isHost ? 'is-host' : 'is-guest'}" data-seg-idx="${segIdx}">
+            <div class="phone-radio-line-head">
+              <div class="phone-radio-line-avatar">${avatar}</div>
               <div class="phone-radio-line-name">${Utils.escapeHtml(name)}</div>
-              <div class="phone-radio-line-bubble">${Utils.escapeHtml(seg.text)}</div>
             </div>
+            <div class="phone-radio-line-bubble">${Utils.escapeHtml(seg.text)}</div>
           </div>`;
       }
+      segIdx++;
     }
     return html;
   }
@@ -12680,6 +13960,12 @@ function _callDoSend() {
     let normalized = String(raw).replace(/([^\n])(\s*>\s)/g, '$1\n>');
     const lines = normalized.split(/\n+/).map(s => s.trim()).filter(Boolean);
     for (let line of lines) {
+      // 互动锚点：[[读留言]] 未完成 / [[读留言:done]] 已留言 / [[读留言:skip]] 已跳过
+      const mInteract = line.match(/^\[\[\s*读留言(?::(done|skip))?\s*\]\]$/);
+      if (mInteract) {
+        segs.push({ kind: 'interact', interact: 'mail', state: mInteract[1] || '', speaker: '', text: '读留言' });
+        continue;
+      }
       if (/^>\s*/.test(line)) {
         let body = line.replace(/^>\s*/, '').trim();
         let speaker = '';

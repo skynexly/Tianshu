@@ -19,8 +19,8 @@ let pendingImages = [];   // [{base64, name, type}]
     enabled: !!conv?.backstageEnabled,
     prompt: conv?.backstagePrompt || '',
     rules: conv?.backstageRules || '',
-    contextCount: conv?.backstageContextCount ?? 15,
-    maxTokens: conv?.backstageMaxTokens ?? 8000,
+    contextCount: conv?.backstageContextCount ?? 200,
+    maxTokens: conv?.backstageMaxTokens ?? 230000,
     convId: conv?.backstageConvId || null,
     timeAware: conv?.backstageTimeAware !== false,  // 默认开
     batteryAware: !!conv?.backstageBatteryAware,    // v687.14：默认关
@@ -761,7 +761,7 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
       } catch(e) {}
       const apiMessages = await API.buildMessages(stampedHistory, systemParts);
 
-    const maxTokens = settings.maxTokens || 8000;
+    const maxTokens = settings.maxTokens || 230000;
     const _estimateTokens = (msgs) => msgs.reduce((sum, m) => {
       const c = m.content;
       if (typeof c === 'string') return sum + Math.ceil(c.length / 2);
@@ -1362,7 +1362,7 @@ aiMsg.content = baseContent + fullContent;
       settings: {
         prompt: settings.prompt || '',
         contextCount: settings.contextCount,
-        maxTokens: settings.maxTokens || 8000
+        maxTokens: settings.maxTokens || 230000
       },
       messages: messages.map(m => ({
         id: m.id,
@@ -1691,8 +1691,8 @@ return String(s == null ? '' : s).replace(/[&<>"']/g, c => map[c]);
     conv.backstagePrompt = document.getElementById('backstage-prompt-input').value.trim();
     const rulesInput = document.getElementById('backstage-rules-input');
     conv.backstageRules = rulesInput ? rulesInput.value.trim().slice(0, 2000) : '';
-    conv.backstageContextCount = parseInt(document.getElementById('backstage-context-count').value) || 15;
-    conv.backstageMaxTokens = parseInt(document.getElementById('backstage-max-tokens').value) || 8000;
+    conv.backstageContextCount = parseInt(document.getElementById('backstage-context-count').value) || 200;
+    conv.backstageMaxTokens = parseInt(document.getElementById('backstage-max-tokens').value) || 230000;
     const taEl = document.getElementById('backstage-time-aware');
     if (taEl) conv.backstageTimeAware = taEl.checked;
     // v687.14：电量/天气
