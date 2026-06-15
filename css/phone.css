@@ -4082,7 +4082,8 @@ background: transparent !important;
   z-index: 0;
 }
 .phone-call-bg.voice {
-  filter: blur(30px) brightness(0.55);
+  /* 背景大图实时模糊是通话界面卡顿主因之一，30px 半径太重；降到 16px 视觉差异极小、开销大幅下降 */
+  filter: blur(16px) brightness(0.55);
   transform: scale(1.2);
 }
 .phone-call-scrim {
@@ -4146,8 +4147,9 @@ background: transparent !important;
 }
 .phone-call-bubble.them {
   align-self: flex-start;
-  background: rgba(20,22,30,0.52);
-  backdrop-filter: blur(8px);
+  /* 原为 backdrop-filter: blur(8px)，但台词逐条入场+各自实时模糊会逐帧重算导致卡顿；
+     改成不透明度更高的纯 alpha 色块，视觉几乎无差，彻底去掉每条气泡的实时背景模糊 */
+  background: rgba(20,22,30,0.66);
   color: #fff;
   border-bottom-left-radius: 4px;
 }

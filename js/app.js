@@ -175,8 +175,8 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v698.3';
-    const CHANGELOG = `【v698.3 更新内容】
+    const APP_VERSION = 'v698.4';
+    const CHANGELOG = `【v698.4 更新内容】
 
 优化了部分界面 UI
 新增「进位属性」：属性满上限后自动向目标属性进位

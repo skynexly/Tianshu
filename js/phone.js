@@ -1346,8 +1346,8 @@ async function openApp(appId) {
     }
   } catch(_) {}
 // 未完成的APP：直接拦截，不进入APP模式
-  if (appId === 'email') { UI.showToast('邮箱开发中...', 1500); return; }
-  if (appId === 'radio') { UI.showToast('电台开发中...', 1500); return; }
+    if (appId === 'email') { UI.showToast('邮箱开发中...', 1500); return; }
+    if (appId === 'radio') { UI.showToast('电台开发中...', 1500); return; }
     // 记住当前页面滚动位置，返回时恢复
   try {
     const pages = document.getElementById('phone-pages');
@@ -4919,7 +4919,8 @@ function _refreshCalBanner() {
   // - name/desc：预览阶段喂给 AI（让它判断某个台该挂哪个标签）
   // - guide：详情阶段喂给 AI（怎么写这档节目，逐个精写，留空表示走通用写法）
   // - dataSource：详情阶段按此注入额外数据（'' = 无额外数据，纯生成）
-  // - interactHint：互动倾向 none/vote/request/lottery/call
+  // - interactHint：互动倾向 none/vote/request/lottery/call（旧字段，暂未消费，保留）
+  // - plays：该标签可挂载的互动玩法 id 数组（对应 _RADIO_PLAYS 的 key），AI 在生成时最多从中挑一个；缺省/空数组=无玩法
   const _RADIO_TAGS = {
     news: [
       { name: '时政要闻', desc: '国家大事、政策、经济、国际、灾害、领导人动向、国家级文化活动、反腐反黑', guide: `你正在生成「时政要闻」类电台节目。这是一档严肃正经的新闻播报。
@@ -5000,9 +5001,124 @@ function _refreshCalBanner() {
    示例风格——
    > 主播名：以上就是今天本地新闻的全部内容，感谢您的收听，我们下次再见。
    片尾曲渐强，演播室灯光缓缓暗下。`, dataSource: 'region', interactHint: 'none', previewSpoken: false, fixedNext: { name: '本地新闻', desc: '聚焦身边事，每日为您播报本地民生、政策、文娱与平安资讯。' } },
-      { name: '社区简讯', desc: '街坊邻里、街头斗殴、家庭伦理、交通事故、社区通知', guide: '', dataSource: 'region', interactHint: '' },
-      { name: '领域专线', desc: '垂直圈子新闻（学术/二次元/时尚/科技等）、技术、圈内八卦、派系论战', guide: '', dataSource: '', interactHint: '' },
-      { name: '娱乐头条', desc: '明星网红八卦、狗仔爆料、粉圈吃瓜、影视进度、趣味新闻', guide: '', dataSource: '', interactHint: '' },
+      { name: '社区简讯', desc: '街坊邻里、街头斗殴、家庭伦理、交通事故、社区通知', guide: `你正在生成「社区简讯」类电台节目。这是一档扎根街坊邻里、家长里短的社区广播，像居委会大喇叭、街道社区台、本地小广播站那样的烟火气节目。
+主播口吻亲切热络、唠家常一样，带着街坊间的人情味和关切，不端着，偶尔可以有点本地腔调和小幽默，但依然是在"播报"社区里的事。
+
+【地域锚定】资料中会给出玩家当前所在的地区。这个"地区"按世界观设定而定，可能是城市、城区、城镇、聚落、星域或任何尺度的地方单位。本档节目只播报**这个地区里最贴近居民日常的小事**——具体到某条街、某个小区、某栋楼、某个市场、某户人家、某个街坊。范围比"地方快报"更小更近，不播市政大事和正规新闻，只播身边人身边事，营造"这就是我家楼下那点事"的真实感。
+
+内容方向（任选其一或组合，符合当前世界观与当地情况）：
+- 街坊邻里的家长里短（谁家添丁、老人寿宴、邻里纠纷、楼道堆物、宠物扰民、寻人寻物）
+- 社区通知与便民消息（停水停电、电梯检修、垃圾分类、疫苗接种、社区活动报名、菜价行情）
+- 家庭伦理与情感纠葛（婆媳、夫妻、子女赡养、分家析产这类家长里短的小矛盾）
+- 街头治安小事（口角斗殴、小偷小摸、占道经营、交通剐蹭、酒后闹事）
+- 交通事故与安全提醒（路口剐蹭、电动车违规、施工围挡、雨天路滑这类身边的小事故）
+- 社区好人好事（热心邻居、拾金不昧、志愿帮扶、邻里互助这类暖心小事）
+
+写法要求：
+- 用"唠家常式的播报"语气，亲切接地气，每条简讯简短，像跟街坊聊天那样把事说清楚。
+- 信息要具体：落到具体的街区、楼栋、市场、店铺、街坊称呼（如"三号楼的王阿姨""菜市场口修鞋的老李"）等细节，营造真实感。
+- 紧扣当前世界观设定与当地的市井风貌，考虑这个地区的普通居民每天都在为什么操心、议论什么。
+- 【重要·保密红线】这是面向社区居民的公开小广播，只能播"街坊本就知道或愿意公开"的家常事。世界观资料中那些隐秘内幕、幕后真相、不为人知的阴谋、暗面/黑暗设定、机密势力的真实运作等普通居民不可能知晓的内容，绝对不能当作社区简讯播出。涉及不可公开的事，最多以"街坊们都在传""听说"的市井传言口吻含糊带过，绝不点破真相。
+- 若主线涉及发生在本地社区的小事（如某条街的纠纷、某户人家的事），可以隐晦地以街坊议论的口吻融入，最多一两条，绝不揭露不可公开的内幕。如果主线内容与社区生活无关，则不应出现在社区简讯中。
+- 主播可以带一点个人关切和人情味（如"大家伙儿多留个心""这事儿办得敞亮"），但不要变成长篇大论的个人吐槽。
+- 生成 5-8 条，每条简讯 150-300 字（比正规新闻短，更口语）。可涉及邻里、通知、治安、交通、好人好事等多个社区方面。
+- 一条简讯可以分成多个段落，适当加入叙述部分，叙述部分重点描述社区广播的声音、气氛，像小广播站里能真实听到的声音，例如话筒电流声、翻看本子、街道背景音、提示音等。
+- 叙述音效贴合社区小广播的家常感（话筒摩擦、翻看记事本、窗外街道声、轻快垫乐、提示音等），不必像正规新闻台那样克制，但也别写成私人化的喝水叹气。
+- 主播播报时一句一句地说，每个台词行只放一两句话，不要把整条简讯挤在一个台词行里，要拆成多个连续的短台词行。
+- 若有嘉宾，可将其作为社区里的热心人、网格员、街道工作人员，在某条简讯后搭句话、补充情况，像街坊间的对话，不喧宾夺主。
+- 时长：30 分钟左右。
+
+节目结构（半固定，保持社区小广播的亲切感）：
+1. 开场：轻快家常的垫乐渐起，主播以热络的问候开场，念出频率与节目名，报出当前日期，像招呼街坊一样引出今天要说的几件事。
+   示例风格——
+   轻快的垫乐响起，话筒里有细微的电流声，像是街道办的小广播刚刚打开。
+   > 主播名：街坊邻居们好哇，这里是 FM频率·节目名。
+   > 主播名：我是主播主播名。今天是当前日期。
+   > 主播名：来，咱先说说这两天社区里的几件新鲜事。
+2. 正文：逐条唠，条目之间用唠家常的串场词衔接（如"说完这个，再唠唠隔壁……""对了，还有件事得提醒大家……""咱们接着往下说……"），可配轻快提示音的叙述行转场。
+3. 结尾：主播以亲切的家常话收束，片尾垫乐渐起。
+   示例风格——
+   > 主播名：今儿社区里的事就唠到这儿，街坊们有事招呼一声，咱们下回接着聊。
+   片尾垫乐轻快地流淌，小广播缓缓关上。`, dataSource: 'region', interactHint: '', plays: ['mail'], previewSpoken: false, fixedNext: { name: '邻里播报', desc: '说说咱社区里的家长里短、街坊新鲜事，听听街坊们发来的留言。' } },
+      { name: '领域专线', desc: '聚焦某一个垂直圈子的圈内电台（如学术学派/二次元/时尚潮流/数码科技/电竞游戏/手作收藏/汽车机车/钓鱼户外/健身运动/美食探店/桌游推理/古典乐器/玄学命理/某种手艺或行业等，按世界观选），主聊圈内资讯、技术门道、圈内八卦、派系论战', guide: `你正在生成「领域专线」类电台节目。这是一档面向特定垂直圈子的小众电台，像某个领域的播客、圈内电台、爱好者频道那样，只聊一个圈子里的事，自带门槛和黑话。
+主播口吻是这个圈子的资深玩家/老炮/行业观察者，熟稔门道、带点圈内人的优越感和热情，说话夹杂这个领域的术语和梗，像跟同好聊天，默认听众都是圈内人，不科普基础概念。
+
+【圈子锚定】本台聚焦的具体圈子已由「频道核心概念」给定（这个台长期就深耕这一个圈子，不会换）。请紧扣频道核心概念里设定的那个圈子来写，整期只深耕它，不要跨圈乱聊、不要临时改聊别的领域。所选圈子契合当前世界观——世界观里有什么样的学派、技术、亚文化、行业、社群，就对应聊什么，不要套用现实世界里世界观中不存在的圈子。
+
+【真人优先，但不唯真人】资料里会给出世界观中的角色档案。其中如果有本圈相关身份的角色（这个领域的达人、名家、大佬、从业者），可以优先挑一两个来聊，把圈内动向、技术解读、人物八卦落到这些真实存在的人身上。但绝不能整档节目都围着这几个角色转——真实的圈内电台里，圈内名人只占一部分，更多是大量不认识的从业者、新人、作品、流派和事件。请让真实角色作为其中的亮点穿插出现（建议全期最多两三条涉及他们），其余内容用符合世界观的圈内人物、作品和话题来填充。
+
+内容方向（任选其一或组合，符合当前世界观与本台圈子）：
+- 圈内资讯与动态（领域最新进展、新作/新品/新成果发布、活动赛事、行业风向）
+- 技术/专业向深挖（某项技术、某种流派、某个理论的解读与门道，面向懂行的人）
+- 圈内八卦与人物（圈内名人、大佬、红人的动向，谁出了新东西、谁翻了车、谁退圈了）
+- 派系论战与争议（圈子内部的路线之争、流派对立、经典争议话题、立场站队）
+- 圈内文化与黑话（这个圈子的梗、行话、鄙视链、不成文的规矩、入圈门槛）
+- 安利与避雷（值得入手/入坑的，以及踩过的坑、被高估的东西）
+
+写法要求：
+- 用"圈内人唠圈内事"的语气，专业又带劲，可以适度用这个领域的术语和黑话，但别堆砌到听不懂。
+- 主播对听众的称呼、口头禅、语气节奏要贴合本台这个圈子的真实文化，不同圈子差别很大（有的叫"列位/诸君"，有的叫"老铁/家人们"，有的叫"各位同行/同好"，有的叫"有缘人/各位道友"……）。请根据频道核心概念里的圈子自行选择契合的称呼与腔调，不要套用固定模板，别一律往"老伙计/唠嗑"这种单一风格上靠。
+- 信息要具体：落到具体的作品名、技术名、人物、流派、事件、社群等细节，营造"这就是圈内消息"的真实感。
+- 紧扣当前世界观设定：所聊的圈子、术语、名人、争议都必须是这个世界里真实存在的，考虑这个世界观里会形成什么样的垂直圈子。
+- 【重要·保密红线】这是面向圈内爱好者的公开电台，只能聊"圈子里本就公开流传"的事。世界观资料与角色档案中那些隐秘内幕、角色不为人知的秘密身份、幕后真相、机密势力的真实运作等普通圈内人不可能知晓的内容，绝对不能当作圈内消息播出——哪怕某个圈内人私下另有身份，电台也只当 ta 是个圈内名人来聊。涉及不可公开的事，最多以"圈里都在传""有小道消息说"的传闻口吻含糊带过，绝不点破真相。
+- 若主线涉及本台圈子里的事（如主角是某领域中人、卷入某派系论战），可以隐晦地以圈内消息的口吻融入，最多一两条，绝不揭露不可公开的内幕。如果主线与本台圈子无关，则不应硬塞进节目。
+- 主播可以带鲜明的圈内立场和个人偏好（如"这流派我站""那玩意儿就是智商税"），有态度但不要变成无脑对线。
+- 生成 5-8 条，每条 200-350 字。可涉及资讯、技术、八卦、论战、文化等多个圈内方面。
+- 一条内容可以分成多个段落，适当加入叙述部分，叙述部分重点描述声音、气氛，像这类小众电台/播客里能真实听到的声音，例如键盘声、翻资料声、背景轻音乐、主播喝口水接着聊等。
+- 叙述音效贴合小众播客的随性感（轻音乐垫底、翻资料、敲键盘、主播随性的小动作等），比正规新闻台松弛，营造圈内电台的氛围。
+- 主播播报时一句一句地说，每个台词行只放一两句话，不要把整条内容挤在一个台词行里，要拆成多个连续的短台词行。
+- 若有嘉宾，可作为同圈的另一位资深玩家或对家流派的代表，跟主播对谈、互掐、补充，碰撞圈内观点，不喧宾夺主。
+- 时长：30 分钟左右。
+
+节目结构（半固定，保持小众圈层电台的调性）：
+1. 开场：圈子感的垫乐渐起，主播以熟络的圈内口吻开场，念出频率与节目名，报出当前日期，点明今晚要唠本圈的哪几件事。
+   示例风格（口吻、称呼按本台圈子调整，下面只示范结构）——
+   一段带着圈子味儿的电子音乐渐起，主播敲了敲话筒。
+   > 主播名：（按本圈习惯的称呼）各位好，这里是 FM频率·节目名。
+   > 主播名：我是主播主播名。今天是当前日期。
+   > 主播名：今晚还是专聊咱们这个圈子，先看几条新鲜的。
+2. 正文：逐条聊，条目之间用圈内串场词衔接，但每次都换不同的说法别重样（可以用圈内黑话过渡、可以抛个争议勾人、可以跟上一条对比、可以卖个关子、可以模拟圈友口吻、可以从技术角度切入……），贴合本圈调性自由发挥，可配轻音效的叙述行转场。
+3. 结尾：主播以圈内人的方式收束，片尾垫乐渐起。
+   示例风格（口吻、称呼按本台圈子调整）——
+   > 主播名：今晚就到这儿，圈里有新动静，咱们下期接着聊。
+   片尾电子乐渐弱，节目缓缓结束。`, dataSource: '', interactHint: '', plays: ['mail'], npcDetail: true },
+      { name: '娱乐头条', desc: '明星网红八卦、狗仔爆料、粉圈吃瓜、影视进度、趣味新闻', guide: `你正在生成「娱乐头条」类电台节目。这是一档轻松热闹的娱乐八卦电台，像明星八卦节目、吃瓜电台、午后娱乐资讯那样，专聊圈里的明星、网红、影视和各种花边趣闻，主打一个热闹好玩、有瓜就唠。
+主播口吻是熟知圈内动向的娱乐主持人，语气轻快、八卦、带点小贱小调侃，吃瓜吃得津津有味，偶尔卖关子、抖机灵，但不恶毒、不造谣坐实，把握住"娱乐大家"的分寸。
+
+【真人优先，但不唯真人】资料里会给出世界观中的角色档案。其中如果有明星、偶像、网红、名人这类身份的角色，可以优先挑一两个来做八卦，把瓜落到这些真实存在的人身上。但绝不能整档节目都围着这几个角色转——真实的娱乐台里，认识的名人只是其中几条，更多是大量不认识的路人明星、新人、行业泛讯和热点事件。请让真实角色作为其中的亮点穿插出现（建议全期最多两三条涉及他们），其余内容用符合世界观的、新编的娱乐圈人物和事件来填充，保持节目的丰富和真实。
+
+内容方向（任选其一或组合，符合当前世界观）：
+- 明星网红动态（谁出了新作品、谁接了新代言、谁公开亮相、谁人气暴涨或过气）
+- 狗仔爆料与花边（绯闻恋情、疑似同框、深夜行踪、未经证实的小道消息，用"疑似""有传闻""知情人士称"的口吻带过）
+- 粉圈吃瓜（粉丝控评、打投、撕番、塌房、粉黑大战、应援名场面）
+- 影视娱乐进度（新剧新片新综艺的开机/杀青/定档/口碑，颁奖礼、首映、热搜话题）
+- 趣味新闻（明星翻车糗事、好笑的现场名场面、网红整活、轻松的奇闻趣事）
+
+写法要求：
+- 用"吃瓜唠嗑"的轻松语气，热闹、八卦、带梗，可以适度调侃但不刻薄、不人身攻击。
+- 信息要具体：落到具体的明星名、作品名、事件、热搜话题等细节，营造"这就是今天的瓜"的真实感；涉及世界观真实角色时，细节要与其档案设定吻合。
+- 紧扣当前世界观设定：所聊的明星、网红、影视、娱乐圈生态都必须是这个世界里真实存在的，考虑这个世界观里会有什么样的娱乐产业和名人。
+- 【重要·保密红线】这是面向大众的娱乐电台，只能聊"娱乐圈里本就公开流传的瓜"。角色档案里那些隐秘身份、不为人知的秘密、幕后真相、与机密势力的关联等不该外传的内容，绝对不能当作八卦爆出——哪怕某个明星私下另有身份，电台也只当 ta 是个明星来聊。涉及不可公开的事，最多以"网上都在传""有小道消息说"的传闻口吻含糊带过，绝不点破真相。
+- 八卦绯闻类内容要把握分寸，用"疑似""据传""有粉丝爆料"等不坐实的措辞，不要言之凿凿地编造没有的丑闻。
+- 若主线涉及娱乐圈的人事（如主角是明星、卷入某桩八卦），可以隐晦地以娱乐资讯的口吻融入，最多一两条，绝不揭露不可公开的内幕。如果主线与娱乐圈无关，则不应硬塞进节目。
+- 生成 2-3 个娱乐事件/话题，每个都要唠透、唠细——交代清楚来龙去脉（起因、经过、各方反应、网友/粉丝怎么说），配上主播的吃瓜评点和调侃，单个事件 400-700 字，不要蜻蜓点水一笔带过。
+- 一条内容可以分成多个段落，适当加入叙述部分，叙述部分重点描述声音、气氛，像娱乐节目里能真实听到的，例如轻快的背景音乐、主播八卦时压低声音、忍不住笑场、卖关子的停顿等。
+- 主播播报时一句一句地说，每个台词行只放一两句话，不要把整条内容挤在一个台词行里，要拆成多个连续的短台词行。
+- 若有嘉宾，可作为另一位娱乐主持或吃瓜搭子，跟主播一唱一和、补充爆料、互相调侃，气氛热闹，不喧宾夺主。
+- 时长：30 分钟左右。
+
+节目结构（半固定，保持娱乐八卦电台的调性）：
+1. 开场：轻快的垫乐渐起，主播热情活泼地开场，念出频率与节目名，报出当前日期，预告今天有哪几个大瓜。
+   示例风格——
+   一段轻快俏皮的音乐渐起，主播笑着开了口。
+   > 主播名：哈喽各位，欢迎收听 FM频率·节目名。
+   > 主播名：我是你们的主播主播名。今天是当前日期。
+   > 主播名：今天的瓜可不少，咱们这就一个一个来唠。
+2. 正文：一个瓜一个瓜地深聊，每个事件展开讲细节、抖包袱、带评点。事件之间用八卦式串场词衔接，但每次都换不同的说法别重样（可以卖关子、可以吐槽、可以跟上一条做对比、可以模拟粉丝口吻、可以突然压低声音爆料、可以用反问勾人……），自由发挥，配轻音效的叙述行转场。
+3. 结尾：主播热闹地收束，片尾垫乐渐起。
+   示例风格——
+   > 主播名：今天的瓜就先唠到这儿，明天还有新鲜的，记得来。
+   片尾轻快音乐渐弱，节目愉快地结束。`, dataSource: '', interactHint: '', plays: ['mail'], npcDetail: true },
     ],
     emotion: [
       { name: '深夜来信', desc: '读听众来信、情感倾诉，主播温柔回应陪伴', guide: '', dataSource: '', interactHint: '' },
@@ -6136,6 +6252,8 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
       descSkip: '主播读了其他听众的留言',
       actLabel: '我要留言', skipLabel: '不留言',
       handler: 'mail',
+      // 注入正文生成提示词时，向 AI 介绍这个玩法（名称、锚点、引出方式）
+      promptHint: '「读留言」（锚点：[[读留言]]）：设置一个读听众来信/留言的环节，主播念出听众发来的留言并简短回应。引出时主播用自己的话自然地把话头转到听众留言上（措辞自拟，不要套用固定句式），随后另起一行单独输出 [[读留言]]。',
     },
   };
 
@@ -6170,6 +6288,7 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
 - 台词行：以「> 说话人：内容」开头，说话人写具体名字（见主持阵容），不带时间戳。
 - 【关键】每个台词行只放一两句话（约 15-40 字），说完就换行另起一个台词行。绝对不要把一大段话、一整条新闻塞进同一个台词行。一条较长的内容要拆成多个连续的台词行，像真人说话那样一句一句地说。
 - 叙述行与台词行自由穿插，像真实电台能听到的声音流。
+- 【措辞原创】guide 里给出的开场白、串场词、结束语等示例只是示意调性，绝对不要原样照抄。请理解它们的作用后，用你自己的话重新组织，每一处过渡、衔接、转场都尽量换不同的说法，避免重复同一个句式，让节目听起来自然多变、不像套模板。
 - 只输出正文，不要解释、不要 JSON、不要标题、不要 markdown 代码块。`;
 
   // 阵容注入块（详情生成时拼 dj/guest/fm 作硬约束）
@@ -6240,6 +6359,49 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
     return '';
   }
 
+  // 本期是否需要注入 NPC 详细资料（任一标签标了 npcDetail:true）。
+  // 用于娱乐头条/领域专线这类"可能聊到世界观真人（明星/达人）"的标签，
+  // 命中则正文生成走 npcBrief:false（发全图 NPC 详情），否则只发速查表。
+  function _radioNeedNpcDetail(prog) {
+    const tags = Array.isArray(prog.tags) ? prog.tags : [];
+    for (const catId of Object.keys(_RADIO_TAGS)) {
+      for (const t of _RADIO_TAGS[catId]) {
+        if (tags.includes(t.name) && t.npcDetail) return true;
+      }
+    }
+    return false;
+  }
+
+  // 按标签收集本期可用玩法 id（合并节目所有标签的 plays，去重，过滤掉玩法池里不存在的）
+  function _radioPlaysOf(prog) {
+    const tags = Array.isArray(prog.tags) ? prog.tags : [];
+    const ids = [];
+    for (const catId of Object.keys(_RADIO_TAGS)) {
+      for (const t of _RADIO_TAGS[catId]) {
+        if (tags.includes(t.name) && Array.isArray(t.plays)) {
+          t.plays.forEach(id => { if (_RADIO_PLAYS[id] && !ids.includes(id)) ids.push(id); });
+        }
+      }
+    }
+    return ids;
+  }
+
+  // 互动玩法提示块：固定框架文案 + 本期可用玩法逐条说明（无可用玩法返回 ''）
+  function _radioPlaysBlock(prog) {
+    const ids = _radioPlaysOf(prog);
+    if (!ids.length) return '';
+    const items = ids.map(id => `- ${_RADIO_PLAYS[id].promptHint || _RADIO_PLAYS[id].title}`).join('\n');
+    return `【互动玩法】
+本期节目可以加入一个互动玩法，让听众参与进来。本期可选的玩法如下（最多选一个，也可以不选）：
+${items}
+
+玩法规则：
+- 若决定加入玩法，在正文里选一个合适的时机由主播自然引出它，通常在节目的中段或尾声（例如"接下来是今晚的听众互动环节……"）。
+- 触发玩法时，单独输出一行锚点 [[锚点名]]，这一行必须位于整篇正文的最末尾，其后不得再有任何内容。
+- 一旦使用玩法，正文不能自行收尾。锚点之后的环节（听众反馈、主播回应、节目收束）会在听众参与之后再生成——你只需把节目铺垫到引出玩法、输出锚点为止，把后续空间留出来。
+- 若不加入玩法，就正常把整期节目写完、自然收尾，不要输出任何锚点。`;
+  }
+
   // 当前地区详细档案块（命中才塞，照搬主线地区命中：读状态栏大地点→小地点→匹配世界观地区→取该地区 detail）
   // 仅 dataSource==='region' 的标签（地方快报/社区简讯等）调用，命中失败返回 ''
   function _radioRegionBlock() {
@@ -6271,13 +6433,16 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
 
     // 资料包（含世界观、当前时间、NPC速查表、节日、主线最近10轮）
+    // 娱乐头条/领域专线等标签需要聊到世界观真人，注入 NPC 详细资料（npcBrief:false）
     let ctx = '';
-    try { ctx = await _buildFullContext({ npcBrief: true }); } catch (_) {}
+    try { ctx = await _buildFullContext({ npcBrief: !_radioNeedNpcDetail(prog) }); } catch (_) {}
     const calBlock = await _radioCalendarBlock();
     const guide = _radioGuideOf(prog);
     const castBlock = _radioCastBlock(prog);
     // 地区数据源：仅 dataSource==='region' 的标签注入当前所在地区详细档案（命中才塞）
     const regionBlock = (_radioDataSourceOf(prog) === 'region') ? _radioRegionBlock() : '';
+    // 互动玩法块：本期标签挂载了玩法才注入（固定框架 + 各玩法说明）
+    const playsBlock = _radioPlaysBlock(prog);
 
     const showName = prog.showName || prog.name || '本期节目';
     const conceptLine = prog.concept ? `\n【频道核心概念】\n${prog.concept}` : '';
@@ -6293,7 +6458,7 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
 ${castBlock}
 
 ${guide || '请根据节目信息与世界观资料，生成一期风格契合、内容充实的电台节目正文。'}
-
+${playsBlock ? '\n' + playsBlock + '\n' : ''}
 ${_RADIO_FORMAT_SPEC}`;
 
     let raw = '';
@@ -6401,9 +6566,10 @@ ${_RADIO_FORMAT_SPEC}`;
     };
   }
 
-  // 调 AI 生成"读留言"段落：玩家留言 + AI 现编 1-2 条虚拟听众留言，主播逐条读
-  // 返回正文片段字符串（叙述 + 台词行），失败返回 ''
-  async function _radioGenMailSegment(prog, mail) {
+  // 调 AI 生成"读留言 + 收尾"段落：带全资料 + 已播前半段正文；有玩家留言则必读（位置不限），无则全编造（须与已播内容相关）；读完承接主题并把节目收尾
+  // 返回正文片段字符串（叙述 + 台词行 + 收尾），失败返回 ''
+  // mail 为 null/无内容时走"无玩家留言"分支；priorBody 是 [[读留言]] 锚点之前的已播正文
+  async function _radioGenMailSegment(prog, mail, priorBody) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
     const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
@@ -6411,29 +6577,57 @@ ${_RADIO_FORMAT_SPEC}`;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
 
+    // 资料块：与正文生成同款（全量上下文 + 历法 + 命中地区）
+    // 标了 npcDetail 的标签（娱乐头条/领域专线）读留言段也注入 NPC 详情，保持与上半段一致
+    let ctx = '';
+    try { ctx = await _buildFullContext({ npcBrief: !_radioNeedNpcDetail(prog) }); } catch (_) {}
+    const calBlock = await _radioCalendarBlock();
+    const regionBlock = (_radioDataSourceOf(prog) === 'region') ? _radioRegionBlock() : '';
+
     const djName = prog.dj || '主播';
     const guestName = prog.guest || '';
     const showName = prog.showName || prog.name || '本期节目';
-    const playerRegion = mail.region ? `，来自${mail.region}` : '';
+    const hasMail = !!(mail && (mail.content || '').trim());
+    const playerRegion = (mail && mail.region) ? `，来自${mail.region}` : '';
 
-    const sysPrompt = `你在为一档电台节目「${showName}」生成"读听众留言"的环节正文。
+    // 读留言要做的事：按有无玩家留言切分支
+    let mailTask = '';
+    if (hasMail) {
+      mailTask = `2. 读 2-3 条听众留言：
+   - 其中有一条是真实听众发来的留言，必须读到，位置不必是第一条，可以穿插在中间或最后，由你按节目节奏安排：
+     · 署名：${mail.name}${playerRegion}
+     · 内容：${mail.content}
+   - 其余 1-2 条由你现编虚构听众。`;
+    } else {
+      mailTask = `2. 读 2-3 条听众留言：
+   - 这 2-3 条全部由你现编虚构听众（这期没有真实听众参与）。
+   - 编造的留言要和本期节目已播内容相关、贴合当前世界观，像真实电台主播会挑出来读的那种：呼应前面播过的话题、引发共鸣或讨论，不要凭空写无关内容。`;
+    }
+
+    const priorText = (priorBody || prog._body || '').trim();
+
+    const sysPrompt = `${ctx}${calBlock ? '\n\n' + calBlock : ''}${regionBlock ? '\n\n' + regionBlock : ''}
+
+你正在续写一档电台节目「${showName}」，本期已经播出了前半段，现在要写"读听众留言"这个互动环节，并接着把整期节目收尾完成。
+
 主播：${djName}${guestName ? `，嘉宾：${guestName}` : ''}。
 
-现在主播要读 2-3 条听众留言，其中第一条是真实玩家的留言，其余 1-2 条由你现编虚构听众（路人，自拟昵称和地区，不要使用世界观里的已知角色）。
+【已播出的前半段正文】
+${priorText}
 
-玩家留言：
-- 署名：${mail.name}${playerRegion}
-- 内容：${mail.content}
+【本环节要做的事】
+1. 承接上文，由主播自然进入读留言环节（前面正文已经引出过，这里直接开始读）。
+${mailTask}
+3. 虚构听众自拟昵称和地区，是普通路人，不要使用世界观里的已知角色。
+4. 主播对每条留言都要有真实、贴合人设的回应。
+5. 读完留言后，不要跑题，承接节目主题做一段简短过渡，然后把整期节目自然收尾（主播道别、片尾垫乐渐起），让节目完整结束。
 
-输出格式要求（严格遵守，这是电台叙述流格式）：
-- 叙述行：不加任何前缀，描写演播室氛围、主播翻看留言的动作、语气等。
-- 台词行：以「> 说话人：内容」开头（说话人是主播或嘉宾的名字）。
-- 主播读每条留言时，先自然念出"来自XX的XXX说……"再转述/回应留言内容。
-- 第一条必须读玩家这条（署名"${mail.name}"${mail.region ? `，来自"${mail.region}"` : ''}）。
-- 另外 1-2 条是你现编的虚拟听众，风格各异。
-- 主播要对每条留言有真实、贴合人设的回应。
-- 总长度 200-400 字，节奏自然，像真的在读信。
-- 只输出正文，不要解释、不要 JSON、不要标题。`;
+【输出格式】（严格遵守，这是电台叙述流格式）
+- 叙述行：不加任何前缀，描写演播室氛围、主播翻看留言的动作、语气、片尾垫乐等。
+- 台词行：以「> 说话人：内容」开头，说话人是主播或嘉宾的名字。
+- 每个台词行只放一两句话（约 15-40 字），说完就换行另起一行，不要把一大段塞进同一行。
+- 主播读每条留言时，先自然念出"来自XX的XXX说……"再转述/回应。
+- 只输出正文，不要解释、不要 JSON、不要标题、不要 markdown 代码块。`;
 
     let raw = '';
     try {
@@ -6443,10 +6637,10 @@ ${_RADIO_FORMAT_SPEC}`;
         body: JSON.stringify({
           model,
           temperature: 0.9,
-          max_tokens: 1200,
+          max_tokens: 1600,
           messages: [
             { role: 'system', content: sysPrompt },
-            { role: 'user', content: '请生成这段读留言的正文。' }
+            { role: 'user', content: '请生成这段读留言并完成节目收尾的正文。' }
           ]
         })
       });
@@ -6476,29 +6670,40 @@ ${_RADIO_FORMAT_SPEC}`;
   }
 
   // 玩法分发器：按玩法 handler 调用对应处理函数（参与玩法的统一入口）
-  async function _radioHandlePlay(play, overlay, prog, ctx, resumeFn) {
+  async function _radioHandlePlay(play, overlay, prog, ctx, resumeFn, opts) {
     const handler = play && play.handler;
     if (handler === 'mail') {
-      return _radioHandleMailInteract(play, overlay, prog, ctx, resumeFn);
+      return _radioHandleMailInteract(play, overlay, prog, ctx, resumeFn, opts);
     }
     // 未知玩法兜底（后续 vote 等在此扩展）
     UI.showToast('该玩法暂未开放', 1500);
   }
 
   // 互动暂停 → 处理留言玩法：弹窗收集 → 生成 → 替换锚点 → 重渲染 → 从锚点后续播
-  async function _radioHandleMailInteract(play, overlay, prog, ctx, resumeFn) {
-    const mail = await _radioMailInput();
-    if (!mail) return;  // 取消：保持暂停态，两个按钮还在
+  // opts.skip=true 时为"不留言"路径：跳过弹窗，mail 传 null（生成纯虚拟听众读留言 + 收尾）
+  async function _radioHandleMailInteract(play, overlay, prog, ctx, resumeFn, opts) {
+    const isSkip = !!(opts && opts.skip);
+    let mail = null;
+    if (!isSkip) {
+      mail = await _radioMailInput();
+      if (!mail) return;  // 取消：保持暂停态，两个按钮还在
+    }
     // 锁定卡片按钮，显示生成中
     const card = overlay.querySelector(`.phone-radio-detail-body .phone-radio-interact[data-seg-idx]`);
     const actions = card ? card.querySelector('.phone-radio-interact-actions') : null;
     const allBtns = card ? card.querySelectorAll('.phone-radio-interact-btn') : [];
     const descEl = card ? card.querySelector('.phone-radio-interact-desc') : null;
     allBtns.forEach(b => { b.disabled = true; });
-    if (descEl) descEl.textContent = '主播正在挑选留言…';
-    UI.showToast('主播正在挑选留言…', 1500);
+    if (descEl) descEl.textContent = isSkip ? '主播正在读留言…' : '主播正在挑选留言…';
+    UI.showToast(isSkip ? '主播正在读留言…' : '主播正在挑选留言…', 1500);
 
-    const segment = await _radioGenMailSegment(prog, mail);
+    // 锚点前的已播正文（喂给生成函数当作"前半段"）
+    const anchor0 = (play && play.anchor) || '读留言';
+    const body0 = prog._body || _RADIO_FAKE_BODY;
+    const anchorRe0 = new RegExp('^\\s*\\[\\[\\s*' + anchor0.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\]\\]\\s*$', 'm');
+    const priorBody = body0.split(anchorRe0)[0] || '';
+
+    const segment = await _radioGenMailSegment(prog, mail, priorBody);
     if (!segment) {
       UI.showToast('生成失败，请重试', 1800);
       allBtns.forEach(b => { b.disabled = false; });
@@ -6506,9 +6711,9 @@ ${_RADIO_FORMAT_SPEC}`;
       return;
     }
     // 把生成的留言段替换掉正文里的 [[读留言]] 锚点（标记为 done + 保留留言正文）
-    const anchor = (play && play.anchor) || '读留言';
-    const body = prog._body || _RADIO_FAKE_BODY;
-    const anchorRe = new RegExp('^\\s*\\[\\[\\s*' + anchor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\]\\]\\s*$', 'm');
+    const anchor = anchor0;
+    const body = body0;
+    const anchorRe = anchorRe0;
     const newBody = body.replace(anchorRe, `[[${anchor}:done]]\n${segment}`);
     prog._body = newBody;
     // 续播交给 resumeFn 处理
@@ -6573,7 +6778,7 @@ ${_RADIO_FORMAT_SPEC}`;
           <div class="phone-radio-detail-interact" id="phone-radio-detail-interact">
             <!-- 互动玩法占位：投票/点歌/抽奖/连线 -->
           </div>
-          <div class="phone-radio-detail-sync" id="phone-radio-detail-sync" style="${bodyRaw ? '' : 'display:none'};padding:14px 16px 24px">
+          <div class="phone-radio-detail-sync" id="phone-radio-detail-sync" style="${bodyRaw && !_radioHasPendingInteract(bodyRaw) ? '' : 'display:none'};padding:14px 16px 24px">
             <button type="button" id="phone-radio-sync-btn" style="width:100%;padding:12px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
               将新闻同步至主线
@@ -6663,7 +6868,7 @@ ${_RADIO_FORMAT_SPEC}`;
           const hintEl = overlay.querySelector('#phone-radio-detail-hint');
           if (hintEl) hintEl.textContent = '点击播放按钮开始';
           const syncWrap = overlay.querySelector('#phone-radio-detail-sync');
-          if (syncWrap) syncWrap.style.display = '';
+          if (syncWrap) syncWrap.style.display = _radioHasPendingInteract(body) ? 'none' : '';
           _radioRevealInit(overlay);
           if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = ''; playBtn.style.pointerEvents = ''; }
         }
@@ -6684,6 +6889,9 @@ ${_RADIO_FORMAT_SPEC}`;
             if (i >= segIdx) el.classList.add('seg-hidden');
           });
         }
+        // 互动完成、正文已无 pending 锚点 → 显示"同步主线"按钮
+        const syncBox = overlay.querySelector('#phone-radio-detail-sync');
+        if (syncBox && !_radioHasPendingInteract(newBody)) syncBox.style.display = '';
         doPlay(segIdx - 1);
       };
       // 续播：互动生成后从指定段之后继续；startSeg<0 表示从头
@@ -6742,23 +6950,10 @@ ${_RADIO_FORMAT_SPEC}`;
           const act = ibtn.getAttribute('data-act');
           if (_RadioSpeaker.isSpeaking()) _RadioSpeaker.stop();
           if (act === 'skip') {
-            // 跳过该玩法：标记为 skip 态（卡片保留，重播时显示该玩法的 skip 文案）
-            const body0 = p._body || bodyRaw;
-            const anchorRe = new RegExp('^\\s*\\[\\[\\s*' + play.anchor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\]\\]\\s*$', 'm');
-            const newBody = body0.replace(anchorRe, `[[${play.anchor}:skip]]`);
-            p._body = newBody;
-            _radioPersistBody(catId, idx, -1, newBody);
-            // 重渲染（锚点变 skip 态）
-            const b = overlay.querySelector('.phone-radio-detail-body');
-            if (b) {
-              b.innerHTML = _radioRenderSegments(newBody, p);
-              const allSegs = b.querySelectorAll('[data-seg-idx]');
-              allSegs.forEach(el => {
-                const i = parseInt(el.getAttribute('data-seg-idx'), 10);
-                if (i >= segIdx) el.classList.add('seg-hidden');
-              });
-            }
-            doPlay(segIdx - 1);
+            // 不留言：照样生成一段读留言（纯虚拟听众）+ 收尾，标记为 done（行为同参与，只是没有玩家留言）
+            _radioHandlePlay(play, overlay, p, { catId, idx, histIdx: -1 }, (newBody) => {
+              applyMailResult(segIdx, newBody);
+            }, { skip: true });
             return;
           }
           // 参与玩法：分发到对应玩法的 handler（取消则什么都不做，卡片留在原位等玩家再选）
@@ -14577,6 +14772,13 @@ function _callDoSend() {
       }
     }
     return segs;
+  }
+
+  // 正文里是否还有未完成的互动锚点（pending，即 [[锚点]] 无 :done/:skip 后缀）。
+  // 有 = 节目还没真正结束（等玩家互动），此时不该显示"同步主线"按钮。
+  function _radioHasPendingInteract(raw) {
+    if (!raw) return false;
+    return _parseRadioReply(raw).some(s => s && s.kind === 'interact' && !s.state);
   }
 
   // 默认嘉宾头像（固定的圆形 SVG：话筒/访客感）
