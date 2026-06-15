@@ -175,10 +175,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v698.1';
-    const CHANGELOG = `【v698.1 更新内容】
+    const APP_VERSION = 'v698.2';
+    const CHANGELOG = `【v698.2 更新内容】
 
-优化了通话功能`;
+优化了通话功能
+修复了 iOS 下点不到返回按钮的问题`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {
