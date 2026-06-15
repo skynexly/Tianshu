@@ -380,6 +380,20 @@
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.22);
   backdrop-filter: blur(4px);
 }
+/* 待解锁：占位框内居中放一把锁，半透明弱化 */
+.phone-app-locked .phone-app-icon-circle-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.phone-app-lock-glyph {
+  width: 22px;
+  height: 22px;
+  color: rgba(255,255,255,0.6);
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.35));
+}
+.phone-app-lock-glyph svg { width: 21px; height: 21px; }
+.phone-app-locked .phone-app-icon-label { opacity: 0.7; }
 .phone-app-icon:active .phone-app-icon-circle { transform: scale(.92); filter: brightness(.92); }
 .phone-icon-glyph {
  width:26px;
@@ -3532,6 +3546,50 @@ background: transparent !important;
 }
 
 /* ===== 音乐播放器卡片 ===== */
+.phone-music-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+.phone-music-col {
+  flex: 1;
+  min-width: 0;
+  max-width: 72%;
+  display: flex;
+  flex-direction: column;
+}
+.phone-music-col .phone-music-card {
+  margin-top: 0;
+  width: auto;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+/* 主屏可编辑寄语：无边框，左对齐到 app 名同侧 */
+.phone-home-note {
+  font-size: 11px;
+  font-style: italic;
+  color: #fff;
+  opacity: 0.9;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.45);
+  padding: 0 2px 6px 10px;
+  outline: none;
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.phone-home-note:empty::before {
+  content: attr(data-placeholder);
+  opacity: 0.5;
+}
+.phone-music-side-apps {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+}
 .phone-music-card {
   margin-top: 12px;
   border-radius: 16px;

@@ -381,7 +381,19 @@ async function formatCustomAttrsStatePrompt() {
         const hasMax = !(a.max === '' || a.max === null || a.max === undefined);
         const maxText = hasMax ? ` / ${a.max}` : '';
         const desc = (a.desc || '').trim() ? `。说明：${a.desc.trim()}` : '';
-        lines.push(`- ${a.name}：当前 ${val}${maxText}${desc}`);
+        let ovText = '';
+        if (a.overflowTo) {
+          const t = globalAttrs.find(x => x.id === a.overflowTo);
+          if (t) ovText = `。进位规则：达到上限 ${a.max} 后，每满一次「${t.name}」+1，本属性保留余数（系统自动处理，你只需正常输出增量）`;
+        }
+        if (a.deriveTo) {
+          const t = globalAttrs.find(x => x.id === a.deriveTo);
+          const step = Number(a.deriveStep) > 0 ? Number(a.deriveStep) : 100;
+          if (t) ovText += `。派生规则：每累计 ${step} 点，「${t.name}」自动+1（${t.name} = 本属性÷${step} 向下取整，系统自动计算，你只需正常输出本属性增量）`;
+        }
+        const isDerived = globalAttrs.some(x => x.deriveTo === a.id);
+        if (isDerived) ovText += `。【只读】本属性由其它属性自动派生，请勿直接输出它的增量（输出也会被忽略）`;
+        lines.push(`- ${a.name}：当前 ${val}${maxText}${desc}${ovText}`);
       });
     }
     if (charCards.length) {
@@ -398,7 +410,19 @@ async function formatCustomAttrsStatePrompt() {
           const hasMax = !(a.max === '' || a.max === null || a.max === undefined);
           const maxText = hasMax ? ` / ${a.max}` : '';
           const desc = (a.desc || '').trim() ? `。说明：${a.desc.trim()}` : '';
-          lines.push(`  - ${a.name}：当前 ${val}${maxText}${desc}`);
+          let ovText = '';
+          if (a.overflowTo) {
+            const t = attrs.find(x => x.id === a.overflowTo);
+            if (t) ovText = `。进位规则：达到上限 ${a.max} 后，每满一次「${t.name}」+1，本属性保留余数（系统自动处理，你只需正常输出增量）`;
+          }
+          if (a.deriveTo) {
+            const t = attrs.find(x => x.id === a.deriveTo);
+            const step = Number(a.deriveStep) > 0 ? Number(a.deriveStep) : 100;
+            if (t) ovText += `。派生规则：每累计 ${step} 点，「${t.name}」自动+1（${t.name} = 本属性÷${step} 向下取整，系统自动计算，你只需正常输出本属性增量）`;
+          }
+          const isDerived = attrs.some(x => x.deriveTo === a.id);
+          if (isDerived) ovText += `。【只读】本属性由其它属性自动派生，请勿直接输出它的增量（输出也会被忽略）`;
+          lines.push(`  - ${a.name}：当前 ${val}${maxText}${desc}${ovText}`);
         });
       });
     }
@@ -438,16 +462,60 @@ const gp = await _getConvGameplay();
     v = Math.max(0, v);
     return v;
   };
+  // 严格进位（留余数）+ 连锁。store 是当前作用域的 {attrId: value} 映射，defs 是该作用域属性定义数组。
+  // 把 attr 累加后的 rawVal 写入 store，若达到上限则向 overflowTo 目标进位，目标再递归处理。
+  const applyWithOverflow = (store, defs, attr, rawVal, visited) => {
+    visited = visited || new Set();
+    let v = Math.max(0, Number.isFinite(Number(rawVal)) ? Number(rawVal) : 0);
+    const hasMax = !(attr.max === '' || attr.max === null || attr.max === undefined);
+    const max = hasMax ? Number(attr.max) : NaN;
+    // 无上限 / 上限非正数 / 未配置进位目标 / 已在链路中（防环）→ 退化为普通钳制
+    if (!hasMax || !Number.isFinite(max) || max <= 0 || !attr.overflowTo || visited.has(attr.id)) {
+      store[attr.id] = clamp(v, attr);
+      return;
+    }
+    visited.add(attr.id);
+    const target = defs.find(d => d && d.id === attr.overflowTo);
+    if (!target) { store[attr.id] = clamp(v, attr); return; }
+    if (v >= max) {
+      const carry = Math.floor(v / max);
+      store[attr.id] = v % max;            // 留余数
+      const tCur = Number(store[target.id] ?? target.initial ?? 0) || 0;
+      applyWithOverflow(store, defs, target, tCur + carry, visited);  // 连锁进位
+    } else {
+      store[attr.id] = v;
+    }
+  };
+  // 派生投影：target = floor(source / step)，纯只读投影，源不动；支持链式（A→B→C），多轮迭代直至稳定+防环
+  const applyDerived = (store, defs) => {
+    let any = false, rounds = 0, loop = true;
+    while (loop && rounds < defs.length + 2) {
+      loop = false; rounds++;
+      defs.forEach(attr => {
+        if (!attr || !attr.deriveTo) return;
+        const target = defs.find(d => d && d.id === attr.deriveTo);
+        if (!target || target.id === attr.id) return;
+        const step = Number(attr.deriveStep) > 0 ? Number(attr.deriveStep) : 100;
+        const srcVal = Number(store[attr.id] ?? attr.initial ?? 0) || 0;
+        const derived = Math.floor(srcVal / step);
+        if (Number(store[target.id]) !== derived) { store[target.id] = derived; loop = true; any = true; }
+      });
+    }
+    return any;
+  };
   const globalDefs = (gp?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
+  const globalDeriveTargets = new Set(globalDefs.filter(a => a.deriveTo).map(a => a.deriveTo));
   const globalDelta = deltaObj.global && typeof deltaObj.global === 'object' ? deltaObj.global : {};
   Object.entries(globalDelta).forEach(([name, delta]) => {
     const attr = globalDefs.find(a => (a.name || '').trim() === String(name).trim());
     const d = toNum(delta);
     if (!attr || d === null) return;
+    if (globalDeriveTargets.has(attr.id)) return; // 派生目标只读，不认 AI 增量
     const cur = status.customAttrs.global[attr.id] ?? attr.initial ?? 0;
-    status.customAttrs.global[attr.id] = clamp(Number(cur || 0) + d, attr);
+    applyWithOverflow(status.customAttrs.global, globalDefs, attr, Number(cur || 0) + d, new Set());
     changed = true;
   });
+  if (applyDerived(status.customAttrs.global, globalDefs)) changed = true;
   const charDelta = deltaObj.characters && typeof deltaObj.characters === 'object' ? deltaObj.characters : {};
   const cards = (gp?.characterAttrs || []).filter(c => c && Array.isArray(c.attrs));
   Object.entries(charDelta).forEach(([charName, attrsObj]) => {
@@ -457,14 +525,17 @@ const gp = await _getConvGameplay();
     const key = _attrTargetKey(card);
     status.customAttrs.characters[key] = status.customAttrs.characters[key] || {};
     const defs = (card.attrs || []).filter(a => a && a.id && (a.name || '').trim());
+    const deriveTargets = new Set(defs.filter(a => a.deriveTo).map(a => a.deriveTo));
     Object.entries(attrsObj).forEach(([attrName, delta]) => {
       const attr = defs.find(a => (a.name || '').trim() === String(attrName).trim());
       const d = toNum(delta);
       if (!attr || d === null) return;
+      if (deriveTargets.has(attr.id)) return; // 派生目标只读，不认 AI 增量
       const cur = status.customAttrs.characters[key][attr.id] ?? attr.initial ?? 0;
-      status.customAttrs.characters[key][attr.id] = clamp(Number(cur || 0) + d, attr);
+      applyWithOverflow(status.customAttrs.characters[key], defs, attr, Number(cur || 0) + d, new Set());
       changed = true;
     });
+    if (applyDerived(status.customAttrs.characters[key], defs)) changed = true;
   });
   if (changed) {
     _currentStatus = status;

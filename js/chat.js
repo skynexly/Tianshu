@@ -458,6 +458,8 @@ const Chat = (() => {
     refreshAiAvatar();
     // 更新加号菜单里的生图按钮可见性
     _updateImgGenButtons();
+    // 更新回复建议灯泡按钮可见性
+    _updateSuggestBtn();
     // 环境音：切换对话时恢复/关闭
     try {
       if (typeof Ambient !== 'undefined') {
@@ -5412,6 +5414,7 @@ bgImage: conv?.convBgImage || '',
         imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
     callEnabled: conv?.convCallEnabled !== false, // 默认开（来电能力）
       callFreq: conv?.convCallFreq || 'normal',     // 来电频率：'normal'(正常,默认) | 'active'(积极)
+      suggestEnabled: conv?.convSuggestEnabled !== false, // 默认开（回复建议灵感灯泡）
     toolsMemory: !!conv?.convToolsMemory,          // 默认关（记忆类工具）
     toolsWorldview: !!conv?.convToolsWorldview,    // 默认关（世界观查询工具）
     toolsEdit: !!conv?.convToolsEdit,              // 默认关（AI 编辑设定/单人卡，高风险）
@@ -5788,6 +5791,8 @@ bgImage: conv?.convBgImage || '',
     document.getElementById('cs-stream').checked = s.stream;
     document.getElementById('cs-gamemode').checked = s.gameMode;
 document.getElementById('cs-format').checked = s.format;
+      const suggestEnEl = document.getElementById('cs-suggest-enabled');
+      if (suggestEnEl) suggestEnEl.checked = s.suggestEnabled;
       const shhEl = document.getElementById('cs-strip-history-html');
       if (shhEl) shhEl.checked = s.stripHistoryHtml;
       const shktEl = document.getElementById('cs-strip-html-keeptext');
@@ -5922,6 +5927,8 @@ document.getElementById('cs-format').checked = s.format;
     conv.convStream = document.getElementById('cs-stream').checked;
     conv.convGameMode = document.getElementById('cs-gamemode').checked;
 conv.convFormat = document.getElementById('cs-format').checked;
+    const suggestSaveEl = document.getElementById('cs-suggest-enabled');
+    if (suggestSaveEl) conv.convSuggestEnabled = suggestSaveEl.checked;
       const shhSaveEl = document.getElementById('cs-strip-history-html');
       if (shhSaveEl) conv.convStripHistoryHtml = shhSaveEl.checked;
       const shktSaveEl = document.getElementById('cs-strip-html-keeptext');
@@ -6034,6 +6041,8 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     closeConvSettingsModal();
     // 更新加号菜单里的生图按钮可见性
     _updateImgGenButtons();
+    // 更新回复建议灯泡按钮可见性
+    _updateSuggestBtn();
     // v687.6：保存后立刻刷新 🎲 按钮 + 历史气泡，无需切换对话
     try { _refreshDiceUI(); } catch(_) {}
     // 更新后台悬浮按钮
@@ -6643,6 +6652,21 @@ async function applyLorebooksToWorldview() {
     if (mainBtn) mainBtn.style.display = show ? 'flex' : 'none';
     const bsBtn = document.getElementById('backstage-imggen-btn');
     if (bsBtn) bsBtn.style.display = show ? 'flex' : 'none';
+  }
+
+  // 回复建议灯泡按钮显隐：跟随对话设置 suggestEnabled（默认开）
+  function _updateSuggestBtn() {
+    const s = _getConvSettings();
+    const btn = document.getElementById('btn-suggest');
+    if (!btn) return;
+    if (s.suggestEnabled) {
+      btn.style.display = 'flex';
+    } else {
+      btn.style.display = 'none';
+      // 关闭时若建议面板还开着，一并收起
+      const panel = document.getElementById('suggest-panel');
+      if (panel) panel.classList.add('hidden');
+    }
   }
 
   let _imgGenSource = 'main'; // 'main' | 'backstage'

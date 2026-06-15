@@ -2080,7 +2080,7 @@ document.getElementById('wv-npc-detail').value = npc.detail || '';
 }
 
 function _defaultGameplayAttr() {
-  return { id: 'attr_' + Utils.uuid().slice(0, 8), name: '', desc: '', max: '', initial: 0 };
+  return { id: 'attr_' + Utils.uuid().slice(0, 8), name: '', desc: '', max: '', initial: 0, overflowTo: '', deriveTo: '', deriveStep: '' };
 }
 
 function _attrTargetKey(t) {
@@ -2575,6 +2575,45 @@ async function openGameplayAttrModal(scope, charIdx, attrIdx) {
   const initEl = document.getElementById('wv-attr-initial'); if (initEl) initEl.value = attr.initial ?? 0;
   const maxEl = document.getElementById('wv-attr-max'); if (maxEl) maxEl.value = attr.max ?? '';
   const descEl = document.getElementById('wv-attr-desc'); if (descEl) descEl.value = attr.desc || '';
+  // 溢出进位目标下拉：同作用域其它属性（排除自己）
+  const ovEl = document.getElementById('wv-attr-overflow');
+  if (ovEl) {
+    const opts = ['<option value="">不进位</option>'];
+    list.forEach((x, i) => {
+      if (i === attrIdx) return; // 排除自己
+      if (!x || !x.id || !(x.name || '').trim()) return;
+      const sel = attr.overflowTo === x.id ? ' selected' : '';
+      opts.push(`<option value="${Utils.escapeHtml(x.id)}"${sel}>${Utils.escapeHtml(x.name)}</option>`);
+    });
+    ovEl.innerHTML = opts.join('');
+    ovEl.value = attr.overflowTo || '';
+  }
+  // 派生目标下拉：同作用域其它属性（排除自己）
+  const dvEl = document.getElementById('wv-attr-derive');
+  if (dvEl) {
+    const opts = ['<option value="">不派生</option>'];
+    list.forEach((x, i) => {
+      if (i === attrIdx) return;
+      if (!x || !x.id || !(x.name || '').trim()) return;
+      const sel = attr.deriveTo === x.id ? ' selected' : '';
+      opts.push(`<option value="${Utils.escapeHtml(x.id)}"${sel}>${Utils.escapeHtml(x.name)}</option>`);
+    });
+    dvEl.innerHTML = opts.join('');
+    dvEl.value = attr.deriveTo || '';
+  }
+  const dvStepEl = document.getElementById('wv-attr-derive-step');
+  if (dvStepEl) dvStepEl.value = attr.deriveStep ?? '';
+  // 进位/派生互斥联动
+  const _wvAttrSyncExclusive = () => {
+    const ovOn = !!(ovEl && ovEl.value);
+    const dvOn = !!(dvEl && dvEl.value);
+    if (ovEl) ovEl.disabled = dvOn;
+    if (dvEl) dvEl.disabled = ovOn;
+    if (dvStepEl) dvStepEl.disabled = ovOn || !dvOn;
+  };
+  if (ovEl) ovEl.onchange = _wvAttrSyncExclusive;
+  if (dvEl) dvEl.onchange = _wvAttrSyncExclusive;
+  _wvAttrSyncExclusive();
   document.getElementById('wv-attr-modal')?.classList.remove('hidden');
   setTimeout(() => nameEl?.focus(), 80);
 }
@@ -2604,6 +2643,12 @@ async function saveGameplayAttrFromModal() {
   const initVal = document.getElementById('wv-attr-initial')?.value || '';
   attr.max = maxVal === '' ? '' : Number(maxVal);
   attr.initial = initVal === '' ? 0 : Number(initVal);
+  attr.overflowTo = document.getElementById('wv-attr-overflow')?.value || '';
+  attr.deriveTo = document.getElementById('wv-attr-derive')?.value || '';
+  const dStep = document.getElementById('wv-attr-derive-step')?.value || '';
+  attr.deriveStep = attr.deriveTo ? (dStep === '' ? 100 : Number(dStep)) : '';
+  // 互斥兜底：二选一，派生优先清进位
+  if (attr.deriveTo) attr.overflowTo = '';
   if (_attrModalCtx.isNew) list.push(attr);
   await _saveEditingWV(w);
   window.__wvEditingCache = w;

@@ -385,13 +385,14 @@ function _applyWallpaper(pd) {
   }
 
   // ===== 个人资料卡：渲染 + inline 编辑 + 头像 =====
-  const PROFILE_DEFAULT = { name: 'Polaris', bio: 'The still point where all worlds turn.', avatar: '' };
+  const PROFILE_DEFAULT = { name: 'Polaris', bio: 'The still point where all worlds turn.', note: 'In silentio vox maxima', avatar: '' };
 
   function _getProfile(pd) {
     const p = pd?.profile || {};
     return {
       name: typeof p.name === 'string' ? p.name : PROFILE_DEFAULT.name,
       bio: typeof p.bio === 'string' ? p.bio : PROFILE_DEFAULT.bio,
+      note: typeof p.note === 'string' ? p.note : PROFILE_DEFAULT.note,
       avatar: typeof p.avatar === 'string' ? p.avatar : ''
     };
   }
@@ -401,9 +402,11 @@ function _applyWallpaper(pd) {
     const nameEl = document.getElementById('phone-profile-name');
     const bioEl = document.getElementById('phone-profile-bio');
     const avatarEl = document.getElementById('phone-profile-avatar');
+    const noteEl = document.getElementById('phone-home-note');
     // 只在不在编辑状态时刷新文字（避免打字时被覆盖）
     if (nameEl && document.activeElement !== nameEl) nameEl.textContent = profile.name || '';
     if (bioEl && document.activeElement !== bioEl) bioEl.textContent = profile.bio || '';
+    if (noteEl && document.activeElement !== noteEl) noteEl.textContent = profile.note || '';
     if (avatarEl) {
       if (profile.avatar) {
         avatarEl.style.backgroundImage = `url("${profile.avatar}")`;
@@ -1037,6 +1040,15 @@ function _renderHomeIcon(a) {
         <span class="phone-app-icon-label">${Utils.escapeHtml(a.name || '')}</span>
       </div>`;
     }
+// 待解锁图标：占位同款外框 + 内部锁图标，不可点
+    if (a.icon === 'locked') {
+      return `<div class="phone-app-icon phone-app-placeholder phone-app-locked" aria-hidden="true">
+        <div class="phone-app-icon-circle phone-app-icon-circle-placeholder">
+          <span class="phone-icon-glyph phone-app-lock-glyph"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span>
+        </div>
+        <span class="phone-app-icon-label">${Utils.escapeHtml(a.name || '待解锁')}</span>
+      </div>`;
+    }
  const action = a.id === 'minimize' ? 'Phone.minimize()' : `Phone.openApp('${a.id}')`;
  // 心动模拟 APP：用世界观图标 png 而非 SVG
  const iconHTML = a.icon === 'heartsim'
@@ -1064,8 +1076,8 @@ function _renderHomeIcon(a) {
       const isHeartSim = document.body?.getAttribute('data-worldview') === '心动模拟';
       const slot3 = isHeartSim
         ? { id: 'heartsim_app', icon: 'heartsim', name: '心动模拟' }
-        : { id: '__placeholder1__', icon: 'placeholder', name: '' };
-      const slot4 = { id: '__placeholder2__', icon: 'placeholder', name: '' };
+        : { id: '__locked1__', icon: 'locked', name: '待解锁' };
+      const slot4 = { id: '__locked2__', icon: 'locked', name: '待解锁' };
       const systemApps = [
         { id: 'takeout', icon: 'takeout', name: (_shopMeta?.takeout?.name || '饿了咪') },
         { id: 'shop', icon: 'shop', name: (_shopMeta?.shop?.name || '桃宝') },
@@ -1127,45 +1139,59 @@ function _renderHomeIcon(a) {
          onkeydown="Phone._onProfileKeydown(event, 'bio', this)"
          oninput="Phone._onProfileInput('bio', this, 60)">The still point where all worlds turn.</div>
   </div>
-  <div class="phone-profile-avatar" id="phone-profile-avatar" onclick="Phone._pickProfileAvatar()"></div>
-</div>
-<div class="phone-system-grid">
-${systemApps.map(a => _renderHomeIcon(a)).join('')}
-</div>
+   <div class="phone-profile-avatar" id="phone-profile-avatar" onclick="Phone._pickProfileAvatar()"></div>
+ </div>
+ <div class="phone-system-grid">
+ ${systemApps.map(a => _renderHomeIcon(a)).join('')}
+ </div>
 <div class="phone-app-grid">
- ${apps.map(a => _renderHomeIcon(a)).join('')}
- </div>
-<div class="phone-home-bottom-spacer"></div>
- </div>
- <div class="phone-page">
-  <div class="phone-delivery-widget" id="phone-delivery-widget"></div>
-  <div class="phone-page2-row">
-    <div class="phone-page2-apps">
-      ${widgetApps.map(a => _renderHomeIcon(a)).join('')}
+   ${apps.map(a => _renderHomeIcon(a)).join('')}
+   </div>
+   <div class="phone-home-bottom-spacer"></div>
+   </div>
+    <div class="phone-page">
+     <div class="phone-delivery-widget" id="phone-delivery-widget"></div>
+    <div class="phone-page2-row">
+      <div class="phone-page2-apps">
+        ${widgetApps.map(a => _renderHomeIcon(a)).join('')}
+      </div>
+      <div class="phone-tomato-card" id="phone-tomato-card" onclick="Phone.openApp('tomato')"></div>
     </div>
-    <div class="phone-tomato-card" id="phone-tomato-card" onclick="Phone.openApp('tomato')"></div>
-  </div>
-  <div class="phone-home-spacer"></div>
- </div>
- <div class="phone-page">
- <div id="phone-cal-banner" class="phone-cal-banner" onclick="Phone.openApp('calendar')" style="display:none"></div>
-  <div class="phone-page2-row">
-    <div class="phone-page2-apps">
-      ${apps2.map(a => _renderHomeIcon(a)).join('')}
+    <div class="phone-home-spacer"></div>
+   </div>
+   <div class="phone-page">
+   <div id="phone-cal-banner" class="phone-cal-banner" onclick="Phone.openApp('calendar')" style="display:none"></div>
+    <div class="phone-page2-row">
+      <div class="phone-page2-apps">
+        ${apps2.map(a => _renderHomeIcon(a)).join('')}
+      </div>
+      <div class="phone-anniversary-card" id="phone-anniversary-card" onclick="Phone._openAnniversaryEditor()"></div>
     </div>
-    <div class="phone-anniversary-card" id="phone-anniversary-card" onclick="Phone._openAnniversaryEditor()"></div>
-  </div>
-  <div class="phone-music-card" id="phone-music-card"></div>
-  <div class="phone-home-spacer"></div>
- </div>
- </div>
-<div class="phone-page-indicator" id="phone-page-indicator">
+<div class="phone-music-row">
+      <div class="phone-music-col">
+        <div class="phone-home-note" id="phone-home-note"
+             contenteditable="true" spellcheck="false"
+             data-placeholder="In silentio vox maxima"
+             onfocus="Phone._onProfileFocus('note', this)"
+             onblur="Phone._onProfileBlur('note', this)"
+             onkeydown="Phone._onProfileKeydown(event, 'note', this)"
+             oninput="Phone._onProfileInput('note', this, 40)">In silentio vox maxima</div>
+        <div class="phone-music-card" id="phone-music-card"></div>
+      </div>
+      <div class="phone-music-side-apps">
+       ${_renderHomeIcon({ id: '__locked3__', icon: 'locked', name: '待解锁' })}
+       ${_renderHomeIcon({ id: '__locked4__', icon: 'locked', name: '待解锁' })}
+     </div>
+    </div>
+     <div class="phone-home-spacer"></div>
+    </div>
+   </div>
+  <div class="phone-page-indicator" id="phone-page-indicator">
    <div class="phone-page-dot active"></div>
    <div class="phone-page-dot"></div>
-   <div class="phone-page-dot"></div>
- </div>
- </div>
- <div class="phone-dock">
+<div class="phone-page-dot"></div>
+  </div>
+  <div class="phone-dock">
    ${dockApps.map(a => _renderHomeIcon(a)).join('')}
  </div>
  </div>
@@ -14035,11 +14061,13 @@ ${sensoryRule}
     });
 
     const replyText = fullReply.trim();
-    if (!replyText) { UI.showToast('对方没有回应', 1500); return; }
+    if (!replyText) { UI.showToast('对方没有回应', 1500); return ''; }
     _activeCall.rounds.push({ role: 'them', text: replyText });
+    return replyText;
 
   } catch(e) {
     UI.showToast('通话回复失败：' + (e.message || '未知'), 2200);
+    return '';
   } finally {
     _callReplyBusy = false;
   }
@@ -14567,7 +14595,12 @@ function _callDoSend() {
     // 去掉裸露的 relation/task/status 等结构标签行
     s = s.replace(/^\s*(relation|task|status|tasks|affinity|darkness)\s*[:：]?\s*$/gim, '');
     // 去掉明显的 JSON 对象/数组块（整行就是 { } 或 [ ] 包裹的结构化数据）
-    s = s.replace(/^\s*[\[{][\s\S]*?[\]}]\s*$/gm, (m) => (/["']?(affinity|darkness|task_|status|type)["']?\s*[:：]/.test(m) ? '' : m));
+    // 注意：判定必须严格，避免误删自然语言叙述里恰好含"类型/状态"等字或被方括号包裹的描写。
+    // 仅当该块看起来是真正的 JSON（带引号的英文键，形如 "key": 或 'key':）时才删除。
+    s = s.replace(/^\s*[\[{][\s\S]*?[\]}]\s*$/gm, (m) => {
+      const looksLikeJson = /["'](affinity|darkness|task_\w*|status|type|npc|amount|delivery)["']\s*[:：]/.test(m);
+      return looksLikeJson ? '' : m;
+    });
     return s.trim();
   }
 
@@ -14806,22 +14839,23 @@ async function _callDoRefresh() {
   const btn = document.getElementById('phone-call-refresh-btn');
   if (btn) { btn.style.pointerEvents = 'none'; btn.innerHTML = _callLoadingSvg; }
   try {
-    await _callRequestReply();
-    // 渲染最新一条 AI 回复（分段）
-    if (_activeCall && _activeCall.rounds.length > 0) {
-      const lastRound = _activeCall.rounds[_activeCall.rounds.length - 1];
-      if (lastRound.role === 'them') {
-        const rawText = lastRound.text;
-        // 检测 AI 是否主动挂断
-        const aiHangup = /\[HANGUP(?::(?:BUSY|PRESENT))?\]/i.test(rawText);
-        const aiBusy = /\[HANGUP:BUSY\]/i.test(rawText);
-        const aiPresent = /\[HANGUP:PRESENT\]/i.test(rawText);
-        const cleanText = rawText.replace(/\s*\[HANGUP(?::(?:BUSY|PRESENT))?\]\s*/gi, '').trim();
-        // 先渲染（去掉标记后的）台词
-        if (cleanText) {
-          lastRound.text = cleanText; // 存干净版本
-          _renderCallSegments(cleanText);
-        }
+    const reply = await _callRequestReply();
+    // 渲染本次 AI 回复（分段）——直接用返回值，不依赖 rounds 末位，
+    // 避免等待期间用户又发消息导致末位变成 me 而漏渲染。
+    if (_activeCall && reply) {
+      const rawText = reply;
+      // 检测 AI 是否主动挂断
+      const aiHangup = /\[HANGUP(?::(?:BUSY|PRESENT))?\]/i.test(rawText);
+      const aiBusy = /\[HANGUP:BUSY\]/i.test(rawText);
+      const aiPresent = /\[HANGUP:PRESENT\]/i.test(rawText);
+      const cleanText = rawText.replace(/\s*\[HANGUP(?::(?:BUSY|PRESENT))?\]\s*/gi, '').trim();
+      // 先渲染（去掉标记后的）台词
+      if (cleanText) {
+        // 把存进 rounds 的那条也换成干净版本
+        const lastThem = [..._activeCall.rounds].reverse().find(r => r.role === 'them');
+        if (lastThem) lastThem.text = cleanText;
+        _renderCallSegments(cleanText);
+      }
         // AI 挂断：渲染完最后一条后延迟结束通话（独立于 cleanText 判断）
         if (aiHangup) {
           const segCount = cleanText ? cleanText.split(/\n+/).filter(Boolean).length : 0;
@@ -14850,7 +14884,6 @@ async function _callDoRefresh() {
           }, delay);
         }
       }
-    }
   } finally {
     if (btn) { btn.style.pointerEvents = ''; btn.innerHTML = _callRefreshSvg; }
   }

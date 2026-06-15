@@ -94,6 +94,9 @@ const ConvGameplay = (() => {
           exist.name = wvA.name;
           exist.desc = wvA.desc;
           exist.max = wvA.max;
+          exist.overflowTo = wvA.overflowTo || '';
+      exist.deriveTo = wvA.deriveTo || '';
+      exist.deriveStep = wvA.deriveStep ?? '';
           // initial 不更新，保持对话自定义
         } else {
           conv.convGameplay.globalAttrs.push(JSON.parse(JSON.stringify(wvA)));
@@ -574,7 +577,7 @@ function _renderAttrConditions() {
       name: document.getElementById('cg-event-name').value.trim(),
       keys: triggerType === 'keyword' ? document.getElementById('cg-event-keys').value.trim() : '',
       triggerType,
-      attrConditions: triggerType === 'attr' ? _attrCondDraft.filter(c => c && c.attrId && Number.isFinite(Number(c.value))).map(c => ({ ...c, value: Number(c.value), operator: c.operator || '>=' })) : [],
+      attrConditions: triggerType === 'attr' ? _attrCondDraft.filter(c => c && (c.attrId || c.attrName) && Number.isFinite(Number(c.value))).map(c => ({ ...c, value: Number(c.value), operator: c.operator || '>=' })) : [],
       triggerTimeStart: triggerType === 'time' ? (document.getElementById('cg-event-time-start')?.value.trim() || '') : '',
       triggerTimeEnd: triggerType === 'time' ? (document.getElementById('cg-event-time-end')?.value.trim() || '') : '',
       completeKey: document.getElementById('cg-event-complete-key').value.trim(),
@@ -1025,7 +1028,7 @@ function _renderAttrConditions() {
   let _attrCtx = null; // { scope, charIdx, attrIdx, isNew }
 
   function _defaultAttr() {
-    return { id: 'attr_' + Utils.uuid().slice(0, 8), name: '', initial: 0, max: '', desc: '' };
+    return { id: 'attr_' + Utils.uuid().slice(0, 8), name: '', initial: 0, max: '', desc: '', overflowTo: '', deriveTo: '', deriveStep: '' };
   }
 
   function _ensureAttrModal() {
@@ -1051,6 +1054,23 @@ function _renderAttrConditions() {
             <input id="cg-attr-max" type="number" placeholder="留空=无上限" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0;outline:none;box-shadow:none">
           </label>
         </div>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">达到上限后进位到
+          <select id="cg-attr-overflow" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;outline:none;box-shadow:none">
+            <option value="">不进位</option>
+          </select>
+          <span style="font-size:11px;color:var(--text-secondary);line-height:1.5">本属性达到上限后，每满一次上限，目标属性 +1，本属性保留余数（需设置最大值才生效）。</span>
+        </label>
+        <div style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:10px">
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text);min-width:0">每累计 N 点派生到
+            <select id="cg-attr-derive" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0;outline:none;box-shadow:none">
+              <option value="">不派生</option>
+            </select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text);min-width:0">步长 N
+            <input id="cg-attr-derive-step" type="number" placeholder="100" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0;outline:none;box-shadow:none">
+          </label>
+        </div>
+        <span style="font-size:11px;color:var(--text-secondary);line-height:1.5">本属性每累计 N 点，目标属性自动+1（目标 = 本属性÷N 向下取整），本属性持续累积不清零。目标属性变为只读、AI 无法直接修改。与「进位」二选一。</span>
         <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">属性描述
           <textarea id="cg-attr-desc" placeholder="让 AI 知道这个数值意味着什么" style="width:100%;box-sizing:border-box;min-height:110px;resize:vertical;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;line-height:1.5;outline:none;box-shadow:none"></textarea>
         </label>
@@ -1084,6 +1104,45 @@ function _renderAttrConditions() {
     document.getElementById('cg-attr-initial').value = attr.initial ?? 0;
     document.getElementById('cg-attr-max').value = attr.max ?? '';
     document.getElementById('cg-attr-desc').value = attr.desc || '';
+    // 溢出进位目标下拉：同作用域其它属性（排除自己）
+    const ovEl = document.getElementById('cg-attr-overflow');
+    if (ovEl) {
+      const opts = ['<option value="">不进位</option>'];
+      list.forEach((x, i) => {
+        if (i === attrIdx) return;
+        if (!x || !x.id || !(x.name || '').trim()) return;
+        const sel = attr.overflowTo === x.id ? ' selected' : '';
+        opts.push(`<option value="${_esc(x.id)}"${sel}>${_esc(x.name)}</option>`);
+      });
+      ovEl.innerHTML = opts.join('');
+      ovEl.value = attr.overflowTo || '';
+    }
+    // 派生目标下拉：同作用域其它属性（排除自己）
+    const dvEl = document.getElementById('cg-attr-derive');
+    if (dvEl) {
+      const opts = ['<option value="">不派生</option>'];
+      list.forEach((x, i) => {
+        if (i === attrIdx) return;
+        if (!x || !x.id || !(x.name || '').trim()) return;
+        const sel = attr.deriveTo === x.id ? ' selected' : '';
+        opts.push(`<option value="${_esc(x.id)}"${sel}>${_esc(x.name)}</option>`);
+      });
+      dvEl.innerHTML = opts.join('');
+      dvEl.value = attr.deriveTo || '';
+    }
+    const dvStepEl = document.getElementById('cg-attr-derive-step');
+    if (dvStepEl) dvStepEl.value = attr.deriveStep ?? '';
+    // 进位/派生互斥联动
+    const _cgAttrSyncExclusive = () => {
+      const ovOn = !!(ovEl && ovEl.value);
+      const dvOn = !!(dvEl && dvEl.value);
+      if (ovEl) ovEl.disabled = dvOn;
+      if (dvEl) dvEl.disabled = ovOn;
+      if (dvStepEl) dvStepEl.disabled = ovOn || !dvOn;
+    };
+    if (ovEl) ovEl.onchange = _cgAttrSyncExclusive;
+    if (dvEl) dvEl.onchange = _cgAttrSyncExclusive;
+    _cgAttrSyncExclusive();
     document.getElementById('cg-attr-modal')?.classList.remove('hidden');
     setTimeout(() => document.getElementById('cg-attr-name')?.focus(), 80);
   }
@@ -1119,6 +1178,12 @@ function _renderAttrConditions() {
     const initVal = document.getElementById('cg-attr-initial')?.value || '';
     attr.max = maxVal === '' ? '' : Number(maxVal);
     attr.initial = initVal === '' ? 0 : Number(initVal);
+    attr.overflowTo = document.getElementById('cg-attr-overflow')?.value || '';
+    attr.deriveTo = document.getElementById('cg-attr-derive')?.value || '';
+    const dStep = document.getElementById('cg-attr-derive-step')?.value || '';
+    attr.deriveStep = attr.deriveTo ? (dStep === '' ? 100 : Number(dStep)) : '';
+    // 互斥兜底：二选一，派生优先清进位
+    if (attr.deriveTo) attr.overflowTo = '';
     if (_attrCtx.isNew) list.push(attr);
     await _saveConvGameplay(gp);
     closeAttrModal();

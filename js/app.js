@@ -175,11 +175,12 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v698.2';
-    const CHANGELOG = `【v698.2 更新内容】
+    const APP_VERSION = 'v698.3';
+    const CHANGELOG = `【v698.3 更新内容】
 
-优化了通话功能
-修复了 iOS 下点不到返回按钮的问题`;
+优化了部分界面 UI
+新增「进位属性」：属性满上限后自动向目标属性进位
+新增「派生属性」：属性每累计 N 点，目标属性自动+1`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

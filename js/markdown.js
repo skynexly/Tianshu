@@ -20,6 +20,23 @@ const Markdown = (() => {
       return `\x00CB${idx}\x00`;
     });
 
+    // 提取 <style>...</style> 整块保护，避免多行 CSS 被逐行处理拆成 <p>/<br>
+    // （内容原样存起来，作用域限定由出口的 sanitize 统一处理）
+    const styleBlocks = [];
+    processed = processed.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, (m) => {
+      const idx = styleBlocks.length;
+      styleBlocks.push(m);
+      return `\x00SB${idx}\x00`;
+    });
+
+    // 提取 <script>...</script> 整块保护（避免多行脚本被逐行处理拆坏），最终一律丢弃。
+    const scriptBlocks = [];
+    processed = processed.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, (m) => {
+      const idx = scriptBlocks.length;
+      scriptBlocks.push(m);
+      return `\x00JS${idx}\x00`;
+    });
+
     // 提取行内代码
     const inlineCodes = [];
     processed = processed.replace(/`([^`\n]+)`/g, (_, code) => {
@@ -35,6 +52,13 @@ const Markdown = (() => {
 
     while (i < lines.length) {
       const line = lines[i];
+
+      // 占位符独占一行（如 <style> 块、<script> 块、html 围栏块）：原样通过，不要包 <p>
+      if (/^\s*\x00(?:SB|CB|JS)\d+\x00\s*$/.test(line)) {
+        html += line.trim();
+        i++;
+        continue;
+      }
 
       // 表格
       if (line.includes('|') && i + 1 < lines.length && /^\|?[\s-:|]+\|/.test(lines[i + 1])) {
@@ -118,8 +142,92 @@ const Markdown = (() => {
     html = html.replace(/\x00CB(\d+)\x00/g, (_, idx) => codeBlocks[parseInt(idx)]);
     // 恢复行内代码
     html = html.replace(/\x00IC(\d+)\x00/g, (_, idx) => inlineCodes[parseInt(idx)]);
+    // 恢复 <style> 块（原样恢复，作用域限定交给下面的 sanitize 统一处理）
+    html = html.replace(/\x00SB(\d+)\x00/g, (_, idx) => styleBlocks[parseInt(idx)] || '');
+
+    // 安全过滤：清洗 on* 事件 / javascript: 伪协议、给 <style> 加气泡作用域。
+    // 此时 <script> 仍是 \x00JS 占位符，不受影响。
+    html = sanitize(html);
+
+    // <script> 块一律丢弃：innerHTML 注入的 <script> 本就不会执行，且放行有安全风险。
+    html = html.replace(/\x00JS(\d+)\x00/g, '');
 
     return html;
+  }
+
+  // 渲染输出的安全清洗：掐掉"执行 JS"这一环，展示能力全部保留。
+  // <script> 已在 render 阶段用占位符抽离并最终丢弃，这里不处理；
+  // 本函数负责 <style> 作用域 + 一律删除 on* 事件 + javascript: 伪协议。
+  function sanitize(html) {
+    if (!html || html.indexOf('<') === -1) return html;
+    let s = html;
+    // 1. <style> 不删除，但强制把内部 CSS 选择器限定到气泡正文（.md-content）内，
+    //    防止裸选择器（button/div/*）泄漏改坏全局界面。允许 AI 写气泡内的背景/动画/伪类。
+    //    先用占位符保护处理结果，避免被下面"删残段"的正则误伤。
+    const _styleHolder = [];
+    s = s.replace(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi, (_, css) => {
+      const idx = _styleHolder.length;
+      _styleHolder.push('<style>' + _scopeBubbleCss(css) + '</style>');
+      return '\x00ST' + idx + '\x00';
+    });
+    // 无闭合的残段 <style ...> 直接删（避免把后续正文都吞进样式）
+    s = s.replace(/<style\b[^>]*>/gi, '');
+    // 2. on* 内联事件属性 / javascript: 伪协议一律删除（innerHTML 注入的事件会执行，必须清洗）
+    // 删除所有 on* 内联事件属性（覆盖双引号、单引号、无引号三种写法）
+    s = s.replace(/\son[a-z0-9_-]+\s*=\s*"[^"]*"/gi, '');
+    s = s.replace(/\son[a-z0-9_-]+\s*=\s*'[^']*'/gi, '');
+    s = s.replace(/\son[a-z0-9_-]+\s*=\s*[^\s>]+/gi, '');
+    // 删除 href/src 等属性里的 javascript: 伪协议
+    s = s.replace(/(\b(?:href|src|xlink:href|formaction)\s*=\s*)(["']?)\s*javascript:[^"'>\s]*/gi, '$1$2');
+    // 恢复被保护的 <style>（已加气泡作用域）
+    if (_styleHolder.length) s = s.replace(/\x00ST(\d+)\x00/g, (_, idx) => _styleHolder[parseInt(idx)] || '');
+    return s;
+  }
+
+  // 把 <style> 内的 CSS 选择器强制限定到气泡正文 .md-content 内，防止泄漏到全局。
+  // @keyframes / @font-face 等 at-rule 原样保留（不针对全局元素）；
+  // @media 外壳保留、内部规则递归加前缀；其余选择器统一加 ".md-content " 前缀。
+  function _scopeBubbleCss(css) {
+    if (!css || css.indexOf('{') === -1) return css || '';
+    const PREFIX = '.md-content';
+    let result = '';
+    let i = 0;
+    const n = css.length;
+    while (i < n) {
+      const braceOpen = css.indexOf('{', i);
+      if (braceOpen === -1) { result += css.slice(i); break; }
+      const selectorRaw = css.slice(i, braceOpen);
+      const selector = selectorRaw.trim();
+      // 找配对的 }
+      let depth = 1, j = braceOpen + 1;
+      for (; j < n; j++) {
+        if (css[j] === '{') depth++;
+        else if (css[j] === '}') { depth--; if (depth === 0) break; }
+      }
+      const inner = css.slice(braceOpen + 1, j); // 不含两端花括号
+      const lead = selectorRaw.slice(0, selectorRaw.length - selectorRaw.trimStart().length);
+      if (selector.startsWith('@')) {
+        const lower = selector.toLowerCase();
+        if (/^@media\b/.test(lower) || /^@supports\b/.test(lower)) {
+          // 条件组：外壳保留，内部规则递归加前缀
+          result += lead + selector + '{' + _scopeBubbleCss(inner) + '}';
+        } else {
+          // @keyframes / @font-face / @import 等：原样保留
+          result += lead + selector + '{' + inner + '}';
+        }
+      } else {
+        const scoped = selector.split(',').map(sel => {
+          const t = sel.trim();
+          if (!t) return t;
+          // 已经限定在气泡内的放行，避免重复加前缀
+          if (t.indexOf(PREFIX) === 0 || t.indexOf(PREFIX) !== -1) return t;
+          return PREFIX + ' ' + t;
+        }).join(', ');
+        result += lead + scoped + '{' + inner + '}';
+      }
+      i = j + 1;
+    }
+    return result;
   }
 
   // 行内格式

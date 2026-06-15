@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=140">
-<link rel="stylesheet" href="css/phone.css?v=156">
+<link rel="stylesheet" href="css/phone.css?v=164">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
 </head>
@@ -1467,6 +1467,15 @@
               <span class="circle-check-ui"></span>
             </span>
           </label>
+          <!-- 输入辅助 -->
+          <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em;margin-top:8px">输入辅助</div>
+          <label class="circle-check-label">
+            <span class="circle-check-text">回复建议<br><span style="font-size:11px;color:var(--text-secondary)">在输入框旁显示灵感灯泡，点击生成回复建议；关闭后隐藏灯泡</span></span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-suggest-enabled" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
         </div>
 
         <!-- ===== 玩法 Tab ===== -->
@@ -1994,6 +2003,23 @@
           <input id="wv-attr-max" type="number" placeholder="留空=无上限" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0;outline:none;box-shadow:none">
         </label>
       </div>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">达到上限后进位到
+        <select id="wv-attr-overflow" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;outline:none;box-shadow:none">
+          <option value="">不进位</option>
+        </select>
+        <span style="font-size:11px;color:var(--text-secondary);line-height:1.5">本属性达到上限后，每满一次上限，目标属性 +1，本属性保留余数（需设置最大值才生效）。</span>
+      </label>
+      <div style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:10px">
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text);min-width:0">每累计 N 点派生到
+          <select id="wv-attr-derive" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0;outline:none;box-shadow:none">
+            <option value="">不派生</option>
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text);min-width:0">步长 N
+          <input id="wv-attr-derive-step" type="number" placeholder="100" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;min-width:0;outline:none;box-shadow:none">
+        </label>
+      </div>
+      <span id="wv-attr-derive-hint" style="font-size:11px;color:var(--text-secondary);line-height:1.5">本属性每累计 N 点，目标属性自动+1（目标 = 本属性÷N 向下取整），本属性持续累积不清零。目标属性变为只读、AI 无法直接修改。与「进位」二选一。</span>
       <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text)">属性描述
         <textarea id="wv-attr-desc" placeholder="让 AI 知道这个数值意味着什么" style="width:100%;box-sizing:border-box;min-height:110px;resize:vertical;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;line-height:1.5;outline:none;box-shadow:none"></textarea>
       </label>
@@ -3932,7 +3958,7 @@ const GameLog = (() => {
 </script>
 <script src="js/db.js?v=11"></script>
 <script src="js/utils.js?v=1"></script>
-<script src="js/markdown.js?v=2"></script>
+<script src="js/markdown.js?v=7"></script>
 <script src="js/api.js"></script>
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
@@ -3942,11 +3968,11 @@ const GameLog = (() => {
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=55"></script>
-<script src="js/worldview.js?v=36"></script>
+<script src="js/worldview.js?v=38"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js"></script>
-<script src="js/conv_gameplay.js?v=6"></script>
+<script src="js/conv_gameplay.js?v=9"></script>
 <script src="js/wv-generator.js?v=7"></script>
 <script src="js/single_card.js?v=9"></script>
 <script src="js/attached-chars.js"></script>
@@ -3955,7 +3981,7 @@ const GameLog = (() => {
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=5"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=43"></script>
+<script src="js/chat.js?v=46"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -3966,12 +3992,12 @@ const GameLog = (() => {
 <script src="js/backstage.js?v=4"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=7"></script>
-<script src="js/status_bar.js?v=25"></script>
+<script src="js/status_bar.js?v=27"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/worldvoice.js?v=3"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
-<script src="js/phone.js?v=390"></script>
+<script src="js/phone.js?v=395"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -3990,7 +4016,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js"></script>
-<script src="js/app.js?v=99"></script>
+<script src="js/app.js?v=100"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
