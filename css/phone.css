@@ -5478,3 +5478,152 @@ background: transparent !important;
   outline: none;
   border-color: var(--accent);
 }
+
+/* ===== 电台「我的」页：订阅小卡 ===== */
+.phone-radio-mine-list {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.phone-radio-mine-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.phone-radio-mine-card:active {
+  transform: scale(0.985);
+  background: var(--bg-tertiary);
+}
+.phone-radio-mine-main {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.phone-radio-mine-cover {
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 11px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-tertiary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.phone-radio-mine-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.phone-radio-mine-cover-fallback {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.phone-radio-mine-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  justify-content: center;
+}
+.phone-radio-mine-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone-radio-mine-fm {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-tertiary));
+}
+.phone-radio-mine-host {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.phone-radio-mine-mic {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+.phone-radio-mine-tags {
+  display: inline-flex;
+  gap: 4px;
+}
+.phone-radio-mine-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 7px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+.phone-radio-mine-next {
+  margin-top: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.phone-radio-mine-next-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.phone-radio-mine-next-line {
+  flex: 1;
+  height: 1px;
+  margin-left: 4px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 35%, transparent) 0%, transparent 100%);
+}
+.phone-radio-mine-next-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone-radio-mine-next-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-mine-card {
+  background: color-mix(in srgb, var(--accent) 12%, rgba(18, 20, 28, 0.42)) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-mine-name { color: rgba(255, 255, 255, 0.96) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-mine-host { color: rgba(255, 255, 255, 0.7) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-mine-next {
+  background: rgba(0, 0, 0, 0.22) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-mine-next-name { color: rgba(255, 255, 255, 0.96) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-mine-next-desc { color: rgba(255, 255, 255, 0.7) !important; }

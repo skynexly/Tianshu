@@ -175,21 +175,10 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v698.0';
-    const CHANGELOG = `【v698.0 更新内容】
+    const APP_VERSION = 'v698.1';
+    const CHANGELOG = `【v698.1 更新内容】
 
-新增功能
-· 🔄对话级玩法同步世界观
-○ 数值/事件/任务系统支持从世界观一键同步
-○ 完全覆盖：清空对话数据，按世界观重新初始化
-○ 追加覆盖：更新定义但保留当前进度与数值
-
-体验优化
-· 📱手机配置改版
-○ 世界观编辑里的手机配置改为独立卡片入口，编辑界面更清爽
-· ✅任务系统优化
-○ 任务完成识别更智能，改写措辞也能正确匹配
-○ 优化了任务发布时机，任务发布更及时`;
+优化了通话功能`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

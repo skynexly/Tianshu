@@ -1166,7 +1166,10 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
 
 // 7b. 来电能力：角色可以主动给玩家打语音/视频电话（开关控制，默认开）
     if (convSettings.callEnabled) {
-      systemParts.push('[来电能力]\n当剧情中某个角色主动给玩家打语音或视频电话时，你可以在回复末尾输出一个 ```call 代码块来触发来电界面。玩家会在手机上看到来电响铃，可以选择接听或拒接。\n\n格式：\n```call\n{"mode":"voice 或 video","name":"角色名","firstLine":"接通后的第一段内容。格式要求：台词行以 > 开头，描述行不加前缀；台词行尾标时间 [HH:MM]；可以描述+台词组合，如：电话那头传来低沉的笑声。\\n> 怎么这个点才回来？ [12:50]"}\n```\n\n语音还是视频，按角色此刻的动机选：\n- voice（语音）：日常联系、交代事情、随口说两句、报平安、不方便露脸或所在环境不适合开视频时。多数情况用语音。\n- video（视频）：很想见到玩家、思念、想亲眼确认玩家的状态/安全/情绪、需要面对面把话说清楚、或想让玩家看到自己这边的画面时。视频更亲密、更郑重，别滥用。\n\n规则：\n- 只有剧情中角色确实有打电话的动机时才使用，不要无理由触发\n- mode 只能是 "voice" 或 "video"，并与上面的动机相符\n- name 必须是角色的确切名字\n- firstLine 是对方接起后立刻说的话，用叙述流格式（描述行不加前缀，台词行以 > 开头并在行尾标 [HH:MM]），至少包含一句台词（> 开头），且要体现这通电话的来意\n- 代码块放在回复末尾，不要在正文中穿插\n- 一条回复里最多一个 ```call 块');
+      const _callFreqLine = (convSettings.callFreq === 'active')
+        ? '\n\n【打电话倾向：积极】只要情境说得过去，就更倾向于让剧情里的角色主动打电话给玩家——想到玩家、有点小事、想分享、单纯想听听声音、关心一句，都可以成为来电的理由，不必等到有要紧事。但要符合该角色此刻的处境（在忙/不方便时除外），也不要在短时间内反复来电造成骚扰。'
+        : '\n\n【打电话倾向：正常】当剧情里某个角色出现这些情况时，可以自然地让 ta 打电话给玩家：有要紧或急的事、情绪比较强烈（想念、担心、兴奋、生气）、有些话当面或打字说不清、很久没联系想听听玩家声音。是否来电由该角色当下的处境和心情决定，合适就打，不合适就不打。';
+      systemParts.push('[来电能力]\n当剧情中某个角色主动给玩家打语音或视频电话时，你可以在回复末尾输出一个 ```call 代码块来触发来电界面。玩家会在手机上看到来电响铃，可以选择接听或拒接。\n\n格式：\n```call\n{"mode":"voice 或 video","name":"角色名","firstLine":"接通后的第一段内容。格式要求：台词行以 > 开头，描述行不加前缀；台词行尾标时间 [HH:MM]；可以描述+台词组合，如：电话那头传来低沉的笑声。\\n> 怎么这个点才回来？ [12:50]"}\n```\n\n语音还是视频，按角色此刻的动机选：\n- voice（语音）：日常联系、交代事情、随口说两句、报平安、不方便露脸或所在环境不适合开视频时。多数情况用语音。\n- video（视频）：很想见到玩家、思念、想亲眼确认玩家的状态/安全/情绪、需要面对面把话说清楚、或想让玩家看到自己这边的画面时。视频更亲密、更郑重，别滥用。\n\n规则：\n- 只有剧情中角色确实有打电话的动机时才使用，不要无理由触发\n- mode 只能是 "voice" 或 "video"，并与上面的动机相符\n- name 必须是角色的确切名字\n- firstLine 是对方接起后立刻说的话，用叙述流格式（描述行不加前缀，台词行以 > 开头并在行尾标 [HH:MM]），至少包含一句台词（> 开头），且要体现这通电话的来意\n- 代码块放在回复末尾，不要在正文中穿插\n- 一条回复里最多一个 ```call 块' + _callFreqLine);
     }
 
       // 8. 心动模拟：累计状态注入
@@ -5408,6 +5411,7 @@ if (!gp) return null;
 bgImage: conv?.convBgImage || '',
         imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
     callEnabled: conv?.convCallEnabled !== false, // 默认开（来电能力）
+      callFreq: conv?.convCallFreq || 'normal',     // 来电频率：'normal'(正常,默认) | 'active'(积极)
     toolsMemory: !!conv?.convToolsMemory,          // 默认关（记忆类工具）
     toolsWorldview: !!conv?.convToolsWorldview,    // 默认关（世界观查询工具）
     toolsEdit: !!conv?.convToolsEdit,              // 默认关（AI 编辑设定/单人卡，高风险）
@@ -5872,6 +5876,7 @@ document.getElementById('cs-format').checked = s.format;
     // 来电能力
     const callEl = document.getElementById('cs-call-enabled');
     if (callEl) callEl.checked = s.callEnabled;
+    _syncCallFreqUI(s.callFreq || 'normal');
     // 工具调用
     const toolsMemEl = document.getElementById('cs-tools-memory');
     if (toolsMemEl) toolsMemEl.checked = s.toolsMemory;
@@ -5950,6 +5955,8 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     if (igSaveEl) conv.convImgGen = igSaveEl.checked;
     const callSaveEl = document.getElementById('cs-call-enabled');
     if (callSaveEl) conv.convCallEnabled = callSaveEl.checked;
+    const callFreqSaveEl = document.getElementById('cs-call-freq-btn');
+    if (callFreqSaveEl) conv.convCallFreq = callFreqSaveEl.dataset.value || 'normal';
     const toolsMemSaveEl = document.getElementById('cs-tools-memory');
     if (toolsMemSaveEl) conv.convToolsMemory = toolsMemSaveEl.checked;
     const toolsWvSaveEl = document.getElementById('cs-tools-worldview');
@@ -6937,6 +6944,49 @@ async function applyLorebooksToWorldview() {
     try { renderAll(); } catch(_) {}
   }
 
+  // ===== 来电频率档位（对话级，正常/积极，在对话设置弹窗内临时编辑）=====
+  const _CALL_FREQ_OPTIONS = [
+    { value: 'normal', label: '正常' },
+    { value: 'active', label: '积极' }
+  ];
+  // 同步按钮的当前值（存在 dataset.value，保存时统一读取）
+  function _syncCallFreqUI(val) {
+    const v = (val === 'active') ? 'active' : 'normal';
+    const btn = document.getElementById('cs-call-freq-btn');
+    const label = document.getElementById('cs-call-freq-label');
+    const opt = _CALL_FREQ_OPTIONS.find(o => o.value === v);
+    if (btn) btn.dataset.value = v;
+    if (label && opt) label.textContent = opt.label;
+  }
+  function _toggleCallFreqDropdown() {
+    const dropdown = document.getElementById('cs-call-freq-dropdown');
+    if (!dropdown) return;
+    const isHidden = dropdown.classList.contains('hidden');
+    if (isHidden) {
+      const btn = document.getElementById('cs-call-freq-btn');
+      const curVal = (btn && btn.dataset.value) || 'normal';
+      dropdown.innerHTML = _CALL_FREQ_OPTIONS.map(o =>
+        `<div class="custom-dropdown-item${o.value === curVal ? ' active' : ''}" onclick="Chat._selectCallFreq('${o.value}')">${Utils.escapeHtml(o.label)}</div>`
+      ).join('');
+      dropdown.classList.remove('hidden');
+      setTimeout(() => {
+        document.addEventListener('click', function _close(e) {
+          if (!dropdown.contains(e.target) && !e.target.closest('#cs-call-freq-btn')) {
+            dropdown.classList.add('hidden');
+            document.removeEventListener('click', _close);
+          }
+        });
+      }, 0);
+    } else {
+      dropdown.classList.add('hidden');
+    }
+  }
+  function _selectCallFreq(val) {
+    _syncCallFreqUI(val);
+    const dropdown = document.getElementById('cs-call-freq-dropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+  }
+
   return {
     loadHistory, send, cancelRequest, editMessage, saveEdit,
     createBranch, switchBranch, regenerate,
@@ -6984,6 +7034,8 @@ openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
     _toggleTimeFormatDropdown, _selectTimeFormat,
     // 气泡时间戳下拉
     _toggleBubbleTimeDropdown,
+    // 来电频率下拉
+    _toggleCallFreqDropdown, _selectCallFreq,
     // 环境音模式下拉
     _toggleAmbientModeDropdown, _selectAmbientMode
   };

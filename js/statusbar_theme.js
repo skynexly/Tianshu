@@ -162,6 +162,8 @@ var StatusBarTheme = (() => {
       realCss = realCss.replace(/\.sb-task-system-section/g, '#sb-task-system');
       // 折叠态锁定基础款：剔除任何命中折叠态的规则
       realCss = _stripCollapsedRules(realCss);
+      // 作用域兜底：把裸标签/通用选择器强制限定到状态栏内，防止泄漏改坏全局界面
+      realCss = _scopeSelectors(realCss);
       
       const style = document.createElement('style');
       style.id = 'sb-theme-preview-custom';
@@ -203,6 +205,48 @@ var StatusBarTheme = (() => {
         new RegExp('\\.' + cls + '(?![\\w-])').test(selector)
       );
       if (!hit) result += block;
+      i = j + 1;
+    }
+    return result;
+  }
+
+  // 作用域兜底：强制每条规则的选择器限定在状态栏内，防止裸标签/通用选择器泄漏到全局。
+  // 已带状态栏锚点（.sb- / .hs- / body[data-sb-skin] / body[data-skin] / #sb- / :root）的放行；
+  // 其余（如 button、div、*）自动加 .sb-root 前缀限定。
+  function _scopeSelectors(css) {
+    if (!css) return css;
+    // 选择器已含状态栏作用域锚点 → 视为安全，放行
+    const SAFE = /\.sb-|\.hs-|\bbody\s*\[\s*data-sb-skin|\bbody\s*\[\s*data-skin|#sb-|:root|\.topbar-row-status/;
+    let result = '';
+    let i = 0;
+    const n = css.length;
+    while (i < n) {
+      const braceOpen = css.indexOf('{', i);
+      if (braceOpen === -1) { result += css.slice(i); break; }
+      const selectorRaw = css.slice(i, braceOpen);
+      const selector = selectorRaw.trim();
+      // 找配对的 }
+      let depth = 1, j = braceOpen + 1;
+      for (; j < n; j++) {
+        if (css[j] === '{') depth++;
+        else if (css[j] === '}') { depth--; if (depth === 0) break; }
+      }
+      const body = css.slice(braceOpen, j + 1);
+      // @media / @keyframes / @font-face 等 at-rule：原样保留（内部规则一般不针对全局元素）
+      if (selector.startsWith('@')) {
+        result += selectorRaw + body;
+      } else {
+        // 逗号分隔的选择器组，逐个处理
+        const scoped = selector.split(',').map(sel => {
+          const s = sel.trim();
+          if (!s) return s;
+          if (SAFE.test(s)) return s;        // 已有状态栏锚点，放行
+          return '.sb-root ' + s;            // 裸选择器，强制限定到状态栏内
+        }).join(', ');
+        // 保留选择器前的空白（缩进/换行），把选择器主体替换为加了作用域的版本
+        const lead = selectorRaw.slice(0, selectorRaw.length - selectorRaw.trimStart().length);
+        result += lead + scoped + ' ' + body;
+      }
       i = j + 1;
     }
     return result;
@@ -1060,12 +1104,19 @@ var StatusBarTheme = (() => {
 根据用户描述，输出自定义 CSS。CSS 叠加在模板基础样式之上（增量覆盖）。
 
 ## CSS 变量（跟随用户主题色自动变化）
-优先使用这些变量，这样用户切主题时颜色会自动跟随。如果用户明确要求固定颜色，可以硬编码。
+**强烈建议优先使用这些主题色变量**，这样用户切换主题时状态栏颜色会自动跟随，保持整体协调。请把它们作为配色的第一选择。
 - --bg, --bg-secondary, --bg-tertiary（背景色）
 - --text, --text-secondary（文字色）
 - --accent（强调色）
 - --border, --decoration（边框/装饰色）
 - --status-bg, --status-card（状态栏专用背景）
+只有当用户**明确要求**某个固定颜色（例如"标题用大红色 #ff0000""背景就要纯黑"）时，才硬编码写死颜色值。否则一律用上面的变量，不要凭自己喜好写死颜色。
+
+## ⛔ 作用域铁律（必须遵守，否则会破坏整个 App）
+你写的 CSS 会注入到**整个页面的全局样式表**里，因此：
+- **每一条选择器都必须限定在状态栏内**，即必须以状态栏根选择器开头：\`.sb-root\` 或 \`body[data-sb-skin="${baseTemplate}"]\` 或 \`body[data-skin]\`，或针对上面 DOM 结构里的 \`.sb-\` / \`.hs-\` 开头的具体 class。
+- **严禁使用裸标签选择器或通用选择器**，例如 \`button {}\`、\`div {}\`、\`* {}\`、\`input {}\`、\`a {}\`——这些会命中整个 App 的所有元素，把全局界面改坏（比如把所有按钮变成方形）。
+- 如果要改某个状态栏内的按钮，要写成 \`.sb-root .sb-card-close {}\` 这种带状态栏前缀的形式，绝不能只写 \`button {}\`。
 
 ## 完整 DOM 结构
 以下是状态栏展开态的完整 HTML 结构（你的 CSS 选择器要对应这些 class）：
