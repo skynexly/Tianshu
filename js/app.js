@@ -175,7 +175,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v700.2';
+    const APP_VERSION = 'v700.3';
     const CHANGELOG = `【v700 更新内容】
 
 新增「小屋」APP：可创建住所、按楼层划分房间、布置家具与装饰
