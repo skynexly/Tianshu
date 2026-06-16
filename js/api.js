@@ -296,7 +296,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
   }
 
   /**
-   * 非流式调用（总结等）
+   * 非流式调用（总结等）— 实际走流式拼接，避免中转站网关超时
    */
   async function summarize(content, summaryPrompt, options) {
     const mainConfig = await getConfig();
@@ -317,15 +317,47 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
           { role: 'system', content: summaryPrompt },
           { role: 'user', content: content }
         ],
-        stream: false,
+        stream: true,
         temperature: 0.3,
         max_tokens: 20000
       })
     });
 
     if (!resp.ok) throw new Error(`总结API错误: ${resp.status}`);
-    const json = await resp.json();
-    return json.choices?.[0]?.message?.content || '';
+
+    // 流式拼接
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let result = '';
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === 'data: [DONE]') continue;
+        if (!trimmed.startsWith('data: ')) continue;
+        try {
+          const json = JSON.parse(trimmed.slice(6));
+          const delta = json.choices?.[0]?.delta?.content;
+          if (delta) result += delta;
+        } catch(_) {}
+      }
+    }
+    // 处理残余 buffer
+    if (buffer.trim() && buffer.trim() !== 'data: [DONE]' && buffer.trim().startsWith('data: ')) {
+      try {
+        const json = JSON.parse(buffer.trim().slice(6));
+        const delta = json.choices?.[0]?.delta?.content;
+        if (delta) result += delta;
+      } catch(_) {}
+    }
+
+    return result;
   }
 
   /**
