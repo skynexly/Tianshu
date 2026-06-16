@@ -1121,7 +1121,7 @@ function showToast(text, duration = 4500) {
     if (!stack) {
       stack = document.createElement('div');
       stack.id = 'ui-toast-stack';
-      stack.style.cssText = 'position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:min(86vw,420px)';
+      stack.style.cssText = 'position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:2147483645;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:min(86vw,420px)';
       document.body.appendChild(stack);
     }
     const toast = document.createElement('div');
