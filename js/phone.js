@@ -5602,9 +5602,9 @@ function _refreshCalBanner() {
           pd.houses = data.houses || [];
           pd.furnitureInventory = data.furnitureInventory || [];
           await _savePhoneData();
-          document.body.removeChild(mask);
+          mask.remove();
           UI.showToast(`已导入 ${pd.houses.length} 套住所`, 2200);
-          _renderCottage(pd);
+          try { _renderCottage(pd); } catch(_) {}
         } catch (e) {
           UI.showToast('导入失败：' + (e.message || '格式错误'), 3000);
         }
@@ -5837,7 +5837,10 @@ function _refreshCalBanner() {
     mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
     const row = (key, label, desc) => `
       <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;cursor:pointer">
-        <input type="checkbox" data-key="${key}" ${s[key] ? 'checked' : ''} style="margin-top:2px;width:16px;height:16px;flex-shrink:0">
+        <span style="position:relative;display:inline-flex;margin-top:1px;flex-shrink:0">
+          <input type="checkbox" class="circle-check" data-key="${key}" ${s[key] ? 'checked' : ''}>
+          <span class="circle-check-ui"></span>
+        </span>
         <div>
           <div style="font-size:14px;color:var(--text)">${label}</div>
           <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${desc}</div>
@@ -6414,9 +6417,12 @@ ${shipSection}
         <textarea id="cottage-ai-req" rows="3" placeholder="例如：北欧风、暖色调、有书房和琴房" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:14px"></textarea>
 
         <label id="cottage-ai-wv-label" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:18px;cursor:pointer;user-select:none">
-          <input id="cottage-ai-wv" type="checkbox" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;cursor:pointer">
-          <span>发送世界观基础资料作为参考<br><span style="font-size:11px;color:var(--text-secondary)">含世界观基础、地区设定、节日，帮 AI 贴合世界观</span></span>
-        </label>
+<span style="position:relative;display:inline-flex;flex-shrink:0">
+<input id="cottage-ai-wv" type="checkbox" class="circle-check">
+<span class="circle-check-ui"></span>
+</span>
+<span>发送世界观基础资料作为参考<br><span style="font-size:11px;color:var(--text-secondary)">含世界观基础、地区设定、节日，帮 AI 贴合世界观</span></span>
+</label>
 
         <div style="display:flex;gap:10px">
           <button id="cottage-ai-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
@@ -6965,9 +6971,12 @@ category 只能是 decor/furniture/deco 三者之一。`;
         <textarea id="cottage-air-req" rows="3" placeholder="例如：北欧风、暖色调、有大书桌" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:14px"></textarea>
 
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:18px;cursor:pointer;user-select:none">
-          <input id="cottage-air-wv" type="checkbox" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;cursor:pointer">
-          <span>发送世界观基础资料作为参考<br><span style="font-size:11px;color:var(--text-secondary)">含世界观基础、地区设定、节日，帮 AI 贴合世界观</span></span>
-        </label>
+<span style="position:relative;display:inline-flex;flex-shrink:0">
+<input id="cottage-air-wv" type="checkbox" class="circle-check">
+<span class="circle-check-ui"></span>
+</span>
+<span>发送世界观基础资料作为参考<br><span style="font-size:11px;color:var(--text-secondary)">含世界观基础、地区设定、节日，帮 AI 贴合世界观</span></span>
+</label>
 
         <div style="display:flex;gap:10px">
           <button id="cottage-air-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>

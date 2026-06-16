@@ -2667,10 +2667,11 @@ background: transparent !important;
   align-items: stretch;
 }
 .phone-page2-apps {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px 14px;
-  flex-shrink: 0;
+display: grid;
+grid-template-columns: repeat(2, 1fr);
+gap: 14px 14px;
+flex-shrink: 0;
+align-self: start;
 }
 
 /* ===== 纪念日卡片 ===== */

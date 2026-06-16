@@ -925,8 +925,8 @@ msgEl.textContent = message || '确定要继续吗？';
 if (modal.parentNode !== document.body) {
 document.body.appendChild(modal);
 }
-modal.style.setProperty('z-index', '99999', 'important');
-modal.querySelector('.modal-content')?.style.setProperty('z-index', '100000', 'important');
+    modal.style.setProperty('z-index', '2147483646', 'important');
+    modal.querySelector('.modal-content')?.style.setProperty('z-index', '2147483647', 'important');
 modal.querySelector('.modal-content')?.style.setProperty('position', 'relative');
 modal.classList.remove('hidden');
 
@@ -965,8 +965,12 @@ modal.classList.remove('hidden');
 
       titleEl.textContent = title || '提示';
       msgEl.textContent = message || '';
-      modal.style.zIndex = '930';
-      modal.querySelector('.modal-content')?.style.setProperty('z-index', '931', 'important');
+      // 必须挂到 body 最顶层，避免被虚拟手机/transform 父级压住
+      if (modal.parentNode !== document.body) {
+        document.body.appendChild(modal);
+      }
+      modal.style.setProperty('z-index', '2147483646', 'important');
+      modal.querySelector('.modal-content')?.style.setProperty('z-index', '2147483647', 'important');
       modal.querySelector('.modal-content')?.style.setProperty('position', 'relative');
       modal.classList.remove('hidden');
 
