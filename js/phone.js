@@ -7372,14 +7372,31 @@ ${houseDataText}`;
             model,
             temperature: 0.7,
             max_tokens: 600,
+            stream: true,
             messages: [
               { role: 'system', content: sysPrompt },
               { role: 'user', content: '请给出这套住所的整体风格总结（150 字以内）。' }
             ]
           })
         });
-        const data = await resp.json();
-        let summary = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+        if (!resp.ok) throw new Error(`API ${resp.status}`);
+        // 流式拼接
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let summary = '';
+        let buf = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() || '';
+          for (const ln of lines) {
+            const t = ln.trim();
+            if (!t || t === 'data: [DONE]' || !t.startsWith('data: ')) continue;
+            try { const j = JSON.parse(t.slice(6)); const d = j.choices?.[0]?.delta?.content; if (d) summary += d; } catch(_) {}
+          }
+        }
         summary = String(summary).replace(/```/g, '').trim();
         if (!summary) { UI.showToast('AI 没有返回内容，请重试', 2000); return; }
         if (summary.length > 160) summary = summary.slice(0, 160);
