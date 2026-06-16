@@ -1424,6 +1424,22 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
           }
           try { GameLog.log('info', `[节日注入] 世界观节日命中，已注入`); } catch(_) {}
         }
+        // 命中提及节日：玩家/AI 聊到了某节日（名字或关键词），把它的内容作为背景资料发给 AI，避免乱编
+        // 排除时间命中已发完整内容的节日（在 festivalText 里），不重复注入
+        if (sendFestival) {
+          try {
+            const mentionedFest = _buildMentionedFestivalPrompt(
+              currentWv.festivals || [], messages,
+              (currentWv.festivals || []).filter(f => f && f.name && festivalText.includes(f.name)).map(f => f.name)
+            );
+            if (mentionedFest) {
+              let firstNonSys = 0;
+              while (firstNonSys < apiMessages.length && apiMessages[firstNonSys].role === 'system') firstNonSys++;
+              apiMessages.splice(firstNonSys, 0, { role: 'system', content: mentionedFest });
+              try { GameLog.log('info', `[节日注入] 命中提及节日，已注入背景资料`); } catch(_) {}
+            }
+          } catch(e) { console.warn('[Chat] 提及节日注入失败', e); }
+        }
         // 扩展条目：按 position 分流（v587）
         // 启用条件：常驻=sendCustom，动态=sendKnowledge；如有任一开启，把对应条目纳入
         wantSrc = (currentWv.knowledges || []).filter(k => {
@@ -1576,6 +1592,19 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
                 }
                 try { GameLog.log('info', `[节日注入] 世界书节日命中，已注入`); } catch(_) {}
               }
+              // 命中提及节日（世界书）：聊到节日名/关键词就把内容作为背景资料发给 AI
+              try {
+                const _mentionedFest = _buildMentionedFestivalPrompt(
+                  _hiddenWv.festivals || [], messages,
+                  (_hiddenWv.festivals || []).filter(f => f && f.name && _festText.includes(f.name)).map(f => f.name)
+                );
+                if (_mentionedFest) {
+                  let firstNonSys = 0;
+                  while (firstNonSys < apiMessages.length && apiMessages[firstNonSys].role === 'system') firstNonSys++;
+                  apiMessages.splice(firstNonSys, 0, { role: 'system', content: _mentionedFest });
+                  try { GameLog.log('info', `[节日注入] 世界书命中提及节日，已注入背景资料`); } catch(_) {}
+                }
+              } catch(e) { console.warn('[Chat] 世界书提及节日注入失败', e); }
               // 扩展条目（卡级 + 对话级总开关都开才注入）
               const _cardKnow = (_hiddenWv.knowledges || []).filter(k => k && k.enabled !== false);
               const _cardEvents = (convSettings.eventsEnabled !== false) ? (_hiddenWv.events || []) : [];
@@ -4865,8 +4894,46 @@ let s = `· ${f.name || '未命名'}`;
 if (f.date) s += `（${f.date}${f.yearly ? '，每年' : ''}）`;
 return s;
 });
-return `【世界观·节日索引】\n本世界包含以下节日（详情会在游戏时间临近时自动补充）：\n${lines.join('\n')}\n可在剧情自然提及时灵活引用，提前埋伏笔。`;
-}
+    return `【世界观·节日索引】\n本世界包含以下节日（详情会在游戏时间临近时自动补充）：\n${lines.join('\n')}\n可在剧情自然提及时灵活引用，提前埋伏笔。`;
+  }
+
+  // 命中提及节日：扫最近正文，命中节日名/触发关键词的，把节日内容作为背景资料发给 AI
+  // 仿"提及地区"那套：不代表节日正在发生，只是玩家/AI 聊到了它，提前把真实详情给 AI 避免乱编
+  // - excludeNames：已通过时间命中（_buildFestivalPrompt）发过完整内容的节日名，避免重复注入
+  function _buildMentionedFestivalPrompt(festivals, msgs, excludeNames) {
+    if (!festivals || festivals.length === 0) return '';
+    const enabled = festivals.filter(f => f && f.enabled !== false && (f.content || '').trim());
+    if (enabled.length === 0) return '';
+    const recent = (msgs || []).filter(m => m.role !== 'system').slice(-4);
+    if (recent.length === 0) return '';
+    const scanText = recent.map(m => m.content || '').join('\n').toLowerCase();
+    if (!scanText.trim()) return '';
+    const exclude = new Set((excludeNames || []).map(n => String(n || '').toLowerCase()));
+    const hits = [];
+    for (const f of enabled) {
+      if (exclude.has(String(f.name || '').toLowerCase())) continue;
+      // 候选关键词：节日名 + keys（逗号/空格分隔）
+      const keys = [];
+      if (f.name) keys.push(f.name);
+      const keyStr = (f.keys || '').trim();
+      if (keyStr) keys.push(...keyStr.split(/[,，、\s]+/).filter(Boolean));
+      let earliest = -1;
+      for (const k of keys) {
+        if (!k || k.length < 2) continue; // 太短的跳过，避免误命中
+        const idx = scanText.indexOf(k.toLowerCase());
+        if (idx >= 0 && (earliest < 0 || idx < earliest)) earliest = idx;
+      }
+      if (earliest >= 0) hits.push({ fest: f, pos: earliest });
+    }
+    if (!hits.length) return '';
+    hits.sort((a, b) => a.pos - b.pos);
+    const top = hits.slice(0, 3);
+    let txt = '【提及的节日】\n本轮玩家或 AI 在正文中提到了以下节日，仅作背景资料参考，不代表节日正在发生，剧情中无需主动展开。\n';
+    for (const h of top) {
+      txt += `\n[节日：${h.fest.name}${h.fest.date ? `（${h.fest.date}）` : ''}]\n${(h.fest.content || '').trim()}\n`;
+    }
+    return txt;
+  }
 
 // 构建知识设定提示（最近2轮对话出现关键词时触发）
 // v581：只处理动态条目（keywordTrigger=true）

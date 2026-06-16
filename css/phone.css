@@ -5104,6 +5104,37 @@ background: transparent !important;
 .phone-radio-interact.skip .phone-radio-interact-desc {
   color: var(--text-tertiary);
 }
+/* 投票卡片：问题 + 选项按钮列表 */
+.phone-radio-vote-q {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.phone-radio-vote-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.phone-radio-vote-opt {
+  width: 100%;
+  padding: 11px 14px;
+  font-size: 14px;
+  text-align: left;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  font-family: inherit;
+}
+.phone-radio-vote-opt:active { transform: scale(0.98); }
+.phone-radio-vote-opt:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.phone-radio-vote-opt:disabled { opacity: 0.55; cursor: default; }
+
 /* 叙述行：居中圆角小卡片（学通话） */
 .phone-radio-narr {
   align-self: center;

@@ -175,12 +175,15 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v698.4';
-    const CHANGELOG = `【v698.4 更新内容】
+    const APP_VERSION = 'v699';
+    const CHANGELOG = `【v699 更新内容】
 
-优化了部分界面 UI
-新增「进位属性」：属性满上限后自动向目标属性进位
-新增「派生属性」：属性每累计 N 点，目标属性自动+1`;
+修复了部分页面返回按钮被遮挡的问题
+修复了部分页面切换主题后不显示内容的问题
+节日设定新增「触发关键词」：聊到相关话题也会把节日详情发给 AI
+新增「AI 生成节日」：在世界观/世界书编辑里一键生成扎根本世界的节日
+手机系统新增世界观注入开关：可分别控制节日 / 常驻 / 动态设定是否注入
+手机系统支持独立的世界书管理：默认沿用主线，可单独关闭或添加手机专属世界书`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

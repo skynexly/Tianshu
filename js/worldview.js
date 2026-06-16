@@ -87,7 +87,7 @@ function _defaultRegion() {
   return { id: 'npc_' + Utils.uuid().slice(0,8), name: '', aliases: '', summary: '', detail: '' };
 }
   function _defaultFestival() {
-    return { id: 'fest_' + Utils.uuid().slice(0,8), name: '', date: '', yearly: true, content: '', enabled: true };
+    return { id: 'fest_' + Utils.uuid().slice(0,8), name: '', date: '', yearly: true, content: '', keys: '', enabled: true };
   }
   function _defaultCustom() {
     // 常驻模式默认值（keywordTrigger=false）
@@ -1010,6 +1010,28 @@ function _syncBuiltinRestoreButton(w) {
     _renderEvents(w.events || []);
     // v632.1：世界书也要渲染全图 NPC（加载时漏了）
     _renderGlobalNpcs(w.globalNpcs || []);
+      
+      // 自愈兜底：切主题后世界书编辑页（special tab）内容区可能高度为 0，强制清除隐藏状态
+      requestAnimationFrame(() => {
+        try {
+          const special = document.getElementById('wv-edit-tab-special');
+          if (!special) return;
+          const visible = special.offsetHeight > 0 && !special.classList.contains('hidden');
+          if (!visible) {
+            const clearVis = (el) => {
+              if (!el) return;
+              el.classList.remove('hidden');
+              ['opacity','transform','display','visibility','height','max-height'].forEach(p => el.style.removeProperty(p));
+            };
+            document.querySelectorAll('.wv-edit-tab-content').forEach(clearVis);
+            let node = special;
+            const panel = document.getElementById('panel-worldview-edit');
+            while (node && node !== panel) { clearVis(node); node = node.parentElement; }
+            clearVis(panel);
+            switchEditTab('special');
+          }
+        } catch(_) {}
+      });
     return;
     }
 
@@ -3024,6 +3046,7 @@ let knowledgesData = [];
     document.getElementById('wv-fest-modal-enabled').onchange = _syncFestEnabledUI;
     _syncFestEnabledUI();
     document.getElementById('wv-fest-modal-content').value = f.content || '';
+    document.getElementById('wv-fest-modal-keys').value = f.keys || '';
     document.getElementById('wv-festival-modal').classList.remove('hidden');
   }
   function saveFestivalFromModal() {
@@ -3034,7 +3057,8 @@ let knowledgesData = [];
       date: document.getElementById('wv-fest-modal-date').value.trim(),
       yearly: document.getElementById('wv-fest-modal-yearly').checked,
       enabled: document.getElementById('wv-fest-modal-enabled').checked,
-      content: document.getElementById('wv-fest-modal-content').value.trim()
+      content: document.getElementById('wv-fest-modal-content').value.trim(),
+      keys: document.getElementById('wv-fest-modal-keys').value.trim()
     };
     _renderFestivals(festivalsData);
     closeFestivalModal();
@@ -3050,6 +3074,134 @@ let knowledgesData = [];
   function closeFestivalModal() {
     _editFestivalIdx = null;
     document.getElementById('wv-festival-modal').classList.add('hidden');
+  }
+
+  // ===== AI 批量生成节日 =====
+  let _aiFestAbort = null;
+
+  // AI 生成节日：弹窗收集需求 + 数量，再调 AI 生成节日数组追加进列表
+  async function aiGenFestivals() {
+    const w = window.__wvEditingCache;
+    if (!w) { UI.showToast('请先打开世界观编辑', 1500); return; }
+    const html = `
+    <div id="ai-fest-gen-overlay" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-fest-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成节日</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-fest-gen-prompt" rows="3" placeholder="例如：多生成几个跟农耕和丰收有关的节日" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <div style="display:flex;gap:12px;margin-top:12px">
+          <div style="flex:1">
+            <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成数量</label>
+            <input type="number" id="ai-fest-gen-count" value="3" min="1" max="10" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">根据世界观设定与历法生成扎根本世界的节日，追加进列表（不覆盖已有节日）。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-fest-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-fest-gen-btn" onclick="Worldview._doAiGenFestivals()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-fest-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  const _AI_FEST_SYS = `你是一个为虚构世界观设计节日的文化设定师。请根据世界观设定，设计符合其文明、历史、信仰、社会结构的节日。
+
+设计要求：
+- 节日要扎根世界观本身：从它的历史事件、神明信仰、自然现象、生产周期、政治制度、重要人物、地域文化里生长出来。不要套用现实世界的节日（春节、圣诞节等），除非世界观本身就是现实背景。
+- 每个节日的来历、习俗、氛围各不相同，彼此不雷同。
+- 不要与「已有节日」重复（名称、日期、主题都要避开）。
+
+每个节日的 content（详情，250-350字）必须涵盖：
+1. 流行范围：属于哪个地区 / 哪一类人会过这个节日。
+2. 来历：从哪里来，为了纪念什么。
+3. 习俗传统：节日这天会做什么、如何庆祝。
+4. 假期：有没有假期，放几天。
+
+输出格式：
+严格输出 JSON 数组，不要用 \`\`\`json 包裹，不要输出任何 JSON 以外的内容。
+每个节日对象包含：
+- name（string）：节日名称
+- date（string）：日期，格式「X月X日」（如「3月15日」）
+- keys（string）：触发关键词，2-5 个，用中文逗号分隔，是聊天时可能提到这个节日的词（别名、相关习俗、标志物等）
+- content（string）：节日详情，250-350字，涵盖上述四点`;
+
+  async function _doAiGenFestivals() {
+    const overlay = document.getElementById('ai-fest-gen-overlay');
+    const btn = document.getElementById('ai-fest-gen-btn');
+    const status = document.getElementById('ai-fest-gen-status');
+    const prompt = document.getElementById('ai-fest-gen-prompt')?.value?.trim() || '';
+    const count = Math.max(1, Math.min(10, parseInt(document.getElementById('ai-fest-gen-count')?.value) || 3));
+
+    const w = window.__wvEditingCache;
+    if (!w) { UI.showToast('请先打开世界观编辑', 1500); return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = `正在生成 ${count} 个节日…`; }
+
+    // 1. 通用资料：世界书模式只发世界书自己的资料；世界观模式发完整上下文
+    let baseCtx;
+    if (isHiddenWv(w)) {
+      // 世界书：description + 知识条目 + 常驻 NPC
+      const parts = [];
+      if (w.description) parts.push(`## 世界书简介\n${w.description}`);
+      const ks = (w.knowledges || []).filter(k => k && k.content);
+      if (ks.length) parts.push(`## 世界书条目\n${ks.map(k => `### ${k.name || '未命名'}\n${k.content}`).join('\n\n')}`);
+      const npcs = (w.globalNpcs || []).filter(n => n && n.name);
+      if (npcs.length) parts.push(`## 角色\n${npcs.map(n => `- ${n.name}${n.summary ? '：' + n.summary : ''}`).join('\n')}`);
+      baseCtx = parts.length ? parts.join('\n\n') : '## 世界书\n（暂无资料，请根据节日设计常识自由发挥）';
+    } else {
+      const settingText = document.getElementById('wv-setting')?.value?.trim() || w.setting || '';
+      baseCtx = (typeof WvGenerator !== 'undefined' && WvGenerator._buildWorldContext)
+        ? WvGenerator._buildWorldContext(w, '', settingText)
+        : `## 世界观设定\n${settingText || '（未提供）'}`;
+    }
+    // 2. 已有节日（防重复）
+    const existing = (festivalsData || []).map(f => `${f.name || ''}（${f.date || ''}）`).filter(s => s !== '（）');
+    const existingBlock = existing.length ? `## 已有节日（不要重复名称、日期、主题）\n${existing.join('、')}\n\n` : '';
+    // 3. 用户要求 + 数量
+    const userMsg = `${prompt ? '## 用户额外要求\n' + prompt + '\n\n' : ''}${baseCtx}\n\n${existingBlock}请生成 ${count} 个节日，严格按要求输出 JSON 数组。`;
+
+    try {
+      _aiFestAbort = new AbortController();
+      const raw = await API.generate(_AI_FEST_SYS, userMsg, { signal: _aiFestAbort.signal, maxTokens: 8000 });
+      let cleaned = (raw || '').trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      // 抓第一个 [ 到最后一个 ]
+      const fa = cleaned.indexOf('[');
+      const la = cleaned.lastIndexOf(']');
+      if (fa !== -1 && la > fa) cleaned = cleaned.substring(fa, la + 1);
+      const parsed = JSON.parse(cleaned);
+      const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.festivals) ? parsed.festivals : []);
+      if (!arr.length) throw new Error('AI 未返回有效节日');
+
+      let added = 0;
+      for (const f of arr) {
+        if (!f || !f.name) continue;
+        festivalsData.push({
+          id: 'fest_' + Utils.uuid().slice(0, 8),
+          name: String(f.name).trim(),
+          date: String(f.date || '').trim(),
+          yearly: true,
+          enabled: true,
+          content: String(f.content || '').trim(),
+          keys: String(f.keys || '').trim()
+        });
+        added++;
+      }
+      _renderFestivals(festivalsData);
+      _wvExtAutoSave();
+      overlay?.remove();
+      UI.showToast(`已生成 ${added} 个节日`, 2000);
+    } catch (e) {
+      if (e.name === 'AbortError') { overlay?.remove(); return; }
+      console.error('[Worldview] AI 生成节日失败', e);
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiFestAbort = null;
+    }
   }
 
   // ---------- 自定义设定渲染（只读卡片） ----------
@@ -4275,6 +4427,28 @@ function closeKnowledgeModal() {
     if (gpBtn) gpBtn.style.display = (id === 'wv_heartsim') ? 'none' : '';
     switchViewerTab('v-basic');
     UI.showPanel('wv-viewer', 'forward');
+    
+    // 自愈兜底：切主题后查看页内容区可能高度为 0，强制清除隐藏状态
+    requestAnimationFrame(() => {
+      try {
+        const basic = document.getElementById('wv-viewer-tab-v-basic');
+        if (!basic) return;
+        const visible = basic.offsetHeight > 0 && !basic.classList.contains('hidden');
+        if (!visible) {
+          const clearVis = (el) => {
+            if (!el) return;
+            el.classList.remove('hidden');
+            ['opacity','transform','display','visibility','height','max-height'].forEach(p => el.style.removeProperty(p));
+          };
+          document.querySelectorAll('.wv-viewer-tab-content').forEach(clearVis);
+          let node = basic;
+          const panel = document.getElementById('panel-wv-viewer');
+          while (node && node !== panel) { clearVis(node); node = node.parentElement; }
+          clearVis(panel);
+          switchViewerTab('v-basic');
+        }
+      } catch(_) {}
+    });
   }
   
   function switchViewerTab(tab) {
@@ -5919,7 +6093,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     _tryExitEdit,
     _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards, _fillStartTimeFields,
 editLorebookDescription,
-    addFestival, editFestival, saveFestivalFromModal, deleteFestivalFromModal, closeFestivalModal,
+    addFestival, editFestival, saveFestivalFromModal, deleteFestivalFromModal, closeFestivalModal, aiGenFestivals, _doAiGenFestivals,
   addCustom, editCustom, saveCustomFromModal, deleteCustomFromModal, closeCustomModal,
 addKnowledge, editKnowledge, saveKnowledgeFromModal, deleteKnowledgeFromModal, closeKnowledgeModal,
 toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, selectKnowPosition,

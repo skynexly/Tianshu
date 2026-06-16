@@ -773,7 +773,7 @@ function _renderAttrConditions() {
     panel.id = 'cg-event-panel';
     panel.style.cssText = 'position:fixed;inset:0;z-index:180;background:var(--bg);display:flex;flex-direction:column;overflow:hidden';
     panel.innerHTML = `
-      <div style="padding:16px 16px 0;flex-shrink:0">
+      <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 0;flex-shrink:0">
         <button onclick="ConvGameplay.closeEventEditor()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;background:none;border:none;color:var(--text);cursor:pointer;margin-bottom:12px">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
@@ -1220,8 +1220,8 @@ function _renderAttrConditions() {
       panel.id = 'cg-attr-panel';
       panel.style.cssText = 'position:fixed;inset:0;z-index:180;background:var(--bg);display:flex;flex-direction:column;overflow:hidden';
       panel.innerHTML = `
-        <div style="padding:16px 16px 0;flex-shrink:0">
-          <button onclick="ConvGameplay.closeAttrEditor()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;background:none;border:none;color:var(--text);cursor:pointer;margin-bottom:12px">
+        <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 0;flex-shrink:0">
+        <button onclick="ConvGameplay.closeAttrEditor()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;background:none;border:none;color:var(--text);cursor:pointer;margin-bottom:12px">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
           </button>
           <div style="margin-bottom:16px">
@@ -1723,8 +1723,8 @@ ${recentMessages}`;
       panel.id = 'cg-task-panel';
       panel.style.cssText = 'position:fixed;inset:0;z-index:180;background:var(--bg);display:flex;flex-direction:column;overflow:hidden';
       panel.innerHTML = `
-        <div style="padding:16px 16px 0;flex-shrink:0">
-          <button onclick="ConvGameplay.closeTaskEditor()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;background:none;border:none;color:var(--text);cursor:pointer;margin-bottom:12px">
+        <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 0;flex-shrink:0">
+        <button onclick="ConvGameplay.closeTaskEditor()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;background:none;border:none;color:var(--text);cursor:pointer;margin-bottom:12px">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
           </button>
           <div style="margin-bottom:16px">

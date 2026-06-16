@@ -616,11 +616,17 @@ function _isAppStillActive(appId) {
     //   - end（到此结束）/ 未选择：保留原版，方便复盘
     let _hsHomecomingActive = false;
     let _hsPostHomeMode = null;
+    let _phonePd = null;
     try {
       const pd = await _getPhoneData();
+      _phonePd = pd;
       _hsHomecomingActive = !!(pd && pd.hsHomecomingTriggered);
       _hsPostHomeMode = pd?.hsPostHomeMode || null;
     } catch(_) {}
+    // 手机注入开关（只控世界观自带的扩展设定，默认全开；世界书来的不受影响）
+    const _injFest = !(_phonePd && _phonePd.injectFestival === false);
+    const _injCustom = !(_phonePd && _phonePd.injectCustom === false);
+    const _injKnowledge = !(_phonePd && _phonePd.injectKnowledge === false);
     const _hsSkipNpc = _hsHomecomingActive && (_hsPostHomeMode === 'continue' || _hsPostHomeMode === 'epilogue' || _hsPostHomeMode === 'companion');
 
     // 1. 世界观基础设定
@@ -651,7 +657,14 @@ function _isAppStillActive(appId) {
           if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
             try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
           }
-          const lbs = await Lorebook.collectForChat({ conv, card, wv });
+          // 手机视角的世界书：默认沿用主线挂的，叠加手机单独加的（phoneLorebookIds），
+          // 再叠加手机单独关的（phoneLorebookDisabled）——只影响手机，主线 conv 不动
+          const _phoneAdd = (_phonePd && Array.isArray(_phonePd.phoneLorebookIds)) ? _phonePd.phoneLorebookIds : [];
+          const _phoneOff = (_phonePd && Array.isArray(_phonePd.phoneLorebookDisabled)) ? _phonePd.phoneLorebookDisabled : [];
+          const phoneConv = conv
+            ? { ...conv, lorebookIds: [...(conv.lorebookIds || []), ..._phoneAdd], lorebookDisabled: [...(conv.lorebookDisabled || []), ..._phoneOff] }
+            : { lorebookIds: _phoneAdd.slice(), lorebookDisabled: _phoneOff.slice() };
+          const lbs = await Lorebook.collectForChat({ conv: phoneConv, card, wv });
           for (const lb of (lbs || [])) {
             if (Array.isArray(lb.globalNpcs)) bookExtra.globalNpcs.push(...lb.globalNpcs);
             if (Array.isArray(lb.festivals)) bookExtra.festivals.push(...lb.festivals);
@@ -723,15 +736,20 @@ function _isAppStillActive(appId) {
         if (allNpcs.length > 0) parts.push('【NPC列表与详细资料】\n' + allNpcs.join('\n---\n'));
         }
 
-        // 节日设定（世界观 + 世界书合并）
-        const allFest = [...(wv.festivals || []), ...bookExtra.festivals];
+        // 节日设定（世界观 + 世界书合并）— 世界观部分受手机开关控制，世界书部分不受影响
+        const allFest = [...(_injFest ? (wv.festivals || []) : []), ...bookExtra.festivals];
         if (allFest.length > 0) {
-          const festStr = allFest.map(f => `${f.name || ''}（${f.date || ''}）：${f.desc || ''}`).join('\n');
+          const festStr = allFest.map(f => `${f.name || ''}（${f.date || ''}）：${f.content || ''}`).join('\n');
           parts.push('【节日设定】\n' + festStr);
         }
 
         // 知识设定（世界观 + 世界书合并）— v687.6：所有启用条目都进，不再区分关键词触发
-        const allKnowledges = [...(wv.knowledges || wv.customs || []), ...bookExtra.knowledges];
+        // 世界观部分按手机开关分常驻(keywordTrigger=false)/动态(true)过滤；世界书部分不受影响
+        const wvKnowledges = (wv.knowledges || wv.customs || []).filter(c => {
+          if (c && c.keywordTrigger) return _injKnowledge;
+          return _injCustom;
+        });
+        const allKnowledges = [...wvKnowledges, ...bookExtra.knowledges];
         if (allKnowledges.length > 0) {
           const enabledAll = allKnowledges.filter(c => c.enabled !== false);
           if (enabledAll.length > 0) {
@@ -752,7 +770,7 @@ function _isAppStillActive(appId) {
           parts.push('【NPC列表与详细资料】\n' + lines.join('\n---\n'));
         }
         if (bookExtra.festivals.length > 0) {
-          parts.push('【节日设定】\n' + bookExtra.festivals.map(f => `${f.name || ''}（${f.date || ''}）：${f.desc || ''}`).join('\n'));
+          parts.push('【节日设定】\n' + bookExtra.festivals.map(f => `${f.name || ''}（${f.date || ''}）：${f.content || ''}`).join('\n'));
         }
         const enabledAll = bookExtra.knowledges.filter(c => c.enabled !== false);
         if (enabledAll.length > 0) {
@@ -4949,11 +4967,15 @@ function _refreshCalBanner() {
 - 主播播报时一句一句地说，每个台词行只放一两句话，不要把整条新闻挤在一个台词行里，要拆成多个连续的短台词行。
 - 若有嘉宾，可将其作为连线前方记者或特约评论员，在某条重点新闻后做简短的现场连线或点评，不喧宾夺主。
 - 时长：30 分钟左右。
-
 节目结构（半固定，保持官方新闻台的庄重感）：
+【今日内容清单（重要，必须遵守）】
+- 开场报完频率/节目名/日期后，主播必须用一段话把"今天这期要播的几条新闻"逐条罗列清楚，每条用一句话点明是什么事，让听众一开场就拿到这期的完整内容清单。
+- 正文必须严格按开场列出的那几条逐条展开：开场列了几条就播几条，顺序、数量、主题一一对应，不增不减。
+- 绝对不要在正文里冒出开场清单之外的新闻，也不要跳过开场答应要播的任何一条。
+
 1. 开场：庄重片头垫乐渐起，主播以固定问候开场，念出频率与节目名，报出当前日期，并简述本期看点。
    示例风格——
-   庄重的片头号角渐起，电流轻微作响，演播室灯光亮起。
+   庄重的片头号角渐起，电流轻微作响，话筒里传来主播沉稳的呼吸。
    > 主播名：各位听众晚上好，这里是 FM频率·节目名。
    > 主播名：我是主播主播名。今天是当前日期。
    > 主播名：先为您介绍今天的主要内容。
@@ -4961,7 +4983,7 @@ function _refreshCalBanner() {
 3. 结尾：主播以固定道别收束，片尾垫乐渐强。
    示例风格——
    > 主播名：以上就是今天晚间新闻的全部内容，感谢您的收听，我们明天同一时间再见。
-   片尾曲渐强，演播室灯光缓缓暗下。`, dataSource: '', interactHint: 'none', previewSpoken: false, fixedNext: { name: '晚间新闻', desc: '每日时政要闻、民生热点与世界动态，准时为您播报。' } },
+   片尾曲庄重地渐强，随后缓缓淡出，归于静默。`, dataSource: '', interactHint: 'none', previewSpoken: false, fixedNext: { name: '晚间新闻', desc: '每日时政要闻、民生热点与世界动态，准时为您播报。' } },
       { name: '地方快报', desc: '地方案件、本地政策、本地文娱、科教', guide: `你正在生成「地方快报」类电台节目。这是一档聚焦本地动态的地方新闻台。
 主播口吻正规但比国家级新闻更亲切接地气，像本地电视台/广播的民生新闻栏目，贴近本地居民生活。
 
@@ -4988,8 +5010,12 @@ function _refreshCalBanner() {
 - 主播播报时一句一句地说，每个台词行只放一两句话，不要把整条新闻挤在一个台词行里，要拆成多个连续的短台词行。
 - 若有嘉宾，可将其作为连线本地记者或现场报道员，在某条重点新闻后做简短的现场连线，不喧宾夺主。
 - 时长：30 分钟左右。
-
 节目结构（半固定，保持本地新闻台的栏目感）：
+【今日内容清单（重要，必须遵守）】
+- 开场报完频率/节目名/日期后，主播必须用一段话把"今天这期要播的几条本地新闻"逐条罗列清楚，每条用一句话点明是什么事，让听众一开场就拿到这期的完整内容清单。
+- 正文必须严格按开场列出的那几条逐条展开：开场列了几条就播几条，顺序、数量、主题一一对应，不增不减。
+- 绝对不要在正文里冒出开场清单之外的新闻，也不要跳过开场答应要播的任何一条。
+
 1. 开场：轻快的片头垫乐渐起，主播以固定问候开场，念出频率与节目名，报出当前日期与所在地区，简述本期本地看点。
    示例风格——
    轻快的片头音乐响起，演播室里翻动稿纸的声音很轻。
@@ -5000,7 +5026,7 @@ function _refreshCalBanner() {
 3. 结尾：主播以固定道别收束，片尾垫乐渐强。
    示例风格——
    > 主播名：以上就是今天本地新闻的全部内容，感谢您的收听，我们下次再见。
-   片尾曲渐强，演播室灯光缓缓暗下。`, dataSource: 'region', interactHint: 'none', previewSpoken: false, fixedNext: { name: '本地新闻', desc: '聚焦身边事，每日为您播报本地民生、政策、文娱与平安资讯。' } },
+   片尾曲庄重地渐强，随后缓缓淡出，归于静默。`, dataSource: 'region', interactHint: 'none', previewSpoken: false, fixedNext: { name: '本地新闻', desc: '聚焦身边事，每日为您播报本地民生、政策、文娱与平安资讯。' } },
       { name: '社区简讯', desc: '街坊邻里、街头斗殴、家庭伦理、交通事故、社区通知', guide: `你正在生成「社区简讯」类电台节目。这是一档扎根街坊邻里、家长里短的社区广播，像居委会大喇叭、街道社区台、本地小广播站那样的烟火气节目。
 主播口吻亲切热络、唠家常一样，带着街坊间的人情味和关切，不端着，偶尔可以有点本地腔调和小幽默，但依然是在"播报"社区里的事。
 
@@ -5027,8 +5053,12 @@ function _refreshCalBanner() {
 - 主播播报时一句一句地说，每个台词行只放一两句话，不要把整条简讯挤在一个台词行里，要拆成多个连续的短台词行。
 - 若有嘉宾，可将其作为社区里的热心人、网格员、街道工作人员，在某条简讯后搭句话、补充情况，像街坊间的对话，不喧宾夺主。
 - 时长：30 分钟左右。
-
 节目结构（半固定，保持社区小广播的亲切感）：
+【今日内容清单（重要，必须遵守）】
+- 开场招呼完街坊、报完频率/节目名/日期后，主播必须用一段话把"今天要唠的几件事"逐条罗列清楚，每件用一句话点明是什么事，让听众一开场就知道这期要说哪几件。
+- 正文必须严格按开场列出的那几件逐条展开：开场列了几件就唠几件，顺序、数量、主题一一对应，不增不减。
+- 绝对不要在正文里冒出开场清单之外的新事，也不要跳过开场答应要说的任何一件。
+
 1. 开场：轻快家常的垫乐渐起，主播以热络的问候开场，念出频率与节目名，报出当前日期，像招呼街坊一样引出今天要说的几件事。
    示例风格——
    轻快的垫乐响起，话筒里有细微的电流声，像是街道办的小广播刚刚打开。
@@ -5046,6 +5076,7 @@ function _refreshCalBanner() {
 【圈子锚定】本台聚焦的具体圈子已由「频道核心概念」给定（这个台长期就深耕这一个圈子，不会换）。请紧扣频道核心概念里设定的那个圈子来写，整期只深耕它，不要跨圈乱聊、不要临时改聊别的领域。所选圈子契合当前世界观——世界观里有什么样的学派、技术、亚文化、行业、社群，就对应聊什么，不要套用现实世界里世界观中不存在的圈子。
 
 【真人优先，但不唯真人】资料里会给出世界观中的角色档案。其中如果有本圈相关身份的角色（这个领域的达人、名家、大佬、从业者），可以优先挑一两个来聊，把圈内动向、技术解读、人物八卦落到这些真实存在的人身上。但绝不能整档节目都围着这几个角色转——真实的圈内电台里，圈内名人只占一部分，更多是大量不认识的从业者、新人、作品、流派和事件。请让真实角色作为其中的亮点穿插出现（建议全期最多两三条涉及他们），其余内容用符合世界观的圈内人物、作品和话题来填充。
+【严禁张冠李戴】只有档案里本职身份确实属于本圈的角色，才能作为圈内人来聊。绝对不许把跟本圈无关的角色（本职是其他领域、其他行业的人）硬安成本圈的达人、大佬、名家——这会扭曲角色的身份设定。如果档案里没有契合本圈身份的角色，就完全用新编的圈内人物来做内容，不要为了"用上真人"而乱安身份。
 
 内容方向（任选其一或组合，符合当前世界观与本台圈子）：
 - 圈内资讯与动态（领域最新进展、新作/新品/新成果发布、活动赛事、行业风向）
@@ -5069,8 +5100,12 @@ function _refreshCalBanner() {
 - 主播播报时一句一句地说，每个台词行只放一两句话，不要把整条内容挤在一个台词行里，要拆成多个连续的短台词行。
 - 若有嘉宾，可作为同圈的另一位资深玩家或对家流派的代表，跟主播对谈、互掐、补充，碰撞圈内观点，不喧宾夺主。
 - 时长：30 分钟左右。
-
 节目结构（半固定，保持小众圈层电台的调性）：
+【今日内容清单（重要，必须遵守）】
+- 开场报完频率/节目名/日期后，主播必须用一段话把"今晚要唠本圈的哪几件事"逐条罗列清楚，每件用一句话点明是什么，让听众一开场就拿到这期的完整内容清单。
+- 正文必须严格按开场列出的那几件逐条展开：开场列了几件就聊几件，顺序、数量、主题一一对应，不增不减。
+- 绝对不要在正文里冒出开场清单之外的新话题，也不要跳过开场答应要聊的任何一件。
+
 1. 开场：圈子感的垫乐渐起，主播以熟络的圈内口吻开场，念出频率与节目名，报出当前日期，点明今晚要唠本圈的哪几件事。
    示例风格（口吻、称呼按本台圈子调整，下面只示范结构）——
    一段带着圈子味儿的电子音乐渐起，主播敲了敲话筒。
@@ -5081,18 +5116,18 @@ function _refreshCalBanner() {
 3. 结尾：主播以圈内人的方式收束，片尾垫乐渐起。
    示例风格（口吻、称呼按本台圈子调整）——
    > 主播名：今晚就到这儿，圈里有新动静，咱们下期接着聊。
-   片尾电子乐渐弱，节目缓缓结束。`, dataSource: '', interactHint: '', plays: ['mail'], npcDetail: true },
-      { name: '娱乐头条', desc: '明星网红八卦、狗仔爆料、粉圈吃瓜、影视进度、趣味新闻', guide: `你正在生成「娱乐头条」类电台节目。这是一档轻松热闹的娱乐八卦电台，像明星八卦节目、吃瓜电台、午后娱乐资讯那样，专聊圈里的明星、网红、影视和各种花边趣闻，主打一个热闹好玩、有瓜就唠。
+    片尾电子乐渐弱，节目缓缓结束。`, dataSource: '', interactHint: '', plays: ['mail'], npcDetail: true, fixedNext: { name: '圈内频道', desc: '继续蹲圈里的新动静、新门道和新瓜，下期接着跟同好们唠。' } },
+      { name: '娱乐头条', desc: '明星网红八卦、狗仔爆料、粉圈吃瓜、影视进度', guide: `你正在生成「娱乐头条」类电台节目。这是一档轻松热闹的娱乐八卦电台，像明星八卦节目、吃瓜电台、午后娱乐资讯那样，专聊圈里的明星、网红、影视和各种花边趣闻，主打一个热闹好玩、有瓜就唠。
 主播口吻是熟知圈内动向的娱乐主持人，语气轻快、八卦、带点小贱小调侃，吃瓜吃得津津有味，偶尔卖关子、抖机灵，但不恶毒、不造谣坐实，把握住"娱乐大家"的分寸。
 
 【真人优先，但不唯真人】资料里会给出世界观中的角色档案。其中如果有明星、偶像、网红、名人这类身份的角色，可以优先挑一两个来做八卦，把瓜落到这些真实存在的人身上。但绝不能整档节目都围着这几个角色转——真实的娱乐台里，认识的名人只是其中几条，更多是大量不认识的路人明星、新人、行业泛讯和热点事件。请让真实角色作为其中的亮点穿插出现（建议全期最多两三条涉及他们），其余内容用符合世界观的、新编的娱乐圈人物和事件来填充，保持节目的丰富和真实。
+【严禁张冠李戴】只有档案里本职身份就是娱乐圈中人（歌手、演员、偶像、网红、主持等）的角色，才能作为明星来聊。绝对不许把本职不是娱乐圈的角色（如官员、局长、军警、商人、学者、普通人等）硬编成明星、顶流、唱将——这些人不会出现在娱乐头条里。如果档案里压根没有娱乐圈身份的角色，就完全用新编的娱乐圈人物来做内容，不要为了"用上真人"而扭曲角色的身份设定。
 
 内容方向（任选其一或组合，符合当前世界观）：
 - 明星网红动态（谁出了新作品、谁接了新代言、谁公开亮相、谁人气暴涨或过气）
 - 狗仔爆料与花边（绯闻恋情、疑似同框、深夜行踪、未经证实的小道消息，用"疑似""有传闻""知情人士称"的口吻带过）
 - 粉圈吃瓜（粉丝控评、打投、撕番、塌房、粉黑大战、应援名场面）
 - 影视娱乐进度（新剧新片新综艺的开机/杀青/定档/口碑，颁奖礼、首映、热搜话题）
-- 趣味新闻（明星翻车糗事、好笑的现场名场面、网红整活、轻松的奇闻趣事）
 
 写法要求：
 - 用"吃瓜唠嗑"的轻松语气，热闹、八卦、带梗，可以适度调侃但不刻薄、不人身攻击。
@@ -5106,8 +5141,12 @@ function _refreshCalBanner() {
 - 主播播报时一句一句地说，每个台词行只放一两句话，不要把整条内容挤在一个台词行里，要拆成多个连续的短台词行。
 - 若有嘉宾，可作为另一位娱乐主持或吃瓜搭子，跟主播一唱一和、补充爆料、互相调侃，气氛热闹，不喧宾夺主。
 - 时长：30 分钟左右。
-
 节目结构（半固定，保持娱乐八卦电台的调性）：
+【今日内容清单（重要，必须遵守）】
+- 开场报完频率/节目名/日期后，主播必须用一段话把"今天要唠的哪几个瓜/话题"逐条罗列清楚，每个用一句话点明是什么，让听众一开场就拿到这期的完整内容清单。
+- 正文必须严格按开场列出的那几个逐条展开：开场列了几个就唠几个，顺序、数量、主题一一对应，不增不减。
+- 绝对不要在正文里冒出开场清单之外的新瓜/新话题，也不要跳过开场答应要唠的任何一个。
+
 1. 开场：轻快的垫乐渐起，主播热情活泼地开场，念出频率与节目名，报出当前日期，预告今天有哪几个大瓜。
    示例风格——
    一段轻快俏皮的音乐渐起，主播笑着开了口。
@@ -5118,7 +5157,49 @@ function _refreshCalBanner() {
 3. 结尾：主播热闹地收束，片尾垫乐渐起。
    示例风格——
    > 主播名：今天的瓜就先唠到这儿，明天还有新鲜的，记得来。
-   片尾轻快音乐渐弱，节目愉快地结束。`, dataSource: '', interactHint: '', plays: ['mail'], npcDetail: true },
+     片尾轻快音乐渐弱，节目愉快地结束。`, dataSource: '', interactHint: '', plays: ['mail', 'vote'], npcDetail: true, fixedNext: { name: '娱乐快递', desc: '明星网红的新鲜瓜、影视新动态和粉圈大事，下期继续为您热闹播报。' } },
+      { name: '趣味新闻', desc: '奇闻轶事、社会奇葩事、乌龙巧合、冷知识、网络热梗、动物趣闻等图一乐的轻松新闻', guide: `你正在生成「趣味新闻」类电台节目。这是一档专播奇闻轶事、轻松趣闻的电台，像那种"今日份沙雕新闻""世界真奇妙""图一乐播报"，只挑好玩的、离谱的、长见识的事来说，主打一个轻松解压、听个乐呵。
+主播口吻是个会讲段子的趣闻主播，语气轻快幽默、爱抖机灵、带点冷吐槽，把离谱的事讲得绘声绘色，时不时自己先笑场，带着听众一起看热闹、涨知识。
+
+【这不是娱乐八卦台】本台只聊"事"本身的趣味，不聊明星网红的瓜。哪怕事里涉及某个名人，重点也是那件好笑/离奇的事，而不是吃 ta 的瓜。明星绯闻、粉圈、塌房这类娱乐八卦请留给娱乐头条，本台不碰。
+
+【真人优先，但不唯真人】资料里会给出世界观中的角色档案。如果某个角色身上恰好有适合做趣闻的素材（干了件离谱小事、闹了个乌龙、有个奇特爱好或冷知识相关身份），可以挑一两个把趣闻落到真人身上，更鲜活真实。但绝不能整档都围着这几个角色转——真实的趣闻台里，主角大多是不认识的路人、奇葩商家、某地居民、甚至动物。请让真实角色作为亮点偶尔穿插（建议全期最多一两条涉及他们），其余用符合世界观的、新编的趣闻来填充。不要为了"用上真人"而强行给角色编派不符合其设定的糗事。
+
+内容方向（任选其一或组合，符合当前世界观）：
+- 社会奇葩事（离谱的纠纷、迷惑行为、令人哭笑不得的乌龙、巧合到不真实的事件）
+- 奇闻轶事（某地的怪事、神奇现象、民间传说式的新鲜事、破纪录的奇葩成就）
+- 冷知识与涨姿势（有意思的科普、容易被误解的常识、世界观里某样东西的冷门来历）
+- 网络热梗与整活（这个世界里正在流行的梗、网友的沙雕创作、热门挑战、群体玩梗）
+- 动物趣闻（聪明或捣蛋的动物、宠物名场面、动物界的奇事）
+- 暖心或反转小故事（结局意外的好事、误会一场的乌龙、让人会心一笑的巧合）
+
+写法要求：
+- 用"讲段子、看热闹"的轻松语气，幽默、有梗、带点恰到好处的吐槽，但不刻薄、不嘲讽弱者、不消费苦难。
+- 信息要具体、有画面感：落到具体的人物、地点、过程、细节，把"离谱在哪、好笑在哪、神奇在哪"讲清楚，营造"还真有这事"的真实感。
+- 紧扣当前世界观设定：所聊的奇闻、梗、冷知识、社会现象都得是这个世界里可能发生、可能流行的，考虑这个世界观的科技、文化、生活方式会催生什么样的趣事。
+- 【保密红线】涉及世界观里的隐秘内幕、机密真相、暗面设定等不可公开的内容，绝对不能当趣闻爆出来。趣味新闻只播无伤大雅、本就公开流传的乐子事。
+- 不造谣、不传播真正的伪科学（冷知识要站得住脚），离奇的事可以用"据说""网友拍到""官方还没回应"等口吻保留悬念。
+- 生成 3-5 条趣闻，每条 200-400 字，把来龙去脉和笑点/奇点讲透，但不必像娱乐头条那样长篇深扒——趣味新闻贵在节奏轻快、一条接一条的新鲜感。
+- 一条趣闻可以分成多个段落，适当加入叙述部分，叙述部分重点描述声音、气氛，例如轻松诙谐的背景音乐、主播讲到离谱处忍不住笑场、模拟现场音效、卖关子的停顿等。
+- 主播播报时一句一句地说，每个台词行只放一两句话，不要把整条趣闻挤在一个台词行里，要拆成多个连续的短台词行。
+- 若有嘉宾，可作为另一位趣闻搭子，跟主播一起吐槽、补充细节、互相接梗，气氛欢乐，不喧宾夺主。
+- 时长：30 分钟左右。
+节目结构（半固定，保持趣味新闻台的轻松调性）：
+【今日内容清单（重要，必须遵守）】
+- 开场报完频率/节目名/日期后，主播必须用一段话把"今天要讲的哪几件好玩的事"逐条罗列清楚，每件用一句话点明是什么，让听众一开场就拿到这期的完整内容清单。
+- 正文必须严格按开场列出的那几件逐条展开：开场列了几件就讲几件，顺序、数量、主题一一对应，不增不减。
+- 绝对不要在正文里冒出开场清单之外的新趣闻，也不要跳过开场答应要讲的任何一件。
+
+1. 开场：轻松诙谐的垫乐渐起，主播笑着开场，念出频率与节目名，报出当前日期，预告今天有哪几件好玩的事。
+   示例风格（口吻自拟，别照抄）——
+   一段诙谐轻快的音乐响起，主播带着笑意开了口。
+   > 主播名：欢迎收听 FM频率·节目名，我是主播主播名。今天是当前日期。
+   > 主播名：来，今天又给大家搜罗了几件好玩的事，咱挨个儿乐一乐。
+2. 正文：一条一条地讲，每条把笑点/奇点抖清楚。条目之间用轻松的串场词衔接，但每次都换不同的说法别重样（可以用反问勾人、可以先卖个关子、可以接上一条的梗、可以假装一本正经、可以自己先笑出声……），自由发挥，配诙谐音效的叙述行转场。
+3. 结尾：主播轻松地收束，片尾垫乐渐起。
+   示例风格（口吻自拟，别照抄）——
+   > 主播名：今天的乐子就先到这儿，世界很大，怪事很多，咱们下回接着看。
+    片尾轻快的音乐渐弱，节目在笑声里结束。`, dataSource: '', interactHint: '', plays: ['mail', 'vote'], fixedNext: { name: '图一乐播报', desc: '再给您搜罗几件好玩的奇闻、冷知识和沙雕新鲜事，下期接着图一乐。' } },
     ],
     emotion: [
       { name: '深夜来信', desc: '读听众来信、情感倾诉，主播温柔回应陪伴', guide: '', dataSource: '', interactHint: '' },
@@ -5148,7 +5229,18 @@ function _refreshCalBanner() {
       { name: '连麦电波', desc: '与听众连麦闲聊，互动陪伴', guide: '', dataSource: '', interactHint: 'call' },
     ],
     music: [
-      { name: '随心点播', desc: '听众点歌+主播播放，随机歌单', guide: '', dataSource: 'playlist', interactHint: 'request' },
+      { name: '随心点播', desc: '听众点歌+主播播放，随机歌单', guide: `你正在生成「随心点播」类电台节目。这是一档以听众点歌为核心的音乐电台，主播开放点歌通道，把听众点的歌一首首报出来、聊几句，再放给大家听，氛围轻松温暖、有陪伴感。
+
+【写法要求】
+- 开场：垫乐渐起，主播以温暖亲切的口吻开场，念出本台频率与节目名、报出当前日期，点明今晚是点歌时间、欢迎大家点歌。
+- 正文：聊几句引入的话题或当下心境（结合当前时间/天气/世界观氛围），自然过渡到"开放点歌"。措辞自拟，不要套用固定句式。
+- 主播对听众的称呼、语气贴合一档暖心音乐台的调性（如各位、朋友们、晚上好的各位听众等），自然亲切即可。
+- 全程是音乐电台的松弛感，不要塞硬新闻、不要长篇大论的资讯播报。
+
+【点歌环节】
+- 在节目接近尾声时开放点歌：主播用自己的话把话头转到"看看今晚听众想听什么、给大家放首歌"，随后另起一行单独输出 [[点歌]]。
+- 点歌环节是整期节目的收尾：点完、评完歌，节目就在歌声中结束。所以一期节目里点歌锚点只出现一次，且放在最后。
+- 不要自己编造"已经放完歌"的情节——锚点之后的报歌、点评、收尾由后续环节生成。`, dataSource: 'playlist', interactHint: 'request', plays: ['request'] },
       { name: '原声专题', desc: '影视/游戏原声带专题，配故事背景', guide: '', dataSource: '', interactHint: '' },
       { name: '音乐人志', desc: '聊某个音乐人/乐队的故事与作品', guide: '', dataSource: '', interactHint: '' },
       { name: '类别专栏', desc: '某音乐类别专题（摇滚/民谣等），推歌+讨论', guide: '', dataSource: '', interactHint: '' },
@@ -5294,9 +5386,19 @@ function _refreshCalBanner() {
     _renderRadio(pd);
   }
 
-  // 打开订阅的台（订阅数据写入逻辑做完后再补完整跳转，先占位）
-  function _radioOpenSubscribed(subId) {
-    UI.showToast('订阅功能开发中', 1500);
+  // 打开「我的」里的台：直接用 __mine__ 频道 + idx 走标准详情页（带"收听本期更新"闸门），
+  // 所有功能（设置/历史/更新/同步主线）天然复用 catId/idx 机制。
+  async function _radioOpenSubscribed(idx) {
+    try {
+      const pd = await _getPhoneData();
+      const mine = (pd.radioPrograms && pd.radioPrograms['__mine__']) || [];
+      const p = mine[idx];
+      if (!p) { UI.showToast('找不到这个电台', 1500); return; }
+      await _radioOpenDetail('__mine__', idx, { fromMine: true, showUpdateGate: true });
+    } catch (e) {
+      console.error('[打开我的电台]', e);
+      UI.showToast('打开失败', 1500);
+    }
   }
 
   // 按标签名跨所有分类查 fixedNext（固定下期预告），找不到返回 null
@@ -5325,41 +5427,38 @@ function _refreshCalBanner() {
     return null;
   }
 
-  // 把听过的台加入订阅（收听并生成了正文后调用）。存台的快照，按 id 去重，最近的排前面
+  // 把生成过详情的台收进「我的」（持久频道 radioPrograms['__mine__']）。存完整台对象，
+  // 这样它在预览页被删/被新台挤出后，「我的」里仍是一个功能齐全的台（可收听更新/进设置/看历史）。
+  // catId === '__mine__' 时说明本就在操作「我的」本体，无需再收藏（避免重复/打乱 idx）。
   async function _radioSubscribeStation(catId, p) {
-    if (!p) return;
+    if (!p || catId === '__mine__') return;
     try {
       const pd = await _getPhoneData();
-      if (!Array.isArray(pd.radioSubscriptions)) pd.radioSubscriptions = [];
-      // 稳定 id：优先 fm+name，避免重复调频后重复订阅同一个台
-      const sid = 'rsub_' + (String(p.fm || '') + '_' + String(p.name || '')).replace(/\s+/g, '');
-      const snapshot = {
-        id: sid,
-        catId,
-        name: p.name || '电台',
-        dj: p.dj || '匿名',
-        guest: p.guest || '',
-        fm: p.fm || '',
-        tags: Array.isArray(p.tags) ? p.tags.slice(0, 2) : [],
-        cover: p.cover || '',
-        intro: p.intro || '',
-        nextShow: (p.nextShow || '').trim(),
-        nextPreview: (p.nextPreview || '').trim(),
-        listenedAt: Date.now()
-      };
-      const idx = pd.radioSubscriptions.findIndex(s => s && s.id === sid);
-      if (idx >= 0) {
-        // 已存在：更新快照并提到最前
-        pd.radioSubscriptions.splice(idx, 1);
+      if (!pd.radioPrograms) pd.radioPrograms = {};
+      if (!Array.isArray(pd.radioPrograms['__mine__'])) pd.radioPrograms['__mine__'] = [];
+      const mine = pd.radioPrograms['__mine__'];
+      const keyOf = (x) => (String(x && x.fm || '') + '_' + String(x && x.name || '')).replace(/\s+/g, '');
+      const k = keyOf(p);
+      // 深拷贝，断开与分类那份的引用，避免持久化后两份相互覆盖
+      const full = JSON.parse(JSON.stringify(p));
+      full._mineAt = Date.now();
+      const existIdx = mine.findIndex(x => keyOf(x) === k);
+      if (existIdx >= 0) {
+        // 已在「我的」：保留它累积的历史（旧拷贝若历史更全则沿用），用最新内容覆盖并提到最前
+        const old = mine[existIdx];
+        if (Array.isArray(old.history) && (!Array.isArray(full.history) || full.history.length < old.history.length)) {
+          full.history = old.history;
+        }
+        mine.splice(existIdx, 1);
       }
-      pd.radioSubscriptions.unshift(snapshot);
+      mine.unshift(full);
       await _savePhoneData();
-    } catch (e) { console.warn('[电台订阅]', e); }
+    } catch (e) { console.warn('[电台收藏]', e); }
   }
 
-  // “我的”页：听过的台列表（横向小卡 + 下期预告块）
+  // “我的”页：收藏（生成过详情）的台列表（横向小卡 + 下期预告块）
   function _renderRadioMine(pd) {
-    const subs = Array.isArray(pd.radioSubscriptions) ? pd.radioSubscriptions : [];
+    const subs = (pd.radioPrograms && Array.isArray(pd.radioPrograms['__mine__'])) ? pd.radioPrograms['__mine__'] : [];
     if (!subs.length) {
       return `
         <div class="phone-radio-mine-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 24px;text-align:center;color:var(--text-secondary)">
@@ -5368,7 +5467,7 @@ function _refreshCalBanner() {
           <div style="font-size:12px;line-height:1.5">在“发现”里听过的电台会出现在这里</div>
         </div>`;
     }
-    const rows = subs.map(s => {
+    const rows = subs.map((s, i) => {
       const tags = (s.tags || []).slice(0, 2).map(t => `<span class="phone-radio-mine-tag">${Utils.escapeHtml(t)}</span>`).join('');
       const next = _radioNextPreviewOf(s);
       const nextHtml = next && (next.name || next.desc) ? `
@@ -5385,7 +5484,7 @@ function _refreshCalBanner() {
         ? `<img src="${Utils.escapeHtml(s.cover)}" alt="">`
         : `<span class="phone-radio-mine-cover-fallback">${Utils.escapeHtml((s.name || '电')[0])}</span>`;
       return `
-        <div class="phone-radio-mine-card" onclick="Phone._radioOpenSubscribed('${Utils.escapeHtml(s.id)}')">
+        <div class="phone-radio-mine-card" onclick="Phone._radioOpenSubscribed(${i})">
           <div class="phone-radio-mine-main">
             <div class="phone-radio-mine-cover">${coverHtml}</div>
             <div class="phone-radio-mine-info">
@@ -5749,6 +5848,7 @@ ${tagLines || '（无限定标签，自由发挥）'}
 - tags 只能从【可用标签】里选，每个电台选 1-2 个；标签可以重复，靠 concept 拉开差异
 - 整批电台中，至多安排 1 个世界观里的真实角色出任某档节目的主持人或嘉宾，且必须贴合该角色的人设与身份；其余主持人/嘉宾一律用虚构化名，不要硬塞角色${avoidLine}
 - concept 要足够详细，后续 AI 靠它来写完整节目
+- 【重要·保密红线】这些都是面向大众公开的电台。世界观资料里那些隐秘内幕、幕后真相、不为人知的阴谋、暗面/黑暗设定、机密势力的真实运作、角色不可公开的秘密身份等普通人不可能知晓的内容，绝对不能直接写进电台的名称、简介(intro)或核心概念(concept)里，也不能定为节目的选题方向。这类内容只能彻底不提，或以官方对外口径（粉饰、伪装成寻常事物）的方式存在。不要为了"有料"而把暗面设定当成节目卖点。
 - coverKeyword 用能代表节目氛围的英文短词
 - 只输出 JSON，不要多余解释
 
@@ -5822,7 +5922,17 @@ ${wvPrompt}`;
       }
     } catch(_) {}
 
-    pd.radioPrograms[catId] = list;
+    // 追加而非覆盖：新生成的台排在前面，旧台保留在后；按 fm+name 去重（同台不重复），整类上限 20 个
+    {
+      const keyOf = (p) => (String(p && p.fm || '') + '_' + String(p && p.name || '')).replace(/\s+/g, '');
+      const prevList = Array.isArray(pd.radioPrograms[catId]) ? pd.radioPrograms[catId] : [];
+      const newKeys = new Set(list.map(keyOf));
+      // 旧台里与本批重名的剔除（让新生成的版本顶替），其余按原顺序接在新台后面
+      const kept = prevList.filter(p => !newKeys.has(keyOf(p)));
+      let merged = list.concat(kept);
+      if (merged.length > 20) merged = merged.slice(0, 20);
+      pd.radioPrograms[catId] = merged;
+    }
     await _savePhoneData();
     _log(`电台「${cat.name}」刷新了 ${list.length} 个台：${list.map(p => p.name).join('、')}`);
     if (!_isAppStillActive('radio')) {
@@ -6220,7 +6330,10 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
       document.body.appendChild(mask);
       const close = (val) => { try { mask.remove(); } catch (_) {} resolve(val); };
       mask.querySelector('#radio-mail-cancel').onclick = () => close(null);
-      mask.addEventListener('click', (e) => { if (e.target === mask) close(null); });
+      // 点遮罩空白处关闭：要求按下和抬起都落在 mask 本身，避免输入框失焦/软键盘收起导致的误触关闭
+      let _maskDownOnSelf = false;
+      mask.addEventListener('mousedown', (e) => { _maskDownOnSelf = (e.target === mask); });
+      mask.addEventListener('click', (e) => { if (e.target === mask && _maskDownOnSelf) close(null); _maskDownOnSelf = false; });
       mask.querySelector('#radio-mail-send').onclick = () => {
         const content = (mask.querySelector('#radio-mail-content').value || '').trim();
         if (!content) { UI.showToast('留言内容不能为空', 1500); return; }
@@ -6255,6 +6368,26 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
       // 注入正文生成提示词时，向 AI 介绍这个玩法（名称、锚点、引出方式）
       promptHint: '「读留言」（锚点：[[读留言]]）：设置一个读听众来信/留言的环节，主播念出听众发来的留言并简短回应。引出时主播用自己的话自然地把话头转到听众留言上（措辞自拟，不要套用固定句式），随后另起一行单独输出 [[读留言]]。',
     },
+    vote: {
+      id: 'vote', anchor: '投票', title: '听众投票', icon: 'vote',
+      descPending: '主播发起了一个投票，选一个吧',
+      descDone: '你参与了这次投票',
+      descSkip: '主播公布了投票结果',
+      actLabel: '', skipLabel: '不投票',
+      handler: 'vote',
+      // 投票锚点带参数：[[投票|问题|选项A|选项B|选项C]]
+      promptHint: '「投票」（锚点：[[投票|问题|选项A|选项B|选项C]]）：发起一个面向听众的投票，让大家选边站或做选择。主播自然地抛出一个跟本期内容相关的问题，给出 2-3 个选项。引出时主播用自己的话把话题引到"听听大家怎么投"上（措辞自拟），随后另起一行单独输出锚点，格式为 [[投票|你的问题|选项一|选项二|选项三]]（用竖线分隔问题和各选项，问题在前，2-3 个选项在后）。',
+    },
+    request: {
+      id: 'request', anchor: '点歌', title: '听众点歌时间', icon: 'request',
+      descPending: '主播开放了点歌通道，要不要点一首？',
+      descDone: '你参与了这次点歌环节',
+      descSkip: '主播播了其他听众点的歌',
+      actLabel: '我要点歌', skipLabel: '不点歌',
+      handler: 'request',
+      // 点歌锚点无参数：[[点歌]]（歌曲信息由玩家在弹窗里选/填）
+      promptHint: '「点歌」（锚点：[[点歌]]）：开放一个听众点歌环节，主播邀请大家点歌，随后会播放点到的歌。这个环节应安排在节目接近尾声处（点完歌、评完歌，节目就随歌声收尾结束）。引出时主播用自己的话自然地把话头转到"开放点歌、看看今晚听众想听什么"上（措辞自拟，不要套用固定句式），随后另起一行单独输出 [[点歌]]。',
+    },
   };
 
   // 按锚点关键字查玩法定义（解析时用）
@@ -6279,12 +6412,15 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
   // 玩法卡片图标
   function _radioPlaySvg(icon) {
     if (icon === 'mail') return _radioMailSvg();
+    if (icon === 'vote') return _radioVoteSvg();
+    if (icon === 'request') return _radioRequestSvg();
     return _radioMailSvg();
   }
 
   // 统一输出格式块（所有标签/玩法共用，对齐 _parseRadioReply 的解析规则）
   const _RADIO_FORMAT_SPEC = `【输出格式】（严格遵守，这是电台叙述流格式）
-- 叙述行：不加任何前缀。描写演播室声音、垫乐、音效、主播动作、语气、现场气氛（如翻阅稿纸声、背景底噪、插播音效、电流声）。
+- 叙述行：不加任何前缀。只描写"能被听到的声音"——垫乐、音效、底噪、电流声、翻阅稿纸声、插播音效，以及主播/嘉宾通过声音传达的东西（语气、停顿、呼吸、笑声、清嗓、喝水声等）。
+- 【纯听觉红线】这是广播电台，听众只能"听"，看不到演播室。叙述行绝对不要描写任何视觉/画面信息：不写灯光明暗、不写主播的表情和肢体动作（如"看数据""翻看留言""低头""对视""灯光暗下"等），也不写演播室的样子、布景、画面切换。一切只能落在"声音"上——如果某个动作发不出声音，就不要写它。
 - 台词行：以「> 说话人：内容」开头，说话人写具体名字（见主持阵容），不带时间戳。
 - 【关键】每个台词行只放一两句话（约 15-40 字），说完就换行另起一个台词行。绝对不要把一大段话、一整条新闻塞进同一个台词行。一条较长的内容要拆成多个连续的台词行，像真人说话那样一句一句地说。
 - 叙述行与台词行自由穿插，像真实电台能听到的声音流。
@@ -6292,6 +6428,7 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
 - 只输出正文，不要解释、不要 JSON、不要标题、不要 markdown 代码块。`;
 
   // 阵容注入块（详情生成时拼 dj/guest/fm 作硬约束）
+  // 若主播/嘉宾命中世界观 NPC，则把 ta 的详细档案拎出来强调，要求严格按人设主持，避免演成泛泛播音腔
   function _radioCastBlock(prog) {
     const dj = prog.dj || '主播';
     const fm = prog.fm ? String(prog.fm) : '';
@@ -6300,6 +6437,53 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
     if (prog.guest) lines.push(`- 嘉宾：${prog.guest}（连线/对谈/点评时出场）`);
     lines.push('台词行的说话人只能是上面列出的人，不要凭空新增主持人或听众。');
     if (fm) lines.push(`开场需自然念出本台频率 FM${fm}，且不得改动台名与主持人。`);
+
+    // NPC 命中：把主播/嘉宾里属于世界观真实角色的档案拎出来强调
+    try {
+      if (typeof NPC !== 'undefined' && NPC.getByNames) {
+        // 自建匹配：覆盖 name + aliases + onlineName（getByNames 不查网名），且要求精确等值，避免"林/小林"这类子串误伤
+        const splitNames = (s) => String(s || '').split(/[,，、\s]+/).map(t => t.trim()).filter(Boolean);
+        const matchNpc = (nm) => {
+          const target = String(nm || '').trim();
+          if (!target) return null;
+          const pool = (NPC.getByNames([target]) || []);
+          // 先在候选里找"精确等值"命中（name/aliases/onlineName 任一完全相等）
+          for (const n of pool) {
+            const keys = [n.name, ...splitNames(n.aliases), ...splitNames(n.onlineName)];
+            if (keys.some(k => k === target)) return n;
+          }
+          return null;
+        };
+        const roleMap = [];
+        if (dj) roleMap.push(['主播', dj]);
+        if (prog.guest) roleMap.push(['嘉宾', prog.guest]);
+        const seen = new Set();
+        const detailParts = [];
+        roleMap.forEach(([role, nm]) => {
+          const hit = matchNpc(nm);
+          if (!hit || seen.has(hit.name)) return;
+          seen.add(hit.name);
+          let d = `[${role}「${nm}」就是世界观中的真实角色：${hit.name}]`;
+          if (hit.aliases) d += ` 代号/别名:${hit.aliases}`;
+          if (hit.onlineName) d += ` 网名:${hit.onlineName}`;
+          if (hit.profession) d += ` 职业:${hit.profession}`;
+          if (hit.faction) d += ` 势力:${hit.faction}`;
+          if (hit.detail) d += `\n${hit.detail}`;
+          detailParts.push(d);
+        });
+        if (detailParts.length) {
+          lines.push('');
+          lines.push('【主持人/嘉宾角色设定（重要）】');
+          lines.push('本节目的主持人/嘉宾中有世界观里的真实角色，必须严格按 ta 的人设来演——说话的语气、口头禅、性格、价值观、专业背景、与人相处的方式都要贴合下面的档案，不要演成一个千篇一律的标准播音腔主播。让听众一听就觉得"这确实是 ta 在主持"。');
+          detailParts.forEach(d => lines.push(d));
+          lines.push('注意：电台是公开节目，即便档案里有该角色不可公开的秘密身份/隐秘背景，也只能体现在 ta 的言谈气质上，绝不能在节目里说破或暗示这些机密。');
+        } else if (dj || prog.guest) {
+          // 没在世界观 NPC 库里精确命中（可能是世界书/单人卡角色，或纯虚构化名）：给一条软提示，让 AI 在全量资料里自查
+          lines.push('');
+          lines.push('若主播或嘉宾的名字恰好对应世界观资料/角色档案里的某个真实角色，请严格按该角色的人设、语气、身份来演，不要演成泛泛的播音腔；若只是虚构化名，则自由塑造一个贴合节目调性的主持人形象即可。');
+        }
+      }
+    } catch (_) {}
     return lines.join('\n');
   }
 
@@ -6371,6 +6555,56 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
     }
     return false;
   }
+  // 本期是否属于新闻类（标签命中 _RADIO_TAGS.news 里任一标签名）。
+  // 新闻类开场已是完整"今日内容清单"，续期只需截开场约 400 字即可拿到全部选题。
+  function _radioIsNewsTag(prog) {
+    const tags = Array.isArray(prog.tags) ? prog.tags : [];
+    const newsTags = _RADIO_TAGS.news || [];
+    for (const t of newsTags) {
+      if (tags.includes(t.name)) return true;
+    }
+    return false;
+  }
+
+  // 新闻类播出时间限制：只在游戏内 18:30-21:00 才允许生成详情。
+  // 非新闻类不受限，返回 true。读不到时间时宽容放行。
+  function _radioNewsTimeAllowed(prog) {
+    if (!_radioIsNewsTag(prog)) return true;
+    try {
+      const sb = Conversations.getStatusBar();
+      const timeStr = sb && sb.time ? sb.time : '';
+      const m = timeStr.match(/(\d{1,2}):(\d{2})/);
+      if (!m) return true; // 读不到时间，放行
+      const h = parseInt(m[1], 10);
+      const min = parseInt(m[2], 10);
+      const total = h * 60 + min;
+      return total >= 18 * 60 + 30 && total <= 21 * 60;
+    } catch (_) { return true; }
+  }
+
+  // 把节目当前正文归档进历史（去重：同 body 不重复存，最多保留 30 期）。
+  // 首次生成成功、以及「收听本期更新」时都调用，确保听过的每一期都进历史。
+  function _radioArchiveEpisode(prog) {
+    if (!prog || !prog._body) return;
+    // 正文里还有未完成的互动锚点（玩法卡片）说明这期没播完，玩法之后的内容还没生成 → 暂不归档
+    if (_radioHasPendingInteract(prog._body)) return;
+    if (!Array.isArray(prog.history)) prog.history = [];
+    if (prog.history.some(h => h && h.body === prog._body)) return;
+    prog.history.unshift({
+      id: 'rh_' + Utils.uuid().slice(0, 8),
+      title: prog.showName || '本期节目',  // 单期标题
+      showName: prog.showName || '本期节目',
+      dj: prog.dj || '匿名',
+      guest: prog.guest || '',
+      tags: Array.isArray(prog.tags) ? prog.tags.slice() : [],
+      cover: prog.cover || '',
+      body: prog._body,
+      duration: prog._duration || '约 30 分钟',
+      time: _radioFmtArchiveTime(new Date())
+    });
+    if (prog.history.length > 30) prog.history = prog.history.slice(0, 30);
+  }
+
 
   // 按标签收集本期可用玩法 id（合并节目所有标签的 plays，去重，过滤掉玩法池里不存在的）
   function _radioPlaysOf(prog) {
@@ -6443,11 +6677,52 @@ ${items}
     const regionBlock = (_radioDataSourceOf(prog) === 'region') ? _radioRegionBlock() : '';
     // 互动玩法块：本期标签挂载了玩法才注入（固定框架 + 各玩法说明）
     const playsBlock = _radioPlaysBlock(prog);
-
-    const showName = prog.showName || prog.name || '本期节目';
+const showName = prog.showName || prog.name || '本期节目';
     const conceptLine = prog.concept ? `\n【频道核心概念】\n${prog.concept}` : '';
 
+    // 续期块：若是"收听本期更新"（带上一期正文 _prevBody），把上一期开头截给 AI 当避重参考。
+    // 新闻类（开场已是完整内容清单）只截开场约 400 字即可；其它标签截多一些（约 1200 字）。
+    let renewBlock = '';
+    const prevBody = (prog._prevBody || '').trim();
+    if (prevBody) {
+      const isNews = _radioIsNewsTag(prog);
+      const limit = isNews ? 400 : 1200;
+      let excerpt = prevBody;
+      if (excerpt.length > limit) {
+        // 截到 limit 字以内的最后一个换行处，避免把某条内容腰斩
+        const cut = excerpt.slice(0, limit);
+        const lastNl = cut.lastIndexOf('\n');
+        excerpt = (lastNl > limit * 0.5 ? cut.slice(0, lastNl) : cut).trim();
+      }
+      renewBlock = `【这是这档节目的更新一期（往期已播过）】
+这档节目之前播过往期，你现在要生成全新的一期。下面给你上一期的${isNews ? '开场内容清单' : '开头片段'}作参考，目的只有一个——避免和上一期撞车：
+
+【上一期节目${isNews ? '开场清单' : '开头'}（节选，仅供参考）】
+${excerpt}
+
+【本期要求】
+- 这是时间推进后的新一期，必须是全新的内容。绝对不要重复上一期已经讲过的事，也不要把上一期的话题换个说法再讲一遍。
+- 换新的角度、新的事件、新的话题，让老听众一听就知道"这是更新的内容"，而不是炒冷饭。
+- 上一期那些已经讲过的事如果有后续进展，可以一句话带过更新，但不要重复铺陈。
+- 本台的栏目定位、主播口吻、节目结构保持不变，听感要和往期连贯，像同一个台的新一期。`;
+    }
+
+    // 下期预告块：从第二期开始（有上期正文 _prevBody），把 nextShow/nextPreview 发给 AI，让 AI 在结尾时自然预告下期
+    let nextBlock = '';
+    if (prevBody) {
+      const nextName = (prog.nextShow || '').trim();
+      const nextDesc = (prog.nextPreview || '').trim();
+      if (nextName || nextDesc) {
+        nextBlock = `\n【下期预告信息（供结尾时参考）】
+${nextName ? `- 下期节目名：${nextName}` : ''}
+${nextDesc ? `- 下期简介：${nextDesc}` : ''}
+
+在节目结尾道别时，主播可以自然地提一句下期内容（措辞自拟，不要生硬照搬），也可以不提（视节目调性而定）。`;
+      }
+    }
+
     const sysPrompt = `${ctx}${calBlock ? '\n\n' + calBlock : ''}${regionBlock ? '\n\n' + regionBlock : ''}
+
 
 你正在为电台节目生成一整期完整的播出正文。
 
@@ -6458,6 +6733,8 @@ ${items}
 ${castBlock}
 
 ${guide || '请根据节目信息与世界观资料，生成一期风格契合、内容充实的电台节目正文。'}
+${renewBlock ? '\n' + renewBlock + '\n' : ''}
+${nextBlock}
 ${playsBlock ? '\n' + playsBlock + '\n' : ''}
 ${_RADIO_FORMAT_SPEC}`;
 
@@ -6623,7 +6900,7 @@ ${mailTask}
 5. 读完留言后，不要跑题，承接节目主题做一段简短过渡，然后把整期节目自然收尾（主播道别、片尾垫乐渐起），让节目完整结束。
 
 【输出格式】（严格遵守，这是电台叙述流格式）
-- 叙述行：不加任何前缀，描写演播室氛围、主播翻看留言的动作、语气、片尾垫乐等。
+- 叙述行：不加任何前缀，只描写能被听到的声音（垫乐、音效、底噪、主播翻阅纸张声、语气、停顿、笑声等）；这是广播电台，绝不要写灯光、表情、动作姿态等任何视觉/画面信息。
 - 台词行：以「> 说话人：内容」开头，说话人是主播或嘉宾的名字。
 - 每个台词行只放一两句话（约 15-40 字），说完就换行另起一行，不要把一大段塞进同一行。
 - 主播读每条留言时，先自然念出"来自XX的XXX说……"再转述/回应。
@@ -6675,7 +6952,13 @@ ${mailTask}
     if (handler === 'mail') {
       return _radioHandleMailInteract(play, overlay, prog, ctx, resumeFn, opts);
     }
-    // 未知玩法兜底（后续 vote 等在此扩展）
+    if (handler === 'vote') {
+      return _radioHandleVoteInteract(play, overlay, prog, ctx, resumeFn, opts);
+    }
+    if (handler === 'request') {
+      return _radioHandleSongInteract(play, overlay, prog, ctx, resumeFn, opts);
+    }
+    // 未知玩法兜底
     UI.showToast('该玩法暂未开放', 1500);
   }
 
@@ -6720,19 +7003,458 @@ ${mailTask}
     if (typeof resumeFn === 'function') resumeFn(newBody);
   }
 
+  // 投票随机出票：给每个选项造一个听众票数。
+  // - 玩家参与时（winnerIdx>=0）：70% 概率让玩家选的那个选项成为最高票，30% 概率让别的选项当票王。
+  // - 玩家不投票时（winnerIdx<0）：各选项纯随机。
+  // 返回 { counts:[..], percents:[..], total, topIdx }（counts 已含玩家那一票）
+  const _VOTE_WIN_RATE = 0.7;  // 玩家选项成为票王的概率（可调）
+  function _radioComputeVote(optionCount, winnerIdx) {
+    const n = Math.max(2, optionCount || 2);
+    // 基础票数：每个选项随机 200~1800
+    const base = [];
+    for (let i = 0; i < n; i++) base.push(200 + Math.floor(Math.random() * 1600));
+    // 决定谁当票王
+    let targetTop = -1;
+    if (winnerIdx >= 0 && winnerIdx < n) {
+      targetTop = (Math.random() < _VOTE_WIN_RATE) ? winnerIdx : -1;
+      if (targetTop < 0) {
+        // 30% 分支：从"非玩家选项"里随机挑一个当票王
+        const others = [];
+        for (let i = 0; i < n; i++) if (i !== winnerIdx) others.push(i);
+        targetTop = others[Math.floor(Math.random() * others.length)];
+      }
+    }
+    // 若指定了票王，把它抬到所有选项之上（在当前最大值基础上加一段随机增量）
+    if (targetTop >= 0) {
+      const curMax = Math.max(...base);
+      base[targetTop] = curMax + 150 + Math.floor(Math.random() * 600);
+    }
+    // 玩家那一票加进去
+    if (winnerIdx >= 0 && winnerIdx < n) base[winnerIdx] += 1;
+    const total = base.reduce((a, b) => a + b, 0);
+    const percents = base.map(c => Math.round(c / total * 100));
+    let topIdx = 0;
+    for (let i = 1; i < n; i++) if (base[i] > base[topIdx]) topIdx = i;
+    return { counts: base, percents, total, topIdx };
+  }
+
+  // 互动暂停 → 处理投票玩法：玩家选项(或不投票) → 算票数(70%票王) → 生成结果段 → 替换锚点 → 续播
+  // opts.vote = { optIdx, question, options }（玩家参与）；opts.skip=true 为不投票
+  async function _radioHandleVoteInteract(play, overlay, prog, ctx, resumeFn, opts) {
+    const isSkip = !!(opts && opts.skip);
+    const voteData = (opts && opts.vote) || null;
+    // 取问题/选项：参与时从 voteData 拿；跳过时从正文锚点解析
+    let question = '';
+    let options = [];
+    if (voteData) {
+      question = voteData.question || '';
+      options = Array.isArray(voteData.options) ? voteData.options : [];
+    } else {
+      // skip：从正文里解析出投票锚点的参数
+      const segs = _parseRadioReply(prog._body || '');
+      const voteSeg = segs.find(s => s.kind === 'interact' && s.interact === 'vote' && !s.state);
+      if (voteSeg && Array.isArray(voteSeg.params)) {
+        question = voteSeg.params[0] || '';
+        options = voteSeg.params.slice(1);
+      }
+    }
+    if (!options.length) { UI.showToast('投票选项缺失', 1500); return; }
+
+    const playerIdx = (voteData && typeof voteData.optIdx === 'number') ? voteData.optIdx : -1;
+    const result = _radioComputeVote(options.length, isSkip ? -1 : playerIdx);
+
+    // 锁定卡片
+    const card = overlay.querySelector(`.phone-radio-detail-body .phone-radio-interact[data-seg-idx]`);
+    const btns = card ? card.querySelectorAll('.phone-radio-vote-opt, .phone-radio-interact-btn') : [];
+    btns.forEach(b => { b.disabled = true; });
+    UI.showToast('正在统计投票…', 1500);
+
+    // 锚点前的已播正文
+    const anchor0 = (play && play.anchor) || '投票';
+    const body0 = prog._body || _RADIO_FAKE_BODY;
+    const anchorRe0 = new RegExp('^\\s*\\[\\[\\s*' + anchor0.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\|[^\\]]*)?\\s*\\]\\]\\s*$', 'm');
+    const priorBody = body0.split(anchorRe0)[0] || '';
+
+    let segment = '';
+    try {
+      segment = await _radioGenVoteSegment(prog, { question, options, result, playerIdx: isSkip ? -1 : playerIdx }, priorBody);
+    } catch (e) {
+      console.error('[投票结果生成]', e);
+      segment = '';
+    }
+    if (!segment) {
+      UI.showToast('生成失败，请重试', 1800);
+      btns.forEach(b => { b.disabled = false; });
+      return;
+    }
+    const newBody = body0.replace(anchorRe0, `[[${anchor0}:done]]\n${segment}`);
+    prog._body = newBody;
+    if (typeof resumeFn === 'function') resumeFn(newBody);
+  }
+
+  // 调 AI 生成"投票结果 + 收尾"段落：带全资料 + 已播前半段 + 投票结果数据；主播公布结果并据此继续节目并收尾
+  async function _radioGenVoteSegment(prog, vote, priorBody) {
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    let mainConfig = {};
+    try { mainConfig = await API.getConfig(); } catch (_) { mainConfig = {}; }
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
+
+    let ctx = '';
+    try { ctx = await _buildFullContext({ npcBrief: !_radioNeedNpcDetail(prog) }); } catch (_) {}
+    let calBlock = '';
+    try { calBlock = await _radioCalendarBlock(); } catch (_) {}
+    let regionBlock = '';
+    try { regionBlock = (_radioDataSourceOf(prog) === 'region') ? _radioRegionBlock() : ''; } catch (_) {}
+
+    const djName = prog.dj || '主播';
+    const guestName = prog.guest || '';
+    const showName = prog.showName || prog.name || '本期节目';
+    const priorText = (priorBody || prog._body || '').trim();
+
+    const { question, options, result, playerIdx } = vote;
+    // 投票结果文本
+    const resultLines = options.map((opt, i) => {
+      const mark = (i === playerIdx) ? '（这是玩家投的）' : '';
+      const topMark = (i === result.topIdx) ? '【最高票】' : '';
+      return `  - ${opt}：${result.percents[i]}%（${result.counts[i]}票）${topMark}${mark}`;
+    }).join('\n');
+    const playerLine = playerIdx >= 0
+      ? `玩家参与了投票，投给了「${options[playerIdx]}」。玩家投的${playerIdx === result.topIdx ? '正好是最高票（跟大多数人想到一块了）' : '不是最高票（属于少数派，最高票是「' + options[result.topIdx] + '」）'}。`
+      : `玩家这次没有参与投票，只听结果。`;
+
+    const sysPrompt = `${ctx}${calBlock ? '\n\n' + calBlock : ''}${regionBlock ? '\n\n' + regionBlock : ''}
+
+你正在续写一档电台节目「${showName}」，本期已经播出了前半段，刚才主播发起了一个听众投票，现在票数已经出来了。要写"公布投票结果并据此把节目继续下去、最后收尾"这一段。
+
+主播：${djName}${guestName ? `，嘉宾：${guestName}` : ''}。
+
+【已播出的前半段正文】
+${priorText}
+
+【投票问题】${question}
+【投票结果】（这是最终票数，已经统计好，直接用，不要改数字）
+${resultLines}
+${playerLine}
+
+【本环节要做的事】
+1. 承接上文，主播先宣布投票通道关闭、票数正在统计中，然后利用这段"等统计"的空当做一点垫场，营造真实直播感。垫场二选一或混着来：
+   - 插播一条电台广告/赞助商口播：内容以你现编为主，每次都换新的、不要重复老一套，可以是这个世界里会有的小店、产品、服务、活动等，带点电台广告特有的夸张吆喝感，轻松俏皮。
+   - 或主播和嘉宾随口闲聊几句：调侃大家的投票热情、卖关子吊胃口、对结果做点悬念铺垫。
+   这段垫场不要太长，一小段即可。
+2. 垫场之后，主播自然地宣布票数统计完毕，正式公布投票结果。报出大致的票数走向或百分比，点出哪个选项票最高。
+3. 主播（和嘉宾）针对投票结果做出真实、贴合人设与本期主题的回应：可以点评大众的选择、可以顺着多数派或少数派的立场展开、可以借结果引出后续内容。具体怎么用这个结果，贴合本档节目的调性来。
+4. 如果玩家参与了且属于少数派，可以自然地用一句话照顾到"也有人投了另一个"的角度，但不要直接对玩家个人喊话（电台不知道具体是谁投的）。
+5. 公布并聊完结果后，不要跑题，承接节目主题做简短过渡，然后把整期节目自然收尾（主播道别、片尾垫乐渐起），让节目完整结束。
+
+【输出格式】（严格遵守，这是电台叙述流格式）
+- 叙述行：不加任何前缀，只描写能被听到的声音（垫乐、音效、底噪、主播翻阅纸张声、语气、停顿、笑声等）；这是广播电台，绝不要写灯光、表情、动作姿态等任何视觉/画面信息。
+- 台词行：以「> 说话人：内容」开头，说话人是主播或嘉宾的名字。
+- 每个台词行只放一两句话（约 15-40 字），说完就换行另起一行，不要把一大段塞进同一行。
+- 措辞自拟，不要套用固定句式。
+- 只输出正文，不要解释、不要 JSON、不要标题、不要 markdown 代码块。`;
+
+    let raw = '';
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model,
+          temperature: 0.9,
+          max_tokens: 1600,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: '请生成这段公布投票结果并完成节目收尾的正文。' }
+          ]
+        })
+      });
+      const data = await resp.json();
+      raw = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    } catch (e) {
+      console.error('[投票结果生成]', e);
+      return '';
+    }
+    return _stripMainlineArtifacts(raw || '').trim();
+  }
 
 
-  async function _radioOpenDetail(catId, idx) {
+  // ===== 点歌玩法 =====
+  // 弹窗：从音乐库选歌 / 现写歌名 / 不点歌，并填署名、送给谁、寄语
+  // 返回 null（取消）或 { trackId, title, artist, desc, lrc, fromName, toName, message }
+  // trackId 有值=真点歌（节目末尾会真的播放该曲）；trackId 为空=现写歌（不真放）
+  function _radioSongInput() {
+    return new Promise((resolve) => {
+      const defName = _radioPlayerName();
+      const tracks = (typeof Music !== 'undefined') ? (Music.getTracks() || []) : [];
+      const mask = document.createElement('div');
+      mask.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+      // 歌库列表 HTML（库空则不渲染这块）
+      let libHtml = '';
+      if (tracks.length) {
+        const items = tracks.map(t =>
+          `<div class="radio-song-item" data-tid="${Utils.escapeHtml(t.id)}" style="padding:9px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--bg-tertiary)">
+            <div style="font-size:14px;color:var(--text);font-weight:500">${Utils.escapeHtml(t.title || '未命名')}</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(t.artist || '未知歌手')}</div>
+          </div>`
+        ).join('');
+        libHtml = `
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">从音乐库点一首（点了会在节目末尾真的播放）</label>
+          <div id="radio-song-lib" style="max-height:180px;overflow-y:auto;margin-bottom:12px">${items}</div>`;
+      }
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+          <div style="font-size:15px;font-weight:600;margin-bottom:4px">${_radioRequestSvg()}点一首歌</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px">选库里的歌主播会真的播放；现写一首主播只点评不播放</div>
+
+          ${libHtml}
+
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">或者现写一首想听的歌（库里没有，不会真的播放）</label>
+          <input id="radio-song-title" type="text" maxlength="40" placeholder="歌名" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:8px">
+          <input id="radio-song-artist" type="text" maxlength="30" placeholder="歌手（可选）" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:12px">
+
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">点歌人</label>
+          <input id="radio-song-from" type="text" maxlength="16" value="${Utils.escapeHtml(defName)}" placeholder="你的昵称" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:12px">
+
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">送给谁（可选）</label>
+          <input id="radio-song-to" type="text" maxlength="20" placeholder="例如：给楼下便利店的店长" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:12px">
+
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">寄语（可选）</label>
+          <textarea id="radio-song-msg" maxlength="200" rows="3" placeholder="想说的话，主播会念出来…" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:none;margin-bottom:16px"></textarea>
+
+          <div style="display:flex;gap:10px">
+            <button id="radio-song-cancel" style="flex:1;padding:10px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer">取消</button>
+            <button id="radio-song-send" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer">点这首</button>
+          </div>
+        </div>`;
+      document.body.appendChild(mask);
+      let selectedTid = '';
+      const close = (val) => { try { mask.remove(); } catch (_) {} resolve(val); };
+      mask.querySelector('#radio-song-cancel').onclick = () => close(null);
+      // 点遮罩空白处关闭：要求按下和抬起都落在 mask 本身，避免输入框失焦/软键盘收起导致的误触关闭
+      let _maskDownOnSelf = false;
+      mask.addEventListener('mousedown', (e) => { _maskDownOnSelf = (e.target === mask); });
+      mask.addEventListener('click', (e) => { if (e.target === mask && _maskDownOnSelf) close(null); _maskDownOnSelf = false; });
+      // 歌库项点选（互斥高亮；选库歌时清空现写输入）
+      const titleInput = mask.querySelector('#radio-song-title');
+      const artistInput = mask.querySelector('#radio-song-artist');
+      const lib = mask.querySelector('#radio-song-lib');
+      if (lib) {
+        lib.addEventListener('click', (e) => {
+          const item = e.target.closest('.radio-song-item');
+          if (!item) return;
+          const tid = item.getAttribute('data-tid');
+          if (selectedTid === tid) {
+            selectedTid = '';
+            item.style.borderColor = 'var(--border)';
+            item.style.background = 'var(--bg-tertiary)';
+          } else {
+            selectedTid = tid;
+            lib.querySelectorAll('.radio-song-item').forEach(el => {
+              el.style.borderColor = 'var(--border)';
+              el.style.background = 'var(--bg-tertiary)';
+            });
+            item.style.borderColor = 'var(--accent)';
+            item.style.background = 'rgba(0,0,0,0.04)';
+            // 选了库歌，清空现写
+            titleInput.value = '';
+            artistInput.value = '';
+          }
+        });
+      }
+      // 输入现写歌时取消库歌选中
+      titleInput.addEventListener('input', () => {
+        if (titleInput.value.trim() && selectedTid) {
+          selectedTid = '';
+          if (lib) lib.querySelectorAll('.radio-song-item').forEach(el => {
+            el.style.borderColor = 'var(--border)';
+            el.style.background = 'var(--bg-tertiary)';
+          });
+        }
+      });
+      mask.querySelector('#radio-song-send').onclick = () => {
+        const fromName = (mask.querySelector('#radio-song-from').value || '').trim() || '一位听众';
+        const toName = (mask.querySelector('#radio-song-to').value || '').trim();
+        const message = (mask.querySelector('#radio-song-msg').value || '').trim();
+        if (selectedTid) {
+          // 真点歌：从库里取完整信息
+          const t = tracks.find(x => x.id === selectedTid);
+          if (!t) { UI.showToast('歌曲不存在', 1500); return; }
+          close({ trackId: t.id, title: t.title || '未命名', artist: t.artist || '', desc: t.desc || '', lrc: t.lrc || '', fromName, toName, message });
+          return;
+        }
+        // 现写歌
+        const title = (titleInput.value || '').trim();
+        if (!title) { UI.showToast('请选一首库里的歌，或写下想听的歌名', 1800); return; }
+        const artist = (artistInput.value || '').trim();
+        close({ trackId: '', title, artist, desc: '', lrc: '', fromName, toName, message });
+      };
+    });
+  }
+
+  // 互动暂停 → 处理点歌玩法：弹窗收集 → 生成报歌+点评+收尾段 → 替换锚点 → 续播
+  // 真点歌时把 trackId 记到 prog._pendingSongId，节目播完后由 onFinish 触发真实播放
+  // opts.skip=true 为"不点歌"路径（主播播虚拟听众点的歌，不真放）
+  async function _radioHandleSongInteract(play, overlay, prog, ctx, resumeFn, opts) {
+    const isSkip = !!(opts && opts.skip);
+    let song = null;
+    if (!isSkip) {
+      song = await _radioSongInput();
+      if (!song) return;  // 取消：保持暂停态
+    }
+    // 锁卡片
+    const card = overlay.querySelector(`.phone-radio-detail-body .phone-radio-interact[data-seg-idx]`);
+    const allBtns = card ? card.querySelectorAll('.phone-radio-interact-btn') : [];
+    const descEl = card ? card.querySelector('.phone-radio-interact-desc') : null;
+    allBtns.forEach(b => { b.disabled = true; });
+    if (descEl) descEl.textContent = '主播正在准备这首歌…';
+    UI.showToast('主播正在准备这首歌…', 1500);
+
+    // 锚点前已播正文
+    const anchor0 = (play && play.anchor) || '点歌';
+    const body0 = prog._body || _RADIO_FAKE_BODY;
+    const anchorRe0 = new RegExp('^\\s*\\[\\[\\s*' + anchor0.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\]\\]\\s*$', 'm');
+    const priorBody = body0.split(anchorRe0)[0] || '';
+
+    const segment = await _radioGenSongSegment(prog, song, priorBody);
+    if (!segment) {
+      UI.showToast('生成失败，请重试', 1800);
+      allBtns.forEach(b => { b.disabled = false; });
+      if (descEl) descEl.textContent = (play && play.descPending) || '主播开放了点歌通道，要不要点一首？';
+      return;
+    }
+    // 真点歌：记下要播放的 songId，节目 TTS 念完后触发
+    prog._pendingSongId = (song && song.trackId) ? song.trackId : '';
+    const newBody = body0.replace(anchorRe0, `[[${anchor0}:done]]\n${segment}`);
+    prog._body = newBody;
+    if (typeof resumeFn === 'function') resumeFn(newBody);
+  }
+
+  // 调 AI 生成"报歌 + 点评 + 收尾"段落：带全资料 + 已播前半段 + 歌曲信息（歌名/歌手/描述/歌词）+ 点歌人/寄语
+  async function _radioGenSongSegment(prog, song, priorBody) {
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
+
+    let ctx = '';
+    try { ctx = await _buildFullContext({ npcBrief: !_radioNeedNpcDetail(prog) }); } catch (_) {}
+    const calBlock = await _radioCalendarBlock();
+    const regionBlock = (_radioDataSourceOf(prog) === 'region') ? _radioRegionBlock() : '';
+
+    const djName = prog.dj || '主播';
+    const guestName = prog.guest || '';
+    const showName = prog.showName || prog.name || '本期节目';
+    const priorText = (priorBody || prog._body || '').trim();
+
+    // 歌曲信息块（玩家参与时有；不点歌时让 AI 现编一首虚拟听众点的歌）
+    let songBlock = '';
+    let songTask = '';
+    if (song) {
+      const isReal = !!song.trackId;
+      const lrcText = song.lrc ? song.lrc.substring(0, 2000) : '（无歌词）';
+      songBlock = `【听众点的歌】
+- 歌名：${song.title || '未命名'}
+- 歌手：${song.artist || '未知'}
+- 歌曲描述：${song.desc || '（无）'}
+- 点歌人：${song.fromName || '一位听众'}
+${song.toName ? `- 送给：${song.toName}` : ''}
+${song.message ? `- 寄语：${song.message}` : ''}
+- 歌词：
+${lrcText}`;
+      songTask = `这是听众真实点的歌${isReal ? '（节目末尾会真的播放这首歌）' : ''}。`;
+    } else {
+      songBlock = `【点歌情况】这次没有具体听众点歌，由你现编一位虚拟听众点的歌（一首符合本世界观、贴合节目调性的歌），自拟歌名、歌手、点歌人和一小段寄语。`;
+      songTask = '这是你现编的虚拟听众点歌，主播不会真的播放音频。';
+    }
+
+    const sysPrompt = `${ctx}${calBlock ? '\n\n' + calBlock : ''}${regionBlock ? '\n\n' + regionBlock : ''}
+
+你正在续写一档电台节目「${showName}」，本期已经播出了前半段，刚才主播开放了听众点歌环节。现在要写"主播报歌、念寄语、点评这首歌，然后把节目收尾"这一段——这是整期节目的结尾段。
+
+主播：${djName}${guestName ? `，嘉宾：${guestName}` : ''}。
+
+【已播出的前半段正文】
+${priorText}
+
+${songBlock}
+
+【本环节要做的事】
+1. 承上启下：先承接前半段聊过的话题，用一两句自然地把它收个尾，如果能跟即将要点的这首歌的情绪/主题搭上一点关系就更好（不必生硬关联），再顺势把话头转到点歌、报歌上。
+2. 主播自然地报出这首点的歌（歌名、歌手），${song && song.fromName ? `念出点歌人「${song.fromName}」${song.toName ? `点给「${song.toName}」` : ''}` : '说说是哪位听众点的'}${song && song.message ? '，并把寄语自然地念出来、做点温暖回应' : ''}。
+3. 主播（和嘉宾）对这首歌做一段真诚、贴合人设的点评：可以聊歌词意境、旋律氛围、适合什么心境听、勾起的联想或回忆等。${songTask}
+4. 点评结束后，主播说一句结束语向听众道别（措辞自拟），然后顺势说"接下来就把这首歌完整放给大家、安静聆听"之类的话，把节目交给音乐。
+5. 最后用叙述行描写：主播的声音渐渐减弱、节目进入尾声、（点的这首歌的）旋律缓缓响起，节目在歌声中收束。整期节目到此自然完整结束。
+
+【输出格式】（严格遵守，这是电台叙述流格式）
+- 叙述行：不加任何前缀，只描写能被听到的声音（主播语气、声音渐弱、片尾旋律响起、垫乐音效等）；这是广播电台，绝不要写灯光、表情、动作姿态等任何视觉/画面信息。
+- 台词行：以「> 说话人：内容」开头，说话人是主播或嘉宾的名字。
+- 每个台词行只放一两句话（约 15-40 字），说完就换行另起一行，不要把一大段塞进同一行。
+- 措辞自拟，不要套用固定句式。
+- 只输出正文，不要解释、不要 JSON、不要标题、不要 markdown 代码块。`;
+
+    let raw = '';
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model,
+          temperature: 0.9,
+          max_tokens: 1600,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: '请生成这段报歌、点评并完成节目收尾的正文。' }
+          ]
+        })
+      });
+      const data = await resp.json();
+      raw = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    } catch (e) {
+      console.error('[点歌段生成]', e);
+      return '';
+    }
+    return _stripMainlineArtifacts(raw || '').trim();
+  }
+
+  // 节目自然播完后：若有待播的点歌曲目，关底噪 → 真实播放该曲
+  function _radioMaybePlaySong(prog) {
+    try {
+      const sid = prog && prog._pendingSongId;
+      if (!sid) return;
+      prog._pendingSongId = '';  // 消费一次，避免重复触发
+      if (typeof Music === 'undefined') return;
+      _RadioSpeaker.stopNoise();  // 放歌前关掉电台底噪，安静听歌
+      Music.play(sid);
+    } catch (e) { console.error('[点歌播放]', e); }
+  }
+
+
+  async function _radioOpenDetail(catId, idx, opts) {
+    opts = opts || {};
+    const fromMine = !!opts.fromMine;
+    // 从「我的」进入：先展示"待更新"闸门——顶部节目名换成下期预告名，中间放「收听本期更新」按钮，点了才生成本期新内容
+    const next = fromMine ? _radioNextPreviewOf((await _getPhoneData()).radioPrograms?.[catId]?.[idx]) : null;
+    let updateGate = fromMine && !!opts.showUpdateGate;
     const pd = await _getPhoneData();
     const programs = (pd.radioPrograms && pd.radioPrograms[catId]) || [];
     const p = programs[idx];
     if (!p) { UI.showToast('节目不存在', 1500); return; }
 
-    // 正文未生成：标记生成中，先进详情页显示骨架（播放键禁用），随后异步生成
-    const needGen = !p._body;
+    // 闸门态下不立即生成；非闸门态沿用旧逻辑
+    const needGen = !updateGate && !p._body;
+    // 新闻类时间限制：18:30-21:00 才允许生成
+    if (needGen && !_radioNewsTimeAllowed(p)) {
+      UI.showToast('晚间新闻仅在 18:30–21:00 播出', 2500);
+      return;
+    }
     if (needGen) p._generating = true;
     // 已有正文的台（再次收听）→ 直接确保在「我的」订阅里；首次生成的在生成成功后再加
-    if (!needGen) { try { await _radioSubscribeStation(catId, p); } catch (_) {} }
+    if (!updateGate && !needGen) { try { await _radioSubscribeStation(catId, p); } catch (_) {} }
 
     // 头部圆形头像：有封面用封面，否则主题色底
     const avatarHtml = p.cover
@@ -6743,10 +7465,14 @@ ${mailTask}
     const hostLine = `主播 ${Utils.escapeHtml(p.dj || '匿名')}${p.guest ? ` · 嘉宾 ${Utils.escapeHtml(p.guest)}` : ''}`;
     const tags = (p.tags || []).map(t => `<span class="phone-radio-card-tag">${Utils.escapeHtml(t)}</span>`).join('');
 
-    // 正文：已生成则渲染真实节目，未生成则空（等异步填入）
-    const bodyRaw = p._body || '';
+    // 正文：闸门态不渲染旧正文（等点更新后重新生成）；否则已生成则渲染真实节目
+    const bodyRaw = updateGate ? '' : (p._body || '');
     const duration = p._duration || '约 30 分钟';
     const segHtml = bodyRaw ? _radioRenderSegments(bodyRaw, p) : '';
+    // 顶部节目名：闸门态显示「下期节目」预告名，引导用户收听更新
+    const showTitle = updateGate
+      ? ((next && next.name) ? next.name : '下期节目')
+      : (p.showName || '本期节目');
 
     const overlay = document.createElement('div');
     overlay.className = 'phone-radio-detail';
@@ -6765,7 +7491,7 @@ ${mailTask}
         <div class="phone-radio-detail-avatar">${avatarHtml}</div>
       </div>
       <div class="phone-radio-detail-meta">
-        <div class="phone-radio-detail-show">${Utils.escapeHtml(p.showName || '本期节目')}</div>
+        <div class="phone-radio-detail-show">${Utils.escapeHtml(showTitle)}</div>
         <div class="phone-radio-detail-info-row">
           <span class="phone-radio-detail-tags">${tags}</span>
           <span class="phone-radio-detail-host">${hostLine}</span>
@@ -6773,7 +7499,17 @@ ${mailTask}
         </div>
       </div>
       <div class="phone-radio-detail-scroll">
-        <div class="phone-radio-detail-hint" id="phone-radio-detail-hint">${p._generating ? '节目准备中…' : '点击播放按钮开始'}</div>
+        ${updateGate ? `
+        <div class="phone-radio-detail-updategate" id="phone-radio-detail-updategate" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center">
+          <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:16px"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg>
+          <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">${Utils.escapeHtml((next && next.name) ? next.name : '下期节目')}</div>
+          ${(next && next.desc) ? `<div style="font-size:12.5px;line-height:1.6;color:var(--text-secondary);max-width:280px;margin-bottom:22px">${Utils.escapeHtml(next.desc)}</div>` : '<div style="margin-bottom:22px"></div>'}
+          <button type="button" id="phone-radio-update-btn" style="padding:11px 28px;background:var(--accent);color:#111;border:none;border-radius:22px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+            收听本期更新
+          </button>
+        </div>` : ''}
+        <div class="phone-radio-detail-hint" id="phone-radio-detail-hint" style="${updateGate ? 'display:none' : ''}">${p._generating ? '节目准备中…' : '点击播放按钮开始'}</div>
         <div class="phone-radio-detail-body">${segHtml}</div>
           <div class="phone-radio-detail-interact" id="phone-radio-detail-interact">
             <!-- 互动玩法占位：投票/点歌/抽奖/连线 -->
@@ -6800,15 +7536,20 @@ ${mailTask}
     const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
     shell.appendChild(overlay);
     const back = overlay.querySelector('#phone-radio-detail-back');
-    // 关闭详情页：停朗读 + 停底噪 + 移除 overlay，并确保底层回到该分类的预览卡片页（定位到刚收听的那张卡）
+    // 关闭详情页：停朗读 + 停底噪 + 移除 overlay；从「我的」进来则回到「我的」tab，否则回该分类预览页
     const closeDetail = async () => {
       _RadioSpeaker.stop();
       _RadioSpeaker.stopNoise();
       overlay.remove();
       try {
-        _radioCardIdx = idx;
         const pd2 = await _getPhoneData();
-        _renderRadioCategory(pd2, catId);
+        if (fromMine) {
+          _radioHomeTab = 'mine';
+          _renderRadio(pd2);
+        } else {
+          _radioCardIdx = idx;
+          _renderRadioCategory(pd2, catId);
+        }
       } catch (_) {}
     };
     if (back) back.onclick = closeDetail;
@@ -6832,6 +7573,45 @@ ${mailTask}
         const spectrumEl = overlay.querySelector('#phone-radio-spectrum');
         if (spectrumEl) spectrumEl.classList.remove('playing');
         _radioRevealAll(overlay);
+      };
+    }
+    // 「收听本期更新」按钮（仅从「我的」进入的闸门态有）：当前期归档进历史 → 清旧正文 → 生成新一期 → 进入正常播放流程
+    const updateBtn = overlay.querySelector('#phone-radio-update-btn');
+    if (updateBtn) {
+      updateBtn.onclick = async () => {
+        // 新闻类时间限制：18:30-21:00 才允许更新
+        if (!_radioNewsTimeAllowed(p)) {
+          UI.showToast('晚间新闻仅在 18:30–21:00 播出', 2500);
+          return;
+        }
+        overlay.remove();
+        _RadioSpeaker.stop();
+        _RadioSpeaker.stopNoise();
+        try {
+          const pd2 = await _getPhoneData();
+          const prog2 = (pd2.radioPrograms && pd2.radioPrograms[catId] || [])[idx];
+          if (prog2) {
+            // 把当前这期归档进历史节目（去重，最多保留 30 期）
+            _radioArchiveEpisode(prog2);
+            prog2._prevBody = prog2._body || '';   // 记下上一期正文，供续期生成时参考避重（生成成功后清掉）
+            prog2._body = '';           // 清掉本期正文，触发重新生成新一期
+            prog2._generating = false;
+            // 更新单期标题：新闻类用 fixedNext.name（固定预告），其它类用 nextShow（用户手动填的）或保持不变
+            const isNews = _radioIsNewsTag(prog2);
+            if (isNews) {
+              // 新闻类：从标签拿固定预告名，用户手动填了 nextShow 就用手动的
+              const tag = (prog2.tags || [])[0];
+              const fx = _radioFixedNextByTag(tag);
+              prog2.showName = (prog2.nextShow || '').trim() || (fx && fx.name) || prog2.showName;
+            } else {
+              // 非新闻类：用户填了 nextShow 就用，否则保持原标题（让 AI 重新生成时自己决定）
+              if ((prog2.nextShow || '').trim()) prog2.showName = prog2.nextShow.trim();
+            }
+            await _savePhoneData();
+          }
+        } catch (_) {}
+        // 不带 showUpdateGate 重开：走标准 needGen 流程生成本期新内容；fromMine 保留以便返回回「我的」
+        await _radioOpenDetail(catId, idx, { fromMine: true });
       };
     }
     // 进入详情页：未播态——隐藏气泡，显示中间提示
@@ -6859,6 +7639,8 @@ ${mailTask}
         p._body = body;
         p._generating = false;
         p._duration = p._duration || '约 30 分钟';
+        if (p._prevBody) delete p._prevBody; // 续期参考已用过，清掉避免下次正常生成时又带上一期
+        _radioArchiveEpisode(p); // 本期生成成功即归档进历史（去重），保证听过的每期都能在历史里回放
         try { await _radioPersistBody(catId, idx, -1, body); } catch (_) {}
         // 生成了详情正文的台 → 加入「我的」订阅
         try { await _radioSubscribeStation(catId, p); } catch (_) {}
@@ -6889,9 +7671,23 @@ ${mailTask}
             if (i >= segIdx) el.classList.add('seg-hidden');
           });
         }
-        // 互动完成、正文已无 pending 锚点 → 显示"同步主线"按钮
+        // 互动完成、正文已无 pending 锚点 → 显示"同步主线"按钮，并把这期完整正文归档进历史
         const syncBox = overlay.querySelector('#phone-radio-detail-sync');
-        if (syncBox && !_radioHasPendingInteract(newBody)) syncBox.style.display = '';
+        if (!_radioHasPendingInteract(newBody)) {
+          if (syncBox) syncBox.style.display = '';
+          // 互动后才生成玩法之后的内容，此时才是完整的一期 → 归档（去重）
+          (async () => {
+            try {
+              const pd2 = await _getPhoneData();
+              const prog2 = (pd2.radioPrograms && pd2.radioPrograms[catId] || [])[idx];
+              if (prog2) { prog2._body = newBody; _radioArchiveEpisode(prog2); }
+              // 内存里这份也归档，保证当前会话「我的」拷贝同步
+              p._body = newBody; _radioArchiveEpisode(p);
+              await _savePhoneData(pd2);
+              try { await _radioSubscribeStation(catId, p); } catch (_) {}
+            } catch (e) { console.warn('[互动后归档]', e); }
+          })();
+        }
         doPlay(segIdx - 1);
       };
       // 续播：互动生成后从指定段之后继续；startSeg<0 表示从头
@@ -6910,7 +7706,8 @@ ${mailTask}
         }, (segIdx) => {
           _radioRevealSeg(overlay, segIdx);
         }, () => {
-          // 一期自然播完：根据循环模式决定下一步
+          // 一期自然播完：若有待播点歌，先关底噪放歌并跳过循环；否则按循环模式决定下一步
+          if (p._pendingSongId) { _radioMaybePlaySong(p); return; }
           if (_radioRepeatMode === 'one') {
             setTimeout(() => { if (playBtn && !_RadioSpeaker.isSpeaking()) doPlay(-1); }, 600);
           }
@@ -6937,11 +7734,11 @@ ${mailTask}
         }
         doPlay(-1);
       };
-      // 互动卡片按钮：不留言 / 我要留言（事件委托）
+      // 互动卡片按钮：不留言 / 我要留言 / 投票选项（事件委托）
       const bodyEl = overlay.querySelector('.phone-radio-detail-body');
       if (bodyEl) {
         bodyEl.addEventListener('click', (e) => {
-          const ibtn = e.target.closest && e.target.closest('.phone-radio-interact-btn');
+          const ibtn = e.target.closest && e.target.closest('.phone-radio-interact-btn, .phone-radio-vote-opt');
           if (!ibtn || ibtn.disabled) return;
           const card = ibtn.closest('.phone-radio-interact');
           const segIdx = card ? parseInt(card.getAttribute('data-seg-idx'), 10) : -1;
@@ -6950,13 +7747,24 @@ ${mailTask}
           const act = ibtn.getAttribute('data-act');
           if (_RadioSpeaker.isSpeaking()) _RadioSpeaker.stop();
           if (act === 'skip') {
-            // 不留言：照样生成一段读留言（纯虚拟听众）+ 收尾，标记为 done（行为同参与，只是没有玩家留言）
+            // 不参与：照样生成一段（纯虚拟听众/纯随机投票）+ 收尾，标记为 done（行为同参与，只是没有玩家输入）
             _radioHandlePlay(play, overlay, p, { catId, idx, histIdx: -1 }, (newBody) => {
               applyMailResult(segIdx, newBody);
             }, { skip: true });
             return;
           }
-          // 参与玩法：分发到对应玩法的 handler（取消则什么都不做，卡片留在原位等玩家再选）
+          if (act === 'vote') {
+            // 投票：玩家点了某个选项，取选项索引 + 该锚点的问题/选项列表
+            const optIdx = parseInt(ibtn.getAttribute('data-opt'), 10);
+            const segs = _parseRadioReply(p._body || '');
+            const seg = segs[segIdx];
+            const params = (seg && Array.isArray(seg.params)) ? seg.params : [];
+            _radioHandlePlay(play, overlay, p, { catId, idx, histIdx: -1 }, (newBody) => {
+              applyMailResult(segIdx, newBody);
+            }, { vote: { optIdx, question: params[0] || '', options: params.slice(1) } });
+            return;
+          }
+          // 参与玩法（mail 的"我要留言"）：分发到对应 handler（取消则什么都不做，卡片留在原位等玩家再选）
           _radioHandlePlay(play, overlay, p, { catId, idx, histIdx: -1 }, (newBody) => {
             applyMailResult(segIdx, newBody);
           });
@@ -7086,19 +7894,9 @@ ${mailTask}
     const p = programs[idx];
     if (!p) { UI.showToast('节目不存在', 1500); return; }
 
-    // 历史节目：暂用假数据兜底（后续接 AI 生成，每期存一条）
+    // 历史节目：只收录真实归档（"收听本期更新"时把上一期推进 history）。无则空，页面显示空态提示。
     if (!Array.isArray(p.history)) {
-      p.history = [{
-        id: 'rh_' + Utils.uuid().slice(0, 8),
-        showName: p.showName || '本期节目',
-        dj: p.dj || '匿名',
-        guest: p.guest || '',
-        tags: (p.tags || []).slice(),
-        cover: p.cover || '',
-        duration: '约 30 分钟',
-        time: _radioFmtArchiveTime(new Date()),
-        body: _RADIO_FAKE_BODY
-      }];
+      p.history = [];
     }
 
     if (!p.voice || typeof p.voice !== 'object') {
@@ -7368,7 +8166,7 @@ ${mailTask}
     const h = (p.history || [])[histIdx];
     if (!h) { UI.showToast('历史节目不存在', 1500); return; }
     const snapshot = Object.assign({}, p, {
-      showName: h.showName || p.showName,
+      showName: h.title || h.showName || p.showName,  // 优先用 title（新归档），回退 showName（老数据）
       dj: h.dj || p.dj,
       guest: h.guest || p.guest,
       tags: h.tags || p.tags,
@@ -7477,7 +8275,13 @@ ${mailTask}
     const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
     shell.appendChild(overlay);
     const back = overlay.querySelector('#phone-radio-hplay-back');
-    if (back) back.onclick = () => { _RadioSpeaker.stop(); _RadioSpeaker.stopNoise(); overlay.remove(); };
+    if (back) back.onclick = async () => {
+      _RadioSpeaker.stop(); _RadioSpeaker.stopNoise(); overlay.remove();
+      // 从「我的」回放下架台进来的：返回时刷新「我的」列表
+      if (ctx.fromMine) {
+        try { _radioHomeTab = 'mine'; _renderRadio(await _getPhoneData()); } catch (_) {}
+      }
+    };
     if (p.voice && p.voice.noise) _RadioSpeaker.startNoise();
     const playBtn = overlay.querySelector('#phone-radio-hplay-play');
     const spectrum = overlay.querySelector('#phone-radio-hplay-spectrum');
@@ -7538,12 +8342,13 @@ ${mailTask}
           if (!playing) _radioRevealAll(overlay);
         }, (segIdx) => {
           _radioRevealSeg(overlay, segIdx);
-        }, () => {
-          // 一期自然播完：根据循环模式决定下一步
-          if (_radioRepeatMode === 'one') {
-            // 单期循环：重播当前期
-            setTimeout(() => { if (playBtn) playBtn.onclick(); }, 600);
-          } else if (total > 1 && typeof ctx.histIdx === 'number') {
+         }, () => {
+           // 一期自然播完：若有待播点歌，先关底噪放歌并跳过循环；否则按循环模式决定下一步
+           if (p._pendingSongId) { _radioMaybePlaySong(p); return; }
+           if (_radioRepeatMode === 'one') {
+             // 单期循环：重播当前期
+             setTimeout(() => { if (playBtn) playBtn.onclick(); }, 600);
+           } else if (total > 1 && typeof ctx.histIdx === 'number') {
             // 列表循环：切下一期
             const hi = (ctx.histIdx + 1) % total;
             setTimeout(() => switchTo(hi), 600);
@@ -7556,6 +8361,14 @@ ${mailTask}
   // 留言信封 SVG 图标
   function _radioMailSvg() {
     return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>';
+  }
+  // 投票 SVG 图标（柱状图）
+  function _radioVoteSvg() {
+    return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><line x1="6" x2="6" y1="20" y2="12"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="18" x2="18" y1="20" y2="14"/></svg>';
+  }
+  // 点歌 SVG 图标（音符）
+  function _radioRequestSvg() {
+    return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
   }
 
   // 把节目正文渲染成 叙述卡片 + 台词气泡（主播用封面头像，嘉宾用固定头像）
@@ -7591,15 +8404,34 @@ ${mailTask}
               <div class="phone-radio-interact-desc">${Utils.escapeHtml(play.descSkip)}</div>
             </div>`;
         } else {
-          cardHtml = `
-            <div class="phone-radio-interact" data-seg-idx="${segIdx}" data-interact="${Utils.escapeHtml(play.id)}">
-              <div class="phone-radio-interact-title">${titleHtml}</div>
-              <div class="phone-radio-interact-desc">${Utils.escapeHtml(play.descPending)}</div>
-              <div class="phone-radio-interact-actions">
-                <button class="phone-radio-interact-btn ghost" type="button" data-act="skip">${Utils.escapeHtml(play.skipLabel)}</button>
-                <button class="phone-radio-interact-btn" type="button" data-act="play">${Utils.escapeHtml(play.actLabel)}</button>
-              </div>
-            </div>`;
+          if (play.id === 'vote') {
+            // 投票 pending：问题 + 选项按钮列表 + 不投票按钮。选项来自锚点参数 seg.params（首项为问题，其余为选项）
+            const params = Array.isArray(seg.params) ? seg.params : [];
+            const question = params[0] || '主播发起了一个投票';
+            const options = params.slice(1);
+            const optBtns = options.map((opt, oi) =>
+              `<button class="phone-radio-vote-opt" type="button" data-act="vote" data-opt="${oi}">${Utils.escapeHtml(opt)}</button>`
+            ).join('');
+            cardHtml = `
+              <div class="phone-radio-interact vote" data-seg-idx="${segIdx}" data-interact="${Utils.escapeHtml(play.id)}">
+                <div class="phone-radio-interact-title">${titleHtml}</div>
+                <div class="phone-radio-vote-q">${Utils.escapeHtml(question)}</div>
+                <div class="phone-radio-vote-opts">${optBtns}</div>
+                <div class="phone-radio-interact-actions">
+                  <button class="phone-radio-interact-btn ghost" type="button" data-act="skip">${Utils.escapeHtml(play.skipLabel)}</button>
+                </div>
+              </div>`;
+          } else {
+            cardHtml = `
+              <div class="phone-radio-interact" data-seg-idx="${segIdx}" data-interact="${Utils.escapeHtml(play.id)}">
+                <div class="phone-radio-interact-title">${titleHtml}</div>
+                <div class="phone-radio-interact-desc">${Utils.escapeHtml(play.descPending)}</div>
+                <div class="phone-radio-interact-actions">
+                  <button class="phone-radio-interact-btn ghost" type="button" data-act="skip">${Utils.escapeHtml(play.skipLabel)}</button>
+                  <button class="phone-radio-interact-btn" type="button" data-act="play">${Utils.escapeHtml(play.actLabel)}</button>
+                </div>
+              </div>`;
+          }
         }
         html += cardHtml;
       } else if (seg.kind === 'desc') {
@@ -8476,17 +9308,180 @@ function _renderSettings(pd) {
  <div class="phone-settings-card">
  <div class="phone-settings-title">本轮操作发送</div>
  <div class="phone-settings-desc">把你在手机里的操作（发动态/下单/搜索等）作为背景行为告诉 AI，让剧情自然回应。关闭后本轮操作仅本地记录，不会发送给 AI。</div>
- <label class="circle-check-label" style="margin-top:0;padding:0">
-   <span class="circle-check-text" style="font-size:13px">发送本轮手机操作</span>
-   <span style="position:relative;display:inline-flex">
-     <input type="checkbox" id="phone-send-actionlog" class="circle-check" ${pd?.sendActionLog !== false ? 'checked' : ''} onchange="Phone._toggleSendActionLog(this.checked)">
-     <span class="circle-check-ui"></span>
-   </span>
- </label>
- </div>
- </div>
- `;
-}
+  <label class="circle-check-label" style="margin-top:0;padding:0">
+    <span class="circle-check-text" style="font-size:13px">发送本轮手机操作</span>
+    <span style="position:relative;display:inline-flex">
+      <input type="checkbox" id="phone-send-actionlog" class="circle-check" ${pd?.sendActionLog !== false ? 'checked' : ''} onchange="Phone._toggleSendActionLog(this.checked)">
+      <span class="circle-check-ui"></span>
+    </span>
+  </label>
+  </div>
+  <div class="phone-settings-card">
+  <div class="phone-settings-title">世界观设定注入</div>
+  <div class="phone-settings-desc">控制手机里的 AI 生成（电台/论坛/朋友圈/地图等）是否携带当前世界观自带的扩展设定。关掉能减少上下文体积。仅作用于世界观自带部分，挂载的世界书不受影响。</div>
+  <label class="circle-check-label" style="margin-top:0;padding:0">
+    <span class="circle-check-text" style="font-size:13px">节日设定<br><span style="font-size:11px;color:var(--text-secondary)">世界观里所有节日的完整内容</span></span>
+    <span style="position:relative;display:inline-flex">
+      <input type="checkbox" id="phone-inject-festival" class="circle-check" ${pd?.injectFestival !== false ? 'checked' : ''} onchange="Phone._toggleInject('injectFestival', this.checked)">
+      <span class="circle-check-ui"></span>
+    </span>
+  </label>
+  <label class="circle-check-label" style="margin-top:10px;padding:0">
+    <span class="circle-check-text" style="font-size:13px">常驻条目<br><span style="font-size:11px;color:var(--text-secondary)">世界观里的常驻知识设定</span></span>
+    <span style="position:relative;display:inline-flex">
+      <input type="checkbox" id="phone-inject-custom" class="circle-check" ${pd?.injectCustom !== false ? 'checked' : ''} onchange="Phone._toggleInject('injectCustom', this.checked)">
+      <span class="circle-check-ui"></span>
+    </span>
+  </label>
+  <label class="circle-check-label" style="margin-top:10px;padding:0">
+    <span class="circle-check-text" style="font-size:13px">动态条目<br><span style="font-size:11px;color:var(--text-secondary)">世界观里关键词触发的知识条目（手机场景会全量发）</span></span>
+    <span style="position:relative;display:inline-flex">
+      <input type="checkbox" id="phone-inject-knowledge" class="circle-check" ${pd?.injectKnowledge !== false ? 'checked' : ''} onchange="Phone._toggleInject('injectKnowledge', this.checked)">
+      <span class="circle-check-ui"></span>
+    </span>
+  </label>
+  </div>
+  <div class="phone-settings-card">
+  <div class="phone-settings-title">世界书</div>
+  <div class="phone-settings-desc">手机里的 AI 生成默认沿用主线挂载的世界书。这里可以单独关掉某本（只影响手机，不动主线），或为手机额外添加一本。</div>
+  <div id="phone-lorebook-list" style="margin-top:4px"><div style="font-size:12px;color:var(--text-secondary)">加载中…</div></div>
+  <button class="phone-settings-btn secondary" style="margin-top:10px" onclick="Phone._phoneLorebookAdd()">+ 添加世界书</button>
+  </div>
+  </div>
+  `;
+  _renderPhoneLorebookList(pd);
+ }
+
+ // 渲染手机世界书列表：主线带来的（可开关）+ 手机单独加的（可开关/移除）
+ async function _renderPhoneLorebookList(pd) {
+   const wrap = document.getElementById('phone-lorebook-list');
+   if (!wrap) return;
+   try {
+     const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+     const wv = await Worldview.getCurrent();
+     let card = null;
+     if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+       try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
+     }
+     const phoneAdd = Array.isArray(pd.phoneLorebookIds) ? pd.phoneLorebookIds : [];
+     const phoneOff = new Set(Array.isArray(pd.phoneLorebookDisabled) ? pd.phoneLorebookDisabled : []);
+     // 主线候选（世界观/卡/常驻角色/对话挂的）
+     const candidates = (typeof Lorebook.collectCandidateIdsAsync === 'function')
+       ? await Lorebook.collectCandidateIdsAsync({ conv, card, wv })
+       : [];
+     const mainIds = candidates.map(c => c.id);
+     // 手机单独加的（排除掉已经在主线里的，避免重复展示）
+     const addOnly = phoneAdd.filter(id => !mainIds.includes(id));
+     const allIds = [...mainIds, ...addOnly];
+     if (allIds.length === 0) {
+       wrap.innerHTML = '<div style="font-size:12px;color:var(--text-secondary)">当前没有可用的世界书。</div>';
+       return;
+     }
+     const rows = [];
+     for (const id of allIds) {
+       const lb = await Lorebook.get(id);
+       if (!lb) continue;
+       const isPhoneAdd = addOnly.includes(id);
+       const on = !phoneOff.has(id);
+       rows.push(`
+         <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+           <div style="flex:1;min-width:0">
+             <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(lb.name || '未命名')}${isPhoneAdd ? ' <span style="font-size:10px;color:var(--accent)">手机添加</span>' : ''}</div>
+           </div>
+           ${isPhoneAdd ? `<button onclick="Phone._phoneLorebookRemove('${id}')" style="background:none;border:1px solid var(--border);color:var(--text-secondary);padding:3px 8px;border-radius:6px;cursor:pointer;font-size:11px">移除</button>` : ''}
+           <span style="position:relative;display:inline-flex">
+             <input type="checkbox" class="circle-check" ${on ? 'checked' : ''} onchange="Phone._phoneLorebookToggle('${id}', this.checked)">
+             <span class="circle-check-ui"></span>
+           </span>
+         </div>`);
+     }
+     wrap.innerHTML = rows.join('') || '<div style="font-size:12px;color:var(--text-secondary)">当前没有可用的世界书。</div>';
+   } catch(e) {
+     console.warn('[Phone] 世界书列表渲染失败', e);
+     wrap.innerHTML = '<div style="font-size:12px;color:var(--danger)">加载失败</div>';
+   }
+ }
+
+ // 开关某本世界书（关=加进 phoneLorebookDisabled，只影响手机）
+ async function _phoneLorebookToggle(id, checked) {
+   const pd = await _getPhoneData();
+   if (!pd) return;
+   if (!Array.isArray(pd.phoneLorebookDisabled)) pd.phoneLorebookDisabled = [];
+   const set = new Set(pd.phoneLorebookDisabled);
+   if (checked) set.delete(id); else set.add(id);
+   pd.phoneLorebookDisabled = [...set];
+   await _savePhoneData();
+ }
+
+ // 移除手机单独添加的世界书
+ async function _phoneLorebookRemove(id) {
+   const pd = await _getPhoneData();
+   if (!pd) return;
+   pd.phoneLorebookIds = (pd.phoneLorebookIds || []).filter(x => x !== id);
+   // 顺手清掉它在禁用列表里的残留
+   pd.phoneLorebookDisabled = (pd.phoneLorebookDisabled || []).filter(x => x !== id);
+   await _savePhoneData();
+   _renderPhoneLorebookList(pd);
+ }
+
+ // 添加世界书：从书库里挑一本当前还没用上的（自建轻量选择弹窗）
+ async function _phoneLorebookAdd() {
+   try {
+     const pd = await _getPhoneData();
+     if (!pd) return;
+     const all = await Lorebook.getAll();
+     if (!all || all.length === 0) { UI.showToast('书库里还没有世界书', 1800); return; }
+     const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+     const wv = await Worldview.getCurrent();
+     let card = null;
+     if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+       try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
+     }
+     const candidates = (typeof Lorebook.collectCandidateIdsAsync === 'function')
+       ? await Lorebook.collectCandidateIdsAsync({ conv, card, wv })
+       : [];
+     const used = new Set([...candidates.map(c => c.id), ...(pd.phoneLorebookIds || [])]);
+     const pickable = all.filter(lb => !used.has(lb.id));
+     if (pickable.length === 0) { UI.showToast('没有可添加的世界书了', 1800); return; }
+
+     const mask = document.createElement('div');
+     mask.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+     const items = pickable.map(lb =>
+       `<div class="phone-lb-pick-item" data-id="${Utils.escapeHtml(lb.id)}" style="padding:11px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--bg-tertiary)">
+          <div style="font-size:14px;color:var(--text);font-weight:500">${Utils.escapeHtml(lb.name || '未命名')}</div>
+          ${lb.description ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(lb.description)}</div>` : ''}
+        </div>`
+     ).join('');
+     mask.innerHTML = `
+       <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:18px;max-width:360px;width:100%;color:var(--text);max-height:80vh;display:flex;flex-direction:column">
+         <div style="font-size:15px;font-weight:600;margin-bottom:4px">添加世界书</div>
+         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px">选一本只在手机场景里额外启用的世界书</div>
+         <div style="overflow-y:auto;flex:1">${items}</div>
+         <button id="phone-lb-pick-cancel" style="margin-top:12px;padding:10px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer">取消</button>
+       </div>`;
+     document.body.appendChild(mask);
+     const close = () => { if (mask.parentNode) mask.parentNode.removeChild(mask); };
+     mask.addEventListener('click', (e) => { if (e.target === mask) close(); });
+     mask.querySelector('#phone-lb-pick-cancel').onclick = close;
+     mask.querySelectorAll('.phone-lb-pick-item').forEach(el => {
+       el.onclick = async () => {
+         const chosenId = el.getAttribute('data-id');
+         close();
+         if (!chosenId) return;
+         const pd2 = await _getPhoneData();
+         if (!pd2) return;
+         if (!Array.isArray(pd2.phoneLorebookIds)) pd2.phoneLorebookIds = [];
+         if (!pd2.phoneLorebookIds.includes(chosenId)) pd2.phoneLorebookIds.push(chosenId);
+         await _savePhoneData();
+         _renderPhoneLorebookList(pd2);
+         UI.showToast('已添加', 1200);
+       };
+     });
+   } catch(e) {
+     console.warn('[Phone] 添加世界书失败', e);
+     UI.showToast('添加失败', 1500);
+   }
+ }
 
 async function _onWallpaperPicked() {
     const dataUrl = await Utils.promptImageInput({ maxSize: 1600, quality: 0.82 });
@@ -8544,11 +9539,19 @@ await _savePhoneData();
 }
 
 async function _toggleSendActionLog(checked) {
-const pd = await _getPhoneData();
-if (!pd) return;
-pd.sendActionLog = !!checked;
-await _savePhoneData();
-}
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    pd.sendActionLog = !!checked;
+    await _savePhoneData();
+  }
+
+  // 世界观设定注入开关（key: injectFestival / injectCustom / injectKnowledge）
+  async function _toggleInject(key, checked) {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    pd[key] = !!checked;
+    await _savePhoneData();
+  }
 
 async function _onMomentsCoverPicked() {
   const dataUrl = await Utils.promptImageInput({ maxSize: 1200, quality: 0.82 });
@@ -14752,10 +15755,20 @@ function _callDoSend() {
     for (let line of lines) {
       // 互动锚点：[[玩法锚点]] 未完成 / [[玩法锚点:done]] 已参与 / [[玩法锚点:skip]] 已跳过
       // 锚点关键字来自玩法池 _RADIO_PLAYS（如「读留言」「投票」…），按池子动态匹配
-      const mInteract = line.match(new RegExp('^\\[\\[\\s*(' + _radioPlayAnchorPattern() + ')(?::(done|skip))?\\s*\\]\\]$'));
+      // 部分玩法锚点带参数，用 | 分隔，如 [[投票|问题|选项A|选项B|选项C]]；done/skip 态则无参数
+      const mInteract = line.match(new RegExp('^\\[\\[\\s*(' + _radioPlayAnchorPattern() + ')((?::(?:done|skip))|(?:\\|[^\\]]*))?\\s*\\]\\]$'));
       if (mInteract) {
         const play = _radioPlayByAnchor(mInteract[1]);
-        segs.push({ kind: 'interact', interact: play ? play.id : 'mail', state: mInteract[2] || '', speaker: '', text: mInteract[1] });
+        const suffix = mInteract[2] || '';
+        let state = '';
+        let params = [];
+        if (suffix.startsWith(':')) {
+          state = suffix.slice(1);
+        } else if (suffix.startsWith('|')) {
+          // 带参数：用 | 拆，过滤空项
+          params = suffix.slice(1).split('|').map(s => s.trim()).filter(Boolean);
+        }
+        segs.push({ kind: 'interact', interact: play ? play.id : 'mail', state, params, speaker: '', text: mInteract[1] });
         continue;
       }
       if (/^>\s*/.test(line)) {
@@ -20630,7 +21643,7 @@ buildHeartsimAppFavorForBackstage,
     flushActionLog, peekActionLog, pushLog, reloadActionLog, reloadChatRoundLog,
     flushActionLogForBackstage,
     getSnapshotForRollback, restoreFromSnapshot,
-    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _onMomentsCoverPicked, _clearMomentsCover,
+    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
     // 个人资料卡
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
     // 主屏分页
