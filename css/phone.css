@@ -702,17 +702,19 @@
 }
 /* 全部订单聚合页：来源徽章配色 */
 .phone-delivery-src-feiniao,
-.phone-delivery-src-youyu,
-.phone-delivery-src-shop,
- .phone-delivery-src-takeout {
- padding: 1px 7px;
- border-radius: 999px;
- font-weight: 600;
- color: #fff !important;
+  .phone-delivery-src-youyu,
+  .phone-delivery-src-shop,
+  .phone-delivery-src-cottage,
+  .phone-delivery-src-takeout {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: 600;
+  color: #fff !important;
 }
 .phone-delivery-src-feiniao { background: #5b8def; }
 .phone-delivery-src-youyu { background: #2bb3a3; }
 .phone-delivery-src-shop { background: #f08a3c; }
+.phone-delivery-src-cottage { background: #9b6dd6; }
 .phone-delivery-src-takeout { background: #e0574a; }
 .phone-shell.has-custom-wallpaper .phone-map-result-card {
  background: rgba(18, 20, 28, 0.30) !important;
@@ -5718,3 +5720,435 @@ background: transparent !important;
 }
 .phone-shell.has-custom-wallpaper .phone-radio-mine-next-name { color: rgba(255, 255, 255, 0.96) !important; }
 .phone-shell.has-custom-wallpaper .phone-radio-mine-next-desc { color: rgba(255, 255, 255, 0.7) !important; }
+
+/* ===== 小屋 App ===== */
+.cottage-ai-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+.cottage-ai-btn:active { background: rgba(255,255,255,0.10); }
+.cottage-ai-mode-opt:active { background: rgba(255,255,255,0.08); }
+.cottage-home { padding: 16px 16px 24px; color: var(--text); }
+/* 商城页：两个入口卡片 */
+.cottage-mall { padding: 16px 16px 24px; color: var(--text); display: flex; flex-direction: column; gap: 12px; }
+.cottage-mall-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 16px;
+  padding: 16px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.24);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.22);
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+.cottage-mall-card:active { transform: scale(0.985); }
+.cottage-mall-card-icon {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+}
+.cottage-mall-card-icon svg { width: 24px; height: 24px; stroke: #fff; }
+.cottage-mall-card-name { font-size: 15px; font-weight: 650; margin-bottom: 3px; }
+.cottage-mall-card-desc { font-size: 12px; color: var(--text-secondary); }
+/* 商城 / 仓库：平铺筛选标签 */
+.cottage-mall-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cottage-mall-chip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card, rgba(255,255,255,0.04));
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s;
+}
+.cottage-mall-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #111;
+  font-weight: 600;
+}
+/* 商城 / 仓库：配送中订单提示条 */
+.cottage-mall-orders-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: rgba(255,255,255,0.04);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* 购买弹窗：付款方式 / 到货方式选项 */
+.cottage-buy-opt {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cottage-buy-opt.active {
+  border-color: var(--accent);
+  background: rgba(255,255,255,0.05);
+  font-weight: 600;
+}
+.cottage-buy-ship-opt {
+  text-align: center;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cottage-buy-ship-opt.active {
+  border-color: var(--accent);
+  background: rgba(255,255,255,0.05);
+  font-weight: 600;
+}
+.cottage-house-list { display: flex; flex-direction: column; gap: 12px; }
+.cottage-empty {
+  padding: 40px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.cottage-house-card {
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.24);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.22);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: transform .1s;
+}
+.cottage-house-card:active { transform: scale(0.98); }
+.cottage-house-card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.cottage-house-name { font-size: 16px; font-weight: 750; }
+.cottage-house-badge {
+  font-size: 10px;
+  font-weight: 650;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #111;
+}
+.cottage-house-addr { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+.cottage-house-meta { font-size: 12px; color: var(--text-secondary); opacity: 0.85; }
+.cottage-add-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px dashed var(--accent);
+  background: none;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.cottage-add-btn:active { background: rgba(255,255,255,0.08); }
+
+/* 住所详情页 */
+.cottage-house-page { padding: 16px 16px 24px; color: var(--text); }
+.cottage-info-card {
+  border-radius: 18px;
+  padding: 18px;
+  background: rgba(255,255,255,0.20);
+  border: 1px solid rgba(255,255,255,0.26);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.24);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  position: relative;
+  transition: transform .1s;
+}
+.cottage-info-card:active { transform: scale(0.99); }
+/* 有图片时：文字铺在深色蒙版上，统一白字 */
+.cottage-info-card-img { height: 140px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; border: none; overflow: hidden; }
+.cottage-info-card-img .cottage-info-name,
+.cottage-info-card-img .cottage-info-addr,
+.cottage-info-card-img .cottage-info-style { color: #fff; }
+.cottage-info-card-img .cottage-info-style {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cottage-info-card-img .cottage-info-addr { margin-bottom: 6px; }
+.cottage-info-card-img .cottage-info-style-empty { color: rgba(255,255,255,0.8); }
+.cottage-info-card-img .cottage-info-edit-hint { display: none; }
+.cottage-info-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cottage-info-name { font-size: 18px; font-weight: 800; }
+.cottage-info-addr { font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; }
+.cottage-info-style { font-size: 13px; line-height: 1.5; color: var(--text); }
+.cottage-info-style-empty { color: var(--text-secondary); opacity: 0.8; }
+.cottage-info-edit-hint {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  text-align: right;
+}
+.cottage-set-cur-btn {
+  width: 100%;
+  margin-top: 14px;
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.cottage-set-cur-btn:active { background: rgba(255,255,255,0.08); }
+
+/* 楼层下拉框 */
+.cottage-floor-select {
+  position: relative;
+  z-index: 60;
+  margin-top: 16px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.24);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 650;
+}
+.cottage-floor-arrow { font-size: 12px; opacity: 0.7; }
+.cottage-floor-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.22);
+  overflow: hidden;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.cottage-floor-menu.hidden { display: none; }
+.cottage-floor-opt {
+  padding: 11px 14px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cottage-floor-opt:active { background: rgba(255,255,255,0.08); }
+.cottage-floor-opt.active .cottage-floor-opt-name { color: var(--accent); font-weight: 700; }
+.cottage-floor-opt-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cottage-floor-opt-act {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.cottage-floor-opt-act:active { background: rgba(255,255,255,0.12); }
+.cottage-floor-opt-del { color: #e0464b; }
+.cottage-floor-opt-add { color: var(--accent); font-size: 13px; }
+
+/* 房间网格：两列卡片 */
+.cottage-room-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.cottage-room-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 10px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.24);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.22);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: transform .12s ease;
+}
+.cottage-room-card:active { transform: scale(0.97); }
+.cottage-room-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.cottage-room-icon svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.30)); }
+.cottage-room-icon-add {
+  background: var(--bg-tertiary);
+  border: 1px dashed var(--border);
+  box-shadow: none;
+}
+.cottage-room-icon-add svg { stroke: var(--text-secondary); filter: none; }
+.cottage-room-name { font-size: 14px; font-weight: 650; color: var(--text); }
+.cottage-room-card-add .cottage-room-name { color: var(--text-secondary); }
+
+/* 房间详情页：装修 / 家具 / 装饰 三栏 */
+.cottage-room-page { padding: 16px 16px 24px; color: var(--text); }
+
+/* 房间顶部信息卡片 */
+.cottage-room-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.24);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.22);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: transform .1s;
+  margin-bottom: 4px;
+}
+.cottage-room-info:active { transform: scale(0.98); }
+.cottage-room-info-icon {
+  flex-shrink: 0;
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.cottage-room-info-icon svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.30)); }
+.cottage-room-info-text { flex: 1; min-width: 0; }
+.cottage-room-info-name { font-size: 16px; font-weight: 750; margin-bottom: 3px; }
+.cottage-room-info-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 图标选择网格（房间编辑弹窗） */
+.cottage-icon-pick {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.cottage-icon-pick svg { width: 22px; height: 22px; stroke: var(--text-secondary) !important; }
+.cottage-icon-pick.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--bg-tertiary)); }
+.cottage-icon-pick.active svg { stroke: var(--accent) !important; }
+
+.cottage-sec-title {
+  font-size: 15px;
+  font-weight: 800;
+  margin: 18px 2px 10px;
+}
+.cottage-sec-title:first-child { margin-top: 2px; }
+.cottage-item-list { display: flex; flex-direction: column; gap: 10px; }
+.cottage-item-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.24);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: transform .1s;
+}
+.cottage-item-card:active { transform: scale(0.98); }
+.cottage-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.cottage-item-name { font-size: 14px; font-weight: 650; flex-shrink: 0; }
+.cottage-item-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.cottage-item-pos {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.85;
+  max-width: 35%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cottage-item-add {
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px dashed var(--accent);
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.cottage-item-add:active { background: rgba(255,255,255,0.08); }

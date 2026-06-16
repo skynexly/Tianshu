@@ -5703,6 +5703,87 @@ async function openPhoneAppsEditor() {
   const shUnitEl = document.getElementById('pa-shop-deliveryUnit'); if (shUnitEl) shUnitEl.value = sh.deliveryUnit || 'day';
   setVal('pa-forum-name', fm.name);
   setVal('pa-forum-desc', fm.desc);
+
+  // 小屋
+  const ct = pa.cottage || {};
+  setVal('pa-cottage-name', ct.name);
+  setVal('pa-cottage-deliveryMin', ct.deliveryMin);
+  setVal('pa-cottage-deliveryMax', ct.deliveryMax);
+  const ctUnitEl = document.getElementById('pa-cottage-deliveryUnit'); if (ctUnitEl) ctUnitEl.value = ct.deliveryUnit || 'day';
+  // 模板状态
+  const tplStatus = document.getElementById('pa-cottage-template-status');
+  if (tplStatus) {
+    if (ct.initialHouse && ct.initialHouse.name) {
+      const roomCount = (ct.initialHouse.floors || []).reduce((n, f) => n + (f.rooms || []).length, 0) || (ct.initialHouse.rooms || []).length;
+      tplStatus.textContent = `已设置：${ct.initialHouse.name}（${roomCount} 个房间）`;
+      tplStatus.style.color = 'var(--accent)';
+    } else {
+      tplStatus.textContent = '未设置';
+      tplStatus.style.color = '';
+    }
+  }
+
+  // 模板按钮事件
+  const tplCopyBtn = document.getElementById('pa-cottage-template-copy');
+  const tplImportBtn = document.getElementById('pa-cottage-template-import');
+  const tplClearBtn = document.getElementById('pa-cottage-template-clear');
+  if (tplCopyBtn) tplCopyBtn.onclick = async () => {
+    try {
+      if (typeof Phone === 'undefined' || !Phone._getPhoneData) { UI.showToast('手机模块未加载', 1500); return; }
+      const pd = await Phone._getPhoneData();
+      const curHouse = (pd?.houses || []).find(h => h.isCurrent);
+      if (!curHouse) { UI.showToast('当前没有设为居住的住所', 2000); return; }
+      const tpl = JSON.parse(JSON.stringify(curHouse));
+      delete tpl.id; delete tpl.isCurrent; delete tpl.image;
+      const ww = await _getEditingWV();
+      if (!ww) return;
+      ww.phoneApps = ww.phoneApps || {};
+      ww.phoneApps.cottage = ww.phoneApps.cottage || {};
+      ww.phoneApps.cottage.initialHouse = tpl;
+      await _saveEditingWV(ww);
+      const roomCount = (tpl.floors || []).reduce((n, f) => n + (f.rooms || []).length, 0) || (tpl.rooms || []).length;
+      const st = document.getElementById('pa-cottage-template-status');
+      if (st) { st.textContent = `已设置：${tpl.name}（${roomCount} 个房间）`; st.style.color = 'var(--accent)'; }
+      UI.showToast('已从当前住所复制为模板', 1600);
+    } catch(e) { UI.showToast('复制失败：' + (e.message || e), 2500); }
+  };
+  if (tplImportBtn) tplImportBtn.onclick = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = '.json,application/json';
+    input.onchange = async () => {
+      const file = input.files[0]; if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        let tpl = null;
+        if (data.__format === 'tianshu_cottage_v1' && Array.isArray(data.houses) && data.houses.length) {
+          tpl = JSON.parse(JSON.stringify(data.houses[0]));
+        } else if (data.name && (data.floors || data.rooms)) {
+          tpl = JSON.parse(JSON.stringify(data));
+        } else { UI.showToast('无法识别的住所数据', 2500); return; }
+        delete tpl.id; delete tpl.isCurrent; delete tpl.image;
+        const ww = await _getEditingWV();
+        if (!ww) return;
+        ww.phoneApps = ww.phoneApps || {};
+        ww.phoneApps.cottage = ww.phoneApps.cottage || {};
+        ww.phoneApps.cottage.initialHouse = tpl;
+        await _saveEditingWV(ww);
+        const roomCount = (tpl.floors || []).reduce((n, f) => n + (f.rooms || []).length, 0) || (tpl.rooms || []).length;
+        const st = document.getElementById('pa-cottage-template-status');
+        if (st) { st.textContent = `已设置：${tpl.name || '住所'}（${roomCount} 个房间）`; st.style.color = 'var(--accent)'; }
+        UI.showToast('已导入住所模板', 1600);
+      } catch(e) { UI.showToast('导入失败：' + (e.message || e), 2500); }
+    };
+    input.click();
+  };
+  if (tplClearBtn) tplClearBtn.onclick = async () => {
+    const ww = await _getEditingWV();
+    if (!ww) return;
+    if (ww.phoneApps?.cottage) { delete ww.phoneApps.cottage.initialHouse; await _saveEditingWV(ww); }
+    const st = document.getElementById('pa-cottage-template-status');
+    if (st) { st.textContent = '未设置'; st.style.color = ''; }
+    UI.showToast('已清除模板', 1200);
+  };
 }
 
 function _buildPhoneAppsEditorHTML(w) {
@@ -5787,6 +5868,37 @@ function _buildPhoneAppsEditorHTML(w) {
     </label>
   </div>
 
+  <!-- 小屋 -->
+  <div style="font-size:14px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:4px;display:flex;align-items:center;gap:6px">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>
+    小屋
+    <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（默认：小屋）</span>
+  </div>
+  <div style="background:var(--bg-tertiary);padding:12px;border-radius:8px;margin-bottom:16px">
+    <label style="display:block;margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">APP 名称</span>
+      <input type="text" id="pa-cottage-name" placeholder="例如：寝居 / 巢穴 / 营地" style="width:100%;padding:6px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+    </label>
+    <div style="margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">家具商城配送时间 <span style="font-size:11px;color:var(--text-secondary)">（留空用默认2-5天）</span></span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="number" id="pa-cottage-deliveryMin" placeholder="最小" style="width:70px;padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+        <span style="color:var(--text-secondary)">~</span>
+        <input type="number" id="pa-cottage-deliveryMax" placeholder="最大" style="width:70px;padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+        <select id="pa-cottage-deliveryUnit" style="padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px"><option value="day">天</option><option value="min">分钟</option></select>
+      </div>
+    </div>
+    <div>
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">初始住所模板 <span style="font-size:11px;color:var(--text-secondary)">（玩家首次进入小屋时自动获得这套房子）</span></span>
+      <div id="pa-cottage-template-status" style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">未设置</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" id="pa-cottage-template-copy" style="padding:6px 12px;font-size:12px;border:1px solid var(--accent);border-radius:6px;background:none;color:var(--accent);cursor:pointer">从当前住所复制</button>
+        <button type="button" id="pa-cottage-template-import" style="padding:6px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--text);cursor:pointer">导入 JSON</button>
+        <button type="button" id="pa-cottage-template-clear" style="padding:6px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:none;color:#e0464b;cursor:pointer">清除</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 </div>`;
 }
@@ -5812,6 +5924,13 @@ async function closePhoneAppsEditor() {
     w.phoneApps.shop.deliveryUnit = getVal('pa-shop-deliveryUnit') || 'day';
     w.phoneApps.forum.name = getVal('pa-forum-name');
     w.phoneApps.forum.desc = getVal('pa-forum-desc');
+    // 小屋
+    w.phoneApps.cottage = w.phoneApps.cottage || {};
+    w.phoneApps.cottage.name = getVal('pa-cottage-name');
+    w.phoneApps.cottage.deliveryMin = getVal('pa-cottage-deliveryMin');
+    w.phoneApps.cottage.deliveryMax = getVal('pa-cottage-deliveryMax');
+    w.phoneApps.cottage.deliveryUnit = getVal('pa-cottage-deliveryUnit') || 'day';
+    // initialHouse 由按钮事件直接写入，这里不覆盖
     // 同步回隐藏字段（供 _collectForm 兼容）
     const syncHidden = (hid, val) => { const el = document.getElementById(hid); if (el) el.value = val; };
     syncHidden('wv-takeout-name', w.phoneApps.takeout.name);

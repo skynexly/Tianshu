@@ -319,6 +319,12 @@ heartsimServiceMessages: [],
   radioChannels: null,   // 频道列表（null=未初始化，首次打开填默认5个）[{id, name, desc, icon, djName, relatedNpcs:[], isDefault}]
   radioPrograms: {},     // 各频道的节目单缓存 { channelId: [{id, title, summary, dj, interact, time, content?}] }
   radioSubscriptions: [], // “我的”页：听过（生成过详情）的台快照列表，最近的在前
+  // 小屋 App
+  houses: [],            // 住所列表 [{id, name, address, styleDesc, isCurrent, rooms:[{id, name, slots:[{id, label, itemId}]}]}]
+  furnitureInventory: [],// 家具仓库 [{id, tag, name, desc, qty}]
+      furnitureMallItems: [],// 家具商城当前展示的商品缓存 [{id, name, desc, price, tag}]
+      furnitureOrders: [],   // 家具订单（走配送的）[{id, name, desc, tag, price, status, deliveryMinutes, orderGameTime, claimedToInv}]
+      furnitureMallSettings: { useWv: true, usePlot: true, useCurrency: true, useLogistics: true }, // 商城设置
   };
    }
 
@@ -792,6 +798,21 @@ function _isAppStillActive(appId) {
       }
     } catch(_) {}
 
+    // 3.1 当前居住的住所信息
+    try {
+      const _pd = await _getPhoneData();
+      if (_pd && Array.isArray(_pd.houses)) {
+        const curHouse = _pd.houses.find(h => h.isCurrent);
+        if (curHouse && curHouse.name) {
+          let hStr = `住所名称：${curHouse.name}`;
+          if (curHouse.region) hStr += `\n所在地区：${curHouse.region}`;
+          if (curHouse.address) hStr += `\n具体地址：${curHouse.address}`;
+          if (curHouse.styleDesc) hStr += `\n装修风格：${curHouse.styleDesc}`;
+          parts.push('【玩家当前居住地】\n' + hStr);
+        }
+      }
+    } catch(_) {}
+
     // 3.5 v617：当前对话绑定的单人卡主角（AI 扮演角色）
     // v687.33：返航 continue/epilogue 模式下跳过（单人卡主角不属于返航后的现实世界）
     if (!_hsSkipNpc) try {
@@ -1023,7 +1044,9 @@ function _extractJsonArrayText(content) {
     mail: `<svg ${common}><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>`,
      radio: `<svg ${common}><path d="M16 3 7 7"></path><rect x="3" y="7" width="18" height="14" rx="2"></rect><circle cx="8" cy="14" r="3"></circle><line x1="16" y1="12" x2="18" y2="12"></line><line x1="16" y1="16" x2="18" y2="16"></line></svg>`,
    feiniao: `<svg ${common}><path d="M16 7h.01"></path><path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20"></path><path d="m20 7 2 .5-2 .5"></path><path d="M10 18v3"></path><path d="M14 17.75V21"></path><path d="M7 18a6 6 0 0 0 3.84-10.61"></path></svg>`,
-   youyu: `<svg ${common}><path d="M2 16s9-15 20-4C11 23 2 8 2 8"/></svg>`
+    youyu: `<svg ${common}><path d="M2 16s9-15 20-4C11 23 2 8 2 8"/></svg>`,
+      cottage: `<svg ${common}><path d="M3 10.5 12 3l9 7.5"></path><path d="M5 9.5V21h14V9.5"></path><path d="M9 21v-6h6v6"></path><path d="M12 3V1.5"></path></svg>`,
+      wardrobe: `<svg ${common}><rect x="4" y="3" width="16" height="18" rx="1.5"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="9.5" y1="11" x2="9.5" y2="13"></line><line x1="14.5" y1="11" x2="14.5" y2="13"></line></svg>`
    };
  return `<span class="phone-icon-glyph phone-icon-${type}">${icons[type] || ''}</span>`;
 }
@@ -1119,8 +1142,8 @@ function _renderHomeIcon(a) {
       const widgetApps = [
       { id: 'feiniao', icon: 'feiniao', name: '飞鸟快递' },
     { id: 'youyu', icon: 'youyu', name: '游鱼小铺' },
-      { id: '_ph1', icon: 'placeholder', name: '未开放' },
-      { id: '_ph2', icon: 'placeholder', name: '未开放' },
+      { id: 'cottage', icon: 'cottage', name: (_shopMeta?.cottage?.name || '小屋') },
+      { id: 'wardrobe', icon: 'wardrobe', name: '衣橱' },
     ];
       // 底部 dock：相机、聊天、收起手机
       const dockApps = [
@@ -1366,6 +1389,7 @@ async function openApp(appId) {
 // 未完成的APP：直接拦截，不进入APP模式
     if (appId === 'email') { UI.showToast('邮箱开发中...', 1500); return; }
     if (appId === 'radio') { UI.showToast('电台开发中...', 1500); return; }
+    if (appId === 'wardrobe') { UI.showToast('衣橱开发中...', 1500); return; }
     // 记住当前页面滚动位置，返回时恢复
   try {
     const pages = document.getElementById('phone-pages');
@@ -1399,6 +1423,7 @@ async function openApp(appId) {
  case 'heartsim_app': _renderHeartSimApp(phoneData); break;
  case 'ledger': _renderLedger(phoneData); break;
  case 'radio': _renderRadio(phoneData); break;
+ case 'cottage': _renderCottage(phoneData); break;
  case 'feiniao': _renderFeiniao(phoneData); break;
  case 'youyu': _renderYouyu(phoneData); break;
  case 'deliveries': _renderDeliveries(phoneData); break;
@@ -2424,13 +2449,20 @@ function _refreshDeliveryWidget() {
     pd = conv?.phoneData;
   } catch(_) {}
 
-  // 找最近在途的快递和外卖订单
-  const shopOrder = _nearestDelivering(pd?.shopOrders);
-  const tkOrder = _nearestDelivering(pd?.takeoutOrders);
+  // 找最近在途的订单。家具订单按配送单位分流：
+  //   分钟级（deliveryUnit==='min'）走外卖进度条；天级走快递大卡。
+  //   旧订单无 deliveryUnit 标记时，回落到数值阈值（<1440 分钟视为分钟级）。
+  const _isMinFurniture = o => o && o.status === 'delivering' &&
+    (o.deliveryUnit ? o.deliveryUnit === 'min' : (o.deliveryMinutes || 0) < 1440);
+  const furnitureMin = (pd?.furnitureOrders || []).filter(_isMinFurniture);
+  const furnitureDays = (pd?.furnitureOrders || []).filter(o => o && o.status === 'delivering' && !_isMinFurniture(o));
+  const shopOrder = _nearestDelivering([].concat(pd?.shopOrders || [], furnitureDays));
+  const tkOrder = _nearestDelivering([].concat(pd?.takeoutOrders || [], furnitureMin));
 
   // 订单来源描述（文字，不用标签）
   function _srcLabel(o, field) {
     if (!o) return '';
+    if (o.furnitureBuy) return `家具商城·${Utils.escapeHtml(o.tag || '家具')}`;
     if (o.sellBuy) return `聊天交易·${Utils.escapeHtml(o.shop || '购入')}`;
     if (o.feiniaoReceive) return `飞鸟·来自${Utils.escapeHtml(o.sender || '某人')}`;
     if (o.feiniaoShip) return `飞鸟·寄给${Utils.escapeHtml(o.target || '某人')}`;
@@ -2467,7 +2499,8 @@ function _refreshDeliveryWidget() {
     const rem = _getDeliveryRemaining(tkOrder);
     const total = tkOrder.deliveryMinutes || 1;
     const pct = Math.max(4, Math.min(100, Math.round((total - rem) / total * 100)));
-    const src = _srcLabel(tkOrder, 'takeoutOrders');
+    const _tkField = (pd?.takeoutOrders || []).includes(tkOrder) ? 'takeoutOrders' : tkOrder?.furnitureBuy ? 'furnitureOrders' : 'shopOrders';
+    const src = _srcLabel(tkOrder, _tkField);
     takeoutHtml = `
       <div class="phone-dw-takeout" onclick="Phone._openDeliveryOrders('takeout')">
         <div class="phone-dw-bar-head">
@@ -5322,6 +5355,2203 @@ function _refreshCalBanner() {
     }
     if (!pd.radioPrograms || typeof pd.radioPrograms !== 'object') pd.radioPrograms = {};
     return pd;
+  }
+
+  // ============ 小屋 App ============
+  // 数据：pd.houses [{id, name, address, styleDesc, isCurrent, rooms:[]}]
+  let _cottageCurHouseId = null; // 当前查看的住所 id（详情页用）
+
+  function _cottageGenId(prefix) {
+    return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  // 当前查看的楼层编号（整数：1=一层、2=二层、-1=地下一层），切住所时重置为 1
+  let _cottageCurFloor = 1;
+
+  // 楼层号 → 默认中文文案（用户未自定义时用）
+  function _cottageDefaultFloorName(f) {
+    const cn = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+    if (f > 0) return (cn[f - 1] || f) + '层';
+    return '地下' + (cn[-f - 1] || (-f)) + '层';
+  }
+
+  // 取楼层显示名：优先自定义 name，否则默认文案
+  function _cottageFloorLabel(house, f) {
+    const fl = (house.floors || []).find(x => x.num === f);
+    if (fl && fl.name) return fl.name;
+    return _cottageDefaultFloorName(f);
+  }
+
+  // 房间图标库（描边风格，对齐电台卡片图标）
+  function _cottageRoomSvg(icon) {
+    const common = 'viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+    const map = {
+      sofa:    `<svg ${common}><path d="M20 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v3"/><path d="M2 11a2 2 0 0 1 2 2v3h16v-3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v5a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2z"/><path d="M4 18v2"/><path d="M20 18v2"/></svg>`,
+      bed:     `<svg ${common}><path d="M2 9V20"/><path d="M2 14h20"/><path d="M22 20V13a2 2 0 0 0-2-2H6"/><path d="M2 9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`,
+      book:    `<svg ${common}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
+      kitchen: `<svg ${common}><path d="M3 11h18"/><path d="M5 11V5a3 3 0 0 1 6 0v6"/><path d="M19 11V5"/><path d="M19 5c0-1.5-1-2.5-2-2.5S15 3.5 15 5v6"/><path d="M5 11v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9"/></svg>`,
+      bath:    `<svg ${common}><path d="M9 6 6.5 3.5a1.5 1.5 0 0 0-1-.5C4.683 3 4 3.683 4 4.5V17a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M4 13h18a1 1 0 0 1 1 1v.5"/><line x1="10" x2="8" y1="5" y2="7"/><line x1="2" x2="22" y1="13" y2="13"/><line x1="7" x2="7" y1="19" y2="21"/><line x1="17" x2="17" y1="19" y2="21"/></svg>`,
+      balcony: `<svg ${common}><path d="M3 21h18"/><path d="M5 21V10l7-5 7 5v11"/><path d="M9 21v-6h6v6"/><path d="M5 14h14"/></svg>`,
+      door:    `<svg ${common}><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.562z"/></svg>`,
+      desk:    `<svg ${common}><path d="M3 5h18"/><path d="M4 5v14"/><path d="M20 5v14"/><path d="M4 12h8"/><path d="M9 12v7"/></svg>`,
+      tv:      `<svg ${common}><rect x="2" y="7" width="20" height="13" rx="2"/><path d="m17 2-5 5-5-5"/></svg>`,
+      dining:  `<svg ${common}><path d="M3 11h18l-1 9H4l-1-9Z"/><path d="M5 11V8a7 7 0 0 1 14 0v3"/></svg>`,
+      plant:   `<svg ${common}><path d="M12 22v-9"/><path d="M12 13c-2.5 0-5-2-5-5 3 0 5 2 5 5Z"/><path d="M12 11c0-2.8 2.2-5 5-5 0 2.8-2.2 5-5 5Z"/><path d="M8 22h8"/></svg>`,
+      kid:     `<svg ${common}><circle cx="12" cy="6" r="3"/><path d="M12 9v7"/><path d="m8 22 4-6 4 6"/><path d="M5 13h14"/></svg>`,
+      laundry: `<svg ${common}><rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="13" r="5"/><path d="M8 6h.01"/><path d="M12 6h.01"/></svg>`,
+      garage:  `<svg ${common}><path d="M3 21V8l9-5 9 5v13"/><path d="M7 21v-7h10v7"/><path d="M7 17h10"/></svg>`,
+      study:   `<svg ${common}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`,
+      music:   `<svg ${common}><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
+      box:     `<svg ${common}><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`,
+      cart:    `<svg ${common}><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>`,
+    };
+    return map[icon] || map.door;
+  }
+
+  // 房间可选图标列表（编辑弹窗用）
+  const _COTTAGE_ROOM_ICONS = ['sofa','bed','book','kitchen','bath','balcony','desk','tv','dining','plant','kid','laundry','garage','study','music','door'];
+
+  // 预设房间（新建住所/迁移时种入一层）
+  const _COTTAGE_PRESET_ROOMS = [
+    { name: '客厅', icon: 'sofa' },
+    { name: '卧室', icon: 'bed' },
+    { name: '书房', icon: 'book' },
+    { name: '厨房', icon: 'kitchen' },
+    { name: '盥洗室', icon: 'bath' },
+    { name: '阳台', icon: 'balcony' },
+  ];
+
+  // 确保住所的楼层/房间字段就位（含旧数据迁移 + 预设房间种入），有变更返回 true
+  function _cottageEnsureHouse(house) {
+    let changed = false;
+    if (!Array.isArray(house.rooms)) { house.rooms = []; changed = true; }
+    // 楼层列表：[{num, name}]，num 为楼层编号（1=一层、-1=地下一层）
+    if (!Array.isArray(house.floors)) {
+      const floors = [];
+      // 旧数据迁移：从 maxFloor/minFloor 区间重建楼层列表
+      const maxF = typeof house.maxFloor === 'number' ? house.maxFloor : 1;
+      const minF = typeof house.minFloor === 'number' ? house.minFloor : 0;
+      for (let f = 1; f <= maxF; f++) floors.push({ num: f, name: '' });
+      for (let f = -1; f >= minF; f--) floors.push({ num: f, name: '' });
+      if (!floors.length) floors.push({ num: 1, name: '' });
+      house.floors = floors;
+      delete house.maxFloor;
+      delete house.minFloor;
+      changed = true;
+    }
+    if (!house._roomsSeeded) {
+      house._roomsSeeded = true;
+      _COTTAGE_PRESET_ROOMS.forEach(p => {
+        house.rooms.push({ id: _cottageGenId('room'), name: p.name, icon: p.icon, floor: 1, slots: [] });
+      });
+      changed = true;
+    }
+    return changed;
+  }
+
+  // 楼层编号列表（从高到低排序）
+  function _cottageFloorList(house) {
+    return (house.floors || []).map(f => f.num).sort((a, b) => b - a);
+  }
+
+  // 小屋首页底部 tab：'cottage' 小屋（住所列表）| 'mall' 商城
+  let _cottageHomeTab = 'cottage';
+
+  // 小屋首页：住所列表 + 添加住所 / 商城，底部两 tab
+  async function _renderCottage(pd) {
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    document.getElementById('phone-title').textContent = (_shopMeta?.cottage?.name || '小屋');
+    _applyWallpaper(pd);
+    if (!Array.isArray(pd.houses)) pd.houses = [];
+
+    // 首次进入：如果没有任何住所且世界观配置了初始模板，自动克隆一套
+    if (pd.houses.length === 0 && _shopMeta?.cottage?.initialHouse) {
+      try {
+        const tpl = JSON.parse(JSON.stringify(_shopMeta.cottage.initialHouse));
+        tpl.id = _cottageGenId('house');
+        tpl.isCurrent = true;
+        // 确保房间都有 id
+        if (Array.isArray(tpl.rooms)) tpl.rooms.forEach(r => { if (!r.id) r.id = _cottageGenId('room'); });
+        if (Array.isArray(tpl.floors)) tpl.floors.forEach(f => { if (Array.isArray(f.rooms)) f.rooms.forEach(r => { if (!r.id) r.id = _cottageGenId('room'); }); });
+        pd.houses.push(tpl);
+        await _savePhoneData();
+        UI.showToast('已自动入住初始住所', 1600);
+      } catch(_) {}
+    }
+
+    const houses = pd.houses;
+    const cards = houses.map(h => {
+      const isCur = !!h.isCurrent;
+      const roomCount = Array.isArray(h.rooms) ? h.rooms.length : 0;
+      return `
+        <div class="cottage-house-card" onclick="Phone._cottageOpenHouse('${Utils.escapeHtml(h.id)}')">
+          <div class="cottage-house-card-top">
+            <div class="cottage-house-name">${Utils.escapeHtml(h.name || '未命名住所')}</div>
+            ${isCur ? '<span class="cottage-house-badge">当前居住</span>' : ''}
+          </div>
+          <div class="cottage-house-addr">${Utils.escapeHtml(h.address || '未填写地址')}</div>
+          <div class="cottage-house-meta">${roomCount} 个房间</div>
+        </div>`;
+    }).join('');
+
+    const emptyHint = houses.length ? '' : `
+      <div class="cottage-empty">还没有住所，点下方按钮添加一个吧</div>`;
+
+    const cottageHtml = `
+      <div class="cottage-home">
+        <div class="cottage-house-list">${cards}${emptyHint}</div>
+        <button class="cottage-add-btn" onclick="Phone._cottageAddHouse()">+ 添加住所</button>
+      </div>`;
+
+    const mallHtml = `
+      <div class="cottage-mall">
+        <div class="cottage-mall-card" onclick="Phone._cottageOpenMall()">
+          <div class="cottage-mall-card-icon">${_cottageRoomSvg('cart')}</div>
+          <div class="cottage-mall-card-text">
+            <div class="cottage-mall-card-name">家具商城</div>
+            <div class="cottage-mall-card-desc">选购家具、装修与装饰物件</div>
+          </div>
+        </div>
+        <div class="cottage-mall-card" onclick="Phone._cottageOpenInventory()">
+          <div class="cottage-mall-card-icon">${_cottageRoomSvg('box')}</div>
+          <div class="cottage-mall-card-text">
+            <div class="cottage-mall-card-name">家具仓库</div>
+            <div class="cottage-mall-card-desc">已购入但还没摆放的物件</div>
+          </div>
+        </div>
+      </div>`;
+
+    body.innerHTML = `
+      <div class="phone-cottage-shell" style="display:flex;flex-direction:column;height:100%">
+        <div style="flex:1;min-height:0;overflow-y:auto">${_cottageHomeTab === 'mall' ? mallHtml : cottageHtml}</div>
+        <div class="phone-tabbar">
+          <div class="phone-tab ${_cottageHomeTab === 'cottage' ? 'active' : ''}" onclick="Phone._switchCottageHomeTab('cottage')">小屋</div>
+          <div class="phone-tab ${_cottageHomeTab === 'mall' ? 'active' : ''}" onclick="Phone._switchCottageHomeTab('mall')">商城</div>
+        </div>
+      </div>`;
+
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = `<button class="phone-nav-btn" title="数据管理" onclick="Phone._cottageDataMenu()">${_uiIcon('settings', 18)}</button>`;
+  }
+
+  // 切换小屋首页底部 tab
+  async function _switchCottageHomeTab(tab) {
+    if (_cottageHomeTab === tab) return;
+    _cottageHomeTab = tab;
+    const pd = await _getPhoneData();
+    _renderCottage(pd);
+  }
+
+  // 小屋数据管理菜单（导出 / 导入）
+  async function _cottageDataMenu() {
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:300px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">小屋数据管理</div>
+        <button id="cottage-data-export" style="width:100%;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer;text-align:left">${_uiIcon('download', 14)} 导出小屋数据</button>
+        <button id="cottage-data-import" style="width:100%;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer;text-align:left">${_uiIcon('box', 14)} 导入小屋数据</button>
+        <button id="cottage-data-close" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:13px;cursor:pointer;margin-top:4px">关闭</button>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#cottage-data-close').onclick = () => document.body.removeChild(mask);
+    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+
+    // 导出
+    mask.querySelector('#cottage-data-export').onclick = async () => {
+      const pd = await _getPhoneData();
+      const exportData = {
+        __format: 'tianshu_cottage_v1',
+        exportedAt: new Date().toISOString(),
+        houses: pd.houses || [],
+        furnitureInventory: pd.furnitureInventory || [],
+      };
+      const json = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cottage_${(pd.houses || []).length}套_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      document.body.removeChild(mask);
+      UI.showToast(`已导出 ${(pd.houses || []).length} 套住所 + 仓库`, 2200);
+    };
+
+    // 导入
+    mask.querySelector('#cottage-data-import').onclick = () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json';
+      input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          if (data.__format !== 'tianshu_cottage_v1') {
+            UI.showToast('无法识别的小屋数据格式', 3000);
+            return;
+          }
+          const ok = await UI.showConfirm('导入小屋数据', `将导入 ${(data.houses || []).length} 套住所和 ${(data.furnitureInventory || []).length} 件仓库物品。\n\n⚠️ 这会覆盖当前的住所和仓库数据，确定继续吗？`);
+          if (!ok) return;
+          const pd = await _getPhoneData();
+          pd.houses = data.houses || [];
+          pd.furnitureInventory = data.furnitureInventory || [];
+          await _savePhoneData();
+          document.body.removeChild(mask);
+          UI.showToast(`已导入 ${pd.houses.length} 套住所`, 2200);
+          _renderCottage(pd);
+        } catch (e) {
+          UI.showToast('导入失败：' + (e.message || '格式错误'), 3000);
+        }
+      };
+      input.click();
+    };
+  }
+
+  // 对外接口：根据小地点匹配住所，命中则返回简化布局字符串，不命中返回空
+  async function getCottageLayoutForLocation(location) {
+    if (!location) return '';
+    const pd = await _getPhoneData();
+    if (!pd || !Array.isArray(pd.houses)) return '';
+    const loc = location.trim();
+    // 遍历所有住所，用住所名称或具体地址匹配小地点（region 不参与匹配，避免大地点误命中）
+    const house = pd.houses.find(h => {
+      const name = (h.name || '').trim();
+      const addr = (h.address || '').trim();
+      if (!name && !addr) return false;
+      // 名称匹配（整体互相包含，至少2字）
+      if (name && name.length >= 2 && (loc.includes(name) || name.includes(loc))) return true;
+      // 具体地址匹配（整体互相包含，至少2字）
+      if (addr && addr.length >= 2 && (loc.includes(addr) || addr.includes(loc))) return true;
+      return false;
+    });
+    if (!house) return '';
+    // 拼简化布局：楼层 → 房间名 → 物品名列表
+    const floors = house.floors || [];
+    if (!floors.length && (!house.rooms || !house.rooms.length)) return '';
+    let lines = [`【玩家住所「${house.name}」室内布局】`];
+    if (house.styleDesc) lines.push(`整体风格：${house.styleDesc}`);
+    if (floors.length) {
+      for (const f of floors.sort((a, b) => b.num - a.num)) {
+        const floorLabel = f.num === 0 ? '地下层' : f.num === 1 ? '一层' : f.num + '层';
+        const roomNames = (f.rooms || []).map(r => r.name || '房间').join('、');
+        lines.push(`${floorLabel}：${roomNames || '（空）'}`);
+        for (const r of (f.rooms || [])) {
+          const items = (r.items || []).map(it => it.name).filter(Boolean);
+          if (items.length) lines.push(`  ${r.name || '房间'}：${items.join('、')}`);
+        }
+      }
+    } else {
+      // 兼容无楼层的旧数据
+      for (const r of (house.rooms || [])) {
+        const items = (r.items || []).map(it => it.name).filter(Boolean);
+        lines.push(`${r.name || '房间'}：${items.length ? items.join('、') : '（空）'}`);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  // ===== 家具商城 / 仓库 =====
+  // 平铺标签（每个映射到房间三大类之一：decor/furniture/deco）
+  const FURNITURE_TAGS = [
+    { key: '家具', cat: 'furniture' },
+    { key: '家电', cat: 'furniture' },
+    { key: '厨卫', cat: 'furniture' },
+    { key: '墙面', cat: 'decor' },
+    { key: '地面', cat: 'decor' },
+    { key: '门窗', cat: 'decor' },
+    { key: '灯具', cat: 'deco' },
+    { key: '布艺', cat: 'deco' },
+    { key: '软装摆件', cat: 'deco' },
+  ];
+  const FURNITURE_TAG_KEYS = FURNITURE_TAGS.map(t => t.key);
+  function _furnitureTagToCat(tag) {
+    const t = FURNITURE_TAGS.find(x => x.key === tag);
+    return t ? t.cat : 'deco';
+  }
+  let _mallSelectedTags = [];   // 商城已选筛选标签
+  let _mallTab = 'items';        // 'items'（暂时只有商品页）
+  let _invSelectedTags = [];    // 仓库筛选标签
+  let _invPickMode = null;       // 仓库选物回调：{onPick} 不为空时为“从仓库里选”模式
+
+  // 商城设置（默认全开）
+  function _getMallSettings(pd) {
+    const def = { useWv: true, usePlot: true, useCurrency: true, useLogistics: true };
+    return Object.assign(def, (pd && pd.furnitureMallSettings) || {});
+  }
+
+  // 拼装世界观资料块（基础设定 + 地区设定详情 + 节日，不含势力/人物），和住所生成同一套来源
+  async function _buildWorldviewBlock() {
+    const wvParts = [];
+    try {
+      const base = (typeof Chat !== 'undefined' && Chat.getWorldviewPrompt) ? (Chat.getWorldviewPrompt() || '') : '';
+      if (base.trim()) wvParts.push('【世界观基础设定】\n' + base.trim());
+    } catch(_) {}
+    try {
+      const wv = await Worldview.getCurrent();
+      if (wv) {
+        if (Array.isArray(wv.regions) && wv.regions.length) {
+          const regStr = wv.regions.map(r => {
+            let s = r.name || '';
+            const d = r.detail || r.desc || r.description || '';
+            if (d) s += '：' + d;
+            return s;
+          }).filter(Boolean).join('\n');
+          if (regStr) wvParts.push('【地区设定】\n' + regStr);
+        }
+        if (Array.isArray(wv.festivals) && wv.festivals.length) {
+          const festStr = wv.festivals.filter(f => f.enabled !== false)
+            .map(f => `${f.name || ''}（${f.date || ''}）：${f.content || ''}`).join('\n');
+          if (festStr) wvParts.push('【节日设定】\n' + festStr);
+        }
+      }
+    } catch(_) {}
+    return wvParts.length ? wvParts.join('\n\n') : '';
+  }
+
+  // 取最近主线剧情（约 10 轮 = 最后 20 条消息）
+  function _buildRecentPlotBlock() {
+    try {
+      const msgs = Chat.getMessages() || [];
+      const recent = msgs.filter(m => !m.hidden).slice(-20);
+      if (!recent.length) return '';
+      return recent.map(m => {
+        const role = m.role === 'user' ? '玩家' : 'AI';
+        const text = (m.content || '').substring(0, 300);
+        return `[${role}] ${text}${(m.content || '').length > 300 ? '…' : ''}`;
+      }).join('\n');
+    } catch(_) { return ''; }
+  }
+
+
+  // 惰性结算：把已到货的家具订单转入仓库
+  async function _settleFurnitureOrders(pd) {
+    if (!pd || !Array.isArray(pd.furnitureOrders)) return false;
+    let changed = false;
+    pd.furnitureInventory = pd.furnitureInventory || [];
+    for (const o of pd.furnitureOrders) {
+      if (!o || o.claimedToInv) continue;
+      let delivered = o.status === 'delivered';
+      if (!delivered && o.status === 'delivering' && o.deliveryMinutes) {
+        const rem = _getDeliveryRemaining(o);
+        delivered = (rem !== null && rem <= 0);
+      }
+      if (!delivered) continue;
+      o.status = 'delivered';
+      o.claimedToInv = true;
+      _addFurnitureToInventory(pd, { name: o.name, desc: o.desc, tag: o.tag });
+      changed = true;
+    }
+    return changed;
+  }
+
+  // 加一件物品进仓库（同名 + 同标签 + 同描述则数量+1，否则新建一条）
+  function _addFurnitureToInventory(pd, item) {
+    pd.furnitureInventory = pd.furnitureInventory || [];
+    const nName = String(item.name || '未命名').slice(0, 30);
+    const nDesc = String(item.desc || '').slice(0, 200);
+    const nTag = FURNITURE_TAG_KEYS.includes(item.tag) ? item.tag : '软装摆件';
+    const exist = pd.furnitureInventory.find(x => x.name === nName && x.tag === nTag && (x.desc || '') === nDesc);
+    if (exist) { exist.qty = (exist.qty || 1) + 1; return exist; }
+    const inv = {
+      id: _cottageGenId('inv'),
+      name: nName,
+      desc: nDesc,
+      tag: nTag,
+      qty: 1,
+    };
+    pd.furnitureInventory.push(inv);
+    return inv;
+  }
+
+  // 家具商城首页
+  async function _cottageOpenMall() {
+    _mallTab = 'items';
+    _pushNav(() => _renderCottageMall());
+    _renderCottageMall();
+  }
+
+  async function _renderCottageMall() {
+    const pd = await _getPhoneData();
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    document.getElementById('phone-title').textContent = '家具商城';
+    _applyWallpaper(pd);
+    if (await _settleFurnitureOrders(pd)) await _savePhoneData();
+
+    const items = pd.furnitureMallItems || [];
+    const orders = (pd.furnitureOrders || []).filter(o => o && !o.claimedToInv);
+
+    const tagChips = FURNITURE_TAG_KEYS.map(t => `
+      <div class="cottage-mall-chip ${_mallSelectedTags.includes(t) ? 'active' : ''}" onclick="Phone._cottageMallToggleTag('${t}')">${t}</div>`).join('');
+
+    const itemsHtml = items.length
+      ? items.map((it, idx) => `
+        <div class="phone-map-result-card">
+          <div class="phone-map-result-head">
+            <div class="phone-map-result-name">${Utils.escapeHtml(it.name || '未命名')}</div>
+          </div>
+          <div class="phone-map-result-address">${_uiIcon('pin', 12)}<span>${Utils.escapeHtml(it.tag || '其它')}</span></div>
+          ${it.desc ? `<div class="phone-map-result-desc">${Utils.escapeHtml(it.desc)}</div>` : ''}
+          <div class="phone-map-result-foot">
+            <div class="phone-map-result-foot-left">
+              <span class="phone-map-distance-pill">¥ ${Utils.escapeHtml(String(it.price || '--'))}</span>
+            </div>
+            <div class="phone-map-result-actions">
+              <button type="button" onclick="Phone._cottageMallBuy(${idx})" class="phone-map-action-btn">${_uiIcon('box', 12)} 购买</button>
+            </div>
+          </div>
+        </div>`).join('')
+      : `<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">选好分类，点刷新看看有什么好物</p>`;
+
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;height:100%">
+        <div style="flex:1;overflow-y:auto;padding:12px">
+          <div class="phone-map-searchbar" style="margin-bottom:10px">
+            <div class="phone-map-search-input-wrap">
+              ${_uiIcon('search', 12)}
+              <input id="cottage-mall-search" type="text" placeholder="搜索家具（如：北欧沙发、实木书桌…）" value="${Utils.escapeHtml(pd.furnitureMallQuery || '')}">
+            </div>
+            <button onclick="Phone._cottageMallRefresh()" class="phone-map-search-btn">搜索</button>
+          </div>
+          <div class="cottage-mall-chips">${tagChips}</div>
+          ${orders.length ? `<div class="cottage-mall-orders-bar" onclick="Phone._cottageShowOrders()">${_uiIcon('box', 13)} ${orders.length} 件家具配送中，点击查看订单</div>` : ''}
+          <div id="cottage-mall-items">${itemsHtml}</div>
+        </div>
+      </div>`;
+
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = `<button class="phone-nav-btn" title="商城设置" onclick="Phone._cottageMallSettings()">${_uiIcon('settings', 18)}</button>`;
+  }
+
+  // 商城设置弹窗：世界观资料 / 主线剧情 / 货币 / 物流 开关
+  async function _cottageMallSettings() {
+    const pd = await _getPhoneData();
+    const s = _getMallSettings(pd);
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    const row = (key, label, desc) => `
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;cursor:pointer">
+        <input type="checkbox" data-key="${key}" ${s[key] ? 'checked' : ''} style="margin-top:2px;width:16px;height:16px;flex-shrink:0">
+        <div>
+          <div style="font-size:14px;color:var(--text)">${label}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${desc}</div>
+        </div>
+      </label>`;
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:8px">商城设置</div>
+        <div id="cottage-mall-set-list">
+          ${row('useWv', '发送世界观基础资料', '刷新商品时参考世界观（基础设定+地区+节日），让商品贴合世界背景')}
+          ${row('usePlot', '发送近期主线剧情', '把最近约 10 轮主线对话作为参考，让商品贴合当前剧情')}
+          ${row('useCurrency', '使用货币', '购买时可从绑定货币里扣款，关闭则只能直接拿（不扣钱）')}
+          ${row('useLogistics', '启用物流系统', '购买时可选走订单配送，关闭则一律立即送达入库')}
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button id="cottage-mall-set-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="cottage-mall-set-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#cottage-mall-set-cancel').onclick = () => document.body.removeChild(mask);
+    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    mask.querySelector('#cottage-mall-set-save').onclick = async () => {
+      const next = {};
+      mask.querySelectorAll('#cottage-mall-set-list input[type=checkbox]').forEach(cb => {
+        next[cb.dataset.key] = cb.checked;
+      });
+      const pd2 = await _getPhoneData();
+      pd2.furnitureMallSettings = Object.assign(_getMallSettings(pd2), next);
+      await _savePhoneData();
+      document.body.removeChild(mask);
+      UI.showToast('已保存', 1200);
+    };
+  }
+
+  function _cottageMallToggleTag(tag) {
+    const i = _mallSelectedTags.indexOf(tag);
+    if (i >= 0) _mallSelectedTags.splice(i, 1);
+    else _mallSelectedTags.push(tag);
+    _renderCottageMall();
+  }
+
+  // 刷新商品：按选中标签 + 关键词调 AI 生成
+  async function _cottageMallRefresh() {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const input = document.getElementById('cottage-mall-search');
+    const query = (input ? input.value : '').trim();
+    pd.furnitureMallQuery = query;
+
+    const mainConfig = await API.getConfig();
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+    const tags = _mallSelectedTags.length ? _mallSelectedTags : FURNITURE_TAG_KEYS;
+    const tagHint = _mallSelectedTags.length
+      ? `只生成这些分类的商品：${tags.join('、')}。`
+      : `分类可在以下范围内自由分布：${tags.join('、')}。`;
+    const queryHint = query ? `用户的搜索关键词：「${query}」，生成的商品要尽量贴合这个需求。` : '';
+
+    // 按设置注入世界观资料 / 近期主线剧情
+    const mset = _getMallSettings(pd);
+    let contextBlock = '';
+    if (mset.useWv) {
+      const wv = await _buildWorldviewBlock();
+      if (wv) contextBlock += `\n以下是这个世界的设定资料，请让商品的名称、材质与风格贴合这个世界观（不要照搬，融入即可）：\n${wv}\n`;
+    }
+    if (mset.usePlot) {
+      const plot = _buildRecentPlotBlock();
+      if (plot) contextBlock += `\n【最近主线剧情（供参考，让商品贴合当前情境，但不要出现人名/剧情）】\n${plot}\n`;
+    }
+
+    const container = document.getElementById('cottage-mall-items');
+    if (container) container.innerHTML = _renderShopLoadingHtml();
+    UI.showToast('正在刷新家具…', 1200);
+
+    const systemPrompt = `你是一个家居家具网购平台的推荐引擎。请生成 8~12 个家居相关商品推荐。${tagHint}${queryHint}
+${contextBlock}
+每个商品包含：
+- name：商品名（简短，如"北欧布艺三人沙发"）
+- tag：分类，必须是以下之一：${FURNITURE_TAG_KEYS.join('、')}
+- desc：一句话商品描述（写材质、颜色、风格、尺寸等本身信息，不要剧情化）
+- price：纯数字字符串，价格合理（家具偏贵些、装饰偏便宜，约 20~9999），不带货币符号
+
+严格要求：商品信息中立客观，不出现任何人名、剧情、推荐理由。
+
+返回纯 JSON 数组，不要任何额外文字：
+[{"name":"商品名","tag":"分类","desc":"商品描述","price":"纯数字"}]`;
+
+    try {
+      const results = await _phoneJsonArrayWithRetry({
+        label: '家具商城刷新', url, key, model,
+        temperature: 0.85, max_tokens: 5000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: '请生成 8~12 条家具商品推荐。' }
+        ]
+      });
+      const norm = (results || []).map(it => ({
+        id: _cottageGenId('mall'),
+        name: String(it.name || '未命名').slice(0, 30),
+        tag: FURNITURE_TAG_KEYS.includes(it.tag) ? it.tag : '软装摆件',
+        desc: String(it.desc || '').slice(0, 200),
+        price: String(it.price || '--').replace(/[^\d.]/g, '') || '--',
+      })).slice(0, 12);
+      pd.furnitureMallItems = norm;
+      await _savePhoneData();
+      _log(`在家具商城刷新了推荐（${norm.length}条）`);
+      _renderCottageMall();
+      UI.showToast('已刷新', 1200);
+    } catch (e) {
+      UI.showToast(`刷新失败：${e.message || '未知错误'}`, 2500);
+      _renderCottageMall();
+    }
+  }
+
+  // 购买：付款（启用货币才选）+ 到货方式（启用物流才选）
+  async function _cottageMallBuy(idx) {
+    const pd = await _getPhoneData();
+    const item = (pd.furnitureMallItems || [])[idx];
+    if (!item) { UI.showToast('商品不存在', 1500); return; }
+    const priceNum = parseFloat(item.price);
+    const hasPrice = Number.isFinite(priceNum) && priceNum > 0;
+    const mset = _getMallSettings(pd);
+    const currencies = _getWalletCurrencyInfos();
+    // 是否显示货币选择：开启货币 且 有绑定货币 且 商品有价格
+    const showCur = mset.useCurrency && currencies.length > 0 && hasPrice;
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    const curSection = showCur ? `
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:6px">支付货币</label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+          ${currencies.map((c, i) => `
+          <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+            <input type="radio" name="cottage-buy-cur" value="${Utils.escapeHtml(c.id)}" ${i === 0 ? 'checked' : ''} style="accent-color:var(--accent)">
+            <span style="flex:1;font-size:13px;color:var(--text)">${Utils.escapeHtml(c.name)}</span>
+            <span style="font-size:12px;color:var(--text-secondary)">余额 ${Utils.escapeHtml(String(c.balance))}</span>
+          </label>`).join('')}
+        </div>` : '';
+    const shipSection = mset.useLogistics ? `
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:6px">到货方式</label>
+        <div id="cottage-buy-ship" style="display:flex;gap:8px;margin-bottom:18px">
+          <div class="cottage-buy-ship-opt active" data-ship="instant" style="flex:1">立即送达</div>
+          <div class="cottage-buy-ship-opt" data-ship="order" style="flex:1">走订单配送</div>
+        </div>` : '';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px">购买「${Utils.escapeHtml(item.name)}」</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">价格 ¥ ${Utils.escapeHtml(String(item.price || '--'))}</div>
+${curSection}
+${shipSection}
+        <div style="display:flex;gap:10px">
+          <button id="cottage-buy-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="cottage-buy-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${showCur ? '确认支付' : '确认购买'}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+
+    let _chosenShip = 'instant';
+    mask.querySelectorAll('.cottage-buy-ship-opt').forEach(opt => {
+      opt.onclick = () => {
+        mask.querySelectorAll('.cottage-buy-ship-opt').forEach(n => n.classList.remove('active'));
+        opt.classList.add('active');
+        _chosenShip = opt.dataset.ship;
+      };
+    });
+
+    mask.querySelector('#cottage-buy-cancel').onclick = () => document.body.removeChild(mask);
+    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+
+    mask.querySelector('#cottage-buy-go').onclick = async () => {
+      // 扣款（仅在显示货币选择时）
+      if (showCur) {
+        const sel = mask.querySelector('input[name="cottage-buy-cur"]:checked');
+        const curId = sel?.value || currencies[0].id;
+        const info = currencies.find(c => c.id === curId);
+        if (!info) { UI.showToast('货币不存在', 1500); return; }
+        try {
+          const sb = Conversations.getStatusBar() || {};
+          sb.customAttrs = sb.customAttrs || {};
+          sb.customAttrs.global = sb.customAttrs.global || {};
+          const balance = Number(sb.customAttrs.global[curId]) || 0;
+          if (balance < priceNum) { UI.showToast(`${info.name}余额不足（需 ${priceNum}，当前 ${balance}）`, 2600); return; }
+          sb.customAttrs.global[curId] = balance - priceNum;
+          await Conversations.setStatusBar(sb);
+          if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
+        } catch (e) { UI.showToast('扣款失败', 1500); return; }
+        await _addLedgerEntry({
+          currencyId: curId,
+          amount: -Math.abs(priceNum),
+          category: '购物',
+          note: `购买家具「${item.name}」`,
+          platform: '家具商城',
+          source: 'furniture_buy',
+          editable: true,
+        });
+      }
+
+      const pd2 = await _getPhoneData();
+      document.body.removeChild(mask);
+      if (_chosenShip === 'instant') {
+        _addFurnitureToInventory(pd2, item);
+        await _savePhoneData();
+        _log(`在家具商城购买了「${item.name}」，已直接入库`);
+        UI.showToast('已送达，入库成功', 1600);
+      } else {
+        // 走订单：从世界观配置读取配送时间
+        const cMeta = _shopMeta?.cottage || {};
+        const dMin = Math.max(1, parseInt(cMeta.deliveryMin) || 2);
+        const dMax = Math.max(dMin, parseInt(cMeta.deliveryMax) || 5);
+        const dUnit = cMeta.deliveryUnit || 'day';
+        const raw = dMin + Math.floor(Math.random() * (dMax - dMin + 1));
+        const minutes = dUnit === 'day' ? raw * 1440 : raw;
+        const days = dUnit === 'day' ? raw : Math.round(raw / 1440 * 10) / 10;
+        pd2.furnitureOrders = pd2.furnitureOrders || [];
+        pd2.furnitureOrders.push({
+          id: _cottageGenId('forder'),
+          name: item.name, desc: item.desc, tag: item.tag, price: item.price,
+          status: 'delivering',
+          deliveryMinutes: minutes,
+          deliveryUnit: dUnit,
+          orderGameTime: _getGameTime() || '',
+          time: _getGameTime() || '',
+          furnitureBuy: true,
+          claimedToInv: false,
+        });
+        pd2.furnitureOrders = pd2.furnitureOrders.slice(-50);
+        await _savePhoneData();
+        const unitLabel = dUnit === 'day' ? '天' : '分钟';
+        _log(`在家具商城下单「${item.name}」，约 ${raw} ${unitLabel}后送达`);
+        UI.showToast(`已下单，约 ${raw} ${unitLabel}后自动入库`, 2200);
+      }
+      if (_currentApp === 'cottage') _renderCottageMall();
+    };
+  }
+
+  // 家具仓库首页 / 选物模式（pickCb 不为空时为“从仓库里选”）
+  async function _cottageOpenInventory(pickCb) {
+    _invPickMode = (typeof pickCb === 'function') ? { onPick: pickCb } : null;
+    _pushNav(() => _renderCottageInventory());
+    _renderCottageInventory();
+  }
+
+  async function _renderCottageInventory() {
+    const pd = await _getPhoneData();
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    document.getElementById('phone-title').textContent = _invPickMode ? '从仓库里选' : '家具仓库';
+    _applyWallpaper(pd);
+    if (await _settleFurnitureOrders(pd)) await _savePhoneData();
+
+    const inv = pd.furnitureInventory || [];
+    const q = (pd.furnitureInvQuery || '').trim();
+    let list = inv.slice();
+    if (_invSelectedTags.length) list = list.filter(it => _invSelectedTags.includes(it.tag));
+    if (q) list = list.filter(it => (it.name || '').includes(q) || (it.desc || '').includes(q));
+
+    const tagChips = FURNITURE_TAG_KEYS.map(t => `
+      <div class="cottage-mall-chip ${_invSelectedTags.includes(t) ? 'active' : ''}" onclick="Phone._cottageInvToggleTag('${t}')">${t}</div>`).join('');
+
+    const orders = (pd.furnitureOrders || []).filter(o => o && !o.claimedToInv);
+
+    const listHtml = list.length
+      ? list.map(it => {
+        const action = _invPickMode
+          ? `<button type="button" onclick="Phone._cottageInvPick('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('check', 12)} 选这个</button>`
+          : `<button type="button" onclick="Phone._cottageInvDelete('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('trash', 12)} 删除</button>`;
+        return `
+        <div class="phone-map-result-card">
+          <div class="phone-map-result-head">
+            <div class="phone-map-result-name">${Utils.escapeHtml(it.name || '未命名')}${(it.qty || 1) > 1 ? ` ×${it.qty}` : ''}</div>
+          </div>
+          <div class="phone-map-result-address">${_uiIcon('pin', 12)}<span>${Utils.escapeHtml(it.tag || '其它')}</span></div>
+          ${it.desc ? `<div class="phone-map-result-desc">${Utils.escapeHtml(it.desc)}</div>` : ''}
+          <div class="phone-map-result-foot">
+            <div class="phone-map-result-foot-left"></div>
+            <div class="phone-map-result-actions">${action}</div>
+          </div>
+        </div>`;
+      }).join('')
+      : `<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">${inv.length ? '没有符合筛选的物品' : '仓库还是空的，去家具商城逛逛吧'}</p>`;
+
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;height:100%">
+        <div style="flex:1;overflow-y:auto;padding:12px">
+          <div class="phone-map-searchbar" style="margin-bottom:10px">
+            <div class="phone-map-search-input-wrap">
+              ${_uiIcon('search', 12)}
+              <input id="cottage-inv-search" type="text" placeholder="搜索仓库里的物品" value="${Utils.escapeHtml(q)}">
+            </div>
+            <button onclick="Phone._cottageInvSearch()" class="phone-map-search-btn">搜索</button>
+          </div>
+          <div class="cottage-mall-chips">${tagChips}</div>
+          ${orders.length ? `<div class="cottage-mall-orders-bar" onclick="Phone._cottageShowOrders()">${_uiIcon('box', 13)} ${orders.length} 件家具配送中，点击查看订单</div>` : ''}
+          <div id="cottage-inv-items">${listHtml}</div>
+        </div>
+      </div>`;
+  }
+
+  function _cottageInvToggleTag(tag) {
+    const i = _invSelectedTags.indexOf(tag);
+    if (i >= 0) _invSelectedTags.splice(i, 1);
+    else _invSelectedTags.push(tag);
+    _renderCottageInventory();
+  }
+
+  async function _cottageInvSearch() {
+    const input = document.getElementById('cottage-inv-search');
+    const pd = await _getPhoneData();
+    pd.furnitureInvQuery = (input ? input.value : '').trim();
+    await _savePhoneData();
+    _renderCottageInventory();
+  }
+
+  async function _cottageInvDelete(invId) {
+    const pd = await _getPhoneData();
+    const it = (pd.furnitureInventory || []).find(x => x.id === invId);
+    if (!it) return;
+    const ok = await UI.showConfirm('删除物品', `确定从仓库删除「${it.name || '该物品'}」吗？`);
+    if (!ok) return;
+    if ((it.qty || 1) > 1) it.qty -= 1;
+    else pd.furnitureInventory = (pd.furnitureInventory || []).filter(x => x.id !== invId);
+    await _savePhoneData();
+    _renderCottageInventory();
+  }
+
+  // 从仓库选物：回调把物品填回当前编辑的房间物品
+  async function _cottageInvPick(invId) {
+    const pd = await _getPhoneData();
+    const it = (pd.furnitureInventory || []).find(x => x.id === invId);
+    if (!it) { UI.showToast('物品不存在', 1500); return; }
+    const cb = _invPickMode && _invPickMode.onPick;
+    _invPickMode = null;
+    goBack();
+    if (typeof cb === 'function') cb(it);
+  }
+
+  // 家具订单弹窗：显示配送中/已送达的家具订单
+  async function _cottageShowOrders() {
+    const pd = await _getPhoneData();
+    await _settleFurnitureOrders(pd);
+    await _savePhoneData();
+    const orders = (pd.furnitureOrders || []).slice().reverse();
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    const rows = orders.length ? orders.map(o => {
+      let status;
+      if (o.claimedToInv || o.status === 'delivered') {
+        status = '<span style="font-size:11px;color:#22c55e;font-weight:600">已送达 · 已入库 ✓</span>';
+      } else {
+        const rem = _getDeliveryRemaining(o);
+        status = (rem !== null && rem > 0)
+          ? `<span style="font-size:11px;color:var(--accent);font-weight:600">配送中 · ${_formatDeliveryRemaining(rem)}后到达</span>`
+          : '<span style="font-size:11px;color:#22c55e;font-weight:600">已送达 ✓</span>';
+      }
+      return `
+        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+          <div style="font-size:14px;font-weight:600;margin-bottom:3px">${Utils.escapeHtml(o.name || '家具')}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:5px">${Utils.escapeHtml(o.tag || '')} · ¥ ${Utils.escapeHtml(String(o.price || '--'))}</div>
+          ${status}
+        </div>`;
+    }).join('') : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;padding:16px 0">暂无家具订单</p>';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:80vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">家具订单</div>
+        ${rows}
+        <button id="cottage-orders-close" style="width:100%;margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">关闭</button>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#cottage-orders-close').onclick = () => document.body.removeChild(mask);
+    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+  }
+
+  // 从仓库里选（弹层版，用于房间物品弹窗内）：标签筛选 + 搜索 + 选中回调
+  async function _cottagePickFromInv(onPick) {
+    const pd = await _getPhoneData();
+    await _settleFurnitureOrders(pd);
+    const inv = pd.furnitureInventory || [];
+    if (!inv.length) { UI.showToast('仓库还是空的，先去家具商城买点东西', 2200); return; }
+
+    let selTags = [];
+    let kw = '';
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:18px;max-width:360px;width:100%;color:var(--text);max-height:84vh;display:flex;flex-direction:column">
+        <div style="font-size:15px;font-weight:600;margin-bottom:12px">从仓库里选</div>
+        <div class="phone-map-searchbar" style="margin-bottom:10px">
+          <div class="phone-map-search-input-wrap">${_uiIcon('search', 12)}<input id="cottage-pick-search" type="text" placeholder="搜索仓库物品"></div>
+        </div>
+        <div id="cottage-pick-chips" class="cottage-mall-chips"></div>
+        <div id="cottage-pick-list" style="flex:1;overflow-y:auto;margin-top:8px"></div>
+        <button id="cottage-pick-close" style="width:100%;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+      </div>`;
+    document.body.appendChild(mask);
+
+    const chipsEl = mask.querySelector('#cottage-pick-chips');
+    const listEl = mask.querySelector('#cottage-pick-list');
+    const searchEl = mask.querySelector('#cottage-pick-search');
+
+    const renderChips = () => {
+      chipsEl.innerHTML = FURNITURE_TAG_KEYS.map(t => `<div class="cottage-mall-chip ${selTags.includes(t) ? 'active' : ''}" data-tag="${t}">${t}</div>`).join('');
+      chipsEl.querySelectorAll('.cottage-mall-chip').forEach(c => {
+        c.onclick = () => {
+          const t = c.dataset.tag;
+          const i = selTags.indexOf(t);
+          if (i >= 0) selTags.splice(i, 1); else selTags.push(t);
+          renderChips(); renderList();
+        };
+      });
+    };
+    const renderList = () => {
+      let list = inv.slice();
+      if (selTags.length) list = list.filter(it => selTags.includes(it.tag));
+      if (kw) list = list.filter(it => (it.name || '').includes(kw) || (it.desc || '').includes(kw));
+      listEl.innerHTML = list.length ? list.map(it => `
+        <div class="cottage-pick-item" data-id="${Utils.escapeHtml(it.id)}" style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer">
+          <div style="font-size:14px;font-weight:600;margin-bottom:3px">${Utils.escapeHtml(it.name || '未命名')}${(it.qty || 1) > 1 ? ` ×${it.qty}` : ''}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:3px">${Utils.escapeHtml(it.tag || '')}</div>
+          ${it.desc ? `<div style="font-size:12px;color:var(--text-secondary)">${Utils.escapeHtml(it.desc)}</div>` : ''}
+        </div>`).join('') : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;padding:16px 0">没有符合条件的物品</p>';
+      listEl.querySelectorAll('.cottage-pick-item').forEach(el => {
+        el.onclick = () => {
+          const it = inv.find(x => x.id === el.dataset.id);
+          if (it && typeof onPick === 'function') onPick(it);
+          document.body.removeChild(mask);
+        };
+      });
+    };
+    if (searchEl) searchEl.oninput = () => { kw = searchEl.value.trim(); renderList(); };
+    mask.querySelector('#cottage-pick-close').onclick = () => document.body.removeChild(mask);
+    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    renderChips();
+    renderList();
+  }
+
+  // 添加住所：新建一个空住所后直接进详情页
+  async function _cottageAddHouse() {
+    const pd = await _getPhoneData();
+    if (!Array.isArray(pd.houses)) pd.houses = [];
+    const house = {
+      id: _cottageGenId('house'),
+      name: '我的小屋',
+      address: '',
+      styleDesc: '',
+      isCurrent: pd.houses.length === 0, // 第一个住所默认设为当前居住
+      rooms: [],
+    };
+    pd.houses.push(house);
+    await _savePhoneData();
+    _cottageCurHouseId = house.id;
+    _pushNav(() => _renderCottageHouse(house.id));
+    _renderCottageHouse(house.id);
+  }
+
+  // 住所详情页：信息卡片 + 楼层下拉 + 房间网格
+  async function _renderCottageHouse(houseId) {
+    const pd = await _getPhoneData();
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    const house = (pd.houses || []).find(h => h.id === houseId);
+    if (!house) { UI.showToast('住所不存在', 1500); goBack(); return; }
+    if (_cottageEnsureHouse(house)) { await _savePhoneData(); }
+    // 切换到新住所时重置楼层为一层；当前楼层若已不存在也回到一层
+    if (_cottageCurHouseId !== houseId) _cottageCurFloor = 1;
+    const floors = _cottageFloorList(house);
+    if (!floors.includes(_cottageCurFloor)) _cottageCurFloor = 1;
+    _cottageCurHouseId = houseId;
+    document.getElementById('phone-title').textContent = house.name || '住所';
+    _applyWallpaper(pd);
+
+    const styleText = (house.styleDesc || '').trim();
+    const imgBg = house.image
+      ? `background:linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0.15)), url('${house.image.replace(/'/g, "\\'")}') center/cover no-repeat;`
+      : '';
+    const hasImg = !!house.image;
+
+    // 楼层选项：现有楼层（可改名/删除）+ 添加一层 + 添加地下一层
+    const canDelete = floors.length > 1;
+    const floorOpts = floors.map(f => `
+      <div class="cottage-floor-opt${f === _cottageCurFloor ? ' active' : ''}">
+        <span class="cottage-floor-opt-name" onclick="Phone._cottageSelectFloor(${f})">${Utils.escapeHtml(_cottageFloorLabel(house, f))}</span>
+        <span class="cottage-floor-opt-act" onclick="event.stopPropagation();Phone._cottageRenameFloor(${f})" title="改名"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+        ${canDelete ? `<span class="cottage-floor-opt-act cottage-floor-opt-del" onclick="event.stopPropagation();Phone._cottageDeleteFloor(${f})" title="删除"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></span>` : ''}
+      </div>`).join('');
+    const floorMenu = `
+      ${floorOpts}
+      <div class="cottage-floor-opt cottage-floor-opt-add" onclick="Phone._cottageAddFloor(1)">+ 添加一层</div>
+      <div class="cottage-floor-opt cottage-floor-opt-add" onclick="Phone._cottageAddFloor(-1)">+ 添加地下一层</div>`;
+
+    // 当前楼层的房间
+    const roomsOnFloor = (house.rooms || []).filter(r => (r.floor || 1) === _cottageCurFloor);
+    const roomCards = roomsOnFloor.map(r => `
+      <div class="cottage-room-card" onclick="Phone._cottageOpenRoom('${Utils.escapeHtml(r.id)}')">
+        <div class="cottage-room-icon">${_cottageRoomSvg(r.icon)}</div>
+        <div class="cottage-room-name">${Utils.escapeHtml(r.name || '房间')}</div>
+      </div>`).join('');
+    const addRoomCard = `
+      <div class="cottage-room-card cottage-room-card-add" onclick="Phone._cottageAddRoom()">
+        <div class="cottage-room-icon cottage-room-icon-add">${_cottageRoomSvg('door')}</div>
+        <div class="cottage-room-name">添加房间</div>
+      </div>`;
+
+    body.innerHTML = `
+      <div class="cottage-house-page">
+        <div class="cottage-info-card${hasImg ? ' cottage-info-card-img' : ''}" style="${imgBg}" onclick="Phone._cottageEditHouse('${Utils.escapeHtml(house.id)}')">
+          <div class="cottage-info-top">
+            <div class="cottage-info-name">${Utils.escapeHtml(house.name || '未命名住所')}</div>
+            ${house.isCurrent ? '<span class="cottage-house-badge">当前居住</span>' : ''}
+          </div>
+          <div class="cottage-info-addr">${Utils.escapeHtml(house.address || '点击填写地址')}</div>
+          ${styleText ? `<div class="cottage-info-style">${Utils.escapeHtml(styleText)}</div>` : '<div class="cottage-info-style cottage-info-style-empty">点击设置装修风格</div>'}
+          <div class="cottage-info-edit-hint">点击卡片编辑</div>
+        </div>
+        ${!house.isCurrent ? `<button class="cottage-set-cur-btn" onclick="Phone._cottageSetCurrent('${Utils.escapeHtml(house.id)}')">设为当前居住</button>` : ''}
+
+        <div class="cottage-floor-select" onclick="event.stopPropagation();Phone._cottageToggleFloorMenu()">
+          <span class="cottage-floor-cur">${Utils.escapeHtml(_cottageFloorLabel(house, _cottageCurFloor))}</span>
+          <span class="cottage-floor-arrow">▾</span>
+          <div class="cottage-floor-menu hidden" id="cottage-floor-menu" onclick="event.stopPropagation()">${floorMenu}</div>
+        </div>
+
+        <div class="cottage-room-grid">
+          ${roomCards}
+          ${addRoomCard}
+        </div>
+      </div>`;
+
+    // 右上角 AI 一键生成按钮
+    const hr = document.getElementById('phone-header-right');
+    if (hr) {
+      hr.innerHTML = `<button class="cottage-ai-btn" onclick="Phone._cottageAiFill()" title="AI 一键生成">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>
+      </button>`;
+    }
+  }
+  // AI 一键生成弹窗：模式（全屋/本层）+ 数量 + 自由要求（先做 UI，逻辑后接）
+  function _cottageAiFill() {
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">AI 一键生成</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">生成范围</label>
+        <div id="cottage-ai-mode-select" data-mode="house" style="position:relative;margin-bottom:14px">
+          <div onclick="event.stopPropagation();this.parentNode.querySelector('.cottage-ai-mode-menu').classList.toggle('hidden')" style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer">
+            <span class="cottage-ai-mode-cur">填充全屋</span>
+            <span style="font-size:12px;opacity:0.7">▾</span>
+          </div>
+          <div class="cottage-ai-mode-menu hidden" style="position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:10;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,0.22);overflow:hidden">
+            <div class="cottage-ai-mode-opt" data-val="house" style="padding:11px 14px;font-size:14px;cursor:pointer">填充全屋</div>
+            <div class="cottage-ai-mode-opt" data-val="floor" style="padding:11px 14px;font-size:14px;cursor:pointer">填充本层</div>
+          </div>
+        </div>
+
+        <div id="cottage-ai-house-opts">
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">楼层数（可不填，AI 自定）</label>
+          <input id="cottage-ai-floors" type="number" min="1" max="10" placeholder="留空则由 AI 决定" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">总房间数（可不填，AI 自定）</label>
+          <input id="cottage-ai-rooms-total" type="number" min="1" max="40" placeholder="留空则由 AI 决定" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
+        </div>
+
+        <div id="cottage-ai-floor-opts" style="display:none">
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">房间数（可不填，AI 自定）</label>
+          <input id="cottage-ai-rooms" type="number" min="1" max="20" placeholder="留空则由 AI 决定" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
+        </div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">想要什么样的（可选）</label>
+        <textarea id="cottage-ai-req" rows="3" placeholder="例如：北欧风、暖色调、有书房和琴房" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:14px"></textarea>
+
+        <label id="cottage-ai-wv-label" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:18px;cursor:pointer;user-select:none">
+          <input id="cottage-ai-wv" type="checkbox" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;cursor:pointer">
+          <span>发送世界观基础资料作为参考<br><span style="font-size:11px;color:var(--text-secondary)">含世界观基础、地区设定、节日，帮 AI 贴合世界观</span></span>
+        </label>
+
+        <div style="display:flex;gap:10px">
+          <button id="cottage-ai-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="cottage-ai-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+
+    // 模式切换：显示对应的数量输入
+    const modeSelect = mask.querySelector('#cottage-ai-mode-select');
+    const houseOpts = mask.querySelector('#cottage-ai-house-opts');
+    const floorOpts = mask.querySelector('#cottage-ai-floor-opts');
+    const applyMode = (val) => {
+      modeSelect.dataset.mode = val;
+      modeSelect.querySelector('.cottage-ai-mode-cur').textContent = (val === 'house') ? '填充全屋' : '填充本层';
+      houseOpts.style.display = (val === 'house') ? '' : 'none';
+      floorOpts.style.display = (val === 'house') ? 'none' : '';
+    };
+    modeSelect.querySelectorAll('.cottage-ai-mode-opt').forEach(opt => {
+      opt.onclick = (e) => {
+        e.stopPropagation();
+        applyMode(opt.dataset.val);
+        modeSelect.querySelector('.cottage-ai-mode-menu').classList.add('hidden');
+      };
+    });
+
+    mask.querySelector('#cottage-ai-cancel').onclick = () => document.body.removeChild(mask);
+    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+
+    // 生成：二次确认（会覆盖已有内容）后调 AI
+    mask.querySelector('#cottage-ai-go').onclick = async () => {
+      const mode = modeSelect.dataset.mode || 'house';
+      const req = (mask.querySelector('#cottage-ai-req').value || '').trim();
+      let floors = '', roomsTotal = '', rooms = '';
+      if (mode === 'house') {
+        floors = (mask.querySelector('#cottage-ai-floors').value || '').trim();
+        roomsTotal = (mask.querySelector('#cottage-ai-rooms-total').value || '').trim();
+      } else {
+        rooms = (mask.querySelector('#cottage-ai-rooms').value || '').trim();
+      }
+      const warn = mode === 'house'
+        ? '将用 AI 重新生成整栋住所的楼层、房间和所有布置，当前已填写的内容会全部丢失。确定继续吗？'
+        : `将用 AI 重新生成「${_cottageFloorLabel((await _getPhoneData()).houses.find(h => h.id === _cottageCurHouseId) || {}, _cottageCurFloor)}」的所有房间和布置，本层已填写的内容会全部丢失。确定继续吗？`;
+      const ok = await UI.showConfirm('AI 一键生成', warn);
+      if (!ok) return;
+      const useWv = !!(mask.querySelector('#cottage-ai-wv') && mask.querySelector('#cottage-ai-wv').checked);
+      document.body.removeChild(mask);
+      await _cottageAiGenerate(mode, { floors, roomsTotal, rooms, req, useWv });
+    };
+  }
+
+  // 调 AI 生成住所内容并写入
+  async function _cottageAiGenerate(mode, opts) {
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+    const pd = await _getPhoneData();
+    const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+    if (!house) { UI.showToast('住所不存在', 1500); return; }
+
+    UI.showToast('AI 正在布置小屋…', 2000);
+
+    // 组装提示词
+    const isHouse = mode === 'house';
+    const isRoom = mode === 'room';
+    let countHint = '';
+    if (isHouse) {
+      if (opts.floors) countHint += `\n- 楼层数：${opts.floors} 层（从一层开始；如需地下层用负数编号）。`;
+      else countHint += `\n- 楼层数：你自己决定（通常 1-3 层）。`;
+      if (opts.roomsTotal) countHint += `\n- 全屋总房间数：约 ${opts.roomsTotal} 个，合理分配到各层。`;
+      else countHint += `\n- 房间数：你自己决定，每层 2-5 个房间为宜。`;
+    } else if (isRoom) {
+      const cc = opts.catCounts || {};
+      const catLine = (label, v) => v ? `\n- ${label}类：约 ${v} 个物品。` : '';
+      const hasAny = cc.decor || cc.furniture || cc.deco;
+      if (hasAny) {
+        countHint += catLine('装修', cc.decor) + catLine('家具', cc.furniture) + catLine('装饰', cc.deco);
+        countHint += '\n- 未指定数量的类别，按下方参考密度自行布置。';
+      } else {
+        countHint += '\n- 各类物品数量你自己决定，参照下方密度让房间显得充实。';
+      }
+    } else {
+      if (opts.rooms) countHint += `\n- 房间数：约 ${opts.rooms} 个。`;
+      else countHint += `\n- 房间数：你自己决定，2-5 个为宜。`;
+    }
+
+    const houseInfo = `住所名称：${house.name || '未命名'}${house.address ? '；地址：' + house.address : ''}${house.styleDesc ? '；整体风格：' + house.styleDesc : ''}`;
+
+    // 可选：世界观基础资料（基础设定 + 地区设定详情，不含势力/人物 + 节日）
+    let wvBlock = '';
+    if (opts.useWv) {
+      const wvParts = [];
+      try {
+        const base = (typeof Chat !== 'undefined' && Chat.getWorldviewPrompt) ? (Chat.getWorldviewPrompt() || '') : '';
+        if (base.trim()) wvParts.push('【世界观基础设定】\n' + base.trim());
+      } catch(_) {}
+      try {
+        const wv = await Worldview.getCurrent();
+        if (wv) {
+          if (Array.isArray(wv.regions) && wv.regions.length) {
+            const regStr = wv.regions.map(r => {
+              let s = r.name || '未命名地区';
+              const d = (r.detail || r.summary || '').trim();
+              if (d) s += '：' + d;
+              return s;
+            }).filter(Boolean).join('\n');
+            if (regStr) wvParts.push('【地区设定】\n' + regStr);
+          }
+          if (Array.isArray(wv.festivals) && wv.festivals.length) {
+            const festStr = wv.festivals.filter(f => f.enabled !== false)
+              .map(f => `${f.name || ''}（${f.date || ''}）：${f.content || ''}`).join('\n');
+            if (festStr) wvParts.push('【节日设定】\n' + festStr);
+          }
+        }
+      } catch(_) {}
+      if (wvParts.length) {
+        wvBlock = '\n以下是这个世界的设定资料，请让住所的布置风格、物品名称与描述贴合这个世界观（不要照搬，融入即可）：\n' + wvParts.join('\n\n') + '\n';
+      }
+    }
+
+    const itemGuide = `【物品布置】每个房间的物品分三类：装修(decor)、家具(furniture)、装饰(deco)。请尽量让每一类都有几件物品（一般每类 2-6 个），让房间显得充实、有生活感，不要每类只放一两件就草草了事。下面给出各类的【参考清单】——这只是建议，请结合住所的整体风格与经济水平灵活取舍：宽裕讲究的家可以布置得丰富精致，简朴或拮据的家则只放最基本的款式、数量也可以少，符合人设即可，不必硬凑。
+
+装修类(decor) 参考：
+- 墙面/壁纸（如米白色壁纸、硅藻泥墙面、裸露砖墙）
+- 地板/地面（如浅木色地板、灰色瓷砖、水泥地）
+- 门（如原木推拉门、白色平开门）
+- 窗（如落地窗、双层隔音窗、老式木框窗）
+
+家具类(furniture) 参考（按房间类型）：
+- 客厅：沙发、茶几、家电（电视/投影等）、储物柜
+- 卧室：床、衣柜（或试衣间）、梳妆台
+- 厨房：橱柜、冰箱、灶台、流理台
+- 餐厅：餐桌椅、橱柜/酒柜
+- 盥洗室/浴室：淋浴或浴缸、坐便器/蹲便器、洗手池
+- 书房：书架、书桌椅
+- 阳台：休闲桌椅、晾衣架
+- 玄关：鞋柜、衣帽架
+- 其它房间：按用途安排相应的主要家具
+
+装饰类(deco) 参考：
+- 灯具（吊灯/落地灯/氛围灯）
+- 窗帘/布艺（窗帘、地毯、抱枕等）
+- 绿植/花艺
+- 墙面装饰（挂画、照片墙、装饰镜）
+- 摆件（花瓶、香薰、书籍、收藏品等）
+
+- 每个物品有 name（简短名称，如"米白色墙纸"）和 desc（一句话描述材质/颜色/风格）。`;
+
+    const curRoom = isRoom ? (house.rooms || []).find(r => r.id === _cottageCurRoomId) : null;
+    const roomInfo = curRoom ? `房间名称：${curRoom.name || '未命名'}${curRoom.desc ? '；房间描述：' + curRoom.desc : ''}` : '';
+
+    const sysPrompt = isRoom
+      ? `你是一个室内设计师，为某一个房间布置物品生成完整内容。请输出 JSON。
+
+住所信息：${houseInfo}
+${roomInfo ? roomInfo + '\n' : ''}${wvBlock}${opts.req ? '\n用户额外要求：' + opts.req + '\n' : ''}
+要求：${countHint}
+${itemGuide}
+
+严格输出如下 JSON 格式（不要任何额外文字、不要 markdown）：
+{
+  "items": [
+    { "category": "decor", "name": "米白色乳胶漆墙面", "desc": "整面墙刷米白色乳胶漆，干净温润" },
+    { "category": "decor", "name": "浅橡木地板", "desc": "浅色橡木纹理，脚感温暖" },
+    { "category": "decor", "name": "原木推拉门", "desc": "通往阳台的双扇原木推拉门" },
+    { "category": "furniture", "name": "布艺转角沙发", "desc": "米灰色布艺沙发，柔软舒适" },
+    { "category": "furniture", "name": "实木茶几", "desc": "胡桃木矮茶几，带收纳层" },
+    { "category": "furniture", "name": "壁挂电视", "desc": "65寸超薄电视，挂于主墙" },
+    { "category": "deco", "name": "落地灯", "desc": "暖光落地灯，立于沙发一角" },
+    { "category": "deco", "name": "针织地毯", "desc": "米色厚针织地毯铺于茶几下" },
+    { "category": "deco", "name": "龟背竹绿植", "desc": "角落一盆龟背竹，增添生气" }
+  ]
+}
+（请根据上面房间的用途布置对应物品，参照示例的密度，每类几件，不要每类只放一两件。）
+category 只能是 decor/furniture/deco 三者之一。`
+      : isHouse
+      ? `你是一个室内设计师，为一个虚拟的家居布置生成完整内容。请输出 JSON。
+
+住所信息：${houseInfo}
+${wvBlock}${opts.req ? '\n用户额外要求：' + opts.req + '\n' : ''}
+要求：${countHint}
+- 房间类型可参考：客厅/会客厅、卧室、书房、厨房、餐厅、盥洗室/浴室、阳台、玄关等，按楼层与住所定位合理安排。一套完整的住宅通常会有客厅、卧室、厨房、餐厅、盥洗室这几类基本空间，可酌情安排。
+- 每个房间要有一句简短的 desc（房间整体感觉/用途）。
+${itemGuide}
+
+严格输出如下 JSON 格式（不要任何额外文字、不要 markdown）：
+{
+  "floors": [
+    {
+      "num": 1,
+      "name": "一层",
+      "rooms": [
+        {
+          "name": "客厅",
+          "desc": "宽敞明亮的会客起居空间",
+          "items": [
+            { "category": "decor", "name": "米白色乳胶漆墙面", "desc": "整面墙刷米白色乳胶漆，干净温润" },
+            { "category": "decor", "name": "浅橡木地板", "desc": "浅色橡木纹理，脚感温暖" },
+            { "category": "decor", "name": "原木推拉门", "desc": "通往阳台的双扇原木推拉门" },
+            { "category": "decor", "name": "落地窗", "desc": "南向落地窗，采光极好" },
+            { "category": "furniture", "name": "布艺转角沙发", "desc": "米灰色布艺沙发，柔软舒适" },
+            { "category": "furniture", "name": "实木茶几", "desc": "胡桃木矮茶几，带收纳层" },
+            { "category": "furniture", "name": "壁挂电视", "desc": "65寸超薄电视，挂于主墙" },
+            { "category": "furniture", "name": "储物边柜", "desc": "白色边柜，放置杂物" },
+            { "category": "deco", "name": "落地灯", "desc": "暖光落地灯，立于沙发一角" },
+            { "category": "deco", "name": "针织地毯", "desc": "米色厚针织地毯铺于茶几下" },
+            { "category": "deco", "name": "龟背竹绿植", "desc": "角落一盆龟背竹，增添生气" },
+            { "category": "deco", "name": "三联装饰画", "desc": "沙发背墙挂三联抽象画" }
+          ]
+        }
+      ]
+    }
+  ]
+}
+（上面示例中每类都给了 3-4 件物品，请参照这个密度来布置每个房间，不要每类只放一两件。）
+num 为楼层编号：地上层用正数（1=一层、2=二层），地下层用负数（-1=地下一层）。category 只能是 decor/furniture/deco 三者之一。`
+      : `你是一个室内设计师，为某一层楼布置房间生成完整内容。请输出 JSON。
+
+住所信息：${houseInfo}
+当前楼层：${_cottageFloorLabel(house, _cottageCurFloor)}
+${wvBlock}${opts.req ? '\n用户额外要求：' + opts.req + '\n' : ''}
+要求：${countHint}
+- 房间类型可参考客厅、卧室、书房、厨房、餐厅、盥洗室、阳台、玄关等，按这一层的功能合理安排。
+- 每个房间要有一句简短的 desc（房间整体感觉/用途）。
+${itemGuide}
+
+严格输出如下 JSON 格式（不要任何额外文字、不要 markdown）：
+{
+  "rooms": [
+    {
+      "name": "客厅",
+      "desc": "宽敞明亮的会客起居空间",
+      "items": [
+        { "category": "decor", "name": "米白色乳胶漆墙面", "desc": "整面墙刷米白色乳胶漆，干净温润" },
+        { "category": "decor", "name": "浅橡木地板", "desc": "浅色橡木纹理，脚感温暖" },
+        { "category": "decor", "name": "原木推拉门", "desc": "通往阳台的双扇原木推拉门" },
+        { "category": "decor", "name": "落地窗", "desc": "南向落地窗，采光极好" },
+        { "category": "furniture", "name": "布艺转角沙发", "desc": "米灰色布艺沙发，柔软舒适" },
+        { "category": "furniture", "name": "实木茶几", "desc": "胡桃木矮茶几，带收纳层" },
+        { "category": "furniture", "name": "壁挂电视", "desc": "65寸超薄电视，挂于主墙" },
+        { "category": "furniture", "name": "储物边柜", "desc": "白色边柜，放置杂物" },
+        { "category": "deco", "name": "落地灯", "desc": "暖光落地灯，立于沙发一角" },
+        { "category": "deco", "name": "针织地毯", "desc": "米色厚针织地毯铺于茶几下" },
+        { "category": "deco", "name": "龟背竹绿植", "desc": "角落一盆龟背竹，增添生气" },
+        { "category": "deco", "name": "三联装饰画", "desc": "沙发背墙挂三联抽象画" }
+      ]
+    }
+  ]
+}
+（上面示例中每类都给了 3-4 件物品，请参照这个密度来布置每个房间，不要每类只放一两件。）
+category 只能是 decor/furniture/deco 三者之一。`;
+
+    let raw = '';
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model,
+          temperature: 0.9,
+          max_tokens: 8000,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: isRoom ? '请生成这个房间的物品布置 JSON。' : (isHouse ? '请生成整栋住所的布置 JSON。' : '请生成这一层的房间布置 JSON。') }
+          ]
+        })
+      });
+      const data = await resp.json();
+      raw = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    } catch (e) {
+      console.error('[小屋AI生成]', e);
+      UI.showToast('生成失败，请重试', 2000);
+      return;
+    }
+
+    // 解析 JSON
+    let parsed;
+    try {
+      const text = String(raw || '').replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start < 0 || end < 0) throw new Error('无 JSON');
+      parsed = JSON.parse(text.slice(start, end + 1));
+    } catch (e) {
+      console.error('[小屋AI解析]', e, raw);
+      UI.showToast('AI 返回格式异常，请重试', 2000);
+      return;
+    }
+
+    const validCat = (c) => (['decor', 'furniture', 'deco'].includes(c) ? c : 'deco');
+    const mkItems = (items) => (Array.isArray(items) ? items : []).map(it => ({
+      id: _cottageGenId('item'),
+      category: validCat(it.category),
+      name: String(it.name || '未命名').slice(0, 20),
+      desc: String(it.desc || '').slice(0, 200),
+      position: '',
+    }));
+
+    // 写回数据
+    const pd2 = await _getPhoneData();
+    const house2 = (pd2.houses || []).find(h => h.id === _cottageCurHouseId);
+    if (!house2) return;
+
+    if (isRoom) {
+      const itemsArr = Array.isArray(parsed.items) ? parsed.items : [];
+      if (!itemsArr.length) { UI.showToast('AI 没有返回物品', 2000); return; }
+      const room2 = (house2.rooms || []).find(r => r.id === _cottageCurRoomId);
+      if (!room2) { UI.showToast('房间不存在', 1500); return; }
+      room2.items = mkItems(itemsArr);
+      await _savePhoneData();
+      UI.showToast('房间布置完成', 1800);
+      _renderCottageRoom(_cottageCurRoomId);
+      return;
+    }
+
+    if (isHouse) {
+      const floorsArr = Array.isArray(parsed.floors) ? parsed.floors : [];
+      if (!floorsArr.length) { UI.showToast('AI 没有返回楼层', 2000); return; }
+      const newFloors = [];
+      const newRooms = [];
+      floorsArr.forEach((fl, idx) => {
+        const num = (typeof fl.num === 'number' && fl.num !== 0) ? fl.num : (idx + 1);
+        if (!newFloors.some(x => x.num === num)) newFloors.push({ num, name: String(fl.name || '').slice(0, 16) });
+        (Array.isArray(fl.rooms) ? fl.rooms : []).forEach(r => {
+          newRooms.push({
+            id: _cottageGenId('room'),
+            name: String(r.name || '未命名').slice(0, 16),
+            icon: 'sofa',
+            floor: num,
+            desc: String(r.desc || '').slice(0, 200),
+            items: mkItems(r.items),
+            slots: [],
+          });
+        });
+      });
+      if (!newFloors.length) newFloors.push({ num: 1, name: '' });
+      house2.floors = newFloors;
+      house2.rooms = newRooms;
+      house2._roomsSeeded = true;
+      _cottageCurFloor = newFloors.map(f => f.num).sort((a, b) => b - a)[0];
+    } else {
+      const roomsArr = Array.isArray(parsed.rooms) ? parsed.rooms : [];
+      if (!roomsArr.length) { UI.showToast('AI 没有返回房间', 2000); return; }
+      // 删掉本层旧房间，写入新房间
+      house2.rooms = (house2.rooms || []).filter(r => (r.floor || 1) !== _cottageCurFloor);
+      roomsArr.forEach(r => {
+        house2.rooms.push({
+          id: _cottageGenId('room'),
+          name: String(r.name || '未命名').slice(0, 16),
+          icon: 'sofa',
+          floor: _cottageCurFloor,
+          desc: String(r.desc || '').slice(0, 200),
+          items: mkItems(r.items),
+          slots: [],
+        });
+      });
+    }
+    await _savePhoneData();
+    UI.showToast('小屋布置完成', 1800);
+    _renderCottageHouse(_cottageCurHouseId);
+  }
+
+  // 楼层下拉开关
+  function _cottageToggleFloorMenu() {
+    const menu = document.getElementById('cottage-floor-menu');
+    if (menu) menu.classList.toggle('hidden');
+  }
+
+  // 选择楼层
+  function _cottageSelectFloor(f) {
+    _cottageCurFloor = f;
+    _renderCottageHouse(_cottageCurHouseId);
+  }
+
+  // 添加楼层：dir=1 往上加（现有最高正层+1），dir=-1 往下加（现有最低负层-1）
+  async function _cottageAddFloor(dir) {
+    const pd = await _getPhoneData();
+    const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+    if (!house) return;
+    _cottageEnsureHouse(house);
+    const nums = (house.floors || []).map(f => f.num);
+    let newNum;
+    if (dir > 0) {
+      const maxPos = nums.filter(n => n > 0);
+      newNum = (maxPos.length ? Math.max(...maxPos) : 0) + 1;
+    } else {
+      const minNeg = nums.filter(n => n < 0);
+      newNum = (minNeg.length ? Math.min(...minNeg) : 0) - 1;
+    }
+    house.floors.push({ num: newNum, name: '' });
+    _cottageCurFloor = newNum;
+    await _savePhoneData();
+    _renderCottageHouse(_cottageCurHouseId);
+  }
+
+  // 楼层改名
+  async function _cottageRenameFloor(f) {
+    const pd = await _getPhoneData();
+    const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+    if (!house) return;
+    const floor = (house.floors || []).find(x => x.num === f);
+    if (!floor) return;
+    const cur = floor.name || _cottageDefaultFloorName(f);
+    const name = await UI.showSimpleInput('楼层名称', cur, { allowEmpty: true });
+    if (name === null) return; // 取消
+    floor.name = (name || '').trim();
+    await _savePhoneData();
+    _renderCottageHouse(_cottageCurHouseId);
+  }
+
+  // 删除楼层（至少保留一层），该层房间一并删除
+  async function _cottageDeleteFloor(f) {
+    const pd = await _getPhoneData();
+    const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+    if (!house) return;
+    if ((house.floors || []).length <= 1) { UI.showToast('至少保留一层', 1500); return; }
+    const roomsOnFloor = (house.rooms || []).filter(r => (r.floor || 1) === f);
+    const label = _cottageFloorLabel(house, f);
+    const ok = await UI.showConfirm('删除楼层', `确定删除「${label}」吗？${roomsOnFloor.length ? `该层 ${roomsOnFloor.length} 个房间会一并删除。` : ''}`);
+    if (!ok) return;
+    house.floors = (house.floors || []).filter(x => x.num !== f);
+    house.rooms = (house.rooms || []).filter(r => (r.floor || 1) !== f);
+    // 当前停在被删层时，回到剩余的最高层
+    if (_cottageCurFloor === f) {
+      const remain = _cottageFloorList(house);
+      _cottageCurFloor = remain.length ? remain[0] : 1;
+    }
+    await _savePhoneData();
+    _renderCottageHouse(_cottageCurHouseId);
+  }
+
+  // 添加房间：在当前楼层新建（默认客厅图标、未命名），进入房间详情页
+  async function _cottageAddRoom() {
+    const pd = await _getPhoneData();
+    const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+    if (!house) return;
+    if (!Array.isArray(house.rooms)) house.rooms = [];
+    const room = {
+      id: _cottageGenId('room'),
+      name: '未命名',
+      icon: 'sofa',
+      floor: _cottageCurFloor,
+      desc: '',
+      items: [],
+      slots: [],
+    };
+    house.rooms.push(room);
+    await _savePhoneData();
+    _cottageCurRoomId = room.id;
+    _pushNav(() => _renderCottageRoom(room.id));
+    _renderCottageRoom(room.id);
+  }
+
+  // 房间内的物品分类
+  const _COTTAGE_ITEM_CATS = [
+    { key: 'decor', name: '装修' },
+    { key: 'furniture', name: '家具' },
+    { key: 'deco', name: '装饰' },
+  ];
+  let _cottageCurRoomId = null;
+
+  // 打开房间详情：装修 / 家具 / 装饰 三栏
+  async function _cottageOpenRoom(roomId) {
+    _cottageCurRoomId = roomId;
+    _pushNav(() => _renderCottageRoom(roomId));
+    _renderCottageRoom(roomId);
+  }
+
+  async function _renderCottageRoom(roomId) {
+    const pd = await _getPhoneData();
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+    const room = house && (house.rooms || []).find(r => r.id === roomId);
+    if (!room) { UI.showToast('房间不存在', 1500); goBack(); return; }
+    if (!Array.isArray(room.items)) room.items = [];
+    _cottageCurRoomId = roomId;
+    document.getElementById('phone-title').textContent = room.name || '房间';
+    _applyWallpaper(pd);
+
+    const sections = _COTTAGE_ITEM_CATS.map(cat => {
+      const items = room.items.filter(it => it.category === cat.key);
+      const cards = items.map(it => `
+        <div class="cottage-item-card" onclick="Phone._cottageEditItem('${Utils.escapeHtml(it.id)}')">
+          <div class="cottage-item-main">
+            <span class="cottage-item-name">${Utils.escapeHtml(it.name || '未命名')}</span>
+            ${it.desc ? `<span class="cottage-item-desc">${Utils.escapeHtml(it.desc)}</span>` : ''}
+          </div>
+          ${it.position ? `<span class="cottage-item-pos">${Utils.escapeHtml(it.position)}</span>` : ''}
+        </div>`).join('');
+      return `
+        <div class="cottage-sec-title">${cat.name}</div>
+        <div class="cottage-item-list">
+          ${cards}
+          <button class="cottage-item-add" onclick="Phone._cottageAddItem('${cat.key}')">+ 添加${cat.name}</button>
+        </div>`;
+    }).join('');
+
+    body.innerHTML = `<div class="cottage-room-page">
+      <div class="cottage-room-info" onclick="Phone._cottageEditRoom('${Utils.escapeHtml(room.id)}')">
+        <div class="cottage-room-info-icon">${_cottageRoomSvg(room.icon)}</div>
+        <div class="cottage-room-info-text">
+          <div class="cottage-room-info-name">${Utils.escapeHtml(room.name || '房间')}</div>
+          <div class="cottage-room-info-desc">${room.desc ? Utils.escapeHtml(room.desc) : '点击编辑房间'}</div>
+        </div>
+      </div>
+      ${sections}</div>`;
+
+    const hr = document.getElementById('phone-header-right');
+    if (hr) {
+      hr.innerHTML = `<button class="cottage-ai-btn" onclick="Phone._cottageAiFillRoom()" title="AI 一键布置本房间">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>
+      </button>`;
+    }
+  }
+
+  // AI 一键布置单个房间：三类物品数量 + 自由要求 + 可选世界观资料
+  function _cottageAiFillRoom() {
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">AI 一键布置本房间</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">各类物品数量（可不填，AI 自定）</label>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <div style="flex:1">
+            <input id="cottage-air-decor" type="number" min="0" max="12" placeholder="装修" style="width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;text-align:center;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none">
+            <div style="text-align:center;font-size:11px;color:var(--text-secondary);margin-top:4px">装修</div>
+          </div>
+          <div style="flex:1">
+            <input id="cottage-air-furniture" type="number" min="0" max="12" placeholder="家具" style="width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;text-align:center;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none">
+            <div style="text-align:center;font-size:11px;color:var(--text-secondary);margin-top:4px">家具</div>
+          </div>
+          <div style="flex:1">
+            <input id="cottage-air-deco" type="number" min="0" max="12" placeholder="装饰" style="width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;text-align:center;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none">
+            <div style="text-align:center;font-size:11px;color:var(--text-secondary);margin-top:4px">装饰</div>
+          </div>
+        </div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">想要什么样的（可选）</label>
+        <textarea id="cottage-air-req" rows="3" placeholder="例如：北欧风、暖色调、有大书桌" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:14px"></textarea>
+
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:18px;cursor:pointer;user-select:none">
+          <input id="cottage-air-wv" type="checkbox" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;cursor:pointer">
+          <span>发送世界观基础资料作为参考<br><span style="font-size:11px;color:var(--text-secondary)">含世界观基础、地区设定、节日，帮 AI 贴合世界观</span></span>
+        </label>
+
+        <div style="display:flex;gap:10px">
+          <button id="cottage-air-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="cottage-air-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+
+    mask.querySelector('#cottage-air-cancel').onclick = () => document.body.removeChild(mask);
+    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+
+    mask.querySelector('#cottage-air-go').onclick = async () => {
+      const req = (mask.querySelector('#cottage-air-req').value || '').trim();
+      const decor = (mask.querySelector('#cottage-air-decor').value || '').trim();
+      const furniture = (mask.querySelector('#cottage-air-furniture').value || '').trim();
+      const deco = (mask.querySelector('#cottage-air-deco').value || '').trim();
+      const useWv = !!(mask.querySelector('#cottage-air-wv') && mask.querySelector('#cottage-air-wv').checked);
+      const ok = await UI.showConfirm('AI 一键布置', '将用 AI 重新布置本房间的所有物品，当前房间里已填写的装修、家具、装饰都会全部丢失。确定继续吗？');
+      if (!ok) return;
+      document.body.removeChild(mask);
+      await _cottageAiGenerate('room', { req, useWv, catCounts: { decor, furniture, deco } });
+    };
+  }
+  async function _cottageEditRoom(roomId) {
+    const pd = await _getPhoneData();
+    const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+    const room = house && (house.rooms || []).find(r => r.id === roomId);
+    if (!room) { UI.showToast('房间不存在', 1500); return; }
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    const iconBtns = _COTTAGE_ROOM_ICONS.map(ic => `
+      <div class="cottage-icon-pick${ic === room.icon ? ' active' : ''}" data-icon="${ic}" onclick="(function(el){el.parentNode.querySelectorAll('.cottage-icon-pick').forEach(n=>n.classList.remove('active'));el.classList.add('active');})(this)">${_cottageRoomSvg(ic)}</div>`).join('');
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">编辑房间</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">图标</label>
+        <div id="cottage-room-icons" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${iconBtns}</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">房间名称</label>
+        <input id="cottage-room-name" type="text" maxlength="16" value="${Utils.escapeHtml(room.name || '')}" placeholder="例如：主卧" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">描述</label>
+        <textarea id="cottage-room-desc" rows="3" placeholder="这个房间的整体感觉、用途等" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:18px">${Utils.escapeHtml(room.desc || '')}</textarea>
+
+        <div style="display:flex;gap:10px">
+          <button id="cottage-room-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="cottage-room-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+        <button id="cottage-room-delete" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:10px;background:none;color:#e0464b;font-size:13px;cursor:pointer">删除此房间</button>
+      </div>`;
+    document.body.appendChild(mask);
+
+    mask.querySelector('#cottage-room-cancel').onclick = () => document.body.removeChild(mask);
+    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+
+    mask.querySelector('#cottage-room-save').onclick = async () => {
+      const name = mask.querySelector('#cottage-room-name').value.trim();
+      const desc = mask.querySelector('#cottage-room-desc').value.trim();
+      const icon = (mask.querySelector('#cottage-room-icons .cottage-icon-pick.active') || {}).dataset?.icon || room.icon || 'door';
+      if (!name) { UI.showToast('请填写房间名称', 1500); return; }
+      const pd2 = await _getPhoneData();
+      const house2 = (pd2.houses || []).find(h => h.id === _cottageCurHouseId);
+      const target = house2 && (house2.rooms || []).find(r => r.id === roomId);
+      if (target) { target.name = name; target.desc = desc; target.icon = icon; }
+      await _savePhoneData();
+      document.body.removeChild(mask);
+      _renderCottageRoom(roomId);
+    };
+
+    mask.querySelector('#cottage-room-delete').onclick = async () => {
+      const ok = await UI.showConfirm('删除房间', `确定删除「${room.name || '该房间'}」吗？里面的布置会一并清除。`);
+      if (!ok) return;
+      const pd2 = await _getPhoneData();
+      const house2 = (pd2.houses || []).find(h => h.id === _cottageCurHouseId);
+      if (house2) house2.rooms = (house2.rooms || []).filter(r => r.id !== roomId);
+      await _savePhoneData();
+      document.body.removeChild(mask);
+      goBack();
+    };
+  }
+
+  // 添加物品：打开编辑弹窗（新建）
+  function _cottageAddItem(category) {
+    _cottageItemForm(category, null);
+  }
+
+  // 编辑物品：根据 id 找到后打开弹窗
+  async function _cottageEditItem(itemId) {
+    const pd = await _getPhoneData();
+    const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+    const room = house && (house.rooms || []).find(r => r.id === _cottageCurRoomId);
+    const item = room && (room.items || []).find(it => it.id === itemId);
+    if (!item) { UI.showToast('物品不存在', 1500); return; }
+    _cottageItemForm(item.category, item);
+  }
+
+  // 物品编辑表单（新建/编辑共用）：名称 / 描述 / 摆放位置
+  function _cottageItemForm(category, item) {
+    const isEdit = !!item;
+    const cur = item || { name: '', desc: '', position: '' };
+    const catName = (_COTTAGE_ITEM_CATS.find(c => c.key === category) || {}).name || '物品';
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">${isEdit ? '编辑' : '添加'}${catName}</div>
+
+        <button id="cottage-item-from-inv" type="button" style="width:100%;padding:10px;margin-bottom:16px;border:1px dashed var(--accent);border-radius:10px;background:none;color:var(--accent);font-size:13px;font-weight:650;cursor:pointer">从仓库里选</button>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">名称</label>
+        <input id="cottage-item-name" type="text" maxlength="20" value="${Utils.escapeHtml(cur.name || '')}" placeholder="例如：米白色墙纸" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">描述</label>
+        <textarea id="cottage-item-desc" rows="3" placeholder="材质、颜色、风格等" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:14px">${Utils.escapeHtml(cur.desc || '')}</textarea>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">摆放位置</label>
+        <input id="cottage-item-pos" type="text" maxlength="30" value="${Utils.escapeHtml(cur.position || '')}" placeholder="例如：靠窗的角落" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:18px">
+
+        <div style="display:flex;gap:10px">
+          <button id="cottage-item-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="cottage-item-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${isEdit ? '保存' : '添加'}</button>
+        </div>
+        ${isEdit ? `<button id="cottage-item-delete" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:10px;background:none;color:#e0464b;font-size:13px;cursor:pointer">删除</button>` : ''}
+      </div>`;
+    document.body.appendChild(mask);
+
+    mask.querySelector('#cottage-item-cancel').onclick = () => document.body.removeChild(mask);
+    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+
+    // 从仓库里选：弹出仓库选择层，选中后填回名称/描述输入框
+    const _fromInvBtn = mask.querySelector('#cottage-item-from-inv');
+    if (_fromInvBtn) _fromInvBtn.onclick = () => {
+      _cottagePickFromInv((it) => {
+        const nameEl = mask.querySelector('#cottage-item-name');
+        const descEl = mask.querySelector('#cottage-item-desc');
+        if (nameEl) nameEl.value = (it.name || '').slice(0, 20);
+        if (descEl) descEl.value = (it.desc || '').slice(0, 200);
+      });
+    };
+
+    mask.querySelector('#cottage-item-save').onclick = async () => {
+      const name = mask.querySelector('#cottage-item-name').value.trim();
+      const desc = mask.querySelector('#cottage-item-desc').value.trim();
+      const position = mask.querySelector('#cottage-item-pos').value.trim();
+      if (!name) { UI.showToast('请填写名称', 1500); return; }
+      const pd = await _getPhoneData();
+      const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+      const room = house && (house.rooms || []).find(r => r.id === _cottageCurRoomId);
+      if (!room) { UI.showToast('房间不存在', 1500); return; }
+      if (!Array.isArray(room.items)) room.items = [];
+      if (isEdit) {
+        const target = room.items.find(it => it.id === item.id);
+        if (target) { target.name = name; target.desc = desc; target.position = position; }
+      } else {
+        room.items.push({ id: _cottageGenId('item'), category, name, desc, position });
+      }
+      await _savePhoneData();
+      document.body.removeChild(mask);
+      _renderCottageRoom(_cottageCurRoomId);
+    };
+
+    if (isEdit) {
+      mask.querySelector('#cottage-item-delete').onclick = async () => {
+        const pd = await _getPhoneData();
+        const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+        const room = house && (house.rooms || []).find(r => r.id === _cottageCurRoomId);
+        if (room) room.items = (room.items || []).filter(it => it.id !== item.id);
+        await _savePhoneData();
+        document.body.removeChild(mask);
+        _renderCottageRoom(_cottageCurRoomId);
+      };
+    }
+  }
+
+  // 编辑住所：名称 / 地址 / 整体风格（含 AI 总结风格占位按钮）
+  function _cottageEditHouse(houseId) {
+    _getPhoneData().then(pd => {
+      const house = (pd.houses || []).find(h => h.id === houseId);
+      if (!house) { UI.showToast('住所不存在', 1500); return; }
+
+      const mask = document.createElement('div');
+      mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+          <div style="font-size:15px;font-weight:600;margin-bottom:16px">编辑住所</div>
+
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">小屋图片</label>
+          <div id="cottage-h-img-preview" style="width:100%;aspect-ratio:16/9;border-radius:12px;border:1px solid var(--border);background:var(--bg-tertiary) center/cover no-repeat;${house.image ? `background-image:url('${house.image.replace(/'/g, "\\'")}')` : ''};display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:12px;margin-bottom:8px">${house.image ? '' : '暂无图片'}</div>
+          <div style="display:flex;gap:8px;margin-bottom:14px">
+            <button id="cottage-h-img-pick" type="button" style="flex:1;padding:8px;font-size:12px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);cursor:pointer">本地 / URL</button>
+            <button id="cottage-h-img-ai" type="button" style="flex:1;padding:8px;font-size:12px;border:1px dashed var(--accent);border-radius:8px;background:none;color:var(--accent);cursor:pointer">AI 生成</button>
+            <button id="cottage-h-img-clear" type="button" style="flex:0 0 auto;padding:8px 12px;font-size:12px;border:1px solid var(--border);border-radius:8px;background:none;color:#e0464b;cursor:pointer">清除</button>
+          </div>
+
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">住所名称</label>
+          <input id="cottage-h-name" type="text" maxlength="20" value="${Utils.escapeHtml(house.name || '')}" placeholder="例如：星河公寓 3 号" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
+
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">所在地区</label>
+<div id="cottage-h-region-wrap" style="position:relative;margin-bottom:14px;display:none">
+<input type="hidden" id="cottage-h-region" value="">
+<div id="cottage-h-region-trigger" style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer;user-select:none">
+<span id="cottage-h-region-label" style="color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">（未选择）</span>
+<svg id="cottage-h-region-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--text-secondary);transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
+</div>
+<div id="cottage-h-region-menu" style="display:none;margin-top:6px;max-height:220px;overflow-y:auto;background:var(--bg-secondary, var(--bg-tertiary));border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.35)"></div>
+</div>
+<div id="cottage-h-region-none" style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;display:none">当前没有世界观地区数据</div>
+
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">具体地址（用于地点匹配）</label>
+          <input id="cottage-h-addr" type="text" maxlength="60" value="${Utils.escapeHtml(house.address || '')}" placeholder="例如：星河路12号·3栋" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
+
+          <label style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--text-secondary);margin-bottom:5px">
+            <span>整体风格</span>
+            <button id="cottage-h-aistyle" type="button" style="padding:3px 10px;font-size:12px;border:1px dashed var(--accent);border-radius:8px;background:none;color:var(--accent);cursor:pointer">AI 总结</button>
+          </label>
+          <textarea id="cottage-h-style" rows="4" placeholder="描述这个家的整体装修风格、氛围、色调" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:18px">${Utils.escapeHtml(house.styleDesc || '')}</textarea>
+
+          <div style="display:flex;gap:10px">
+            <button id="cottage-h-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+            <button id="cottage-h-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+          </div>
+          <button id="cottage-h-delete" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:10px;background:none;color:#e0464b;font-size:13px;cursor:pointer">删除此住所</button>
+        </div>`;
+      document.body.appendChild(mask);
+
+      // 填充地区下拉选（自定义暗色下拉，从世界观 regions 读取）
+      try {
+        const regionWrap = mask.querySelector('#cottage-h-region-wrap');
+        const regionInput = mask.querySelector('#cottage-h-region');
+        const regionTrigger = mask.querySelector('#cottage-h-region-trigger');
+        const regionLabel = mask.querySelector('#cottage-h-region-label');
+        const regionArrow = mask.querySelector('#cottage-h-region-arrow');
+        const regionMenu = mask.querySelector('#cottage-h-region-menu');
+        const regionNone = mask.querySelector('#cottage-h-region-none');
+
+        // 构建一个菜单项
+        const _buildRegionItem = (val, text) => {
+          const it = document.createElement('div');
+          it.dataset.value = val;
+          it.textContent = text;
+          it.style.cssText = 'padding:11px 12px;font-size:14px;color:var(--text);cursor:pointer;transition:background .15s';
+          it.onmousedown = (e) => { e.preventDefault(); };
+          it.onclick = () => {
+            regionInput.value = val;
+            regionLabel.textContent = text;
+            regionLabel.style.color = val ? 'var(--text)' : 'var(--text-secondary)';
+            regionMenu.querySelectorAll('[data-value]').forEach(n => { n.style.background = 'none'; });
+            it.style.background = 'var(--bg-tertiary)';
+            _closeRegionMenu();
+          };
+          return it;
+        };
+        let _regionOpen = false;
+        const _openRegionMenu = () => { regionMenu.style.display = ''; regionArrow.style.transform = 'rotate(180deg)'; _regionOpen = true; };
+        const _closeRegionMenu = () => { regionMenu.style.display = 'none'; regionArrow.style.transform = ''; _regionOpen = false; };
+        regionTrigger.onclick = (e) => { e.stopPropagation(); _regionOpen ? _closeRegionMenu() : _openRegionMenu(); };
+        // 点击面板外关闭
+        mask.addEventListener('click', (e) => { if (_regionOpen && !regionWrap.contains(e.target)) _closeRegionMenu(); });
+
+        const _fillRegions = (regions) => {
+          regionMenu.innerHTML = '';
+          regionMenu.appendChild(_buildRegionItem('', '（未选择）'));
+          regions.forEach(r => {
+            const name = r.name || '未命名地区';
+            const item = _buildRegionItem(r.name || '', name);
+            regionMenu.appendChild(item);
+            if ((house.region || '') === r.name) {
+              regionInput.value = r.name || '';
+              regionLabel.textContent = name;
+              regionLabel.style.color = 'var(--text)';
+              item.style.background = 'var(--bg-tertiary)';
+            }
+          });
+          regionWrap.style.display = '';
+        };
+
+        if (typeof Worldview !== 'undefined' && Worldview.getCurrent) {
+          Worldview.getCurrent().then(wv => {
+            if (wv && Array.isArray(wv.regions) && wv.regions.length) {
+              _fillRegions(wv.regions);
+            } else {
+              regionNone.style.display = '';
+            }
+          }).catch(() => { regionNone.style.display = ''; });
+        } else {
+          regionNone.style.display = '';
+        }
+      } catch(_) {
+        const regionNone = mask.querySelector('#cottage-h-region-none');
+        if (regionNone) regionNone.style.display = '';
+      }
+
+      // 弹窗内暂存的图片（保存时才落库）
+      let _pendingImg = house.image || '';
+      const _imgPreview = mask.querySelector('#cottage-h-img-preview');
+      const _refreshImgPreview = () => {
+        if (_pendingImg) {
+          _imgPreview.style.backgroundImage = `url('${_pendingImg.replace(/'/g, "\\'")}')`;
+          _imgPreview.textContent = '';
+        } else {
+          _imgPreview.style.backgroundImage = '';
+          _imgPreview.textContent = '暂无图片';
+        }
+      };
+
+      mask.querySelector('#cottage-h-cancel').onclick = () => document.body.removeChild(mask);
+      mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+
+      // 上传图片：本地 / URL（复用通用图片输入组件）
+      mask.querySelector('#cottage-h-img-pick').onclick = async () => {
+        try {
+          const dataUrl = await Utils.promptImageInput({ maxSize: 1280, quality: 0.75 });
+          if (!dataUrl) return;
+          if (typeof dataUrl === 'string' && dataUrl.length > 2600000) {
+            UI.showToast('图片过大，请选择更小的图片', 2500); return;
+          }
+          _pendingImg = dataUrl;
+          _refreshImgPreview();
+        } catch (e) { console.warn('[Cottage] image pick failed', e); UI.showToast('图片设置失败', 1500); }
+      };
+
+      // AI 生成图片：选房间/按整体风格 + 自定义提示词，生成后进相册并设为封面
+      mask.querySelector('#cottage-h-img-ai').onclick = () => {
+        _cottageAiGenImage(houseId, (dataUrl) => {
+          if (dataUrl) { _pendingImg = dataUrl; _refreshImgPreview(); }
+        });
+      };
+
+      mask.querySelector('#cottage-h-img-clear').onclick = () => {
+        _pendingImg = '';
+        _refreshImgPreview();
+      };
+
+      // AI 总结风格：读取全屋房间与物品，生成 150 字内的整体描述，填入风格输入框
+    mask.querySelector('#cottage-h-aistyle').onclick = async () => {
+      const btn = mask.querySelector('#cottage-h-aistyle');
+      const styleArea = mask.querySelector('#cottage-h-style');
+      const pd = await _getPhoneData();
+      const h = (pd.houses || []).find(x => x.id === houseId);
+      if (!h) { UI.showToast('住所不存在', 1500); return; }
+      const rooms = (h.rooms || []);
+      if (!rooms.length || !rooms.some(r => (r.items || []).length)) {
+        UI.showToast('房间还没有布置内容，先填点东西再总结', 2200);
+        return;
+      }
+      // 配置
+      const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+      const mainConfig = await API.getConfig();
+      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const key = funcConfig.apiKey || mainConfig.apiKey;
+      const model = funcConfig.model || mainConfig.model;
+      if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+      // 组装全屋数据
+      const floorLabel = (n) => _cottageFloorLabel(h, n);
+      const catName = { decor: '装修', furniture: '家具', deco: '装饰' };
+      const roomsByFloor = {};
+      rooms.forEach(r => { (roomsByFloor[r.floor || 1] = roomsByFloor[r.floor || 1] || []).push(r); });
+      const floorNums = Object.keys(roomsByFloor).map(Number).sort((a, b) => b - a);
+      const lines = [];
+      floorNums.forEach(fn => {
+        lines.push(`【${floorLabel(fn)}】`);
+        roomsByFloor[fn].forEach(r => {
+          let s = `· ${r.name || '未命名房间'}`;
+          if (r.desc) s += `（${r.desc}）`;
+          lines.push(s);
+          (r.items || []).forEach(it => {
+            lines.push(`  - [${catName[it.category] || '物品'}]${it.name || ''}${it.desc ? '：' + it.desc : ''}`);
+          });
+        });
+      });
+      const houseDataText = lines.join('\n');
+      const totalRooms = rooms.length;
+
+      const sysPrompt = `你是一个室内设计顾问。下面是一套住所的全部楼层、房间和物品布置数据。请你通读后，写一段不超过 150 字的整体风格总结，需要涵盖：大致房型（几层、约多少房间）、整体装修风格与色调、主要功能空间有哪些。语言精炼、像房产/设计简介，不要分点，不要逐条复述物品，只输出这段总结文字本身，不要任何额外说明或标题。
+
+住所名称：${h.name || '未命名'}${h.address ? '；地址：' + h.address : ''}
+共 ${floorNums.length} 个楼层，约 ${totalRooms} 个房间。
+
+布置数据：
+${houseDataText}`;
+
+      const oldText = btn.textContent;
+      btn.textContent = '总结中…';
+      btn.disabled = true;
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+          body: JSON.stringify({
+            model,
+            temperature: 0.7,
+            max_tokens: 600,
+            messages: [
+              { role: 'system', content: sysPrompt },
+              { role: 'user', content: '请给出这套住所的整体风格总结（150 字以内）。' }
+            ]
+          })
+        });
+        const data = await resp.json();
+        let summary = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+        summary = String(summary).replace(/```/g, '').trim();
+        if (!summary) { UI.showToast('AI 没有返回内容，请重试', 2000); return; }
+        if (summary.length > 160) summary = summary.slice(0, 160);
+        if (styleArea) styleArea.value = summary;
+        UI.showToast('已生成风格总结', 1500);
+      } catch (e) {
+        console.error('[小屋AI总结]', e);
+        UI.showToast('总结失败，请重试', 2000);
+      } finally {
+        btn.textContent = oldText;
+        btn.disabled = false;
+      }
+    };
+
+      mask.querySelector('#cottage-h-save').onclick = async () => {
+      const name = mask.querySelector('#cottage-h-name').value.trim();
+      const address = mask.querySelector('#cottage-h-addr').value.trim();
+      const regionVal = (mask.querySelector('#cottage-h-region')?.value || '').trim();
+      const styleDesc = mask.querySelector('#cottage-h-style').value.trim();
+      if (!name) { UI.showToast('请填写住所名称', 1500); return; }
+      const pd2 = await _getPhoneData();
+      const target = (pd2.houses || []).find(h => h.id === houseId);
+      if (target) { target.name = name; target.address = address; target.region = regionVal; target.styleDesc = styleDesc; target.image = _pendingImg || ''; }
+        await _savePhoneData();
+        document.body.removeChild(mask);
+        _renderCottageHouse(houseId);
+      };
+
+      mask.querySelector('#cottage-h-delete').onclick = async () => {
+        const ok = await UI.showConfirm('删除住所', `确定删除「${house.name || '该住所'}」吗？房间和布置会一并清除。`);
+        if (!ok) return;
+        const pd2 = await _getPhoneData();
+        const wasCurrent = (pd2.houses || []).find(h => h.id === houseId)?.isCurrent;
+        pd2.houses = (pd2.houses || []).filter(h => h.id !== houseId);
+        // 若删的是当前居住，且还有其它住所，把第一个设为当前
+        if (wasCurrent && pd2.houses.length) pd2.houses[0].isCurrent = true;
+        await _savePhoneData();
+        document.body.removeChild(mask);
+        goBack();
+      };
+    });
+  }
+
+  // AI 生成小屋图片：选房间或按整体风格 + 自定义提示词 → 生图 → 进相册 → 回调设为封面
+  async function _cottageAiGenImage(houseId, onDone) {
+    const pd = await _getPhoneData();
+    const house = (pd.houses || []).find(h => h.id === houseId);
+    if (!house) { UI.showToast('住所不存在', 1500); return; }
+    const rooms = (house.rooms || []);
+    const catName = { decor: '装修', furniture: '家具', deco: '装饰' };
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    // 目标选项：按整体风格 + 各房间
+    const roomOpts = rooms.map(r => `<div class="cottage-floor-opt" data-target="room:${Utils.escapeHtml(r.id)}" style="cursor:pointer">${Utils.escapeHtml(r.name || '未命名房间')}（${_cottageFloorLabel(house, r.floor || 1)}）</div>`).join('');
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">AI 生成小屋图片</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">画什么</label>
+        <div id="cottage-img-target" data-target="style" style="position:relative;margin-bottom:14px">
+          <div onclick="event.stopPropagation();this.parentNode.querySelector('.cottage-img-menu').classList.toggle('hidden')" style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer">
+            <span class="cottage-img-target-cur">按整体风格（外观/概念图）</span>
+            <span style="font-size:12px;opacity:0.7">▾</span>
+          </div>
+          <div class="cottage-img-menu hidden" style="position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:10;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,0.22);overflow:hidden;max-height:220px;overflow-y:auto">
+            <div class="cottage-floor-opt" data-target="style" style="cursor:pointer">按整体风格（外观/概念图）</div>
+            ${roomOpts}
+          </div>
+        </div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">补充提示词（可选）</label>
+        <textarea id="cottage-img-req" rows="3" placeholder="例如：黄昏暖光、写实风格、俯视角、电影感" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:14px"></textarea>
+
+        <div id="cottage-img-result" style="display:none;margin-bottom:14px">
+          <div id="cottage-img-preview" style="width:100%;height:160px;border-radius:10px;background-size:cover;background-position:center;border:1px solid var(--border);margin-bottom:8px"></div>
+          <button id="cottage-img-download" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:13px;cursor:pointer">下载图片到本地</button>
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button id="cottage-img-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="cottage-img-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+
+    const targetSel = mask.querySelector('#cottage-img-target');
+    targetSel.querySelectorAll('.cottage-floor-opt').forEach(opt => {
+      opt.onclick = (e) => {
+        e.stopPropagation();
+        targetSel.dataset.target = opt.dataset.target;
+        targetSel.querySelector('.cottage-img-target-cur').textContent = opt.textContent;
+        targetSel.querySelector('.cottage-img-menu').classList.add('hidden');
+      };
+    });
+
+    mask.querySelector('#cottage-img-cancel').onclick = () => document.body.removeChild(mask);
+    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+
+    let _lastImageId = null;
+    mask.querySelector('#cottage-img-download').onclick = () => {
+      if (_lastImageId && typeof Chat?.downloadImage === 'function') Chat.downloadImage(_lastImageId);
+      else UI.showToast('暂无可下载的图片', 1500);
+    };
+
+    mask.querySelector('#cottage-img-go').onclick = async () => {
+      const target = targetSel.dataset.target || 'style';
+      const req = (mask.querySelector('#cottage-img-req').value || '').trim();
+
+      // 拼生图 prompt
+      let basePrompt = '';
+      if (target.startsWith('room:')) {
+        const roomId = target.slice(5);
+        const room = rooms.find(r => r.id === roomId);
+        if (!room) { UI.showToast('房间不存在', 1500); return; }
+        const itemLines = (room.items || []).map(it => `${catName[it.category] || ''}：${it.name || ''}${it.desc ? '（' + it.desc + '）' : ''}`).join('；');
+        basePrompt = `室内设计效果图，一个${room.name || '房间'}的实景照片。${room.desc ? room.desc + '。' : ''}${itemLines ? '空间内有：' + itemLines + '。' : ''}${house.styleDesc ? '整体风格：' + house.styleDesc + '。' : ''}写实、光线自然、布局合理，无人物。`;
+      } else {
+        basePrompt = `一栋住宅的外观或整体氛围概念图。住所名称：${house.name || '我的小屋'}。${house.address ? '地址：' + house.address + '。' : ''}${house.styleDesc ? '整体风格：' + house.styleDesc + '。' : '温馨宜居的家。'}写实、光线自然、有生活气息，无人物。`;
+      }
+      const drawPrompt = req ? `${basePrompt}\n\n额外要求：${req}` : basePrompt;
+
+      const goBtn = mask.querySelector('#cottage-img-go');
+      const oldText = goBtn.textContent;
+      goBtn.textContent = '生成中…';
+      goBtn.disabled = true;
+      try {
+        const images = await API.generateImage(drawPrompt, { n: 1, size: '1024x1024' });
+        if (!images || !images.length) throw new Error('没有返回图片');
+        const dataUrl = images[0];
+
+        // 存 drawnImages（进收藏图库）
+        const imageId = 'img_' + Utils.uuid();
+        await DB.put('drawnImages', { id: imageId, dataUrl, prompt: drawPrompt, createdAt: new Date().toISOString() });
+
+        // 进相册
+        const pd2 = await _getPhoneData();
+        if (pd2) {
+          if (!Array.isArray(pd2.album)) pd2.album = [];
+          pd2.album.push({
+            id: 'photo_' + Utils.uuid().slice(0, 8),
+            mode: 'ai_image',
+            text: `小屋图片：${house.name || '我的小屋'}`,
+            imageId,
+            location: '',
+            time: '',
+            createdAt: new Date().toISOString()
+          });
+          await _savePhoneData();
+        }
+
+        _lastImageId = imageId;
+        const prev = mask.querySelector('#cottage-img-preview');
+        prev.style.backgroundImage = `url('${dataUrl.replace(/'/g, "\\'")}')`;
+        mask.querySelector('#cottage-img-result').style.display = '';
+        UI.showToast('已生成并存入相册', 1800);
+
+        // 回调设为封面（暂存，保存住所时落库）
+        if (typeof onDone === 'function') onDone(dataUrl);
+      } catch (e) {
+        console.error('[小屋AI生图]', e);
+        UI.showToast(`生成失败：${e.message || '未知错误'}`, 2600);
+      } finally {
+        goBtn.textContent = oldText;
+        goBtn.disabled = false;
+      }
+    };
+  }
+
+  // 从列表打开住所详情（push 导航栈）
+  function _cottageOpenHouse(houseId) {
+    _pushNav(() => _renderCottageHouse(houseId));
+    _renderCottageHouse(houseId);
+  }
+
+  // 设为当前居住：同一时间只有一个 isCurrent
+  async function _cottageSetCurrent(houseId) {
+    const pd = await _getPhoneData();
+    (pd.houses || []).forEach(h => { h.isCurrent = (h.id === houseId); });
+    await _savePhoneData();
+    _renderCottageHouse(houseId);
   }
 
   // 电台首页底部 tab：'discover' 发现（分类网格）| 'mine' 我的（听过的台）
@@ -18116,7 +20346,8 @@ let _deliveriesTab = 'all'; // 'all' | 'delivering' | 'done'
 
 // 判定订单来源 { label, kind }
 function _deliveryOrderSource(o, field) {
-  if (o.sellBuy) return { label: '聊天·交易', cls: 'youyu' };
+    if (o.furnitureBuy || field === 'furnitureOrders') return { label: '家具商城', cls: 'cottage' };
+    if (o.sellBuy) return { label: '聊天·交易', cls: 'youyu' };
   if (o.feiniaoReceive) return { label: '飞鸟·收件', cls: 'feiniao' };
   if (o.feiniaoShip) return { label: '飞鸟·寄件', cls: 'feiniao' };
   if (o.youyuSell) return { label: '游鱼·售出', cls: 'youyu' };
@@ -18127,7 +20358,9 @@ function _deliveryOrderSource(o, field) {
 // 判断订单是否可以「收入物品栏」：必须是「收进来给自己的」+ 已送达 + 未收取过
 // 可收：飞鸟收件、桃宝/饿了咪给自己买的；不可收：飞鸟寄件、游鱼售出、给别人买的
 function _deliveryClaimable(o, field) {
-  if (!o || o.claimedToInv) return false;
+    if (!o || o.claimedToInv) return false;
+    // 家具订单：到货自动入家具仓库，不在此手动收取
+    if (o.furnitureBuy || field === 'furnitureOrders') return false;
   // 已送达判定
   let delivered = o.status === 'delivered';
   if (!delivered && o.status === 'delivering' && o.deliveryMinutes) {
@@ -18202,15 +20435,23 @@ async function _deliveryClaimToInv(field, orderId) {
 }
 
 function _renderDeliveries(pd) {
-  const body = document.getElementById('phone-body');
-  document.getElementById('phone-title').textContent = '全部订单';
-  _applyWallpaper(pd);
+    const body = document.getElementById('phone-body');
+    document.getElementById('phone-title').textContent = '全部订单';
+    _applyWallpaper(pd);
 
-  // 聚合两个订单数组，附带来源字段
-  const all = []
-    .concat((pd?.shopOrders || []).map(o => ({ o, field: 'shopOrders' })))
-    .concat((pd?.takeoutOrders || []).map(o => ({ o, field: 'takeoutOrders' })))
-    .filter(x => x.o);
+    // 家具订单到货则惰性结算入仓库，结算有变化时重渲染
+    if (Array.isArray(pd?.furnitureOrders) && pd.furnitureOrders.some(o => o && !o.claimedToInv)) {
+      _settleFurnitureOrders(pd).then(changed => {
+        if (changed) { _savePhoneData().then(() => { if (_currentApp === 'deliveries') _renderDeliveries(pd); }); }
+      });
+    }
+
+    // 聚合订单数组，附带来源字段
+    const all = []
+      .concat((pd?.shopOrders || []).map(o => ({ o, field: 'shopOrders' })))
+      .concat((pd?.takeoutOrders || []).map(o => ({ o, field: 'takeoutOrders' })))
+      .concat((pd?.furnitureOrders || []).map(o => ({ o, field: 'furnitureOrders' })))
+      .filter(x => x.o);
 
   // 按下单游戏时间倒序（新→旧）；无时间的排最后
   all.sort((a, b) => {
@@ -18248,7 +20489,8 @@ function _renderDeliveries(pd) {
     }
     // 副信息：收/寄件人或目标
     let metaPill = '';
-    if (o.feiniaoReceive) metaPill = o.sender ? `来自 ${Utils.escapeHtml(o.sender)}` : '';
+    if (o.furnitureBuy || field === 'furnitureOrders') metaPill = o.tag ? Utils.escapeHtml(o.tag) : '家具仓库';
+    else if (o.feiniaoReceive) metaPill = o.sender ? `来自 ${Utils.escapeHtml(o.sender)}` : '';
     else if (o.feiniaoShip) metaPill = o.target ? `寄给 ${Utils.escapeHtml(o.target)}` : '';
     else if (o.youyuSell) metaPill = o.buyer ? `买家 ${Utils.escapeHtml(o.buyer)}` : '';
     else metaPill = (o.target && o.target !== '自己') ? `→ ${Utils.escapeHtml(o.target)}` : '自己';
@@ -18271,7 +20513,7 @@ function _renderDeliveries(pd) {
         </div>
         ${statusHtml ? `<div style="margin-top:6px">${statusHtml}</div>` : ''}
         ${o.claimedToInv
-          ? `<div style="margin-top:8px;font-size:11px;color:var(--text-secondary)">${_uiIcon('check', 11)} 已收入物品栏</div>`
+          ? `<div style="margin-top:8px;font-size:11px;color:var(--text-secondary)">${_uiIcon('check', 11)} ${(o.furnitureBuy || field === 'furnitureOrders') ? '已入家具仓库' : '已收入物品栏'}</div>`
           : (_deliveryClaimable(o, field)
             ? `<div style="margin-top:8px;display:flex;justify-content:flex-end"><button type="button" onclick="Phone._deliveryClaimToInv('${field}','${o.id}')" class="phone-map-action-btn">${_uiIcon('box', 12)} 收入物品栏</button></div>`
             : '')}
@@ -19808,6 +22050,23 @@ _renderMemo(pd);
         }
       }
   }
+  // 家具订单（走物流配送的）到货提示词
+  if (Array.isArray(pd.furnitureOrders)) {
+    for (const order of pd.furnitureOrders) {
+      if (!order || order.notified) continue;
+      // 已送达判定
+      let delivered = order.status === 'delivered';
+      if (!delivered && order.status === 'delivering' && order.deliveryMinutes) {
+        const rem = _getDeliveryRemaining(order);
+        delivered = (rem !== null && rem <= 0);
+      }
+      if (!delivered) continue;
+      order.status = 'delivered';
+      order.notified = true;
+      changed = true;
+      prompts.push(`【家具商城配送已送达】{{user}}此前在家具商城下单的"${order.name}"已送达，将入库到家中的家具仓库。请在剧情中自然加入收货情节（拆快递/搬家具/摆放），不要复述本提示。如果剧情中已经体现收货，无视本条。`);
+    }
+  }
   // 游鱼购买确认提示词（一次性消费）
   if (Array.isArray(pd.youyuConfirmPrompts) && pd.youyuConfirmPrompts.length) {
     for (const p of pd.youyuConfirmPrompts) prompts.push(p);
@@ -20130,10 +22389,11 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
 
   // 当前世界观对商城/信息载体的覆写（名字/描述）；open() 时异步加载
   let _shopMeta = {
-    takeout: { name: '', desc: '' },
-    shop: { name: '', desc: '' },
-    forum: { name: '', desc: '' }
-  };
+  takeout: { name: '', desc: '' },
+  shop: { name: '', desc: '' },
+  forum: { name: '', desc: '' },
+  cottage: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day', initialHouse: null }
+};
 
   async function _loadShopMeta() {
     try {
@@ -20155,12 +22415,19 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
           deliveryUnit: pa.shop?.deliveryUnit,
         },
         forum: {
-          name: ((pa.forum?.name) || '').trim(),
-          desc: ((pa.forum?.desc) || '').trim()
-        }
-      };
-    } catch(_) {
-      _shopMeta = { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' } };
+      name: ((pa.forum?.name) || '').trim(),
+      desc: ((pa.forum?.desc) || '').trim()
+    },
+    cottage: {
+      name: ((pa.cottage?.name) || '').trim(),
+      deliveryMin: pa.cottage?.deliveryMin || 2,
+      deliveryMax: pa.cottage?.deliveryMax || 5,
+      deliveryUnit: pa.cottage?.deliveryUnit || 'day',
+      initialHouse: pa.cottage?.initialHouse || null
+    }
+  };
+} catch(_) {
+  _shopMeta = { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' }, cottage: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day', initialHouse: null } };
     }
   }
 
@@ -21656,6 +23923,10 @@ _onPagesScroll,
  _renderLedger, _ledgerSwitchCur, _ledgerEditEntry, _ledgerAddManual, _ledgerCycleView, _ledgerCalPick,
 // 电台 App
   _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _radioAddCategory, _radioEditCategory, _switchRadioHomeTab, _radioOpenSubscribed,
+  // 小屋 App
+  _renderCottage, _cottageAddHouse, _cottageOpenHouse, _cottageEditHouse, _cottageSetCurrent, _switchCottageHomeTab, _cottageDataMenu, getCottageLayoutForLocation, _cottageOpenMall, _cottageOpenInventory, _cottageMallSettings, _cottageMallToggleTag, _cottageMallRefresh, _cottageMallBuy, _cottageInvToggleTag, _cottageInvSearch, _cottageInvDelete, _cottageInvPick, _cottageShowOrders,
+  _cottageToggleFloorMenu, _cottageSelectFloor, _cottageAddFloor, _cottageRenameFloor, _cottageDeleteFloor, _cottageAddRoom, _cottageOpenRoom,
+  _cottageAddItem, _cottageEditItem, _cottageEditRoom, _cottageAiFill, _cottageAiFillRoom,
     // 聊天 App
   _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _onChatSettingsCallAutoPlayToggle, _onChatSettingsPhoneDownToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
   ingestChatMessages, getChatHistoryForNPCs,

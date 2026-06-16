@@ -923,6 +923,23 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
 const char = await Character.get();
 if (char) systemParts.push(Character.formatForPrompt(char));
 
+// 3a. 玩家当前居住地（从小屋系统读取）
+try {
+  if (typeof Phone !== 'undefined' && Phone._getPhoneData) {
+    const _pd = await Phone._getPhoneData();
+    if (_pd && Array.isArray(_pd.houses)) {
+      const curHouse = _pd.houses.find(h => h.isCurrent);
+      if (curHouse && curHouse.name) {
+        let hStr = `住所名称：${curHouse.name}`;
+        if (curHouse.region) hStr += `\n所在地区：${curHouse.region}`;
+        if (curHouse.address) hStr += `\n具体地址：${curHouse.address}`;
+        if (curHouse.styleDesc) hStr += `\n装修风格：${curHouse.styleDesc}`;
+        systemParts.push('【玩家当前居住地】\n' + hStr);
+      }
+    }
+  }
+} catch(_) {}
+
 // 3b. 世界观速查表（每轮发，所有地区/势力/NPC概要）— 番外模式下看 inheritNpc 开关 — 非文游模式跳过
     // v687.33：返航"继续日常"模式下全部跳过
     if (!_skipNpcInjection && isGameMode && !isSingleConv && (!isGaidenConv || gaidenSettings.inheritNpc)) {
@@ -1052,6 +1069,18 @@ if (char) systemParts.push(Character.formatForPrompt(char));
         const mentionedPrompt = NPC.formatMentionedForPrompt(scanText, region);
         if (mentionedPrompt) systemParts.push(mentionedPrompt);
       } catch(e) { console.warn('[Chat] 提及地区注入失败', e); }
+    }
+
+    // 4e. 住所布局（小地点命中玩家住所时，发送简化室内布局）
+    if (isGameMode) {
+      try {
+        const _sb = Conversations.getStatusBar() || {};
+        const _loc = String(_sb.location || '').trim();
+        if (_loc && typeof Phone !== 'undefined' && Phone.getCottageLayoutForLocation) {
+          const cottageLayout = await Phone.getCottageLayoutForLocation(_loc);
+          if (cottageLayout) systemParts.push(cottageLayout);
+        }
+      } catch(_) {}
     }
 
     // 5. 相关记忆（方案B：关系按NPC名直接命中，事件按地点+关键词）
