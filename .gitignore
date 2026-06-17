@@ -3,3 +3,5 @@ android/
 local.properties
 *.apk
 node_modules/
+# 邀请码发放资源, 不入库(本地保留)
+docs/邀请码-*.txt
