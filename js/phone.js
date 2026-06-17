@@ -5,9 +5,22 @@
  */
 const Phone = (() => {
   // ===== 状态 =====
-  let _isOpen = false;
-  let _currentApp = null;
-  let _hasNewNotif = false;
+let _isOpen = false;
+let _currentApp = null;
+let _hasNewNotif = false;
+
+// 工具：安全的 mask 点击关闭（解决手机键盘收起导致误关的问题）
+  function _maskCloseOnBg(mask, closeFn) {
+    let downOnMask = false;
+    let hadFocusedInput = false;
+    mask.addEventListener('pointerdown', e => {
+      downOnMask = (e.target === mask);
+      // 按下瞬间若有输入框聚焦：本次点击视为「收起键盘」，布局会回弹，不应关闭弹窗
+      const ae = document.activeElement;
+      hadFocusedInput = !!(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable));
+    });
+    mask.addEventListener('click', e => { if (downOnMask && e.target === mask && !hadFocusedInput) { closeFn ? closeFn() : mask.remove(); } });
+  }
  let _batteryTimer = null;
  let _batteryRef = null;
 
@@ -214,6 +227,22 @@ function _flushChatRoundLog() {
       }
       if (patched) Conversations.saveList().catch(() => {});
     }
+    // phoneData 防丢：如果当前数据看起来是空的（初始化态）但备份里有内容，自动恢复
+    try {
+      const isEmptyState = !conv.phoneData.album?.length && !conv.phoneData.cachedForumPosts?.length && !conv.phoneData.memos?.length && !conv.phoneData.houses?.length;
+      if (isEmptyState && convId) {
+        const backup = await DB.get('gameState', `phoneBackup_${convId}`);
+        if (backup && backup.value && typeof backup.value === 'object') {
+          const bk = backup.value;
+          if (bk.album?.length || bk.cachedForumPosts?.length || bk.memos?.length || bk.houses?.length) {
+            // 备份里有实质内容，恢复
+            conv.phoneData = bk;
+            Conversations.saveList().catch(() => {});
+            console.warn('[Phone] phoneData 疑似被重置，已从备份恢复');
+          }
+        }
+      }
+    } catch(_) {}
     return conv.phoneData;
   }
 
@@ -228,6 +257,15 @@ function _flushChatRoundLog() {
 
   async function _savePhoneData() {
     try { await Conversations.saveList(); } catch(_) {}
+    // phoneData 整体备份：防止 conversations 数据回退/重置导致全部丢失
+    try {
+      const convId = Conversations.getCurrent();
+      const conv = convId && Conversations.getList().find(c => c.id === convId);
+      const pd = conv?.phoneData;
+      if (convId && pd && (pd.album?.length || pd.cachedForumPosts?.length || pd.memos?.length || pd.houses?.length)) {
+        await DB.put('gameState', { key: `phoneBackup_${convId}`, value: pd });
+      }
+    } catch(_) {}
   }
 
   function _defaultPhoneData() {
@@ -325,7 +363,11 @@ heartsimServiceMessages: [],
       furnitureMallItems: [],// 家具商城当前展示的商品缓存 [{id, name, desc, price, tag}]
       furnitureOrders: [],   // 家具订单（走配送的）[{id, name, desc, tag, price, status, deliveryMinutes, orderGameTime, claimedToInv}]
       furnitureMallSettings: { useWv: true, usePlot: true, useCurrency: true, useLogistics: true }, // 商城设置
-  };
+  // 衣橱 App
+wardrobeOutfit: { top:[], bottom:[], onesuit:[], outer:[], shoes:[], hat:[], accessory:[] }, // 今日穿搭，每部位可多件
+    wardrobePortrait: '',   // 立绘 dataURL
+    wardrobeSuits: [],      // 已保存套装 [{id, name, outfit:{...}}]
+ };
    }
 
   
@@ -1143,7 +1185,7 @@ function _renderHomeIcon(a) {
       { id: 'feiniao', icon: 'feiniao', name: '飞鸟快递' },
     { id: 'youyu', icon: 'youyu', name: '游鱼小铺' },
       { id: 'cottage', icon: 'cottage', name: (_shopMeta?.cottage?.name || '小屋') },
-      { id: 'wardrobe', icon: 'wardrobe', name: '衣橱' },
+      { id: 'wardrobe', icon: 'wardrobe', name: (_shopMeta?.wardrobe?.name || '衣橱') },
     ];
       // 底部 dock：相机、聊天、收起手机
       const dockApps = [
@@ -1389,7 +1431,6 @@ async function openApp(appId) {
 // 未完成的APP：直接拦截，不进入APP模式
     if (appId === 'email') { UI.showToast('邮箱开发中...', 1500); return; }
     if (appId === 'radio') { UI.showToast('电台开发中...', 1500); return; }
-    if (appId === 'wardrobe') { UI.showToast('衣橱开发中...', 1500); return; }
     // 记住当前页面滚动位置，返回时恢复
   try {
     const pages = document.getElementById('phone-pages');
@@ -1424,6 +1465,7 @@ async function openApp(appId) {
  case 'ledger': _renderLedger(phoneData); break;
  case 'radio': _renderRadio(phoneData); break;
  case 'cottage': _renderCottage(phoneData); break;
+	case 'wardrobe': _renderWardrobe(phoneData); break;
  case 'feiniao': _renderFeiniao(phoneData); break;
  case 'youyu': _renderYouyu(phoneData); break;
  case 'deliveries': _renderDeliveries(phoneData); break;
@@ -1986,7 +2028,7 @@ async function _ledgerAddManual() {
 function _showOrderDetail(name, price, desc, platform) {
   const mask = document.createElement('div');
   mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;padding:20px';
-  mask.onclick = e => { if (e.target === mask) mask.remove(); };
+  _maskCloseOnBg(mask);
   mask.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text)">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
       <svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='var(--accent)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/><line x1='3' x2='21' y1='6' y2='6'/><path d='M16 10a4 4 0 0 1-8 0'/></svg>
@@ -2041,7 +2083,7 @@ async function _claimTransfer(contactId, msgId) {
   // 弹底部货币选择面板
   const mask = document.createElement('div');
   mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.4);display:flex;align-items:flex-end;justify-content:center';
-  mask.onclick = e => { if (e.target === mask) mask.remove(); };
+  _maskCloseOnBg(mask);
   const listHtml = walletInfos.map(w => `
     <div data-id="${Utils.escapeHtml(w.id)}" style="padding:12px 16px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--bg-tertiary);display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0">
@@ -2159,7 +2201,7 @@ async function _sellBuy(contactId, msgId) {
     chosen = await new Promise(resolve => {
       const mask = document.createElement('div');
       mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.4);display:flex;align-items:flex-end;justify-content:center';
-      mask.onclick = e => { if (e.target === mask) { mask.remove(); resolve(null); } };
+      _maskCloseOnBg(mask, () => { mask.remove(); resolve(null); });
       const listHtml = infos.map(w => `
         <div data-id="${Utils.escapeHtml(w.id)}" style="padding:12px 16px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--bg-tertiary);display:flex;align-items:center;gap:10px">
           <div style="flex:1;min-width:0">
@@ -2277,7 +2319,7 @@ async function _showSellDetail(contactId, msgId) {
 
   const mask = document.createElement('div');
   mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;padding:20px';
-  mask.onclick = e => { if (e.target === mask) mask.remove(); };
+  _maskCloseOnBg(mask);
   mask.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text)">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
       <svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='var(--accent)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 9l1-5h16l1 5'/><path d='M4 9v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9'/><path d='M9 13h6'/></svg>
@@ -2456,13 +2498,16 @@ function _refreshDeliveryWidget() {
     (o.deliveryUnit ? o.deliveryUnit === 'min' : (o.deliveryMinutes || 0) < 1440);
   const furnitureMin = (pd?.furnitureOrders || []).filter(_isMinFurniture);
   const furnitureDays = (pd?.furnitureOrders || []).filter(o => o && o.status === 'delivering' && !_isMinFurniture(o));
-  const shopOrder = _nearestDelivering([].concat(pd?.shopOrders || [], furnitureDays));
-  const tkOrder = _nearestDelivering([].concat(pd?.takeoutOrders || [], furnitureMin));
+  const wardrobeMin = (pd?.wardrobeOrders || []).filter(_isMinFurniture);
+  const wardrobeDays = (pd?.wardrobeOrders || []).filter(o => o && o.status === 'delivering' && !_isMinFurniture(o));
+  const shopOrder = _nearestDelivering([].concat(pd?.shopOrders || [], furnitureDays, wardrobeDays));
+  const tkOrder = _nearestDelivering([].concat(pd?.takeoutOrders || [], furnitureMin, wardrobeMin));
 
   // 订单来源描述（文字，不用标签）
   function _srcLabel(o, field) {
     if (!o) return '';
     if (o.furnitureBuy) return `家具商城·${Utils.escapeHtml(o.tag || '家具')}`;
+    if (o.wardrobeBuy) return `服装商城·${Utils.escapeHtml(o.tag || '服装')}`;
     if (o.sellBuy) return `聊天交易·${Utils.escapeHtml(o.shop || '购入')}`;
     if (o.feiniaoReceive) return `飞鸟·来自${Utils.escapeHtml(o.sender || '某人')}`;
     if (o.feiniaoShip) return `飞鸟·寄给${Utils.escapeHtml(o.target || '某人')}`;
@@ -4731,7 +4776,7 @@ async function _openAnniversaryEditor() {
   const mask = document.createElement('div');
   mask.className = 'phone-cal-modal-mask';
   mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center';
-  mask.onclick = e => { if (e.target === mask) mask.remove(); };
+  _maskCloseOnBg(mask);
   mask.innerHTML = `
     <div style="background:var(--bg);border-radius:20px 20px 0 0;width:100%;max-width:400px;padding:20px 20px 28px;max-height:80vh;overflow-y:auto">
       <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px"></div>
@@ -5463,6 +5508,7 @@ function _refreshCalBanner() {
     if (!body) return;
     document.getElementById('phone-title').textContent = (_shopMeta?.cottage?.name || '小屋');
     _applyWallpaper(pd);
+    if (await _settleFurnitureOrders(pd)) await _savePhoneData();
     if (!Array.isArray(pd.houses)) pd.houses = [];
 
     // 首次进入：如果没有任何住所且世界观配置了初始模板，自动克隆一套
@@ -5556,7 +5602,7 @@ function _refreshCalBanner() {
       </div>`;
     document.body.appendChild(mask);
     mask.querySelector('#cottage-data-close').onclick = () => document.body.removeChild(mask);
-    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
 
     // 导出
     mask.querySelector('#cottage-data-export').onclick = async () => {
@@ -5611,6 +5657,1259 @@ function _refreshCalBanner() {
       };
       input.click();
     };
+  }
+
+  // ===== 衣橱 App =====
+  const WARDROBE_PARTS = [
+    { key: 'top', name: '上装' },
+    { key: 'bottom', name: '下装' },
+    { key: 'onesuit', name: '连体' },
+    { key: 'outer', name: '外套' },
+    { key: 'shoes', name: '鞋袜' },
+    { key: 'hat', name: '帽子' },
+    { key: 'accessory', name: '饰品' },
+  ];
+  // 衣橱首页底部 tab：'dress' 着装 | 'mall' 商城
+  let _wardrobeHomeTab = 'dress';
+  // 衣橱标签 = 7 个部位名 + 未分类（未分类只用于仓库分类，不是穿衣部位）
+  const WARDROBE_TAG_KEYS = WARDROBE_PARTS.map(p => p.name).concat('未分类');
+  // 商城侧可选标签（不含"未分类"——未分类只在仓库里作为兜底/手动归类用）
+  const WARDROBE_MALL_TAG_KEYS = WARDROBE_PARTS.map(p => p.name);
+  function _wardrobeTagToPartKey(tag) {
+    const p = WARDROBE_PARTS.find(x => x.name === tag);
+    return p ? p.key : null;
+  }
+  let _wardrobeMallSelectedTags = [];  // 商城已选筛选标签
+  let _wardrobeInvSelectedTags = [];   // 仓库筛选标签
+
+  // 衣橱商城设置（默认全开）
+  function _getWardrobeMallSettings(pd) {
+    const def = { useWv: true, usePlot: true, useCurrency: true, useLogistics: true };
+    return Object.assign(def, (pd && pd.wardrobeMallSettings) || {});
+  }
+
+  // 惰性结算：把已到货的服装订单转入仓库
+  async function _settleWardrobeOrders(pd) {
+    if (!pd || !Array.isArray(pd.wardrobeOrders)) return false;
+    let changed = false;
+    pd.wardrobeInventory = pd.wardrobeInventory || [];
+    for (const o of pd.wardrobeOrders) {
+      if (!o || o.claimedToInv) continue;
+      let delivered = o.status === 'delivered';
+      if (!delivered && o.status === 'delivering' && o.deliveryMinutes) {
+        const rem = _getDeliveryRemaining(o);
+        delivered = (rem !== null && rem <= 0);
+      }
+      if (!delivered) continue;
+      o.status = 'delivered';
+      o.claimedToInv = true;
+      _addClothToInventory(pd, { name: o.name, desc: o.desc, tag: o.tag });
+      changed = true;
+    }
+    return changed;
+  }
+
+  // 加一件服装进衣橱仓库（同名 + 同标签 + 同描述则数量+1，否则新建一条）
+  function _addClothToInventory(pd, item) {
+    pd.wardrobeInventory = pd.wardrobeInventory || [];
+    const nName = String(item.name || '未命名').slice(0, 30);
+    const nDesc = String(item.desc || '').slice(0, 200);
+    const nTag = WARDROBE_TAG_KEYS.includes(item.tag) ? item.tag : '未分类';
+    const exist = pd.wardrobeInventory.find(x => x.name === nName && x.tag === nTag && (x.desc || '') === nDesc);
+    if (exist) { exist.qty = (exist.qty || 1) + 1; return exist; }
+    const inv = {
+      id: _cottageGenId('winv'),
+      name: nName,
+      desc: nDesc,
+      tag: nTag,
+      qty: 1,
+    };
+    pd.wardrobeInventory.push(inv);
+    return inv;
+  }
+
+
+  function _getOutfit(pd) {
+    const o = (pd && pd.wardrobeOutfit) || {};
+    const out = {};
+    WARDROBE_PARTS.forEach(p => { out[p.key] = Array.isArray(o[p.key]) ? o[p.key] : []; });
+    return out;
+  }
+
+  // 把衣橱当前着装同步进状态栏的「玩家衣着」字段（只发名字，不发描述，避免和换装状态脱节导致 AI 混乱）
+  async function _syncOutfitToStatusBar(pd) {
+    try {
+      if (typeof Conversations === 'undefined' || !Conversations.getStatusBar) return;
+      const sb = Conversations.getStatusBar();
+      if (!sb) return; // 未初始化状态栏（非文游/未开属性）不处理
+      const outfit = _getOutfit(pd);
+      const segs = WARDROBE_PARTS.map(p => {
+        const items = (outfit[p.key] || []).filter(it => it && it.name);
+        if (!items.length) return '';
+        return `${p.name}：${items.map(it => it.name).join(' + ')}`;
+      }).filter(Boolean);
+      sb.playerOutfit = segs.join('；');
+      await Conversations.setStatusBar(sb);
+      if (typeof StatusBar !== 'undefined' && StatusBar.refreshFromConv) StatusBar.refreshFromConv();
+    } catch(_) {}
+  }
+
+  async function _renderWardrobe(pd) {
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    document.getElementById('phone-title').textContent = (_shopMeta?.wardrobe?.name || '衣橱');
+    _applyWallpaper(pd);
+    if (await _settleWardrobeOrders(pd)) await _savePhoneData();
+
+    const outfit = _getOutfit(pd);
+    const portrait = pd.wardrobePortrait || '';
+
+    const title = '当前着装';
+
+    const portraitHtml = portrait
+      ? `<div class="wardrobe-portrait" style="background-image:url('${portrait.replace(/'/g, "\\'")}')" onclick="Phone._wardrobePickPortrait()"></div>`
+      : `<div class="wardrobe-portrait wardrobe-portrait-empty" onclick="Phone._wardrobePickPortrait()">
+           <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+           <span>添加立绘</span>
+         </div>`;
+
+    const partsHtml = WARDROBE_PARTS.map(p => {
+      const items = outfit[p.key] || [];
+      const itemsHtml = items.length
+        ? items.map((it, i) => `
+            <div class="wardrobe-item" onclick="Phone._wardrobeItemDetail('${p.key}', ${i})">
+              <span class="wardrobe-item-name">${Utils.escapeHtml(it.name || '未命名')}</span>
+              ${it.desc ? `<span class="wardrobe-item-desc">${Utils.escapeHtml(it.desc)}</span>` : ''}
+              <button class="wardrobe-item-del" onclick="event.stopPropagation();Phone._wardrobeRemoveItem('${p.key}', ${i})" title="移除">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>`).join('')
+        : `<div class="wardrobe-part-empty">未穿着</div>`;
+      return `
+        <div class="wardrobe-part">
+          <div class="wardrobe-part-head">
+            <span class="wardrobe-part-name">${p.name}</span>
+            <button class="wardrobe-part-add" onclick="Phone._wardrobeAddItem('${p.key}')">+ 添加</button>
+          </div>
+          <div class="wardrobe-part-items">${itemsHtml}</div>
+        </div>`;
+    }).join('');
+
+    // 右侧按钮
+    const hasOutfit = WARDROBE_PARTS.some(p => (outfit[p.key] || []).length > 0);
+    const suits = Array.isArray(pd.wardrobeSuits) ? pd.wardrobeSuits : [];
+
+    const dressHtml = `
+      <div class="wardrobe-shell">
+        <div class="wardrobe-top">
+          ${portraitHtml}
+          <div class="wardrobe-top-right">
+            <div class="wardrobe-card-head">
+              <div class="wardrobe-card-title">${title}</div>
+              <div class="wardrobe-card-hint">移除的服装会直接进入仓库</div>
+            </div>
+            <div class="wardrobe-top-btns">
+              ${hasOutfit ? `<button class="wardrobe-btn" onclick="Phone._wardrobeSaveSuit()">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                保存为套装
+              </button>` : ''}
+              <button class="wardrobe-btn" onclick="Phone._wardrobeOpenSuits()">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2 12 5.5 8 2l-4.38 1.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6l-1 12h14l-1-12h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23Z"/></svg>
+                套装收藏${suits.length ? ' · ' + suits.length : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="wardrobe-parts">${partsHtml}</div>
+      </div>`;
+
+    const mallHtml = `
+      <div class="cottage-mall">
+        <div class="cottage-mall-card" onclick="Phone._wardrobeOpenMall()">
+          <div class="cottage-mall-card-icon">${_cottageRoomSvg('cart')}</div>
+          <div class="cottage-mall-card-text">
+            <div class="cottage-mall-card-name">服装商城</div>
+            <div class="cottage-mall-card-desc">选购上装、下装、外套与各类配饰</div>
+          </div>
+        </div>
+        <div class="cottage-mall-card" onclick="Phone._wardrobeOpenInventory()">
+          <div class="cottage-mall-card-icon">${_cottageRoomSvg('box')}</div>
+          <div class="cottage-mall-card-text">
+            <div class="cottage-mall-card-name">衣橱</div>
+            <div class="cottage-mall-card-desc">已购入但还没穿上的服装</div>
+          </div>
+        </div>
+      </div>`;
+
+    body.innerHTML = `
+      <div class="phone-cottage-shell" style="display:flex;flex-direction:column;height:100%">
+        <div style="flex:1;min-height:0;overflow-y:auto">${_wardrobeHomeTab === 'mall' ? mallHtml : dressHtml}</div>
+        <div class="phone-tabbar">
+          <div class="phone-tab ${_wardrobeHomeTab === 'dress' ? 'active' : ''}" onclick="Phone._switchWardrobeHomeTab('dress')">着装</div>
+          <div class="phone-tab ${_wardrobeHomeTab === 'mall' ? 'active' : ''}" onclick="Phone._switchWardrobeHomeTab('mall')">商城</div>
+        </div>
+      </div>`;
+
+    // 右上角：着装 tab 显示 AI 生成套装按钮
+    const hr = document.getElementById('phone-header-right');
+    if (hr) {
+      hr.innerHTML = _wardrobeHomeTab === 'dress'
+        ? `<button class="cottage-ai-btn" onclick="Phone._wardrobeAiGenSuits()" title="AI 一键生成套装">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>
+          </button>`
+        : '';
+    }
+  }
+
+  // 切换衣橱首页底部 tab
+  async function _switchWardrobeHomeTab(tab) {
+    if (_wardrobeHomeTab === tab) return;
+    _wardrobeHomeTab = tab;
+    const pd = await _getPhoneData();
+    _renderWardrobe(pd);
+  }
+
+  // 服装商城首页
+  async function _wardrobeOpenMall() {
+    _pushNav(() => _renderWardrobeMall());
+    _renderWardrobeMall();
+  }
+
+  async function _renderWardrobeMall() {
+    const pd = await _getPhoneData();
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    document.getElementById('phone-title').textContent = '服装商城';
+    _applyWallpaper(pd);
+    if (await _settleWardrobeOrders(pd)) await _savePhoneData();
+
+    const items = pd.wardrobeMallItems || [];
+    const orders = (pd.wardrobeOrders || []).filter(o => o && !o.claimedToInv);
+
+    const tagChips = WARDROBE_MALL_TAG_KEYS.map(t => `
+      <div class="cottage-mall-chip ${_wardrobeMallSelectedTags.includes(t) ? 'active' : ''}" onclick="Phone._wardrobeMallToggleTag('${t}')">${t}</div>`).join('');
+
+    const itemsHtml = items.length
+      ? items.map((it, idx) => `
+        <div class="phone-map-result-card">
+          <div class="phone-map-result-head">
+            <div class="phone-map-result-name">${Utils.escapeHtml(it.name || '未命名')}</div>
+          </div>
+          <div class="phone-map-result-address">${_uiIcon('pin', 12)}<span>${Utils.escapeHtml(it.tag || '其它')}</span></div>
+          ${it.desc ? `<div class="phone-map-result-desc">${Utils.escapeHtml(it.desc)}</div>` : ''}
+          <div class="phone-map-result-foot">
+            <div class="phone-map-result-foot-left">
+              <span class="phone-map-distance-pill">¥ ${Utils.escapeHtml(String(it.price || '--'))}</span>
+            </div>
+            <div class="phone-map-result-actions">
+              <button type="button" onclick="Phone._wardrobeMallBuy(${idx})" class="phone-map-action-btn">${_uiIcon('box', 12)} 购买</button>
+            </div>
+          </div>
+        </div>`).join('')
+      : `<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">选好分类，点搜索看看有什么新衣服</p>`;
+
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;height:100%">
+        <div style="flex:1;overflow-y:auto;padding:12px">
+          <div class="phone-map-searchbar" style="margin-bottom:10px">
+            <div class="phone-map-search-input-wrap">
+              ${_uiIcon('search', 12)}
+              <input id="wardrobe-mall-search" type="text" placeholder="搜索服装（如：米白针织衫、阔腿裤…）" value="${Utils.escapeHtml(pd.wardrobeMallQuery || '')}">
+            </div>
+            <button onclick="Phone._wardrobeMallRefresh()" class="phone-map-search-btn">搜索</button>
+          </div>
+          <div class="cottage-mall-chips">${tagChips}</div>
+          ${orders.length ? `<div class="cottage-mall-orders-bar" onclick="Phone._wardrobeShowOrders()">${_uiIcon('box', 13)} ${orders.length} 件服装配送中，点击查看订单</div>` : ''}
+          <div id="wardrobe-mall-items">${itemsHtml}</div>
+        </div>
+      </div>`;
+
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = `<button class="phone-nav-btn" title="商城设置" onclick="Phone._wardrobeMallSettings()">${_uiIcon('settings', 18)}</button>`;
+  }
+
+  // 商城设置弹窗：世界观资料 / 主线剧情 / 货币 / 物流 开关
+  async function _wardrobeMallSettings() {
+    const pd = await _getPhoneData();
+    const s = _getWardrobeMallSettings(pd);
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    const row = (key, label, desc) => `
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;cursor:pointer">
+        <span style="position:relative;display:inline-flex;margin-top:1px;flex-shrink:0">
+          <input type="checkbox" class="circle-check" data-key="${key}" ${s[key] ? 'checked' : ''}>
+          <span class="circle-check-ui"></span>
+        </span>
+        <div>
+          <div style="font-size:14px;color:var(--text)">${label}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${desc}</div>
+        </div>
+      </label>`;
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:8px">商城设置</div>
+        <div id="wardrobe-mall-set-list">
+          ${row('useWv', '发送世界观基础资料', '刷新商品时参考世界观（基础设定+地区+节日），让服装贴合世界背景')}
+          ${row('usePlot', '发送近期主线剧情', '把最近约 10 轮主线对话作为参考，让服装贴合当前剧情')}
+          ${row('useCurrency', '使用货币', '购买时可从绑定货币里扣款，关闭则只能直接拿（不扣钱）')}
+          ${row('useLogistics', '启用物流系统', '购买时可选走订单配送，关闭则一律立即送达入库')}
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button id="wardrobe-mall-set-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="wardrobe-mall-set-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#wardrobe-mall-set-cancel').onclick = () => document.body.removeChild(mask);
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
+    mask.querySelector('#wardrobe-mall-set-save').onclick = async () => {
+      const next = {};
+      mask.querySelectorAll('#wardrobe-mall-set-list input[type=checkbox]').forEach(cb => {
+        next[cb.dataset.key] = cb.checked;
+      });
+      const pd2 = await _getPhoneData();
+      pd2.wardrobeMallSettings = Object.assign(_getWardrobeMallSettings(pd2), next);
+      await _savePhoneData();
+      document.body.removeChild(mask);
+      UI.showToast('已保存', 1200);
+    };
+  }
+
+  function _wardrobeMallToggleTag(tag) {
+    const i = _wardrobeMallSelectedTags.indexOf(tag);
+    if (i >= 0) _wardrobeMallSelectedTags.splice(i, 1);
+    else _wardrobeMallSelectedTags.push(tag);
+    _renderWardrobeMall();
+  }
+
+  // 刷新商品：按选中标签 + 关键词调 AI 生成
+  async function _wardrobeMallRefresh() {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const input = document.getElementById('wardrobe-mall-search');
+    const query = (input ? input.value : '').trim();
+    pd.wardrobeMallQuery = query;
+
+    const mainConfig = await API.getConfig();
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+    const tags = _wardrobeMallSelectedTags.length ? _wardrobeMallSelectedTags : WARDROBE_MALL_TAG_KEYS;
+    const tagHint = _wardrobeMallSelectedTags.length
+      ? `只生成这些部位的服装：${tags.join('、')}。`
+      : `部位可在以下范围内自由分布：${tags.join('、')}。`;
+    const queryHint = query ? `用户的搜索关键词：「${query}」，生成的服装要尽量贴合这个需求。` : '';
+
+    // 按设置注入世界观资料 / 近期主线剧情
+    const mset = _getWardrobeMallSettings(pd);
+    let contextBlock = '';
+    if (mset.useWv) {
+      const wv = await _buildWorldviewBlock();
+      if (wv) contextBlock += `\n以下是这个世界的设定资料，请让服装的名称、材质与风格贴合这个世界观（不要照搬，融入即可）：\n${wv}\n`;
+    }
+    if (mset.usePlot) {
+      const plot = _buildRecentPlotBlock();
+      if (plot) contextBlock += `\n【最近主线剧情（供参考，让服装贴合当前情境，但不要出现人名/剧情）】\n${plot}\n`;
+    }
+
+    const container = document.getElementById('wardrobe-mall-items');
+    if (container) container.innerHTML = _renderShopLoadingHtml();
+    UI.showToast('正在刷新服装…', 1200);
+
+    const systemPrompt = `你是一个服装网购平台的推荐引擎。请生成 8~12 个服装相关商品推荐。${tagHint}${queryHint}
+${contextBlock}
+每个商品包含：
+- name：商品名（简短，如"米白色高领针织衫"）
+- tag：部位分类，必须是以下之一：${WARDROBE_MALL_TAG_KEYS.join('、')}
+- desc：一句话商品描述（写材质、颜色、款式、剪裁等本身信息，不要剧情化）
+- price：纯数字字符串，价格合理（外套偏贵些、配饰偏便宜，约 20~9999），不带货币符号
+
+严格要求：商品信息中立客观，不出现任何人名、剧情、推荐理由。
+
+返回纯 JSON 数组，不要任何额外文字：
+[{"name":"商品名","tag":"部位","desc":"商品描述","price":"纯数字"}]`;
+
+    try {
+      const results = await _phoneJsonArrayWithRetry({
+        label: '服装商城刷新', url, key, model,
+        temperature: 0.85, max_tokens: 5000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: '请生成 8~12 条服装商品推荐。' }
+        ]
+      });
+      const norm = (results || []).map(it => ({
+        id: _cottageGenId('wmall'),
+        name: String(it.name || '未命名').slice(0, 30),
+        tag: WARDROBE_TAG_KEYS.includes(it.tag) ? it.tag : '上装',
+        desc: String(it.desc || '').slice(0, 200),
+        price: String(it.price || '--').replace(/[^\d.]/g, '') || '--',
+      })).slice(0, 12);
+      pd.wardrobeMallItems = norm;
+      await _savePhoneData();
+      _log(`在服装商城刷新了推荐（${norm.length}条）`);
+      _renderWardrobeMall();
+      UI.showToast('已刷新', 1200);
+    } catch (e) {
+      UI.showToast(`刷新失败：${e.message || '未知错误'}`, 2500);
+      _renderWardrobeMall();
+    }
+  }
+
+  // 购买：付款（启用货币才选）+ 到货方式（启用物流才选）
+  async function _wardrobeMallBuy(idx) {
+    const pd = await _getPhoneData();
+    const item = (pd.wardrobeMallItems || [])[idx];
+    if (!item) { UI.showToast('商品不存在', 1500); return; }
+    const priceNum = parseFloat(item.price);
+    const hasPrice = Number.isFinite(priceNum) && priceNum > 0;
+    const mset = _getWardrobeMallSettings(pd);
+    const currencies = _getWalletCurrencyInfos();
+    const showCur = mset.useCurrency && currencies.length > 0 && hasPrice;
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    const curSection = showCur ? `
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:6px">支付货币</label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+          ${currencies.map((c, i) => `
+          <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+            <input type="radio" name="wardrobe-buy-cur" value="${Utils.escapeHtml(c.id)}" ${i === 0 ? 'checked' : ''} style="accent-color:var(--accent)">
+            <span style="flex:1;font-size:13px;color:var(--text)">${Utils.escapeHtml(c.name)}</span>
+            <span style="font-size:12px;color:var(--text-secondary)">余额 ${Utils.escapeHtml(String(c.balance))}</span>
+          </label>`).join('')}
+        </div>` : '';
+    const shipSection = mset.useLogistics ? `
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:6px">到货方式</label>
+        <div id="wardrobe-buy-ship" style="display:flex;gap:8px;margin-bottom:18px">
+          <div class="cottage-buy-ship-opt active" data-ship="instant" style="flex:1">立即送达</div>
+          <div class="cottage-buy-ship-opt" data-ship="order" style="flex:1">走订单配送</div>
+        </div>` : '';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px">购买「${Utils.escapeHtml(item.name)}」</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">价格 ¥ ${Utils.escapeHtml(String(item.price || '--'))}</div>
+${curSection}
+${shipSection}
+        <div style="display:flex;gap:10px">
+          <button id="wardrobe-buy-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="wardrobe-buy-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${showCur ? '确认支付' : '确认购买'}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+
+    let _chosenShip = 'instant';
+    mask.querySelectorAll('.cottage-buy-ship-opt').forEach(opt => {
+      opt.onclick = () => {
+        mask.querySelectorAll('.cottage-buy-ship-opt').forEach(n => n.classList.remove('active'));
+        opt.classList.add('active');
+        _chosenShip = opt.dataset.ship;
+      };
+    });
+
+    mask.querySelector('#wardrobe-buy-cancel').onclick = () => document.body.removeChild(mask);
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
+
+    mask.querySelector('#wardrobe-buy-go').onclick = async () => {
+      if (showCur) {
+        const sel = mask.querySelector('input[name="wardrobe-buy-cur"]:checked');
+        const curId = sel?.value || currencies[0].id;
+        const info = currencies.find(c => c.id === curId);
+        if (!info) { UI.showToast('货币不存在', 1500); return; }
+        try {
+          const sb = Conversations.getStatusBar() || {};
+          sb.customAttrs = sb.customAttrs || {};
+          sb.customAttrs.global = sb.customAttrs.global || {};
+          const balance = Number(sb.customAttrs.global[curId]) || 0;
+          if (balance < priceNum) { UI.showToast(`${info.name}余额不足（需 ${priceNum}，当前 ${balance}）`, 2600); return; }
+          sb.customAttrs.global[curId] = balance - priceNum;
+          await Conversations.setStatusBar(sb);
+          if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
+        } catch (e) { UI.showToast('扣款失败', 1500); return; }
+        await _addLedgerEntry({
+          currencyId: curId,
+          amount: -Math.abs(priceNum),
+          category: '购物',
+          note: `购买服装「${item.name}」`,
+          platform: '服装商城',
+          source: 'wardrobe_buy',
+          editable: true,
+        });
+      }
+
+      const pd2 = await _getPhoneData();
+      document.body.removeChild(mask);
+      if (_chosenShip === 'instant') {
+        _addClothToInventory(pd2, item);
+        await _savePhoneData();
+        _log(`在服装商城购买了「${item.name}」，已直接入库${showCur ? `（前端已自动扣除 ${priceNum}，AI无需再处理此扣款）` : ''}`);
+        UI.showToast('已送达，入库成功', 1600);
+      } else {
+        const cMeta = _shopMeta?.wardrobe || {};
+        const dMin = Math.max(1, parseInt(cMeta.deliveryMin) || 2);
+        const dMax = Math.max(dMin, parseInt(cMeta.deliveryMax) || 5);
+        const dUnit = cMeta.deliveryUnit || 'day';
+        const raw = dMin + Math.floor(Math.random() * (dMax - dMin + 1));
+        const minutes = dUnit === 'day' ? raw * 1440 : raw;
+        pd2.wardrobeOrders = pd2.wardrobeOrders || [];
+        pd2.wardrobeOrders.push({
+          id: _cottageGenId('worder'),
+          name: item.name, desc: item.desc, tag: item.tag, price: item.price,
+          status: 'delivering',
+          deliveryMinutes: minutes,
+          deliveryUnit: dUnit,
+          orderGameTime: _getGameTime() || '',
+          time: _getGameTime() || '',
+          wardrobeBuy: true,
+          claimedToInv: false,
+        });
+        pd2.wardrobeOrders = pd2.wardrobeOrders.slice(-50);
+        await _savePhoneData();
+        const unitLabel = dUnit === 'day' ? '天' : '分钟';
+        _log(`在服装商城下单「${item.name}」，约 ${raw} ${unitLabel}后送达${showCur ? `（前端已自动扣除 ${priceNum}，AI无需再处理此扣款）` : ''}`);
+        UI.showToast(`已下单，约 ${raw} ${unitLabel}后自动入库`, 2200);
+      }
+      if (_currentApp === 'wardrobe') _renderWardrobeMall();
+    };
+  }
+
+  // 衣橱仓库首页
+  async function _wardrobeOpenInventory() {
+    _pushNav(() => _renderWardrobeInventory());
+    _renderWardrobeInventory();
+  }
+
+  async function _renderWardrobeInventory() {
+    const pd = await _getPhoneData();
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    document.getElementById('phone-title').textContent = '衣橱仓库';
+    _applyWallpaper(pd);
+    if (await _settleWardrobeOrders(pd)) await _savePhoneData();
+
+    const inv = pd.wardrobeInventory || [];
+    const q = (pd.wardrobeInvQuery || '').trim();
+    let list = inv.slice();
+    if (_wardrobeInvSelectedTags.length) list = list.filter(it => _wardrobeInvSelectedTags.includes(it.tag));
+    if (q) list = list.filter(it => (it.name || '').includes(q) || (it.desc || '').includes(q));
+
+    const tagChips = WARDROBE_TAG_KEYS.map(t => `
+      <div class="cottage-mall-chip ${_wardrobeInvSelectedTags.includes(t) ? 'active' : ''}" onclick="Phone._wardrobeInvToggleTag('${t}')">${t}</div>`).join('');
+
+    const orders = (pd.wardrobeOrders || []).filter(o => o && !o.claimedToInv);
+
+    const listHtml = list.length
+      ? list.map(it => `
+        <div class="phone-map-result-card">
+          <div class="phone-map-result-head">
+            <div class="phone-map-result-name">${Utils.escapeHtml(it.name || '未命名')}${(it.qty || 1) > 1 ? ` ×${it.qty}` : ''}</div>
+          </div>
+          <div class="phone-map-result-address">${_uiIcon('pin', 12)}<span>${Utils.escapeHtml(it.tag || '其它')}</span></div>
+          ${it.desc ? `<div class="phone-map-result-desc">${Utils.escapeHtml(it.desc)}</div>` : ''}
+          <div class="phone-map-result-foot">
+            <div class="phone-map-result-foot-left"></div>
+            <div class="phone-map-result-actions" style="display:flex;gap:6px">
+            <button type="button" onclick="Phone._wardrobeInvEditTag('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('pin', 12)} 分类</button>
+            <button type="button" onclick="Phone._wardrobeInvDelete('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('trash', 12)} 删除</button>
+          </div>
+          </div>
+        </div>`).join('')
+      : `<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">${inv.length ? '没有符合筛选的服装' : '仓库还是空的，去服装商城逛逛吧'}</p>`;
+
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;height:100%">
+        <div style="flex:1;overflow-y:auto;padding:12px">
+          <div class="phone-map-searchbar" style="margin-bottom:10px">
+            <div class="phone-map-search-input-wrap">
+              ${_uiIcon('search', 12)}
+              <input id="wardrobe-inv-search" type="text" placeholder="搜索仓库里的服装" value="${Utils.escapeHtml(q)}">
+            </div>
+            <button onclick="Phone._wardrobeInvSearch()" class="phone-map-search-btn">搜索</button>
+          </div>
+          <div class="cottage-mall-chips">${tagChips}</div>
+          ${orders.length ? `<div class="cottage-mall-orders-bar" onclick="Phone._wardrobeShowOrders()">${_uiIcon('box', 13)} ${orders.length} 件服装配送中，点击查看订单</div>` : ''}
+          <div id="wardrobe-inv-items">${listHtml}</div>
+        </div>
+      </div>`;
+  }
+
+  function _wardrobeInvToggleTag(tag) {
+    const i = _wardrobeInvSelectedTags.indexOf(tag);
+    if (i >= 0) _wardrobeInvSelectedTags.splice(i, 1);
+    else _wardrobeInvSelectedTags.push(tag);
+    _renderWardrobeInventory();
+  }
+
+  async function _wardrobeInvSearch() {
+    const input = document.getElementById('wardrobe-inv-search');
+    const pd = await _getPhoneData();
+    pd.wardrobeInvQuery = (input ? input.value : '').trim();
+    await _savePhoneData();
+    _renderWardrobeInventory();
+  }
+
+  async function _wardrobeInvDelete(invId) {
+    const pd = await _getPhoneData();
+    const it = (pd.wardrobeInventory || []).find(x => x.id === invId);
+    if (!it) return;
+    const ok = await UI.showConfirm('删除服装', `确定从仓库删除「${it.name || '该服装'}」吗？`);
+    if (!ok) return;
+    if ((it.qty || 1) > 1) it.qty -= 1;
+    else pd.wardrobeInventory = (pd.wardrobeInventory || []).filter(x => x.id !== invId);
+    await _savePhoneData();
+    _renderWardrobeInventory();
+  }
+
+  // 改服装分类：弹出标签选择，选中后更新该条 tag
+  async function _wardrobeInvEditTag(invId) {
+    const pd = await _getPhoneData();
+    const it = (pd.wardrobeInventory || []).find(x => x.id === invId);
+    if (!it) return;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+    const chips = WARDROBE_TAG_KEYS.map(t => `<div class="cottage-mall-chip ${it.tag === t ? 'active' : ''}" data-tag="${t}">${t}</div>`).join('');
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">修改分类</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px">「${Utils.escapeHtml(it.name || '该服装')}」当前：${Utils.escapeHtml(it.tag || '未分类')}</div>
+        <div class="cottage-mall-chips" style="margin-bottom:4px">${chips}</div>
+      </div>`;
+    document.body.appendChild(mask);
+    _maskCloseOnBg(mask);
+    mask.querySelectorAll('.cottage-mall-chip').forEach(c => {
+      c.onclick = async () => {
+        it.tag = c.dataset.tag;
+        await _savePhoneData();
+        mask.remove();
+        UI.showToast(`已归类到「${it.tag}」`, 1200);
+        _renderWardrobeInventory();
+      };
+    });
+  }
+
+  // 穿上：从仓库取一件服装填入对应部位的当前着装（库存数量-1）
+  async function _wardrobeInvWear(invId) {
+    const pd = await _getPhoneData();
+    const it = (pd.wardrobeInventory || []).find(x => x.id === invId);
+    if (!it) { UI.showToast('服装不存在', 1500); return; }
+    const partKey = _wardrobeTagToPartKey(it.tag) || 'top';
+    if (!pd.wardrobeOutfit) pd.wardrobeOutfit = {};
+    if (!Array.isArray(pd.wardrobeOutfit[partKey])) pd.wardrobeOutfit[partKey] = [];
+    pd.wardrobeOutfit[partKey].push({ name: it.name, desc: it.desc || '' });
+    // 库存数量-1
+    if ((it.qty || 1) > 1) it.qty -= 1;
+    else pd.wardrobeInventory = (pd.wardrobeInventory || []).filter(x => x.id !== invId);
+    await _savePhoneData();
+    await _syncOutfitToStatusBar(pd);
+    _log(`从衣橱仓库取出「${it.name}」穿上`);
+    UI.showToast(`已穿上「${it.name}」`, 1400);
+    _renderWardrobeInventory();
+  }
+
+  // 服装订单弹窗：显示配送中/已送达的服装订单
+  async function _wardrobeShowOrders() {
+    const pd = await _getPhoneData();
+    await _settleWardrobeOrders(pd);
+    await _savePhoneData();
+    const orders = (pd.wardrobeOrders || []).slice().reverse();
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    const rows = orders.length ? orders.map(o => {
+      let status;
+      if (o.claimedToInv || o.status === 'delivered') {
+        status = '<span style="font-size:11px;color:#22c55e;font-weight:600">已送达 · 已入库 ✓</span>';
+      } else {
+        const rem = _getDeliveryRemaining(o);
+        status = (rem !== null && rem > 0)
+          ? `<span style="font-size:11px;color:var(--accent);font-weight:600">配送中 · ${_formatDeliveryRemaining(rem)}后到达</span>`
+          : '<span style="font-size:11px;color:#22c55e;font-weight:600">已送达 ✓</span>';
+      }
+      return `
+        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+          <div style="font-size:14px;font-weight:600;margin-bottom:3px">${Utils.escapeHtml(o.name || '服装')}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:5px">${Utils.escapeHtml(o.tag || '')} · ¥ ${Utils.escapeHtml(String(o.price || '--'))}</div>
+          ${status}
+        </div>`;
+    }).join('') : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;padding:16px 0">暂无服装订单</p>';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:80vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">服装订单</div>
+        ${rows}
+        <button id="wardrobe-orders-close" style="width:100%;margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">关闭</button>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#wardrobe-orders-close').onclick = () => document.body.removeChild(mask);
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
+  }
+
+  // 从仓库里选（弹层版，用于添加着装弹窗内）：标签筛选 + 搜索 + 选中回调
+  // 不预筛标签，整个仓库都可选——穿到哪个部位由调用方传入的 partKey 决定（裤子也能当上衣穿）
+  async function _wardrobePickFromInv(partKey, onPick) {
+    const pd = await _getPhoneData();
+    await _settleWardrobeOrders(pd);
+    const inv = pd.wardrobeInventory || [];
+    if (!inv.length) { UI.showToast('仓库还是空的，先去服装商城买点衣服', 2200); return; }
+
+    let selTags = [];
+    let kw = '';
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:18px;max-width:360px;width:100%;color:var(--text);max-height:84vh;display:flex;flex-direction:column">
+        <div style="font-size:15px;font-weight:600;margin-bottom:12px">从仓库里选</div>
+        <div class="phone-map-searchbar" style="margin-bottom:10px">
+          <div class="phone-map-search-input-wrap">${_uiIcon('search', 12)}<input id="wardrobe-pick-search" type="text" placeholder="搜索仓库服装"></div>
+        </div>
+        <div id="wardrobe-pick-chips" class="cottage-mall-chips"></div>
+        <div id="wardrobe-pick-list" style="flex:1;overflow-y:auto;margin-top:8px"></div>
+        <button id="wardrobe-pick-close" style="width:100%;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+      </div>`;
+    document.body.appendChild(mask);
+
+    const chipsEl = mask.querySelector('#wardrobe-pick-chips');
+    const listEl = mask.querySelector('#wardrobe-pick-list');
+    const searchEl = mask.querySelector('#wardrobe-pick-search');
+
+    const renderChips = () => {
+      chipsEl.innerHTML = WARDROBE_TAG_KEYS.map(t => `<div class="cottage-mall-chip ${selTags.includes(t) ? 'active' : ''}" data-tag="${t}">${t}</div>`).join('');
+      chipsEl.querySelectorAll('.cottage-mall-chip').forEach(c => {
+        c.onclick = () => {
+          const t = c.dataset.tag;
+          const i = selTags.indexOf(t);
+          if (i >= 0) selTags.splice(i, 1); else selTags.push(t);
+          renderChips(); renderList();
+        };
+      });
+    };
+    const renderList = () => {
+      let list = inv.slice();
+      if (selTags.length) list = list.filter(it => selTags.includes(it.tag));
+      if (kw) list = list.filter(it => (it.name || '').includes(kw) || (it.desc || '').includes(kw));
+      listEl.innerHTML = list.length ? list.map(it => `
+        <div class="cottage-pick-item" data-id="${Utils.escapeHtml(it.id)}" style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer">
+          <div style="font-size:14px;font-weight:600;margin-bottom:3px">${Utils.escapeHtml(it.name || '未命名')}${(it.qty || 1) > 1 ? ` ×${it.qty}` : ''}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:3px">${Utils.escapeHtml(it.tag || '')}</div>
+          ${it.desc ? `<div style="font-size:12px;color:var(--text-secondary)">${Utils.escapeHtml(it.desc)}</div>` : ''}
+        </div>`).join('') : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;padding:16px 0">没有符合条件的服装</p>';
+      listEl.querySelectorAll('.cottage-pick-item').forEach(el => {
+        el.onclick = () => {
+          const it = inv.find(x => x.id === el.dataset.id);
+          document.body.removeChild(mask);
+          if (it && typeof onPick === 'function') onPick(it);
+        };
+      });
+    };
+    if (searchEl) searchEl.oninput = () => { kw = searchEl.value.trim(); renderList(); };
+    mask.querySelector('#wardrobe-pick-close').onclick = () => document.body.removeChild(mask);
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
+    renderChips();
+    renderList();
+  }
+
+  async function _wardrobeAddItem(partKey) {
+    const part = WARDROBE_PARTS.find(p => p.key === partKey);
+    if (!part) return;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">添加${part.name}</div>
+        <button id="wardrobe-add-from-inv" type="button" style="width:100%;padding:10px;margin-bottom:16px;border:1px dashed var(--accent);border-radius:10px;background:none;color:var(--accent);font-size:13px;font-weight:650;cursor:pointer">从仓库里选</button>
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">名称</label>
+        <input id="wardrobe-add-name" type="text" maxlength="30" placeholder="例如：米白色针织衫" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:12px">
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">描述（可选）</label>
+        <textarea id="wardrobe-add-desc" rows="2" placeholder="材质、颜色、款式细节…" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:16px"></textarea>
+        <div style="display:flex;gap:10px">
+          <button id="wardrobe-add-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="wardrobe-add-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">添加</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#wardrobe-add-cancel').onclick = () => mask.remove();
+    _maskCloseOnBg(mask);
+
+    // 从仓库里选：选中后消费库存（数量-1）并直接穿上对应部位
+    mask.querySelector('#wardrobe-add-from-inv').onclick = () => {
+      _wardrobePickFromInv(partKey, async (picked) => {
+        const pd = await _getPhoneData();
+        const it = (pd.wardrobeInventory || []).find(x => x.id === picked.id);
+        if (!it) { UI.showToast('服装不存在', 1500); return; }
+        const pk = partKey; // 穿哪个部位由用户点的部位决定，不受衣服标签限制（裤子也能当上衣穿）
+        if (!pd.wardrobeOutfit) pd.wardrobeOutfit = {};
+        if (!Array.isArray(pd.wardrobeOutfit[pk])) pd.wardrobeOutfit[pk] = [];
+        pd.wardrobeOutfit[pk].push({ name: it.name, desc: it.desc || '' });
+        if ((it.qty || 1) > 1) it.qty -= 1;
+        else pd.wardrobeInventory = (pd.wardrobeInventory || []).filter(x => x.id !== picked.id);
+        await _savePhoneData();
+        await _syncOutfitToStatusBar(pd);
+        _log(`从衣橱仓库取出「${it.name}」穿上`);
+        UI.showToast(`已穿上「${it.name}」`, 1400);
+        mask.remove();
+        _renderWardrobe(pd);
+      });
+    };
+
+    mask.querySelector('#wardrobe-add-save').onclick = async () => {
+      const name = (mask.querySelector('#wardrobe-add-name').value || '').trim();
+      if (!name) { UI.showToast('请填写名称', 1500); return; }
+      const desc = (mask.querySelector('#wardrobe-add-desc').value || '').trim();
+      const pd = await _getPhoneData();
+      if (!pd.wardrobeOutfit) pd.wardrobeOutfit = {};
+      if (!Array.isArray(pd.wardrobeOutfit[partKey])) pd.wardrobeOutfit[partKey] = [];
+      pd.wardrobeOutfit[partKey].push({ name: name.slice(0, 30), desc: desc.slice(0, 200) });
+      await _savePhoneData();
+      await _syncOutfitToStatusBar(pd);
+      mask.remove();
+      _renderWardrobe(pd);
+    };
+  }
+
+  async function _wardrobeRemoveItem(partKey, idx) {
+    const pd = await _getPhoneData();
+    const arr = pd.wardrobeOutfit && pd.wardrobeOutfit[partKey];
+    if (!Array.isArray(arr)) return;
+    const it = arr[idx];
+    // 脱下：把这件衣服放回仓库（消费制闭环，避免凭空消失）
+    if (it && it.name) {
+      const part = WARDROBE_PARTS.find(p => p.key === partKey);
+      _addClothToInventory(pd, { name: it.name, desc: it.desc || '', tag: part ? part.name : '上装' });
+    }
+    arr.splice(idx, 1);
+    await _savePhoneData();
+    await _syncOutfitToStatusBar(pd);
+    if (it && it.name) UI.showToast(`已脱下「${it.name}」，放回仓库`, 1400);
+    _renderWardrobe(pd);
+  }
+
+  // 查看着装单品详情：完整名称 + 描述
+  async function _wardrobeItemDetail(partKey, idx) {
+    const pd = await _getPhoneData();
+    const arr = (pd.wardrobeOutfit && pd.wardrobeOutfit[partKey]) || [];
+    const it = arr[idx];
+    if (!it) return;
+    const part = WARDROBE_PARTS.find(p => p.key === partKey);
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text);max-height:80vh;overflow-y:auto">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">${part ? Utils.escapeHtml(part.name) : '单品'}</div>
+        <div style="font-size:17px;font-weight:600;margin-bottom:14px;word-break:break-word">${Utils.escapeHtml(it.name || '未命名')}</div>
+        <div style="font-size:13px;line-height:1.7;color:${it.desc ? 'var(--text)' : 'var(--text-secondary)'};white-space:pre-wrap;word-break:break-word">${it.desc ? Utils.escapeHtml(it.desc) : '（没有填写描述）'}</div>
+        <button id="wardrobe-item-detail-close" style="width:100%;margin-top:18px;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">关闭</button>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#wardrobe-item-detail-close').onclick = () => mask.remove();
+    _maskCloseOnBg(mask);
+  }
+
+  async function _wardrobePickPortrait() {
+    const pd = await _getPhoneData();
+    const hasPortrait = !!pd.wardrobePortrait;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:280px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">立绘</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <button id="wardrobe-portrait-upload" style="padding:11px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">上传图片（本地 / URL）</button>
+          <button id="wardrobe-portrait-ai" style="padding:11px;border:1px dashed var(--accent);border-radius:10px;background:none;color:var(--accent);font-size:14px;cursor:pointer">AI 生成</button>
+          ${hasPortrait ? `<button id="wardrobe-portrait-clear" style="padding:11px;border:1px solid var(--border);border-radius:10px;background:none;color:#e0464b;font-size:14px;cursor:pointer">清除立绘</button>` : ''}
+          <button id="wardrobe-portrait-cancel" style="padding:9px;border:none;border-radius:10px;background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">取消</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    _maskCloseOnBg(mask);
+    mask.querySelector('#wardrobe-portrait-cancel').onclick = () => mask.remove();
+
+    mask.querySelector('#wardrobe-portrait-upload').onclick = async () => {
+      mask.remove();
+      try {
+        const dataUrl = await Utils.promptImageInput({ maxSize: 900, quality: 0.8 });
+        if (!dataUrl) return;
+        if (typeof dataUrl === 'string' && dataUrl.length > 2600000) {
+          UI.showToast('图片过大，请选择更小的图片', 2500); return;
+        }
+        const pd2 = await _getPhoneData();
+        pd2.wardrobePortrait = dataUrl;
+        await _savePhoneData();
+        _renderWardrobe(pd2);
+        UI.showToast('立绘已更新', 1400);
+      } catch (e) { console.warn('[Wardrobe] portrait pick failed', e); UI.showToast('图片设置失败', 1500); }
+    };
+
+    mask.querySelector('#wardrobe-portrait-ai').onclick = () => {
+      mask.remove();
+      _wardrobeAiGenPortrait();
+    };
+
+    if (hasPortrait) {
+      mask.querySelector('#wardrobe-portrait-clear').onclick = async () => {
+        const pd2 = await _getPhoneData();
+        pd2.wardrobePortrait = '';
+        await _savePhoneData();
+        mask.remove();
+        _renderWardrobe(pd2);
+        UI.showToast('已清除立绘', 1400);
+      };
+    }
+  }
+
+  // AI 生成立绘：发送当前着装 + 自定义提示词（可选附面具外观参考）→ 生图 → 进相册 → 落库立绘
+  async function _wardrobeAiGenPortrait() {
+    const pd = await _getPhoneData();
+    const outfit = _getOutfit(pd);
+    // 拼当前着装文字
+    const partLines = WARDROBE_PARTS.map(p => {
+      const items = (outfit[p.key] || []).filter(it => it && it.name);
+      if (!items.length) return '';
+      const names = items.map(it => `${it.name}${it.desc ? '（' + it.desc + '）' : ''}`).join('、');
+      return `${p.name}：${names}`;
+    }).filter(Boolean);
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">AI 生成立绘</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">当前着装</label>
+        <div style="font-size:13px;line-height:1.6;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;color:${partLines.length ? 'var(--text)' : 'var(--text-secondary)'}">${partLines.length ? partLines.map(l => Utils.escapeHtml(l)).join('<br>') : '当前没有着装，将仅按提示词生成'}</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">补充提示词（可选）</label>
+        <textarea id="wardrobe-img-req" rows="3" placeholder="例如：全身立绘、半写实风格、纯色背景、站姿" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:14px"></textarea>
+
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:18px;cursor:pointer;user-select:none">
+          <span style="position:relative;display:inline-flex;flex-shrink:0">
+            <input id="wardrobe-img-usemask" type="checkbox" class="circle-check">
+            <span class="circle-check-ui"></span>
+          </span>
+          发送面具外观作为参考
+        </label>
+
+        <div id="wardrobe-img-result" style="display:none;margin-bottom:14px">
+          <div id="wardrobe-img-preview" style="width:100%;height:200px;border-radius:10px;background-size:cover;background-position:center;border:1px solid var(--border);margin-bottom:8px"></div>
+          <button id="wardrobe-img-download" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:13px;cursor:pointer">下载图片到本地</button>
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button id="wardrobe-img-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="wardrobe-img-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#wardrobe-img-cancel').onclick = () => document.body.removeChild(mask);
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
+
+    let _lastImageId = null;
+    mask.querySelector('#wardrobe-img-download').onclick = () => {
+      if (_lastImageId && typeof Chat?.downloadImage === 'function') Chat.downloadImage(_lastImageId);
+      else UI.showToast('暂无可下载的图片', 1500);
+    };
+
+    mask.querySelector('#wardrobe-img-go').onclick = async () => {
+      const req = (mask.querySelector('#wardrobe-img-req').value || '').trim();
+      const useMask = mask.querySelector('#wardrobe-img-usemask').checked;
+
+      // 取面具外观参考（仅 background，不含名字/异能/物品）
+      let maskRef = '';
+      if (useMask) {
+        try { const ch = await Character.get(); maskRef = (ch && ch.background) ? String(ch.background).trim() : ''; } catch(_) {}
+      }
+
+      // 拼生图 prompt
+      let basePrompt = '一张人物全身立绘。';
+      if (maskRef) basePrompt += `人物外观参考：${maskRef}。`;
+      if (partLines.length) basePrompt += `当前穿着 —— ${partLines.join('；')}。`;
+      basePrompt += '单人、站姿、完整展示服装细节、背景简洁。';
+      const drawPrompt = req ? `${basePrompt}\n\n额外要求：${req}` : basePrompt;
+
+      const goBtn = mask.querySelector('#wardrobe-img-go');
+      const oldText = goBtn.textContent;
+      goBtn.textContent = '生成中…';
+      goBtn.disabled = true;
+      try {
+        const images = await API.generateImage(drawPrompt, { n: 1, size: '768x1024' });
+        if (!images || !images.length) throw new Error('没有返回图片');
+        const dataUrl = images[0];
+
+        // 存 drawnImages（进收藏图库）
+        const imageId = 'img_' + Utils.uuid();
+        await DB.put('drawnImages', { id: imageId, dataUrl, prompt: drawPrompt, createdAt: new Date().toISOString() });
+
+        // 进相册
+        const pd2 = await _getPhoneData();
+        if (pd2) {
+          if (!Array.isArray(pd2.album)) pd2.album = [];
+          pd2.album.push({
+            id: 'photo_' + Utils.uuid().slice(0, 8),
+            mode: 'ai_image',
+            text: '立绘',
+            imageId,
+            location: '',
+            time: '',
+            createdAt: new Date().toISOString()
+          });
+          // 同时落库为当前立绘
+          pd2.wardrobePortrait = dataUrl;
+          await _savePhoneData();
+          _renderWardrobe(pd2);
+        }
+
+        _lastImageId = imageId;
+        const prev = mask.querySelector('#wardrobe-img-preview');
+        prev.style.backgroundImage = `url('${dataUrl.replace(/'/g, "\\'")}')`;
+        mask.querySelector('#wardrobe-img-result').style.display = '';
+        UI.showToast('已生成并设为立绘', 1800);
+      } catch (e) {
+        console.error('[衣橱AI生图]', e);
+        UI.showToast(`生成失败：${e.message || '未知错误'}`, 2600);
+      } finally {
+        goBtn.textContent = oldText;
+        goBtn.disabled = false;
+      }
+    };
+  }
+
+  // AI 一键生成套装：填套装数量 + 自由要求（可选附面具外观参考）→ 生成 N 套 → 落库套装收藏
+  async function _wardrobeAiGenSuits() {
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">AI 一键生成套装</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">生成套数</label>
+        <input id="wardrobe-ais-count" type="number" min="1" max="6" value="3" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">风格要求（可选）</label>
+        <textarea id="wardrobe-ais-req" rows="3" placeholder="例如：日常通勤、约会甜美、运动休闲、复古港风…" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:14px"></textarea>
+
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:12px;cursor:pointer;user-select:none">
+          <span style="position:relative;display:inline-flex;flex-shrink:0">
+            <input id="wardrobe-ais-wv" type="checkbox" class="circle-check" checked>
+            <span class="circle-check-ui"></span>
+          </span>
+          发送世界观资料作为参考
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:18px;cursor:pointer;user-select:none">
+          <span style="position:relative;display:inline-flex;flex-shrink:0">
+            <input id="wardrobe-ais-usemask" type="checkbox" class="circle-check">
+            <span class="circle-check-ui"></span>
+          </span>
+          发送面具信息作为参考
+        </label>
+
+        <div style="display:flex;gap:10px">
+          <button id="wardrobe-ais-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="wardrobe-ais-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#wardrobe-ais-cancel').onclick = () => document.body.removeChild(mask);
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
+
+    mask.querySelector('#wardrobe-ais-go').onclick = async () => {
+      const count = Math.max(1, Math.min(6, parseInt(mask.querySelector('#wardrobe-ais-count').value) || 3));
+      const req = (mask.querySelector('#wardrobe-ais-req').value || '').trim();
+      const useWv = mask.querySelector('#wardrobe-ais-wv').checked;
+      const useMask = mask.querySelector('#wardrobe-ais-usemask').checked;
+
+      const mainConfig = await API.getConfig();
+      const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const key = funcConfig.apiKey || mainConfig.apiKey;
+      const model = funcConfig.model || mainConfig.model;
+      if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+      // 上下文：世界观资料 / 面具外观
+      let contextBlock = '';
+      if (useWv) {
+        const wv = await _buildWorldviewBlock();
+        if (wv) contextBlock += `\n以下是这个世界的设定资料，请让服装的名称、材质与风格贴合这个世界观（不要照搬，融入即可）：\n${wv}\n`;
+      }
+      if (useMask) {
+        try {
+          const ch = await Character.get();
+          const bg = (ch && ch.background) ? String(ch.background).trim() : '';
+          if (bg) contextBlock += `\n以下是角色的外观/人设参考，请让套装贴合这个人物气质（不要照搬文字，只作风格参考）：\n${bg}\n`;
+        } catch(_) {}
+      }
+      const reqHint = req ? `用户的风格要求：「${req}」，生成的套装要尽量贴合。` : '';
+      const partList = WARDROBE_PARTS.map(p => `${p.key}（${p.name}）`).join('、');
+
+      const goBtn = mask.querySelector('#wardrobe-ais-go');
+      const oldText = goBtn.textContent;
+      goBtn.textContent = '生成中…';
+      goBtn.disabled = true;
+
+      const systemPrompt = `你是一个服装搭配师。请生成 ${count} 套完整的穿搭套装。${reqHint}
+${contextBlock}
+每套套装包含：
+- name：套装名（简短有辨识度，如"周末慵懒风""通勤干练装"）
+- 七个部位字段，键名固定为：${partList}。每个部位是一个数组，元素为 { "name": "服装名", "desc": "材质/颜色/款式细节，一句话" }。
+  - 不一定每个部位都要有衣服，按搭配合理性来（比如穿连体裙就不需要上装下装；不一定有帽子）。
+  - 同一部位可以多件（叠穿），但通常一两件即可。
+
+严格要求：服装信息中立客观，写款式本身，不出现人名、剧情。
+
+返回纯 JSON 数组，每个元素是一套套装，格式：
+[{"name":"套装名","top":[{"name":"","desc":""}],"bottom":[],"onesuit":[],"outer":[],"shoes":[],"hat":[],"accessory":[]}]`;
+
+      try {
+        const results = await _phoneJsonArrayWithRetry({
+          label: '衣橱AI生成套装', url, key, model,
+          temperature: 0.9, max_tokens: 6000,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `请生成 ${count} 套穿搭套装。` }
+          ]
+        });
+        const norm = (results || []).slice(0, count).map((s, i) => {
+          const outfit = {};
+          WARDROBE_PARTS.forEach(p => {
+            const arr = Array.isArray(s[p.key]) ? s[p.key] : [];
+            outfit[p.key] = arr.filter(it => it && it.name).map(it => ({
+              name: String(it.name).slice(0, 30),
+              desc: String(it.desc || '').slice(0, 200),
+            }));
+          });
+          return {
+            id: Date.now().toString(36) + '_' + i,
+            name: String(s.name || `套装${i + 1}`).slice(0, 20),
+            outfit,
+          };
+        }).filter(s => WARDROBE_PARTS.some(p => (s.outfit[p.key] || []).length));
+
+        if (!norm.length) throw new Error('AI 没有返回有效套装');
+
+        const pd2 = await _getPhoneData();
+        if (!Array.isArray(pd2.wardrobeSuits)) pd2.wardrobeSuits = [];
+        pd2.wardrobeSuits.push(...norm);
+        await _savePhoneData();
+        _log(`在衣橱用 AI 生成了 ${norm.length} 套套装`);
+        document.body.removeChild(mask);
+        UI.showToast(`已生成 ${norm.length} 套，存入套装收藏`, 2000);
+        _renderWardrobe(pd2);
+      } catch (e) {
+        console.error('[衣橱AI生成套装]', e);
+        UI.showToast(`生成失败：${e.message || '未知错误'}`, 2600);
+        goBtn.textContent = oldText;
+        goBtn.disabled = false;
+      }
+    };
+  }
+
+  async function _wardrobeSaveSuit() {
+    const pd = await _getPhoneData();
+    const outfit = _getOutfit(pd);
+    const allItems = WARDROBE_PARTS.flatMap(p => (outfit[p.key] || []));
+    if (!allItems.length) { UI.showToast('当前没有穿着，无法保存', 1500); return; }
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:300px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">保存为套装</div>
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">套装名称</label>
+        <input id="wardrobe-suit-name" type="text" maxlength="20" placeholder="例如：日常通勤" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:16px">
+        <div style="display:flex;gap:10px">
+          <button id="wardrobe-suit-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="wardrobe-suit-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#wardrobe-suit-cancel').onclick = () => mask.remove();
+    _maskCloseOnBg(mask);
+    mask.querySelector('#wardrobe-suit-save').onclick = async () => {
+      const name = (mask.querySelector('#wardrobe-suit-name').value || '').trim();
+      if (!name) { UI.showToast('请填写名称', 1500); return; }
+      if (!Array.isArray(pd.wardrobeSuits)) pd.wardrobeSuits = [];
+      pd.wardrobeSuits.push({ id: Date.now().toString(36), name: name.slice(0, 20), outfit: JSON.parse(JSON.stringify(outfit)) });
+      await _savePhoneData();
+      mask.remove();
+      UI.showToast('套装已保存', 1400);
+      _renderWardrobe(pd);
+    };
+  }
+
+  async function _wardrobeOpenSuits() {
+    const pd = await _getPhoneData();
+    const suits = Array.isArray(pd.wardrobeSuits) ? pd.wardrobeSuits : [];
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    const listHtml = suits.length
+      ? suits.map((s, i) => {
+        const preview = WARDROBE_PARTS.flatMap(p => (s.outfit[p.key] || []).map(it => it.name)).filter(Boolean).join('、') || '空套装';
+        return `
+          <div class="wardrobe-suit-row" data-idx="${i}">
+            <div class="wardrobe-suit-info" onclick="document.querySelector('[data-suit-apply=\\'${i}\\']').click()">
+              <div class="wardrobe-suit-name">${Utils.escapeHtml(s.name)}</div>
+              <div class="wardrobe-suit-preview">${Utils.escapeHtml(preview.length > 40 ? preview.slice(0, 40) + '…' : preview)}</div>
+            </div>
+            <button data-suit-apply="${i}" style="display:none"></button>
+            <button class="wardrobe-suit-del" data-suit-del="${i}" title="删除">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>`;
+      }).join('')
+      : `<div style="text-align:center;color:var(--text-secondary);font-size:13px;padding:20px 0">还没有保存过套装</div>`;
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text);max-height:70vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">套装收藏</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);margin-bottom:14px;cursor:pointer;user-select:none">
+          <span style="position:relative;display:inline-flex;flex-shrink:0">
+            <input id="wardrobe-suit-recycle" type="checkbox" class="circle-check">
+            <span class="circle-check-ui"></span>
+          </span>
+          切换前把当前着装移入仓库
+        </label>
+        <div class="wardrobe-suit-list">${listHtml}</div>
+        <button style="width:100%;margin-top:14px;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer" onclick="this.closest('[style*=fixed]').remove()">关闭</button>
+      </div>`;
+    document.body.appendChild(mask);
+    _maskCloseOnBg(mask);
+    // 应用套装
+    mask.querySelectorAll('[data-suit-apply]').forEach(btn => {
+      btn.onclick = async () => {
+        const idx = parseInt(btn.dataset.suitApply);
+        const suit = suits[idx];
+        if (!suit) return;
+        const recycle = !!(mask.querySelector('#wardrobe-suit-recycle') && mask.querySelector('#wardrobe-suit-recycle').checked);
+        let recycled = 0;
+        if (recycle) {
+          // 把当前着装的每件衣物移入仓库
+          const cur = _getOutfit(pd);
+          WARDROBE_PARTS.forEach(p => {
+            (cur[p.key] || []).forEach(it => {
+              if (it && it.name) { _addClothToInventory(pd, { name: it.name, desc: it.desc, tag: p.name }); recycled++; }
+            });
+          });
+        }
+        pd.wardrobeOutfit = JSON.parse(JSON.stringify(suit.outfit));
+        await _savePhoneData();
+        await _syncOutfitToStatusBar(pd);
+        mask.remove();
+        UI.showToast(`已换上「${suit.name}」${recycled ? `，原着装 ${recycled} 件已入仓库` : ''}`, 1800);
+        _renderWardrobe(pd);
+      };
+    });
+    // 删除套装
+    mask.querySelectorAll('[data-suit-del]').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.suitDel);
+        const suit = suits[idx];
+        if (!suit) return;
+        if (!await UI.showConfirm('删除套装', `确定删除「${suit.name}」？`)) return;
+        pd.wardrobeSuits.splice(idx, 1);
+        await _savePhoneData();
+        mask.remove();
+        UI.showToast('已删除', 1400);
+        _renderWardrobe(pd);
+      };
+    });
   }
 
   // 对外接口：根据小地点匹配住所，命中则返回简化布局字符串，不命中返回空
@@ -5668,8 +6967,11 @@ function _refreshCalBanner() {
     { key: '灯具', cat: 'deco' },
     { key: '布艺', cat: 'deco' },
     { key: '软装摆件', cat: 'deco' },
+    { key: '未分类', cat: 'deco' },
   ];
   const FURNITURE_TAG_KEYS = FURNITURE_TAGS.map(t => t.key);
+  // 商城侧可选标签（不含"未分类"）
+  const FURNITURE_MALL_TAG_KEYS = FURNITURE_TAGS.filter(t => t.key !== '未分类').map(t => t.key);
   function _furnitureTagToCat(tag) {
     const t = FURNITURE_TAGS.find(x => x.key === tag);
     return t ? t.cat : 'deco';
@@ -5755,7 +7057,7 @@ function _refreshCalBanner() {
     pd.furnitureInventory = pd.furnitureInventory || [];
     const nName = String(item.name || '未命名').slice(0, 30);
     const nDesc = String(item.desc || '').slice(0, 200);
-    const nTag = FURNITURE_TAG_KEYS.includes(item.tag) ? item.tag : '软装摆件';
+    const nTag = FURNITURE_TAG_KEYS.includes(item.tag) ? item.tag : '未分类';
     const exist = pd.furnitureInventory.find(x => x.name === nName && x.tag === nTag && (x.desc || '') === nDesc);
     if (exist) { exist.qty = (exist.qty || 1) + 1; return exist; }
     const inv = {
@@ -5767,6 +7069,18 @@ function _refreshCalBanner() {
     };
     pd.furnitureInventory.push(inv);
     return inv;
+  }
+
+  // 把一批房间物品回收进家具仓库（用于 AI 重新生成前保留旧布置）
+  function _recycleItemsToInventory(pd, items) {
+    if (!Array.isArray(items)) return 0;
+    let n = 0;
+    for (const it of items) {
+      if (!it || !it.name) continue;
+      _addFurnitureToInventory(pd, { name: it.name, desc: it.desc, tag: it.category });
+      n++;
+    }
+    return n;
   }
 
   // 家具商城首页
@@ -5787,7 +7101,7 @@ function _refreshCalBanner() {
     const items = pd.furnitureMallItems || [];
     const orders = (pd.furnitureOrders || []).filter(o => o && !o.claimedToInv);
 
-    const tagChips = FURNITURE_TAG_KEYS.map(t => `
+    const tagChips = FURNITURE_MALL_TAG_KEYS.map(t => `
       <div class="cottage-mall-chip ${_mallSelectedTags.includes(t) ? 'active' : ''}" onclick="Phone._cottageMallToggleTag('${t}')">${t}</div>`).join('');
 
     const itemsHtml = items.length
@@ -5862,7 +7176,7 @@ function _refreshCalBanner() {
       </div>`;
     document.body.appendChild(mask);
     mask.querySelector('#cottage-mall-set-cancel').onclick = () => document.body.removeChild(mask);
-    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
     mask.querySelector('#cottage-mall-set-save').onclick = async () => {
       const next = {};
       mask.querySelectorAll('#cottage-mall-set-list input[type=checkbox]').forEach(cb => {
@@ -5898,7 +7212,7 @@ function _refreshCalBanner() {
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
 
-    const tags = _mallSelectedTags.length ? _mallSelectedTags : FURNITURE_TAG_KEYS;
+    const tags = _mallSelectedTags.length ? _mallSelectedTags : FURNITURE_MALL_TAG_KEYS;
     const tagHint = _mallSelectedTags.length
       ? `只生成这些分类的商品：${tags.join('、')}。`
       : `分类可在以下范围内自由分布：${tags.join('、')}。`;
@@ -5924,7 +7238,7 @@ function _refreshCalBanner() {
 ${contextBlock}
 每个商品包含：
 - name：商品名（简短，如"北欧布艺三人沙发"）
-- tag：分类，必须是以下之一：${FURNITURE_TAG_KEYS.join('、')}
+- tag：分类，必须是以下之一：${FURNITURE_MALL_TAG_KEYS.join('、')}
 - desc：一句话商品描述（写材质、颜色、风格、尺寸等本身信息，不要剧情化）
 - price：纯数字字符串，价格合理（家具偏贵些、装饰偏便宜，约 20~9999），不带货币符号
 
@@ -6013,7 +7327,7 @@ ${shipSection}
     });
 
     mask.querySelector('#cottage-buy-cancel').onclick = () => document.body.removeChild(mask);
-    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
 
     mask.querySelector('#cottage-buy-go').onclick = async () => {
       // 扣款（仅在显示货币选择时）
@@ -6048,7 +7362,7 @@ ${shipSection}
       if (_chosenShip === 'instant') {
         _addFurnitureToInventory(pd2, item);
         await _savePhoneData();
-        _log(`在家具商城购买了「${item.name}」，已直接入库`);
+        _log(`在家具商城购买了「${item.name}」，已直接入库${showCur ? `（前端已自动扣除 ${priceNum}，AI无需再处理此扣款）` : ''}`);
         UI.showToast('已送达，入库成功', 1600);
       } else {
         // 走订单：从世界观配置读取配送时间
@@ -6074,7 +7388,7 @@ ${shipSection}
         pd2.furnitureOrders = pd2.furnitureOrders.slice(-50);
         await _savePhoneData();
         const unitLabel = dUnit === 'day' ? '天' : '分钟';
-        _log(`在家具商城下单「${item.name}」，约 ${raw} ${unitLabel}后送达`);
+        _log(`在家具商城下单「${item.name}」，约 ${raw} ${unitLabel}后送达${showCur ? `（前端已自动扣除 ${priceNum}，AI无需再处理此扣款）` : ''}`);
         UI.showToast(`已下单，约 ${raw} ${unitLabel}后自动入库`, 2200);
       }
       if (_currentApp === 'cottage') _renderCottageMall();
@@ -6111,7 +7425,8 @@ ${shipSection}
       ? list.map(it => {
         const action = _invPickMode
           ? `<button type="button" onclick="Phone._cottageInvPick('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('check', 12)} 选这个</button>`
-          : `<button type="button" onclick="Phone._cottageInvDelete('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('trash', 12)} 删除</button>`;
+          : `<button type="button" onclick="Phone._cottageInvEditTag('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('pin', 12)} 分类</button>
+             <button type="button" onclick="Phone._cottageInvDelete('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('trash', 12)} 删除</button>`;
         return `
         <div class="phone-map-result-card">
           <div class="phone-map-result-head">
@@ -6171,6 +7486,33 @@ ${shipSection}
     _renderCottageInventory();
   }
 
+  // 改家具分类：弹出标签选择，选中后更新该条 tag
+  async function _cottageInvEditTag(invId) {
+    const pd = await _getPhoneData();
+    const it = (pd.furnitureInventory || []).find(x => x.id === invId);
+    if (!it) return;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+    const chips = FURNITURE_TAG_KEYS.map(t => `<div class="cottage-mall-chip ${it.tag === t ? 'active' : ''}" data-tag="${t}">${t}</div>`).join('');
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">修改分类</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px">「${Utils.escapeHtml(it.name || '该物品')}」当前：${Utils.escapeHtml(it.tag || '未分类')}</div>
+        <div class="cottage-mall-chips" style="margin-bottom:4px">${chips}</div>
+      </div>`;
+    document.body.appendChild(mask);
+    _maskCloseOnBg(mask);
+    mask.querySelectorAll('.cottage-mall-chip').forEach(c => {
+      c.onclick = async () => {
+        it.tag = c.dataset.tag;
+        await _savePhoneData();
+        mask.remove();
+        UI.showToast(`已归类到「${it.tag}」`, 1200);
+        _renderCottageInventory();
+      };
+    });
+  }
+
   // 从仓库选物：回调把物品填回当前编辑的房间物品
   async function _cottageInvPick(invId) {
     const pd = await _getPhoneData();
@@ -6215,7 +7557,7 @@ ${shipSection}
       </div>`;
     document.body.appendChild(mask);
     mask.querySelector('#cottage-orders-close').onclick = () => document.body.removeChild(mask);
-    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
   }
 
   // 从仓库里选（弹层版，用于房间物品弹窗内）：标签筛选 + 搜索 + 选中回调
@@ -6276,7 +7618,7 @@ ${shipSection}
     };
     if (searchEl) searchEl.oninput = () => { kw = searchEl.value.trim(); renderList(); };
     mask.querySelector('#cottage-pick-close').onclick = () => document.body.removeChild(mask);
-    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
     renderChips();
     renderList();
   }
@@ -6450,7 +7792,7 @@ ${shipSection}
     });
 
     mask.querySelector('#cottage-ai-cancel').onclick = () => document.body.removeChild(mask);
-    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
 
     // 生成：二次确认（会覆盖已有内容）后调 AI
     mask.querySelector('#cottage-ai-go').onclick = async () => {
@@ -6464,8 +7806,8 @@ ${shipSection}
         rooms = (mask.querySelector('#cottage-ai-rooms').value || '').trim();
       }
       const warn = mode === 'house'
-        ? '将用 AI 重新生成整栋住所的楼层、房间和所有布置，当前已填写的内容会全部丢失。确定继续吗？'
-        : `将用 AI 重新生成「${_cottageFloorLabel((await _getPhoneData()).houses.find(h => h.id === _cottageCurHouseId) || {}, _cottageCurFloor)}」的所有房间和布置，本层已填写的内容会全部丢失。确定继续吗？`;
+        ? '将用 AI 重新生成整栋住所的楼层、房间和所有布置。原有房间里的物品会自动回收进家具仓库，楼层和房间结构会被新生成的覆盖。确定继续吗？'
+        : `将用 AI 重新生成「${_cottageFloorLabel((await _getPhoneData()).houses.find(h => h.id === _cottageCurHouseId) || {}, _cottageCurFloor)}」的所有房间和布置。本层房间里的物品会自动回收进家具仓库，房间结构会被新生成的覆盖。确定继续吗？`;
       const ok = await UI.showConfirm('AI 一键生成', warn);
       if (!ok) return;
       const useWv = !!(mask.querySelector('#cottage-ai-wv') && mask.querySelector('#cottage-ai-wv').checked);
@@ -6735,6 +8077,8 @@ category 只能是 decor/furniture/deco 三者之一。`;
       if (!itemsArr.length) { UI.showToast('AI 没有返回物品', 2000); return; }
       const room2 = (house2.rooms || []).find(r => r.id === _cottageCurRoomId);
       if (!room2) { UI.showToast('房间不存在', 1500); return; }
+      // 旧物品回收进仓库后再覆盖
+      _recycleItemsToInventory(pd2, room2.items);
       room2.items = mkItems(itemsArr);
       await _savePhoneData();
       UI.showToast('房间布置完成', 1800);
@@ -6745,6 +8089,8 @@ category 只能是 decor/furniture/deco 三者之一。`;
     if (isHouse) {
       const floorsArr = Array.isArray(parsed.floors) ? parsed.floors : [];
       if (!floorsArr.length) { UI.showToast('AI 没有返回楼层', 2000); return; }
+      // 全屋旧物品回收进仓库后再覆盖
+      (house2.rooms || []).forEach(r => _recycleItemsToInventory(pd2, r.items));
       const newFloors = [];
       const newRooms = [];
       floorsArr.forEach((fl, idx) => {
@@ -6770,7 +8116,8 @@ category 只能是 decor/furniture/deco 三者之一。`;
     } else {
       const roomsArr = Array.isArray(parsed.rooms) ? parsed.rooms : [];
       if (!roomsArr.length) { UI.showToast('AI 没有返回房间', 2000); return; }
-      // 删掉本层旧房间，写入新房间
+      // 删掉本层旧房间，写入新房间（旧物品先回收进仓库）
+      (house2.rooms || []).filter(r => (r.floor || 1) === _cottageCurFloor).forEach(r => _recycleItemsToInventory(pd2, r.items));
       house2.rooms = (house2.rooms || []).filter(r => (r.floor || 1) !== _cottageCurFloor);
       roomsArr.forEach(r => {
         house2.rooms.push({
@@ -6986,7 +8333,7 @@ category 只能是 decor/furniture/deco 三者之一。`;
     document.body.appendChild(mask);
 
     mask.querySelector('#cottage-air-cancel').onclick = () => document.body.removeChild(mask);
-    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
 
     mask.querySelector('#cottage-air-go').onclick = async () => {
       const req = (mask.querySelector('#cottage-air-req').value || '').trim();
@@ -6994,7 +8341,7 @@ category 只能是 decor/furniture/deco 三者之一。`;
       const furniture = (mask.querySelector('#cottage-air-furniture').value || '').trim();
       const deco = (mask.querySelector('#cottage-air-deco').value || '').trim();
       const useWv = !!(mask.querySelector('#cottage-air-wv') && mask.querySelector('#cottage-air-wv').checked);
-      const ok = await UI.showConfirm('AI 一键布置', '将用 AI 重新布置本房间的所有物品，当前房间里已填写的装修、家具、装饰都会全部丢失。确定继续吗？');
+      const ok = await UI.showConfirm('AI 一键布置', '将用 AI 重新布置本房间的所有物品。当前房间里已有的装修、家具、装饰会自动回收进家具仓库，再由新生成的覆盖。确定继续吗？');
       if (!ok) return;
       document.body.removeChild(mask);
       await _cottageAiGenerate('room', { req, useWv, catCounts: { decor, furniture, deco } });
@@ -7032,7 +8379,7 @@ category 只能是 decor/furniture/deco 三者之一。`;
     document.body.appendChild(mask);
 
     mask.querySelector('#cottage-room-cancel').onclick = () => document.body.removeChild(mask);
-    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
 
     mask.querySelector('#cottage-room-save').onclick = async () => {
       const name = mask.querySelector('#cottage-room-name').value.trim();
@@ -7101,17 +8448,21 @@ category 只能是 decor/furniture/deco 三者之一。`;
           <button id="cottage-item-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
           <button id="cottage-item-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${isEdit ? '保存' : '添加'}</button>
         </div>
-        ${isEdit ? `<button id="cottage-item-delete" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:10px;background:none;color:#e0464b;font-size:13px;cursor:pointer">删除</button>` : ''}
+        ${isEdit ? `<button id="cottage-item-delete" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:10px;background:none;color:#e0464b;font-size:13px;cursor:pointer">移除物品</button>` : ''}
       </div>`;
     document.body.appendChild(mask);
 
-    mask.querySelector('#cottage-item-cancel').onclick = () => document.body.removeChild(mask);
-    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    // 本次表单是否从仓库选了物品（记录被选库存条目，保存时消费 -1）
+    let _pickedInv = null;
 
-    // 从仓库里选：弹出仓库选择层，选中后填回名称/描述输入框
+    mask.querySelector('#cottage-item-cancel').onclick = () => document.body.removeChild(mask);
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
+
+    // 从仓库里选：弹出仓库选择层，选中后填回名称/描述输入框，并记录来源库存
     const _fromInvBtn = mask.querySelector('#cottage-item-from-inv');
     if (_fromInvBtn) _fromInvBtn.onclick = () => {
       _cottagePickFromInv((it) => {
+        _pickedInv = it;
         const nameEl = mask.querySelector('#cottage-item-name');
         const descEl = mask.querySelector('#cottage-item-desc');
         if (nameEl) nameEl.value = (it.name || '').slice(0, 20);
@@ -7129,6 +8480,23 @@ category 只能是 decor/furniture/deco 三者之一。`;
       const room = house && (house.rooms || []).find(r => r.id === _cottageCurRoomId);
       if (!room) { UI.showToast('房间不存在', 1500); return; }
       if (!Array.isArray(room.items)) room.items = [];
+
+      // 仅当本次「从仓库里选」时才动库存：
+      //  - 编辑模式：先把编辑前的旧物品退回仓库（数量+1），再消费新选中的库存
+      //  - 新建模式：消费新选中的库存
+      if (_pickedInv) {
+        // 校验库存仍然存在且有量
+        const invItem = (pd.furnitureInventory || []).find(x => x.id === _pickedInv.id);
+        if (!invItem || (invItem.qty || 1) < 1) { UI.showToast('该物品库存不足', 1800); return; }
+        if (isEdit) {
+          // 旧物品退回仓库
+          _addFurnitureToInventory(pd, { name: item.name, desc: item.desc, tag: item.category });
+        }
+        // 消费新选中库存
+        if ((invItem.qty || 1) > 1) invItem.qty -= 1;
+        else pd.furnitureInventory = (pd.furnitureInventory || []).filter(x => x.id !== invItem.id);
+      }
+
       if (isEdit) {
         const target = room.items.find(it => it.id === item.id);
         if (target) { target.name = name; target.desc = desc; target.position = position; }
@@ -7142,13 +8510,47 @@ category 只能是 decor/furniture/deco 三者之一。`;
 
     if (isEdit) {
       mask.querySelector('#cottage-item-delete').onclick = async () => {
-        const pd = await _getPhoneData();
-        const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
-        const room = house && (house.rooms || []).find(r => r.id === _cottageCurRoomId);
-        if (room) room.items = (room.items || []).filter(it => it.id !== item.id);
-        await _savePhoneData();
-        document.body.removeChild(mask);
-        _renderCottageRoom(_cottageCurRoomId);
+        // 弹出选择：放回仓库 or 永久删除
+        const actionMask = document.createElement('div');
+        actionMask.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+        actionMask.innerHTML = `
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:280px;width:100%;color:var(--text)">
+            <div style="font-size:15px;font-weight:600;margin-bottom:6px">移除「${Utils.escapeHtml(item.name)}」</div>
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">选择处理方式</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <button id="cottage-remove-recycle" style="padding:11px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">放回仓库</button>
+              <button id="cottage-remove-permanent" style="padding:11px;border:none;border-radius:10px;background:none;color:#e0464b;font-size:14px;cursor:pointer">永久删除</button>
+              <button id="cottage-remove-cancel" style="padding:9px;border:none;border-radius:10px;background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">取消</button>
+            </div>
+          </div>`;
+        document.body.appendChild(actionMask);
+        _maskCloseOnBg(actionMask);
+        actionMask.querySelector('#cottage-remove-cancel').onclick = () => actionMask.remove();
+        actionMask.querySelector('#cottage-remove-recycle').onclick = async () => {
+          const pd = await _getPhoneData();
+          const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+          const room = house && (house.rooms || []).find(r => r.id === _cottageCurRoomId);
+          if (room) room.items = (room.items || []).filter(it => it.id !== item.id);
+          if (!Array.isArray(pd.furnitureInventory)) pd.furnitureInventory = [];
+          const existing = pd.furnitureInventory.find(x => x.name === item.name && x.desc === item.desc);
+          if (existing) { existing.qty = (existing.qty || 1) + 1; }
+          else { pd.furnitureInventory.push({ id: _cottageGenId('inv'), name: item.name, desc: item.desc || '', tag: item.category || 'furniture', qty: 1 }); }
+          await _savePhoneData();
+          actionMask.remove();
+          document.body.removeChild(mask);
+          UI.showToast(`「${item.name}」已放回仓库`, 1500);
+          _renderCottageRoom(_cottageCurRoomId);
+        };
+        actionMask.querySelector('#cottage-remove-permanent').onclick = async () => {
+          const pd = await _getPhoneData();
+          const house = (pd.houses || []).find(h => h.id === _cottageCurHouseId);
+          const room = house && (house.rooms || []).find(r => r.id === _cottageCurRoomId);
+          if (room) room.items = (room.items || []).filter(it => it.id !== item.id);
+          await _savePhoneData();
+          actionMask.remove();
+          document.body.removeChild(mask);
+          _renderCottageRoom(_cottageCurRoomId);
+        };
       };
     }
   }
@@ -7166,12 +8568,7 @@ category 只能是 decor/furniture/deco 三者之一。`;
           <div style="font-size:15px;font-weight:600;margin-bottom:16px">编辑住所</div>
 
           <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">小屋图片</label>
-          <div id="cottage-h-img-preview" style="width:100%;aspect-ratio:16/9;border-radius:12px;border:1px solid var(--border);background:var(--bg-tertiary) center/cover no-repeat;${house.image ? `background-image:url('${house.image.replace(/'/g, "\\'")}')` : ''};display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:12px;margin-bottom:8px">${house.image ? '' : '暂无图片'}</div>
-          <div style="display:flex;gap:8px;margin-bottom:14px">
-            <button id="cottage-h-img-pick" type="button" style="flex:1;padding:8px;font-size:12px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);cursor:pointer">本地 / URL</button>
-            <button id="cottage-h-img-ai" type="button" style="flex:1;padding:8px;font-size:12px;border:1px dashed var(--accent);border-radius:8px;background:none;color:var(--accent);cursor:pointer">AI 生成</button>
-            <button id="cottage-h-img-clear" type="button" style="flex:0 0 auto;padding:8px 12px;font-size:12px;border:1px solid var(--border);border-radius:8px;background:none;color:#e0464b;cursor:pointer">清除</button>
-          </div>
+          <div id="cottage-h-img-preview" style="width:100%;aspect-ratio:16/9;border-radius:12px;border:1px solid var(--border);background:var(--bg-tertiary) center/cover no-repeat;${house.image ? `background-image:url('${house.image.replace(/'/g, "\\'")}')` : ''};display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:12px;margin-bottom:14px;cursor:pointer">${house.image ? '' : '点击设置图片'}</div>
 
           <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">住所名称</label>
           <input id="cottage-h-name" type="text" maxlength="20" value="${Utils.escapeHtml(house.name || '')}" placeholder="例如：星河公寓 3 号" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
@@ -7285,31 +8682,53 @@ category 只能是 decor/furniture/deco 三者之一。`;
       };
 
       mask.querySelector('#cottage-h-cancel').onclick = () => document.body.removeChild(mask);
-      mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+      _maskCloseOnBg(mask, () => document.body.removeChild(mask));
 
-      // 上传图片：本地 / URL（复用通用图片输入组件）
-      mask.querySelector('#cottage-h-img-pick').onclick = async () => {
-        try {
-          const dataUrl = await Utils.promptImageInput({ maxSize: 1280, quality: 0.75 });
-          if (!dataUrl) return;
-          if (typeof dataUrl === 'string' && dataUrl.length > 2600000) {
-            UI.showToast('图片过大，请选择更小的图片', 2500); return;
-          }
-          _pendingImg = dataUrl;
-          _refreshImgPreview();
-        } catch (e) { console.warn('[Cottage] image pick failed', e); UI.showToast('图片设置失败', 1500); }
-      };
+      // 点击图片框：弹出动作菜单（上传 / AI 生成 / 清除）
+      _imgPreview.onclick = () => {
+        const actionMask = document.createElement('div');
+        actionMask.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+        actionMask.innerHTML = `
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:280px;width:100%;color:var(--text)">
+            <div style="font-size:15px;font-weight:600;margin-bottom:16px">小屋图片</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <button id="cottage-img-upload" style="padding:11px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">上传图片（本地 / URL）</button>
+              <button id="cottage-img-ai" style="padding:11px;border:1px dashed var(--accent);border-radius:10px;background:none;color:var(--accent);font-size:14px;cursor:pointer">AI 生成</button>
+              ${_pendingImg ? `<button id="cottage-img-clear" style="padding:11px;border:1px solid var(--border);border-radius:10px;background:none;color:#e0464b;font-size:14px;cursor:pointer">清除图片</button>` : ''}
+              <button id="cottage-img-cancel" style="padding:9px;border:none;border-radius:10px;background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">取消</button>
+            </div>
+          </div>`;
+        document.body.appendChild(actionMask);
+        _maskCloseOnBg(actionMask);
+        actionMask.querySelector('#cottage-img-cancel').onclick = () => actionMask.remove();
 
-      // AI 生成图片：选房间/按整体风格 + 自定义提示词，生成后进相册并设为封面
-      mask.querySelector('#cottage-h-img-ai').onclick = () => {
-        _cottageAiGenImage(houseId, (dataUrl) => {
-          if (dataUrl) { _pendingImg = dataUrl; _refreshImgPreview(); }
-        });
-      };
+        actionMask.querySelector('#cottage-img-upload').onclick = async () => {
+          actionMask.remove();
+          try {
+            const dataUrl = await Utils.promptImageInput({ maxSize: 1280, quality: 0.75 });
+            if (!dataUrl) return;
+            if (typeof dataUrl === 'string' && dataUrl.length > 2600000) {
+              UI.showToast('图片过大，请选择更小的图片', 2500); return;
+            }
+            _pendingImg = dataUrl;
+            _refreshImgPreview();
+          } catch (e) { console.warn('[Cottage] image pick failed', e); UI.showToast('图片设置失败', 1500); }
+        };
 
-      mask.querySelector('#cottage-h-img-clear').onclick = () => {
-        _pendingImg = '';
-        _refreshImgPreview();
+        actionMask.querySelector('#cottage-img-ai').onclick = () => {
+          actionMask.remove();
+          _cottageAiGenImage(houseId, (dataUrl) => {
+            if (dataUrl) { _pendingImg = dataUrl; _refreshImgPreview(); }
+          });
+        };
+
+        if (_pendingImg) {
+          actionMask.querySelector('#cottage-img-clear').onclick = () => {
+            _pendingImg = '';
+            _refreshImgPreview();
+            actionMask.remove();
+          };
+        }
       };
 
       // AI 总结风格：读取全屋房间与物品，生成 150 字内的整体描述，填入风格输入框
@@ -7494,7 +8913,7 @@ ${houseDataText}`;
     });
 
     mask.querySelector('#cottage-img-cancel').onclick = () => document.body.removeChild(mask);
-    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
 
     let _lastImageId = null;
     mask.querySelector('#cottage-img-download').onclick = () => {
@@ -7524,7 +8943,7 @@ ${houseDataText}`;
       goBtn.textContent = '生成中…';
       goBtn.disabled = true;
       try {
-        const images = await API.generateImage(drawPrompt, { n: 1, size: '1024x1024' });
+        const images = await API.generateImage(drawPrompt, { n: 1, size: '1024x768' });
         if (!images || !images.length) throw new Error('没有返回图片');
         const dataUrl = images[0];
 
@@ -10770,7 +12189,7 @@ ${songBlock}
       </div>`;
 
     mask.querySelector('#radio-cat-cancel').onclick = () => document.body.removeChild(mask);
-    mask.onclick = (e) => { if (e.target === mask) document.body.removeChild(mask); };
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
 
     mask.querySelector('#radio-cat-save').onclick = async () => {
       const name = mask.querySelector('#radio-cat-name').value.trim();
@@ -20373,6 +21792,7 @@ let _deliveriesTab = 'all'; // 'all' | 'delivering' | 'done'
 // 判定订单来源 { label, kind }
 function _deliveryOrderSource(o, field) {
     if (o.furnitureBuy || field === 'furnitureOrders') return { label: '家具商城', cls: 'cottage' };
+    if (o.wardrobeBuy || field === 'wardrobeOrders') return { label: '服装商城', cls: 'cottage' };
     if (o.sellBuy) return { label: '聊天·交易', cls: 'youyu' };
   if (o.feiniaoReceive) return { label: '飞鸟·收件', cls: 'feiniao' };
   if (o.feiniaoShip) return { label: '飞鸟·寄件', cls: 'feiniao' };
@@ -20387,6 +21807,8 @@ function _deliveryClaimable(o, field) {
     if (!o || o.claimedToInv) return false;
     // 家具订单：到货自动入家具仓库，不在此手动收取
     if (o.furnitureBuy || field === 'furnitureOrders') return false;
+    // 服装订单：到货自动入衣橱仓库，不在此手动收取
+    if (o.wardrobeBuy || field === 'wardrobeOrders') return false;
   // 已送达判定
   let delivered = o.status === 'delivered';
   if (!delivered && o.status === 'delivering' && o.deliveryMinutes) {
@@ -20416,49 +21838,107 @@ function _deliveryItemsOf(o) {
   return [{ name: (o.name || '物品').trim(), count: 1, effect: (o.desc || '').trim() }];
 }
 
-// 收入物品栏：把订单物品写入当前面具 inventory，标记 claimedToInv
-async function _deliveryClaimToInv(field, orderId) {
-  const pd = await _getPhoneData();
-  if (!pd) return;
-  const list = pd[field] || [];
-  const o = list.find(x => x && x.id === orderId);
-  if (!o) { UI.showToast('订单不存在', 1500); return; }
-  if (!_deliveryClaimable(o, field)) { UI.showToast('该订单不可收取', 1500); return; }
-
-  const items = _deliveryItemsOf(o).filter(it => it.name);
-  if (!items.length) { UI.showToast('没有可收取的物品', 1500); return; }
-
-  // 写入当前面具的物品栏
-  let maskId = '';
-  try { maskId = Character.getCurrentId(); } catch(_) {}
-  if (!maskId) { UI.showToast('当前没有激活的面具', 1800); return; }
-  try {
-    const maskData = await DB.get('characters', maskId);
-    if (!maskData) { UI.showToast('面具数据读取失败', 1800); return; }
-    const inv = Array.isArray(maskData.inventory) ? maskData.inventory : [];
-    items.forEach(it => {
-      const idx = inv.findIndex(x => (x?.name || '').trim() === it.name);
-      if (idx >= 0) {
-        inv[idx].count = (inv[idx].count || 1) + (it.count || 1);
-        if (it.effect && !inv[idx].effect) inv[idx].effect = it.effect;
-      } else {
-        inv.push({ name: it.name, count: it.count || 1, effect: it.effect || '' });
-      }
+// 收货：弹出目的地选择（物品栏 / 衣橱仓库 / 家具仓库），选完再入库
+  async function _deliveryClaimPick(field, orderId) {
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center';
+    const btn = (dest, label, sub) => `
+      <button type="button" data-dest="${dest}" style="width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:8px;color:var(--text);cursor:pointer;text-align:left">
+        <span style="font-size:14px;font-weight:600">${label}</span>
+        <span style="font-size:12px;color:var(--text-secondary)">${sub}</span>
+      </button>`;
+    mask.innerHTML = `
+      <div style="background:var(--bg);border-radius:16px 16px 0 0;padding:16px;width:100%;max-width:400px">
+        <div style="text-align:center;font-size:13px;color:var(--text-secondary);padding:4px 0 6px">收进哪里？</div>
+        ${btn('mask', '物品栏', '收进当前面具的随身物品栏')}
+        ${btn('wardrobe', '衣橱仓库', '收进衣橱，可在着装里穿上')}
+        ${btn('furniture', '家具仓库', '收进小屋，可摆进房间')}
+        <button type="button" id="delivery-claim-cancel" style="width:100%;background:none;border:none;color:var(--text-secondary);font-size:13px;padding:12px 0 4px;cursor:pointer">取消</button>
+      </div>`;
+    document.body.appendChild(mask);
+    _maskCloseOnBg(mask);
+    mask.querySelector('#delivery-claim-cancel').onclick = () => mask.remove();
+    mask.querySelectorAll('button[data-dest]').forEach(b => {
+      b.onclick = () => { mask.remove(); _deliveryClaimToInv(field, orderId, b.dataset.dest); };
     });
-    maskData.inventory = inv;
-    await DB.put('characters', maskData);
-  } catch(e) {
-    console.warn('[全部订单] 收入物品栏失败', e);
-    UI.showToast('收取失败', 1500);
-    return;
   }
 
-  o.claimedToInv = true;
-  await _savePhoneData();
-  const itemNames = items.map(it => it.count > 1 ? `${it.name}×${it.count}` : it.name).join('、');
-  UI.showToast(`已收入物品栏：${itemNames}`, 2200);
-  if (_currentApp === 'deliveries') _renderDeliveries(pd);
-}
+  // 收入仓库：把订单物品写入指定目的地（dest: 'mask' 物品栏 | 'wardrobe' 衣橱 | 'furniture' 家具），标记 claimedToInv
+  async function _deliveryClaimToInv(field, orderId, dest) {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const list = pd[field] || [];
+    const o = list.find(x => x && x.id === orderId);
+    if (!o) { UI.showToast('订单不存在', 1500); return; }
+    if (!_deliveryClaimable(o, field)) { UI.showToast('该订单不可收取', 1500); return; }
+
+    const items = _deliveryItemsOf(o).filter(it => it.name);
+    if (!items.length) { UI.showToast('没有可收取的物品', 1500); return; }
+
+    if (dest === 'wardrobe') {
+      // 收进衣橱仓库（按 count 逐件加，tag 默认未分类，玩家可在仓库改）
+      items.forEach(it => {
+        for (let i = 0; i < (it.count || 1); i++) {
+          _addClothToInventory(pd, { name: it.name, desc: it.effect || '', tag: '未分类' });
+        }
+      });
+      o.claimedToInv = true;
+      o.claimedDest = 'wardrobe';
+      await _savePhoneData();
+      const itemNames = items.map(it => it.count > 1 ? `${it.name}×${it.count}` : it.name).join('、');
+      UI.showToast(`已收入衣橱仓库：${itemNames}`, 2200);
+      if (_currentApp === 'deliveries') _renderDeliveries(pd);
+      return;
+    }
+
+    if (dest === 'furniture') {
+      // 收进家具仓库
+      items.forEach(it => {
+        for (let i = 0; i < (it.count || 1); i++) {
+          _addFurnitureToInventory(pd, { name: it.name, desc: it.effect || '', tag: '未分类' });
+        }
+      });
+      o.claimedToInv = true;
+      o.claimedDest = 'furniture';
+      await _savePhoneData();
+      const itemNames = items.map(it => it.count > 1 ? `${it.name}×${it.count}` : it.name).join('、');
+      UI.showToast(`已收入家具仓库：${itemNames}`, 2200);
+      if (_currentApp === 'deliveries') _renderDeliveries(pd);
+      return;
+    }
+
+    // dest === 'mask'（默认）：写入当前面具的物品栏
+    let maskId = '';
+    try { maskId = Character.getCurrentId(); } catch(_) {}
+    if (!maskId) { UI.showToast('当前没有激活的面具', 1800); return; }
+    try {
+      const maskData = await DB.get('characters', maskId);
+      if (!maskData) { UI.showToast('面具数据读取失败', 1800); return; }
+      const inv = Array.isArray(maskData.inventory) ? maskData.inventory : [];
+      items.forEach(it => {
+        const idx = inv.findIndex(x => (x?.name || '').trim() === it.name);
+        if (idx >= 0) {
+          inv[idx].count = (inv[idx].count || 1) + (it.count || 1);
+          if (it.effect && !inv[idx].effect) inv[idx].effect = it.effect;
+        } else {
+          inv.push({ name: it.name, count: it.count || 1, effect: it.effect || '' });
+        }
+      });
+      maskData.inventory = inv;
+      await DB.put('characters', maskData);
+    } catch(e) {
+      console.warn('[全部订单] 收入物品栏失败', e);
+      UI.showToast('收取失败', 1500);
+      return;
+    }
+
+    o.claimedToInv = true;
+    o.claimedDest = 'mask';
+    await _savePhoneData();
+    const itemNames = items.map(it => it.count > 1 ? `${it.name}×${it.count}` : it.name).join('、');
+    UI.showToast(`已收入物品栏：${itemNames}`, 2200);
+    if (_currentApp === 'deliveries') _renderDeliveries(pd);
+  }
 
 function _renderDeliveries(pd) {
     const body = document.getElementById('phone-body');
@@ -20471,12 +21951,19 @@ function _renderDeliveries(pd) {
         if (changed) { _savePhoneData().then(() => { if (_currentApp === 'deliveries') _renderDeliveries(pd); }); }
       });
     }
+    // 服装订单到货则惰性结算入衣橱仓库，结算有变化时重渲染
+    if (Array.isArray(pd?.wardrobeOrders) && pd.wardrobeOrders.some(o => o && !o.claimedToInv)) {
+      _settleWardrobeOrders(pd).then(changed => {
+        if (changed) { _savePhoneData().then(() => { if (_currentApp === 'deliveries') _renderDeliveries(pd); }); }
+      });
+    }
 
     // 聚合订单数组，附带来源字段
     const all = []
       .concat((pd?.shopOrders || []).map(o => ({ o, field: 'shopOrders' })))
       .concat((pd?.takeoutOrders || []).map(o => ({ o, field: 'takeoutOrders' })))
       .concat((pd?.furnitureOrders || []).map(o => ({ o, field: 'furnitureOrders' })))
+      .concat((pd?.wardrobeOrders || []).map(o => ({ o, field: 'wardrobeOrders' })))
       .filter(x => x.o);
 
   // 按下单游戏时间倒序（新→旧）；无时间的排最后
@@ -20516,6 +22003,7 @@ function _renderDeliveries(pd) {
     // 副信息：收/寄件人或目标
     let metaPill = '';
     if (o.furnitureBuy || field === 'furnitureOrders') metaPill = o.tag ? Utils.escapeHtml(o.tag) : '家具仓库';
+    else if (o.wardrobeBuy || field === 'wardrobeOrders') metaPill = o.tag ? Utils.escapeHtml(o.tag) : '衣橱仓库';
     else if (o.feiniaoReceive) metaPill = o.sender ? `来自 ${Utils.escapeHtml(o.sender)}` : '';
     else if (o.feiniaoShip) metaPill = o.target ? `寄给 ${Utils.escapeHtml(o.target)}` : '';
     else if (o.youyuSell) metaPill = o.buyer ? `买家 ${Utils.escapeHtml(o.buyer)}` : '';
@@ -20539,9 +22027,9 @@ function _renderDeliveries(pd) {
         </div>
         ${statusHtml ? `<div style="margin-top:6px">${statusHtml}</div>` : ''}
         ${o.claimedToInv
-          ? `<div style="margin-top:8px;font-size:11px;color:var(--text-secondary)">${_uiIcon('check', 11)} ${(o.furnitureBuy || field === 'furnitureOrders') ? '已入家具仓库' : '已收入物品栏'}</div>`
+          ? `<div style="margin-top:8px;font-size:11px;color:var(--text-secondary)">${_uiIcon('check', 11)} ${o.claimedDest === 'wardrobe' ? '已入衣橱仓库' : o.claimedDest === 'furniture' ? '已入家具仓库' : o.claimedDest === 'mask' ? '已收入物品栏' : ((o.furnitureBuy || field === 'furnitureOrders') ? '已入家具仓库' : ((o.wardrobeBuy || field === 'wardrobeOrders') ? '已入衣橱仓库' : '已收入物品栏'))}</div>`
           : (_deliveryClaimable(o, field)
-            ? `<div style="margin-top:8px;display:flex;justify-content:flex-end"><button type="button" onclick="Phone._deliveryClaimToInv('${field}','${o.id}')" class="phone-map-action-btn">${_uiIcon('box', 12)} 收入物品栏</button></div>`
+            ? `<div style="margin-top:8px;display:flex;justify-content:flex-end"><button type="button" onclick="Phone._deliveryClaimPick('${field}','${o.id}')" class="phone-map-action-btn">${_uiIcon('box', 12)} 收货</button></div>`
             : '')}
         <div style="font-size:10px;color:var(--text-secondary);margin-top:6px">${o.feiniaoReceive ? '收件于' : (o.youyuSell ? '售出于' : '下单于')} ${Utils.escapeHtml(o.time || o.orderGameTime || '')}</div>
       </div>`;
@@ -20680,7 +22168,7 @@ async function _feiniaoShowOrderDetail(orderId) {
  const mask = document.createElement('div');
  mask.id = 'feiniao-order-detail-overlay';
  mask.style.cssText = 'position:fixed;inset:0;z-index:10015;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:18px';
- mask.onclick = (e) => { if (e.target === mask) mask.remove(); };
+ _maskCloseOnBg(mask);
  mask.innerHTML = `
    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;max-width:360px;width:100%;max-height:86vh;display:flex;flex-direction:column;color:var(--text)">
      <div style="display:flex;align-items:center;gap:10px;padding:18px 20px 12px">
@@ -20810,7 +22298,7 @@ function _youyuShowOrderDetail(orderId) {
   const mask = document.createElement('div');
   mask.id = 'youyu-order-detail-overlay';
   mask.style.cssText = 'position:fixed;inset:0;z-index:10015;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:18px';
-  mask.onclick = (e) => { if (e.target === mask) mask.remove(); };
+  _maskCloseOnBg(mask);
   mask.innerHTML = `
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;max-width:360px;width:100%;max-height:86vh;display:flex;flex-direction:column;color:var(--text)">
       <div style="display:flex;align-items:center;gap:10px;padding:18px 20px 12px">
@@ -20881,53 +22369,97 @@ function _youyuAddListing() {
 }
 
 // 从物品栏选一件：在同一个弹窗内切换到物品列表视图
-async function _youyuPickFromInventory() {
-  let maskId = '', inv = [];
-  try {
-    maskId = Character.getCurrentId();
-    const maskData = maskId ? await DB.get('characters', maskId) : null;
-    inv = Array.isArray(maskData?.inventory) ? maskData.inventory : [];
-  } catch(_) {}
-  if (!inv.length) { UI.showToast('当前面具物品栏是空的', 1800); return; }
-  _youyuInvCtx = { maskId, inv };
-  const mask = document.getElementById('youyu-list-overlay');
-  if (!mask) return;
-  const rows = inv.map((it, i) => `
-    <div onclick="Phone._youyuPickInvItem(${i})" style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;margin-top:8px;cursor:pointer">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(it.name || '未命名')}</div>
-        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">持有 ×${it.count || 1}${it.effect ? '　' + Utils.escapeHtml(it.effect) : ''}</div>
-      </div>
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-    </div>
-  `).join('');
-  mask.innerHTML = `
-    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;max-width:340px;width:100%;max-height:86vh;display:flex;flex-direction:column;color:var(--text)">
-      <div style="font-size:15px;font-weight:600;padding:18px 20px 12px">选择物品</div>
-      <div style="flex:1;overflow-y:auto;padding:0 20px 8px">${rows}</div>
-      <div style="padding:10px 20px 18px">
-        <button onpointerdown="event.preventDefault();Phone._youyuRenderListModal()" style="width:100%;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">返回</button>
-      </div>
-    </div>
-  `;
-}
+// 点「从仓库」：先弹来源选择（物品栏 / 衣橱仓库 / 家具仓库）
+  function _youyuPickSource() {
+    const mask = document.createElement('div');
+    mask.id = 'youyu-src-overlay';
+    mask.style.cssText = 'position:fixed;inset:0;z-index:10020;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center';
+    const btn = (src, label, sub) => `
+      <button type="button" data-src="${src}" style="width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:8px;color:var(--text);cursor:pointer;text-align:left">
+        <span style="font-size:14px;font-weight:600">${label}</span>
+        <span style="font-size:12px;color:var(--text-secondary)">${sub}</span>
+      </button>`;
+    mask.innerHTML = `
+      <div style="background:var(--bg);border-radius:16px 16px 0 0;padding:16px;width:100%;max-width:400px">
+        <div style="text-align:center;font-size:13px;color:var(--text-secondary);padding:4px 0 6px">从哪里选商品？</div>
+        ${btn('mask', '物品栏', '当前面具的随身物品')}
+        ${btn('wardrobe', '衣橱仓库', '已购入的服装')}
+        ${btn('furniture', '家具仓库', '已购入的家具家居')}
+        <button type="button" id="youyu-src-cancel" style="width:100%;background:none;border:none;color:var(--text-secondary);font-size:13px;padding:12px 0 4px;cursor:pointer">取消</button>
+      </div>`;
+    document.body.appendChild(mask);
+    _maskCloseOnBg(mask, () => mask.remove());
+    mask.querySelector('#youyu-src-cancel').onclick = () => mask.remove();
+    mask.querySelectorAll('button[data-src]').forEach(b => {
+      b.onclick = () => { mask.remove(); _youyuPickFromInventory(b.dataset.src); };
+    });
+  }
 
-// 选中物品栏某件物品后，填入草稿并切回编辑视图
-function _youyuPickInvItem(i) {
-  if (!_youyuInvCtx) return;
-  const it = _youyuInvCtx.inv[i];
-  if (!it) return;
-  if (!_youyuListDraft) _youyuListDraft = {};
-  _youyuListDraft.name = it.name || '';
-  _youyuListDraft.effect = it.effect || '';
-  _youyuListDraft.maxCount = it.count || 1;
-  _youyuListDraft.count = 1;
-  _youyuListDraft.fromInventory = true;
-  _youyuListDraft.maskId = _youyuInvCtx.maskId;
-  _youyuListDraft.invName = it.name || '';
-  _youyuRenderListModal();
-}
-let _youyuInvCtx = null;
+  // 从指定来源选一件：src='mask' 物品栏 | 'wardrobe' 衣橱 | 'furniture' 家具
+  async function _youyuPickFromInventory(src) {
+    src = src || 'mask';
+    let maskId = '', list = [];
+    if (src === 'mask') {
+      try {
+        maskId = Character.getCurrentId();
+        const maskData = maskId ? await DB.get('characters', maskId) : null;
+        const inv = Array.isArray(maskData?.inventory) ? maskData.inventory : [];
+        list = inv.map(it => ({ name: it.name, effect: it.effect || '', count: it.count || 1 }));
+      } catch(_) {}
+      if (!list.length) { UI.showToast('当前面具物品栏是空的', 1800); return; }
+    } else if (src === 'wardrobe') {
+      const pd = await _getPhoneData();
+      const inv = (pd && pd.wardrobeInventory) || [];
+      list = inv.map(it => ({ name: it.name, effect: it.desc || '', count: it.qty || 1, invId: it.id }));
+      if (!list.length) { UI.showToast('衣橱仓库是空的', 1800); return; }
+    } else {
+      const pd = await _getPhoneData();
+      const inv = (pd && pd.furnitureInventory) || [];
+      list = inv.map(it => ({ name: it.name, effect: it.desc || '', count: it.qty || 1, invId: it.id }));
+      if (!list.length) { UI.showToast('家具仓库是空的', 1800); return; }
+    }
+    _youyuInvCtx = { src, maskId, inv: list };
+    const mask = document.getElementById('youyu-list-overlay');
+    if (!mask) return;
+    const rows = list.map((it, i) => `
+      <div onclick="Phone._youyuPickInvItem(${i})" style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;margin-top:8px;cursor:pointer">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(it.name || '未命名')}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">持有 ×${it.count || 1}${it.effect ? '　' + Utils.escapeHtml(it.effect) : ''}</div>
+        </div>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    `).join('');
+    const srcLabel = src === 'wardrobe' ? '衣橱仓库' : src === 'furniture' ? '家具仓库' : '物品栏';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;max-width:340px;width:100%;max-height:86vh;display:flex;flex-direction:column;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;padding:18px 20px 12px">选择商品 · ${srcLabel}</div>
+        <div style="flex:1;overflow-y:auto;padding:0 20px 8px">${rows}</div>
+        <div style="padding:10px 20px 18px">
+          <button onpointerdown="event.preventDefault();Phone._youyuRenderListModal()" style="width:100%;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">返回</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // 选中某件后，填入草稿并切回编辑视图
+  function _youyuPickInvItem(i) {
+    if (!_youyuInvCtx) return;
+    const it = _youyuInvCtx.inv[i];
+    if (!it) return;
+    if (!_youyuListDraft) _youyuListDraft = {};
+    _youyuListDraft.name = it.name || '';
+    _youyuListDraft.effect = it.effect || '';
+    _youyuListDraft.maxCount = it.count || 1;
+    _youyuListDraft.count = 1;
+    _youyuListDraft.fromInventory = true;
+    _youyuListDraft.invSource = _youyuInvCtx.src;          // 'mask' | 'wardrobe' | 'furniture'
+    _youyuListDraft.maskId = _youyuInvCtx.maskId;
+    _youyuListDraft.invName = it.name || '';
+    _youyuListDraft.invId = it.invId || '';                // 衣橱/家具来源的库存条目 id
+    _youyuRenderListModal();
+  }
+  let _youyuInvCtx = null;
 
 
 
@@ -20988,7 +22520,7 @@ function _youyuRenderListModal() {
         <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">商品名称</label>
         <div style="display:flex;gap:8px;margin-bottom:14px">
           <input id="youyu-l-name" value="${Utils.escapeHtml(d.name)}" ${d.fromInventory ? 'readonly' : ''} oninput="Phone._youyuDraftSet('name', this.value)" placeholder="商品名称" style="flex:1;min-width:0;box-sizing:border-box;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 10px;outline:none">
-          <button onpointerdown="event.preventDefault();Phone._youyuPickFromInventory()" style="white-space:nowrap;padding:9px 12px;border-radius:8px;border:1px dashed var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer">从物品栏</button>
+          <button onpointerdown="event.preventDefault();Phone._youyuPickSource()" style="white-space:nowrap;padding:9px 12px;border-radius:8px;border:1px dashed var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer">从仓库</button>
         </div>
         ${countBlock}
         <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">交付方式</label>
@@ -21067,40 +22599,60 @@ async function _youyuConfirmListing() {
      minutes = rawNum;
    }
  }
- // 物品栏来源：从面具扣 count
- if (d.fromInventory && d.maskId) {
-   try {
-     const maskData = await DB.get('characters', d.maskId);
-     if (maskData) {
-       const inv = Array.isArray(maskData.inventory) ? maskData.inventory : [];
-       const idx = inv.findIndex(x => (x?.name || '').trim() === String(d.invName || name).trim());
+const pd = await _getPhoneData();
+   // 按来源扣减库存：mask 面具物品栏 / wardrobe 衣橱仓库 / furniture 家具仓库
+   if (d.fromInventory) {
+     const invSrc = d.invSource || 'mask';
+     if (invSrc === 'mask' && d.maskId) {
+       try {
+         const maskData = await DB.get('characters', d.maskId);
+         if (maskData) {
+           const inv = Array.isArray(maskData.inventory) ? maskData.inventory : [];
+           const idx = inv.findIndex(x => (x?.name || '').trim() === String(d.invName || name).trim());
+           if (idx >= 0) {
+             const left = (inv[idx].count || 1) - count;
+             if (left > 0) inv[idx].count = left;
+             else inv.splice(idx, 1);
+             maskData.inventory = inv;
+             await DB.put('characters', maskData);
+           }
+         }
+       } catch(_) {}
+     } else if (invSrc === 'wardrobe') {
+       const arr = pd.wardrobeInventory || [];
+       const idx = arr.findIndex(x => x && x.id === d.invId);
        if (idx >= 0) {
-         const have = inv[idx].count || 1;
-         const left = have - count;
-         if (left > 0) inv[idx].count = left;
-         else inv.splice(idx, 1);
-         maskData.inventory = inv;
-         await DB.put('characters', maskData);
+         const left = (arr[idx].qty || 1) - count;
+         if (left > 0) arr[idx].qty = left;
+         else arr.splice(idx, 1);
+       }
+     } else if (invSrc === 'furniture') {
+       const arr = pd.furnitureInventory || [];
+       const idx = arr.findIndex(x => x && x.id === d.invId);
+       if (idx >= 0) {
+         const left = (arr[idx].qty || 1) - count;
+         if (left > 0) arr[idx].qty = left;
+         else arr.splice(idx, 1);
        }
      }
-   } catch(_) {}
- }
- const pd = await _getPhoneData();
- pd.shopListings = pd.shopListings || [];
- pd.shopListings.push({
-   id: 'listing_' + Utils.uuid().slice(0, 8),
-   name,
+   }
+   pd.shopListings = pd.shopListings || [];
+   pd.shopListings.push({
+     id: 'listing_' + Utils.uuid().slice(0, 8),
+     name,
    effect,
    count,
    price,
    currencyId,
    deliveryMode: d.deliveryMode,
    minutes,
-   fromInventory: !!d.fromInventory,
-   maskId: d.maskId || '',
-   invName: d.invName || name,
-   time: new Date().toLocaleString(),
- });
+fromInventory: !!d.fromInventory,
+     invSource: d.invSource || 'mask',
+     invId: d.invId || '',
+     maskId: d.maskId || '',
+     invName: d.invName || name,
+     time: new Date().toLocaleString(),
+   });
  await _savePhoneData();
  document.getElementById('youyu-list-overlay')?.remove();
  _youyuListDraft = null;
@@ -21108,29 +22660,44 @@ async function _youyuConfirmListing() {
  UI.showToast('已上架', 1200);
 }
 
-// 下架：物品栏来源的放回物品栏，自定义的直接删除
-async function _youyuRemoveListing(listingId) {
-  const pd = await _getPhoneData();
-  const l = (pd?.shopListings || []).find(x => x.id === listingId);
-  if (!l) return;
-  if (l.fromInventory && l.maskId) {
-    try {
-      const maskData = await DB.get('characters', l.maskId);
-      if (maskData) {
-        const inv = Array.isArray(maskData.inventory) ? maskData.inventory : [];
-        const idx = inv.findIndex(x => (x?.name || '').trim() === String(l.invName || l.name).trim());
-        if (idx >= 0) inv[idx].count = (inv[idx].count || 1) + (l.count || 1);
-        else inv.push({ name: l.invName || l.name, effect: l.effect || '', count: l.count || 1 });
-        maskData.inventory = inv;
-        await DB.put('characters', maskData);
+// 下架：来源库存的放回原仓库，自定义的直接删除
+  async function _youyuRemoveListing(listingId) {
+    const pd = await _getPhoneData();
+    const l = (pd?.shopListings || []).find(x => x.id === listingId);
+    if (!l) return;
+    let returnedLabel = '';
+    if (l.fromInventory) {
+      const invSrc = l.invSource || 'mask';
+      if (invSrc === 'mask' && l.maskId) {
+        try {
+          const maskData = await DB.get('characters', l.maskId);
+          if (maskData) {
+            const inv = Array.isArray(maskData.inventory) ? maskData.inventory : [];
+            const idx = inv.findIndex(x => (x?.name || '').trim() === String(l.invName || l.name).trim());
+            if (idx >= 0) inv[idx].count = (inv[idx].count || 1) + (l.count || 1);
+            else inv.push({ name: l.invName || l.name, effect: l.effect || '', count: l.count || 1 });
+            maskData.inventory = inv;
+            await DB.put('characters', maskData);
+          }
+        } catch(_) {}
+        returnedLabel = '物品栏';
+      } else if (invSrc === 'wardrobe') {
+        for (let i = 0; i < (l.count || 1); i++) {
+          _addClothToInventory(pd, { name: l.invName || l.name, desc: l.effect || '', tag: '未分类' });
+        }
+        returnedLabel = '衣橱仓库';
+      } else if (invSrc === 'furniture') {
+        for (let i = 0; i < (l.count || 1); i++) {
+          _addFurnitureToInventory(pd, { name: l.invName || l.name, desc: l.effect || '', tag: '未分类' });
+        }
+        returnedLabel = '家具仓库';
       }
-    } catch(_) {}
+    }
+    pd.shopListings = (pd.shopListings || []).filter(x => x.id !== listingId);
+    await _savePhoneData();
+    if (_currentApp === 'youyu') _renderYouyu(pd);
+    UI.showToast(returnedLabel ? `已下架并放回${returnedLabel}` : '已下架', 1200);
   }
-  pd.shopListings = (pd.shopListings || []).filter(x => x.id !== listingId);
-  await _savePhoneData();
-  if (_currentApp === 'youyu') _renderYouyu(pd);
-  UI.showToast(l.fromInventory ? '已下架并放回物品栏' : '已下架', 1200);
-}
 
 // 分享商品（target: 'main'=主线, 'chat'=聊天）
 async function _youyuShareListing(listingId, target) {
@@ -21353,10 +22920,10 @@ function _feiniaoAddOrder() {
  overlay.innerHTML = `
    <div style="width:100%;max-width:420px;background:var(--bg);border-radius:16px 16px 0 0;padding:8px 12px 16px;animation:sheetSlideUp 0.2s ease">
      <div style="text-align:center;font-size:13px;color:var(--text-secondary);padding:10px 0 6px">选择寄件方式</div>
-     <button onclick="Phone._feiniaoPickFromInventory()" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:8px;font-size:14px;color:var(--text);cursor:pointer;text-align:left">
-       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg>
-       <div><div style="font-weight:600">从物品栏中选择</div><div style="font-size:12px;color:var(--text-secondary);margin-top:2px">寄出后将从物品栏扣除</div></div>
-     </button>
+      <button onclick="Phone._feiniaoPickSource()" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:8px;font-size:14px;color:var(--text);cursor:pointer;text-align:left">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg>
+        <div><div style="font-weight:600">从仓库选择</div><div style="font-size:12px;color:var(--text-secondary);margin-top:2px">物品栏 / 衣橱 / 家具，寄出后从来源扣除</div></div>
+      </button>
      <button onclick="Phone._feiniaoCustomItem()" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:8px;font-size:14px;color:var(--text);cursor:pointer;text-align:left">
        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
        <div><div style="font-weight:600">自定义物品</div><div style="font-size:12px;color:var(--text-secondary);margin-top:2px">手动填写寄件名称</div></div>
@@ -21371,63 +22938,109 @@ function _feiniaoCloseSheet() {
  document.getElementById('feiniao-sheet-overlay')?.remove();
 }
 
-// 读取当前面具物品栏
-async function _feiniaoGetInventory() {
- try {
-   const maskId = Character.getCurrentId();
-   if (!maskId) return { maskId: '', inv: [] };
-   const maskData = await DB.get('characters', maskId);
-   const inv = Array.isArray(maskData?.inventory) ? maskData.inventory : [];
-   return { maskId, inv };
- } catch(_) { return { maskId: '', inv: [] }; }
+// 读取指定来源的可寄物品列表：src='mask' 物品栏 | 'wardrobe' 衣橱 | 'furniture' 家具
+async function _feiniaoGetSourceList(src) {
+  src = src || 'mask';
+  if (src === 'mask') {
+    try {
+      const maskId = Character.getCurrentId();
+      if (!maskId) return { src, maskId: '', inv: [] };
+      const maskData = await DB.get('characters', maskId);
+      const raw = Array.isArray(maskData?.inventory) ? maskData.inventory : [];
+      // 归一化：count 数量、effect 描述、无 invId（按名字匹配扣减）
+      const inv = raw.map(it => ({ name: it.name || '未命名', effect: it.effect || '', count: it.count || 1, invId: '' }));
+      return { src, maskId, inv };
+    } catch(_) { return { src, maskId: '', inv: [] }; }
+  }
+  const pd = await _getPhoneData();
+  const field = src === 'wardrobe' ? 'wardrobeInventory' : 'furnitureInventory';
+  const raw = (pd && pd[field]) || [];
+  const inv = raw.map(it => ({ name: it.name || '未命名', effect: it.desc || '', count: it.qty || 1, invId: it.id || '' }));
+  return { src, maskId: '', inv };
 }
 
-// 「从物品栏中选择」：弹出物品多选列表
-async function _feiniaoPickFromInventory() {
- _feiniaoCloseSheet();
- const { maskId, inv } = await _feiniaoGetInventory();
- if (!inv.length) { UI.showToast('当前面具物品栏是空的', 1800); return; }
- _feiniaoEnsureDraft();
- // 预填：草稿里已选的物品栏物品数量（按名字匹配），实现"再次打开可调整"而非堆叠
- const preset = {};
- inv.forEach((it, i) => {
-   const exist = _feiniaoDraft.items.find(x => x.fromInventory && x.invName === (it.name || '未命名'));
-   if (exist) preset[i] = exist.count || 0;
- });
- // 选择状态：{ idx: 选中数量 }
- const sel = { ...preset };
- const overlay = document.createElement('div');
- overlay.id = 'feiniao-inv-overlay';
- overlay.style.cssText = 'position:fixed;inset:0;z-index:10010;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center';
- overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
- const rows = inv.map((it, i) => {
-   const max = it.count || 1;
-   return `
-     <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;margin-top:8px">
-       <div style="flex:1;min-width:0">
-         <div style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(it.name || '未命名')}</div>
-         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">持有 ×${max}${it.effect ? '　' + Utils.escapeHtml(it.effect) : ''}</div>
-       </div>
-       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-         <button onclick="Phone._feiniaoInvStep(${i}, -1, ${max})" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:16px;cursor:pointer;line-height:1">−</button>
-         <span id="feiniao-inv-cnt-${i}" style="min-width:20px;text-align:center;font-size:14px;color:var(--text)">${preset[i] || 0}</span>
-         <button onclick="Phone._feiniaoInvStep(${i}, 1, ${max})" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:16px;cursor:pointer;line-height:1">+</button>
-       </div>
-     </div>`;
- }).join('');
- overlay.innerHTML = `
-   <div style="width:100%;max-width:420px;max-height:80vh;display:flex;flex-direction:column;background:var(--bg);border-radius:16px 16px 0 0;padding:8px 12px 16px;animation:sheetSlideUp 0.2s ease">
-     <div style="text-align:center;font-size:14px;font-weight:600;color:var(--text);padding:10px 0 4px">选择寄件物品</div>
-     <div style="text-align:center;font-size:12px;color:var(--text-secondary);padding-bottom:6px">可多选，可设数量</div>
-     <div style="flex:1;overflow-y:auto;padding:0 2px 8px">${rows}</div>
-     <div style="display:flex;gap:10px;margin-top:6px">
-       <button onclick="document.getElementById('feiniao-inv-overlay').remove()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-       <button onclick="Phone._feiniaoInvConfirm()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">确定</button>
-     </div>
-   </div>
- `;
- document.body.appendChild(overlay);
- _feiniaoInvCtx = { maskId, inv, sel };
+// 兼容旧调用：默认读物品栏
+async function _feiniaoGetInventory() {
+  const { maskId, inv } = await _feiniaoGetSourceList('mask');
+  return { maskId, inv };
+}
+
+// 点「从仓库选择」：先弹来源选择（物品栏 / 衣橱仓库 / 家具仓库）
+function _feiniaoPickSource() {
+  _feiniaoCloseSheet();
+  const mask = document.createElement('div');
+  mask.id = 'feiniao-src-overlay';
+  mask.style.cssText = 'position:fixed;inset:0;z-index:10012;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center';
+  const btn = (src, label, sub) => `
+    <button type="button" data-src="${src}" style="width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:8px;color:var(--text);cursor:pointer;text-align:left">
+      <span style="font-size:14px;font-weight:600">${label}</span>
+      <span style="font-size:12px;color:var(--text-secondary)">${sub}</span>
+    </button>`;
+  mask.innerHTML = `
+    <div style="background:var(--bg);border-radius:16px 16px 0 0;padding:16px;width:100%;max-width:420px">
+      <div style="text-align:center;font-size:13px;color:var(--text-secondary);padding:4px 0 6px">从哪里选寄件物品？</div>
+      ${btn('mask', '物品栏', '当前面具的随身物品')}
+      ${btn('wardrobe', '衣橱仓库', '已购入的服装')}
+      ${btn('furniture', '家具仓库', '已购入的家具家居')}
+      <button type="button" id="feiniao-src-cancel" style="width:100%;background:none;border:none;color:var(--text-secondary);font-size:13px;padding:12px 0 4px;cursor:pointer">取消</button>
+    </div>`;
+  document.body.appendChild(mask);
+  _maskCloseOnBg(mask, () => mask.remove());
+  mask.querySelector('#feiniao-src-cancel').onclick = () => mask.remove();
+  mask.querySelectorAll('button[data-src]').forEach(b => {
+    b.onclick = () => { mask.remove(); _feiniaoPickFromInventory(b.dataset.src); };
+  });
+}
+
+// 「从指定来源选择」：弹出物品多选列表（src='mask'|'wardrobe'|'furniture'）
+async function _feiniaoPickFromInventory(src) {
+  src = src || 'mask';
+  _feiniaoCloseSheet();
+  const { maskId, inv } = await _feiniaoGetSourceList(src);
+  const srcLabel = src === 'wardrobe' ? '衣橱仓库' : src === 'furniture' ? '家具仓库' : '物品栏';
+  if (!inv.length) { UI.showToast(`${srcLabel}是空的`, 1800); return; }
+  _feiniaoEnsureDraft();
+  // 预填：草稿里已选的同来源物品数量（按来源+名字/invId 匹配），实现"再次打开可调整"
+  const preset = {};
+  inv.forEach((it, i) => {
+    const exist = _feiniaoDraft.items.find(x => x.fromInventory && (x.invSource || 'mask') === src
+      && (it.invId ? x.invId === it.invId : x.invName === (it.name || '未命名')));
+    if (exist) preset[i] = exist.count || 0;
+  });
+  // 选择状态：{ idx: 选中数量 }
+  const sel = { ...preset };
+  const overlay = document.createElement('div');
+  overlay.id = 'feiniao-inv-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10010;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  const rows = inv.map((it, i) => {
+    const max = it.count || 1;
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;margin-top:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(it.name || '未命名')}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">持有 ×${max}${it.effect ? '　' + Utils.escapeHtml(it.effect) : ''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <button onclick="Phone._feiniaoInvStep(${i}, -1, ${max})" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:16px;cursor:pointer;line-height:1">−</button>
+          <span id="feiniao-inv-cnt-${i}" style="min-width:20px;text-align:center;font-size:14px;color:var(--text)">${preset[i] || 0}</span>
+          <button onclick="Phone._feiniaoInvStep(${i}, 1, ${max})" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:16px;cursor:pointer;line-height:1">+</button>
+        </div>
+      </div>`;
+  }).join('');
+  overlay.innerHTML = `
+    <div style="width:100%;max-width:420px;max-height:80vh;display:flex;flex-direction:column;background:var(--bg);border-radius:16px 16px 0 0;padding:8px 12px 16px;animation:sheetSlideUp 0.2s ease">
+      <div style="text-align:center;font-size:14px;font-weight:600;color:var(--text);padding:10px 0 4px">选择寄件物品 · ${srcLabel}</div>
+      <div style="text-align:center;font-size:12px;color:var(--text-secondary);padding-bottom:6px">可多选，可设数量</div>
+      <div style="flex:1;overflow-y:auto;padding:0 2px 8px">${rows}</div>
+      <div style="display:flex;gap:10px;margin-top:6px">
+        <button onclick="document.getElementById('feiniao-inv-overlay').remove()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+        <button onclick="Phone._feiniaoInvConfirm()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">确定</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  _feiniaoInvCtx = { src, maskId, inv, sel };
 }
 
 let _feiniaoInvCtx = null;
@@ -21446,23 +23059,33 @@ function _feiniaoInvStep(idx, delta, max) {
 
 // 确认物品选择 → 合并进草稿 → 打开寄件弹窗
 function _feiniaoInvConfirm() {
- if (!_feiniaoInvCtx) return;
- const { maskId, inv, sel } = _feiniaoInvCtx;
- const picked = [];
- Object.keys(sel).forEach(k => {
-   const n = sel[k];
-   if (n > 0) {
-     const it = inv[Number(k)];
-     picked.push({ name: it.name || '未命名', count: n, fromInventory: true, maskId, invName: it.name || '未命名', maxCount: it.count || 1 });
-   }
- });
- _feiniaoEnsureDraft();
- // 物品栏物品按名字覆盖：先清掉草稿里所有来自物品栏的项，再写入本次选择（避免重复堆叠）
- _feiniaoDraft.items = _feiniaoDraft.items.filter(x => !x.fromInventory);
- _feiniaoDraft.items.push(...picked);
- document.getElementById('feiniao-inv-overlay')?.remove();
- _feiniaoInvCtx = null;
- _feiniaoOpenShipModal();
+  if (!_feiniaoInvCtx) return;
+  const { src, maskId, inv, sel } = _feiniaoInvCtx;
+  const picked = [];
+  Object.keys(sel).forEach(k => {
+    const n = sel[k];
+    if (n > 0) {
+      const it = inv[Number(k)];
+      picked.push({
+        name: it.name || '未命名',
+        count: n,
+        fromInventory: true,
+        invSource: src || 'mask',
+        maskId: src === 'mask' ? maskId : '',
+        invName: it.name || '未命名',
+        invId: it.invId || '',
+        effect: it.effect || '',
+        maxCount: it.count || 1,
+      });
+    }
+  });
+  _feiniaoEnsureDraft();
+  // 只覆盖"本次来源"的项，保留其他来源已选（支持跨库混选）
+  _feiniaoDraft.items = _feiniaoDraft.items.filter(x => !(x.fromInventory && (x.invSource || 'mask') === (src || 'mask')));
+  _feiniaoDraft.items.push(...picked);
+  document.getElementById('feiniao-inv-overlay')?.remove();
+  _feiniaoInvCtx = null;
+  _feiniaoOpenShipModal();
 }
 
 // 「自定义物品」→ 弹出编辑弹窗（名称 / 数量 / 描述）→ 确认后加进草稿
@@ -21476,7 +23099,7 @@ function _feiniaoCustomItem(editIdx) {
  mask.id = 'feiniao-custom-overlay';
  mask.dataset.editIdx = isEdit ? String(editIdx) : '';
  mask.style.cssText = 'position:fixed;inset:0;z-index:10015;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:18px';
- mask.onclick = (e) => { if (e.target === mask) mask.remove(); };
+ _maskCloseOnBg(mask);
  mask.innerHTML = `
    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;max-width:340px;width:100%;color:var(--text)">
      <div style="font-size:15px;font-weight:600;padding:18px 20px 12px">${isEdit ? '编辑物品' : '自定义物品'}</div>
@@ -21541,7 +23164,7 @@ function _feiniaoOpenShipModal() {
    mask = document.createElement('div');
    mask.id = 'feiniao-ship-overlay';
    mask.style.cssText = 'position:fixed;inset:0;z-index:10005;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:18px';
-   mask.onclick = (e) => { if (e.target === mask) _feiniaoCancelShip(); };
+   _maskCloseOnBg(mask, () => _feiniaoCancelShip());
    document.body.appendChild(mask);
  }
  const d = _feiniaoDraft;
@@ -21560,7 +23183,7 @@ function _feiniaoOpenShipModal() {
    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;margin-top:6px">
      <span style="flex:1;min-width:0;color:var(--text);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(it.name || '未命名')}</span>
      <span style="flex-shrink:0;font-size:13px;color:var(--text-secondary)">×${it.count || 1}</span>
-     ${it.fromInventory ? '<span style="font-size:10px;color:var(--text-secondary);flex-shrink:0;padding:2px 5px;border:1px solid var(--border);border-radius:4px">物品栏</span>' : `<button onclick="Phone._feiniaoEditCustomItem(${i})" style="width:24px;height:24px;flex-shrink:0;border-radius:6px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg></button>`}
+      ${it.fromInventory ? `<span style="font-size:10px;color:var(--text-secondary);flex-shrink:0;padding:2px 5px;border:1px solid var(--border);border-radius:4px">${it.invSource === 'wardrobe' ? '衣橱' : it.invSource === 'furniture' ? '家具' : '物品栏'}</span>` : `<button onclick="Phone._feiniaoEditCustomItem(${i})" style="width:24px;height:24px;flex-shrink:0;border-radius:6px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg></button>`}
      <button onclick="Phone._feiniaoItemRemove(${i})" style="width:24px;height:24px;flex-shrink:0;border-radius:6px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;font-size:16px;line-height:1">×</button>
    </div>
  `).join('');
@@ -21753,40 +23376,61 @@ async function _feiniaoSubmitShip() {
  const gameTime = _getGameTime();
  if (!gameTime) { UI.showToast('当前无游戏时间，无法生成配送信息', 2000); return; }
 
- // 含物品栏物品时二次确认
- const invItems = d.items.filter(it => it.fromInventory);
- if (invItems.length) {
-   const ok = await UI.showConfirm('确认寄出', '物品栏中的物品寄出后会在面具中删除，是否继续？');
-   if (!ok) return;
- }
-
- // 1) 扣减面具物品栏（按 maskId 分组，按数量扣减）
- try {
-   const byMask = {};
-   invItems.forEach(it => {
-     const mid = it.maskId || Character.getCurrentId();
-     if (!mid) return;
-     (byMask[mid] = byMask[mid] || []).push(it);
-   });
-   for (const mid of Object.keys(byMask)) {
-     const maskData = await DB.get('characters', mid);
-     if (!maskData) continue;
-     const inv = Array.isArray(maskData.inventory) ? maskData.inventory : [];
-     byMask[mid].forEach(it => {
-       const idx = inv.findIndex(x => (x?.name || '').trim() === String(it.invName || it.name).trim());
-       if (idx < 0) return;
-       const have = inv[idx].count || 1;
-       const left = have - (it.count || 1);
-       if (left > 0) inv[idx].count = left;
-       else inv.splice(idx, 1);
-     });
-     maskData.inventory = inv;
-     await DB.put('characters', maskData);
+   // 含来源库存物品时二次确认
+   const invItems = d.items.filter(it => it.fromInventory);
+   if (invItems.length) {
+     const ok = await UI.showConfirm('确认寄出', '从物品栏/衣橱/家具仓库选的物品寄出后会从对应来源扣除，是否继续？');
+     if (!ok) return;
    }
- } catch(e) { console.warn('[飞鸟] 扣减物品栏失败', e); }
 
- // 2) 生成订单（与网购同一套字段，按时效分类存入对应订单数组）
- const pd = await _getPhoneData();
+   const pd = await _getPhoneData();
+
+  // 1) 按来源扣减库存：mask 面具物品栏（按名字）/ wardrobe 衣橱 / furniture 家具（按 invId 扣 qty）
+  try {
+    // 1a) 物品栏：按 maskId 分组，按名字匹配扣 count
+    const maskItems = invItems.filter(it => (it.invSource || 'mask') === 'mask');
+    const byMask = {};
+    maskItems.forEach(it => {
+      const mid = it.maskId || Character.getCurrentId();
+      if (!mid) return;
+      (byMask[mid] = byMask[mid] || []).push(it);
+    });
+    for (const mid of Object.keys(byMask)) {
+      const maskData = await DB.get('characters', mid);
+      if (!maskData) continue;
+      const inv = Array.isArray(maskData.inventory) ? maskData.inventory : [];
+      byMask[mid].forEach(it => {
+        const idx = inv.findIndex(x => (x?.name || '').trim() === String(it.invName || it.name).trim());
+        if (idx < 0) return;
+        const have = inv[idx].count || 1;
+        const left = have - (it.count || 1);
+        if (left > 0) inv[idx].count = left;
+        else inv.splice(idx, 1);
+      });
+      maskData.inventory = inv;
+      await DB.put('characters', maskData);
+    }
+    // 1b) 衣橱仓库：按 invId 扣 qty
+    invItems.filter(it => it.invSource === 'wardrobe').forEach(it => {
+      const arr = pd.wardrobeInventory || [];
+      const idx = arr.findIndex(x => x && x.id === it.invId);
+      if (idx < 0) return;
+      const left = (arr[idx].qty || 1) - (it.count || 1);
+      if (left > 0) arr[idx].qty = left;
+      else arr.splice(idx, 1);
+    });
+    // 1c) 家具仓库：按 invId 扣 qty
+    invItems.filter(it => it.invSource === 'furniture').forEach(it => {
+      const arr = pd.furnitureInventory || [];
+      const idx = arr.findIndex(x => x && x.id === it.invId);
+      if (idx < 0) return;
+      const left = (arr[idx].qty || 1) - (it.count || 1);
+      if (left > 0) arr[idx].qty = left;
+      else arr.splice(idx, 1);
+    });
+  } catch(e) { console.warn('[飞鸟] 扣减库存失败', e); }
+
+  // 2) 生成订单（与网购同一套字段，按时效分类存入对应订单数组）
  const recipNames = d.recipients.map(r => r.name).join('、');
  const itemSummary = d.items.map(it => `${it.name}${(it.count || 1) > 1 ? '×' + it.count : ''}`).join('、');
  const ordersField = minutes < 1440 ? 'takeoutOrders' : 'shopOrders';
@@ -21804,7 +23448,7 @@ async function _feiniaoSubmitShip() {
    // 飞鸟寄件专属标记
    feiniaoShip: true,
    shipMode: isExpress ? 'express' : 'errand',
-   shipItems: d.items.map(it => ({ name: it.name, count: it.count || 1, effect: it.effect || '', fromInventory: !!it.fromInventory })),
+   shipItems: d.items.map(it => ({ name: it.name, count: it.count || 1, effect: it.effect || '', fromInventory: !!it.fromInventory, invSource: it.invSource || '' })),
    recipients: d.recipients.map(r => ({ name: r.name, source: r.source || '' })),
    hideSender: !!d.hideSender,
  };
@@ -22091,6 +23735,23 @@ _renderMemo(pd);
       order.notified = true;
       changed = true;
       prompts.push(`【家具商城配送已送达】{{user}}此前在家具商城下单的"${order.name}"已送达，将入库到家中的家具仓库。请在剧情中自然加入收货情节（拆快递/搬家具/摆放），不要复述本提示。如果剧情中已经体现收货，无视本条。`);
+    }
+  }
+  // 服装订单（走物流配送的）到货提示词
+  if (Array.isArray(pd.wardrobeOrders)) {
+    for (const order of pd.wardrobeOrders) {
+      if (!order || order.notified) continue;
+      // 已送达判定
+      let delivered = order.status === 'delivered';
+      if (!delivered && order.status === 'delivering' && order.deliveryMinutes) {
+        const rem = _getDeliveryRemaining(order);
+        delivered = (rem !== null && rem <= 0);
+      }
+      if (!delivered) continue;
+      order.status = 'delivered';
+      order.notified = true;
+      changed = true;
+      prompts.push(`【服装商城配送已送达】{{user}}此前在服装商城下单的"${order.name}"已送达，将收进衣橱仓库。请在剧情中自然加入收货情节（拆快递/试穿），不要复述本提示。如果剧情中已经体现收货，无视本条。`);
     }
   }
   // 游鱼购买确认提示词（一次性消费）
@@ -22418,7 +24079,8 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
   takeout: { name: '', desc: '' },
   shop: { name: '', desc: '' },
   forum: { name: '', desc: '' },
-  cottage: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day', initialHouse: null }
+  cottage: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day', initialHouse: null },
+  wardrobe: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day' }
 };
 
   async function _loadShopMeta() {
@@ -22450,10 +24112,16 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
       deliveryMax: pa.cottage?.deliveryMax || 5,
       deliveryUnit: pa.cottage?.deliveryUnit || 'day',
       initialHouse: pa.cottage?.initialHouse || null
+    },
+    wardrobe: {
+      name: ((pa.wardrobe?.name) || '').trim(),
+      deliveryMin: pa.wardrobe?.deliveryMin || 2,
+      deliveryMax: pa.wardrobe?.deliveryMax || 5,
+      deliveryUnit: pa.wardrobe?.deliveryUnit || 'day'
     }
   };
 } catch(_) {
-  _shopMeta = { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' }, cottage: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day', initialHouse: null } };
+  _shopMeta = { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' }, cottage: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day', initialHouse: null }, wardrobe: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day' } };
     }
   }
 
@@ -22779,7 +24447,7 @@ ${fullCtx}`;
     const mask = document.createElement('div');
     mask.id = 'phone-shop-custom-modal';
     mask.style.cssText = 'position:fixed;inset:0;z-index:10015;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:18px';
-    mask.onclick = (e) => { if (e.target === mask) mask.remove(); };
+    _maskCloseOnBg(mask);
     mask.innerHTML = `
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;max-width:340px;width:100%;color:var(--text)">
         <div style="font-size:15px;font-weight:600;padding:18px 20px 12px">${Utils.escapeHtml(cfg.customBtnText)}</div>
@@ -23944,15 +25612,17 @@ _onPagesScroll,
     // 番茄钟
     _refreshTomatoCard, _tomatoStart, _tomatoStop, _tomatoStartFromUI, _renderTomato, _switchTomatoTab,
     _tomatoToggle, _tomatoAdjust, _tomatoReset, _tomatoFinish, _tomatoEditGoal, _tomatoSaveGoal, _tomatoSaveSettings, _tomatoEditDuration, _tomatoSetDuration, _tomatoSaveDuration, _tomatoExit, _tomatoInviteCompanion, _tomatoSelectCompanion, _tomatoShowDetail,
-    _openDeliveryOrders, _dwPickExpressBg, _dwDoPickImage, _dwDoClearBg, _renderDeliveries, _switchDeliveriesTab, _deliveryClaimToInv,
+    _openDeliveryOrders, _dwPickExpressBg, _dwDoPickImage, _dwDoClearBg, _renderDeliveries, _switchDeliveriesTab, _deliveryClaimToInv, _deliveryClaimPick,
   // 记账 App
  _renderLedger, _ledgerSwitchCur, _ledgerEditEntry, _ledgerAddManual, _ledgerCycleView, _ledgerCalPick,
 // 电台 App
   _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _radioAddCategory, _radioEditCategory, _switchRadioHomeTab, _radioOpenSubscribed,
   // 小屋 App
-  _renderCottage, _cottageAddHouse, _cottageOpenHouse, _cottageEditHouse, _cottageSetCurrent, _switchCottageHomeTab, _cottageDataMenu, getCottageLayoutForLocation, _cottageOpenMall, _cottageOpenInventory, _cottageMallSettings, _cottageMallToggleTag, _cottageMallRefresh, _cottageMallBuy, _cottageInvToggleTag, _cottageInvSearch, _cottageInvDelete, _cottageInvPick, _cottageShowOrders,
+  _renderCottage, _cottageAddHouse, _cottageOpenHouse, _cottageEditHouse, _cottageSetCurrent, _switchCottageHomeTab, _cottageDataMenu, getCottageLayoutForLocation, _cottageOpenMall, _cottageOpenInventory, _cottageMallSettings, _cottageMallToggleTag, _cottageMallRefresh, _cottageMallBuy, _cottageInvToggleTag, _cottageInvSearch, _cottageInvDelete, _cottageInvEditTag, _cottageInvPick, _cottageShowOrders,
   _cottageToggleFloorMenu, _cottageSelectFloor, _cottageAddFloor, _cottageRenameFloor, _cottageDeleteFloor, _cottageAddRoom, _cottageOpenRoom,
   _cottageAddItem, _cottageEditItem, _cottageEditRoom, _cottageAiFill, _cottageAiFillRoom,
+    // 衣橱 App
+    _wardrobeAddItem, _wardrobeRemoveItem, _wardrobeItemDetail, _wardrobePickPortrait, _wardrobeSaveSuit, _wardrobeOpenSuits, _wardrobeAiGenSuits, _switchWardrobeHomeTab, _wardrobeOpenMall, _wardrobeOpenInventory, _wardrobeMallSettings, _wardrobeMallToggleTag, _wardrobeMallRefresh, _wardrobeMallBuy, _wardrobeInvToggleTag, _wardrobeInvSearch, _wardrobeInvDelete, _wardrobeInvEditTag, _wardrobeInvWear, _wardrobeShowOrders,
     // 聊天 App
   _switchChatTab, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _onChatSettingsCallAutoPlayToggle, _onChatSettingsPhoneDownToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
   ingestChatMessages, getChatHistoryForNPCs,
@@ -23971,11 +25641,11 @@ _chatPickCallPortrait, _chatClearCallPortrait, _showCallRecord,
     _closeCameraAdjust, _cameraAIWrite, _cameraAIDraw,
     // 内部方法需要暴露给 onclick
     _addMemo, _editMemo, _saveMemo, _deleteMemo, _shareMemo, _collectMemo,
- _feiniaoAddOrder, _feiniaoCloseSheet, _feiniaoPickFromInventory, _feiniaoCustomItem, _feiniaoCustomConfirm, _feiniaoEditCustomItem,
+ _feiniaoAddOrder, _feiniaoCloseSheet, _feiniaoPickSource, _feiniaoPickFromInventory, _feiniaoCustomItem, _feiniaoCustomConfirm, _feiniaoEditCustomItem,
  _feiniaoInvStep, _feiniaoInvConfirm, _feiniaoDraftSet, _feiniaoSetMode, _feiniaoItemName, _feiniaoItemCount, _feiniaoItemRemove, _feiniaoAddItem, _feiniaoCancelShip, _feiniaoSubmitShip,
  _feiniaoAddRecipient, _feiniaoRecipToggle, _feiniaoRecipConfirm, _feiniaoRecipRemove,
  _feiniaoShowOrderDetail, _feiniaoDeleteOrder, _switchFeiniaoTab,
- _renderYouyu, _switchYouyuTab, _youyuAddListing, _youyuPickFromInventory, _youyuPickInvItem, _youyuOpenListModal, _youyuRenderListModal, _youyuDraftSet, _youyuSetDelivery, _youyuConfirmListing, _youyuRemoveListing, _youyuShareListing, _youyuSendToChat, _youyuHandleBuy, _youyuDeleteOrder, _youyuShowOrderDetail,
+ _renderYouyu, _switchYouyuTab, _youyuAddListing, _youyuPickSource, _youyuPickFromInventory, _youyuPickInvItem, _youyuOpenListModal, _youyuRenderListModal, _youyuDraftSet, _youyuSetDelivery, _youyuConfirmListing, _youyuRemoveListing, _youyuShareListing, _youyuSendToChat, _youyuHandleBuy, _youyuDeleteOrder, _youyuShowOrderDetail,
     _forumRefresh, _forumSearch, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,
     _switchForumTab, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
     _addForumPost, _editForumPost, _saveForumPost, _deleteForumPost, _viewMyForumPost, _collectMyForumPost, _likeMyForumPost, _sendMyForumComment, _sendForumComment, _refreshForumComment, _shareMyForumPost, _refreshMyForumPost,

@@ -5360,17 +5360,17 @@ body[data-sb-skin="neumorph"] .sb-player-card {
  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
  gap:10px;
 }
-body[data-skin="single-default"] .sb-player-card,
+body[data-skin="single-default"] .sb-player-card::before,
 body[data-sb-skin="neumorph"] .sb-player-card::before {
- content: "Your Status";
- grid-column:1 / -1;
- display: block;
- margin-bottom: -2px;
- font-size:11px;
- line-height:1;
- font-weight:800;
- color: var(--accent);
- letter-spacing: .06em;
+  content: "Your Status";
+  grid-column:1 / -1;
+  display: block;
+  margin-bottom: -2px;
+  font-size:11px;
+  line-height:1;
+  font-weight:800;
+  color: var(--accent);
+  letter-spacing: .06em;
 }
 body[data-skin="single-default"] .sb-player-card .sb-field-row ,
 body[data-sb-skin="neumorph"] .sb-player-card .sb-field-row {

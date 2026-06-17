@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=140">
-<link rel="stylesheet" href="css/phone.css?v=177">
+<link rel="stylesheet" href="css/style.css?v=141">
+<link rel="stylesheet" href="css/phone.css?v=185">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
 </head>
@@ -72,10 +72,14 @@
           </button>
           <div id="new-menu-default-theme-sep" class="ctx-sep" style="display:none"></div>
           <button id="new-menu-default-theme" onclick="Worldview.openDefaultThemePicker(); UI.toggleNewMenu()" class="ctx-item" style="display:none;align-items:center;gap:10px">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
-            绑定主题
-          </button>
-        </div>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+绑定主题
+</button>
+<button id="new-menu-default-skin" onclick="Worldview.openDefaultSkinPicker(); UI.toggleNewMenu()" class="ctx-item" style="display:none;align-items:center;gap:10px">
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="6" rx="1"/><rect x="2" y="14" width="13" height="6" rx="1"/><line x1="18" y1="14" x2="18" y2="20"/><line x1="22" y1="14" x2="22" y2="20"/></svg>
+状态栏皮肤
+</button>
+</div>
       </div>
       <!-- 角色筛选器（仅无世界观下显示） -->
       <div id="char-filter-wrapper" style="display:none;position:relative;margin:0 8px 8px">
@@ -614,8 +618,8 @@
  <div class="modal-content">
  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
  <h3>编辑异能</h3>
- <button class="btn-icon" onclick="Character.deleteAbility()" style="width:32px;height:32px;padding:4px;color:var(--danger)">
- <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+ <button class="btn-icon" onclick="Character.closeAbilityModal()" style="width:32px;height:32px;padding:4px">
+ <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
  </button>
  </div>
  <div class="form-group"><span class="form-label">异能名称</span><input type="text" id="ability-edit-name" placeholder="异能名称"></div>
@@ -623,7 +627,7 @@
  <div class="form-group"><span class="form-label">异能等级</span><input type="text" id="ability-edit-level" placeholder="如：S级、A级"></div>
 <div class="form-group"><span class="form-label">异能描述</span><textarea id="ability-edit-desc" rows="4" placeholder="异能效果描述"></textarea></div>
   <div class="modal-actions" style="flex-shrink:0;margin-top:12px;padding-top:12px">
- <button onclick="Character.closeAbilityModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
+ <button onclick="Character.deleteAbility()" style="flex:1;background:none;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));color:var(--danger)">删除</button>
  <button onclick="Character.saveAbility()" style="flex:1">保存</button>
  </div>
  </div>
@@ -634,8 +638,8 @@
  <div class="modal-content">
  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
  <h3>编辑物品</h3>
- <button class="btn-icon" onclick="Character.deleteItem()" style="width:32px;height:32px;padding:4px;color:var(--danger)">
- <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+ <button class="btn-icon" onclick="Character.closeItemModal()" style="width:32px;height:32px;padding:4px">
+ <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
  </button>
  </div>
  <div class="form-group"><span class="form-label">物品名称</span><input type="text" id="item-edit-name" placeholder="物品名称"></div>
@@ -643,7 +647,7 @@
 <div class="form-group"><span class="form-label">物品描述</span><textarea id="item-edit-effect" rows="4" placeholder="物品效果描述"></textarea></div>
 <div class="form-group"><span class="form-label">入手时间</span><input type="text" id="item-edit-gotat" placeholder="如：2026年4月30日 18:30（留空则自动提取）"></div>
   <div class="modal-actions" style="flex-shrink:0;margin-top:12px;padding-top:12px">
- <button onclick="Character.closeItemModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
+ <button onclick="Character.deleteItem()" style="flex:1;background:none;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));color:var(--danger)">删除</button>
  <button onclick="Character.saveItem()" style="flex:1">保存</button>
  </div>
   </div>
@@ -3887,6 +3891,15 @@ NPC
   </div>
 </div>
 
+<!-- 无世界观·状态栏皮肤选择弹窗 -->
+<div id="default-skin-modal" class="modal hidden" onclick="if(event.target===this) Worldview.closeDefaultSkinPicker()">
+  <div class="modal-content" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:16px 12px;max-width:280px;width:80%">
+    <h3 style="margin:0 0 4px 0;color:var(--text);font-size:15px;padding:0 8px">状态栏皮肤</h3>
+    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;padding:0 8px">为「无世界观」选择状态栏外观</div>
+    <div id="default-skin-list" style="max-height:50vh;overflow-y:auto"></div>
+  </div>
+</div>
+
 <!-- 日志弹窗 -->
 <div id="log-modal" class="modal hidden">
   <div class="modal-content" style="max-height:80vh;display:flex;flex-direction:column">
@@ -3963,7 +3976,7 @@ const GameLog = (() => {
 })();
 </script>
 <script src="js/db.js?v=11"></script>
-<script src="js/utils.js?v=1"></script>
+<script src="js/utils.js?v=2"></script>
 <script src="js/markdown.js?v=7"></script>
 <script src="js/api.js"></script>
 <script src="js/time-awareness.js"></script>
@@ -3973,8 +3986,8 @@ const GameLog = (() => {
 <script src="js/memory.js"></script>
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
-<script src="js/statusbar_theme.js?v=55"></script>
-<script src="js/worldview.js?v=43"></script>
+<script src="js/statusbar_theme.js?v=56"></script>
+<script src="js/worldview.js?v=46"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js"></script>
@@ -3983,11 +3996,11 @@ const GameLog = (() => {
 <script src="js/single_card.js?v=9"></script>
 <script src="js/attached-chars.js"></script>
 <script src="js/single_mode.js?v=2"></script>
-<script src="js/character.js?v=2"></script>
+<script src="js/character.js?v=3"></script>
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=5"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=47"></script>
+<script src="js/chat.js?v=50"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4003,13 +4016,13 @@ const GameLog = (() => {
 <script src="js/worldvoice.js?v=3"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
-<script src="js/phone.js?v=454"></script>
+<script src="js/phone.js?v=481"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
-<script src="js/ui.js?v=6"></script>
+<script src="js/ui.js?v=7"></script>
 <script src="js/data-mgr.js"></script>
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>
@@ -4022,7 +4035,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js"></script>
-<script src="js/app.js?v=103"></script>
+<script src="js/app.js?v=104"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

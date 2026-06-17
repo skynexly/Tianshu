@@ -404,16 +404,19 @@ var StatusBarTheme = (() => {
     if (modal) modal.classList.add('hidden');
   }
 
-  function selectTemplate(template) {
+  async function selectTemplate(template) {
     console.log('[StatusBarTheme.selectTemplate] 开始，模板:', template);
-    
+
     // 先关闭模板选择器
     closeTemplatePicker();
-    
-    // 使用 UI.showPrompt 或者直接用 prompt
+
+    // 用项目统一的输入弹窗（替代浏览器原生 prompt）
     const defaultName = '我的' + (PRESETS[template]?.name || '主题');
-    const name = prompt('请输入主题名称', defaultName);
-    
+    const name = await UI.showSimpleInput('给新主题起个名字', defaultName, {
+      placeholder: '输入主题名称',
+      allowEmpty: false
+    });
+
     if (!name || !name.trim()) {
       console.log('[StatusBarTheme.selectTemplate] 用户取消输入');
       return;

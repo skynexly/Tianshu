@@ -3433,11 +3433,11 @@ align-self: start;
   box-sizing: border-box;
 }
 .phone-shell.has-custom-wallpaper .phone-ledger-summary,
-.phone-shell.has-custom-wallpaper .phone-ledger-item {
-  background-color: rgba(255,255,255,0.1);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
+  .phone-shell.has-custom-wallpaper .phone-ledger-item {
+    background-color: rgba(18, 20, 28, 0.38) !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  }
 /* 视图切换按钮（标题栏右上角） */
 .phone-ledger-viewbtn {
   width: 36px; height: 36px;
@@ -5848,7 +5848,6 @@ align-self: start;
   background: rgba(255,255,255,0.18);
   border: 1px solid rgba(255,255,255,0.24);
   box-shadow: 0 6px 18px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.22);
-  backdrop-filter: blur(10px);
   cursor: pointer;
   transition: transform .1s;
 }
@@ -5887,7 +5886,6 @@ align-self: start;
   background: rgba(255,255,255,0.20);
   border: 1px solid rgba(255,255,255,0.26);
   box-shadow: 0 8px 22px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.24);
-  backdrop-filter: blur(12px);
   cursor: pointer;
   position: relative;
   transition: transform .1s;
@@ -5943,7 +5941,6 @@ align-self: start;
   background: rgba(255,255,255,0.18);
   border: 1px solid rgba(255,255,255,0.24);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.22);
-  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -6011,7 +6008,6 @@ align-self: start;
   background: rgba(255,255,255,0.18);
   border: 1px solid rgba(255,255,255,0.24);
   box-shadow: 0 6px 18px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.22);
-  backdrop-filter: blur(10px);
   cursor: pointer;
   transition: transform .12s ease;
 }
@@ -6049,7 +6045,6 @@ align-self: start;
   background: rgba(255,255,255,0.18);
   border: 1px solid rgba(255,255,255,0.24);
   box-shadow: 0 6px 18px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.22);
-  backdrop-filter: blur(10px);
   cursor: pointer;
   transition: transform .1s;
   margin-bottom: 4px;
@@ -6109,7 +6104,6 @@ align-self: start;
   background: rgba(255,255,255,0.18);
   border: 1px solid rgba(255,255,255,0.24);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.22);
-  backdrop-filter: blur(10px);
   cursor: pointer;
   transition: transform .1s;
 }
@@ -6151,5 +6145,235 @@ align-self: start;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
+}
+
+/* ===== 衣橱 App ===== */
+.wardrobe-shell {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.wardrobe-top {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+}
+.wardrobe-portrait {
+  width: 100px;
+  height: 150px;
+  border-radius: 14px;
+  background: var(--bg-tertiary) center/cover no-repeat;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: opacity .2s;
+}
+.wardrobe-portrait:active { opacity: .7; }
+.wardrobe-portrait-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+.wardrobe-portrait-empty span {
+  font-size: 11px;
+}
+.wardrobe-top-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.wardrobe-card-head {
+  /* 标题区贴顶 */
+}
+.wardrobe-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.wardrobe-card-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.wardrobe-top-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wardrobe-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+.wardrobe-btn:active { opacity: .7; }
+.wardrobe-btn svg { flex-shrink: 0; color: var(--accent); }
+.wardrobe-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.wardrobe-part {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.wardrobe-part-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.wardrobe-part-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.wardrobe-part-add {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wardrobe-part-add:active { opacity: .7; }
+.wardrobe-part-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wardrobe-part-empty {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+.wardrobe-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--bg-tertiary);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.wardrobe-item:active { background: var(--bg-secondary); }
+.wardrobe-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.wardrobe-item-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wardrobe-item-del {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 3px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wardrobe-item-del:active { color: #f44; }
+/* 衣橱 — 套装列表弹窗 */
+.wardrobe-suit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wardrobe-suit-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+  gap: 10px;
+}
+.wardrobe-suit-info {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.wardrobe-suit-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.wardrobe-suit-preview {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wardrobe-suit-del {
+  flex-shrink: 0;
+  padding: 5px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wardrobe-suit-del:active { color: #f44; }
+
+/* 遮罩模式：衣橱卡片照搬配送卡玻璃风（渐变+边框+inset高光），文字提亮 */
+.phone-shell.has-custom-wallpaper .wardrobe-part,
+.phone-shell.has-custom-wallpaper .wardrobe-item,
+.phone-shell.has-custom-wallpaper .wardrobe-btn,
+.phone-shell.has-custom-wallpaper .wardrobe-part-add {
+  background: linear-gradient(to top, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 55%), linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.14) 100%), rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.24);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.22);
+}
+.phone-shell.has-custom-wallpaper .wardrobe-portrait-empty {
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+.phone-shell.has-custom-wallpaper .wardrobe-card-hint,
+.phone-shell.has-custom-wallpaper .wardrobe-part-name,
+.phone-shell.has-custom-wallpaper .wardrobe-item-name,
+.phone-shell.has-custom-wallpaper .wardrobe-item-desc,
+.phone-shell.has-custom-wallpaper .wardrobe-part-empty {
+  color: rgba(255,255,255,0.9);
+}
+.phone-shell.has-custom-wallpaper .wardrobe-part-add,
+.phone-shell.has-custom-wallpaper .wardrobe-btn {
+  color: #fff;
 }
 .cottage-item-add:active { background: rgba(255,255,255,0.08); }

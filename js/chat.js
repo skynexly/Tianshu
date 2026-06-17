@@ -923,6 +923,32 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
 const char = await Character.get();
 if (char) systemParts.push(Character.formatForPrompt(char));
 
+// 3-衣橱. 当前着装（从衣橱系统读取，只要穿了就发）
+try {
+  if (typeof Phone !== 'undefined' && Phone._getPhoneData) {
+    const _pd = await Phone._getPhoneData();
+    const _outfit = (_pd && _pd.wardrobeOutfit) || {};
+    const _WARDROBE_PARTS = [
+      { key: 'top', name: '上装' },
+      { key: 'bottom', name: '下装' },
+      { key: 'onesuit', name: '连体' },
+      { key: 'outer', name: '外套' },
+      { key: 'shoes', name: '鞋袜' },
+      { key: 'hat', name: '帽子' },
+      { key: 'accessory', name: '饰品' },
+    ];
+    const _lines = _WARDROBE_PARTS.map(p => {
+      const items = Array.isArray(_outfit[p.key]) ? _outfit[p.key].filter(it => it && it.name) : [];
+      if (!items.length) return '';
+      const names = items.map(it => it.desc ? `${it.name}（${it.desc}）` : it.name).join(' + ');
+      return `${p.name}：${names}`;
+    }).filter(Boolean);
+    if (_lines.length) {
+      systemParts.push('【{{user}}当前着装】\n{{user}}此刻穿着以下服装，描写外貌/动作时请与之保持一致，不要凭空换装：\n' + _lines.join('\n'));
+    }
+  }
+} catch(_) {}
+
 // 3a. 玩家当前居住地（从小屋系统读取）
 try {
   if (typeof Phone !== 'undefined' && Phone._getPhoneData) {
@@ -5321,20 +5347,35 @@ if (!gp) return null;
    */
   async function showContext() {
     // v687 重构：复用 _buildApiContext
-    const { apiMessages, char, relatedMemories, convSettings, isGameMode, isGaidenConv, isSingleConv } = await _buildApiContext(messages);
+    try {
+      const { apiMessages, char, relatedMemories, convSettings, isGameMode, isGaidenConv, isSingleConv } = await _buildApiContext(messages);
 
-    const totalTokens = apiMessages.reduce((sum, m) => sum + Utils.estimateTokens(m.content), 0);
+      const totalTokens = apiMessages.reduce((sum, m) => sum + Utils.estimateTokens(m.content), 0);
 
-    const content = apiMessages.map((m, i) => {
-      return `[${i}] role=${m.role} (~${Utils.estimateTokens(m.content)}tk)\n${m.content}`;
-    }).join('\n\n' + '='.repeat(60) + '\n\n');
+      const content = apiMessages.map((m, i) => {
+        const _c = (typeof m.content === 'string') ? m.content
+          : (m.content == null ? '' : (typeof m.content === 'object' ? JSON.stringify(m.content, null, 2) : String(m.content)));
+        return `[${i}] role=${m.role} (~${Utils.estimateTokens(m.content)}tk)\n${_c}`;
+      }).join('\n\n' + '='.repeat(60) + '\n\n');
 
-    document.getElementById('edit-content').value =
-      `=== 上下文预览 ===\n消息数: ${apiMessages.length}\n总Token估算: ~${totalTokens}\n当前轮数: ${roundCount}\n当前分支: ${currentBranchId}\n当前区域: ${NPC.getRegion()}\n文游模式: ${isGameMode ? '开' : '关'}\n流式输出: ${convSettings.stream ? '开' : '关'}\n回复格式: ${convSettings.format ? '开' : '关'}\n番外对话: ${isGaidenConv ? '是' : '否'}\n命中记忆: ${relatedMemories.length}条\n\n${'='.repeat(50)}\n\n${content}`;
-    document.getElementById('edit-modal').classList.remove('hidden');
-    document.getElementById('edit-modal').dataset.editId = '__debug__';
-    if (typeof UI !== 'undefined' && UI.switchDebugTab) {
-      UI.switchDebugTab('debug-context');
+      document.getElementById('edit-content').value =
+        `=== 上下文预览 ===\n消息数: ${apiMessages.length}\n总Token估算: ~${totalTokens}\n当前轮数: ${roundCount}\n当前分支: ${currentBranchId}\n当前区域: ${NPC.getRegion()}\n文游模式: ${isGameMode ? '开' : '关'}\n流式输出: ${convSettings.stream ? '开' : '关'}\n回复格式: ${convSettings.format ? '开' : '关'}\n番外对话: ${isGaidenConv ? '是' : '否'}\n命中记忆: ${relatedMemories.length}条\n\n${'='.repeat(50)}\n\n${content}`;
+      document.getElementById('edit-modal').classList.remove('hidden');
+      document.getElementById('edit-modal').dataset.editId = '__debug__';
+      if (typeof UI !== 'undefined' && UI.switchDebugTab) {
+        UI.switchDebugTab('debug-context');
+      }
+    } catch (e) {
+      console.error('[Chat] showContext 构建上下文失败', e);
+      // 不再静默失败：把错误显示在弹窗里，方便排查
+      const ta = document.getElementById('edit-content');
+      if (ta) {
+        ta.value = `=== 上下文预览失败 ===\n构建上下文时出错：\n${e && e.message ? e.message : e}\n\n${e && e.stack ? e.stack : ''}`;
+        document.getElementById('edit-modal').classList.remove('hidden');
+        document.getElementById('edit-modal').dataset.editId = '__debug__';
+        if (typeof UI !== 'undefined' && UI.switchDebugTab) UI.switchDebugTab('debug-context');
+      }
+      if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('上下文构建出错，已显示错误详情', 2000);
     }
   }
 

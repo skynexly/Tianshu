@@ -57,8 +57,10 @@ const UI = (() => {
         const showDefaultTheme = !activeWv || activeWv === '__default_wv__';
         const themeBtn = document.getElementById('new-menu-default-theme');
         const themeSep = document.getElementById('new-menu-default-theme-sep');
+        const skinBtn = document.getElementById('new-menu-default-skin');
         if (themeBtn) themeBtn.style.display = showDefaultTheme ? 'flex' : 'none';
         if (themeSep) themeSep.style.display = showDefaultTheme ? 'block' : 'none';
+        if (skinBtn) skinBtn.style.display = showDefaultTheme ? 'flex' : 'none';
       } catch(_) {}
       menu.classList.remove('closing', 'hidden');
     }

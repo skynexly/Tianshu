@@ -71,6 +71,11 @@ const Utils = (() => {
    */
   function estimateTokens(text) {
     if (!text) return 0;
+    // 兼容非字符串入参（如多模态 content 为数组/对象时），统一转成字符串再估算
+    if (typeof text !== 'string') {
+      try { text = typeof text === 'object' ? JSON.stringify(text) : String(text); }
+      catch(_) { text = String(text); }
+    }
     const chinese = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
     const english = (text.match(/[a-zA-Z]+/g) || []).length;
     const other = (text.match(/[0-9]+/g) || []).length;

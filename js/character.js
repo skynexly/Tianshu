@@ -864,10 +864,12 @@ async function saveAbility() {
 }
 
 async function deleteAbility() {
-  if (editingAbilityIdx === null) return;
-  Character.removeAbility(editingAbilityIdx);
-  closeAbilityEdit();
-}
+    if (editingAbilityIdx === null) return;
+    const ok = await UI.showConfirm('删除异能', '确定删除这个异能吗？');
+    if (!ok) return;
+    Character.removeAbility(editingAbilityIdx);
+    closeAbilityEdit();
+  }
 
 async function closeAbilityModal() {
   await closeAbilityEdit();
@@ -964,10 +966,12 @@ async function saveItem() {
 }
 
 async function deleteItem() {
-  if (editingItemIdx === null) return;
-  Character.removeItem(editingItemIdx);
-  closeItemEdit();
-}
+    if (editingItemIdx === null) return;
+    const ok = await UI.showConfirm('删除物品', '确定删除这个物品吗？');
+    if (!ok) return;
+    Character.removeItem(editingItemIdx);
+    closeItemEdit();
+  }
 
 async function closeItemModal() {
   await closeItemEdit();

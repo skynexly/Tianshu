@@ -643,7 +643,9 @@ function _applyStatusBarSkin(w) {
       return;
     }
     // 自定义世界观
-    const skin = w.statusBarSkin || 'terminal';
+    // 无世界观（__default_wv__）原生默认皮肤是 single-default，其余自定义世界观默认 terminal
+    const _defaultSkin = (w.id === '__default_wv__') ? 'single-default' : 'terminal';
+    const skin = w.statusBarSkin || _defaultSkin;
     if (skin.startsWith('sb_')) {
       if (window.StatusBarTheme) {
         const theme = StatusBarTheme.get(skin);
@@ -654,9 +656,14 @@ function _applyStatusBarSkin(w) {
           document.body.setAttribute('data-sb-skin', 'terminal');
         }
       }
+    } else if (skin === 'single-default') {
+      // 无世界观风：用 data-skin，清掉 data-sb-skin
+      document.body.setAttribute('data-skin', 'single-default');
+      document.body.removeAttribute('data-sb-skin');
     } else {
-      // 预设风格
+      // 预设风格（terminal / neumorph）
       document.body.setAttribute('data-sb-skin', skin);
+      document.body.removeAttribute('data-skin');
     }
     try { setTimeout(() => StatusBar?.refreshFromConv?.(), 0); } catch(_) {}
   } catch(_) {}
@@ -4993,29 +5000,99 @@ function closeDefaultThemePicker() {
 }
 
 async function pickDefaultTheme(value) {
-  try {
-    let wv = await DB.get('worldviews', '__default_wv__');
-    if (!wv) {
-      wv = { id: '__default_wv__', name: '无世界观', description: '未挂世界观的对话', icon: '∅', iconImage: '' };
-    }
-    wv.themeName = value || '';
-    await DB.put('worldviews', wv);
-
-    // 如果当前正处于无世界观下，立刻应用
-    const cur = (typeof getCurrentId === 'function') ? getCurrentId() : null;
-    if (!cur || cur === '__default_wv__') {
-      if (value) {
-        _applyBoundTheme(value);
+    try {
+      let wv = await DB.get('worldviews', '__default_wv__');
+      if (!wv) {
+        wv = { id: '__default_wv__', name: '无世界观', description: '未挂世界观的对话', icon: '∅', iconImage: '' };
       }
-      // 不绑定时不主动切回什么——保留用户当前临时改的主题
+      wv.themeName = value || '';
+      await DB.put('worldviews', wv);
+
+      // 如果当前正处于无世界观下，立刻应用
+      const cur = (typeof getCurrentId === 'function') ? getCurrentId() : null;
+      if (!cur || cur === '__default_wv__') {
+        if (value) {
+          _applyBoundTheme(value);
+        }
+        // 不绑定时不主动切回什么——保留用户当前临时改的主题
+      }
+      UI.showToast(value ? '主题已绑定到无世界观' : '已取消绑定', 1800);
+    } catch(e) {
+      console.warn('[pickDefaultTheme]', e);
+      UI.showToast('保存失败', 1800);
     }
-    UI.showToast(value ? '主题已绑定到无世界观' : '已取消绑定', 1800);
-  } catch(e) {
-    console.warn('[pickDefaultTheme]', e);
-    UI.showToast('保存失败', 1800);
+    closeDefaultThemePicker();
   }
-  closeDefaultThemePicker();
-}
+
+  // ---------- 无世界观·状态栏皮肤选择弹窗 ----------
+  async function openDefaultSkinPicker() {
+    const modal = document.getElementById('default-skin-modal');
+    const list = document.getElementById('default-skin-list');
+    if (!modal || !list) return;
+
+    // 读出当前 __default_wv__ 的 statusBarSkin（无世界观默认 single-default）
+    let current = 'single-default';
+    try {
+      const wv = await DB.get('worldviews', '__default_wv__');
+      if (wv && wv.statusBarSkin) current = wv.statusBarSkin;
+    } catch(_) {}
+
+    const _row = (label, value, desc) => {
+      const active = current === value;
+      const check = active
+        ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0"><path d="M20 6 9 17l-5-5"/></svg>'
+        : '<span style="width:14px;flex-shrink:0"></span>';
+      const safe = Utils.escapeHtml(value);
+      const descHtml = desc ? `<span style="font-size:11px;color:var(--text-secondary);display:block;margin-top:2px">${Utils.escapeHtml(desc)}</span>` : '';
+      return `<div onclick="Worldview.pickDefaultSkin('${safe}')" class="ctx-item" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text)${active ? ';background:var(--bg-tertiary)' : ''}">${check}<span style="flex:1;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(label)}</span>${descHtml}</span></div>`;
+    };
+
+    // 预设风格
+    let html = _row('终端风格', 'terminal', '黑客风格，等宽字体')
+      + _row('拟态风格', 'neumorph', '柔和阴影，圆角卡片')
+      + _row('无世界观', 'single-default', '简洁优雅');
+
+    // 自定义状态栏主题（sb_ 开头）
+    try {
+      if (window.StatusBarTheme && StatusBarTheme.getAll) {
+        const customThemes = StatusBarTheme.getAll();
+        if (customThemes.length) {
+          html += '<div style="height:1px;background:var(--border);margin:4px 0"></div>';
+          customThemes.forEach(t => { html += _row(t.name, t.id, '自定义主题'); });
+        }
+      }
+    } catch(_) {}
+
+    list.innerHTML = html;
+    modal.classList.remove('hidden');
+  }
+
+  function closeDefaultSkinPicker() {
+    const modal = document.getElementById('default-skin-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  async function pickDefaultSkin(value) {
+    try {
+      let wv = await DB.get('worldviews', '__default_wv__');
+      if (!wv) {
+        wv = { id: '__default_wv__', name: '无世界观', description: '未挂世界观的对话', icon: '∅', iconImage: '' };
+      }
+      wv.statusBarSkin = value || 'single-default';
+      await DB.put('worldviews', wv);
+
+      // 如果当前正处于无世界观下，立刻应用
+      const cur = (typeof getCurrentId === 'function') ? getCurrentId() : null;
+      if (!cur || cur === '__default_wv__') {
+        _applyStatusBarSkin(wv);
+      }
+      UI.showToast('状态栏皮肤已应用', 1800);
+    } catch(e) {
+      console.warn('[pickDefaultSkin]', e);
+      UI.showToast('保存失败', 1800);
+    }
+    closeDefaultSkinPicker();
+  }
 
 // 初始化时恢复当前世界观
   async function _restoreCurrentWorldview() {
@@ -5076,6 +5153,14 @@ async function pickDefaultTheme(value) {
       Chat.setWorldview('');
       NPC.init({ npcs: [], factions: [], regions: [] });
       console.log('[Worldview.restore] 使用默认世界观（空）');
+      // 应用无世界观保存的状态栏皮肤 / 绑定主题
+      try {
+        const dwv = await DB.get('worldviews', '__default_wv__');
+        if (dwv) {
+          _applyStatusBarSkin(dwv);
+          if (dwv.themeName) { try { _applyBoundTheme(dwv.themeName); } catch(_) {} }
+        }
+      } catch(e) { console.warn('[Worldview.restore] 无世界观皮肤恢复失败', e); }
     }
   }
   
@@ -5710,6 +5795,12 @@ async function openPhoneAppsEditor() {
   setVal('pa-cottage-deliveryMin', ct.deliveryMin);
   setVal('pa-cottage-deliveryMax', ct.deliveryMax);
   const ctUnitEl = document.getElementById('pa-cottage-deliveryUnit'); if (ctUnitEl) ctUnitEl.value = ct.deliveryUnit || 'day';
+  // 衣橱（无初始模板，仅 APP 名 + 配送时间）
+  const wr = pa.wardrobe || {};
+  setVal('pa-wardrobe-name', wr.name);
+  setVal('pa-wardrobe-deliveryMin', wr.deliveryMin);
+  setVal('pa-wardrobe-deliveryMax', wr.deliveryMax);
+  const wrUnitEl = document.getElementById('pa-wardrobe-deliveryUnit'); if (wrUnitEl) wrUnitEl.value = wr.deliveryUnit || 'day';
   // 模板状态
   const tplStatus = document.getElementById('pa-cottage-template-status');
   if (tplStatus) {
@@ -5897,6 +5988,27 @@ function _buildPhoneAppsEditorHTML(w) {
         <button type="button" id="pa-cottage-template-clear" style="padding:6px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:none;color:#e0464b;cursor:pointer">清除</button>
       </div>
     </div>
+
+  <!-- 衣橱 -->
+  <div style="font-size:14px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:4px;display:flex;align-items:center;gap:6px">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M12 3v3"/><path d="m5 6 3 14h8l3-14"/></svg>
+    衣橱
+    <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（默认：衣橱）</span>
+  </div>
+  <div style="background:var(--bg-tertiary);padding:12px;border-radius:8px;margin-bottom:16px">
+    <label style="display:block;margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">APP 名称</span>
+      <input type="text" id="pa-wardrobe-name" placeholder="例如：衣阁 / 行装 / 锦衣坊" style="width:100%;padding:6px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+    </label>
+    <div>
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">服装商城配送时间 <span style="font-size:11px;color:var(--text-secondary)">（留空用默认2-5天）</span></span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="number" id="pa-wardrobe-deliveryMin" placeholder="最小" style="width:70px;padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+        <span style="color:var(--text-secondary)">~</span>
+        <input type="number" id="pa-wardrobe-deliveryMax" placeholder="最大" style="width:70px;padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+        <select id="pa-wardrobe-deliveryUnit" style="padding:6px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px"><option value="day">天</option><option value="min">分钟</option></select>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -5930,6 +6042,12 @@ async function closePhoneAppsEditor() {
     w.phoneApps.cottage.deliveryMin = getVal('pa-cottage-deliveryMin');
     w.phoneApps.cottage.deliveryMax = getVal('pa-cottage-deliveryMax');
     w.phoneApps.cottage.deliveryUnit = getVal('pa-cottage-deliveryUnit') || 'day';
+    // 衣橱（无初始模板）
+    w.phoneApps.wardrobe = w.phoneApps.wardrobe || {};
+    w.phoneApps.wardrobe.name = getVal('pa-wardrobe-name');
+    w.phoneApps.wardrobe.deliveryMin = getVal('pa-wardrobe-deliveryMin');
+    w.phoneApps.wardrobe.deliveryMax = getVal('pa-wardrobe-deliveryMax');
+    w.phoneApps.wardrobe.deliveryUnit = getVal('pa-wardrobe-deliveryUnit') || 'day';
     // initialHouse 由按钮事件直接写入，这里不覆盖
     // 同步回隐藏字段（供 _collectForm 兼容）
     const syncHidden = (hid, val) => { const el = document.getElementById(hid); if (el) el.value = val; };
@@ -6224,7 +6342,7 @@ toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, sele
     reapplyStatusBarSkin,
     _toggleSkinDropdown, _selectSkin,
     toggleThemeDropdown, selectTheme,
-    openDefaultThemePicker, closeDefaultThemePicker, pickDefaultTheme,
+    openDefaultThemePicker, closeDefaultThemePicker, pickDefaultTheme, openDefaultSkinPicker, closeDefaultSkinPicker, pickDefaultSkin,
     restoreCurrentWorldview: _restoreCurrentWorldview,
     exportCurrent, importSingle, restoreBuiltinWorldview: _restoreBuiltinWorldview, toggleEditMoreMenu: _toggleEditMoreMenu, closeEditMoreMenu: _closeEditMoreMenu, loadBuiltinWorldviews: _loadBuiltinWorldviews, migrateTianshuchengNpcNames: _migrateTianshuchengNpcNames,
     ensureHiddenWvForCard, deleteHiddenWvForCard, isHiddenWv,
