@@ -1,5 +1,5 @@
 // Service Worker - 天枢城 PWA v2
-const CACHE_NAME = 'tianshu-v697.0';
+const CACHE_NAME = 'tianshu-v702.0';
 const PRE_CACHE = [
   './',
   './index.html',
@@ -36,10 +36,10 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;
 
-  // JS 文件：网络优先 + 缓存兜底。
-  // 网络成功时用最新版并更新缓存；网络失败时从缓存兜底，避免 "DB is not defined" 白屏。
+  // JS / CSS 文件：网络优先 + 缓存兜底。
+  // 网络成功时用最新版并更新缓存；网络失败时从缓存兜底，避免 "DB is not defined" 白屏或样式丢失。
   // 始终对网络请求加 cache:'no-store' 跳过浏览器 HTTP 缓存，确保拿到最新文件。
-  if (url.pathname.endsWith('.js') && !url.pathname.endsWith('sw.js')) {
+  if ((url.pathname.endsWith('.js') && !url.pathname.endsWith('sw.js')) || url.pathname.endsWith('.css')) {
     e.respondWith(
       fetch(e.request, { cache: 'no-store' })
         .then(resp => {
