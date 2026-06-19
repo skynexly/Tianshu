@@ -81,6 +81,88 @@ const DataMgr = (() => {
     }
   }
 
+  // 递归剥离内嵌的 base64 dataURL（图片/字体等），替换成占位符。
+  // 不依赖具体字段名，任何值为 data:image/... 或 data:font/... 的字符串都会被清掉。
+  // 原地修改传入对象，调用方应传入可丢弃的副本或本来就要序列化的数据。
+  function _stripDataUrls(node) {
+    if (node == null) return node;
+    if (typeof node === 'string') {
+      return /^data:(image|font|audio|video)\//i.test(node) ? '[stripped]' : node;
+    }
+    if (Array.isArray(node)) {
+      for (let i = 0; i < node.length; i++) node[i] = _stripDataUrls(node[i]);
+      return node;
+    }
+    if (typeof node === 'object') {
+      for (const k of Object.keys(node)) node[k] = _stripDataUrls(node[k]);
+      return node;
+    }
+    return node;
+  }
+
+  // 纯文字导出：跳过纯图片表（drawnImages/npcAvatars），并递归剥离其余数据里
+  // 内嵌的 base64 图片/字体，得到一个体积极小、永远不会 OOM 的存档。
+  // 用于数据量大、带图导出闪退时的兜底备份；图片不会被保留。
+  async function exportTextOnly() {
+    try {
+      const gameState = _stripDataUrls(await _safeGetAll('gameState'));
+      const conversations = (gameState.find(x => x && x.key === 'conversations')?.value) || [];
+
+      const parts = [];
+      let _first = true;
+      const _emit = (key, value) => {
+        parts.push((_first ? '{' : ',') + JSON.stringify(key) + ':');
+        parts.push(JSON.stringify(value === undefined ? null : value));
+        _first = false;
+      };
+
+      _emit('version', 4);
+      _emit('textOnly', true);
+      _emit('exportTime', new Date().toISOString());
+      _emit('messages', _stripDataUrls(await _safeGetAll('messages')));
+      _emit('memories', _stripDataUrls(await _safeGetAll('memories')));
+      _emit('settings', _stripDataUrls(await _safeGetAll('settings')));
+      _emit('characters', _stripDataUrls(await _safeGetAll('characters')));
+      _emit('gameState', gameState);
+      _emit('conversations', conversations);
+      _emit('worldviews', _stripDataUrls(await _safeGetAll('worldviews')));
+      _emit('archives', _stripDataUrls(await _safeGetAll('archives')));
+      _emit('summaries', _stripDataUrls(await _safeGetAll('summaries')));
+      _emit('singleCards', _stripDataUrls(await _safeGetAll('singleCards')));
+      _emit('lorebooks', _stripDataUrls(await _safeGetAll('lorebooks')));
+      // 图片表整表跳过：导出空数组占位，导入端遇到空数组即不写入
+      _emit('npcAvatars', []);
+      _emit('drawnImages', []);
+      _emit('single_cards', _stripDataUrls(await _safeGetAll('singleCards')));
+      _emit('npc_avatars', []);
+      _emit('drawn_images', []);
+      // 主题配置里可能含 chatBgImage/customFontData，解析后剥离再写回字符串
+      let themeConfig = localStorage.getItem('themeConfig') || null;
+      try { if (themeConfig) themeConfig = JSON.stringify(_stripDataUrls(JSON.parse(themeConfig))); } catch(_) {}
+      let themePresets = localStorage.getItem('themeCustomPresets') || null;
+      try { if (themePresets) themePresets = JSON.stringify(_stripDataUrls(JSON.parse(themePresets))); } catch(_) {}
+      _emit('themeConfig', themeConfig);
+      _emit('themeCustomPresets', themePresets);
+      parts.push('}');
+
+      const blob = new Blob(parts, { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `skynex-save-text-${new Date().toISOString().slice(0, 10)}.json`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      try { localStorage.setItem('tianshu_last_export_at', String(Date.now())); } catch(_) {}
+      UI.showToast('已导出纯文字存档（不含图片）', 2500);
+    } catch (e) {
+      console.error('[DataMgr.exportTextOnly]', e);
+      await UI.showAlert('导出失败', e.message || String(e));
+    }
+  }
+
   function importAll() {
     const input = document.createElement('input');
     input.type = 'file';
@@ -93,9 +175,13 @@ const DataMgr = (() => {
         const data = JSON.parse(text);
         if (!data.version) throw new Error('无效的存档文件');
 
-        if (!await UI.showConfirm('导入存档', '导入将覆盖当前所有数据，确定继续？')) return;
+        const isTextOnly = !!data.textOnly;
+        const confirmMsg = isTextOnly
+          ? '这是纯文字存档（不含图片）。导入会覆盖文字数据，但保留你当前已有的图片（头像、生成图）。确定继续？'
+          : '导入将覆盖当前所有数据，确定继续？';
+        if (!await UI.showConfirm('导入存档', confirmMsg)) return;
 
-        // 清空
+        // 清空（纯文字存档不动图片表，保留现有图片）
         await _safeClear('messages');
         await _safeClear('memories');
         await _safeClear('settings');
@@ -105,9 +191,11 @@ const DataMgr = (() => {
         await _safeClear('archives');
         await _safeClear('summaries');
         await _safeClear('singleCards');
-        await _safeClear('npcAvatars');
-        await _safeClear('drawnImages');
         await _safeClear('lorebooks');
+        if (!isTextOnly) {
+          await _safeClear('npcAvatars');
+          await _safeClear('drawnImages');
+        }
 
         // 导入
         for (const m of (data.messages || [])) await _safePut('messages', m);
@@ -124,17 +212,20 @@ const DataMgr = (() => {
         for (const a of (data.archives || [])) await _safePut('archives', a);
         for (const s of (data.summaries || [])) await _safePut('summaries', s);
         const importedSingleCards = data.singleCards || data.single_cards || [];
-        const importedNpcAvatars = data.npcAvatars || data.npc_avatars || [];
-        const importedDrawnImages = data.drawnImages || data.drawn_images || [];
         for (const c of importedSingleCards) await _safePut('singleCards', c);
-        for (const a of importedNpcAvatars) await _safePut('npcAvatars', a);
-        for (const img of importedDrawnImages) await _safePut('drawnImages', img);
+        // 纯文字存档的图片表是空的，跳过写入以保留现有图片
+        if (!isTextOnly) {
+          const importedNpcAvatars = data.npcAvatars || data.npc_avatars || [];
+          const importedDrawnImages = data.drawnImages || data.drawn_images || [];
+          for (const a of importedNpcAvatars) await _safePut('npcAvatars', a);
+          for (const img of importedDrawnImages) await _safePut('drawnImages', img);
+        }
         // v4：lorebooks（v3 之前没这个字段，老存档直接跳过）
         for (const lb of (data.lorebooks || [])) await _safePut('lorebooks', lb);
         if (data.themeConfig) localStorage.setItem('themeConfig', data.themeConfig);
         if (data.themeCustomPresets) localStorage.setItem('themeCustomPresets', data.themeCustomPresets);
 
-        await UI.showAlert('导入成功', '总存档已恢复，页面将自动刷新');
+        await UI.showAlert('导入成功', isTextOnly ? '文字数据已恢复（图片保留原样），页面将自动刷新' : '总存档已恢复，页面将自动刷新');
         location.reload();
       } catch (e) {
         await UI.showAlert('导入失败', e.message || String(e));
@@ -150,5 +241,5 @@ const DataMgr = (() => {
     } catch(_) { return 0; }
   }
 
-  return { exportAll, importAll, getLastExportAt };
+  return { exportAll, exportTextOnly, importAll, getLastExportAt };
 })();

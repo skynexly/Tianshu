@@ -524,11 +524,16 @@ const Auth = (() => {
 
       <div class="auth-profile-section-title">数据</div>
       <div class="auth-profile-list">
-        <div class="auth-profile-item" id="auth-profile-export">
-          <div class="auth-profile-item-label">导出存档</div>
-          <div class="auth-profile-item-value" id="auth-profile-last-export">${_formatLastExport()}</div>
-          <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-        </div>
+          <div class="auth-profile-item" id="auth-profile-export">
+            <div class="auth-profile-item-label">导出存档</div>
+            <div class="auth-profile-item-value" id="auth-profile-last-export">${_formatLastExport()}</div>
+            <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          </div>
+          <div class="auth-profile-item" id="auth-profile-export-text">
+            <div class="auth-profile-item-label">导出存档（纯文字·不含图片）</div>
+            <div class="auth-profile-item-value">数据多时更稳</div>
+            <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          </div>
         <div class="auth-profile-item" id="auth-profile-import">
           <div class="auth-profile-item-label">导入存档</div>
           <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
@@ -562,6 +567,13 @@ const Auth = (() => {
     document.getElementById('auth-profile-export').addEventListener('click', async () => {
       try {
         await DataMgr.exportAll();
+        const el = document.getElementById('auth-profile-last-export');
+        if (el) el.textContent = _formatLastExport();
+      } catch(_) {}
+    });
+    document.getElementById('auth-profile-export-text').addEventListener('click', async () => {
+      try {
+        await DataMgr.exportTextOnly();
         const el = document.getElementById('auth-profile-last-export');
         if (el) el.textContent = _formatLastExport();
       } catch(_) {}
