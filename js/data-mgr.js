@@ -25,32 +25,45 @@ const DataMgr = (() => {
       const npcAvatars = await _safeGetAll('npcAvatars');
       const drawnImages = await _safeGetAll('drawnImages');
       const lorebooks = await _safeGetAll('lorebooks');
-      const data = {
-        version: 4,
-        exportTime: new Date().toISOString(),
-        messages: await _safeGetAll('messages'),
-        memories: await _safeGetAll('memories'),
-        settings: await _safeGetAll('settings'),
-        characters: await _safeGetAll('characters'),
-        gameState,
-        // 显式冗余一份，方便人工检查/兼容旧导入器；真实来源仍是 gameState 内的 conversations 项
-        conversations: (gameState.find(x => x && x.key === 'conversations')?.value) || [],
-        worldviews: await _safeGetAll('worldviews'),
-        archives: await _safeGetAll('archives'),
-        summaries: await _safeGetAll('summaries'),
-        singleCards,
-        npcAvatars,
-        drawnImages,
-        lorebooks,
-        // 兼容别名：避免外部检查工具/旧脚本只认 snake_case 时误以为没打包
-        single_cards: singleCards,
-        npc_avatars: npcAvatars,
-        drawn_images: drawnImages,
-        themeConfig: localStorage.getItem('themeConfig') || null,
-        themeCustomPresets: localStorage.getItem('themeCustomPresets') || null
+      const conversations = (gameState.find(x => x && x.key === 'conversations')?.value) || [];
+
+      // 注意：大存档（含 drawnImages / npcAvatars / messages 里的 base64 图片）一次性
+      // JSON.stringify 整个对象会在 JS 堆里生成一个巨型字符串，移动浏览器极易 OOM 闪退。
+      // 这里改成按字段分片 stringify，push 进数组直接交给 Blob 流式拼接，
+      // 避免同时存在「所有数据拼成的单一巨串」。同时去掉缩进，进一步省内存与体积。
+      const parts = [];
+      let _first = true;
+      const _emit = (key, value) => {
+        parts.push((_first ? '{' : ',') + JSON.stringify(key) + ':');
+        parts.push(JSON.stringify(value === undefined ? null : value));
+        _first = false;
       };
 
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      _emit('version', 4);
+      _emit('exportTime', new Date().toISOString());
+      _emit('messages', await _safeGetAll('messages'));
+      _emit('memories', await _safeGetAll('memories'));
+      _emit('settings', await _safeGetAll('settings'));
+      _emit('characters', await _safeGetAll('characters'));
+      _emit('gameState', gameState);
+      // 显式冗余一份，方便人工检查/兼容旧导入器；真实来源仍是 gameState 内的 conversations 项
+      _emit('conversations', conversations);
+      _emit('worldviews', await _safeGetAll('worldviews'));
+      _emit('archives', await _safeGetAll('archives'));
+      _emit('summaries', await _safeGetAll('summaries'));
+      _emit('singleCards', singleCards);
+      _emit('npcAvatars', npcAvatars);
+      _emit('drawnImages', drawnImages);
+      _emit('lorebooks', lorebooks);
+      // 兼容别名：避免外部检查工具/旧脚本只认 snake_case 时误以为没打包
+      _emit('single_cards', singleCards);
+      _emit('npc_avatars', npcAvatars);
+      _emit('drawn_images', drawnImages);
+      _emit('themeConfig', localStorage.getItem('themeConfig') || null);
+      _emit('themeCustomPresets', localStorage.getItem('themeCustomPresets') || null);
+      parts.push('}');
+
+      const blob = new Blob(parts, { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
