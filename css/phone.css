@@ -5205,6 +5205,23 @@ align-self: start;
 /* 嘉宾整体靠右：头像名字行反向、气泡右对齐 */
 .phone-radio-line.is-guest { align-items: flex-end; }
 .phone-radio-line.is-guest .phone-radio-line-head { flex-direction: row-reverse; }
+/* 来电听众（打进热线的虚构听众）：右对齐、装饰色、电话听筒头像 */
+.phone-radio-line.is-caller { align-items: flex-end; }
+.phone-radio-line.is-caller .phone-radio-line-head { flex-direction: row-reverse; }
+.phone-radio-line-avatar-caller {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--decoration);
+  color: #fff;
+}
+.phone-radio-line-avatar-caller svg { width: 15px; height: 15px; }
+.phone-radio-line.is-caller .phone-radio-line-bubble {
+  background: color-mix(in srgb, var(--decoration) 12%, var(--bg-secondary));
+  border-radius: 16px 4px 16px 16px;
+}
 .phone-radio-detail-interact:empty { display: none; }
 .phone-radio-detail-end {
   text-align: center;
@@ -5256,6 +5273,130 @@ align-self: start;
 .phone-shell.has-custom-wallpaper .phone-radio-detail-player {
   background: rgba(18, 20, 28, 0.35);
 }
+
+/* ===== 连线（call）玩法 UI ===== */
+/* 玩家发言气泡（右对齐，区别于主播/嘉宾的台词行） */
+.phone-radio-call-msg {
+  display: flex;
+  justify-content: flex-end;
+  margin: 10px 0;
+}
+.phone-radio-call-msg.is-me .phone-radio-call-bubble {
+  padding: 9px 13px;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.65;
+  word-break: break-word;
+  max-width: 78%;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+/* 连线中主播台词行加一点呼吸感，区分于正文已播内容 */
+.phone-radio-call-hostline { animation: radio-call-fadein 0.3s ease; }
+@keyframes radio-call-fadein {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 底部连线输入条（替换播放器位置） */
+.phone-radio-call-bar {
+  flex-shrink: 0;
+  padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-call-bar {
+  background: rgba(18, 20, 28, 0.55);
+  backdrop-filter: blur(8px);
+}
+.phone-radio-call-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.phone-radio-call-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff5a5a;
+  box-shadow: 0 0 0 0 rgba(255,90,90,0.6);
+  animation: radio-call-pulse 1.4s ease-out infinite;
+}
+@keyframes radio-call-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255,90,90,0.5); }
+  70% { box-shadow: 0 0 0 7px rgba(255,90,90,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,90,90,0); }
+}
+.phone-radio-call-inputrow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.phone-radio-call-inputrow textarea {
+  flex: 1;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--bg-tertiary);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  outline: none;
+  resize: none;
+  max-height: 90px;
+  font-family: inherit;
+}
+.phone-radio-call-send {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.phone-radio-call-send:active { transform: scale(0.94); }
+.phone-radio-call-actions {
+  display: flex;
+  gap: 10px;
+}
+.phone-radio-call-refresh,
+.phone-radio-call-hangup {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+}
+.phone-radio-call-refresh {
+  flex: 2;
+  background: var(--bg-tertiary);
+  color: var(--text);
+}
+.phone-radio-call-refresh:disabled { opacity: 0.5; cursor: default; }
+.phone-radio-call-hangup {
+  background: color-mix(in srgb, #ff5a5a 16%, var(--bg-tertiary));
+  color: #ff5a5a;
+}
+.phone-radio-call-refresh:active,
+.phone-radio-call-hangup:active { transform: scale(0.97); }
 
 /* ===== 电台设置页 ===== */
 .phone-radio-set-tabs {
@@ -6377,3 +6518,46 @@ align-self: start;
   color: #fff;
 }
 .cottage-item-add:active { background: rgba(255,255,255,0.08); }
+
+/* ============================================================
+   手机主题：主题选择器 UI（设置页通用）
+   ============================================================ */
+.phone-theme-options {
+  display: flex;
+  gap: 12px;
+}
+.phone-theme-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.12);
+  border: 2px solid transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.phone-theme-option.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.phone-theme-swatch {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+}
+.phone-theme-swatch-glass {
+  background: linear-gradient(135deg, rgba(255,255,255,0.42), rgba(255,255,255,0.14));
+  border: 1px solid rgba(255,255,255,0.3);
+  backdrop-filter: blur(6px);
+}
+.phone-theme-swatch-fudge {
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.phone-theme-name { font-size: 12px; font-weight: 700; }
+
