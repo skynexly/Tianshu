@@ -730,8 +730,8 @@ ${isEditing
       .replace(/"/g, '"')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
-    list.innerHTML = names.map(name => {
-      const safeId = 'th-export-' + name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    list.innerHTML = names.map((name, i) => {
+      const safeId = 'th-export-' + i;
       const safeName = escHtml(name);
       return `<label for="${safeId}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;cursor:pointer">
         <input id="${safeId}" type="checkbox" class="theme-export-check" value="${safeName}" checked onchange="Theme.syncExportToggleState()" style="position:absolute;opacity:0;pointer-events:none">

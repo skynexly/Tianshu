@@ -3873,7 +3873,11 @@ function _logMusicSwitch(newTrack, oldTrack) {
 function _musicLibRowClick(id) {
   _ltEnsureSession();
   if (_ltSession) {
-    Music.play(id);
+    // 一起听模式下点歌意图是"播放并回一起听页"，不应有暂停语义。
+    // 只有点的不是当前正在播放的歌才切歌；点当前歌则保持播放状态。
+    if (id !== Music.getCurrentId()) {
+      Music.play(id);
+    }
     // 弹出列表页，回到一起听
     _navStack.pop(); // 移除列表页
     const t = Music.getTracks().find(x => x.id === id);
@@ -17750,7 +17754,7 @@ async function _hydrateChatContacts(pd) {
       return `<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)">
         <div style="width:40px;height:40px;border-radius:50%;flex-shrink:0;background:var(--bg-tertiary);color:var(--text-secondary);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;overflow:hidden">${avatar}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:14px;font-weight:600;color:var(--text)">${Utils.escapeHtml(c.name)}</div>
+          <div class="phone-chat-name" style="font-size:14px;font-weight:600;color:var(--text)">${Utils.escapeHtml(c.name)}</div>
           <div style="font-size:11px;color:var(--text-secondary)">${_chatSourceLabel(c.source)}</div>
         </div>
         <button onclick="Phone._addChatContactByIdx(${i})" style="padding:5px 14px;font-size:12px;background:var(--accent);color:#fff;border:none;border-radius:14px;cursor:pointer;flex-shrink:0">添加</button>
@@ -18000,13 +18004,14 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
   const avatarInner = mine ? meAvatarInner : _groupSenderAvatarInner(members, sender);
   const time = m.time ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(m.time)}</div>` : '';
   const nameTag = mine ? '' : `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:3px;padding-left:2px">${Utils.escapeHtml(sender)}</div>`;
+  // 群卡片气泡：名字 + 时间统一放在气泡下方一行（them 显示名字，me 只显示时间）
+  const footTag = (m.time || (!mine && sender)) ? `<div style="display:flex;align-items:center;gap:6px;margin-top:2px;padding-left:2px">${mine ? '' : `<span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(sender)}</span>`}${m.time ? `<span style="font-size:10px;color:var(--text-secondary)">${Utils.escapeHtml(m.time)}</span>` : ''}</div>` : '';
 
   // 语音气泡
   if (m.type === 'voice') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0;max-width:70%">
-        ${nameTag}
         <div onclick="Phone._playGroupVoice('${groupId}','${m.id}')" style="padding:10px 14px;border-radius:18px;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer;${mine ? 'flex-direction:row-reverse' : ''}">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
           <div class="phone-chat-voice-wave" id="voice-wave-${m.id}" style="display:flex;align-items:center;gap:3px;opacity:0.7">
@@ -18018,7 +18023,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
           </div>
         </div>
         <div style="margin-top:4px;padding:6px 10px;border-radius:8px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;max-width:100%;word-break:break-word">${Utils.escapeHtml(m.voiceDesc || '')}</div>
-        ${time}
+        ${footTag}
       </div>
     </div>`;
   }
@@ -18028,7 +18033,6 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-        ${nameTag}
         <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8">
             <svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='var(--accent)' stroke='none'><path d='M12 2a8 8 0 0 0-8 8c0 5.4 7.05 11.5 7.35 11.76a1 1 0 0 0 1.3 0C12.95 21.5 20 15.4 20 10a8 8 0 0 0-8-8Zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z'/></svg>
@@ -18039,7 +18043,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
             ${m.placeDesc ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.placeDesc)}</div>` : ''}
           </div>
         </div>
-        ${time}
+        ${footTag}
       </div>
     </div>`;
   }
@@ -18049,7 +18053,6 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-        ${nameTag}
         <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:flex-start">
             <div style="width:44px;height:44px;border-radius:8px;background:var(--bg-secondary,#eee);flex-shrink:0;display:flex;align-items:center;justify-content:center">
@@ -18065,7 +18068,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
             ${m.productShop ? `<span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${Utils.escapeHtml(m.productShop)}</span>` : ''}
           </div>
         </div>
-        ${time}
+        ${footTag}
       </div>
     </div>`;
   }
@@ -18076,7 +18079,6 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-        ${nameTag}
         <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="padding:12px 14px 10px">
             <div style="font-size:11px;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:4px">
@@ -18090,7 +18092,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
             <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(m.forumAuthor || '匿名')}</span>
           </div>
         </div>
-        ${time}
+        ${footTag}
       </div>
     </div>`;
   }
@@ -18107,7 +18109,6 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="red_packet" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-        ${nameTag}
         <div onclick="Phone._openGroupRedPacket('${groupId}','${m.id}')" style="width:230px;border-radius:14px;overflow:hidden;cursor:pointer;background:${allGone ? 'var(--bg-tertiary)' : '#d9433a'}">
           <div style="padding:14px 14px 12px;display:flex;align-items:center;gap:10px">
             <div style="width:40px;height:40px;border-radius:8px;flex-shrink:0;background:${allGone ? 'var(--text-secondary)' : '#f6c945'};display:flex;align-items:center;justify-content:center">
@@ -18120,7 +18121,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
           </div>
           <div style="padding:6px 14px;background:rgba(0,0,0,0.12);font-size:10px;color:${allGone ? 'var(--text-secondary)' : 'rgba(255,255,255,0.85)'}">${subline}</div>
         </div>
-        ${time}
+        ${footTag}
       </div>
     </div>`;
   }
@@ -18137,11 +18138,10 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-        ${nameTag}
         <div class="phone-camera-polaroid" onclick="Phone._showGroupPhotoDetail('${groupId}', '${m.id}')" style="opacity:1;margin:0;width:150px;min-height:150px;transform:none;cursor:pointer">
           <div class="phone-camera-polaroid-frame" style="padding:8px 8px 28px">${innerHtml}</div>
         </div>
-        ${time}
+        ${footTag}
       </div>
     </div>`;
   }
@@ -18151,7 +18151,6 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-        ${nameTag}
         <div onclick="Phone._showChatLocationDetail('${Utils.escapeHtml(m.location || '')}','${Utils.escapeHtml(m.address || '')}')" style="width:200px;border-radius:14px;overflow:hidden;cursor:pointer;background:var(--bg-tertiary)">
           <div style="padding:12px 14px 8px;display:flex;align-items:center;gap:10px">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -18164,7 +18163,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.5"><path d="M3 3h18M3 9h18M3 15h18M3 21h18M9 3v18M15 3v18"/></svg>
           </div>
         </div>
-        ${time}
+        ${footTag}
       </div>
     </div>`;
   }
@@ -18176,16 +18175,15 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${meAvatarInner}</div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;min-width:0;max-width:72%">
         <div style="padding:8px 12px;border-radius:18px;border-bottom-right-radius:4px;font-size:14px;line-height:1.5;background:var(--accent);color:#fff;word-break:break-word">${quoteBlock}${Utils.escapeHtml(m.text || '')}</div>
-        ${time}
+        ${footTag}
       </div>
     </div>`;
   }
   return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px">
     <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
     <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:72%">
-      ${nameTag}
       <div style="padding:8px 12px;border-radius:18px;border-bottom-left-radius:4px;font-size:14px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);word-break:break-word">${quoteBlock}${Utils.escapeHtml(m.text || '')}</div>
-      ${time}
+      ${footTag}
     </div>
   </div>`;
 }

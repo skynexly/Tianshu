@@ -1008,7 +1008,7 @@ background: transparent !important;
   overflow-y: auto !important;
 }
 .phone-photo-detail-close {
-  position: fixed;
+  position: absolute;
   top: 16px;
   right: 16px;
   width: 32px;

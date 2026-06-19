@@ -175,8 +175,8 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v702';
-const CHANGELOG = `【v702 更新内容】
+    const APP_VERSION = 'v702.1';
+const CHANGELOG = `【v702.1 更新内容】
 
 新增手机主题「奶油软糖」：温暖柔和的圆润设计，可在系统设置切换
 新增群聊功能：支持创建群、群成员多轮自然回复、引用/撤回/编辑消息、分享卡片、多媒体互动、群红包与主动私聊`;

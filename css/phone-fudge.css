@@ -50,7 +50,7 @@
   border-radius: 50%;
   background: var(--text);
   border: none;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 28%, transparent);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--text) 15%, transparent);
   backdrop-filter: none;
 }
 .phone-shell.phone-theme-fudge .phone-icon-glyph {
@@ -81,7 +81,7 @@
 .phone-shell.phone-theme-fudge .phone-app-calendar .phone-app-icon-circle,
 .phone-shell.phone-theme-fudge .phone-app-radio .phone-app-icon-circle {
   background: var(--bg);
-  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.12);
 }
 .phone-shell.phone-theme-fudge .phone-app-takeout .phone-icon-glyph,
 .phone-shell.phone-theme-fudge .phone-app-map .phone-icon-glyph,
@@ -217,6 +217,98 @@
   box-shadow: 0 6px 16px rgba(0,0,0,0.18);
 }
 
+/* ---- 音乐 App 内页（播放详情 / 音乐库 / 评论）：主文字色深底，文字反转为背景色 ---- */
+/* 主要文字：标题、歌曲名、控制按钮、激活歌词 → 浅色 */
+.phone-shell.phone-theme-fudge .phone-mdetail-title,
+.phone-shell.phone-theme-fudge .phone-mdetail-ctrl,
+.phone-shell.phone-theme-fudge .phone-mdetail-lrc-line.active,
+.phone-shell.phone-theme-fudge .phone-mlib-h-title,
+.phone-shell.phone-theme-fudge .phone-mlib-title,
+.phone-shell.phone-theme-fudge .phone-mlib-title.active,
+.phone-shell.phone-theme-fudge .phone-mlib-add-btn,
+.phone-shell.phone-theme-fudge .phone-mlib-earphone-btn.on,
+.phone-shell.phone-theme-fudge .phone-mcomment-content {
+  color: var(--bg) !important;
+}
+/* 次要文字：歌手、副标题、歌词、时间、菜单、操作图标、评论名/时间 → 半透明浅色 */
+.phone-shell.phone-theme-fudge .phone-mdetail-artist,
+.phone-shell.phone-theme-fudge .phone-mdetail-menu,
+.phone-shell.phone-theme-fudge .phone-mdetail-lrc-line,
+.phone-shell.phone-theme-fudge .phone-mdetail-lrc-empty,
+.phone-shell.phone-theme-fudge .phone-mdetail-action-btn,
+.phone-shell.phone-theme-fudge .phone-music-times,
+.phone-shell.phone-theme-fudge .phone-mlib-h-sub,
+.phone-shell.phone-theme-fudge .phone-mlib-sub,
+.phone-shell.phone-theme-fudge .phone-mlib-empty,
+.phone-shell.phone-theme-fudge .phone-mcomment-name,
+.phone-shell.phone-theme-fudge .phone-mcomment-meta,
+.phone-shell.phone-theme-fudge .phone-mcomment-empty,
+.phone-shell.phone-theme-fudge .phone-mcomment-tip {
+  color: color-mix(in srgb, var(--bg) 66%, transparent) !important;
+}
+/* 歌曲行的卡片底：用浅色半透明块在深底上分层 */
+.phone-shell.phone-theme-fudge .phone-mlib-row.active {
+  background: color-mix(in srgb, var(--bg) 12%, transparent) !important;
+}
+/* 评论页：顶部歌曲卡标题 + "评论"标题 → 浅色 */
+.phone-shell.phone-theme-fudge .phone-mcomment-card-title,
+.phone-shell.phone-theme-fudge .phone-mcomment-bar-title {
+  color: var(--bg) !important;
+}
+/* 评论页：歌手、刷新按钮 → 半透明浅色 */
+.phone-shell.phone-theme-fudge .phone-mcomment-card-artist,
+.phone-shell.phone-theme-fudge .phone-mcomment-refresh {
+  color: color-mix(in srgb, var(--bg) 66%, transparent) !important;
+}
+/* 评论页顶部歌曲卡：浅色半透明块分层 */
+.phone-shell.phone-theme-fudge .phone-mcomment-card {
+  background: color-mix(in srgb, var(--bg) 12%, transparent) !important;
+}
+/* 评论页底部输入栏：融入深底，去突兀的浅色直角块 */
+.phone-shell.phone-theme-fudge .phone-mcomment-input-bar {
+  background: var(--text) !important;
+  border-top: none !important;
+}
+.phone-shell.phone-theme-fudge .phone-mcomment-input-bar input {
+  background: color-mix(in srgb, var(--bg) 16%, transparent) !important;
+  border: none !important;
+  color: var(--bg) !important;
+}
+/* 一起听留言卡：深底主题下文字反成背景色，卡片底用浅色半透明块 */
+.phone-shell.phone-theme-fudge .lt-msg-card {
+  background: color-mix(in srgb, var(--bg) 14%, transparent) !important;
+}
+.phone-shell.phone-theme-fudge .lt-msg-card span,
+.phone-shell.phone-theme-fudge .lt-msg-card div {
+  color: var(--bg) !important;
+}
+/* 一起听记录详情页 hero 卡：深底主题下用实色浅底，内部深字保持清晰 */
+.phone-shell.phone-theme-fudge .lt-detail-hero {
+  background: var(--bg) !important;
+}
+/* section 标题（深底上反成浅色） */
+.phone-shell.phone-theme-fudge .lt-detail-section-title {
+  color: color-mix(in srgb, var(--bg) 80%, transparent) !important;
+}
+/* 一起听播放页：顶部歌名/歌手是内联 var(--text)，深底上反成浅色 */
+.phone-shell.phone-theme-fudge .phone-mdetail-page [style*="color:var(--text)"] {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge .phone-mdetail-page [style*="color:var(--text-secondary)"] {
+  color: color-mix(in srgb, var(--bg) 66%, transparent) !important;
+}
+/* 一起听/播放详情页：进度条在深底上反色（轨道、填充、圆点） */
+.phone-shell.phone-theme-fudge .phone-mdetail-page .phone-music-bar {
+  background: color-mix(in srgb, var(--bg) 24%, transparent) !important;
+}
+.phone-shell.phone-theme-fudge .phone-mdetail-page .phone-music-bar-fill {
+  background: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge .phone-mdetail-page .phone-music-bar-dot {
+  background: var(--bg) !important;
+  border-color: var(--bg) !important;
+}
+
 /* ============================================================
    商城（桃宝/饿了咪）App 内部：去边框 + 圆角化
    ============================================================ */
@@ -293,6 +385,35 @@
 .phone-shell.phone-theme-fudge .phone-forum-edit button {
   border-radius: 999px !important;
   border: none !important;
+}
+
+/* ---- 论坛帖子详情页：内容区铺主文字色深底，文字需反转为背景色 ---- */
+/* 正文 + Markdown 内容 + 发帖人名 + 评论区标题/用户名等：反转为浅色 */
+.phone-shell.phone-theme-fudge .phone-forum-detail-page,
+.phone-shell.phone-theme-fudge .phone-forum-detail-page .phone-forum-detail-md,
+.phone-shell.phone-theme-fudge .phone-forum-detail-page .md-content,
+.phone-shell.phone-theme-fudge .phone-forum-detail-page [style*="color:var(--text)"] {
+  color: var(--bg) !important;
+}
+/* 次要文字（时间、计数、评论时间）：半透明背景色 */
+.phone-shell.phone-theme-fudge .phone-forum-detail-page [style*="color:var(--text-secondary)"] {
+  color: color-mix(in srgb, var(--bg) 62%, transparent) !important;
+}
+/* 标签：保留主题强调色，仅把底改成半透明浅色 */
+.phone-shell.phone-theme-fudge .phone-forum-detail-page [style*="background:var(--bg-tertiary)"] {
+  background: color-mix(in srgb, var(--bg) 16%, transparent) !important;
+}
+/* 底栏评论框：深底上换成半透明浅色块 + 浅色字 */
+.phone-shell.phone-theme-fudge .phone-forum-detail-page .phone-forum-detail-actions {
+  background: var(--text) !important;
+  border-top: none !important;
+}
+.phone-shell.phone-theme-fudge .phone-forum-detail-page .phone-forum-detail-actions > div[style*="background:var(--bg-tertiary)"] {
+  background: color-mix(in srgb, var(--bg) 16%, transparent) !important;
+  border: none !important;
+}
+.phone-shell.phone-theme-fudge .phone-forum-detail-page .phone-forum-detail-actions input {
+  color: var(--bg) !important;
 }
 
 /* 顶栏返回/导航按钮：去底、去边框、去毛玻璃，只留图标 */
