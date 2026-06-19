@@ -55,8 +55,11 @@ const DataMgr = (() => {
       const a = document.createElement('a');
       a.href = url;
       a.download = `skynex-save-${new Date().toISOString().slice(0, 10)}.json`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       try { localStorage.setItem('tianshu_last_export_at', String(Date.now())); } catch(_) {}
       UI.showToast('已导出总存档', 2000);
     } catch (e) {
