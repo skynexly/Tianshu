@@ -522,8 +522,12 @@ const Auth = (() => {
         ${devicesHtml}
       </div>
 
-      <div class="auth-profile-section-title">数据</div>
-      <div class="auth-profile-list">
+<div class="auth-profile-section-title">数据</div>
+          <div class="auth-profile-list">
+          <div class="auth-profile-item" id="auth-profile-storage" style="cursor:default">
+            <div class="auth-profile-item-label">存储空间</div>
+            <div class="auth-profile-item-value" id="auth-profile-storage-val">统计中…</div>
+          </div>
           <div class="auth-profile-item" id="auth-profile-export">
             <div class="auth-profile-item-label">导出存档</div>
             <div class="auth-profile-item-value" id="auth-profile-last-export">${_formatLastExport()}</div>
@@ -533,6 +537,11 @@ const Auth = (() => {
             <div class="auth-profile-item-label">导出存档（纯文字·不含图片）</div>
             <div class="auth-profile-item-value">数据多时更稳</div>
             <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          </div>
+          <div class="auth-profile-item" id="auth-profile-image-mgr">
+            <div class="auth-profile-item-label">图片存储管理</div>
+            <div class="auth-profile-item-value" id="auth-profile-image-stat">查看占用</div>
+            <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         <div class="auth-profile-item" id="auth-profile-import">
           <div class="auth-profile-item-label">导入存档</div>
@@ -578,6 +587,9 @@ const Auth = (() => {
         if (el) el.textContent = _formatLastExport();
       } catch(_) {}
     });
+    document.getElementById('auth-profile-image-mgr').addEventListener('click', () => _openImageManager());
+    _refreshImageStat();
+    _refreshStorageEstimate();
     document.getElementById('auth-profile-import').addEventListener('click', () => DataMgr.importAll());
     root.querySelectorAll('[data-kick]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -605,7 +617,286 @@ const Auth = (() => {
     });
   }
 
-  // ===== 通用弹窗工具：confirm / prompt / alert（套用项目标准 .modal 样式）=====
+  // ===== 图片存储管理面板 =====
+  function _fmtBytes(b) {
+    if (!b) return '0 B';
+    if (b < 1024) return b + ' B';
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' MB';
+    return (b / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+  }
+  function _fmtImgTime(t) {
+    const ts = typeof t === 'string' ? Date.parse(t) || 0 : (t || 0);
+    if (!ts) return '';
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  let _imgMgrSelected = new Set();
+  let _imgMgrNeedReload = false;
+
+  async function _openImageManager() {
+    let modal = document.querySelector('.auth-image-mgr');
+    if (modal) modal.remove();
+    modal = document.createElement('div');
+    modal.className = 'modal auth-image-mgr';
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width:none;width:100%;height:100%;max-height:100%;border-radius:0;display:flex;flex-direction:column;box-sizing:border-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-shrink:0">
+          <h3 style="margin:0">图片存储管理</h3>
+          <button type="button" data-act="close" style="background:none;border:none;color:var(--text-secondary);font-size:26px;line-height:1;cursor:pointer;padding:0 6px">×</button>
+        </div>
+        <div id="img-mgr-stat" style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:10px;flex-shrink:0">统计中…</div>
+        <div id="img-mgr-scroll" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch">
+          <div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:8px">AI 生成图</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <button type="button" data-act="select-all" style="font-size:12px;padding:5px 10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);cursor:pointer">全选</button>
+            <button type="button" data-act="clear-sel" style="font-size:12px;padding:5px 10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);cursor:pointer">取消选择</button>
+            <button type="button" data-act="del-old" style="font-size:12px;padding:5px 10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);cursor:pointer">删除30天前</button>
+            <button type="button" data-act="del-sel" style="font-size:12px;padding:5px 10px;background:var(--danger);border:none;border-radius:6px;color:#fff;cursor:pointer;margin-left:auto">删除所选 (0)</button>
+          </div>
+          <div id="img-mgr-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;align-content:start">
+            <p style="grid-column:1/-1;text-align:center;color:var(--text-secondary);padding:30px 0;font-size:13px">加载中…</p>
+          </div>
+          <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-top:8px">
+            删除生成图只清理图库，聊天里的图会显示"图片已丢失"，不影响文字。
+          </div>
+          <div style="border-top:1px solid var(--border);margin:16px 0 8px;padding-top:14px">
+            <div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:4px">手机内联图片（按对话）</div>
+            <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:10px">
+              壁纸、头像、封面、卡背景、动态配图等直接存在各对话里。清理某项会清空该对话对应的图（恢复默认），无法恢复。仅统计上传的图片，外链 URL 不占空间。
+            </div>
+            <div id="img-mgr-phone">
+              <p style="text-align:center;color:var(--text-secondary);padding:20px 0;font-size:13px">扫描中…</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    const profileOverlay = document.getElementById('auth-profile-overlay');
+    const host = (profileOverlay && profileOverlay.classList.contains('visible')) ? profileOverlay : document.body;
+    host.appendChild(modal);
+
+    _imgMgrSelected = new Set();
+    _imgMgrNeedReload = false;
+
+    const grid = modal.querySelector('#img-mgr-grid');
+    const statEl = modal.querySelector('#img-mgr-stat');
+    const delSelBtn = modal.querySelector('[data-act="del-sel"]');
+
+    const refreshDelBtn = () => { delSelBtn.textContent = `删除所选 (${_imgMgrSelected.size})`; };
+
+    const loadStats = async () => {
+      try {
+        const s = await DataMgr.getStorageStats();
+        let phoneBytes = 0, phoneCount = 0;
+        try {
+          const ps = await DataMgr.scanPhoneImages();
+          ps.forEach(c => { phoneBytes += c.total; phoneCount += Object.keys(c.cats).length; });
+        } catch(_) {}
+        const grand = s.total.bytes + phoneBytes;
+        statEl.innerHTML =
+          `生成图：${s.drawn.count} 张 · ${_fmtBytes(s.drawn.bytes)}<br>` +
+          `头像（图库）：${s.avatars.count} 张 · ${_fmtBytes(s.avatars.bytes)}<br>` +
+          `手机内联图：${_fmtBytes(phoneBytes)}<br>` +
+          `<span style="color:var(--text);font-weight:600">合计：${_fmtBytes(grand)}</span>`;
+      } catch(_) { statEl.textContent = '统计失败'; }
+    };
+
+    const renderGrid = async () => {
+      let list = [];
+      try { list = await DataMgr.listDrawnImages(); } catch(_) {}
+      if (!list.length) {
+        grid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:var(--text-secondary);padding:30px 0;font-size:13px">暂无生成图</p>';
+        return;
+      }
+      grid.innerHTML = list.map(it => `
+        <div class="img-mgr-cell" data-id="${_escape(it.id)}" style="position:relative;border-radius:8px;overflow:hidden;background:var(--bg-tertiary);cursor:pointer;aspect-ratio:1/1">
+          <img data-imgid="${_escape(it.id)}" style="width:100%;height:100%;object-fit:cover;display:block" loading="lazy">
+          <div class="img-mgr-check" style="position:absolute;top:4px;left:4px;width:18px;height:18px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center"></div>
+          <div style="position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,0.7));color:#fff;font-size:9px;padding:8px 4px 3px;line-height:1.2">${_fmtBytes(it.bytes)}</div>
+        </div>
+      `).join('');
+      // 懒加载缩略图：逐个取 dataUrl
+      for (const img of grid.querySelectorAll('img[data-imgid]')) {
+        const id = img.getAttribute('data-imgid');
+        DataMgr.getDrawnImageData(id).then(url => { if (url) img.src = url; });
+      }
+      // 选择交互
+      grid.querySelectorAll('.img-mgr-cell').forEach(cell => {
+        cell.addEventListener('click', () => {
+          const id = cell.getAttribute('data-id');
+          const check = cell.querySelector('.img-mgr-check');
+          if (_imgMgrSelected.has(id)) {
+            _imgMgrSelected.delete(id);
+            check.style.background = 'rgba(0,0,0,0.3)';
+            check.innerHTML = '';
+            cell.style.outline = '';
+          } else {
+            _imgMgrSelected.add(id);
+            check.style.background = 'var(--accent)';
+            check.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+            cell.style.outline = '2px solid var(--accent)';
+          }
+          refreshDelBtn();
+        });
+      });
+    };
+
+    modal.querySelector('[data-act="select-all"]').addEventListener('click', () => {
+      grid.querySelectorAll('.img-mgr-cell').forEach(cell => {
+        const id = cell.getAttribute('data-id');
+        _imgMgrSelected.add(id);
+        const check = cell.querySelector('.img-mgr-check');
+        check.style.background = 'var(--accent)';
+        check.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+        cell.style.outline = '2px solid var(--accent)';
+      });
+      refreshDelBtn();
+    });
+    modal.querySelector('[data-act="clear-sel"]').addEventListener('click', () => {
+      _imgMgrSelected.clear();
+      grid.querySelectorAll('.img-mgr-cell').forEach(cell => {
+        const check = cell.querySelector('.img-mgr-check');
+        check.style.background = 'rgba(0,0,0,0.3)';
+        check.innerHTML = '';
+        cell.style.outline = '';
+      });
+      refreshDelBtn();
+    });
+    delSelBtn.addEventListener('click', async () => {
+      if (!_imgMgrSelected.size) { await _modal({ title: '提示', desc: '还没有选择图片', cancelText: false, okText: '好的' }); return; }
+      const ok = await _modal({ title: '删除所选图片', desc: `确定删除 ${_imgMgrSelected.size} 张生成图？删除后聊天里这些图会显示"图片已丢失"，无法恢复。`, danger: true, okText: '删除' });
+      if (!ok) return;
+      const n = await DataMgr.deleteDrawnImages([..._imgMgrSelected]);
+      _imgMgrSelected.clear();
+      refreshDelBtn();
+      await loadStats();
+      await renderGrid();
+      _refreshImageStat();
+      if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(`已删除 ${n} 张`, 1500);
+    });
+    modal.querySelector('[data-act="del-old"]').addEventListener('click', async () => {
+      const ok = await _modal({ title: '删除30天前的生成图', desc: '确定删除 30 天前的所有生成图？无法恢复。', danger: true, okText: '删除' });
+      if (!ok) return;
+      const before = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const n = await DataMgr.deleteDrawnImagesBefore(before);
+      _imgMgrSelected.clear();
+      refreshDelBtn();
+      await loadStats();
+      await renderGrid();
+      _refreshImageStat();
+      if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(`已删除 ${n} 张`, 1500);
+    });
+
+    // ---- 手机内联图片（按对话）----
+    const phoneBox = modal.querySelector('#img-mgr-phone');
+    const catLabels = {};
+    try { (DataMgr.getPhoneImageCats() || []).forEach(c => { catLabels[c.key] = c.label; }); } catch(_) {}
+
+    const renderPhone = async () => {
+      let list = [];
+      try { list = await DataMgr.scanPhoneImages(); } catch(_) {}
+      if (!list.length) {
+        phoneBox.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:20px 0;font-size:13px">没有内联图片占用</p>';
+        return;
+      }
+      phoneBox.innerHTML = list.map(conv => {
+        const catRows = Object.keys(conv.cats).map(k => `
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+            <span style="flex:1;font-size:12px;color:var(--text-secondary)">${_escape(catLabels[k] || k)} · ${_fmtBytes(conv.cats[k])}</span>
+            <button type="button" data-clear-cat data-conv="${_escape(conv.convId)}" data-cat="${_escape(k)}" style="font-size:11px;padding:3px 9px;background:none;border:1px solid var(--border);border-radius:5px;color:var(--text-secondary);cursor:pointer">清理</button>
+          </div>
+        `).join('');
+        return `
+          <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <span style="flex:1;font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escape(conv.convName)}</span>
+              <span style="font-size:12px;color:var(--accent)">${_fmtBytes(conv.total)}</span>
+              <button type="button" data-clear-all data-conv="${_escape(conv.convId)}" style="font-size:11px;padding:3px 9px;background:var(--danger);border:none;border-radius:5px;color:#fff;cursor:pointer">全清</button>
+            </div>
+            ${catRows}
+          </div>
+        `;
+      }).join('');
+
+      // 单类别清理
+      phoneBox.querySelectorAll('[data-clear-cat]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const convId = btn.getAttribute('data-conv');
+          const cat = btn.getAttribute('data-cat');
+          const ok = await _modal({ title: '清理图片', desc: `确定清理这个对话的「${catLabels[cat] || cat}」？该对话对应的图会被清空（恢复默认），无法恢复。`, danger: true, okText: '清理' });
+          if (!ok) return;
+          await DataMgr.clearPhoneImages(convId, [cat]);
+          await loadStats(); _refreshImageStat();
+          await renderPhone();
+          _imgMgrNeedReload = true;
+          if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已清理', 1500);
+        });
+      });
+      // 整对话清理
+      phoneBox.querySelectorAll('[data-clear-all]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const convId = btn.getAttribute('data-conv');
+          const ok = await _modal({ title: '清理该对话全部内联图片', desc: '确定清空这个对话的所有壁纸/头像/封面/卡背景/动态配图？无法恢复。', danger: true, okText: '全部清理' });
+          if (!ok) return;
+          await DataMgr.clearPhoneImages(convId, null);
+          await loadStats(); _refreshImageStat();
+          await renderPhone();
+          _imgMgrNeedReload = true;
+          if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已清理', 1500);
+        });
+      });
+    };
+
+    // 关闭面板时，如果清理过内联图，提示刷新（让 Conversations 内存 list 重新从 DB 加载，
+    // 否则下次 saveList 会用内存里的旧数据覆盖，清理白做）
+    const closeWithReload = () => {
+      modal.remove();
+      if (_imgMgrNeedReload) {
+        _imgMgrNeedReload = false;
+        _modal({ title: '清理完成', desc: '已清理手机内联图片。需要刷新页面让改动生效，是否现在刷新？', okText: '刷新', cancelText: '稍后' }).then(yes => {
+          if (yes) location.reload();
+        });
+      }
+    };
+    modal.querySelector('[data-act="close"]').addEventListener('click', closeWithReload);
+    modal.addEventListener('click', e => { if (e.target === modal) closeWithReload(); });
+
+    await loadStats();
+    await renderGrid();
+    await renderPhone();
+  }
+
+  // 刷新数据区"图片存储管理"那行的占用文字
+  async function _refreshImageStat() {
+    const el = document.getElementById('auth-profile-image-stat');
+    if (!el) return;
+    try {
+      const s = await DataMgr.getStorageStats();
+      let phoneBytes = 0;
+      try {
+        const ps = await DataMgr.scanPhoneImages();
+        ps.forEach(c => { phoneBytes += c.total; });
+      } catch(_) {}
+      el.textContent = _fmtBytes(s.total.bytes + phoneBytes);
+    } catch(_) {}
+  }
+
+  // 刷新数据区"存储空间"那行：显示浏览器 IndexedDB 已用 / 配额
+  async function _refreshStorageEstimate() {
+    const el = document.getElementById('auth-profile-storage-val');
+    if (!el) return;
+    try {
+      const e = await DataMgr.getStorageEstimate();
+      if (!e.supported || !e.quota) { el.textContent = '无法获取'; return; }
+      const pct = Math.round((e.usage / e.quota) * 100);
+      el.textContent = `${_fmtBytes(e.usage)} / ${_fmtBytes(e.quota)}（${pct}%）`;
+    } catch(_) { el.textContent = '无法获取'; }
+  }
+
+
   // opts = { title, desc, input, defaultValue, placeholder, maxLength, validate,
   //          okText, cancelText, danger }
   // 返回 Promise：confirm/alert → resolve(true/false)；prompt → resolve(string|null)

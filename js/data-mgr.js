@@ -55,10 +55,6 @@ const DataMgr = (() => {
       _emit('npcAvatars', npcAvatars);
       _emit('drawnImages', drawnImages);
       _emit('lorebooks', lorebooks);
-      // 兼容别名：避免外部检查工具/旧脚本只认 snake_case 时误以为没打包
-      _emit('single_cards', singleCards);
-      _emit('npc_avatars', npcAvatars);
-      _emit('drawn_images', drawnImages);
       _emit('themeConfig', localStorage.getItem('themeConfig') || null);
       _emit('themeCustomPresets', localStorage.getItem('themeCustomPresets') || null);
       parts.push('}');
@@ -81,13 +77,14 @@ const DataMgr = (() => {
     }
   }
 
-  // 递归剥离内嵌的 base64 dataURL（图片/字体等），替换成占位符。
+  // 递归剥离内嵌的 base64 dataURL（图片/字体等），替换成空字符串。
   // 不依赖具体字段名，任何值为 data:image/... 或 data:font/... 的字符串都会被清掉。
+  // 用空串而非占位符，避免导入后被当成图片 URL 渲染出破图。
   // 原地修改传入对象，调用方应传入可丢弃的副本或本来就要序列化的数据。
   function _stripDataUrls(node) {
     if (node == null) return node;
     if (typeof node === 'string') {
-      return /^data:(image|font|audio|video)\//i.test(node) ? '[stripped]' : node;
+      return /^data:(image|font|audio|video)\//i.test(node) ? '' : node;
     }
     if (Array.isArray(node)) {
       for (let i = 0; i < node.length; i++) node[i] = _stripDataUrls(node[i]);
@@ -133,9 +130,6 @@ const DataMgr = (() => {
       // 图片表整表跳过：导出空数组占位，导入端遇到空数组即不写入
       _emit('npcAvatars', []);
       _emit('drawnImages', []);
-      _emit('single_cards', _stripDataUrls(await _safeGetAll('singleCards')));
-      _emit('npc_avatars', []);
-      _emit('drawn_images', []);
       // 主题配置里可能含 chatBgImage/customFontData，解析后剥离再写回字符串
       let themeConfig = localStorage.getItem('themeConfig') || null;
       try { if (themeConfig) themeConfig = JSON.stringify(_stripDataUrls(JSON.parse(themeConfig))); } catch(_) {}
@@ -177,7 +171,7 @@ const DataMgr = (() => {
 
         const isTextOnly = !!data.textOnly;
         const confirmMsg = isTextOnly
-          ? '这是纯文字存档（不含图片）。导入会覆盖文字数据，但保留你当前已有的图片（头像、生成图）。确定继续？'
+          ? '这是纯文字存档（不含任何图片）。导入会覆盖文字数据，并保留你当前设备上已有的图片（不会用存档里的空图覆盖）。注意：如果导入到一台没有这些图的新设备，那些图就会是空的。确定继续？'
           : '导入将覆盖当前所有数据，确定继续？';
         if (!await UI.showConfirm('导入存档', confirmMsg)) return;
 
@@ -225,7 +219,7 @@ const DataMgr = (() => {
         if (data.themeConfig) localStorage.setItem('themeConfig', data.themeConfig);
         if (data.themeCustomPresets) localStorage.setItem('themeCustomPresets', data.themeCustomPresets);
 
-        await UI.showAlert('导入成功', isTextOnly ? '文字数据已恢复（图片保留原样），页面将自动刷新' : '总存档已恢复，页面将自动刷新');
+        await UI.showAlert('导入成功', isTextOnly ? '文字数据已恢复。独立图库（生成图/头像）保留了本机现有的；手机里的壁纸/头像/封面等内联图因为纯文字存档不含它们，会是空的（恢复默认）。页面将自动刷新' : '总存档已恢复，页面将自动刷新');
         location.reload();
       } catch (e) {
         await UI.showAlert('导入失败', e.message || String(e));
@@ -241,5 +235,194 @@ const DataMgr = (() => {
     } catch(_) { return 0; }
   }
 
-  return { exportAll, exportTextOnly, importAll, getLastExportAt };
+  // ===== 图片存储管理 =====
+  // 估算一条记录里所有 dataURL 字符串的字节数（base64 字符串长度近似 = 字节数）
+  function _recordImageBytes(rec) {
+    let bytes = 0;
+    const visit = (v) => {
+      if (typeof v === 'string') {
+        if (/^data:(image|font|audio|video)\//i.test(v)) bytes += v.length;
+      } else if (Array.isArray(v)) {
+        v.forEach(visit);
+      } else if (v && typeof v === 'object') {
+        Object.values(v).forEach(visit);
+      }
+    };
+    visit(rec);
+    return bytes;
+  }
+
+  // 统计图片相关存储：生成图（drawnImages）+ 头像（npcAvatars）的数量与体积
+  async function getStorageStats() {
+    const drawn = await _safeGetAll('drawnImages');
+    const avatars = await _safeGetAll('npcAvatars');
+    let drawnBytes = 0;
+    for (const r of drawn) drawnBytes += _recordImageBytes(r);
+    let avatarBytes = 0;
+    for (const r of avatars) avatarBytes += _recordImageBytes(r);
+    return {
+      drawn: { count: drawn.length, bytes: drawnBytes },
+      avatars: { count: avatars.length, bytes: avatarBytes },
+      total: { count: drawn.length + avatars.length, bytes: drawnBytes + avatarBytes }
+    };
+  }
+
+  // 列出生成图（缩略展示用）：返回 [{id, prompt, createdAt, bytes}]，按时间倒序，不含 dataUrl
+  async function listDrawnImages() {
+    const drawn = await _safeGetAll('drawnImages');
+    return drawn.map(r => ({
+      id: r.id,
+      prompt: r.prompt || '',
+      createdAt: r.createdAt || 0,
+      bytes: _recordImageBytes(r)
+    })).sort((a, b) => {
+      const ta = typeof a.createdAt === 'string' ? Date.parse(a.createdAt) || 0 : (a.createdAt || 0);
+      const tb = typeof b.createdAt === 'string' ? Date.parse(b.createdAt) || 0 : (b.createdAt || 0);
+      return tb - ta;
+    });
+  }
+
+  // 取单张生成图的 dataUrl（缩略图懒加载用）
+  async function getDrawnImageData(id) {
+    try {
+      const r = await DB.get('drawnImages', id);
+      return r && r.dataUrl ? r.dataUrl : '';
+    } catch(_) { return ''; }
+  }
+
+  // 批量删除生成图（消息里的 [TSIMG:id] 占位会优雅降级显示"图片已丢失"）
+  async function deleteDrawnImages(ids) {
+    let ok = 0;
+    for (const id of (ids || [])) {
+      try { await DB.del('drawnImages', id); ok++; } catch(_) {}
+    }
+    return ok;
+  }
+
+  // 删除指定时间之前的生成图，返回删除数量。beforeTs 为毫秒时间戳
+  async function deleteDrawnImagesBefore(beforeTs) {
+    const drawn = await _safeGetAll('drawnImages');
+    const toDel = drawn.filter(r => {
+      const t = typeof r.createdAt === 'string' ? Date.parse(r.createdAt) || 0 : (r.createdAt || 0);
+      return t && t < beforeTs;
+    }).map(r => r.id);
+    return await deleteDrawnImages(toDel);
+  }
+
+  // ===== 手机内联图片（各对话 phoneData 里直接内联的 base64）管理 =====
+  // 只统计 data: 开头的 base64，URL/空串不计。
+
+  function _isDataUrl(v) {
+    return typeof v === 'string' && /^data:(image|font|audio|video)\//i.test(v);
+  }
+  function _strBytes(v) { return _isDataUrl(v) ? v.length : 0; }
+
+  // 内联图片类别定义：key=类别id，label=显示名，scan(pd)=返回该类别在这个 phoneData 里的字节数，
+  // clear(pd)=就地清空该类别的图片字段（返回是否有改动）
+  const _PHONE_IMG_CATS = [
+    { key: 'wallpaper', label: '壁纸',
+      scan: pd => _strBytes(pd.wallpaper),
+      clear: pd => { if (_isDataUrl(pd.wallpaper)) { pd.wallpaper = ''; return true; } return false; } },
+    { key: 'avatar', label: '主页头像',
+      scan: pd => _strBytes(pd.profile && pd.profile.avatar),
+      clear: pd => { if (pd.profile && _isDataUrl(pd.profile.avatar)) { pd.profile.avatar = ''; return true; } return false; } },
+    { key: 'momentsCover', label: '好友圈封面',
+      scan: pd => _strBytes(pd.momentsCover),
+      clear: pd => { if (_isDataUrl(pd.momentsCover)) { pd.momentsCover = ''; return true; } return false; } },
+    { key: 'dwExpressBg', label: '快递卡背景',
+      scan: pd => _strBytes(pd.dwExpressBg),
+      clear: pd => { if (_isDataUrl(pd.dwExpressBg)) { pd.dwExpressBg = ''; return true; } return false; } },
+    { key: 'anniversary', label: '纪念日卡背景',
+      scan: pd => _strBytes(pd.anniversary && pd.anniversary.image),
+      clear: pd => { if (pd.anniversary && _isDataUrl(pd.anniversary.image)) { pd.anniversary.image = ''; return true; } return false; } },
+    { key: 'wardrobe', label: '衣橱立绘',
+      scan: pd => _strBytes(pd.wardrobePortrait),
+      clear: pd => { if (_isDataUrl(pd.wardrobePortrait)) { pd.wardrobePortrait = ''; return true; } return false; } },
+    { key: 'npcMoments', label: 'NPC动态配图',
+      scan: pd => (Array.isArray(pd.npcMoments) ? pd.npcMoments : []).reduce((s, m) => s + _strBytes(m && m.image), 0),
+      clear: pd => { let c = false; (Array.isArray(pd.npcMoments) ? pd.npcMoments : []).forEach(m => { if (m && _isDataUrl(m.image)) { m.image = ''; c = true; } }); return c; } },
+    { key: 'moments', label: '我的动态配图',
+      scan: pd => (Array.isArray(pd.moments) ? pd.moments : []).reduce((s, m) => s + _strBytes(m && m.image), 0),
+      clear: pd => { let c = false; (Array.isArray(pd.moments) ? pd.moments : []).forEach(m => { if (m && _isDataUrl(m.image)) { m.image = ''; c = true; } }); return c; } },
+    { key: 'houses', label: '小屋图片',
+      scan: pd => (Array.isArray(pd.houses) ? pd.houses : []).reduce((s, h) => s + _strBytes(h && h.image), 0),
+      clear: pd => { let c = false; (Array.isArray(pd.houses) ? pd.houses : []).forEach(h => { if (h && _isDataUrl(h.image)) { h.image = ''; c = true; } }); return c; } },
+    { key: 'chatAvatars', label: '联系人/群头像',
+      scan: pd => (Array.isArray(pd.chatContacts) ? pd.chatContacts : []).reduce((s, c) => s + _strBytes(c && c.avatar), 0)
+                + (Array.isArray(pd.chatGroups) ? pd.chatGroups : []).reduce((s, g) => s + _strBytes(g && g.avatar), 0),
+      clear: pd => { let c = false;
+        (Array.isArray(pd.chatContacts) ? pd.chatContacts : []).forEach(x => { if (x && _isDataUrl(x.avatar)) { x.avatar = ''; c = true; } });
+        (Array.isArray(pd.chatGroups) ? pd.chatGroups : []).forEach(x => { if (x && _isDataUrl(x.avatar)) { x.avatar = ''; c = true; } });
+        return c; } },
+    { key: 'hsTargets', label: '心动目标头像',
+      scan: pd => (Array.isArray(pd.hsAppTargets) ? pd.hsAppTargets : []).reduce((s, t) => s + _strBytes(t && t.avatar), 0),
+      clear: pd => { let c = false; (Array.isArray(pd.hsAppTargets) ? pd.hsAppTargets : []).forEach(t => { if (t && _isDataUrl(t.avatar)) { t.avatar = ''; c = true; } }); return c; } },
+  ];
+
+  // 取 conversations 数组（真实来源在 gameState 的 conversations 项）
+  async function _getConversations() {
+    const gs = await DB.get('gameState', 'conversations');
+    return (gs && Array.isArray(gs.value)) ? gs.value : [];
+  }
+
+  // 扫描所有对话的 phoneData 内联图片，返回 [{convId, convName, total, cats:{key:bytes}}]，只含有图的对话
+  async function scanPhoneImages() {
+    const convs = await _getConversations();
+    const result = [];
+    for (const conv of convs) {
+      const pd = conv && conv.phoneData;
+      if (!pd || typeof pd !== 'object') continue;
+      const cats = {};
+      let total = 0;
+      for (const cat of _PHONE_IMG_CATS) {
+        let bytes = 0;
+        try { bytes = cat.scan(pd) || 0; } catch(_) {}
+        if (bytes > 0) { cats[cat.key] = bytes; total += bytes; }
+      }
+      if (total > 0) {
+        result.push({ convId: conv.id, convName: conv.name || '未命名对话', total, cats });
+      }
+    }
+    result.sort((a, b) => b.total - a.total);
+    return result;
+  }
+
+  // 内联图片类别元信息（给 UI 显示用）
+  function getPhoneImageCats() {
+    return _PHONE_IMG_CATS.map(c => ({ key: c.key, label: c.label }));
+  }
+
+  // 清理某个对话指定类别的内联图片。catKeys 不传或为空数组表示清理该对话所有类别。
+  // 返回清理后是否有改动。改动会写回 gameState 的 conversations。
+  async function clearPhoneImages(convId, catKeys) {
+    const gs = await DB.get('gameState', 'conversations');
+    const convs = (gs && Array.isArray(gs.value)) ? gs.value : [];
+    const conv = convs.find(c => c && c.id === convId);
+    if (!conv || !conv.phoneData) return false;
+    const keys = (Array.isArray(catKeys) && catKeys.length) ? catKeys : _PHONE_IMG_CATS.map(c => c.key);
+    let changed = false;
+    for (const cat of _PHONE_IMG_CATS) {
+      if (!keys.includes(cat.key)) continue;
+      try { if (cat.clear(conv.phoneData)) changed = true; } catch(_) {}
+    }
+    if (changed) {
+      await DB.put('gameState', { key: 'conversations', value: convs });
+    }
+    return changed;
+  }
+
+  // 浏览器存储配额估算：返回 {usage, quota, supported}，字节。不支持时 supported=false
+  async function getStorageEstimate() {
+    try {
+      if (navigator.storage && navigator.storage.estimate) {
+        const est = await navigator.storage.estimate();
+        return { usage: est.usage || 0, quota: est.quota || 0, supported: true };
+      }
+    } catch(_) {}
+    return { usage: 0, quota: 0, supported: false };
+  }
+
+  return { exportAll, exportTextOnly, importAll, getLastExportAt,
+           getStorageStats, listDrawnImages, getDrawnImageData, deleteDrawnImages, deleteDrawnImagesBefore,
+           scanPhoneImages, getPhoneImageCats, clearPhoneImages, getStorageEstimate };
 })();
