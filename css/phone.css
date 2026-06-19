@@ -184,16 +184,20 @@
   scrollbar-width: none;
 }
 .phone-pages::-webkit-scrollbar { display: none; }
-/* 单页 */
+/* 单页：内容超高时本页可纵向滚动（兜底，避免图标被裁掉）；正常屏幕由矮屏媒体查询压紧后不会出现滚动条 */
 .phone-page {
   flex-shrink: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
   padding: 8px 18px 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   scroll-snap-align: start;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.phone-page::-webkit-scrollbar { display: none; }
 /* 页面指示器 */
 .phone-page-indicator {
   display: flex;
@@ -6536,7 +6540,7 @@ align-self: start;
   border-radius: 16px;
   background: rgba(255,255,255,0.12);
   border: 2px solid transparent;
-  color: var(--text);
+  color: currentColor;
   cursor: pointer;
   transition: border-color .15s, background .15s;
 }
@@ -6560,4 +6564,32 @@ align-self: start;
   box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .phone-theme-name { font-size: 12px; font-weight: 700; }
+
+/* ============================================================
+   矮屏适配：内容高度紧张时压紧主屏三页的间距与图标尺寸，
+   让常见小屏 / 带地址栏的浏览器不用滚动就能看全所有 app。
+   极端不够时仍由 .phone-page 的纵向滚动兜底。
+   ============================================================ */
+@media (max-height: 740px) {
+  .phone-app-icon-circle { width: 48px; height: 48px; }
+  .phone-app-icon { gap: 5px; }
+  .phone-system-grid, .phone-app-grid { gap: 10px 14px; padding: 6px 6px 4px; }
+  .phone-app-grid { padding: 2px 6px 2px; }
+  .phone-widget { padding: 16px 8px 8px; }
+  .phone-home-bottom-spacer { min-height: 12px; }
+  .phone-home-spacer { min-height: 8px; }
+  .phone-page2-row { padding-top: 10px; gap: 10px; }
+  .phone-page2-apps { gap: 10px 14px; }
+  .phone-delivery-widget { margin-top: 12px; gap: 10px; }
+  .phone-music-row { margin-top: 8px; gap: 10px; }
+  .phone-dock { margin: 6px 4px max(env(safe-area-inset-bottom, 0px), 4px); padding: 8px 8px; }
+}
+@media (max-height: 640px) {
+  .phone-app-icon-circle { width: 44px; height: 44px; }
+  .phone-app-icon-label { font-size: 10.5px; }
+  .phone-system-grid, .phone-app-grid { gap: 8px 12px; }
+  .phone-page2-apps { gap: 8px 12px; }
+  .phone-widget { padding: 10px 8px 6px; }
+  .phone-page2-row { padding-top: 6px; }
+}
 
