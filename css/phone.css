@@ -6583,6 +6583,26 @@ align-self: start;
   .phone-delivery-widget { margin-top: 12px; gap: 10px; }
   .phone-music-row { margin-top: 8px; gap: 10px; }
   .phone-dock { margin: 6px 4px max(env(safe-area-inset-bottom, 0px), 4px); padding: 8px 8px; }
+  /* 卡片同步缩小：番茄钟 */
+  .phone-tomato-card { padding: 8px; }
+  .phone-tomato-ring { width: 64px; height: 64px; }
+  .phone-tomato-clock { font-size: 22px; }
+  .phone-tomato-label { margin-top: 4px; }
+  /* 音乐卡片 */
+  .phone-music-card { padding: 8px 12px 8px; }
+  .phone-music-cover { width: 38px; height: 38px; }
+  /* 个人资料卡 */
+  .phone-profile-card { padding: 8px 12px; margin-bottom: 8px; }
+  .phone-profile-name { font-size: 15px; }
+  /* 飞鸟快递方卡（aspect-ratio 是高度大户，压扁） */
+  .phone-dw-express { aspect-ratio: 4 / 3; padding: 12px; }
+  .phone-dw-mini { padding: 10px 12px; }
+  /* 纪念日卡（flex:1 会被同行撑高，限高压住） */
+  .phone-anniversary-card { max-height: 150px; padding: 10px; }
+  /* 日历卡片（第三页顶部 banner） */
+  .phone-cal-banner { margin-top: 12px; padding: 10px 14px 10px; }
+  .phone-cal-banner-clock { font-size: 23px; }
+  .phone-cal-banner-countdown { margin-top: 5px; }
 }
 @media (max-height: 640px) {
   .phone-app-icon-circle { width: 44px; height: 44px; }
@@ -6591,5 +6611,16 @@ align-self: start;
   .phone-page2-apps { gap: 8px 12px; }
   .phone-widget { padding: 10px 8px 6px; }
   .phone-page2-row { padding-top: 6px; }
+  /* 卡片再缩一档 */
+  .phone-tomato-ring { width: 56px; height: 56px; }
+  .phone-tomato-clock { font-size: 19px; }
+  .phone-music-card { padding: 6px 10px 6px; }
+  .phone-music-cover { width: 34px; height: 34px; }
+  .phone-music-title { font-size: 13px; }
+  .phone-dw-express { aspect-ratio: 3 / 2; padding: 10px; }
+  .phone-anniversary-card { max-height: 120px; }
+  .phone-profile-card { padding: 6px 10px; }
+  .phone-cal-banner { margin-top: 8px; padding: 8px 14px; }
+  .phone-cal-banner-clock { font-size: 20px; }
 }
 
