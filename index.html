@@ -11,7 +11,8 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=141">
-<link rel="stylesheet" href="css/phone.css?v=185">
+<link rel="stylesheet" href="css/phone.css?v=247">
+<link rel="stylesheet" href="css/phone-fudge.css?v=2">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
 </head>
@@ -3054,10 +3055,12 @@
 <button type="button" onclick="WvGenerator.inlineSetting()" class="ai-action-btn" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-bottom:8px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>AI 生成设定</button>
 
             <div style="padding-top:12px;margin-top:4px">
-              <div style="font-size:13px;font-weight:bold;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg> 通用货币</div>
-              <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">仅发给AI做价格参考，前端统一显示 ¥；留空则不注入。</div>
-              <label>货币名称<input type="text" id="wv-currency-name" placeholder="例如：人民币 / 灵石 / 主神积分"></label>
-              <label>货币说明 <span style="font-size:11px;color:var(--text-secondary)">（可选，帮助AI判断价格区间）</span><div style="position:relative;width:100%"><textarea id="wv-currency-desc" class="auto-resize-textarea" rows="2" placeholder="例如：本世界通用货币，购买力对标现实人民币 / 主神商城点数，一份普通道具约几百积分" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-currency-desc','货币说明')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+                <div style="font-size:13px;font-weight:bold;color:var(--text);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg> 通用货币</div>
+                <button type="button" onclick="Worldview.addCurrency()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 添加货币</button>
+              </div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">仅发给AI做价格参考，前端统一显示 ¥；可添加多种货币。</div>
+              <div id="wv-currencies-container" style="display:flex;flex-direction:column;gap:10px"></div>
             </div>
 
             <div style="padding-top:16px;margin-top:16px">
@@ -3987,12 +3990,12 @@ const GameLog = (() => {
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=56"></script>
-<script src="js/worldview.js?v=46"></script>
+<script src="js/worldview.js?v=49"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js"></script>
 <script src="js/conv_gameplay.js?v=10"></script>
-<script src="js/wv-generator.js?v=7"></script>
+<script src="js/wv-generator.js?v=8"></script>
 <script src="js/single_card.js?v=9"></script>
 <script src="js/attached-chars.js"></script>
 <script src="js/single_mode.js?v=2"></script>
@@ -4000,7 +4003,7 @@ const GameLog = (() => {
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=5"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=50"></script>
+<script src="js/chat.js?v=51"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4016,7 +4019,7 @@ const GameLog = (() => {
 <script src="js/worldvoice.js?v=3"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
-<script src="js/phone.js?v=481"></script>
+<script src="js/phone.js?v=556"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -4035,7 +4038,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js"></script>
-<script src="js/app.js?v=104"></script>
+<script src="js/app.js?v=105"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

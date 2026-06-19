@@ -1,0 +1,660 @@
+/* ============================================================
+   phone-fudge.css —— 奶油软糖主题专属覆盖层
+   从 phone.css 剥离，集中维护 .phone-theme-fudge 的所有规则。
+   依赖：phone.css（变量、基础布局、玻璃主题），必须在其之后加载。
+   ============================================================ */
+
+/* ============================================================
+   主题：奶油软糖（fudge）—— 实色 + 圆润 + 柔和阴影 + 无边框
+   配色：主背景/主文字  与  顶栏侧边栏/主题色  两套交错
+   先覆盖桌面（图标 + 设置卡），其余 App 后续逐步铺开
+   ============================================================ */
+.phone-shell.phone-theme-fudge {
+  background:
+    linear-gradient(180deg,
+      var(--text-secondary) 0%,
+      color-mix(in srgb, var(--text-secondary) 50%, var(--bg)) 55%,
+      var(--bg) 100%);
+  box-shadow: 0 18px 60px rgba(0,0,0,0.36);
+}
+.phone-shell.phone-theme-fudge::before { display: none; }
+/* 进入 App 后（非桌面态）：内容区铺主文字色纯底，与实色卡片拉开对比 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-body {
+  background: var(--text);
+}
+/* 顶栏（状态栏 + 标题栏）也铺主文字色，与 body 连成一片 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-statusbar,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-header {
+  background: var(--text);
+}
+/* 顶栏 + 底栏文字/图标反转为背景色（主文字色底上才看得清） */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-statusbar,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-header,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) #phone-title,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-nav-btn {
+  color: var(--bg);
+}
+/* 底部 tab 栏：铺主文字色底，文字反转为背景色 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-tabbar {
+  background: var(--text);
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-tab {
+  color: color-mix(in srgb, var(--bg) 60%, transparent);
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-tab.active {
+  color: var(--bg);
+}
+
+/* 桌面 App 图标：实色圆形 + 柔和阴影，去边框去毛玻璃 */
+.phone-shell.phone-theme-fudge .phone-app-icon-circle {
+  border-radius: 50%;
+  background: var(--text);
+  border: none;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 28%, transparent);
+  backdrop-filter: none;
+}
+.phone-shell.phone-theme-fudge .phone-icon-glyph {
+  width: 20px;
+  height: 20px;
+  color: var(--accent);
+  filter: none;
+}
+.phone-shell.phone-theme-fudge .phone-icon-glyph svg {
+  width: 19px;
+  height: 19px;
+}
+.phone-shell.phone-theme-fudge .phone-app-settings .phone-app-icon-circle,
+.phone-shell.phone-theme-fudge .phone-app-minimize .phone-app-icon-circle {
+  background: var(--text);
+}
+.phone-shell.phone-theme-fudge .phone-app-icon-label {
+  text-shadow: none;
+}
+/* 配色 B：主背景色底 + 主文字色图标（按 App 指定）
+   takeout 饿了咪 / map 地图 / memo 备忘录 / chat 聊天 / youyu 游鱼小铺 / cottage 小屋 / calendar 日历 / radio 电台 */
+.phone-shell.phone-theme-fudge .phone-app-takeout .phone-app-icon-circle,
+.phone-shell.phone-theme-fudge .phone-app-map .phone-app-icon-circle,
+.phone-shell.phone-theme-fudge .phone-app-memo .phone-app-icon-circle,
+.phone-shell.phone-theme-fudge .phone-app-chat .phone-app-icon-circle,
+.phone-shell.phone-theme-fudge .phone-app-youyu .phone-app-icon-circle,
+.phone-shell.phone-theme-fudge .phone-app-cottage .phone-app-icon-circle,
+.phone-shell.phone-theme-fudge .phone-app-calendar .phone-app-icon-circle,
+.phone-shell.phone-theme-fudge .phone-app-radio .phone-app-icon-circle {
+  background: var(--bg);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+}
+.phone-shell.phone-theme-fudge .phone-app-takeout .phone-icon-glyph,
+.phone-shell.phone-theme-fudge .phone-app-map .phone-icon-glyph,
+.phone-shell.phone-theme-fudge .phone-app-memo .phone-icon-glyph,
+.phone-shell.phone-theme-fudge .phone-app-chat .phone-icon-glyph,
+.phone-shell.phone-theme-fudge .phone-app-youyu .phone-icon-glyph,
+.phone-shell.phone-theme-fudge .phone-app-cottage .phone-icon-glyph,
+.phone-shell.phone-theme-fudge .phone-app-calendar .phone-icon-glyph,
+.phone-shell.phone-theme-fudge .phone-app-radio .phone-icon-glyph {
+  color: var(--accent);
+}
+/* 占位/待解锁：实色弱化、去虚线边框 */
+.phone-shell.phone-theme-fudge .phone-app-icon-circle-placeholder {
+  border: none;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+/* 设置卡：实色圆角 + 柔和阴影，无边框 */
+.phone-shell.phone-theme-fudge .phone-settings-card {
+  background: var(--bg-secondary);
+  border: none;
+  border-radius: 22px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.12);
+  backdrop-filter: none;
+}
+.phone-shell.phone-theme-fudge .phone-settings-btn.secondary {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: none;
+}
+
+/* 底部 dock：去掉外框，完全透明（图标直接浮在背景上） */
+.phone-shell.phone-theme-fudge .phone-dock {
+  background: none;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+/* 个人资料卡：主文字色底，无边框，柔和阴影 */
+.phone-shell.phone-theme-fudge .phone-profile-card {
+  background: var(--text);
+  border: none;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 24%, transparent);
+}
+/* 卡内名字/签名改背景色（浅底上的深字），去文字阴影 */
+.phone-shell.phone-theme-fudge .phone-profile-name,
+.phone-shell.phone-theme-fudge .phone-profile-bio {
+  color: var(--bg);
+  text-shadow: none;
+  caret-color: var(--bg);
+}
+/* 头像框去边框 */
+.phone-shell.phone-theme-fudge .phone-profile-avatar {
+  border: none;
+}
+
+/* ---- 第二页小组件卡片配色 ---- */
+/* 快递大卡：主文字色底 */
+.phone-shell.phone-theme-fudge .phone-dw-express {
+  background: var(--text);
+  border: none;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 22%, transparent);
+}
+.phone-shell.phone-theme-fudge .phone-dw-express .phone-dw-express-name,
+.phone-shell.phone-theme-fudge .phone-dw-express .phone-dw-express-unit,
+.phone-shell.phone-theme-fudge .phone-dw-express .phone-dw-express-empty,
+.phone-shell.phone-theme-fudge .phone-dw-express .phone-dw-express-foot {
+  color: var(--bg);
+}
+/* 天数数字保留主题色（浅底上更醒目） */
+.phone-shell.phone-theme-fudge .phone-dw-express .phone-dw-express-num {
+  color: var(--accent);
+}
+/* 钱包余额卡（第1个 mini）：背景色底 */
+.phone-shell.phone-theme-fudge .phone-dw-mini:nth-child(1) {
+  background: var(--bg);
+  border: none;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+}
+/* 记账/本月结余卡（第2个 mini）：主文字色底 */
+.phone-shell.phone-theme-fudge .phone-dw-mini:nth-child(2) {
+  background: var(--text);
+  border: none;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 22%, transparent);
+}
+.phone-shell.phone-theme-fudge .phone-dw-mini:nth-child(2) .phone-dw-mini-label,
+.phone-shell.phone-theme-fudge .phone-dw-mini:nth-child(2) .phone-dw-mini-num,
+.phone-shell.phone-theme-fudge .phone-dw-mini:nth-child(2) .phone-dw-mini-empty {
+  color: var(--bg);
+}
+/* 进度条卡：背景色底 */
+.phone-shell.phone-theme-fudge .phone-dw-takeout {
+  background: var(--bg);
+  border: none;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+}
+/* 番茄钟卡：主文字色底 */
+.phone-shell.phone-theme-fudge .phone-tomato-card {
+  background: var(--text);
+  border: none;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 22%, transparent);
+}
+/* 番茄钟卡内文字/时钟改次文字色（浅底上可读） */
+.phone-shell.phone-theme-fudge .phone-tomato-card .phone-tomato-label,
+.phone-shell.phone-theme-fudge .phone-tomato-card .phone-tomato-goal,
+.phone-shell.phone-theme-fudge .phone-tomato-card .phone-tomato-clock {
+  color: var(--text-secondary);
+}
+.phone-shell.phone-theme-fudge .phone-tomato-card .tomato-clock-min { stroke: var(--text-secondary); }
+.phone-shell.phone-theme-fudge .phone-tomato-card .tomato-clock-center { fill: var(--text-secondary); }
+
+/* ---- 第三页卡片配色 ---- */
+/* 日历卡（banner）：背景色底 */
+.phone-shell.phone-theme-fudge .phone-cal-banner {
+  background: var(--bg);
+  border: none;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+}
+/* 纪念日卡：主文字色底（无背景图时），文字转背景色 */
+.phone-shell.phone-theme-fudge .phone-anniversary-card {
+  background-color: var(--text);
+  border: none;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 22%, transparent);
+}
+.phone-shell.phone-theme-fudge .phone-anniversary-card .phone-anniversary-card-text {
+  color: var(--bg);
+}
+/* 音乐播放器卡：背景色底 */
+.phone-shell.phone-theme-fudge .phone-music-card {
+  background: var(--bg);
+  border: none;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+}
+
+/* ============================================================
+   商城（桃宝/饿了咪）App 内部：去边框 + 圆角化
+   ============================================================ */
+/* 去掉所有边框分割线 */
+.phone-shell.phone-theme-fudge .phone-shop-app .phone-map-result-card,
+.phone-shell.phone-theme-fudge .phone-shop-app .phone-map-track-card,
+.phone-shell.phone-theme-fudge .phone-shop-app .phone-map-search-input-wrap,
+.phone-shell.phone-theme-fudge .phone-shop-app .phone-tabbar {
+  border: none;
+}
+/* 搜索框：更圆润 */
+.phone-shell.phone-theme-fudge .phone-shop-app .phone-map-search-input-wrap {
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+}
+/* 搜索按钮：更圆润 */
+.phone-shell.phone-theme-fudge .phone-shop-app .phone-map-search-btn {
+  border-radius: 999px;
+  padding: 0 16px;
+}
+/* 刷新 / 自定义按钮：更圆润、去边框 */
+.phone-shell.phone-theme-fudge .phone-shop-app .phone-shop-refresh-btn,
+.phone-shell.phone-theme-fudge .phone-shop-app .phone-shop-custom-btn {
+  border-radius: 999px !important;
+  border: none !important;
+}
+/* 商品卡 / 订单卡 / 搜索记录卡：更圆的圆角 + 背景色实色 + 加内边距防文字挤 */
+.phone-shell.phone-theme-fudge .phone-shop-app .phone-map-result-card,
+.phone-shell.phone-theme-fudge .phone-shop-app .phone-map-track-card {
+  border-radius: 18px;
+  background: var(--bg) !important;
+  padding: 14px;
+}
+
+/* ============================================================
+   论坛（风闻搬家）App 内部：圆角化（实色背景已由 fudge 默认提供）
+   行内样式写死了 border-radius，需 !important 覆盖
+   ============================================================ */
+/* 搜索框 + 帖子卡：更圆 + 去边框 */
+.phone-shell.phone-theme-fudge .phone-forum-app #phone-forum-search,
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-post-card {
+  border-radius: 18px !important;
+  border: none !important;
+}
+/* 帖子卡加内边距防文字挤 + 背景色实色 */
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-post-card {
+  padding: 14px !important;
+  background: var(--bg) !important;
+}
+/* 搜索 / 刷新 / 发帖按钮：胶囊形、去边框 */
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-search-btn,
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-refresh-btn,
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-post-btn {
+  border-radius: 999px !important;
+  border: none !important;
+}
+/* 底部 tabbar 去边框 */
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-tabbar {
+  border: none;
+}
+/* 搜索记录行：去掉分割线 */
+.phone-shell.phone-theme-fudge .phone-forum-app #phone-forum-history-panel > div[style*="border-bottom"] {
+  border-bottom: none !important;
+}
+/* ---- 论坛编辑/发帖页：输入框 + 按钮大圆角 ---- */
+/* 标题/时间/正文/配图描述/标签 输入框 */
+.phone-shell.phone-theme-fudge .phone-forum-edit input,
+.phone-shell.phone-theme-fudge .phone-forum-edit textarea {
+  border-radius: 16px !important;
+  border: none !important;
+  padding: 12px 16px !important;
+}
+/* 发布 / 删除 / 从相册选 按钮 */
+.phone-shell.phone-theme-fudge .phone-forum-edit button {
+  border-radius: 999px !important;
+  border: none !important;
+}
+
+/* 顶栏返回/导航按钮：去底、去边框、去毛玻璃，只留图标 */
+.phone-shell.phone-theme-fudge .phone-nav-btn {
+  background: none;
+  border: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ============================================================
+   地图 App 内部：去边框 + 圆角化（与商城同一套思路）
+   ============================================================ */
+/* 去边框 */
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-result-card,
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-track-card,
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-search-input-wrap,
+.phone-shell.phone-theme-fudge .phone-map-app .phone-tabbar {
+  border: none;
+}
+/* 搜索框：胶囊形 */
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-search-input-wrap {
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+}
+/* 搜索按钮：胶囊形 */
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-search-btn {
+  border-radius: 999px;
+  padding: 0 16px;
+}
+/* 结果卡 / 轨迹卡：大圆角 + 背景色实色 + 内边距防文字挤 */
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-result-card,
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-track-card {
+  border-radius: 18px;
+  background: var(--bg) !important;
+  padding: 14px;
+}
+/* 搜索记录行：去掉分割线 */
+.phone-shell.phone-theme-fudge .phone-map-app #phone-map-searchhist-panel > div[style*="border-bottom"] {
+  border-bottom: none !important;
+}
+
+/* ============================================================
+   好友圈 App：顶部封面 + 发动态编辑页 圆角化
+   ============================================================ */
+/* 顶部封面：更大圆角 */
+.phone-shell.phone-theme-fudge .phone-moments-cover {
+  border-radius: 22px;
+}
+/* 发动态编辑页：正文/配图描述/时间 输入框，大圆角 + 去边框 + 内边距 */
+.phone-shell.phone-theme-fudge .phone-moment-edit textarea,
+.phone-shell.phone-theme-fudge .phone-moment-edit input {
+  border-radius: 16px !important;
+  border: none !important;
+  padding: 12px 16px !important;
+}
+/* 对谁可见 / 发布 / 从相册选 按钮：胶囊形 + 去边框 */
+.phone-shell.phone-theme-fudge .phone-moment-edit .phone-visible-trigger,
+.phone-shell.phone-theme-fudge .phone-moment-edit button {
+  border-radius: 999px !important;
+  border: none !important;
+}
+
+/* ---- 好友圈动态列表：卡片圆角化 ---- */
+/* 动态卡：大圆角 + 内边距 */
+.phone-shell.phone-theme-fudge .phone-moment-card {
+  border-radius: 18px;
+  border: none;
+  padding: 14px;
+  background: var(--bg) !important;
+}
+/* 评论卡：圆角化 + 去边框 */
+.phone-shell.phone-theme-fudge .phone-moment-comment-card {
+  border-radius: 14px;
+  border: none;
+  padding: 8px 12px;
+  background: var(--bg-tertiary) !important;
+}
+/* 评论区分割线去掉 */
+.phone-shell.phone-theme-fudge .phone-moment-comments {
+  border-top: none;
+}
+/* 配图卡 + 配图描述：圆角化 */
+.phone-shell.phone-theme-fudge .phone-moment-image {
+  border-radius: 14px;
+  border: none;
+}
+.phone-shell.phone-theme-fudge .phone-moment-image-desc {
+  border-radius: 14px;
+}
+
+/* ============================================================
+   备忘录 App：卡片 + 编辑页 + 按钮 圆角化
+   ============================================================ */
+/* 备忘录卡：大圆角 + 去边框 + 内边距 */
+.phone-shell.phone-theme-fudge .phone-memo-preview-card {
+  border-radius: 18px;
+  border: none;
+  padding: 14px;
+  background: var(--bg) !important;
+}
+/* 编辑页输入框：大圆角 + 去边框 + 内边距 */
+.phone-shell.phone-theme-fudge .phone-memo-edit-page input,
+.phone-shell.phone-theme-fudge .phone-memo-edit-page textarea {
+  border-radius: 16px !important;
+  border: none !important;
+  padding: 12px 16px !important;
+}
+/* 保存 / 收藏 / 分享 / 删除 按钮：胶囊形 + 去边框 */
+.phone-shell.phone-theme-fudge .phone-memo-save-btn,
+.phone-shell.phone-theme-fudge .phone-memo-action-btn {
+  border-radius: 999px;
+  border: none;
+}
+/* App 内底部按钮落在主文字色底上：收藏/分享（非删除）文字改背景色才看得清 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-memo-action-btn:not(.danger) {
+  color: var(--bg);
+}
+
+/* ============================================================
+   钱包 App：绑定属性卡 + 添加按钮 圆角化
+   ============================================================ */
+/* 绑定属性卡：大圆角 + 去边框 + 背景色实色（压过 has-wallpaper 渐变） */
+.phone-shell.phone-theme-fudge .phone-wallet-card {
+  border-radius: 18px !important;
+  border: none !important;
+  background: var(--bg) !important;
+}
+/* 添加货币按钮：大圆角 + 去虚线边框 */
+.phone-shell.phone-theme-fudge .phone-wallet-add-btn {
+  border-radius: 18px !important;
+  border: none !important;
+  background: var(--bg-tertiary) !important;
+}
+
+/* ============================================================
+   记账 App：各卡片去边框 + 大圆角 + 背景色实色
+   ============================================================ */
+.phone-shell.phone-theme-fudge .phone-ledger-summary,
+.phone-shell.phone-theme-fudge .phone-ledger-item,
+.phone-shell.phone-theme-fudge .phone-ledger-year-row {
+  border: none !important;
+  border-radius: 18px !important;
+  background: var(--bg) !important;
+}
+/* 年视图当前月：用主题色细描边突出（保留语义） */
+.phone-shell.phone-theme-fudge .phone-ledger-year-row.cur {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* 手动记一笔按钮：大圆角 */
+.phone-shell.phone-theme-fudge .phone-ledger-add-btn {
+  border-radius: 18px !important;
+  border: none !important;
+}
+/* 记账右上角视图切换图标（落在主文字色顶栏上）→ 背景色 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-ledger-viewbtn {
+  color: var(--bg);
+}
+/* 日历视图文字（月份/星期/日期/明细标题）→ 背景色 */
+.phone-shell.phone-theme-fudge .phone-ledger-cal-month,
+.phone-shell.phone-theme-fudge .phone-ledger-cal-wd,
+.phone-shell.phone-theme-fudge .phone-ledger-cal-day,
+.phone-shell.phone-theme-fudge .phone-ledger-cal-detail-title {
+  color: var(--bg);
+}
+
+/* ============================================================
+   小屋 + 衣橱 App：贴页面底的标题 → 背景色
+   ============================================================ */
+/* 衣橱「当前着装」标题：落在主文字色页面底上 → 背景色（卡片内的部位名不改，用文字色） */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .wardrobe-card-title {
+  color: var(--bg) !important;
+}
+/* 衣橱/小屋右上角 AI 按钮（落在主文字色顶栏上） */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .cottage-ai-btn {
+  color: var(--bg);
+}
+
+/* 衣橱：卡片 + 按钮去边框 + 大圆角 */
+.phone-shell.phone-theme-fudge .wardrobe-part {
+  border: none !important;
+  border-radius: 18px;
+  background: var(--bg-secondary) !important;
+  padding: 14px 16px;
+}
+.phone-shell.phone-theme-fudge .wardrobe-portrait {
+  border: none !important;
+  border-radius: 18px;
+}
+.phone-shell.phone-theme-fudge .wardrobe-portrait-empty {
+  border: none !important;
+  border-radius: 18px;
+}
+.phone-shell.phone-theme-fudge .wardrobe-item {
+  border-radius: 14px;
+}
+.phone-shell.phone-theme-fudge .wardrobe-btn {
+  border: none !important;
+  border-radius: 999px;
+}
+.phone-shell.phone-theme-fudge .wardrobe-part-add {
+  border: none !important;
+  border-radius: 999px;
+}
+
+/* 小屋：全部实色卡片 + 去边框 + 大圆角（带封面图的住所信息卡除外，避免盖掉图片） */
+.phone-shell.phone-theme-fudge .cottage-mall-card,
+.phone-shell.phone-theme-fudge .cottage-house-card,
+.phone-shell.phone-theme-fudge .cottage-info-card:not(.cottage-info-card-img),
+.phone-shell.phone-theme-fudge .cottage-room-card,
+.phone-shell.phone-theme-fudge .cottage-room-info,
+.phone-shell.phone-theme-fudge .cottage-item-card {
+  background: var(--bg-secondary) !important;
+  border: none !important;
+  border-radius: 18px;
+  box-shadow: none !important;
+}
+/* 小屋/衣橱商城的商品卡 + 仓库卡（复用 .phone-map-result-card，但根容器无商城作用域） */
+.phone-shell.phone-theme-fudge .phone-cottage-shell .phone-map-result-card,
+.phone-shell.phone-theme-fudge .phone-cottage-shop .phone-map-result-card {
+  background: var(--bg-secondary) !important;
+  border: none !important;
+  border-radius: 18px;
+  padding: 14px;
+}
+/* 小屋/衣橱商城：搜索框 + 搜索按钮去边框 + 胶囊形 */
+.phone-shell.phone-theme-fudge .phone-cottage-shop .phone-map-search-input-wrap {
+  background: var(--bg-secondary) !important;
+  border: none !important;
+  border-radius: 999px;
+}
+.phone-shell.phone-theme-fudge .phone-cottage-shop .phone-map-search-btn {
+  border-radius: 999px;
+}
+/* 小屋：带图片的住所信息卡保持铺满，不强制圆角内边距 */
+.phone-shell.phone-theme-fudge .cottage-info-card-img {
+  border-radius: 18px;
+}
+/* 小屋：按钮去边框（含虚线）+ 胶囊形 */
+.phone-shell.phone-theme-fudge .cottage-add-btn,
+.phone-shell.phone-theme-fudge .cottage-set-cur-btn,
+.phone-shell.phone-theme-fudge .cottage-item-add {
+  border: none !important;
+  border-radius: 999px;
+  background: var(--bg-secondary) !important;
+}
+/* 小屋：楼层下拉框去边框 + 大圆角 */
+.phone-shell.phone-theme-fudge .cottage-floor-select {
+  border: none !important;
+  border-radius: 14px;
+  background: var(--bg-secondary) !important;
+}
+.phone-shell.phone-theme-fudge .cottage-floor-menu {
+  border: none !important;
+  border-radius: 14px;
+}
+
+/* 聊天：联系人/会话名字 + 详情页右上角按钮 → 背景色（落在主文字色底上） */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-chat-name {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) #phone-header-right button {
+  color: var(--bg) !important;
+}
+
+/* 电台「我的」页：订阅卡 + 下期预告块 → 实色背景 + 大圆角 */
+.phone-shell.phone-theme-fudge .phone-radio-mine-card {
+  background: var(--bg-secondary) !important;
+  border: none !important;
+  border-radius: 18px;
+}
+.phone-shell.phone-theme-fudge .phone-radio-mine-next {
+  background: var(--bg-tertiary) !important;
+  border-radius: 14px;
+}
+
+/* 日历：事项卡 → 去边框 + 大圆角 + 实色背景 */
+.phone-shell.phone-theme-fudge .phone-cal-ev-card {
+  background: var(--bg-secondary) !important;
+  border: none !important;
+  border-radius: 16px;
+}
+
+/* ============================================================
+   日历 App：页面文字落在主文字色底上 → 改背景色
+   ============================================================ */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-cal-title-text,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-cal-nav-btn,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-cal-weekday,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-cal-day-title {
+  color: var(--bg);
+}
+/* 日期数字（排除今天/选中态，它们有专属高亮色） */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-cal-cell:not(.phone-cal-today):not(.phone-cal-selected) .phone-cal-daynum {
+  color: var(--bg);
+}
+
+/* ============================================================
+   全部订单聚合页：订单卡去边框 + 大圆角 + 背景色实色
+   ============================================================ */
+.phone-shell.phone-theme-fudge .phone-deliveries-app .phone-map-result-card {
+  border: none !important;
+  border-radius: 18px !important;
+  background: var(--bg) !important;
+  padding: 14px;
+}
+.phone-shell.phone-theme-fudge .phone-deliveries-app .phone-tabbar {
+  border: none;
+}
+
+/* ============================================================
+   飞鸟（快递）+ 游鱼（小铺）App：卡片去边框 + 大圆角 + 背景色实色
+   ============================================================ */
+.phone-shell.phone-theme-fudge .phone-feiniao-app .phone-map-result-card,
+.phone-shell.phone-theme-fudge .phone-youyu-app .phone-map-result-card {
+  border: none !important;
+  border-radius: 18px !important;
+  background: var(--bg) !important;
+  padding: 14px;
+}
+/* 添加寄件 / 上架商品 按钮：大圆角 + 去虚线边框 */
+.phone-shell.phone-theme-fudge .phone-feiniao-add-btn,
+.phone-shell.phone-theme-fudge .phone-youyu-add-btn {
+  border-radius: 18px !important;
+  border: none !important;
+  background: var(--bg-tertiary) !important;
+}
+/* 底部 tabbar 去边框 */
+.phone-shell.phone-theme-fudge .phone-feiniao-app .phone-tabbar,
+.phone-shell.phone-theme-fudge .phone-youyu-app .phone-tabbar {
+  border: none;
+}
+
+/* ============================================================
+   番茄钟 App：实色背景 + 历史记录卡大圆角
+   ============================================================ */
+/* App 页整体实色背景（专注播放器卡是毛玻璃，靠页面底色衬托） */
+.phone-shell.phone-theme-fudge .phone-tomato-app {
+  background: var(--bg);
+}
+/* 专注播放器卡：实色背景 + 去毛玻璃 */
+.phone-shell.phone-theme-fudge .phone-tomato-player {
+  background: var(--bg-secondary);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* 历史记录卡：大圆角 + 背景色实色 */
+.phone-shell.phone-theme-fudge .phone-tomato-hist-card {
+  border-radius: 18px;
+  background: var(--bg-secondary) !important;
+}
+/* tabbar 去边框 */
+.phone-shell.phone-theme-fudge .phone-tomato-app .phone-tabbar {
+  border: none;
+}
+/* 番茄钟全屏模式：状态栏也补实色背景（否则露出 shell 渐变显灰） */
+.phone-shell.phone-theme-fudge.phone-tomato-mode .phone-statusbar {
+  background: var(--bg);
+}
+
+/* 聊天输入框：奶油软糖用圆润无边框（玻璃冰糖保持方正带边框） */
+.phone-shell.phone-theme-fudge .phone-chat-input-box {
+  border: none !important;
+  border-radius: 18px !important;
+}

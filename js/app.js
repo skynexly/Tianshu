@@ -175,16 +175,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v701';
-const CHANGELOG = `【v701 更新内容】
+    const APP_VERSION = 'v702';
+const CHANGELOG = `【v702 更新内容】
 
-新增「衣橱」APP：选购服装、自由换装，穿搭实时同步给主线 AI
-小屋/衣橱仓库系统优化：新增「未分类」标签与手动改分类，脱下的衣物、移除的物品可返回仓库
-游鱼小铺 & 飞鸟快递打通三仓库：可从物品栏 / 衣橱 / 家具仓库取物上架售卖或寄出
-订单收货支持三选一：到货物品可自由放入随身物品栏、衣橱仓库或家具仓库
-世界观编辑 → 玩法 中新增「衣橱」配置：可自定义 APP 名称与服装商城配送时间
-修复了一些陈年 Bug
-优化部分界面布局与交互细节`;
+新增手机主题「奶油软糖」：温暖柔和的圆润设计，可在系统设置切换
+新增群聊功能：支持创建群、群成员多轮自然回复、引用/撤回/编辑消息、分享卡片、多媒体互动、群红包与主动私聊`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {
