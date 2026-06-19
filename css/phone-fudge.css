@@ -50,7 +50,7 @@
   border-radius: 50%;
   background: var(--text);
   border: none;
-  box-shadow: 0 3px 8px color-mix(in srgb, var(--text) 15%, transparent);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--text) 10%, transparent);
   backdrop-filter: none;
 }
 .phone-shell.phone-theme-fudge .phone-icon-glyph {
@@ -106,7 +106,7 @@
   background: var(--bg-secondary);
   border: none;
   border-radius: 22px;
-  box-shadow: 0 8px 22px rgba(0,0,0,0.12);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   backdrop-filter: none;
 }
 .phone-shell.phone-theme-fudge .phone-settings-btn.secondary {
@@ -125,7 +125,7 @@
 .phone-shell.phone-theme-fudge .phone-profile-card {
   background: var(--text);
   border: none;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 24%, transparent);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--text) 12%, transparent);
 }
 /* 卡内名字/签名改背景色（浅底上的深字），去文字阴影 */
 .phone-shell.phone-theme-fudge .phone-profile-name,
@@ -144,7 +144,7 @@
 .phone-shell.phone-theme-fudge .phone-dw-express {
   background: var(--text);
   border: none;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 22%, transparent);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--text) 12%, transparent);
 }
 .phone-shell.phone-theme-fudge .phone-dw-express .phone-dw-express-name,
 .phone-shell.phone-theme-fudge .phone-dw-express .phone-dw-express-unit,
@@ -160,13 +160,13 @@
 .phone-shell.phone-theme-fudge .phone-dw-mini:nth-child(1) {
   background: var(--bg);
   border: none;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.10);
 }
 /* 记账/本月结余卡（第2个 mini）：主文字色底 */
 .phone-shell.phone-theme-fudge .phone-dw-mini:nth-child(2) {
   background: var(--text);
   border: none;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 22%, transparent);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--text) 12%, transparent);
 }
 .phone-shell.phone-theme-fudge .phone-dw-mini:nth-child(2) .phone-dw-mini-label,
 .phone-shell.phone-theme-fudge .phone-dw-mini:nth-child(2) .phone-dw-mini-num,
@@ -177,13 +177,13 @@
 .phone-shell.phone-theme-fudge .phone-dw-takeout {
   background: var(--bg);
   border: none;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.10);
 }
 /* 番茄钟卡：主文字色底 */
 .phone-shell.phone-theme-fudge .phone-tomato-card {
   background: var(--text);
   border: none;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 22%, transparent);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--text) 12%, transparent);
 }
 /* 番茄钟卡内文字/时钟改次文字色（浅底上可读） */
 .phone-shell.phone-theme-fudge .phone-tomato-card .phone-tomato-label,
@@ -199,13 +199,13 @@
 .phone-shell.phone-theme-fudge .phone-cal-banner {
   background: var(--bg);
   border: none;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.10);
 }
 /* 纪念日卡：主文字色底（无背景图时），文字转背景色 */
 .phone-shell.phone-theme-fudge .phone-anniversary-card {
   background-color: var(--text);
   border: none;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 22%, transparent);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--text) 12%, transparent);
 }
 .phone-shell.phone-theme-fudge .phone-anniversary-card .phone-anniversary-card-text {
   color: var(--bg);
@@ -214,7 +214,7 @@
 .phone-shell.phone-theme-fudge .phone-music-card {
   background: var(--bg);
   border: none;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.10);
 }
 
 /* ---- 音乐 App 内页（播放详情 / 音乐库 / 评论）：主文字色深底，文字反转为背景色 ---- */
