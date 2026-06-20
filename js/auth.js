@@ -509,7 +509,7 @@ const Auth = (() => {
         <div class="auth-profile-name-block">
           <div class="auth-profile-name">
             <span id="auth-profile-name-text">${_escape(nick)}</span>
-            <button class="auth-profile-name-edit" id="auth-profile-name-edit" aria-label="改昵称">
+            <button class="auth-profile-name-edit" id="auth-profile-name-edit" aria-label="改昵称"${_isNicknameChanged() ? ' style="opacity:0.4"' : ''}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
             </button>
           </div>
@@ -524,9 +524,12 @@ const Auth = (() => {
 
 <div class="auth-profile-section-title">数据</div>
           <div class="auth-profile-list">
-          <div class="auth-profile-item" id="auth-profile-storage" style="cursor:default">
-            <div class="auth-profile-item-label">存储空间</div>
-            <div class="auth-profile-item-value" id="auth-profile-storage-val">统计中…</div>
+          <div class="auth-profile-item" id="auth-profile-storage" style="cursor:default;flex-direction:column;align-items:stretch">
+            <div style="display:flex;align-items:center;width:100%">
+              <div class="auth-profile-item-label">存储空间</div>
+              <div class="auth-profile-item-value" id="auth-profile-storage-val" style="margin-right:0">统计中…</div>
+            </div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">由浏览器估算，仅供参考</div>
           </div>
           <div class="auth-profile-item" id="auth-profile-export">
             <div class="auth-profile-item-label">导出存档</div>
@@ -553,6 +556,7 @@ const Auth = (() => {
       <div class="auth-profile-list">
         <div class="auth-profile-item" id="auth-profile-change-password">
           <div class="auth-profile-item-label">修改密码</div>
+          ${_isPasswordChanged() ? '<div class="auth-profile-item-value">已修改</div>' : ''}
           <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </div>
         <div class="auth-profile-item danger" id="auth-profile-logout">
@@ -981,6 +985,10 @@ const Auth = (() => {
 
   // ===== 改昵称 =====
   async function _onEditNickname() {
+    if (_isNicknameChanged()) {
+      await _modal({ title: '昵称仅可修改一次', desc: '你已经改过昵称了，无法再次修改。', cancelText: false, okText: '好的' });
+      return;
+    }
     const cur = _state?.nickname || '';
     const v = await _modal({
       title: '昵称',
@@ -988,6 +996,7 @@ const Auth = (() => {
       defaultValue: cur,
       placeholder: '昵称',
       maxLength: 30,
+      desc: '昵称仅可修改一次，请谨慎填写。',
       okText: '保存',
       validate: s => {
         if (!s) return '昵称不能为空';
@@ -997,6 +1006,7 @@ const Auth = (() => {
     });
     if (v === null) return;
   setNickname(v);
+  _markNicknameChanged();
   _renderProfile();
   _refreshAccountCard();
   // v683.3：异步同步到后端，让其它设备也能拿到
@@ -1063,9 +1073,13 @@ const Auth = (() => {
   }
 
   // 改密码
-  function _onChangePassword() {
-    if (!_state) return;
-    let modal = document.getElementById('auth-pw-modal');
+function _onChangePassword() {
+  if (!_state) return;
+  if (_isPasswordChanged()) {
+    _modal({ title: '密码仅可修改一次', desc: '你已经改过密码了，无法再次修改。', cancelText: false, okText: '好的' });
+    return;
+  }
+  let modal = document.getElementById('auth-pw-modal');
     if (modal) modal.remove();
     modal = document.createElement('div');
     modal.id = 'auth-pw-modal';
@@ -1073,7 +1087,7 @@ const Auth = (() => {
     modal.innerHTML = `
       <div class="modal-content" style="max-width:420px">
         <h3>修改密码</h3>
-        <p style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:0 0 12px">改密后将退出当前账号在其它设备的登录。</p>
+        <p style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:0 0 12px">密码仅可修改一次，请谨慎设置。改密后将退出当前账号在其它设备的登录。</p>
 
         <div class="form-group">
           <span class="form-label">原密码</span>
@@ -1161,6 +1175,7 @@ const Auth = (() => {
           new_password: newPw,
         });
         if (status === 200 && data?.ok) {
+          _markPasswordChanged();
           if (data.devices) {
             _state.devices = data.devices;
             _saveState(_state);
@@ -1168,7 +1183,7 @@ const Auth = (() => {
           close();
           await _modal({
             title: '密码已修改',
-            desc: '其它设备已被踢出登录。',
+            desc: '其它设备已被踢出登录。密码仅可修改一次，无法再次修改。',
             cancelText: false,
             okText: '好的',
           });
@@ -1242,6 +1257,23 @@ const Auth = (() => {
   function getState() { return _state ? { ...(_state), devices: (_state.devices || []).slice() } : null; }
   function getNickname() { return _state?.nickname || ''; }
   function getEmail() { return _state?.email || ''; }
+  // ===== 改名/改密次数限制（前端，按账号记标记）=====
+  function _limitKey(kind) {
+    const id = (_state?.email || '').trim().toLowerCase();
+    return `tianshu_${kind}_changed::${id}`;
+  }
+  function _isNicknameChanged() {
+    try { return localStorage.getItem(_limitKey('nick')) === '1'; } catch(_) { return false; }
+  }
+  function _markNicknameChanged() {
+    try { localStorage.setItem(_limitKey('nick'), '1'); } catch(_) {}
+  }
+  function _isPasswordChanged() {
+    try { return localStorage.getItem(_limitKey('pwd')) === '1'; } catch(_) { return false; }
+  }
+  function _markPasswordChanged() {
+    try { localStorage.setItem(_limitKey('pwd'), '1'); } catch(_) {}
+  }
 function setNickname(n) {
   if (!_state) return;
   _state.nickname = String(n || '').trim().slice(0, 30);

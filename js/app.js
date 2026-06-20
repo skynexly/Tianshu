@@ -175,8 +175,8 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v702.2';
-const CHANGELOG = `【v702.2 更新内容】
+    const APP_VERSION = 'v702.3';
+const CHANGELOG = `【v702.3 更新内容】
 
 新增「纯文字导出」：剥离所有图片只导文字，体积极小，数据多到全量导出闪退时用它备份
 修复全量导出在数据量大时闪退/卡死的问题

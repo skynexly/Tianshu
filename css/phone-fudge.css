@@ -689,6 +689,39 @@
   background: var(--bg-tertiary) !important;
   border-radius: 14px;
 }
+/* 电台播放按钮：fudge 下详情页背景是 --bg（浅色），按钮底保持透明或用背景色，图标用主文字色 */
+.phone-shell.phone-theme-fudge .phone-radio-play-btn {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18) !important;
+}
+.phone-shell.phone-theme-fudge .phone-radio-play-btn svg {
+  fill: var(--text) !important;
+}
+/* 电台前后切换按钮：分类预览页控制区，图标用主文字色 */
+.phone-shell.phone-theme-fudge .phone-radio-ctrl-btn {
+  color: var(--text) !important;
+}
+.phone-shell.phone-theme-fudge .phone-radio-ctrl-btn svg {
+  stroke: var(--text) !important;
+}
+/* 电台详情页控制按钮（跳过/前/后/列表）：图标用主文字色，播放按钮单独处理 */
+.phone-shell.phone-theme-fudge .phone-mdetail-ctrl {
+  color: var(--text) !important;
+}
+.phone-shell.phone-theme-fudge .phone-mdetail-ctrl svg {
+  fill: var(--text) !important;
+  stroke: var(--text) !important;
+}
+/* 详情页播放按钮：深色底+浅色图标 */
+.phone-shell.phone-theme-fudge .phone-mdetail-ctrl.phone-mdetail-play {
+  background: var(--text) !important;
+  border-radius: 50%;
+}
+.phone-shell.phone-theme-fudge .phone-mdetail-ctrl.phone-mdetail-play svg {
+  fill: var(--bg) !important;
+  stroke: var(--bg) !important;
+}
 
 /* 日历：事项卡 → 去边框 + 大圆角 + 实色背景 */
 .phone-shell.phone-theme-fudge .phone-cal-ev-card {
