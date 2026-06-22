@@ -696,6 +696,9 @@
 }
 
 /* 电台「我的」页：订阅卡 + 下期预告块 → 实色背景 + 大圆角 */
+.phone-shell.phone-theme-fudge .phone-radio-mine-header-name {
+  color: var(--bg);
+}
 .phone-shell.phone-theme-fudge .phone-radio-mine-card {
   background: var(--bg-secondary) !important;
   border: none !important;

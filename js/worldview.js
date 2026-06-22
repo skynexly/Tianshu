@@ -2165,7 +2165,7 @@ function _renderCurrencies(w) {
     <div style="border:1px solid color-mix(in srgb, var(--border) 60%, transparent);border-radius:9px;padding:10px;background:var(--bg-secondary);display:flex;flex-direction:column;gap:8px">
       <div style="display:flex;align-items:center;gap:8px">
         <input type="text" value="${Utils.escapeHtml(c.name || '')}" placeholder="货币名称" oninput="Worldview.updateCurrency(${i},'name',this.value)" style="flex:1;min-width:0">
-        <button type="button" onclick="Worldview.bindCurrencyToAttr(${i})" style="white-space:nowrap;padding:6px 9px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--accent);font-size:11px;cursor:pointer">建属性</button>
+        <button type="button" onclick="Worldview.bindCurrencyToAttr(${i})" style="white-space:nowrap;padding:6px 9px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--accent);font-size:11px;cursor:pointer">创建属性</button>
         <button type="button" onclick="Worldview.deleteCurrency(${i})" style="white-space:nowrap;padding:6px 9px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--danger);font-size:11px;cursor:pointer">删除</button>
       </div>
       <textarea rows="2" placeholder="货币说明，如购买力" oninput="Worldview.updateCurrency(${i},'desc',this.value)" style="width:100%">${Utils.escapeHtml(c.desc || '')}</textarea>
@@ -5889,6 +5889,10 @@ async function openPhoneAppsEditor() {
   const shUnitEl = document.getElementById('pa-shop-deliveryUnit'); if (shUnitEl) shUnitEl.value = sh.deliveryUnit || 'day';
   setVal('pa-forum-name', fm.name);
   setVal('pa-forum-desc', fm.desc);
+  // 电台
+  const rd = pa.radio || {};
+  setVal('pa-radio-name', rd.name);
+  setVal('pa-radio-desc', rd.desc);
 
   // 小屋
   const ct = pa.cottage || {};
@@ -6060,6 +6064,44 @@ function _buildPhoneAppsEditorHTML(w) {
     </label>
   </div>
 
+  <!-- 电台 -->
+  <div style="font-size:14px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:4px;display:flex;align-items:center;gap:6px">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+    电台
+    <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（默认：5个预设分类）</span>
+  </div>
+  <div style="background:var(--bg-tertiary);padding:12px;border-radius:8px;margin-bottom:16px">
+    <label style="display:block;margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">APP 名称</span>
+      <input type="text" id="pa-radio-name" placeholder="例如：调频 / 无线电 / 声波" style="width:100%;padding:6px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+    </label>
+    <label style="display:block;margin-bottom:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">APP 描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这个世界的电台画风）</span></span>
+      <textarea id="pa-radio-desc" class="auto-resize-textarea" rows="2" placeholder="例如：修真界主流电台，涵盖宗门资讯、夜话情感、灵异志怪等分类" style="width:100%;padding:8px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:50px"></textarea>
+    </label>
+<div>
+            <button type="button" onclick="Worldview.openRadioCategoriesEditor()" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">管理分类与标签</button>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">隐藏预设、新建分类、自定义标签</div>
+          </div>
+          <div style="margin-top:10px">
+            <button type="button" onclick="Worldview.openRadioCastEditor()" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">可出场角色</button>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以主持电台 / 当嘉宾</div>
+          </div>
+  </div>
+
+  <!-- 阅读 -->
+  <div style="font-size:14px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:4px;display:flex;align-items:center;gap:6px">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+    阅读
+    <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（小说阅读）</span>
+  </div>
+  <div style="background:var(--bg-tertiary);padding:12px;border-radius:8px;margin-bottom:16px">
+    <div>
+      <button type="button" onclick="Worldview.openReadingCastEditor()" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">可出场作者</button>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以成为书的作者</div>
+    </div>
+  </div>
+
   <!-- 小屋 -->
   <div style="font-size:14px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:4px;display:flex;align-items:center;gap:6px">
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>
@@ -6137,6 +6179,10 @@ async function closePhoneAppsEditor() {
     w.phoneApps.shop.deliveryUnit = getVal('pa-shop-deliveryUnit') || 'day';
     w.phoneApps.forum.name = getVal('pa-forum-name');
     w.phoneApps.forum.desc = getVal('pa-forum-desc');
+    // 电台（只保存 name/desc，分类数据由分类编辑器单独管理）
+    w.phoneApps.radio = w.phoneApps.radio || {};
+    w.phoneApps.radio.name = getVal('pa-radio-name');
+    w.phoneApps.radio.desc = getVal('pa-radio-desc');
     // 小屋
     w.phoneApps.cottage = w.phoneApps.cottage || {};
     w.phoneApps.cottage.name = getVal('pa-cottage-name');
@@ -6169,6 +6215,602 @@ async function closePhoneAppsEditor() {
   const overlay = document.getElementById('phone-apps-editor-overlay');
   if (overlay) overlay.remove();
   _updatePhoneAppsLabel();
+}
+
+// ===== 电台分类编辑器 =====
+const _RADIO_ICON_OPTIONS = [
+  { id: 'news', label: '新闻' }, { id: 'emotion', label: '情感' }, { id: 'ghost', label: '怪谈' },
+  { id: 'talk', label: '闲聊' }, { id: 'music', label: '音乐' }, { id: 'mic', label: '麦克风' },
+  { id: 'star', label: '星星' }, { id: 'book', label: '书本' }, { id: 'tower', label: '信号塔' },
+  { id: 'clock', label: '时钟' }, { id: 'heart', label: '爱心' }, { id: 'coffee', label: '咖啡' },
+];
+const _RADIO_PRESET_CATS = [
+  { id: 'news', name: '晚间新闻' }, { id: 'emotion', name: '深夜情感' },
+  { id: 'ghost', name: '都市怪谈' }, { id: 'chat', name: '闲聊电台' }, { id: 'music', name: '音乐漫谈' },
+];
+
+async function openRadioCategoriesEditor() {
+  const w = await _getEditingWV();
+  if (!w) { UI.showToast('请先选择世界观', 1200); return; }
+  w.phoneApps = w.phoneApps || {};
+  w.phoneApps.radio = w.phoneApps.radio || {};
+  if (!Array.isArray(w.phoneApps.radio.hiddenPresets)) w.phoneApps.radio.hiddenPresets = [];
+  if (!Array.isArray(w.phoneApps.radio.categories)) w.phoneApps.radio.categories = [];
+
+  let overlay = document.getElementById('radio-cats-editor-overlay');
+  if (overlay) overlay.remove();
+  overlay = document.createElement('div');
+  overlay.id = 'radio-cats-editor-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;animation:sbFadeIn .2s ease-out';
+  document.body.appendChild(overlay);
+  _renderRadioCatsEditor(overlay, w);
+}
+
+function _renderRadioCatsEditor(overlay, w) {
+  const radio = w.phoneApps.radio;
+  const hidden = new Set(radio.hiddenPresets || []);
+  const customs = radio.categories || [];
+
+  let presetsHtml = _RADIO_PRESET_CATS.map(p => {
+    const isHidden = hidden.has(p.id);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-tertiary);border-radius:8px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:14px;color:var(--text)">${p.name}</span>
+        <span style="font-size:11px;color:var(--text-secondary)">预设</span>
+      </div>
+      <button type="button" onclick="Worldview._radioTogglePreset('${p.id}')" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:${isHidden ? 'var(--accent)' : 'var(--bg-secondary)'};color:${isHidden ? '#fff' : 'var(--text)'};font-size:12px;cursor:pointer">${isHidden ? '恢复' : '隐藏'}</button>
+    </div>`;
+  }).join('');
+
+  let customsHtml = customs.map((c, i) => {
+    const iconLabel = (_RADIO_ICON_OPTIONS.find(o => o.id === c.icon) || {}).label || c.icon;
+    const tagCount = (c.tags || []).length;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-tertiary);border-radius:8px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+        <span style="font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name || '未命名'}</span>
+        <span style="font-size:11px;color:var(--text-secondary)">${iconLabel} · ${tagCount}个标签</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button type="button" onclick="Worldview._radioEditCat(${i})" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:12px;cursor:pointer">编辑</button>
+        <button type="button" onclick="Worldview._radioDeleteCat(${i})" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--danger);font-size:12px;cursor:pointer">删除</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  overlay.innerHTML = `
+  <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 12px;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:8px">
+      <button type="button" onclick="Worldview.closeRadioCatsEditor()" style="border:none;background:none;color:var(--text);cursor:pointer;padding:4px">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span style="font-size:16px;font-weight:600;color:var(--text)">电台分类管理</span>
+    </div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:0 16px 24px">
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">预设分类</div>
+    ${presetsHtml}
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:8px">自建分类</div>
+    ${customsHtml || '<div style="font-size:12px;color:var(--text-secondary);padding:12px;text-align:center">还没有自建分类</div>'}
+    <button type="button" onclick="Worldview._radioAddCat()" style="width:100%;margin-top:12px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">+ 新建分类</button>
+  </div>`;
+}
+  async function closeRadioCatsEditor() {
+    const overlay = document.getElementById('radio-cats-editor-overlay');
+    if (overlay) overlay.remove();
+  }
+
+  // ===== 电台「可出场角色」编辑器 =====
+  // castMode: 'default'(发全部,AI自选) | 'disabled'(不发名单) | 'whitelist'(只发勾选)
+  // castWhitelist: [{ id, name }]  存世界观 NPC + 单人卡角色的 id+name
+  // castIncludeLorebook: bool  勾选后，挂载的世界书 NPC 整体放行
+  // 收集可勾选的角色：世界观所有 NPC（全图常驻 + 地区/势力挂载）+ 单人卡全部角色
+  async function _radioCollectCastChars(w) {
+    const wv = [];
+    const cards = [];
+    const seen = new Set();
+    const _addWv = (n) => {
+      if (!n || !n.id || seen.has(n.id)) return;
+      seen.add(n.id);
+      wv.push({ id: n.id, name: n.name || '未命名', aliases: n.aliases || '', avatar: n.avatar || '', group: 'wv' });
+    };
+    (w.globalNpcs || []).forEach(_addWv);
+    (w.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(_addWv)));
+    try {
+      const list = await SingleCard.getAll();
+      (list || []).forEach(c => {
+        if (!c || !c.id || seen.has(c.id)) return;
+        seen.add(c.id);
+        cards.push({ id: c.id, name: c.name || '未命名角色', aliases: c.aliases || '', avatar: c.avatar || '', group: 'card' });
+      });
+    } catch (_) {}
+    return { wv, cards };
+  }
+
+  async function openRadioCastEditor() {
+    const w = await _getEditingWV();
+    if (!w) { UI.showToast('请先选择世界观', 1200); return; }
+    w.phoneApps = w.phoneApps || {};
+    w.phoneApps.radio = w.phoneApps.radio || {};
+    if (!w.phoneApps.radio.castMode) w.phoneApps.radio.castMode = 'default';
+    if (!Array.isArray(w.phoneApps.radio.castWhitelist)) w.phoneApps.radio.castWhitelist = [];
+    if (typeof w.phoneApps.radio.castIncludeLorebook !== 'boolean') w.phoneApps.radio.castIncludeLorebook = false;
+
+    let overlay = document.getElementById('radio-cast-editor-overlay');
+    if (overlay) overlay.remove();
+    overlay = document.createElement('div');
+    overlay.id = 'radio-cast-editor-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;animation:sbFadeIn .2s ease-out';
+    document.body.appendChild(overlay);
+    _renderRadioCastEditor(overlay, w);
+  }
+
+  async function _renderRadioCastEditor(overlay, w, query = '') {
+    const radio = w.phoneApps.radio;
+    const mode = radio.castMode || 'default';
+    const picked = new Set((radio.castWhitelist || []).map(x => x.id));
+    const incLore = !!radio.castIncludeLorebook;
+
+    const modeBtn = (val, label, desc) => `
+      <div onclick="Worldview._radioSetCastMode('${val}')" style="padding:10px 12px;border-radius:8px;margin-bottom:6px;cursor:pointer;border:1px solid ${mode === val ? 'var(--accent)' : 'var(--border)'};background:${mode === val ? 'color-mix(in srgb, var(--accent) 12%, var(--bg-tertiary))' : 'var(--bg-tertiary)'}">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:16px;height:16px;border-radius:50%;border:2px solid ${mode === val ? 'var(--accent)' : 'var(--text-secondary)'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${mode === val ? '<span style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></span>' : ''}</span>
+          <span style="font-size:14px;color:var(--text);font-weight:600">${label}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;margin-left:24px">${desc}</div>
+      </div>`;
+
+    let listHtml = '';
+    if (mode === 'whitelist') {
+      const { wv, cards } = await _radioCollectCastChars(w);
+      const q = String(query || '').toLowerCase().trim();
+      const matchQ = (n) => !q || [n.name, n.aliases].some(v => String(v || '').toLowerCase().includes(q));
+      const charRow = (n) => {
+        const on = picked.has(n.id);
+        return `<div onclick="Worldview._radioToggleCastNpc('${n.id}')" style="display:flex;align-items:center;gap:10px;padding:8px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:var(--bg-tertiary);cursor:pointer;margin-bottom:6px">
+          <div style="width:34px;height:34px;border-radius:50%;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex-shrink:0">${n.avatar ? `<img src="${Utils.escapeHtml(n.avatar)}" style="width:100%;height:100%;object-fit:cover">` : Utils.escapeHtml((n.name || '?').slice(0,1))}</div>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.name)}${n.aliases ? `<span style="font-size:11px;color:var(--text-secondary)"> · ${Utils.escapeHtml(n.aliases)}</span>` : ''}</div>
+          </div>
+          <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+        </div>`;
+      };
+      const groupHtml = (title, arr) => {
+        const f = arr.filter(matchQ);
+        if (!f.length) return '';
+        return `<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:6px">${title}（${f.length}）</div>${f.map(charRow).join('')}`;
+      };
+      const wvGroup = groupHtml('世界观角色', wv);
+      const cardGroup = groupHtml('单人卡角色', cards);
+      const noResult = (!wvGroup && !cardGroup) ? `<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:12px">${q ? '没有匹配的角色' : '没有可选的角色'}</div>` : '';
+      // 世界书角色：整体开关复选框（不预知具体角色，运行时按来源放行）
+      const loreBox = `
+        <div onclick="Worldview._radioToggleCastLorebook()" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid ${incLore ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:${incLore ? 'color-mix(in srgb, var(--accent) 12%, var(--bg-tertiary))' : 'var(--bg-tertiary)'};cursor:pointer;margin-top:16px">
+          <span style="width:20px;height:20px;border-radius:5px;border:2px solid ${incLore ? 'var(--accent)' : 'var(--text-secondary)'};background:${incLore ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${incLore ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:13px;color:var(--text);font-weight:600">世界书角色</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">勾选后，当前挂载的世界书 NPC 全部可出场（无需逐个选）</div>
+          </div>
+        </div>`;
+      listHtml = `
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:8px">勾选可出场的角色（已选 ${picked.size}${incLore ? ' + 世界书' : ''}）</div>
+        <input id="radio-cast-search" placeholder="搜索角色 / 别名" oninput="Worldview._radioCastSearch(this.value)" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;margin-bottom:8px">
+        <div>${wvGroup}${cardGroup}${noResult}</div>
+        ${loreBox}`;
+    }
+
+    overlay.innerHTML = `
+    <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 12px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:8px">
+        <button type="button" onclick="Worldview.closeRadioCastEditor()" style="border:none;background:none;color:var(--text);cursor:pointer;padding:4px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span style="font-size:16px;font-weight:600;color:var(--text)">可出场角色</span>
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:0 16px 24px">
+      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;line-height:1.6">生成电台预览时，决定哪些角色可能出任主播 / 嘉宾。该设置只影响预览生成阶段。</div>
+      ${modeBtn('default', '默认', '发送全部角色，由 AI 自行挑选合适的人出场')}
+      ${modeBtn('disabled', '禁用', '不发送任何角色名单，主播 / 嘉宾全部为虚构')}
+      ${modeBtn('whitelist', '勾选', '只发送下方勾选的角色，AI 只能从中挑选')}
+      ${listHtml}
+    </div>`;
+  }
+
+  async function closeRadioCastEditor() {
+    const overlay = document.getElementById('radio-cast-editor-overlay');
+    if (overlay) overlay.remove();
+  }
+
+  async function _radioSetCastMode(mode) {
+    const w = await _getEditingWV(); if (!w) return;
+    w.phoneApps = w.phoneApps || {}; w.phoneApps.radio = w.phoneApps.radio || {};
+    w.phoneApps.radio.castMode = ['default', 'disabled', 'whitelist'].includes(mode) ? mode : 'default';
+    if (!Array.isArray(w.phoneApps.radio.castWhitelist)) w.phoneApps.radio.castWhitelist = [];
+    await _saveEditingWV(w);
+    const overlay = document.getElementById('radio-cast-editor-overlay');
+    if (overlay) _renderRadioCastEditor(overlay, w);
+  }
+
+  async function _radioToggleCastNpc(npcId) {
+    const w = await _getEditingWV(); if (!w) return;
+    w.phoneApps = w.phoneApps || {}; w.phoneApps.radio = w.phoneApps.radio || {};
+    if (!Array.isArray(w.phoneApps.radio.castWhitelist)) w.phoneApps.radio.castWhitelist = [];
+    const list = w.phoneApps.radio.castWhitelist;
+    const idx = list.findIndex(x => x.id === npcId);
+    if (idx >= 0) {
+      list.splice(idx, 1);
+    } else {
+      const { wv, cards } = await _radioCollectCastChars(w);
+      const npc = [...wv, ...cards].find(n => n.id === npcId);
+      if (npc) list.push({ id: npc.id, name: npc.name });
+    }
+    await _saveEditingWV(w);
+    const overlay = document.getElementById('radio-cast-editor-overlay');
+    const q = (document.getElementById('radio-cast-search') || {}).value || '';
+    if (overlay) _renderRadioCastEditor(overlay, w, q);
+  }
+
+  async function _radioToggleCastLorebook() {
+    const w = await _getEditingWV(); if (!w) return;
+    w.phoneApps = w.phoneApps || {}; w.phoneApps.radio = w.phoneApps.radio || {};
+    w.phoneApps.radio.castIncludeLorebook = !w.phoneApps.radio.castIncludeLorebook;
+    await _saveEditingWV(w);
+    const overlay = document.getElementById('radio-cast-editor-overlay');
+    const q = (document.getElementById('radio-cast-search') || {}).value || '';
+    if (overlay) _renderRadioCastEditor(overlay, w, q);
+  }
+function _radioCastSearch(query) {
+    const overlay = document.getElementById('radio-cast-editor-overlay');
+    if (!overlay) return;
+    _getEditingWV().then(w => { if (w) _renderRadioCastEditor(overlay, w, query); });
+  }
+
+  // ===== 阅读「可出场作者」编辑器 =====
+  // 与电台同款三档：castMode default/disabled/whitelist；castWhitelist [{id,name}]；castIncludeLorebook bool
+  // 存进 w.phoneApps.reading，复用电台的角色收集器 _radioCollectCastChars
+  async function openReadingCastEditor() {
+    const w = await _getEditingWV();
+    if (!w) { UI.showToast('请先选择世界观', 1200); return; }
+    w.phoneApps = w.phoneApps || {};
+    w.phoneApps.reading = w.phoneApps.reading || {};
+    if (!Array.isArray(w.phoneApps.reading.castWhitelist)) w.phoneApps.reading.castWhitelist = [];
+    if (typeof w.phoneApps.reading.castIncludeLorebook !== 'boolean') w.phoneApps.reading.castIncludeLorebook = false;
+
+    let overlay = document.getElementById('reading-cast-editor-overlay');
+    if (overlay) overlay.remove();
+    overlay = document.createElement('div');
+    overlay.id = 'reading-cast-editor-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;animation:sbFadeIn .2s ease-out';
+    document.body.appendChild(overlay);
+    _renderReadingCastEditor(overlay, w);
+  }
+
+  // 阅读「可出场作者」：纯白名单（没勾人=作者全虚构；勾了=AI 只能从名单里挑人署名）。
+  // 与电台不同——作者身份与人物素材分离，默认不发任何 NPC 当作者，只有勾选的才发。
+  async function _renderReadingCastEditor(overlay, w, query = '') {
+    const reading = w.phoneApps.reading;
+    const picked = new Set((reading.castWhitelist || []).map(x => x.id));
+    const incLore = !!reading.castIncludeLorebook;
+
+    const { wv, cards } = await _radioCollectCastChars(w);
+    const q = String(query || '').toLowerCase().trim();
+    const matchQ = (n) => !q || [n.name, n.aliases].some(v => String(v || '').toLowerCase().includes(q));
+    const charRow = (n) => {
+      const on = picked.has(n.id);
+      return `<div onclick="Worldview._readingToggleCastNpc('${n.id}')" style="display:flex;align-items:center;gap:10px;padding:8px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:var(--bg-tertiary);cursor:pointer;margin-bottom:6px">
+        <div style="width:34px;height:34px;border-radius:50%;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex-shrink:0">${n.avatar ? `<img src="${Utils.escapeHtml(n.avatar)}" style="width:100%;height:100%;object-fit:cover">` : Utils.escapeHtml((n.name || '?').slice(0,1))}</div>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.name)}${n.aliases ? `<span style="font-size:11px;color:var(--text-secondary)"> · ${Utils.escapeHtml(n.aliases)}</span>` : ''}</div>
+        </div>
+        <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+      </div>`;
+    };
+    const groupHtml = (title, arr) => {
+      const f = arr.filter(matchQ);
+      if (!f.length) return '';
+      return `<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:6px">${title}（${f.length}）</div>${f.map(charRow).join('')}`;
+    };
+    const wvGroup = groupHtml('世界观角色', wv);
+    const cardGroup = groupHtml('单人卡角色', cards);
+    const noResult = (!wvGroup && !cardGroup) ? `<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:12px">${q ? '没有匹配的角色' : '没有可选的角色'}</div>` : '';
+    const loreBox = `
+      <div onclick="Worldview._readingToggleCastLorebook()" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid ${incLore ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:${incLore ? 'color-mix(in srgb, var(--accent) 12%, var(--bg-tertiary))' : 'var(--bg-tertiary)'};cursor:pointer;margin-top:16px">
+        <span style="width:20px;height:20px;border-radius:5px;border:2px solid ${incLore ? 'var(--accent)' : 'var(--text-secondary)'};background:${incLore ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${incLore ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:13px;color:var(--text);font-weight:600">世界书角色</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">勾选后，当前挂载的世界书 NPC 全部可成为作者（无需逐个选）</div>
+        </div>
+      </div>`;
+    const countLabel = (picked.size || incLore) ? `已选 ${picked.size}${incLore ? ' + 世界书' : ''}` : '未选 · 作者将全部虚构';
+    const listHtml = `
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:4px;margin-bottom:8px">勾选可成为作者的角色（${countLabel}）</div>
+      <input id="reading-cast-search" placeholder="搜索角色 / 别名" oninput="Worldview._readingCastSearch(this.value)" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;margin-bottom:8px">
+      <div>${wvGroup}${cardGroup}${noResult}</div>
+      ${loreBox}`;
+
+    overlay.innerHTML = `
+    <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 12px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:8px">
+        <button type="button" onclick="Worldview.closeReadingCastEditor()" style="border:none;background:none;color:var(--text);cursor:pointer;padding:4px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span style="font-size:16px;font-weight:600;color:var(--text)">可出场作者</span>
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:0 16px 24px">
+      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;line-height:1.6">设置哪些角色可以作为书的作者署名。不勾任何人则作者全部虚构；勾了谁，AI 就只能从这些人里挑选作者。此设置独立于「注入世界观」和「映射」，只决定作者身份。</div>
+      ${listHtml}
+    </div>`;
+  }
+
+  async function closeReadingCastEditor() {
+    const overlay = document.getElementById('reading-cast-editor-overlay');
+    if (overlay) overlay.remove();
+  }
+
+  async function _readingToggleCastNpc(npcId) {
+    const w = await _getEditingWV(); if (!w) return;
+    w.phoneApps = w.phoneApps || {}; w.phoneApps.reading = w.phoneApps.reading || {};
+    if (!Array.isArray(w.phoneApps.reading.castWhitelist)) w.phoneApps.reading.castWhitelist = [];
+    const list = w.phoneApps.reading.castWhitelist;
+    const idx = list.findIndex(x => x.id === npcId);
+    if (idx >= 0) {
+      list.splice(idx, 1);
+    } else {
+      const { wv, cards } = await _radioCollectCastChars(w);
+      const npc = [...wv, ...cards].find(n => n.id === npcId);
+      if (npc) list.push({ id: npc.id, name: npc.name });
+    }
+    await _saveEditingWV(w);
+    const overlay = document.getElementById('reading-cast-editor-overlay');
+    const q = (document.getElementById('reading-cast-search') || {}).value || '';
+    if (overlay) _renderReadingCastEditor(overlay, w, q);
+  }
+
+  async function _readingToggleCastLorebook() {
+    const w = await _getEditingWV(); if (!w) return;
+    w.phoneApps = w.phoneApps || {}; w.phoneApps.reading = w.phoneApps.reading || {};
+    w.phoneApps.reading.castIncludeLorebook = !w.phoneApps.reading.castIncludeLorebook;
+    await _saveEditingWV(w);
+    const overlay = document.getElementById('reading-cast-editor-overlay');
+    const q = (document.getElementById('reading-cast-search') || {}).value || '';
+    if (overlay) _renderReadingCastEditor(overlay, w, q);
+  }
+
+  function _readingCastSearch(query) {
+    const overlay = document.getElementById('reading-cast-editor-overlay');
+    if (!overlay) return;
+    _getEditingWV().then(w => { if (w) _renderReadingCastEditor(overlay, w, query); });
+  }
+
+
+
+async function _radioTogglePreset(presetId) {
+  const w = await _getEditingWV(); if (!w) return;
+  w.phoneApps = w.phoneApps || {}; w.phoneApps.radio = w.phoneApps.radio || {};
+  if (!Array.isArray(w.phoneApps.radio.hiddenPresets)) w.phoneApps.radio.hiddenPresets = [];
+  const arr = w.phoneApps.radio.hiddenPresets;
+  const idx = arr.indexOf(presetId);
+  if (idx >= 0) arr.splice(idx, 1); else arr.push(presetId);
+  await _saveEditingWV(w);
+  const overlay = document.getElementById('radio-cats-editor-overlay');
+  if (overlay) _renderRadioCatsEditor(overlay, w);
+}
+
+async function _radioAddCat() {
+  const w = await _getEditingWV(); if (!w) return;
+  w.phoneApps = w.phoneApps || {}; w.phoneApps.radio = w.phoneApps.radio || {};
+  if (!Array.isArray(w.phoneApps.radio.categories)) w.phoneApps.radio.categories = [];
+  const newCat = { id: 'rc_' + Date.now().toString(36), name: '', icon: 'mic', direction: '', tags: [] };
+  w.phoneApps.radio.categories.push(newCat);
+  await _saveEditingWV(w);
+  // 直接打开编辑
+  _radioOpenCatEditor(w, w.phoneApps.radio.categories.length - 1);
+}
+
+async function _radioEditCat(idx) {
+  const w = await _getEditingWV(); if (!w) return;
+  _radioOpenCatEditor(w, idx);
+}
+
+async function _radioDeleteCat(idx) {
+  const w = await _getEditingWV(); if (!w) return;
+  const cats = w.phoneApps?.radio?.categories;
+  if (!cats || !cats[idx]) return;
+  if (!await UI.showConfirm('删除分类', `确定删除分类「${cats[idx].name || '未命名'}」？其下所有标签也会被删除。`)) return;
+  cats.splice(idx, 1);
+  await _saveEditingWV(w);
+  const overlay = document.getElementById('radio-cats-editor-overlay');
+  if (overlay) _renderRadioCatsEditor(overlay, w);
+}
+
+// ===== 单个分类编辑器 =====
+function _radioOpenCatEditor(w, catIdx) {
+  const cats = w.phoneApps?.radio?.categories;
+  if (!cats || !cats[catIdx]) return;
+  const overlay = document.getElementById('radio-cats-editor-overlay');
+  if (!overlay) return;
+  const cat = cats[catIdx];
+
+  const iconBtns = _RADIO_ICON_OPTIONS.map(o =>
+    `<button type="button" data-icon="${o.id}" onclick="Worldview._radioSetCatIcon(${catIdx},'${o.id}')" style="padding:6px 10px;border-radius:6px;border:1px solid ${cat.icon === o.id ? 'var(--accent)' : 'var(--border)'};background:${cat.icon === o.id ? 'color-mix(in srgb, var(--accent) 15%, var(--bg-secondary))' : 'var(--bg-secondary)'};color:${cat.icon === o.id ? 'var(--accent)' : 'var(--text)'};font-size:12px;cursor:pointer">${o.label}</button>`
+  ).join('');
+
+  const tagRows = (cat.tags || []).map((t, ti) =>
+    `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg-secondary);border-radius:6px;margin-bottom:4px">
+      <span style="font-size:13px;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.name || '未命名标签'}</span>
+      <div style="display:flex;gap:4px">
+        <button type="button" onclick="Worldview._radioEditTag(${catIdx},${ti})" style="padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:11px;cursor:pointer">编辑</button>
+        <button type="button" onclick="Worldview._radioDeleteTag(${catIdx},${ti})" style="padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--danger);font-size:11px;cursor:pointer">删</button>
+      </div>
+    </div>`
+  ).join('');
+
+  overlay.innerHTML = `
+  <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 12px;display:flex;align-items:center;gap:8px">
+    <button type="button" onclick="Worldview._radioBackToCatsList()" style="border:none;background:none;color:var(--text);cursor:pointer;padding:4px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <span style="font-size:16px;font-weight:600;color:var(--text)">编辑分类</span>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:0 16px 24px">
+    <label style="display:block;margin-bottom:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">分类名称</span>
+      <input type="text" id="rc-cat-name" value="${(cat.name || '').replace(/"/g, '"')}" placeholder="例如：深夜食堂" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px" onchange="Worldview._radioSaveCatField(${catIdx},'name',this.value)">
+    </label>
+    <div style="margin-bottom:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:6px">图标</span>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${iconBtns}</div>
+    </div>
+    <label style="display:block;margin-bottom:16px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">大方向 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这个分类的基调）</span></span>
+      <textarea id="rc-cat-direction" rows="2" placeholder="例如：都市夜归人的美食与人情" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:50px" onchange="Worldview._radioSaveCatField(${catIdx},'direction',this.value)">${(cat.direction || '').replace(/</g, '&lt;')}</textarea>
+    </label>
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">标签列表</div>
+    ${tagRows || '<div style="font-size:12px;color:var(--text-secondary);padding:8px;text-align:center">还没有标签，点下方按钮添加</div>'}
+    <button type="button" onclick="Worldview._radioAddTag(${catIdx})" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">+ 添加标签</button>
+  </div>`;
+}
+
+async function _radioBackToCatsList() {
+  const w = await _getEditingWV(); if (!w) return;
+  const overlay = document.getElementById('radio-cats-editor-overlay');
+  if (overlay) _renderRadioCatsEditor(overlay, w);
+}
+
+async function _radioSetCatIcon(catIdx, iconId) {
+  const w = await _getEditingWV(); if (!w) return;
+  const cat = w.phoneApps?.radio?.categories?.[catIdx]; if (!cat) return;
+  cat.icon = iconId;
+  await _saveEditingWV(w);
+  _radioOpenCatEditor(w, catIdx);
+}
+
+async function _radioSaveCatField(catIdx, field, value) {
+  const w = await _getEditingWV(); if (!w) return;
+  const cat = w.phoneApps?.radio?.categories?.[catIdx]; if (!cat) return;
+  cat[field] = (value || '').trim();
+  await _saveEditingWV(w);
+}
+
+async function _radioAddTag(catIdx) {
+  const w = await _getEditingWV(); if (!w) return;
+  const cat = w.phoneApps?.radio?.categories?.[catIdx]; if (!cat) return;
+  if (!Array.isArray(cat.tags)) cat.tags = [];
+  cat.tags.push({ name: '', desc: '', guide: '', wordCount: 2000, plays: [], renewMode: 'unit' });
+  await _saveEditingWV(w);
+  _radioOpenTagEditor(w, catIdx, cat.tags.length - 1);
+}
+
+async function _radioEditTag(catIdx, tagIdx) {
+  const w = await _getEditingWV(); if (!w) return;
+  _radioOpenTagEditor(w, catIdx, tagIdx);
+}
+
+async function _radioDeleteTag(catIdx, tagIdx) {
+  const w = await _getEditingWV(); if (!w) return;
+  const cat = w.phoneApps?.radio?.categories?.[catIdx]; if (!cat) return;
+  const tags = cat.tags || []; if (!tags[tagIdx]) return;
+  if (!await UI.showConfirm('删除标签', `确定删除标签「${tags[tagIdx].name || '未命名'}」？`)) return;
+  tags.splice(tagIdx, 1);
+  await _saveEditingWV(w);
+  _radioOpenCatEditor(w, catIdx);
+}
+
+// ===== 标签编辑器 =====
+const _RADIO_PLAY_OPTIONS = [
+  { id: 'mail', label: '读留言' }, { id: 'vote', label: '投票' }, { id: 'request', label: '点歌' },
+  { id: 'call', label: '连线' }, { id: 'lottery', label: '抽奖' }, { id: 'divination', label: '问卜' },
+];
+
+function _radioOpenTagEditor(w, catIdx, tagIdx) {
+  const cat = w.phoneApps?.radio?.categories?.[catIdx]; if (!cat) return;
+  const tags = cat.tags || []; const tag = tags[tagIdx]; if (!tag) return;
+  const overlay = document.getElementById('radio-cats-editor-overlay'); if (!overlay) return;
+
+  const playsSet = new Set(tag.plays || []);
+  const playCheckboxes = _RADIO_PLAY_OPTIONS.map(p =>
+    `<label style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;border:1px solid ${playsSet.has(p.id) ? 'var(--accent)' : 'var(--border)'};background:${playsSet.has(p.id) ? 'color-mix(in srgb, var(--accent) 15%, var(--bg-secondary))' : 'var(--bg-secondary)'};color:var(--text);font-size:12px;cursor:pointer">
+      <span style="position:relative;display:inline-flex;flex-shrink:0">
+        <input type="checkbox" class="circle-check" value="${p.id}" ${playsSet.has(p.id) ? 'checked' : ''} onchange="Worldview._radioToggleTagPlay(${catIdx},${tagIdx},this.value,this.checked)">
+        <span class="circle-check-ui"></span>
+      </span>
+      ${p.label}
+    </label>`
+  ).join('');
+
+  const renewMode = tag.renewMode || 'unit';
+
+  overlay.innerHTML = `
+  <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 12px;display:flex;align-items:center;gap:8px">
+    <button type="button" onclick="Worldview._radioBackToCatEditor(${catIdx})" style="border:none;background:none;color:var(--text);cursor:pointer;padding:4px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <span style="font-size:16px;font-weight:600;color:var(--text)">编辑标签</span>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:0 16px 24px">
+    <label style="display:block;margin-bottom:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">标签名称 <span style="font-size:11px;color:var(--text-secondary)">（预览时喂给AI）</span></span>
+      <input type="text" id="rt-tag-name" value="${(tag.name || '').replace(/"/g, '"')}" placeholder="例如：夜宵闲话" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px" onchange="Worldview._radioSaveTagField(${catIdx},${tagIdx},'name',this.value)">
+    </label>
+    <label style="display:block;margin-bottom:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">描述 <span style="font-size:11px;color:var(--text-secondary)">（预览时喂给AI，让它判断某个台该不该挂这个标签）</span></span>
+      <textarea id="rt-tag-desc" rows="2" placeholder="例如：围绕一种深夜会吃的食物，讲讲来吃的人和他们的故事" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:50px" onchange="Worldview._radioSaveTagField(${catIdx},${tagIdx},'desc',this.value)">${(tag.desc || '').replace(/</g, '&lt;')}</textarea>
+    </label>
+    <label style="display:block;margin-bottom:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">本期要求 <span style="font-size:11px;color:var(--text-secondary)">（选填，详情生成时注入AI）</span></span>
+      <textarea id="rt-tag-guide" rows="3" placeholder="例如：轻松温暖的调子，别煽情过头" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:70px" onchange="Worldview._radioSaveTagField(${catIdx},${tagIdx},'guide',this.value)">${(tag.guide || '').replace(/</g, '&lt;')}</textarea>
+    </label>
+    <label style="display:block;margin-bottom:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">字数</span>
+      <input type="number" id="rt-tag-wordCount" value="${tag.wordCount || 2000}" min="500" max="5000" step="100" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px" onchange="Worldview._radioSaveTagField(${catIdx},${tagIdx},'wordCount',parseInt(this.value)||2000)">
+    </label>
+    <div style="margin-bottom:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:6px">可用玩法 <span style="font-size:11px;color:var(--text-secondary)">（AI最多从中挑一个融入节目）</span></span>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${playCheckboxes}</div>
+    </div>
+    <div style="margin-bottom:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:6px">续期方式 <span style="font-size:11px;color:var(--text-secondary)">（收听本期更新时如何处理上一期）</span></span>
+      <div style="display:flex;gap:6px">
+        <button type="button" onclick="Worldview._radioSetTagRenewMode(${catIdx},${tagIdx},'unit')" style="flex:1;padding:8px;border-radius:6px;border:1px solid ${renewMode === 'unit' ? 'var(--accent)' : 'var(--border)'};background:${renewMode === 'unit' ? 'color-mix(in srgb, var(--accent) 15%, var(--bg-secondary))' : 'var(--bg-secondary)'};color:${renewMode === 'unit' ? 'var(--accent)' : 'var(--text)'};font-size:12px;cursor:pointer">独立单元</button>
+        <button type="button" onclick="Worldview._radioSetTagRenewMode(${catIdx},${tagIdx},'serial')" style="flex:1;padding:8px;border-radius:6px;border:1px solid ${renewMode === 'serial' ? 'var(--accent)' : 'var(--border)'};background:${renewMode === 'serial' ? 'color-mix(in srgb, var(--accent) 15%, var(--bg-secondary))' : 'var(--bg-secondary)'};color:${renewMode === 'serial' ? 'var(--accent)' : 'var(--text)'};font-size:12px;cursor:pointer">连载</button>
+        <button type="button" onclick="Worldview._radioSetTagRenewMode(${catIdx},${tagIdx},'free')" style="flex:1;padding:8px;border-radius:6px;border:1px solid ${renewMode === 'free' ? 'var(--accent)' : 'var(--border)'};background:${renewMode === 'free' ? 'color-mix(in srgb, var(--accent) 15%, var(--bg-secondary))' : 'var(--bg-secondary)'};color:${renewMode === 'free' ? 'var(--accent)' : 'var(--text)'};font-size:12px;cursor:pointer">自由发挥</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.4">
+        独立单元：换题材避免撞车 · 连载：接着上一期往下讲 · 自由发挥：参考上期开头
+      </div>
+    </div>
+  </div>`;
+}
+
+async function _radioBackToCatEditor(catIdx) {
+  const w = await _getEditingWV(); if (!w) return;
+  _radioOpenCatEditor(w, catIdx);
+}
+
+async function _radioSaveTagField(catIdx, tagIdx, field, value) {
+  const w = await _getEditingWV(); if (!w) return;
+  const tag = w.phoneApps?.radio?.categories?.[catIdx]?.tags?.[tagIdx]; if (!tag) return;
+  tag[field] = (typeof value === 'string') ? value.trim() : value;
+  await _saveEditingWV(w);
+}
+
+async function _radioToggleTagPlay(catIdx, tagIdx, playId, checked) {
+  const w = await _getEditingWV(); if (!w) return;
+  const tag = w.phoneApps?.radio?.categories?.[catIdx]?.tags?.[tagIdx]; if (!tag) return;
+  if (!Array.isArray(tag.plays)) tag.plays = [];
+  const idx = tag.plays.indexOf(playId);
+  if (checked && idx < 0) tag.plays.push(playId);
+  else if (!checked && idx >= 0) tag.plays.splice(idx, 1);
+  await _saveEditingWV(w);
+}
+
+async function _radioSetTagRenewMode(catIdx, tagIdx, mode) {
+  const w = await _getEditingWV(); if (!w) return;
+  const tag = w.phoneApps?.radio?.categories?.[catIdx]?.tags?.[tagIdx]; if (!tag) return;
+  tag.renewMode = mode;
+  await _saveEditingWV(w);
+  _radioOpenTagEditor(w, catIdx, tagIdx);
 }
 
 async function _calAddWeekDay() {
@@ -6425,6 +7067,11 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal, onTaskTypeRewardModeChange, openPhaseRewardModal,
     openCalendarEditor, closeCalendarEditor,
     openPhoneAppsEditor, closePhoneAppsEditor,
+openRadioCategoriesEditor, closeRadioCatsEditor, _radioTogglePreset, _radioAddCat, _radioEditCat, _radioDeleteCat,
+    openRadioCastEditor, closeRadioCastEditor, _radioSetCastMode, _radioToggleCastNpc, _radioToggleCastLorebook, _radioCastSearch,
+    openReadingCastEditor, closeReadingCastEditor, _readingToggleCastNpc, _readingToggleCastLorebook, _readingCastSearch,
+_radioOpenCatEditor, _radioBackToCatsList, _radioSetCatIcon, _radioSaveCatField,
+_radioAddTag, _radioEditTag, _radioDeleteTag, _radioOpenTagEditor, _radioBackToCatEditor, _radioSaveTagField, _radioToggleTagPlay, _radioSetTagRenewMode,
     _onCalWeekDayChange, _calAddWeekDay, _calRemoveWeekDay, _calToggleDayType, _calSetMonthMode, _calSetUniformDays, _calSetMonthDays, _calAddMonth, _calRemoveMonth,
     _calSetSeasonName, _calSetSeasonMonths, _calSetSeasonWeather, _calAddSeason, _calRemoveSeason, _calReset,
     _calSetPeriodName, _calSetPeriodHour, _calSetPeriodDesc, _calAddPeriod, _calRemovePeriod,

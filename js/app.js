@@ -175,15 +175,12 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v702.4';
-const CHANGELOG = `【v702.3 更新内容】
+    const APP_VERSION = 'v703';
+const CHANGELOG = `【v703 更新内容】
 
-新增「纯文字导出」：剥离所有图片只导文字，体积极小，数据多到全量导出闪退时用它备份
-修复全量导出在数据量大时闪退/卡死的问题
-新增「图片存储管理」：在个人主页→数据里查看并清理 AI 生成图、头像，以及手机里的壁纸/封面/动态配图等内联图片
-新增「存储空间」显示：实时查看浏览器已用容量
-全量导出文件瘦身：去掉重复打包的图片数据，导出文件大幅变小
-优化了奶油软糖的部分显示`;
+新增「电台」APP
+新增小屋仓库、衣橱仓库的编辑按钮，可直接修改物品的名称、描述与分类
+优化了部分界面显示`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

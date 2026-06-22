@@ -413,7 +413,7 @@ heartsimServiceMessages: [],
   radioSubscriptions: [], // “我的”页：听过（生成过详情）的台快照列表，最近的在前
   // 阅读 App
   readingBooks: [],      // 书架（生成过详情/读过的书）[{id, title, author, intro, category, cover, concept, toc, chapters, ... }]，最近读的在前
-  readingDiscover: [],   // 发现页上一次刷新/搜索的书卡缓存 [{id, title, author, intro, category, cover}]
+  readingDiscover: { long: [], short: [] }, // 发现页书卡缓存，按类型分开：长篇连载 / 短篇小说 [{id, title, author, intro, category, cover, type}]
   // 小屋 App
   houses: [],            // 住所列表 [{id, name, address, styleDesc, isCurrent, rooms:[{id, name, slots:[{id, label, itemId}]}]}]
   furnitureInventory: [],// 家具仓库 [{id, tag, name, desc, qty}]
@@ -762,6 +762,15 @@ function _isAppStillActive(appId) {
     // lite 模式（连线夜话专用）：跳过玩家面具/住所/单人卡主角/挂载角色，
     // 只保留世界观基础+时间+节日+知识+速查表+10轮主线。其它调用方不传则行为不变。
     const lite = !!(opts && opts.lite);
+    // castFilter（电台/阅读「可出场角色」专用，纯可选）：控制 NPC 详情输出。
+    //   { mode:'disabled' } 完全不发任何 NPC；{ mode:'whitelist', ids:Set } 只发名单内 NPC。
+    //   不传则行为完全不变。仅作用于完整模式（npcBrief:false）的 NPC 详情块。
+    const castFilter = (opts && opts.castFilter && (opts.castFilter.mode === 'disabled' || opts.castFilter.mode === 'whitelist'))
+      ? { mode: opts.castFilter.mode, ids: (opts.castFilter.ids instanceof Set) ? opts.castFilter.ids : new Set(Array.isArray(opts.castFilter.ids) ? opts.castFilter.ids : []), allowLorebook: !!opts.castFilter.allowLorebook }
+      : null;
+    // includeConvChars（电台/阅读专用，纯可选）：lite 模式下也补发当前对话的单人卡主角 + 挂载角色。
+    //   不传则行为不变。返航(_hsSkipNpc)模式始终不补发。
+    const includeConvChars = !!(opts && opts.includeConvChars);
     const parts = [];
 
     // v687.33：心动模拟返航后，根据 hsPostHomeMode 决定如何构建世界观/NPC 数据
@@ -859,7 +868,16 @@ function _isAppStillActive(appId) {
         } else {
         // 完整模式：全图 NPC + 详细资料（世界观 + 世界书合并）
         const allNpcs = [];
-        const collectNpc = (npc, regionName) => {
+        // castFilter：disabled 整块跳过；whitelist 只收名单内 id
+        const _castAllow = (npc, isLorebook) => {
+          if (!castFilter) return true;
+          if (castFilter.mode === 'disabled') return false;
+          // whitelist：勾选了"世界书角色"时，世界书来源的 NPC 整体放行
+          if (isLorebook && castFilter.allowLorebook) return true;
+          return !!(npc && npc.id && castFilter.ids.has(npc.id));
+        };
+        const collectNpc = (npc, regionName, isLorebook) => {
+          if (!_castAllow(npc, isLorebook)) return;
           let desc = `${npc.name || '未命名'}`;
           if (regionName) desc += `（所属：${regionName}）`;
           if (npc.aliases) desc += `（别名：${npc.aliases}）`;
@@ -884,7 +902,7 @@ function _isAppStillActive(appId) {
           (wv.regions || []).forEach(r => (r.npcs || []).forEach(n => { if (n.id) seenIds.add(n.id); }));
           for (const npc of bookExtra.globalNpcs) {
             if (npc.id && seenIds.has(npc.id)) continue;
-            collectNpc(npc, '');
+            collectNpc(npc, '', true);
           }
         }
         if (allNpcs.length > 0) parts.push('【NPC列表与详细资料】\n' + allNpcs.join('\n---\n'));
@@ -963,9 +981,16 @@ function _isAppStillActive(appId) {
 
     // 3.5 v617：当前对话绑定的单人卡主角（AI 扮演角色）
     // v687.33：返航 continue/epilogue 模式下跳过（单人卡主角不属于返航后的现实世界）
-    if (!_hsSkipNpc && !lite) try {
+    // includeConvChars：电台/阅读预览在 lite 下也带上（受 castFilter 约束：disabled 不发，whitelist 需 id 命中）
+    if (!_hsSkipNpc && (!lite || includeConvChars)) try {
       const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
-      if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+      // castFilter 约束：disabled 全不发；whitelist 仅当该角色 id 在名单内才发
+      const _convCharAllow = (id) => {
+        if (!castFilter) return true;
+        if (castFilter.mode === 'disabled') return false;
+        return !!(id && castFilter.ids.has(id));
+      };
+      if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId && _convCharAllow(conv.singleCharId)) {
         const card = await DB.get('singleCards', conv.singleCharId);
         if (card && card.name) {
           let cardStr = `姓名：${card.name}`;
@@ -973,7 +998,7 @@ function _isAppStillActive(appId) {
           if (card.detail) cardStr += `\n设定：${card.detail}`;
           parts.push('【当前对话主角（AI 扮演角色）】\n' + cardStr);
         }
-      } else if (conv && conv.isSingle && conv.singleCharType === 'npc' && conv.singleCharId) {
+      } else if (conv && conv.isSingle && conv.singleCharType === 'npc' && conv.singleCharId && _convCharAllow(conv.singleCharId)) {
         // 单人·NPC 模式：从 worldviews 里查
         try {
           const wvs = await DB.getAll('worldviews');
@@ -996,9 +1021,17 @@ function _isAppStillActive(appId) {
 
     // 3.6 v617：对话级挂载角色（拉郎 / 客串 / 常驻）
     // v687.33：返航 continue/epilogue 模式下跳过（挂载角色也不属于返航后的现实世界）
-    if (!_hsSkipNpc && !lite) try {
+    // includeConvChars：电台/阅读预览在 lite 下也带上（受 castFilter 约束）
+    if (!_hsSkipNpc && (!lite || includeConvChars)) try {
       if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
-        const attached = await AttachedChars.resolveAll();
+        let attached = await AttachedChars.resolveAll();
+        if (attached && attached.length > 0) {
+          // castFilter 约束：disabled 全不发；whitelist 仅保留 id 在名单内的
+          if (castFilter) {
+            if (castFilter.mode === 'disabled') attached = [];
+            else attached = attached.filter(c => c && c.id && castFilter.ids.has(c.id));
+          }
+        }
         if (attached && attached.length > 0) {
           const attStrs = attached.map(c => {
             let s = `${c.name || '未命名'}`;
@@ -1205,7 +1238,81 @@ function _extractJsonArrayText(content) {
     }
     throw new Error(lastError || '生成失败');
   }
-  // ===== 浮动按钮 =====
+
+  // 同上，但解析单个 JSON 对象（故事蓝图等用）。失败重试，全失败抛错。
+  async function _phoneJsonObjectWithRetry(opts) {
+    const {
+      label = '手机内容', url, key, model, messages,
+      temperature = 0.9, max_tokens = 2048,
+      onAttempt
+    } = opts || {};
+    const baseMax = (opts && Number.isFinite(opts.maxRetries)) ? opts.maxRetries : 3;
+    const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : baseMax;
+    let lastError = '';
+    let lastContent = '';
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (typeof onAttempt === 'function') onAttempt(attempt, maxRetries);
+        const strictMessages = attempt === 1 ? messages : [
+          ...(messages || []),
+          { role: 'system', content: '上一次返回无法解析。请立刻重新输出严格 JSON 对象：只能输出以 { 开头、以 } 结尾的 JSON；不要 Markdown；不要解释；不要代码块；字符串必须使用英文双引号。' }
+        ];
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+          body: JSON.stringify({ model, messages: strictMessages, stream: false, temperature, max_tokens })
+        });
+        if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
+        const json = await resp.json();
+        const content = json.choices?.[0]?.message?.content || '';
+        lastContent = content;
+        return _parsePhoneJsonObject(content);
+      } catch(e) {
+        lastError = e.message || String(e);
+        console.error(`[Phone] ${label} attempt ${attempt} failed:`, e, lastContent ? { content: lastContent } : '');
+        if (attempt < maxRetries) {
+          UI.showToast(`${label}生成失败，正在重试…（${attempt + 1}/${maxRetries}）`, 1600);
+          await new Promise(r => setTimeout(r, 900));
+        }
+      }
+    }
+    throw new Error(lastError || '生成失败');
+  }
+
+  // 纯文本生成（章节正文等用），不做 JSON 解析，直接返回文本。失败重试，全失败抛错。
+  async function _phoneTextWithRetry(opts) {
+    const {
+      label = '手机内容', url, key, model, messages,
+      temperature = 0.9, max_tokens = 4096,
+      onAttempt
+    } = opts || {};
+    const baseMax = (opts && Number.isFinite(opts.maxRetries)) ? opts.maxRetries : 3;
+    const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : baseMax;
+    let lastError = '';
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (typeof onAttempt === 'function') onAttempt(attempt, maxRetries);
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+          body: JSON.stringify({ model, messages, stream: false, temperature, max_tokens })
+        });
+        if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
+        const json = await resp.json();
+        const content = (json.choices?.[0]?.message?.content || '').trim();
+        if (!content) throw new Error('返回为空');
+        return content;
+      } catch(e) {
+        lastError = e.message || String(e);
+        console.error(`[Phone] ${label} attempt ${attempt} failed:`, e);
+        if (attempt < maxRetries) {
+          UI.showToast(`${label}生成失败，正在重试…（${attempt + 1}/${maxRetries}）`, 1600);
+          await new Promise(r => setTimeout(r, 900));
+        }
+      }
+    }
+    throw new Error(lastError || '生成失败');
+  }
   function _updateFab() {
     const fab = document.getElementById('phone-fab');
     if (!fab) return;
@@ -1663,6 +1770,7 @@ async function openApp(appId) {
   } catch(_) {}
   // 未完成的APP：直接拦截，不进入APP模式
   if (appId === 'email') { UI.showToast('邮箱开发中...', 1500); return; }
+  if (appId === 'reading') { UI.showToast('阅读开发中...', 1500); return; }
   // 记住当前页面滚动位置，返回时恢复
   try {
     const pages = document.getElementById('phone-pages');
@@ -1696,7 +1804,7 @@ async function openApp(appId) {
  case 'heartsim_app': _renderHeartSimApp(phoneData); break;
  case 'ledger': _renderLedger(phoneData); break;
  case 'radio': _renderRadio(phoneData); break;
-      case 'reading': UI.showToast('阅读开发中…', 1500); return;
+      case 'reading': _renderReading(phoneData); break;
  case 'cottage': _renderCottage(phoneData); break;
 	case 'wardrobe': _renderWardrobe(phoneData); break;
  case 'feiniao': _renderFeiniao(phoneData); break;
@@ -6115,8 +6223,12 @@ function _refreshCalBanner() {
     ],
   };
 
-  // 取某分类的标签池（预设分类返回 _RADIO_TAGS，自定义分类暂无标签）
-  function _radioTagsOf(catId) { return _RADIO_TAGS[catId] || []; }
+  // 取某分类的标签池：预设分类返回 _RADIO_TAGS；自建分类返回其 tags（来自世界观缓存）。
+  function _radioTagsOf(catId) {
+    if (_RADIO_TAGS[catId]) return _RADIO_TAGS[catId];
+    const cc = _radioCustomCatById(catId);
+    return cc && Array.isArray(cc.tags) ? cc.tags : [];
+  }
 
   // 生成一批互不重复的 FM 频率（87.0–108.0，保留一位小数）
   function _radioGenFmList(n) {
@@ -6179,13 +6291,149 @@ function _refreshCalBanner() {
     return `${cat.airStart || '00:00'} - ${cat.airEnd || '24:00'} 播出`;
   }
 
-  // 确保分类已初始化
+  // 确保分类已初始化。分类列表 =（预设 − 被隐藏的预设）+ 自建分类。
+  // 始终按「生效分类」重建 pd.radioCategories（保留运行时临时的 random_temp）。
+  // 依赖 _radioCustomCfgCache：缓存未刷新时 _radioEffectiveCategories 返回全部预设，与旧行为一致。
   function _ensureRadioCategories(pd) {
-    if (!Array.isArray(pd.radioCategories)) {
-      pd.radioCategories = _RADIO_DEFAULT_CATEGORIES.map(c => ({ ...c }));
-    }
+    const eff = _radioEffectiveCategories();
+    const temp = Array.isArray(pd.radioCategories) ? pd.radioCategories.find(c => c && c.id === 'random_temp') : null;
+    pd.radioCategories = temp ? eff.concat([temp]) : eff;
     if (!pd.radioPrograms || typeof pd.radioPrograms !== 'object') pd.radioPrograms = {};
     return pd;
+  }
+
+  // ===== 世界观自定义电台配置（phoneApps.radio）同步缓存 =====
+  // 结构：{ name, desc, hiddenPresets:[预设catId], categories:[{id,name,icon,direction,tags:[{name,desc,guide,wordCount,plays:[],renewMode}]}] }
+  // 朗读/生成链路是同步读取的，进电台时异步刷新一次，之后同步用。
+  let _radioCustomCfgCache = null;
+  // 规范化世界观里的 radio 配置（容错补齐字段）
+  function _radioNormalizeCustomCfg(raw) {
+    const r = (raw && typeof raw === 'object') ? raw : {};
+    const cats = Array.isArray(r.categories) ? r.categories : [];
+    return {
+      name: typeof r.name === 'string' ? r.name : '',
+      desc: typeof r.desc === 'string' ? r.desc : '',
+      hiddenPresets: Array.isArray(r.hiddenPresets) ? r.hiddenPresets.filter(x => typeof x === 'string') : [],
+      castMode: (r.castMode === 'disabled' || r.castMode === 'whitelist') ? r.castMode : 'default',
+      castWhitelist: Array.isArray(r.castWhitelist) ? r.castWhitelist.filter(x => x && x.id).map(x => ({ id: String(x.id), name: String(x.name || '') })) : [],
+      castIncludeLorebook: !!r.castIncludeLorebook,
+      categories: cats.filter(c => c && typeof c === 'object').map(c => ({
+        id: String(c.id || ''),
+        name: String(c.name || ''),
+        icon: String(c.icon || 'mic'),
+        direction: String(c.direction || ''),
+        isCustom: true,
+        tags: (Array.isArray(c.tags) ? c.tags : []).filter(t => t && typeof t === 'object').map(t => ({
+          name: String(t.name || ''),
+          desc: String(t.desc || ''),
+          guide: typeof t.guide === 'string' ? t.guide : '',
+          wordCount: parseInt(t.wordCount, 10) || 0,
+          plays: Array.isArray(t.plays) ? t.plays.filter(x => typeof x === 'string') : [],
+          renewMode: (t.renewMode === 'serial' || t.renewMode === 'free') ? t.renewMode : 'unit',
+        })),
+      })),
+    };
+  }
+  // 异步刷新缓存（进电台时调用一次）
+  async function _radioRefreshCustomCfg() {
+    try {
+      const wv = (typeof Worldview !== 'undefined' && Worldview.getCurrent) ? await Worldview.getCurrent() : null;
+      const raw = wv && wv.phoneApps ? wv.phoneApps.radio : null;
+      _radioCustomCfgCache = _radioNormalizeCustomCfg(raw);
+    } catch (_) {
+      _radioCustomCfgCache = _radioNormalizeCustomCfg(null);
+    }
+    return _radioCustomCfgCache;
+  }
+  // 同步取缓存（没刷过则返回空配置）
+  function _radioCustomCfg() {
+    return _radioCustomCfgCache || _radioNormalizeCustomCfg(null);
+  }
+  // 取「最终生效的分类列表」：预设（去掉被隐藏的）+ 自建分类
+  function _radioEffectiveCategories() {
+    const cfg = _radioCustomCfg();
+    const hidden = new Set(cfg.hiddenPresets || []);
+    const presets = _RADIO_DEFAULT_CATEGORIES.filter(c => !hidden.has(c.id)).map(c => ({ ...c, isCustom: false }));
+    const customs = (cfg.categories || []).map(c => ({
+      id: c.id, name: c.name, icon: c.icon, direction: c.direction,
+      airStart: '', airEnd: '', allDay: true, isDefault: false, isCustom: true,
+      desc: c.direction || '',
+    }));
+    return presets.concat(customs);
+  }
+  // 按 catId 找自建分类原始对象（含 tags）
+  function _radioCustomCatById(catId) {
+    return (_radioCustomCfg().categories || []).find(c => c.id === catId) || null;
+  }
+  // 按标签名找自建标签对象（跨所有自建分类）
+  function _radioCustomTagByName(tagName) {
+    if (!tagName) return null;
+    for (const c of (_radioCustomCfg().categories || [])) {
+      const hit = (c.tags || []).find(t => t.name === tagName);
+      if (hit) return { tag: hit, direction: c.direction };
+    }
+    return null;
+  }
+
+  // ===== 阅读「可出场作者」配置缓存 =====
+  // 纯白名单：castWhitelist [{id,name}] 为空=作者全虚构；非空=AI 只能从名单里挑人署名。
+  // castIncludeLorebook: bool 勾选则当前挂载的世界书 NPC 也都可当作者。
+  // 作者身份与「注入世界观」「映射」完全独立——这里只决定谁能署名当作者。
+  let _readingCastCfgCache = null;
+  function _readingNormalizeCastCfg(raw) {
+    const r = (raw && typeof raw === 'object') ? raw : {};
+    return {
+      castWhitelist: Array.isArray(r.castWhitelist) ? r.castWhitelist.filter(x => x && x.id).map(x => ({ id: String(x.id), name: String(x.name || '') })) : [],
+      castIncludeLorebook: !!r.castIncludeLorebook,
+    };
+  }
+  async function _readingRefreshCastCfg() {
+    try {
+      const wv = (typeof Worldview !== 'undefined' && Worldview.getCurrent) ? await Worldview.getCurrent() : null;
+      const raw = wv && wv.phoneApps ? wv.phoneApps.reading : null;
+      _readingCastCfgCache = _readingNormalizeCastCfg(raw);
+    } catch (_) {
+      _readingCastCfgCache = _readingNormalizeCastCfg(null);
+    }
+    return _readingCastCfgCache;
+  }
+  function _readingCastCfg() {
+    return _readingCastCfgCache || _readingNormalizeCastCfg(null);
+  }
+  // 构建「可出场作者」资料块：按白名单 id 取角色（名+简介），独立于世界观/映射。
+  // 名单为空且未开世界书 → 返回空串（作者全虚构）。
+  async function _readingBuildAuthorBlock(t) {
+    const unit = (t === 'short') ? '篇' : '本';
+    const cfg = _readingCastCfg();
+    const wl = (cfg.castWhitelist || []).filter(x => x && (x.id || x.name));
+    const ids = new Set(wl.map(x => x.id).filter(Boolean));
+    const names = new Set(wl.map(x => String(x.name || '').trim()).filter(Boolean));
+    if (wl.length === 0 && !cfg.castIncludeLorebook) return '';
+    let candidates = [];
+    try { candidates = await _collectChatCandidates(); } catch (_) { candidates = []; }
+    // id 优先匹配，id 没中再按 name 兜底（两条读取路径 id 体系可能错位）
+    const picked = candidates.filter(c => {
+      if (c.id && ids.has(c.id)) return true;
+      if (c.name && names.has(String(c.name).trim())) return true;
+      if (cfg.castIncludeLorebook && c.source === 'lorebook') return true;
+      return false;
+    });
+    // 已被 candidates 命中的名字（用于补齐没抓到详情的白名单作者）
+    const pickedNames = new Set(picked.map(c => String(c.name || '').trim()));
+    const lines = picked.map(c => {
+      let s = `- ${c.name}`;
+      if (c.aliases) s += `（别名：${c.aliases}）`;
+      if (c.onlineName) s += `（笔名/网名：${c.onlineName}）`;
+      if (c.detail) s += `\n  ${c.detail.replace(/\n+/g, ' ').slice(0, 200)}`;
+      return s;
+    });
+    // 白名单里有、但 candidates 没抓到的作者：至少用名字保证能出场（无详情）
+    wl.forEach(x => {
+      const nm = String(x.name || '').trim();
+      if (nm && !pickedNames.has(nm)) lines.push(`- ${nm}`);
+    });
+    if (!lines.length) return '';
+    return `【可出场作者名单】\n以下是被指定「可以作为书的作者」的真实角色。你可以让其中合适的人作为某些作品的作者（author 字段直接填其本名），其余作品用虚构作者笔名。不要让名单之外的真实角色当作者。\n整批 8-10 ${unit}里，最多只安排 0-2 ${unit}出自名单作者之手（宁少勿多，可以一个都不用），且要贴合该角色的身份气质，其余一律用虚构笔名，别让名单作者占满整批。\n${lines.join('\n')}`;
   }
 
   // ============ 小屋 App ============
@@ -6998,6 +7246,7 @@ ${shipSection}
           <div class="phone-map-result-foot">
             <div class="phone-map-result-foot-left"></div>
             <div class="phone-map-result-actions" style="display:flex;gap:6px">
+            <button type="button" onclick="Phone._wardrobeInvEdit('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('pen', 12)} 编辑</button>
             <button type="button" onclick="Phone._wardrobeInvEditTag('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('pin', 12)} 分类</button>
             <button type="button" onclick="Phone._wardrobeInvDelete('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('trash', 12)} 删除</button>
           </div>
@@ -7074,6 +7323,59 @@ ${shipSection}
         _renderWardrobeInventory();
       };
     });
+  }
+
+  // 编辑服装：改名称 / 描述 / 分类（三合一）
+  async function _wardrobeInvEdit(invId) {
+    const pd = await _getPhoneData();
+    const it = (pd.wardrobeInventory || []).find(x => x.id === invId);
+    if (!it) return;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+    const chips = WARDROBE_TAG_KEYS.map(t => `<div class="cottage-mall-chip ${it.tag === t ? 'active' : ''}" data-tag="${t}">${t}</div>`).join('');
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">编辑服装</div>
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">名称</label>
+        <input id="wardrobe-inv-edit-name" type="text" maxlength="30" value="${Utils.escapeHtml(it.name || '')}" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:12px">
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">描述（可选）</label>
+        <textarea id="wardrobe-inv-edit-desc" rows="2" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:12px">${Utils.escapeHtml(it.desc || '')}</textarea>
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">分类</label>
+        <div class="cottage-mall-chips" style="margin-bottom:16px">${chips}</div>
+        <div style="display:flex;gap:10px">
+          <button id="wardrobe-inv-edit-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="wardrobe-inv-edit-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    _maskCloseOnBg(mask);
+    let pickedTag = it.tag || '未分类';
+    mask.querySelectorAll('.cottage-mall-chip').forEach(c => {
+      c.onclick = () => {
+        pickedTag = c.dataset.tag;
+        mask.querySelectorAll('.cottage-mall-chip').forEach(x => x.classList.toggle('active', x === c));
+      };
+    });
+    mask.querySelector('#wardrobe-inv-edit-cancel').onclick = () => mask.remove();
+    mask.querySelector('#wardrobe-inv-edit-save').onclick = async () => {
+      const name = (mask.querySelector('#wardrobe-inv-edit-name').value || '').trim();
+      if (!name) { UI.showToast('请填写名称', 1500); return; }
+      const desc = (mask.querySelector('#wardrobe-inv-edit-desc').value || '').trim();
+      const nTag = WARDROBE_TAG_KEYS.includes(pickedTag) ? pickedTag : '未分类';
+      const dup = (pd.wardrobeInventory || []).find(x => x !== it && x.name === name.slice(0, 30) && (x.desc || '') === desc.slice(0, 200) && x.tag === nTag);
+      if (dup) {
+        dup.qty = (dup.qty || 1) + (it.qty || 1);
+        pd.wardrobeInventory = (pd.wardrobeInventory || []).filter(x => x !== it);
+      } else {
+        it.name = name.slice(0, 30);
+        it.desc = desc.slice(0, 200);
+        it.tag = nTag;
+      }
+      await _savePhoneData();
+      mask.remove();
+      UI.showToast('已保存', 1200);
+      _renderWardrobeInventory();
+    };
   }
 
   // 穿上：从仓库取一件服装填入对应部位的当前着装（库存数量-1）
@@ -8211,8 +8513,9 @@ ${shipSection}
       ? list.map(it => {
         const action = _invPickMode
           ? `<button type="button" onclick="Phone._cottageInvPick('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('check', 12)} 选这个</button>`
-          : `<button type="button" onclick="Phone._cottageInvEditTag('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('pin', 12)} 分类</button>
-             <button type="button" onclick="Phone._cottageInvDelete('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('trash', 12)} 删除</button>`;
+          : `<button type="button" onclick="Phone._cottageInvEdit('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('pen', 12)} 编辑</button>
+            <button type="button" onclick="Phone._cottageInvEditTag('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('pin', 12)} 分类</button>
+            <button type="button" onclick="Phone._cottageInvDelete('${Utils.escapeHtml(it.id)}')" class="phone-map-action-btn">${_uiIcon('trash', 12)} 删除</button>`;
         return `
         <div class="phone-map-result-card">
           <div class="phone-map-result-head">
@@ -8270,6 +8573,60 @@ ${shipSection}
     else pd.furnitureInventory = (pd.furnitureInventory || []).filter(x => x.id !== invId);
     await _savePhoneData();
     _renderCottageInventory();
+  }
+
+  // 编辑家具：改名称 / 描述 / 分类（三合一）
+  async function _cottageInvEdit(invId) {
+    const pd = await _getPhoneData();
+    const it = (pd.furnitureInventory || []).find(x => x.id === invId);
+    if (!it) return;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+    const chips = FURNITURE_TAG_KEYS.map(t => `<div class="cottage-mall-chip ${it.tag === t ? 'active' : ''}" data-tag="${t}">${t}</div>`).join('');
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">编辑物品</div>
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">名称</label>
+        <input id="cottage-inv-edit-name" type="text" maxlength="30" value="${Utils.escapeHtml(it.name || '')}" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:12px">
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">描述（可选）</label>
+        <textarea id="cottage-inv-edit-desc" rows="2" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:12px">${Utils.escapeHtml(it.desc || '')}</textarea>
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">分类</label>
+        <div class="cottage-mall-chips" style="margin-bottom:16px">${chips}</div>
+        <div style="display:flex;gap:10px">
+          <button id="cottage-inv-edit-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="cottage-inv-edit-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    _maskCloseOnBg(mask);
+    let pickedTag = it.tag || '未分类';
+    mask.querySelectorAll('.cottage-mall-chip').forEach(c => {
+      c.onclick = () => {
+        pickedTag = c.dataset.tag;
+        mask.querySelectorAll('.cottage-mall-chip').forEach(x => x.classList.toggle('active', x === c));
+      };
+    });
+    mask.querySelector('#cottage-inv-edit-cancel').onclick = () => mask.remove();
+    mask.querySelector('#cottage-inv-edit-save').onclick = async () => {
+      const name = (mask.querySelector('#cottage-inv-edit-name').value || '').trim();
+      if (!name) { UI.showToast('请填写名称', 1500); return; }
+      const desc = (mask.querySelector('#cottage-inv-edit-desc').value || '').trim();
+      const nTag = FURNITURE_TAG_KEYS.includes(pickedTag) ? pickedTag : '未分类';
+      // 合并：若改完后与另一条同名同描述同分类，则合并数量
+      const dup = (pd.furnitureInventory || []).find(x => x !== it && x.name === name.slice(0, 30) && (x.desc || '') === desc.slice(0, 200) && x.tag === nTag);
+      if (dup) {
+        dup.qty = (dup.qty || 1) + (it.qty || 1);
+        pd.furnitureInventory = (pd.furnitureInventory || []).filter(x => x !== it);
+      } else {
+        it.name = name.slice(0, 30);
+        it.desc = desc.slice(0, 200);
+        it.tag = nTag;
+      }
+      await _savePhoneData();
+      mask.remove();
+      UI.showToast('已保存', 1200);
+      _renderCottageInventory();
+    };
   }
 
   // 改家具分类：弹出标签选择，选中后更新该条 tag
@@ -9864,6 +10221,10 @@ ${houseDataText}`;
   // 底部两个 tab：'shelf' 书架（默认，在读/读过的书）| 'discover' 发现（刷新推荐/搜索新书）
   let _readingHomeTab = 'shelf';
   let _readingPrefsExpanded = false;
+  // 发现页顶部类型 tab：'long' 长篇连载（三段式：列表→详情→分章正文）| 'short' 短篇小说（一次成文，不分章）
+  let _readingDiscoverType = 'long';
+  // 发现页：生成列表时是否把世界观设定作为参考背景发给 AI（默认关，纯架空）
+  let _readingUseWvRef = false;
 
   // ===== 阅读全局偏好 =====
   const _READING_GLOBAL_PREFS_DEFAULT = { useWorldView: false, useNpc: false, npcMapping: 'weak' };
@@ -9891,15 +10252,10 @@ ${houseDataText}`;
     await _savePhoneData();
     _renderReading(pd);
   }
-  // 展开/折叠设置面板（浮窗）
-  function _readingTogglePrefs() {
+  // 展开/折叠全局偏好横条（仿电台同款）
+  async function _readingTogglePrefsExpand() {
     _readingPrefsExpanded = !_readingPrefsExpanded;
-    const panel = document.getElementById('phone-reading-prefs-panel');
-    const mask = document.getElementById('phone-reading-prefs-mask');
-    if (panel) panel.style.display = _readingPrefsExpanded ? 'block' : 'none';
-    if (mask) mask.style.display = _readingPrefsExpanded ? 'block' : 'none';
-    const gear = document.getElementById('phone-reading-gear');
-    if (gear) gear.classList.toggle('active', _readingPrefsExpanded);
+    _renderReading(await _getPhoneData());
   }
 
   // 阅读首页：书架（默认）/ 发现 两个 tab
@@ -9907,13 +10263,15 @@ ${houseDataText}`;
     const body = document.getElementById('phone-body');
     document.getElementById('phone-title').textContent = '阅读';
     _applyWallpaper(pd);
+    try { await _readingRefreshCastCfg(); } catch (_) {}
 
-    const shelfHtml = _renderReadingShelf(pd);
+    const _readingMaskInfo = (_readingHomeTab === 'shelf') ? await _getMaskInfo() : null;
+    const shelfHtml = _renderReadingShelf(pd, _readingMaskInfo);
     const discoverHtml = _renderReadingDiscover(pd);
 
     body.innerHTML = `
       <div class="phone-reading-shell" style="display:flex;flex-direction:column;height:100%">
-        <div style="flex:1;min-height:0;overflow-y:auto;padding:14px 14px 24px">${_readingHomeTab === 'shelf' ? shelfHtml : discoverHtml}</div>
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:${_readingHomeTab === 'shelf' ? '0 0 24px' : '14px 14px 24px'}">${_readingHomeTab === 'shelf' ? shelfHtml : discoverHtml}</div>
         <div class="phone-tabbar">
           <div class="phone-tab ${_readingHomeTab === 'shelf' ? 'active' : ''}" onclick="Phone._switchReadingHomeTab('shelf')">书架</div>
           <div class="phone-tab ${_readingHomeTab === 'discover' ? 'active' : ''}" onclick="Phone._switchReadingHomeTab('discover')">发现</div>
@@ -9935,38 +10293,12 @@ ${houseDataText}`;
   }
 
   // 书架：横向长条卡片（左竖封面 + 右书名/简介）。在读/读过的书，最近的在前。
-  function _renderReadingShelf(pd) {
-    const prefs = _readingGlobalPrefs(pd);
-    const mappingLabels = { weak: '彩蛋', mid: '原型', strong: '入戏' };
-    const prefsPanel = `
-      <div id="phone-reading-prefs-mask" class="phone-reading-prefs-mask" style="display:${_readingPrefsExpanded ? 'block' : 'none'}" onclick="Phone._readingTogglePrefs()"></div>
-      <div id="phone-reading-prefs-panel" class="phone-reading-prefs" style="display:${_readingPrefsExpanded ? 'block' : 'none'}">
-        <label class="phone-reading-pref-row">
-          <span>注入世界观</span>
-          <input type="checkbox" ${prefs.useWorldView ? 'checked' : ''} onchange="Phone._readingTogglePref('useWorldView', this.checked)">
-        </label>
-        <label class="phone-reading-pref-row">
-          <span>注入 NPC</span>
-          <input type="checkbox" ${prefs.useNpc ? 'checked' : ''} onchange="Phone._readingTogglePref('useNpc', this.checked)">
-        </label>
-        <div class="phone-reading-pref-row ${prefs.useNpc ? '' : 'disabled'}">
-          <span>映射强度</span>
-          <div class="phone-reading-mapping-btns">
-            ${['weak', 'mid', 'strong'].map(v => `<button class="phone-reading-mapping-btn ${prefs.npcMapping === v ? 'active' : ''}" onclick="Phone._readingSetMapping('${v}')" ${prefs.useNpc ? '' : 'disabled'}>${mappingLabels[v]}</button>`).join('')}
-          </div>
-        </div>
-      </div>`;
-    // 齿轮 + 浮窗设置面板（书架顶栏，relative 定位锚点）
-    const topBar = `
-      <div class="phone-reading-topbar">
-        <span class="phone-reading-topbar-title">我的书架</span>
-        <button id="phone-reading-gear" class="phone-reading-gear ${_readingPrefsExpanded ? 'active' : ''}" onclick="Phone._readingTogglePrefs()">${_uiIcon('settings', 18)}</button>
-        ${prefsPanel}
-      </div>`;
+  function _renderReadingShelf(pd, maskInfo) {
+    const header = _readingMineHeader(pd, maskInfo);
 
     const books = Array.isArray(pd.readingBooks) ? pd.readingBooks : [];
     if (!books.length) {
-      return `${topBar}
+      return `${header}
         <div class="phone-reading-empty">
           <div class="phone-reading-empty-icon">${_readingBookIcon(40)}</div>
           <div class="phone-reading-empty-title">书架还空着</div>
@@ -9975,7 +10307,61 @@ ${houseDataText}`;
         </div>`;
     }
     const cards = books.map(b => _readingShelfCard(b)).join('');
-    return `${topBar}<div class="phone-reading-shelf">${cards}</div>`;
+    return `${header}<div class="phone-reading-mine-section-title">我的书架</div><div class="phone-reading-shelf">${cards}</div>`;
+  }
+
+  // 书架页顶部：个人资料头部（头像 + 网名 + 在读本数）
+  function _readingMineHeader(pd, maskInfo) {
+    const userName = (maskInfo && maskInfo.username) || '我';
+    const userAvatar = (maskInfo && maskInfo.avatar) || '';
+    const count = Array.isArray(pd.readingBooks) ? pd.readingBooks.length : 0;
+    const avaHtml = userAvatar
+      ? `<img class="phone-radio-mine-ava" src="${Utils.escapeHtml(userAvatar)}" alt="">`
+      : `<div class="phone-radio-mine-ava phone-radio-mine-ava-fallback">${Utils.escapeHtml((userName || '我')[0])}</div>`;
+    return `
+      <div class="phone-radio-mine-header">
+        ${avaHtml}
+        <div class="phone-radio-mine-header-info">
+          <div class="phone-radio-mine-header-name">${Utils.escapeHtml(userName)}</div>
+          <div class="phone-radio-mine-header-sub">书友 · 在读 ${count} 本书</div>
+        </div>
+      </div>`;
+  }
+
+  // 书架页：全局偏好折叠横条（沿用电台同款样式）
+  function _readingGlobalPrefsBar(pd) {
+    const prefs = _readingGlobalPrefs(pd);
+    const mappingLabels = { weak: '彩蛋', mid: '原型', strong: '入戏' };
+    const sw = (key, label, on) => `
+      <div class="phone-radio-pref-row">
+        <span>${label}</span>
+        <label class="phone-radio-switch">
+          <input type="checkbox" ${on ? 'checked' : ''} onchange="Phone._readingTogglePref('${key}', this.checked)">
+          <span class="phone-radio-switch-slider"></span>
+        </label>
+      </div>`;
+    const mappingRow = `
+      <div class="phone-radio-pref-row ${prefs.useNpc ? '' : 'disabled'}">
+        <span>映射强度</span>
+        <div class="phone-reading-mapping-btns">
+          ${['weak', 'mid', 'strong'].map(v => `<button class="phone-reading-mapping-btn ${prefs.npcMapping === v ? 'active' : ''}" onclick="Phone._readingSetMapping('${v}')" ${prefs.useNpc ? '' : 'disabled'}>${mappingLabels[v]}</button>`).join('')}
+        </div>
+      </div>`;
+    const gear = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>`;
+    const chevron = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s;transform:rotate(${_readingPrefsExpanded ? 180 : 0}deg)"><path d="m6 9 6 6 6-6"/></svg>`;
+    return `
+      <div class="phone-radio-prefs">
+        <div class="phone-radio-prefs-head" onclick="Phone._readingTogglePrefsExpand()">
+          <span class="phone-radio-prefs-gear">${gear}</span>
+          <span class="phone-radio-prefs-title">全局偏好设置</span>
+          <span class="phone-radio-prefs-chevron">${chevron}</span>
+        </div>
+        <div class="phone-radio-prefs-body" style="display:${_readingPrefsExpanded ? 'block' : 'none'}">
+          ${sw('useWorldView', '注入世界观', prefs.useWorldView)}
+          ${sw('useNpc', '注入 NPC', prefs.useNpc)}
+          ${mappingRow}
+        </div>
+      </div>`;
   }
 
   // 单本书架卡片（横长条）
@@ -9985,7 +10371,9 @@ ${houseDataText}`;
       ? `<img src="${Utils.escapeHtml(cover)}" alt="">`
       : `<div class="phone-reading-cover-fallback">${Utils.escapeHtml((b.title || '书')[0])}</div>`;
     const author = (b.author || '佚名').trim();
-    const cat = (b.category || '').trim();
+    // category 兼容数组（新）与字符串（旧）：取数组首项展示在 meta 行
+    const cats = Array.isArray(b.category) ? b.category.filter(Boolean) : (b.category ? [String(b.category)] : []);
+    const cat = cats.join(' · ');
     const intro = (b.intro || '').trim();
     // 阅读进度：读到第几章 / 共几章
     const total = Array.isArray(b.toc) ? b.toc.length : 0;
@@ -9997,43 +10385,1345 @@ ${houseDataText}`;
       <div class="phone-reading-shelf-card" onclick="Phone._readingOpenBook('${Utils.escapeHtml(b.id)}')">
         <div class="phone-reading-shelf-cover">${coverHtml}</div>
         <div class="phone-reading-shelf-info">
-          <div class="phone-reading-shelf-title">${Utils.escapeHtml(b.title || '未命名')}</div>
-          <div class="phone-reading-shelf-meta">${Utils.escapeHtml(author)}${cat ? ' · ' + Utils.escapeHtml(cat) : ''}</div>
+          <div class="phone-reading-shelf-titlerow">
+            <span class="phone-reading-shelf-title">${Utils.escapeHtml(b.title || '未命名')}</span>
+            <span class="phone-reading-shelf-author">${Utils.escapeHtml(author)}</span>
+          </div>
+          ${cat ? `<div class="phone-reading-shelf-cats">${cats.map(c => `<span class="phone-reading-shelf-cat">${Utils.escapeHtml(c)}</span>`).join('')}</div>` : ''}
           <div class="phone-reading-shelf-intro">${Utils.escapeHtml(intro)}</div>
           ${progressText ? `<div class="phone-reading-shelf-progress">${Utils.escapeHtml(progressText)}</div>` : ''}
         </div>
       </div>`;
   }
 
-  // 发现：刷新推荐 / 搜索新书（生成式）。本版先占位结构，生成逻辑后续接。
+  // 发现：长篇连载 / 短篇小说 两个类型 tab，各自刷新推荐 / 搜索新书（生成式）。本版先占位结构，生成逻辑后续接。
   function _renderReadingDiscover(pd) {
-    const books = Array.isArray(pd.readingDiscover) ? pd.readingDiscover : [];
+    const type = (_readingDiscoverType === 'short') ? 'short' : 'long';
+    const disc = (pd.readingDiscover && typeof pd.readingDiscover === 'object' && !Array.isArray(pd.readingDiscover))
+      ? pd.readingDiscover
+      : { long: Array.isArray(pd.readingDiscover) ? pd.readingDiscover : [], short: [] };
+    const books = Array.isArray(disc[type]) ? disc[type] : [];
+    const typeTabs = `
+      <div class="phone-reading-type-tabs">
+        <div class="phone-reading-type-tab ${type === 'long' ? 'active' : ''}" onclick="Phone._switchReadingDiscoverType('long')">长篇连载</div>
+        <div class="phone-reading-type-tab ${type === 'short' ? 'active' : ''}" onclick="Phone._switchReadingDiscoverType('short')">短篇小说</div>
+      </div>`;
+    const ph = (type === 'short') ? '搜短篇题材，如「悬疑」「治愈」「脑洞」' : '搜想追的长篇，如「修仙」「悬疑推理」';
     const searchBar = `
       <div class="phone-reading-discover-bar">
-        <input id="phone-reading-search" class="phone-reading-search" type="text" placeholder="搜想读的题材，如「修仙」「悬疑推理」">
+        <input id="phone-reading-search" class="phone-reading-search" type="text" placeholder="${ph}">
         <button class="phone-reading-search-btn" onclick="Phone._readingSearch()">搜索</button>
-      </div>`;
+      </div>
+      <label class="phone-reading-wvref circle-check-label">
+        <span class="circle-check-text">参考世界观背景生成（不勾则纯架空）</span>
+        <input type="checkbox" class="circle-check" ${_readingUseWvRef ? 'checked' : ''} onchange="Phone._readingToggleWvRef(this.checked)">
+        <span class="circle-check-ui"></span>
+      </label>`;
     let listHtml;
     if (!books.length) {
+      const emptyDesc = (type === 'short') ? '搜个题材，或直接点搜索看看短篇' : '搜个题材，或直接点搜索看看连载';
       listHtml = `
         <div class="phone-reading-empty">
           <div class="phone-reading-empty-icon">${_readingBookIcon(40)}</div>
           <div class="phone-reading-empty-title">还没有推荐</div>
-          <div class="phone-reading-empty-desc">搜个题材，或直接点搜索看看</div>
+          <div class="phone-reading-empty-desc">${emptyDesc}</div>
         </div>`;
     } else {
       listHtml = `<div class="phone-reading-shelf">${books.map(b => _readingShelfCard(b)).join('')}</div>`;
     }
-    return `<div class="phone-reading-discover">${searchBar}${listHtml}</div>`;
+    return `<div class="phone-reading-discover">${typeTabs}${searchBar}${listHtml}</div>`;
   }
 
-  // 占位：打开书（详情/阅读器）—— 生成逻辑后续接
-  async function _readingOpenBook(id) {
-    UI.showToast('书籍详情开发中…', 1500);
+  // 切换发现页类型 tab（长篇连载 / 短篇小说）
+  async function _switchReadingDiscoverType(type) {
+    const t = (type === 'short') ? 'short' : 'long';
+    if (_readingDiscoverType === t) return;
+    _readingDiscoverType = t;
+    _renderReading(await _getPhoneData());
   }
-  // 占位：搜索新书（题材可为空，空则随机推荐）—— 生成逻辑后续接
+
+  // 发现页：切换「参考世界观背景生成」复选框（仅影响下次生成，不触发重渲染）
+  function _readingToggleWvRef(on) {
+    _readingUseWvRef = !!on;
+  }
+
+  // 打开书：弹窗展示完整信息 + 操作按钮（加入书架 / 查看目录）
+  async function _readingOpenBook(id) {
+    const pd = await _getPhoneData();
+    const shelf = Array.isArray(pd.readingBooks) ? pd.readingBooks : [];
+    const disc = (pd.readingDiscover && typeof pd.readingDiscover === 'object' && !Array.isArray(pd.readingDiscover))
+      ? pd.readingDiscover : { long: [], short: [] };
+    // 先从书架找，再从发现页两类缓存找
+    let book = shelf.find(b => b && b.id === id);
+    const inShelf = !!book;
+    if (!book) {
+      book = (Array.isArray(disc.long) ? disc.long : []).find(b => b && b.id === id)
+          || (Array.isArray(disc.short) ? disc.short : []).find(b => b && b.id === id);
+    }
+    if (!book) { UI.showToast('未找到该书', 1500); return; }
+
+    const cats = Array.isArray(book.category) ? book.category.filter(Boolean) : (book.category ? [String(book.category)] : []);
+    const typeLabel = (book.type === 'short') ? '短篇小说' : '长篇连载';
+    const total = Array.isArray(book.toc) ? book.toc.length : 0;
+    const cover = (book.cover || '').trim();
+    const coverHtml = cover
+      ? `<img src="${Utils.escapeHtml(cover)}" style="width:100%;height:100%;object-fit:cover">`
+      : `<div class="phone-reading-cover-fallback" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:28px">${Utils.escapeHtml((book.title || '书')[0])}</div>`;
+    const catsHtml = cats.length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 0">${cats.map(c => `<span style="font-size:11px;color:var(--text-secondary);background:var(--bg-tertiary);padding:3px 8px;border-radius:5px">${Utils.escapeHtml(c)}</span>`).join('')}</div>`
+      : '';
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px';
+    _maskCloseOnBg(mask);
+
+    const isShort = (book.type === 'short');
+    const mainLabel = '开始阅读';
+    const btnsHtml = inShelf
+      ? `<button id="rd-book-main" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">${mainLabel}</button>`
+      : `<button id="rd-book-add" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">加入书架</button>
+         <button id="rd-book-main" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">${mainLabel}</button>`;
+
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:340px;width:100%;max-height:80%;display:flex;flex-direction:column;overflow:hidden;color:var(--text)">
+        <div style="padding:20px 20px 0;overflow-y:auto">
+          <div style="display:flex;gap:14px">
+            <div style="width:74px;height:100px;border-radius:8px;overflow:hidden;flex-shrink:0;background:var(--accent-dim,rgba(100,100,200,0.15))">${coverHtml}</div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:16px;font-weight:700;line-height:1.35;word-break:break-word">${Utils.escapeHtml(book.title || '未命名')}</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">${Utils.escapeHtml((book.author || '佚名').trim())}</div>
+              <div style="font-size:11px;color:var(--text-tertiary,#888);margin-top:6px">${typeLabel}${total ? ` · 共 ${total} 章` : ''}</div>
+            </div>
+          </div>
+          ${catsHtml}
+          <div style="font-size:13px;line-height:1.7;color:var(--text-secondary);margin:14px 0 20px;white-space:pre-wrap;word-break:break-word">${Utils.escapeHtml((book.intro || '').trim() || '暂无简介')}</div>
+        </div>
+        <div style="display:flex;gap:10px;padding:12px 20px 18px">${btnsHtml}</div>
+      </div>`;
+    document.body.appendChild(mask);
+
+    const addBtn = mask.querySelector('#rd-book-add');
+    if (addBtn) addBtn.onclick = async () => {
+      await _readingAddToShelf(book);
+      mask.remove();
+      UI.showToast('已加入书架', 1400);
+    };
+    const tocBtn = mask.querySelector('#rd-book-main');
+    if (tocBtn) tocBtn.onclick = async () => {
+      // 查看目录 / 开始阅读 都默认入书架
+      if (!inShelf) await _readingAddToShelf(book);
+      mask.remove();
+      // 已生成过大纲/正文的，直接进入；否则先弹生成设置
+      const already = (book.type === 'short') ? !!book.content : (Array.isArray(book.toc) && book.toc.length > 0);
+      if (already) {
+        if (book.type === 'short') { UI.showToast('正文阅读开发中…', 1500); }
+        else { _readingOpenToc(book.id); }
+        return;
+      }
+      _readingShowGenSetup(book.id);
+    };
+  }
+
+  // 生成设置弹窗：选「参考世界观」+ NPC 映射档（彩蛋/原型/入戏），确认后存进 book 并触发生成
+  async function _readingShowGenSetup(bookId) {
+    const pd = await _getPhoneData();
+    const shelf = Array.isArray(pd.readingBooks) ? pd.readingBooks : [];
+    const book = shelf.find(b => b && b.id === bookId);
+    if (!book) { UI.showToast('未找到该书', 1500); return; }
+    const isShort = (book.type === 'short');
+
+    // 当前已存选择（默认：不注入世界观、不映射人物）
+    let useWv = !!book.genUseWorldView;
+    let mapping = ['none', 'weak', 'mid', 'strong'].includes(book.genMapping) ? book.genMapping : 'none';
+
+    const mappingOpts = [
+      { v: 'none', name: '不映射', desc: '主角与配角全部原创，故事里不出现世界里的真实角色' },
+      { v: 'weak', name: '彩蛋', desc: '主角完全原创，世界里的真实角色只偶尔客串、当彩蛋出现' },
+      { v: 'mid', name: '原型', desc: '主角以某个真实角色为原型（借用性格内核），但换名换设定，不是本人' },
+      { v: 'strong', name: '入戏', desc: '主角直接就是某个真实角色，用本名、贴合其设定，故事围绕 ta 展开' },
+    ];
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px';
+    _maskCloseOnBg(mask, () => { if (mask.dataset.busy !== '1') mask.remove(); });
+
+    // 加载态：生成期间留在弹窗里显示进度，禁背景关闭，无取消
+    const renderLoading = (text) => {
+      mask.dataset.busy = '1';
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:300px;width:100%;padding:36px 24px;display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--text)">
+          <div style="width:34px;height:34px;border:3px solid color-mix(in srgb, var(--accent) 22%, transparent);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite"></div>
+          <div id="rd-gen-loading-text" style="font-size:13px;color:var(--text-secondary);text-align:center;line-height:1.6">${text || '正在生成…'}</div>
+        </div>`;
+    };
+    const setLoadingText = (text) => {
+      const el = mask.querySelector('#rd-gen-loading-text');
+      if (el) el.textContent = text;
+    };
+
+    const render = () => {
+      mask.dataset.busy = '';
+      const wvRow = `
+        <label class="circle-check-label" style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:16px">
+          <span class="circle-check-text">
+            <span style="font-size:13px;color:var(--text)">参考世界观背景</span>
+            <span style="display:block;font-size:11px;color:var(--text-tertiary,#888);margin-top:2px">贴着世界观设定写背景；不勾则纯架空（仅背景，与人物映射无关）</span>
+          </span>
+          <input type="checkbox" class="circle-check" id="rd-gen-wv" ${useWv ? 'checked' : ''}>
+          <span class="circle-check-ui"></span>
+        </label>`;
+      const mapHtml = mappingOpts.map(o => `
+        <div data-v="${o.v}" class="rd-gen-map-opt" style="padding:11px 13px;border:1px solid ${mapping === o.v ? 'var(--accent)' : 'var(--border)'};border-radius:10px;cursor:pointer;margin-bottom:8px;background:${mapping === o.v ? 'color-mix(in srgb, var(--accent) 12%, var(--bg))' : 'var(--bg-tertiary)'}">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${o.name}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${o.desc}</div>
+        </div>`).join('');
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:340px;width:100%;max-height:84%;display:flex;flex-direction:column;overflow:hidden;color:var(--text)">
+          <div style="padding:20px 20px 0;overflow-y:auto">
+            <div style="font-size:16px;font-weight:700">偏好设置</div>
+            <div style="font-size:12px;color:var(--text-tertiary,#888);margin:6px 0 16px">${Utils.escapeHtml(book.title || '未命名')} · ${isShort ? '短篇小说' : '长篇连载'}</div>
+            ${wvRow}
+            <div style="font-size:13px;font-weight:600;margin-bottom:8px">人物映射</div>
+            ${mapHtml}
+          </div>
+          <div style="display:flex;gap:10px;padding:14px 20px 18px">
+            <button id="rd-gen-cancel" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">取消</button>
+            <button id="rd-gen-ok" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">${isShort ? '进入阅读' : '查看目录'}</button>
+          </div>
+        </div>`;
+      mask.querySelectorAll('.rd-gen-map-opt').forEach(el => {
+        el.onclick = () => { mapping = el.getAttribute('data-v'); render(); };
+      });
+      const wvCb = mask.querySelector('#rd-gen-wv');
+      if (wvCb) wvCb.onchange = () => { useWv = wvCb.checked; };
+      mask.querySelector('#rd-gen-cancel').onclick = () => mask.remove();
+      mask.querySelector('#rd-gen-ok').onclick = async () => {
+        // 存进 book
+        const pd2 = await _getPhoneData();
+        const bk = (pd2.readingBooks || []).find(b => b && b.id === bookId);
+        if (bk) {
+          bk.genUseWorldView = !!useWv;
+          bk.genMapping = mapping;
+          await _savePhoneData();
+        }
+        if (isShort) {
+          // 短篇：正文生成后续接，暂时直接关弹窗
+          mask.remove();
+          UI.showToast('正文生成开发中…', 1600);
+          return;
+        }
+        // 长篇：已生成过则直接进目录
+        if (bk && bk.blueprint) { mask.remove(); _readingOpenToc(bookId); return; }
+        // 进入加载态，串行生成蓝图 → 目录
+        renderLoading('正在铺设故事蓝图…');
+        const onProgress = (t) => setLoadingText(t);
+        const ok = await _readingGenLongBook(bookId, onProgress);
+        if (ok) {
+          mask.remove();
+          _readingOpenToc(bookId);
+        } else {
+          // 失败：恢复偏好选择态，可重试
+          render();
+          UI.showToast('生成失败，请重试', 1800);
+        }
+      };
+    };
+    render();
+    document.body.appendChild(mask);
+  }
+
+  // 取作者文风画像：作者命中名单真实角色才有；按作者名缓存进 pd.readingAuthorStyles，同作者复用。
+  // 返回拼好的提示词块（无则空串）。
+  async function _readingGetAuthorStyle(book) {
+    const author = (book.author || '').trim();
+    if (!author) return '';
+    // 该作者是否是当前可出场的真实角色
+    let cand = null;
+    try {
+      const list = await _collectChatCandidates();
+      cand = (list || []).find(c => c && c.name && c.name.trim() === author);
+    } catch (_) {}
+    if (!cand || !cand.detail) return '';   // 虚构笔名 / 查不到资料 → 不做画像
+
+    const pd = await _getPhoneData();
+    if (!pd.readingAuthorStyles || typeof pd.readingAuthorStyles !== 'object') pd.readingAuthorStyles = {};
+    let prof = pd.readingAuthorStyles[author];
+
+    if (!prof) {
+      // 提炼画像
+      const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+      const mainConfig = await API.getConfig();
+      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const key = funcConfig.apiKey || mainConfig.apiKey;
+      const model = funcConfig.model || mainConfig.model;
+      if (!url || !key || !model) return '';
+      const sys = `下面是一个人物的人设资料。假设这个人是一位小说作者，请根据其性格、气质、经历，推演出 ta 写小说时会有的文风与写作偏好。不要照抄人设，要做合理的文学化推演。
+
+【人物】${author}
+【人设资料】
+${cand.detail}
+
+严格输出 JSON 对象，不要 Markdown、不要代码块、不要解释，以 { 开头 } 结尾：
+{
+  "tone": "叙事语气与腔调（冷峻/戏谑/温柔/疏离等，结合此人气质）",
+  "themes": "偏爱的题材母题与主题倾向",
+  "techniques": "惯用的叙事手法（如多线叙事、强反转、意识流、白描等）",
+  "pacing": "节奏特点（铺陈型/快节奏/张弛交替等）",
+  "sentence": "语言与句式特征（长句/短句、修辞密度、用词偏好等）"
+}`;
+      try {
+        prof = await _phoneJsonObjectWithRetry({
+          label: '作者文风', url, key, model,
+          temperature: 0.8, max_tokens: 1024,
+          messages: [
+            { role: 'system', content: sys },
+            { role: 'user', content: `请推演${author}的文风与写作偏好。` }
+          ]
+        });
+      } catch (e) { console.error('[作者文风]', e); return ''; }
+      if (!prof || typeof prof !== 'object') return '';
+      // 回存复用
+      const pd2 = await _getPhoneData();
+      if (!pd2.readingAuthorStyles || typeof pd2.readingAuthorStyles !== 'object') pd2.readingAuthorStyles = {};
+      pd2.readingAuthorStyles[author] = prof;
+      await _savePhoneData(pd2);
+    }
+
+    const parts = [];
+    if (prof.tone) parts.push(`语气腔调：${prof.tone}`);
+    if (prof.themes) parts.push(`题材偏好：${prof.themes}`);
+    if (prof.techniques) parts.push(`叙事手法：${prof.techniques}`);
+    if (prof.pacing) parts.push(`节奏：${prof.pacing}`);
+    if (prof.sentence) parts.push(`语言句式：${prof.sentence}`);
+    if (!parts.length) return '';
+    return `\n【作者文风】本书署名作者「${author}」，请让创作贴合 ta 的文风与写作偏好：\n${parts.join('\n')}\n`;
+  }
+
+  // 把发现页的书加入书架（沿用同一 id，最近的在前；已存在则置顶）
+  async function _readingAddToShelf(book) {
+    const pd = await _getPhoneData();
+    if (!Array.isArray(pd.readingBooks)) pd.readingBooks = [];
+    const idx = pd.readingBooks.findIndex(b => b && b.id === book.id);
+    if (idx >= 0) pd.readingBooks.splice(idx, 1);
+    pd.readingBooks.unshift({ ...book });
+    await _savePhoneData();
+    if (_readingHomeTab === 'shelf') _renderReading(pd);
+  }
+
+  // 构建「可映射人物」名单块（全量：当前对话上下文里的所有角色）。映射档为 none 时不需要。
+  async function _readingBuildMappingPool() {
+    let candidates = [];
+    try { candidates = await _collectChatCandidates(); } catch (_) { candidates = []; }
+    if (!candidates.length) return '';
+    const lines = candidates.map(c => {
+      let s = `- ${c.name}`;
+      if (c.aliases) s += `（别名：${c.aliases}）`;
+      if (c.detail) s += `\n  ${c.detail.replace(/\n+/g, ' ').slice(0, 220)}`;
+      return s;
+    });
+    return lines.join('\n');
+  }
+
+  // 按映射档拼「人物要求」块。pool 为可映射人物名单文本。
+  function _readingMappingBlock(mapping, pool) {
+    const m = ['none', 'weak', 'mid', 'strong'].includes(mapping) ? mapping : 'none';
+    if (m === 'none') return '【人物要求】主角与所有配角均为原创虚构人物，故事里不出现任何现实/世界里的真实角色。';
+    if (!pool) return '【人物要求】主角与所有配角均为原创虚构人物。';
+    if (m === 'weak') return `【人物要求】主角与所有重要角色（主角、男女主、核心配角、反派、幕后黑手等一切推动主线的角色）都必须是原创虚构人物。下列真实角色只能作为"彩蛋"出现——即一闪而过的客串、路人、被提及的名字、不影响主线走向的次要点缀，戏份极轻，绝不能担任主角、重要配角、反派或任何对剧情有实质推动作用的角色：\n${pool}`;
+    if (m === 'mid') return `【人物要求】主角以下列某个真实角色为"人物原型"——借用其性格内核与气质，但更换姓名与身份设定，使其成为一个全新角色（不是本人）。在 protagonist.persona 里点明取材自谁的内核：\n${pool}`;
+    // strong
+    return `【人物要求】主角直接就是下列某个真实角色本人——protagonist.name 必须使用其本名，persona / personality 要贴合其设定，整个故事围绕 ta 展开：\n${pool}`;
+  }
+
+  // 把蓝图 characters 格式化成喂给目录/正文的人物文本（新结构：表格化字段）
+  function _readingCharsText(bp) {
+    const chars = (bp && bp.characters) || {};
+    const lines = [];
+    const proArr = Array.isArray(chars.protagonist) ? chars.protagonist : (chars.protagonist ? [chars.protagonist] : []);
+    proArr.forEach(p => {
+      if (!p || !p.name) return;
+      lines.push(`【主角】${p.name}（${p.gender || ''}/${p.age || ''}）｜${p.identity || ''}\n  外貌：${p.appearance || ''}\n  性格：${p.personality || ''}\n  才能：${p.talent || ''}\n  目标：${p.desire || ''}\n  成长：${p.arc || ''}`);
+    });
+    (Array.isArray(chars.supporting) ? chars.supporting : []).forEach(c => {
+      if (!c || !c.name) return;
+      lines.push(`【配角】${c.name}（${c.gender || ''}/${c.age || ''}）｜${c.identity || ''}｜定位：${c.position || ''}\n  外貌：${c.appearance || ''}\n  性格：${c.personality || ''}\n  才能：${c.talent || ''}\n  目标：${c.desire || ''}｜登场：${c.debut || ''}`);
+    });
+    (Array.isArray(chars.cameos) ? chars.cameos : []).forEach(c => {
+      if (!c || !c.name) return;
+      lines.push(`【彩蛋】${c.name}（${c.gender || ''}/${c.age || ''}）｜${c.identity || ''}｜作用：${c.position || ''}｜外貌：${c.appearance || ''}｜性格：${c.personality || ''}｜登场：${c.debut || ''}`);
+    });
+    return lines.join('\n');
+  }
+
+  // 构建喂给阅读的世界观背景块。detailed=false（蓝图/目录）只发地区/势力的简介；
+  // detailed=true（正文）发完整 detail。基础设定 + 地区 + 势力 + 节日 + 知识，均不含 NPC。
+  async function _readingWorldviewBlock(detailed) {
+    const parts = [];
+    try {
+      const base = (typeof Chat !== 'undefined' && Chat.getWorldviewPrompt) ? (Chat.getWorldviewPrompt() || '') : '';
+      if (base.trim()) parts.push('【世界观基础设定】\n' + base.trim());
+    } catch (_) {}
+    try {
+      const wv = await Worldview.getCurrent();
+      if (wv) {
+        if (Array.isArray(wv.regions) && wv.regions.length) {
+          const regBlocks = wv.regions.map(r => {
+            if (!r || !r.name) return '';
+            let s = `● ${r.name}`;
+            const rd = detailed ? (r.detail || r.summary || '') : (r.summary || r.detail || '');
+            if (rd) s += `：${rd}`;
+            const facs = Array.isArray(r.factions) ? r.factions : [];
+            const facStr = facs.map(f => {
+              if (!f || !f.name) return '';
+              const fd = detailed ? (f.detail || f.summary || '') : (f.summary || f.detail || '');
+              return `  - 势力·${f.name}${fd ? `：${fd}` : ''}`;
+            }).filter(Boolean).join('\n');
+            if (facStr) s += '\n' + facStr;
+            return s;
+          }).filter(Boolean).join('\n');
+          if (regBlocks) parts.push('【地区与势力】\n' + regBlocks);
+        }
+        if (Array.isArray(wv.festivals) && wv.festivals.length) {
+          const festStr = wv.festivals.filter(f => f.enabled !== false)
+            .map(f => `${f.name || ''}（${f.date || ''}）：${f.content || ''}`).join('\n');
+          if (festStr) parts.push('【节日设定】\n' + festStr);
+        }
+        const ks = (wv.knowledges || wv.customs || []).filter(c => c && c.enabled !== false);
+        if (ks.length) parts.push('【知识设定】\n' + ks.map(c => `${c.name || ''}：${c.content || ''}`).join('\n'));
+      }
+    } catch (_) {}
+    return parts.length ? parts.join('\n\n') : '';
+  }
+
+  // 生成长篇故事蓝图（第一段）。存进 book.blueprint。返回 true/false 表示成功与否。
+  async function _readingGenBlueprint(bookId) {
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) return false;
+
+    // 功能模型配置
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return false; }
+
+    // 世界观背景（可选；蓝图阶段发精简版）
+    let wvBlock = '';
+    if (book.genUseWorldView) {
+      try {
+        const wv = await _readingWorldviewBlock(false);
+        if (wv) wvBlock = `【参考世界观背景】\n请让故事背景贴合下面的世界观设定：\n${wv}`;
+      } catch (_) {}
+    }
+    // 映射人物（按档）
+    let mappingBlock = '';
+    if (book.genMapping && book.genMapping !== 'none') {
+      const pool = await _readingBuildMappingPool();
+      mappingBlock = _readingMappingBlock(book.genMapping, pool);
+    } else {
+      mappingBlock = _readingMappingBlock('none', '');
+    }
+    // 作者文风（署名真实作者才有）
+    let authorStyleBlock = '';
+    try { authorStyleBlock = await _readingGetAuthorStyle(book); } catch (_) {}
+
+    const cats = Array.isArray(book.category) ? book.category.filter(Boolean).join('、') : (book.category || '');
+    const sysPrompt = `你是长篇小说的故事架构师。请为下面这本书设计完整的故事蓝图（不是正文，而是供后续分章创作使用的总纲）。
+
+【书籍信息】
+书名：${book.title || '未命名'}
+作者：${book.author || '佚名'}
+题材标签：${cats || '（未指定）'}
+简介：${(book.intro || '').trim() || '（无）'}
+${wvBlock ? '\n' + wvBlock + '\n' : ''}${authorStyleBlock}
+请先确定这本书的总章数（在 40-120 章之间，按题材和故事体量自定一个确切数字），然后输出故事蓝图。严格使用 JSON 对象格式，不能返回 Markdown、代码块或解释，必须以 { 开头、以 } 结尾：
+
+{
+  "totalChapters": 总章数（整数）,
+  "structure": [
+    { "phase": "阶段名", "chapterRange": "起-止", "summary": "这一阶段发生什么（2-4句）" }
+  ],
+  "mainline": "明线：主角的核心动力、目标、出发点，他想做什么或被迫做什么（要具体，不要空泛）",
+  "darkline": {
+    "truth": "暗线：是什么决定了主角的处境与动力——隐藏的真相、幕后推手、各方势力的博弈",
+    "revealPace": "暗线如何随剧情逐步揭示：何时埋线、何时露出线索、何时完全揭晓"
+  },
+  "characters": {
+    "protagonist": [
+      { "name": "姓名", "basis": "取材来源：写'原创'或某真实角色名", "gender": "性别", "age": "年龄", "identity": "身份", "appearance": "外貌（发色瞳色、气质、体格，简写）", "personality": "性格（四组四字词语，如：慵懒随性、理性聪慧、外冷内热、恃才傲物）", "talent": "才能（特殊之处）", "desire": "核心目标/欲望", "arc": "成长弧光" }
+    ],
+    "supporting": [
+      { "name": "姓名", "basis": "取材来源：写'原创'或某真实角色名", "gender": "性别", "age": "年龄", "identity": "身份", "appearance": "外貌（发色瞳色、气质、体格，简写）", "personality": "性格（四组四字词语）", "position": "定位（主角的朋友/对手/助力等）", "talent": "才能（特殊之处）", "desire": "核心目标/欲望", "debut": "出场章节" }
+    ],
+    "cameos": [
+      { "name": "姓名", "basis": "取材来源：写'原创'或某真实角色名", "gender": "性别", "age": "年龄", "identity": "身份", "appearance": "外貌（简写）", "personality": "性格（四组四字词语）", "position": "定位（出场的作用）", "debut": "出场章节" }
+    ]
+  }
+}
+
+要求：
+- structure 必须覆盖完整故事弧：故事开始 → 深入探索 → 情节转折 →（若干个【重大事件 + 收尾铺垫】循环）→ 伏笔回收/真相揭晓 → 结局。重大事件的数量由故事体量决定，长故事多设几个。
+- 所有 chapterRange 必须连续衔接、首尾相接，最后一个阶段的结束章必须等于 totalChapters。
+- 人物是后续创作的唯一依据，每个角色的每个字段都要填满、写具体，不要留空、不要含糊。后续写正文时只看这里，不会再有别的人物资料。性格统一用四组四字词语。
+- protagonist 列 1-2 个主角。supporting 列 3-6 个真正影响主线的角色（男女主、重要配角、反派、幕后黑手等），路人龙套不列，每个都标 debut。cameos 列需要客串的角色（可以为空数组）。
+- 暗线要与明线形成"表里"：明线是主角表面上在追的，暗线是背后真正起作用的。
+${mappingBlock}
+- 除上述映射要求外，其余角色一律原创，basis 写"原创"。不要套用现实中已存在的真实作品设定。`;
+
+    UI.showToast('正在铺设故事蓝图…', 2000);
+    let bp;
+    try {
+      bp = await _phoneJsonObjectWithRetry({
+        label: '故事蓝图', url, key, model,
+        temperature: 0.9, max_tokens: 4096,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: `请为《${book.title || '未命名'}》设计故事蓝图。` }
+        ]
+      });
+    } catch (e) {
+      console.error('[故事蓝图]', e);
+      return false;
+    }
+    if (!bp || typeof bp !== 'object') return false;
+
+    // 规范化并存储
+    const total = parseInt(bp.totalChapters, 10);
+    const plannedChapters = (Number.isFinite(total) && total >= 40 && total <= 120) ? total : 0;
+    const pd2 = await _getPhoneData();
+    const bk = (pd2.readingBooks || []).find(b => b && b.id === bookId);
+    if (!bk) return false;
+    bk.blueprint = {
+      structure: Array.isArray(bp.structure) ? bp.structure : [],
+      mainline: typeof bp.mainline === 'string' ? bp.mainline : '',
+      darkline: (bp.darkline && typeof bp.darkline === 'object') ? bp.darkline : {},
+      characters: (bp.characters && typeof bp.characters === 'object') ? bp.characters : {},
+    };
+    if (plannedChapters) bk.plannedChapters = plannedChapters;
+    await _savePhoneData();
+    return true;
+  }
+
+  // 长篇生成编排：蓝图 → 首批目录，串行。带进度回调。返回是否全部成功。
+  async function _readingGenLongBook(bookId, onProgress) {
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) return false;
+    // 第一段：蓝图（已有则跳过）
+    if (!book.blueprint) {
+      if (onProgress) onProgress('正在铺设故事蓝图…');
+      const ok1 = await _readingGenBlueprint(bookId);
+      if (!ok1) return false;
+    }
+    // 第二段：首批目录（已有则跳过）
+    const pd2 = await _getPhoneData();
+    const bk2 = (pd2.readingBooks || []).find(b => b && b.id === bookId);
+    if (!bk2 || !Array.isArray(bk2.toc) || bk2.toc.length === 0) {
+      if (onProgress) onProgress('正在规划章节目录…');
+      const ok2 = await _readingGenToc(bookId);
+      if (!ok2) return false;
+    }
+    return true;
+  }
+
+  // 生成长篇章节目录（基于蓝图）。每章 {idx, title, summary}，summary 详细且不可见。
+  // 首次生成前 fromIdx=0 起的一批；进度匹配蓝图，前 20 章只推进到约全书 1/5。
+  async function _readingGenToc(bookId, batchSize) {
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) return false;
+    if (!book.blueprint) return false;
+
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return false; }
+
+    const total = Number.isFinite(book.plannedChapters) ? book.plannedChapters : 0;
+    const existing = Array.isArray(book.toc) ? book.toc : [];
+    const fromIdx = existing.length;            // 已有多少章，从下一章续
+    const batch = Number.isFinite(batchSize) ? batchSize : 20;
+    const toIdx = total ? Math.min(fromIdx + batch, total) : fromIdx + batch;
+    if (total && fromIdx >= total) { UI.showToast('目录已全部生成', 1500); return false; }
+
+    const bp = book.blueprint;
+    const structText = (Array.isArray(bp.structure) ? bp.structure : [])
+      .map(s => `- ${s.phase}（${s.chapterRange || '?'}）：${s.summary || ''}`).join('\n');
+    const chars = bp.characters || {};
+    const charsText = _readingCharsText(bp);
+    const darkText = bp.darkline ? `真相：${bp.darkline.truth || ''}\n揭示节奏：${bp.darkline.revealPace || ''}` : '';
+
+    // 世界观背景（开了参考世界观才喂；目录阶段发精简版）
+    let wvBlock = '';
+    if (book.genUseWorldView) {
+      try {
+        const wv = await _readingWorldviewBlock(false);
+        if (wv) wvBlock = `\n【参考世界观背景】\n请让剧情贴合下面的世界观设定：\n${wv}\n`;
+      } catch (_) {}
+    }
+    // 人物已在蓝图 characters 定稿，目录续写只读蓝图人设，不再发 NPC 映射池
+
+    const progressHint = total
+      ? `本书共 ${total} 章。你现在要写第 ${fromIdx + 1} 到第 ${toIdx} 章的目录。这一批的剧情进度必须严格匹配上面的故事结构——到第 ${toIdx} 章为止，整体剧情大约只推进到全书的 ${Math.round((toIdx / total) * 100)}% 左右，不要把后面的重大事件提前塞进来，留足后续展开空间。`
+      : `你现在要写第 ${fromIdx + 1} 到第 ${toIdx} 章的目录，注意循序渐进，不要把整本书的剧情在这一批里讲完。`;
+
+    // 续写时：把已有章节回顾给 AI（全部标题 + 最近几章详述），保证衔接、不重复
+    let recapBlock = '';
+    if (fromIdx > 0) {
+      const titleList = existing.map(c => `${c.idx}. ${c.title || ''}`).join('\n');
+      const tail = existing.slice(-3).map(c => `第${c.idx}章《${c.title || ''}》：${c.summary || ''}`).join('\n');
+      // 最后一章若已写出正文，把尾部 500 字喂进去，让续写紧贴实际正文走向
+      let lastBodyTail = '';
+      const lastCh = existing[existing.length - 1];
+      if (lastCh && lastCh.content && lastCh.content.trim()) {
+        lastBodyTail = `\n最后一章《${lastCh.title || ''}》正文的结尾（后续要从这里实际的走向接续，而不是只看大纲）：\n${lastCh.content.trim().slice(-500)}\n`;
+      }
+      recapBlock = `\n【已有章节回顾】\n已经写好了前 ${fromIdx} 章，目录如下：\n${titleList}\n\n最近几章的详情（你要从这里无缝接着往下写，不要重复已发生的剧情）：\n${tail}\n${lastBodyTail}`;
+    }
+
+    const sysPrompt = `你是长篇小说的分章规划师。请基于下面的故事蓝图，规划这本书的章节目录。
+
+【书籍】${book.title || '未命名'}
+【明线】${bp.mainline || ''}
+【暗线】${darkText}
+【故事结构】
+${structText}
+${wvBlock}
+【主要人物】
+${charsText}
+${recapBlock}
+${progressHint}
+
+严格使用 JSON 数组格式，不能返回 Markdown、代码块或解释，必须以 [ 开头、以 ] 结尾：
+[
+  { "idx": 章节号（整数，从 ${fromIdx + 1} 开始连续）, "title": "章节标题（不带书名号或「第N章」前缀，只写标题本身）", "summary": "本章详述：这一章从头到尾大概发生什么、推进到哪、涉及哪些人物，要具体到能作为正文创作的依据；同时为后续章节留下衔接余地，不要把后面的剧情写死" }
+]
+
+要求：
+- 只输出第 ${fromIdx + 1} 到第 ${toIdx} 章，共 ${toIdx - fromIdx} 章，idx 连续不跳号。
+- 每章的剧情必须落在故事结构对应阶段内，符合明暗线走向，不能脱离蓝图自由发挥。
+- summary 要详细（这章的来龙去脉），但要给后文留余地，不要剧透或写死后面的重大转折。
+- title 简洁有吸引力，不要加书名号、引号或"第N章"。
+- 全部原创，不套用现实已存在的作品。`;
+
+    let arr;
+    try {
+      arr = await _phoneJsonArrayWithRetry({
+        label: '章节目录', url, key, model,
+        temperature: 0.85, max_tokens: 4096,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: `请规划第 ${fromIdx + 1} 到第 ${toIdx} 章的目录。` }
+        ]
+      });
+    } catch (e) {
+      console.error('[章节目录]', e);
+      return false;
+    }
+
+    // 规范化：title 去书名号；summary 保留；idx 重新按顺序补正
+    const cleaned = (Array.isArray(arr) ? arr : []).filter(c => c && c.title).map((c, i) => ({
+      idx: fromIdx + i + 1,
+      title: String(c.title).replace(/^[《<「『\s]+|[》>」』\s]+$/g, '').replace(/^第?\s*[0-9一二三四五六七八九十百]+\s*章\s*[:：]?\s*/, '').slice(0, 40),
+      summary: String(c.summary || '').slice(0, 800),
+    }));
+    if (!cleaned.length) return false;
+
+    const pd2 = await _getPhoneData();
+    const bk = (pd2.readingBooks || []).find(b => b && b.id === bookId);
+    if (!bk) return false;
+    bk.toc = [...(Array.isArray(bk.toc) ? bk.toc : []), ...cleaned];
+    await _savePhoneData();
+    return true;
+  }
+
+  // 目录页里的「生成后续章节」按钮：生成下一批并刷新目录页
+  async function _readingGenMoreToc(bookId) {
+    UI.showToast('正在规划后续章节…', 2000);
+    const ok = await _readingGenToc(bookId);
+    if (ok) { UI.showToast('章节目录已更新', 1500); _renderReadingToc(bookId); }
+    else UI.showToast('生成失败，请重试', 1800);
+  }
+
+  // 打开长篇目录页（全屏二级页：顶部书籍信息 + 章节目录 + 底部进入阅读）
+  function _readingOpenToc(bookId) {
+    document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-home-mode');
+    document.getElementById('phone-back-btn')?.classList.remove('hidden');
+    document.getElementById('phone-title').textContent = '目录';
+    const render = () => _renderReadingToc(bookId);
+    _pushNav(render);
+    render();
+  }
+
+  async function _renderReadingToc(bookId) {
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) { body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-secondary)">未找到该书</div>'; return; }
+
+    const cover = (book.cover || '').trim();
+    const coverHtml = cover
+      ? `<img src="${Utils.escapeHtml(cover)}" style="width:100%;height:100%;object-fit:cover">`
+      : `<div class="phone-reading-cover-fallback" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:26px">${Utils.escapeHtml((book.title || '书')[0])}</div>`;
+    const cats = Array.isArray(book.category) ? book.category.filter(Boolean) : (book.category ? [String(book.category)] : []);
+    const catsHtml = cats.length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">${cats.map(c => `<span style="font-size:10px;color:var(--text-secondary);background:var(--bg-tertiary);padding:2px 7px;border-radius:4px">${Utils.escapeHtml(c)}</span>`).join('')}</div>`
+      : '';
+    const total = Number.isFinite(book.plannedChapters) ? book.plannedChapters : 0;
+    const toc = Array.isArray(book.toc) ? book.toc : [];
+    const readIdx = (typeof book.lastReadChapter === 'number') ? book.lastReadChapter : -1;
+
+    const headHtml = `
+      <div class="phone-reading-toc-head">
+        <div class="phone-reading-toc-cover">${coverHtml}</div>
+        <div class="phone-reading-toc-meta">
+          <div class="phone-reading-toc-title">${Utils.escapeHtml(book.title || '未命名')}</div>
+          <div class="phone-reading-toc-author">${Utils.escapeHtml((book.author || '佚名').trim())} · 长篇连载${total ? ` · 共 ${total} 章` : ''}</div>
+          ${catsHtml}
+        </div>
+        <div class="phone-reading-toc-gear" onclick="Phone._readingOpenBookSettings('${Utils.escapeHtml(book.id)}')" title="书籍设置">⚙</div>
+      </div>`;
+
+    const listHtml = toc.length
+      ? toc.map(c => {
+          const done = readIdx >= 0 && (c.idx - 1) <= readIdx;
+          return `<div class="phone-reading-toc-item${done ? ' read' : ''}" onclick="Phone._readingReadChapter('${Utils.escapeHtml(book.id)}', ${c.idx})">
+            <span class="phone-reading-toc-idx">${c.idx}</span>
+            <span class="phone-reading-toc-name">${Utils.escapeHtml(c.title || '未命名章节')}</span>
+          </div>`;
+        }).join('')
+      : '<div style="padding:30px;text-align:center;color:var(--text-secondary);font-size:13px">还没有章节</div>';
+
+    const moreHtml = (total && toc.length < total)
+      ? `<div class="phone-reading-toc-more" onclick="Phone._readingGenMoreToc('${Utils.escapeHtml(book.id)}')">生成后续章节（${toc.length}/${total}）</div>`
+      : '';
+
+    const startLabel = readIdx >= 0 ? '继续阅读' : '开始阅读';
+    body.innerHTML = `
+      <div class="phone-reading-toc-page">
+        <div class="phone-reading-toc-scroll">
+          ${headHtml}
+          <div class="phone-reading-toc-section">目录</div>
+          <div class="phone-reading-toc-list">${listHtml}</div>
+          ${moreHtml}
+        </div>
+        <div class="phone-reading-toc-footer">
+          <button class="phone-reading-toc-startbtn" onclick="Phone._readingReadChapter('${Utils.escapeHtml(book.id)}', ${readIdx >= 0 ? readIdx + 1 : (toc[0] ? toc[0].idx : 1)})">${startLabel}</button>
+        </div>
+      </div>`;
+  }
+
+  // ===== 书籍设置（全书级）=====
+  function _readingOpenBookSettings(bookId) {
+    document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-home-mode');
+    document.getElementById('phone-back-btn')?.classList.remove('hidden');
+    document.getElementById('phone-title').textContent = '书籍设置';
+    const render = () => _renderReadingBookSettings(bookId);
+    _pushNav(render);
+    render();
+  }
+
+  async function _renderReadingBookSettings(bookId) {
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) { body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-secondary)">未找到该书</div>'; return; }
+    const toc = Array.isArray(book.toc) ? book.toc : [];
+    const lastWritten = toc.filter(c => c.content && c.content.trim()).reduce((mx, c) => Math.max(mx, c.idx), 0);
+    const id = Utils.escapeHtml(book.id);
+
+    const row = (label, desc, btnHtml) => `
+      <div class="phone-reading-set-row">
+        <div class="phone-reading-set-rowmain">
+          <div class="phone-reading-set-rowlabel">${label}</div>
+          ${desc ? `<div class="phone-reading-set-rowdesc">${desc}</div>` : ''}
+        </div>
+        ${btnHtml}
+      </div>`;
+
+    body.innerHTML = `
+      <div class="phone-reading-set-page">
+        ${row('设置封面', '为这本书更换封面图', `<button class="phone-reading-set-btn" onclick="Phone._readingSetCover('${id}')">上传</button>`)}
+        ${row('共读模式', '邀请角色一起读、划线评论（开发中）', `<button class="phone-reading-set-btn" onclick="UI.showToast('共读模式开发中…',1500)">设置</button>`)}
+        ${row('重写最新一章', lastWritten ? `重写第 ${lastWritten} 章正文，会回滚本章的伏笔记录` : '还没有已生成的正文', lastWritten ? `<button class="phone-reading-set-btn danger" onclick="Phone._readingRewriteLast('${id}')">重写</button>` : `<button class="phone-reading-set-btn" disabled style="opacity:.4">重写</button>`)}
+        ${row('查看大纲', '书名/作者/蓝图/每章概述/伏笔池（含剧透）', `<button class="phone-reading-set-btn" onclick="Phone._readingViewOutline('${id}')">查看</button>`)}
+      </div>`;
+  }
+
+  // 设置封面：弹窗选择上传本地图片或填 URL
+  async function _readingSetCover(bookId) {
+    const doSave = async (dataUrl) => {
+      const pd = await _getPhoneData();
+      const bk = (pd.readingBooks || []).find(b => b && b.id === bookId);
+      if (!bk) return;
+      bk.cover = dataUrl;
+      await _savePhoneData(pd);
+      UI.showToast('封面已更新', 1400);
+      _renderReadingBookSettings(bookId);
+    };
+    const doUpload = () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.style.display = 'none';
+      input.onchange = async () => {
+        const file = input.files && input.files[0];
+        if (!file) { input.remove(); return; }
+        try {
+          const dataUrl = await _compressWallpaper(file, { maxW: 600, maxH: 800, quality: 0.82 });
+          await doSave(dataUrl);
+        } catch (e) { UI.showToast('图片处理失败', 1600); }
+        input.remove();
+      };
+      document.body.appendChild(input);
+      input.click();
+    };
+
+    const mask = document.createElement('div');
+    mask.className = 'phone-mask';
+    mask.style.cssText = 'position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45)';
+    mask.innerHTML = `
+      <div style="width:78%;max-width:300px;background:var(--bg,#16181f);border-radius:14px;overflow:hidden">
+        <div style="padding:16px 20px;font-size:15px;font-weight:700;color:var(--text)">设置封面</div>
+        <div id="rd-cover-upload" style="padding:13px 20px;font-size:14px;color:var(--text);cursor:pointer;border-top:1px solid var(--border,rgba(255,255,255,0.08))">上传本地图片</div>
+        <div id="rd-cover-url" style="padding:13px 20px;font-size:14px;color:var(--text);cursor:pointer;border-top:1px solid var(--border,rgba(255,255,255,0.08))">输入图片链接</div>
+        <div id="rd-cover-cancel" style="padding:13px 20px;font-size:14px;color:var(--text-secondary);cursor:pointer;border-top:1px solid var(--border,rgba(255,255,255,0.08));text-align:center">取消</div>
+      </div>`;
+    _maskCloseOnBg(mask);
+    document.body.appendChild(mask);
+    mask.querySelector('#rd-cover-upload').onclick = () => { mask.remove(); doUpload(); };
+    mask.querySelector('#rd-cover-url').onclick = async () => {
+      mask.remove();
+      const res = await _musicForm('输入图片链接', [{ key: 'url', label: '图片链接', value: '', textarea: true }]);
+      if (res && (res.url || '').trim()) await doSave(res.url.trim());
+    };
+    mask.querySelector('#rd-cover-cancel').onclick = () => mask.remove();
+  }
+
+  // 重写最新一章：回滚该章伏笔，清正文重生成
+  async function _readingRewriteLast(bookId) {
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) return;
+    const toc = Array.isArray(book.toc) ? book.toc : [];
+    const lastWritten = toc.filter(c => c.content && c.content.trim()).reduce((mx, c) => Math.max(mx, c.idx), 0);
+    if (!lastWritten) { UI.showToast('还没有已生成的正文', 1500); return; }
+    const ok = await UI.showConfirm('重写最新一章', `确定重写第 ${lastWritten} 章？本章正文会清空重新生成，本章相关的伏笔记录也会回滚。`);
+    if (!ok) return;
+
+    // 回滚伏笔：删本章新埋的、恢复本章回收的
+    const bk = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (Array.isArray(bk.foreshadows)) {
+      bk.foreshadows = bk.foreshadows.filter(f => !(f && f.chapter === lastWritten));
+      bk.foreshadows.forEach(f => {
+        if (f && f.recoveredChapter === lastWritten) { f.recovered = false; delete f.recoveredChapter; }
+      });
+    }
+    // 清正文
+    const ch = (Array.isArray(bk.toc) ? bk.toc : []).find(c => c.idx === lastWritten);
+    if (ch) ch.content = '';
+    await _savePhoneData(pd);
+
+    // 重新生成并打开阅读器
+    await _readingReadChapter(bookId, lastWritten);
+  }
+
+  // 查看大纲（只读，含剧透）
+  async function _readingViewOutline(bookId) {
+    document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-home-mode');
+    document.getElementById('phone-back-btn')?.classList.remove('hidden');
+    document.getElementById('phone-title').textContent = '大纲';
+    const render = () => _renderReadingOutline(bookId);
+    _pushNav(render);
+    render();
+  }
+
+  async function _renderReadingOutline(bookId) {
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) { body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-secondary)">未找到该书</div>'; return; }
+    const esc = Utils.escapeHtml;
+    const bp = book.blueprint || {};
+    const chars = bp.characters || {};
+
+    // 作者风格
+    let styleHtml = '';
+    const style = (pd.readingAuthorStyles || {})[(book.author || '').trim()];
+    if (style) {
+      const parts = [];
+      if (style.tone) parts.push(`语气腔调：${esc(style.tone)}`);
+      if (style.themes) parts.push(`题材偏好：${esc(style.themes)}`);
+      if (style.techniques) parts.push(`叙事手法：${esc(style.techniques)}`);
+      if (style.pacing) parts.push(`节奏：${esc(style.pacing)}`);
+      if (style.sentence) parts.push(`语言句式：${esc(style.sentence)}`);
+      if (parts.length) styleHtml = `<div class="phone-reading-ol-sec">作者风格</div><div class="phone-reading-ol-text">${parts.join('<br>')}</div>`;
+    }
+
+    // 蓝图
+    let bpHtml = '';
+    if (bp.mainline || (bp.structure && bp.structure.length)) {
+      const struct = (Array.isArray(bp.structure) ? bp.structure : [])
+        .map(s => `<div class="phone-reading-ol-item"><b>${esc(s.phase || '')}</b>（${esc(s.chapterRange || '?')}）<br>${esc(s.summary || '')}</div>`).join('');
+      const proArr = Array.isArray(chars.protagonist) ? chars.protagonist : (chars.protagonist ? [chars.protagonist] : []);
+      const proHtml = proArr.filter(p => p && p.name).map(p =>
+        `<div class="phone-reading-ol-item"><b>${esc(p.name)}</b>（${esc(p.gender || '')}/${esc(p.age || '')}）｜${esc(p.identity || '')}${p.basis && p.basis !== '原创' ? `〔取材：${esc(p.basis)}〕` : ''}<br>外貌：${esc(p.appearance || '')}<br>性格：${esc(p.personality || '')}<br>才能：${esc(p.talent || '')}<br>目标：${esc(p.desire || '')}<br>成长：${esc(p.arc || '')}</div>`).join('');
+      const sup = (Array.isArray(chars.supporting) ? chars.supporting : []).filter(c => c && c.name).map(c =>
+        `<div class="phone-reading-ol-item"><b>${esc(c.name)}</b>（${esc(c.gender || '')}/${esc(c.age || '')}）｜${esc(c.identity || '')}｜定位：${esc(c.position || '')}${c.basis && c.basis !== '原创' ? `〔取材：${esc(c.basis)}〕` : ''}<br>外貌：${esc(c.appearance || '')}<br>性格：${esc(c.personality || '')}<br>才能：${esc(c.talent || '')}<br>目标：${esc(c.desire || '')}｜登场：${esc(c.debut || '')}</div>`).join('');
+      const cam = (Array.isArray(chars.cameos) ? chars.cameos : []).filter(c => c && c.name).map(c =>
+        `<div class="phone-reading-ol-item"><b>${esc(c.name)}</b>（${esc(c.gender || '')}/${esc(c.age || '')}）｜${esc(c.identity || '')}｜作用：${esc(c.position || '')}${c.basis && c.basis !== '原创' ? `〔取材：${esc(c.basis)}〕` : ''}｜登场：${esc(c.debut || '')}</div>`).join('');
+      bpHtml = `
+        <div class="phone-reading-ol-sec">明线</div><div class="phone-reading-ol-text">${esc(bp.mainline || '—')}</div>
+        <div class="phone-reading-ol-sec">暗线</div><div class="phone-reading-ol-text">真相：${esc(bp.darkline?.truth || '—')}<br>揭示节奏：${esc(bp.darkline?.revealPace || '—')}</div>
+        <div class="phone-reading-ol-sec">故事结构</div>${struct || '<div class="phone-reading-ol-text">—</div>'}
+        <div class="phone-reading-ol-sec">主角</div>${proHtml || '<div class="phone-reading-ol-text">—</div>'}
+        ${sup ? `<div class="phone-reading-ol-sec">配角</div>${sup}` : ''}
+        ${cam ? `<div class="phone-reading-ol-sec">彩蛋角色</div>${cam}` : ''}`;
+    } else {
+      bpHtml = '<div class="phone-reading-ol-text">尚未生成蓝图</div>';
+    }
+
+    // 每章概述
+    const toc = Array.isArray(book.toc) ? book.toc : [];
+    const tocHtml = toc.length
+      ? toc.map(c => `<div class="phone-reading-ol-item"><b>第${c.idx}章 ${esc(c.title || '')}</b><br>${esc(c.summary || '（无概述）')}</div>`).join('')
+      : '<div class="phone-reading-ol-text">还没有章节</div>';
+
+    // 伏笔池
+    const fs = Array.isArray(book.foreshadows) ? book.foreshadows : [];
+    const fsHtml = fs.length
+      ? fs.map(f => `<div class="phone-reading-ol-item${f.recovered ? ' recovered' : ''}">
+          <b>[${f.id}] 埋于第${f.chapter}章${f.recovered ? `，已于第${f.recoveredChapter}章回收` : '（未回收）'}</b><br>
+          埋设：${esc(f.buried || '')}<br>浮出：${esc(f.revealHint || '')}${f.excerpt ? `<br>原文：${esc(f.excerpt)}` : ''}
+        </div>`).join('')
+      : '<div class="phone-reading-ol-text">暂无伏笔</div>';
+
+    body.innerHTML = `
+      <div class="phone-reading-ol-page">
+        <div class="phone-reading-ol-warn">⚠ 以下内容含完整剧透</div>
+        <div class="phone-reading-ol-sec">书名</div><div class="phone-reading-ol-text">${esc(book.title || '未命名')}</div>
+        <div class="phone-reading-ol-sec">作者</div><div class="phone-reading-ol-text">${esc((book.author || '佚名').trim())}</div>
+        ${styleHtml}
+        <div class="phone-reading-ol-sec">简介</div><div class="phone-reading-ol-text">${esc((book.intro || '').trim() || '—')}</div>
+        ${bpHtml}
+        <div class="phone-reading-ol-sec">每章概述</div>${tocHtml}
+        <div class="phone-reading-ol-sec">伏笔池</div>${fsHtml}
+      </div>`;
+  }
+
+  // 生成单章正文。存进 book.toc[n].content。返回正文文本或 null。
+  async function _readingGenChapterText(bookId, idx, onProgress) {
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) return null;
+    const toc = Array.isArray(book.toc) ? book.toc : [];
+    const chapter = toc.find(c => c.idx === idx);
+    if (!chapter) return null;
+    if (chapter.content && chapter.content.trim()) return chapter.content;
+
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return null; }
+
+    const bp = book.blueprint || {};
+    const structText = (Array.isArray(bp.structure) ? bp.structure : [])
+      .map(s => `- ${s.phase}（${s.chapterRange || '?'}）：${s.summary || ''}`).join('\n');
+    const chars = bp.characters || {};
+    const charsText = _readingCharsText(bp);
+    const darkText = bp.darkline ? `真相：${bp.darkline.truth || ''}\n揭示节奏：${bp.darkline.revealPace || ''}` : '';
+
+    // 世界观背景（正文阶段发详细版）
+    let wvBlock = '';
+    if (book.genUseWorldView) {
+      try {
+        const wv = await _readingWorldviewBlock(true);
+        if (wv) wvBlock = `\n【参考世界观背景】\n请让剧情贴合下面的世界观设定：\n${wv}\n`;
+      } catch (_) {}
+    }
+    // 人物已在蓝图 characters 定稿，正文只读蓝图人设，不再发 NPC 映射池
+    // 作者文风（署名真实作者才有；同作者复用缓存）
+    let authorStyleBlock = '';
+    try { authorStyleBlock = await _readingGetAuthorStyle(book); } catch (_) {}
+
+    // 上一章正文尾部（衔接）
+    let prevTail = '';
+    const prev = toc.find(c => c.idx === idx - 1);
+    if (prev && prev.content && prev.content.trim()) {
+      const t = prev.content.trim();
+      prevTail = `\n【上一章结尾】（请从这里自然承接，不要重复）：\n${t.slice(-600)}\n`;
+    }
+
+    const total = Number.isFinite(book.plannedChapters) ? book.plannedChapters : 0;
+
+    // 未回收伏笔池
+    const allFs = Array.isArray(book.foreshadows) ? book.foreshadows : [];
+    const openFs = allFs.filter(f => f && !f.recovered);
+    let foreshadowBlock = '';
+    if (openFs.length) {
+      const lines = openFs.map(f => `[${f.id}]（埋于第${f.chapter}章）埋设：${f.buried || ''}｜建议浮出：${f.revealHint || ''}`).join('\n');
+      foreshadowBlock = `\n【未回收伏笔池】\n以下是前文埋下、尚未回收的伏笔。你可以在本章择机回收其中合适的（每章最多回收 1 条），时机不到的继续留着，不要为了回收而强行回收：\n${lines}\n`;
+    }
+
+    // 尾声判定：当前章进入蓝图倒数第二个阶段即算尾声，开始催收伏笔
+    let endgameBlock = '';
+    const struct = Array.isArray(bp.structure) ? bp.structure : [];
+    if (struct.length >= 2) {
+      const endgamePhase = struct[struct.length - 2];
+      const m = String(endgamePhase.chapterRange || '').match(/(\d+)/);
+      const endgameStart = m ? parseInt(m[1], 10) : 0;
+      if (endgameStart && idx >= endgameStart && openFs.length) {
+        endgameBlock = `\n【尾声提醒】故事已进入收束阶段（${endgamePhase.phase || '尾声'}），距离结局不远了。请有意识地开始把上面未回收的伏笔逐步回收掉，不要留到结局还有一堆悬而未决；但仍遵守每章最多回收 1 条、回收要自然不突兀。\n`;
+      }
+    }
+
+    const sysPrompt = `你是专业的网文作者，正在写一本长篇连载。请根据下面的设定写出第 ${idx} 章的正文。
+
+【书籍】${book.title || '未命名'}${total ? `（共 ${total} 章，当前第 ${idx} 章）` : ''}
+【明线】${bp.mainline || ''}
+【暗线】${darkText}
+【故事结构】
+${structText}
+${wvBlock}${authorStyleBlock}
+【主要人物】
+${charsText}
+${prevTail}
+【本章剧情】（这一章客观上要发生的事，是创作的依据）：
+${chapter.summary || '（无，请根据上下文自然推进）'}
+${foreshadowBlock}${endgameBlock}
+写作要求：
+- 篇幅约 3000 字，是一篇完整的章节正文，不是大纲、不是梗概。
+- 动笔前先自己想清楚这一章的"写作意图"：在本章剧情的基础上，决定从哪个角度切入、重点推进哪条情节、着重展现人物的哪个侧面、从哪个角度刻画关系、暗示或揭示哪个真相——选定一两个重点写足、写到位，其余一笔带过，不要平均用力、流水账式地把剧情交代完。不必每章都强凹高潮反转，张弛有度即可。
+- 用第三人称或贴合本书的人称叙事，重场景、重细节、重人物的动作与心理，少用空泛概述。对话要自然、推动情节。
+- 【断章技巧】结尾不要把事情完全收干净。在情绪、悬念或冲突的某个高点收尾——例如关键信息即将揭晓的前一刻、危机骤然降临、意外登场、一句留白的台词之后戛然而止，制造"想看下一章"的期待。但不要烂尾式硬断。
+- 严格符合故事蓝图，不要把后面的剧情提前写完，也不要和已有章节矛盾。
+
+输出格式：先输出章节正文（不要写"第X章"标题、不要任何解释或方括号备注）。正文写完后，如果本章存在需要记录的内容，再在最末尾按下面格式追加（没有就不要写对应区块）：
+
+1. 本章如果埋下了一个新伏笔（本章最多记一条；若这一章本就不适合埋伏笔，就不要硬埋、也不要输出这个区块），在正文之后另起一行输出：
+###伏笔###
+原文：（埋伏笔那一小截的正文原话，一句即可）
+埋设：（这里到底埋了什么）
+浮出：（适合在什么时候、什么情境下揭开）
+
+2. 如果本章回收了未回收伏笔池里的伏笔（最多 1 条），输出：
+###回收###
+（被回收伏笔的编号，就是池子里 [ ] 中的数字）
+
+这两个区块都是给后台记录用的，不是正文的一部分。`;
+
+    if (typeof onProgress === 'function') onProgress(`正在加载《${chapter.title || ('第' + idx + '章')}》…`);
+    let text;
+    try {
+      text = await _phoneTextWithRetry({
+        label: '章节正文', url, key, model,
+        temperature: 0.92, max_tokens: 8192,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: `请写出第 ${idx} 章《${chapter.title || ''}》的正文。` }
+        ]
+      });
+    } catch (e) {
+      console.error('[章节正文]', e);
+      return null;
+    }
+    if (!text) return null;
+
+    // 解析伏笔/回收区块，并从正文里切掉（不展示给读者）
+    let cleanText = text;
+    let newForeshadow = null;
+    let recoveredIds = [];
+    // ###伏笔### 区块
+    const fsMatch = cleanText.match(/###\s*伏笔\s*###([\s\S]*?)(?=###\s*回收\s*###|$)/);
+    if (fsMatch) {
+      const seg = fsMatch[1];
+      const ex = (seg.match(/原文[：:]\s*(.+)/) || [])[1] || '';
+      const bu = (seg.match(/埋设[：:]\s*(.+)/) || [])[1] || '';
+      const rv = (seg.match(/浮出[：:]\s*(.+)/) || [])[1] || '';
+      if (bu.trim()) {
+        newForeshadow = { excerpt: ex.trim(), buried: bu.trim(), revealHint: rv.trim() };
+      }
+    }
+    // ###回收### 区块（编号，逗号/空格/换行分隔）
+    const rcMatch = cleanText.match(/###\s*回收\s*###([\s\S]*?)$/);
+    if (rcMatch) {
+      recoveredIds = (rcMatch[1].match(/\d+/g) || []).map(n => parseInt(n, 10)).filter(Number.isFinite);
+    }
+    // 从正文中移除这两个区块（取第一个 ### 标记之前的内容为正文）
+    const cutAt = cleanText.search(/###\s*(伏笔|回收)\s*###/);
+    if (cutAt >= 0) cleanText = cleanText.slice(0, cutAt).trim();
+
+    // 存储
+    const pd2 = await _getPhoneData();
+    const bk = (pd2.readingBooks || []).find(b => b && b.id === bookId);
+    if (!bk) return null;
+    const bkToc = Array.isArray(bk.toc) ? bk.toc : [];
+    const ch = bkToc.find(c => c.idx === idx);
+    if (ch) ch.content = cleanText;
+    // 伏笔池
+    if (!Array.isArray(bk.foreshadows)) bk.foreshadows = [];
+    // 回收（只回收每章最多 1 条，取第一个有效编号）
+    if (recoveredIds.length) {
+      const rid = recoveredIds[0];
+      const f = bk.foreshadows.find(x => x && x.id === rid && !x.recovered);
+      if (f) { f.recovered = true; f.recoveredChapter = idx; }
+    }
+    // 新埋伏笔
+    if (newForeshadow) {
+      const nextId = bk.foreshadows.reduce((mx, x) => Math.max(mx, x && x.id || 0), 0) + 1;
+      bk.foreshadows.push({ id: nextId, chapter: idx, recovered: false, ...newForeshadow });
+    }
+    await _savePhoneData(pd2);
+    return cleanText;
+  }
+
+  // 阅读某章：无正文先生成，再进阅读器全屏页
+  async function _readingReadChapter(bookId, idx) {
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) return;
+    const toc = Array.isArray(book.toc) ? book.toc : [];
+    const chapter = toc.find(c => c.idx === idx);
+    if (!chapter) { UI.showToast('该章节还未生成目录', 1600); return; }
+
+    let content = (chapter.content || '').trim();
+    if (!content) {
+      const mask = document.createElement('div');
+      mask.className = 'phone-mask';
+      mask.style.cssText = 'position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.55)';
+      mask.innerHTML = `
+        <div style="width:34px;height:34px;border:3px solid rgba(255,255,255,0.25);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+        <div id="rd-read-load-text" style="margin-top:14px;color:#fff;font-size:13px">正在创作正文…</div>`;
+      const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+      shell.appendChild(mask);
+      content = await _readingGenChapterText(bookId, idx, (t) => {
+        const el = mask.querySelector('#rd-read-load-text');
+        if (el) el.textContent = t;
+      });
+      mask.remove();
+      if (!content) { UI.showToast('正文生成失败，请重试', 1800); return; }
+    }
+
+    // 更新阅读进度
+    const pd2 = await _getPhoneData();
+    const bk = (pd2.readingBooks || []).find(b => b && b.id === bookId);
+    if (bk && (typeof bk.lastReadChapter !== 'number' || bk.lastReadChapter < idx - 1)) {
+      bk.lastReadChapter = idx - 1;
+      await _savePhoneData(pd2);
+    }
+
+    document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-home-mode');
+    document.getElementById('phone-back-btn')?.classList.remove('hidden');
+    document.getElementById('phone-title').textContent = chapter.title || `第${idx}章`;
+    const render = () => _renderReadingChapter(bookId, idx);
+    _pushNav(render);
+    render();
+  }
+
+  // 渲染阅读器页：正文 + 上一章/下一章导航
+  async function _renderReadingChapter(bookId, idx) {
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) { body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-secondary)">未找到该书</div>'; return; }
+    const toc = Array.isArray(book.toc) ? book.toc : [];
+    const chapter = toc.find(c => c.idx === idx);
+    if (!chapter) { body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-secondary)">未找到该章</div>'; return; }
+
+    const total = Number.isFinite(book.plannedChapters) ? book.plannedChapters : 0;
+    const paras = (chapter.content || '').split(/\n+/).map(p => p.trim()).filter(Boolean);
+    const bodyHtml = paras.map(p => `<p class="phone-reading-chapter-p">${Utils.escapeHtml(p)}</p>`).join('');
+
+    const hasPrev = toc.some(c => c.idx === idx - 1);
+    // 下一章：目录里有下一章 → 可读；没有但还没到总章数 → 末章（需先续目录）
+    const hasNextToc = toc.some(c => c.idx === idx + 1);
+    const isLastToc = toc.length > 0 && idx === toc[toc.length - 1].idx;
+    const needMoreToc = isLastToc && total && toc.length < total;
+    const isBookEnd = total && idx >= total;
+
+    let nextBtn = '';
+    if (hasNextToc) {
+      nextBtn = `<button class="phone-reading-chapter-nav next" onclick="Phone._readingReadChapter('${Utils.escapeHtml(book.id)}', ${idx + 1})">下一章</button>`;
+    } else if (needMoreToc) {
+      nextBtn = `<button class="phone-reading-chapter-nav next" onclick="Phone._readingContinueAfterChapter('${Utils.escapeHtml(book.id)}', ${idx})">生成后续章节</button>`;
+    } else if (isBookEnd) {
+      nextBtn = `<button class="phone-reading-chapter-nav next disabled" disabled>已完结</button>`;
+    }
+    const prevBtn = hasPrev
+      ? `<button class="phone-reading-chapter-nav prev" onclick="Phone._readingReadChapter('${Utils.escapeHtml(book.id)}', ${idx - 1})">上一章</button>`
+      : `<button class="phone-reading-chapter-nav prev disabled" disabled>上一章</button>`;
+
+    body.innerHTML = `
+      <div class="phone-reading-chapter-page">
+        <div class="phone-reading-chapter-scroll">
+          <div class="phone-reading-chapter-title">${Utils.escapeHtml(chapter.title || ('第' + idx + '章'))}</div>
+          <div class="phone-reading-chapter-sub">第 ${idx} 章${total ? ` / 共 ${total} 章` : ''}</div>
+          <div class="phone-reading-chapter-body">${bodyHtml}</div>
+          <div class="phone-reading-chapter-navrow">${prevBtn}${nextBtn}</div>
+        </div>
+      </div>`;
+    const scroll = body.querySelector('.phone-reading-chapter-scroll');
+    if (scroll) scroll.scrollTop = 0;
+  }
+
+  // 读到目录最后一章后：续写下一批目录（喂入最后一章正文尾部），完成后跳到下一章
+  async function _readingContinueAfterChapter(bookId, idx) {
+    const mask = document.createElement('div');
+    mask.className = 'phone-mask';
+    mask.style.cssText = 'position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.55)';
+    mask.innerHTML = `
+      <div style="width:34px;height:34px;border:3px solid rgba(255,255,255,0.25);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+      <div style="margin-top:14px;color:#fff;font-size:13px">正在规划后续章节…</div>`;
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(mask);
+    const ok = await _readingGenToc(bookId);
+    mask.remove();
+    if (!ok) { UI.showToast('续写章节失败，请重试', 1800); return; }
+    await _readingReadChapter(bookId, idx + 1);
+  }
+
+  // ===== 列表生成：长篇连载 / 短篇小说 =====
+  // 字段统一：title / author / category(数组) / intro。长短篇仅措辞与简介口吻不同。
+  // 题材：有关键词→贴合关键词、在该方向下拉开差异；无关键词→自由发挥、拉开差异。
+  // 世界观注入由全局偏好 useWorldView 控制；作者名单由「可出场作者」castMode 控制（与电台 castFilter 同源）。
+  async function _readingGenList(type, keyword) {
+    const t = (type === 'short') ? 'short' : 'long';
+    const kw = String(keyword || '').trim();
+    const pd = await _getPhoneData();
+
+    // 功能模型配置
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) {
+      UI.showToast('请先配置功能模型', 1800);
+      return;
+    }
+
+    // 世界观背景注入（仅当发现页勾选「参考世界观背景生成」时）。NPC 屏蔽——列表阶段不发人物素材，
+    // 人物素材是详情/正文阶段（映射）的事。作者身份走独立的「可出场作者」名单，与世界观开关无关。
+    let wvPrompt = '';
+    if (_readingUseWvRef) {
+      try { wvPrompt = await _buildFullContext({ npcBrief: false, lite: true, castFilter: { mode: 'disabled' } }); } catch (_) {}
+    }
+    // 可出场作者名单（完全独立：不管世界观/映射开没开，只要设了名单就发）
+    let authorBlock = '';
+    try { authorBlock = await _readingBuildAuthorBlock(t); } catch (_) {}
+
+    // 关键词行：有则贴合方向+在方向内拉开差异；无则自由发挥+拉开差异
+    const kwLine = kw
+      ? `【读者想找的题材/关键词】${kw}\n请所有作品都贴合这个方向，但在符合该方向的前提下，让 8-10 ${t === 'short' ? '篇' : '本'}之间的设定、切入角度、风格调性尽量拉开差异，不要写成雷同的几${t === 'short' ? '篇' : '本'}。`
+      : `本次无指定方向，题材完全自由发挥；让 8-10 ${t === 'short' ? '篇' : '本'}之间的题材、风格、调性尽量拉开差异，不要扎堆同一类。`;
+
+    // 作者约束：有名单→只能从名单挑（其余虚构）；无名单→作者全部虚构
+    const authorRule = authorBlock
+      ? '\n- 作者优先从【可出场作者名单】里挑选合适的人（author 填其本名），名单外的作品请自行创作一个像真人的笔名填入 author，不要把"虚构笔名""作者笔名"这类说明文字当作答案填进去。'
+      : '\n- 每部作品的 author 都请自行创作一个像真人的笔名（中文为主，可带个性），不要把"虚构笔名""作者笔名"这类说明文字当作答案填进去。';
+
+    const unit = (t === 'short') ? '篇' : '本';
+    const longSpec = `每本输出以下字段，严格使用 JSON 数组格式，不能返回 Markdown，不能返回代码块，不能解释，必须以 [ 开头、以 ] 结尾：
+[
+  {
+    "title": "书名",
+    "author": "作者笔名（一个像真人的中文笔名，如 江停雪、墨river、老猫不睡 之类，自行创作）",
+    "category": ["题材标签（你为这本书自拟，1-3 个，每个简短，如 2-6 字）"],
+    "intro": "简介（150 字左右，面向读者的推荐语，写出这本长篇的主线钩子和追更感，让人想一直追下去。用户可见）"
+  }
+]
+
+要求：
+- 这是【长篇连载】：每本都应是能长期展开、有主线、有持续悬念的大故事，简介要体现"这是个能追很久的故事"。
+- category 为 1-3 个题材标签，由你为每本书自拟。
+- title 只写书名本身，不要加书名号《》或任何引号、标点包裹。
+- 简介里可以写主角的身份、职业、处境（如"一个殡仪馆化妆师""退伍军医"），但不要给主角起具体人名；需要指代主角本人时一律用"Ta/这个人/他"等代词。主角的名字留到后续正文阶段再定。
+- title/author/category/intro 全部由你原创，不要套用现实中已存在的真实作品名、真实作者名。${authorRule}
+- 只输出 JSON，不要多余解释。`;
+    const shortSpec = `每篇输出以下字段，严格使用 JSON 数组格式，不能返回 Markdown，不能返回代码块，不能解释，必须以 [ 开头、以 ] 结尾：
+[
+  {
+    "title": "篇名",
+    "author": "作者笔名（一个像真人的中文笔名，如 江停雪、墨river、老猫不睡 之类，自行创作）",
+    "category": ["题材标签（你为这篇自拟，1-3 个，每个简短，如 2-6 字）"],
+    "intro": "简介（150 字左右，面向读者的推荐语，写出这篇短篇的核心设定或情绪内核，让人想立刻读完。用户可见）"
+  }
+]
+
+要求：
+- 这是【短篇小说】：每篇都应是一篇完整、能一口气读完（约 2000-5000 字）的独立故事，有清晰的内核和收束，简介要体现"一篇就完"的完整感，不要写成长篇的开头。
+- category 为 1-3 个题材标签，由你为每篇自拟。
+- title 只写篇名本身，不要加书名号《》或任何引号、标点包裹。
+- 简介里可以写主角的身份、职业、处境（如"一个殡仪馆化妆师""退伍军医"），但不要给主角起具体人名；需要指代主角本人时一律用"Ta/这个人/他"等代词。主角的名字留到后续正文阶段再定。
+- title/author/category/intro 全部由你原创，不要套用现实中已存在的真实作品名、真实作者名。${authorRule}
+- 只输出 JSON，不要多余解释。`;
+
+    const sysPrompt = `你是小说推荐生成系统。请生成 8-10 ${unit}【${t === 'short' ? '短篇小说' : '长篇连载'}】${t === 'short' ? '' : '小说'}的列表卡片。
+${kwLine}
+${t === 'short' ? shortSpec : longSpec}${authorBlock ? '\n\n' + authorBlock : ''}${wvPrompt ? '\n\n' + wvPrompt : ''}`;
+
+    let raw;
+    try {
+      raw = await _phoneJsonArrayWithRetry({
+        label: t === 'short' ? '短篇列表' : '长篇列表', url, key, model,
+        temperature: 0.95, max_tokens: 4096,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: kw ? `请生成一批贴合「${kw}」的${t === 'short' ? '短篇小说' : '长篇连载'}。` : `请生成一批${t === 'short' ? '短篇小说' : '长篇连载'}。` }
+        ]
+      });
+    } catch (e) {
+      console.error('[阅读列表]', e);
+      UI.showToast('生成失败，请重试', 1800);
+      return;
+    }
+
+    // 规范化：title 必填；category 转数组（兼容字符串）；裁剪长度
+    const list = (Array.isArray(raw) ? raw : []).filter(b => b && b.title).map(b => {
+      let cats = [];
+      if (Array.isArray(b.category)) cats = b.category.map(c => String(c || '').trim()).filter(Boolean);
+      else if (typeof b.category === 'string') cats = b.category.split(/[,，、\s]+/).map(c => c.trim()).filter(Boolean);
+      return {
+        id: 'bk_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        title: String(b.title).replace(/^[《<「『\s]+|[》>」』\s]+$/g, '').slice(0, 40),
+        author: String(b.author || '佚名').slice(0, 20),
+        category: cats.slice(0, 3),
+        intro: String(b.intro || '').slice(0, 300),
+        type: t,
+        cover: ''
+      };
+    });
+    if (list.length === 0) {
+      UI.showToast('生成结果为空，请重试', 1800);
+      return;
+    }
+
+    // 写入对应类型缓存（覆盖上一批）
+    if (!pd.readingDiscover || typeof pd.readingDiscover !== 'object' || Array.isArray(pd.readingDiscover)) {
+      pd.readingDiscover = { long: [], short: [] };
+    }
+    pd.readingDiscover[t] = list;
+    await _savePhoneData();
+    _renderReading(pd);
+  }
+
+  // 搜索/刷新：按当前类型 tab 生成一批（题材可为空，空则随机推荐）
   async function _readingSearch() {
-    UI.showToast('搜索生成开发中…', 1500);
+    const input = document.getElementById('phone-reading-search');
+    const kw = input ? input.value.trim() : '';
+    const type = (_readingDiscoverType === 'short') ? 'short' : 'long';
+    UI.showToast(type === 'short' ? '正在生成短篇…' : '正在生成连载…', 1500);
+    await _readingGenList(type, kw);
   }
   // ========================== 阅读 App 结束 ==========================
 
@@ -10042,6 +11732,7 @@ ${houseDataText}`;
     const body = document.getElementById('phone-body');
     document.getElementById('phone-title').textContent = '电台';
     _applyWallpaper(pd);
+    await _radioRefreshCustomCfg(); // 先拉世界观自定义电台配置（隐藏的预设/自建分类），再重建分类列表
     _ensureRadioCategories(pd);
 
     const cats = (pd.radioCategories || []).filter(c => c.id !== 'random_temp');
@@ -10067,7 +11758,8 @@ ${houseDataText}`;
           ${randomCard}
         </div>
       </div>`;
-    const mineHtml = `${_radioGlobalPrefsBar(pd)}${_renderRadioMine(pd)}`;
+    const _radioMaskInfo = (_radioHomeTab === 'mine') ? await _getMaskInfo() : null;
+    const mineHtml = `${_radioMineHeader(pd, _radioMaskInfo)}${_radioGlobalPrefsBar(pd)}${_renderRadioMine(pd)}`;
 
     body.innerHTML = `
       <div class="phone-radio-shell" style="display:flex;flex-direction:column;height:100%">
@@ -10075,8 +11767,9 @@ ${houseDataText}`;
         <div class="phone-tabbar">
           <div class="phone-tab ${_radioHomeTab === 'discover' ? 'active' : ''}" onclick="Phone._switchRadioHomeTab('discover')">发现</div>
           <div class="phone-tab ${_radioHomeTab === 'mine' ? 'active' : ''}" onclick="Phone._switchRadioHomeTab('mine')">我的</div>
-        </div>
-      </div>`;
+    </div>
+    </div>`;
+    if (_radioHomeTab === 'mine') _radioInitSwipeDelete();
   }
 
   // 切换电台首页底部 tab
@@ -10176,6 +11869,24 @@ ${houseDataText}`;
   // 全局偏好状态：横条是否展开（仅 UI 态，不持久化）
   let _radioPrefsExpanded = false;
 
+  // 「我的」页顶部：个人资料头部（头像 + 网名 + 收藏数）
+  function _radioMineHeader(pd, maskInfo) {
+    const userName = (maskInfo && maskInfo.username) || '我';
+    const userAvatar = (maskInfo && maskInfo.avatar) || '';
+    const count = (pd.radioPrograms && Array.isArray(pd.radioPrograms['__mine__'])) ? pd.radioPrograms['__mine__'].length : 0;
+    const avaHtml = userAvatar
+      ? `<img class="phone-radio-mine-ava" src="${Utils.escapeHtml(userAvatar)}" alt="">`
+      : `<div class="phone-radio-mine-ava phone-radio-mine-ava-fallback">${Utils.escapeHtml((userName || '我')[0])}</div>`;
+    return `
+      <div class="phone-radio-mine-header">
+        ${avaHtml}
+        <div class="phone-radio-mine-header-info">
+          <div class="phone-radio-mine-header-name">${Utils.escapeHtml(userName)}</div>
+          <div class="phone-radio-mine-header-sub">听众 · 已收藏 ${count} 个台</div>
+        </div>
+      </div>`;
+  }
+
   // 「我的」页顶部：全局偏好横条卡片（齿轮图标，点击展开/收起三个开关）
   function _radioGlobalPrefsBar(pd) {
     const prefs = _radioGlobalPrefs(pd);
@@ -10245,23 +11956,86 @@ ${houseDataText}`;
         ? `<img src="${Utils.escapeHtml(s.cover)}" alt="">`
         : `<span class="phone-radio-mine-cover-fallback">${Utils.escapeHtml((s.name || '电')[0])}</span>`;
       return `
-        <div class="phone-radio-mine-card" onclick="Phone._radioOpenSubscribed(${i})">
-          <div class="phone-radio-mine-main">
-            <div class="phone-radio-mine-cover">${coverHtml}</div>
-            <div class="phone-radio-mine-info">
-              <div class="phone-radio-mine-name">${Utils.escapeHtml(s.name || '电台')}</div>
-              <div class="phone-radio-mine-host">
-                ${tags ? `<span class="phone-radio-mine-tags">${tags}</span>` : ''}
-                <svg class="phone-radio-mine-mic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-                <span>${Utils.escapeHtml(_radioDisplayName(s.dj) || '匿名')}${s.guest ? ` · ${Utils.escapeHtml(_radioDisplayName(s.guest))}` : ''}</span>
+        <div class="phone-radio-mine-swipe" data-idx="${i}">
+          <div class="phone-radio-mine-swipe-content">
+            <div class="phone-radio-mine-card" onclick="Phone._radioOpenSubscribed(${i})">
+              <div class="phone-radio-mine-main">
+                <div class="phone-radio-mine-cover">${coverHtml}</div>
+                <div class="phone-radio-mine-info">
+                  <div class="phone-radio-mine-name">${Utils.escapeHtml(s.name || '电台')}</div>
+                  <div class="phone-radio-mine-host">
+                    ${tags ? `<span class="phone-radio-mine-tags">${tags}</span>` : ''}
+                    <svg class="phone-radio-mine-mic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                    <span>${Utils.escapeHtml(_radioDisplayName(s.dj) || '匿名')}${s.guest ? ` · ${Utils.escapeHtml(_radioDisplayName(s.guest))}` : ''}</span>
+                  </div>
+                </div>
+                ${s.fm ? `<span class="phone-radio-mine-fm">FM ${Utils.escapeHtml(String(s.fm))}</span>` : ''}
               </div>
+              ${nextHtml}
             </div>
-            ${s.fm ? `<span class="phone-radio-mine-fm">FM ${Utils.escapeHtml(String(s.fm))}</span>` : ''}
           </div>
-          ${nextHtml}
+          <div class="phone-radio-mine-swipe-delete" onclick="Phone._radioDeleteSubscribed(${i})">删除</div>
         </div>`;
     }).join('');
-    return `<div class="phone-radio-mine-list">${rows}</div>`;
+    return `<div class="phone-radio-mine-section-title">我的订阅</div><div class="phone-radio-mine-list">${rows}</div>`;
+  }
+
+  // 初始化左滑删除（在「我的」tab 渲染后调用）
+  function _radioInitSwipeDelete() {
+    document.querySelectorAll('.phone-radio-mine-swipe').forEach(swipe => {
+      const content = swipe.querySelector('.phone-radio-mine-swipe-content');
+      if (!content) return;
+      let startX = 0, currentX = 0, isSwiping = false;
+      const maxSwipe = -80; // 删除按钮宽度
+      
+      const onStart = (e) => {
+        const touch = e.touches ? e.touches[0] : e;
+        startX = touch.clientX;
+        currentX = 0;
+        isSwiping = true;
+        content.classList.add('swiping');
+      };
+      
+      const onMove = (e) => {
+        if (!isSwiping) return;
+        const touch = e.touches ? e.touches[0] : e;
+        const diffX = touch.clientX - startX;
+        // 只允许向左滑
+        if (diffX < 0) {
+          currentX = Math.max(diffX, maxSwipe);
+          content.style.transform = `translateX(${currentX}px)`;
+          e.preventDefault();
+        }
+      };
+      
+      const onEnd = () => {
+        if (!isSwiping) return;
+        isSwiping = false;
+        content.classList.remove('swiping');
+        // 滑动超过一半就锁定到删除位置，否则复位
+        if (currentX < maxSwipe / 2) {
+          content.style.transform = `translateX(${maxSwipe}px)`;
+        } else {
+          content.style.transform = '';
+        }
+      };
+      
+      content.addEventListener('touchstart', onStart, { passive: true });
+      content.addEventListener('touchmove', onMove, { passive: false });
+      content.addEventListener('touchend', onEnd);
+      content.addEventListener('touchcancel', onEnd);
+    });
+  }
+
+  // 删除「我的」页订阅台
+  async function _radioDeleteSubscribed(idx) {
+    if (!await UI.showConfirm('删除电台', '确定从「我的」里删除这个电台？')) return;
+    const pd = await _getPhoneData();
+    const mine = pd.radioPrograms?.['__mine__'];
+    if (!mine || !mine[idx]) return;
+    mine.splice(idx, 1);
+    await _savePhoneData();
+    _renderRadio(pd);
   }
 
   // 打开某个分类（节目单页）
@@ -10277,9 +12051,13 @@ ${houseDataText}`;
   async function _radioOpenRandom() {
     const pd = await _getPhoneData();
     _ensureRadioCategories(pd);
-    
-    // 读游戏时间，判断哪些分类当前可用
-    let availableCats = ['chat', 'music']; // 全天可用
+
+    // 生效分类里，预设受时间闸门限制，自建分类恒全天可用
+    const cfg = _radioCustomCfg();
+    const hidden = new Set(cfg.hiddenPresets || []);
+    const customCatIds = (cfg.categories || []).map(c => c.id);
+    // 读游戏时间，判断哪些预设当前可用
+    let availablePresets = ['chat', 'music']; // 全天可用
     try {
       const sb = Conversations.getStatusBar();
       const timeStr = sb && sb.time ? sb.time : '';
@@ -10289,21 +12067,22 @@ ${houseDataText}`;
         const min = parseInt(m[2], 10);
         const total = h * 60 + min;
         // 新闻 18:30-21:00
-        if (total >= 18 * 60 + 30 && total <= 21 * 60) availableCats.push('news');
+        if (total >= 18 * 60 + 30 && total <= 21 * 60) availablePresets.push('news');
         // 情感 22:00-02:00（跨午夜）
-        if (total >= 22 * 60 || total <= 2 * 60) availableCats.push('emotion');
+        if (total >= 22 * 60 || total <= 2 * 60) availablePresets.push('emotion');
         // 怪谈 21:00-04:00（跨午夜）
-        if (total >= 21 * 60 || total <= 4 * 60) availableCats.push('ghost');
+        if (total >= 21 * 60 || total <= 4 * 60) availablePresets.push('ghost');
       } else {
-        // 读不到时间，全放行
-        availableCats = ['news', 'emotion', 'ghost', 'chat', 'music'];
+        // 读不到时间，预设全放行
+        availablePresets = ['news', 'emotion', 'ghost', 'chat', 'music'];
       }
     } catch (_) {
-      // 异常时全放行
-      availableCats = ['news', 'emotion', 'ghost', 'chat', 'music'];
+      availablePresets = ['news', 'emotion', 'ghost', 'chat', 'music'];
     }
-    
-    // 从可用分类的标签池里随机抽 2-4 个标签
+    // 去掉被隐藏的预设，再并上自建分类（自建恒全天）
+    const availableCats = availablePresets.filter(id => !hidden.has(id)).concat(customCatIds);
+
+    // 从可用分类的标签池里随机抽标签
     const allTags = [];
     for (const catId of availableCats) {
       const tags = _radioTagsOf(catId);
@@ -10601,6 +12380,21 @@ ${houseDataText}`;
     return { aliasToId, idToName };
   }
 
+  // 「可出场角色」三档对应的主播/嘉宾选用规则文案（注入预览 sysPrompt）
+  function _radioCastRuleBlock(castMode, avoidLine) {
+    if (castMode === 'disabled') {
+      return `- 【本批主播/嘉宾全部虚构】本世界观设定为不安排任何真实角色出任主播或嘉宾。所有电台的 dj/guest 一律使用贴合世界观风格的虚构化名，绝不能填入世界观里任何真实角色的姓名或其变体。
+- 【虚构化名要避开世界观角色】取化名时要明显区别于世界观里已知角色的姓名，不要沿用其姓氏、名字用字或专属称呼，避免听众误以为是那个角色串台。`;
+    }
+    if (castMode === 'whitelist') {
+      return `- 【只能用名单内的真实角色】本世界观限定了可出场的角色——下方世界观资料里出现的真实角色，就是允许出任主播/嘉宾的全部名额。可以让其中合适的角色出任某档节目的主持人或嘉宾，且必须贴合其人设与身份。【真实角色必须用其本名】一旦启用某个真实角色，dj/guest 字段就要直接填其在世界观里的本名（与档案完全一致），绝不能用"X老师""老X"这类尊称、绰号、代称或另起化名代替。资料里没出现的角色一律不得作为真实角色启用。其余主持人/嘉宾用虚构化名${avoidLine}
+- 【虚构化名要避开世界观角色】给虚构主持人/嘉宾取的化名，要明显区别于名单内角色及世界观里已知角色的姓名，避免听众误以为是某个角色串台。`;
+    }
+    // default
+    return `- 整批电台中，至多安排 1 个世界观里的真实角色出任某档节目的主持人或嘉宾，且必须贴合该角色的人设与身份。【真实角色必须用其本名】一旦让某个世界观真实角色当主播/嘉宾，dj/guest 字段就要直接填这个角色在世界观里的本名（与角色档案里的名字完全一致），绝不能用"X老师""老X""某主播"这类尊称、绰号、代称或另起化名来代替——否则后续系统无法识别出这是该真实角色。其余主持人/嘉宾一律用虚构化名，不要硬塞角色${avoidLine}
+- 【虚构化名要避开世界观角色】给虚构主持人/嘉宾取的化名，要明显区别于世界观里已知角色的姓名，不要沿用世界观角色的姓氏、名字用字或专属称呼（如世界观里有个姓陆的角色，就别给虚构主播取"陆老师""老陆""小陆"这类名字），避免听众误以为是那个角色串台。真实角色只在上一条说的"至多 1 个"名额里、用其本名出场。`;
+  }
+
   // 生成分类节目单（核心逻辑，空状态与重新调频共用）
   async function _radioGenerate(catId) {
     const pd = await _getPhoneData();
@@ -10625,12 +12419,14 @@ ${houseDataText}`;
     const isRandom = !!cat.isRandom;
     let tagList = [];
     if (cat._tempTags && Array.isArray(cat._tempTags)) {
-      // 随机频道：用临时抽取的标签名，从各分类标签池里找完整定义
+      // 随机频道：用临时抽取的标签名，从各分类标签池里找完整定义（含自建分类）
       const allTags = [];
       Object.keys(_RADIO_TAGS).forEach(k => { allTags.push(..._RADIO_TAGS[k]); });
+      (_radioCustomCfg().categories || []).forEach(c => { allTags.push(...(c.tags || [])); });
       tagList = cat._tempTags.map(name => allTags.find(t => t.name === name)).filter(Boolean);
     } else if (isRandom) {
       Object.keys(_RADIO_TAGS).forEach(k => { tagList = tagList.concat(_RADIO_TAGS[k]); });
+      (_radioCustomCfg().categories || []).forEach(c => { tagList = tagList.concat(c.tags || []); });
     } else {
       tagList = _radioTagsOf(catId);
     }
@@ -10639,8 +12435,13 @@ ${houseDataText}`;
 
     // 全量资料包（含世界观详细数据 + 主线最近10轮）
     // v 预览生成不依赖玩家面具/住所等玩家专属信息，走 lite 模式
+    // 「可出场角色」三档：default 全发；disabled 不发任何 NPC；whitelist 只发名单内角色
+    const _radioCast = _radioCustomCfg();
+    let _castFilter = null;
+    if (_radioCast.castMode === 'disabled') _castFilter = { mode: 'disabled' };
+    else if (_radioCast.castMode === 'whitelist') _castFilter = { mode: 'whitelist', ids: (_radioCast.castWhitelist || []).map(x => x.id), allowLorebook: !!_radioCast.castIncludeLorebook };
     let wvPrompt = '';
-    try { wvPrompt = await _buildFullContext({ npcBrief: false, lite: true }); } catch(_) {}
+    try { wvPrompt = await _buildFullContext({ npcBrief: false, lite: true, castFilter: _castFilter, includeConvChars: true }); } catch(_) {}
 
     // NPC 索引（别名归一）+ 避让名单：radioRecentNpcs 存的是 NPC id，展示时翻译成主名
     const npcIndex = await _radioBuildNpcIndex();
@@ -10674,8 +12475,7 @@ ${tagLines || '（无限定标签，自由发挥）'}
 要求：
 - 6-8 个电台之间风格差异要明显（不同主播调性、不同内容侧重）
 - tags 只能从【可用标签】里选，每个电台只选 1 个标签（不要选两个，避免风格冲突）；标签可以在不同电台间重复，靠 concept 拉开差异
-- 整批电台中，至多安排 1 个世界观里的真实角色出任某档节目的主持人或嘉宾，且必须贴合该角色的人设与身份。【真实角色必须用其本名】一旦让某个世界观真实角色当主播/嘉宾，dj/guest 字段就要直接填这个角色在世界观里的本名（与角色档案里的名字完全一致），绝不能用"X老师""老X""某主播"这类尊称、绰号、代称或另起化名来代替——否则后续系统无法识别出这是该真实角色。其余主持人/嘉宾一律用虚构化名，不要硬塞角色${avoidLine}
-- 【虚构化名要避开世界观角色】给虚构主持人/嘉宾取的化名，要明显区别于世界观里已知角色的姓名，不要沿用世界观角色的姓氏、名字用字或专属称呼（如世界观里有个姓陆的角色，就别给虚构主播取"陆老师""老陆""小陆"这类名字），避免听众误以为是那个角色串台。真实角色只在上一条说的"至多 1 个"名额里、用其本名出场。
+${_radioCastRuleBlock(_radioCast.castMode, avoidLine)}
 - concept 要足够详细，后续 AI 靠它来写完整节目
 - 【重要·扣紧世界观，禁现实专有名词】name/dj/guest/intro/concept/showName 等所有面向听众的文案，都必须扎根于下方提供的世界观资料，绝不能出现现实世界的国名、地名、机构名、民族/国族标签或仅属于现实的专有概念（如"中国式家庭""北上广""华尔街""996"等）。该世界观里的地名、风物、文化、人群称谓是什么，就用什么；若世界观未提供对应概念，用贴合该世界设定的说法自拟，绝不套用现实标签。节目主题（showName）要讲的现象本身可以普世（如边界感、付出感绑架），但承载它的措辞必须是这个世界的，而不是现实地球的。
 - 【重要·保密红线】这些都是面向大众公开的电台。世界观资料里那些隐秘内幕、幕后真相、不为人知的阴谋、暗面/黑暗设定、机密势力的真实运作、角色不可公开的秘密身份等普通人不可能知晓的内容，绝对不能直接写进电台的名称、简介(intro)或核心概念(concept)里，也不能定为节目的选题方向。这类内容只能彻底不提，或以官方对外口径（粉饰、伪装成寻常事物）的方式存在。不要为了"有料"而把暗面设定当成节目卖点。
@@ -11322,6 +13122,46 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
 - 下期主题必须紧扣本台的核心概念、契合本档节目的标签调性，是这个台会聊的内容，不要跑题到其它类型的节目去。
 - 这一行只是元数据，不会被读出来，也不算节目内容，更不是听众互动环节——不要把它写成台词行（不要加「> 」前缀）、不要当成钩子去引导听众参与，单纯写一行 [[next:...]] 即可。
 - 示例：[[next:雨夜的来信|下期我们聊聊那些藏在雨声里、迟迟没寄出的话。]]`;
+  // ===== 自建标签：基础款 guide 拼装 =====
+  // 用户自建标签不手写完整 guide，由系统按固定骨架拼装：
+  //   开头（标签名 + 频道大方向）→ 本期要求(选填) → 篇幅(字数) → 可用玩法(选填) → 输出格式 → 下期预告
+  // 不含保密红线、不含"禁现实专有名词"，以便用户高度贴合自定义世界观（哪怕现实背景）。
+  // 参数：
+  //   tag      自建标签对象 { name, desc, guide(=用户填的"要求"), wordCount, plays:[], renewMode }
+  //   catName  分类名（兜底用作标签名前缀，一般用 tag.name）
+  //   direction 分类大方向（cat.direction，可空）
+  function _radioBuildCustomGuide(tag, direction) {
+    const tagName = (tag && tag.name) ? String(tag.name).trim() : '电台';
+    const dir = (direction || '').trim();
+    const req = (tag && tag.guide ? String(tag.guide) : '').trim();
+    const wc = parseInt(tag && tag.wordCount, 10);
+    const plays = Array.isArray(tag && tag.plays) ? tag.plays : [];
+
+    const parts = [];
+
+    // 开头：标签名 +（可选）频道大方向
+    let head = `你正在主持「${tagName}」类电台节目。`;
+    if (dir) head += `本频道的大方向：${dir}。`;
+    parts.push(head);
+
+    // 本期要求（用户填的话才有）
+    if (req) {
+      parts.push(`【本期要求】\n${req}`);
+    }
+
+    // 篇幅
+    if (wc && wc > 0) {
+      parts.push(`【篇幅】本期正文约 ${wc} 字，按这个体量来安排节奏和内容密度。`);
+    }
+
+    // 可用玩法：不在 guide 里写，交给 _radioPlaysBlock 统一注入（与预设标签保持一致）
+
+    // 输出格式（复用通用块）
+    parts.push(_RADIO_FORMAT_SPEC);
+    // 下期预告：不在 guide 里写，交给 nextGenBlock 统一注入（与预设标签保持一致）
+
+    return parts.join('\n\n');
+  }
 
   // 取主播/嘉宾的「显示名」：若该名字精确命中世界观 NPC 且有网名(onlineName)，返回网名；否则返回原名。
   // 用于前端显示与台词自称——电台主播惯用艺名/网名，而非本名。
@@ -11348,7 +13188,7 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
 
   // 阵容注入块（详情生成时拼 dj/guest/fm 作硬约束）
   // 若主播/嘉宾命中世界观 NPC，则把 ta 的详细档案拎出来强调，要求严格按人设主持，避免演成泛泛播音腔
-  function _radioCastBlock(prog) {
+  function _radioCastBlock(prog, convChars) {
     const dj = prog.dj || '主播';
     const djShow = _radioDisplayName(dj);
     const fm = prog.fm ? String(prog.fm) : '';
@@ -11363,6 +13203,17 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
       if (typeof NPC !== 'undefined' && NPC.getByNames) {
         // 自建匹配：覆盖 name + aliases + onlineName（getByNames 不查网名），且要求精确等值，避免"林/小林"这类子串误伤
         const splitNames = (s) => String(s || '').split(/[,，、\s]+/).map(t => t.trim()).filter(Boolean);
+        // 对话角色（单人卡/挂载/世界书）回退匹配源：这些角色不在 NPC 库里，但预览阶段允许它们当主播/嘉宾
+        const convList = Array.isArray(convChars) ? convChars : [];
+        const matchConv = (nm) => {
+          const target = String(nm || '').trim();
+          if (!target) return null;
+          for (const c of convList) {
+            const keys = [c.name, ...splitNames(c.aliases), ...splitNames(c.onlineName)];
+            if (keys.some(k => k === target)) return c;
+          }
+          return null;
+        };
         const matchNpc = (nm) => {
           const target = String(nm || '').trim();
           if (!target) return null;
@@ -11372,7 +13223,8 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
             const keys = [n.name, ...splitNames(n.aliases), ...splitNames(n.onlineName)];
             if (keys.some(k => k === target)) return n;
           }
-          return null;
+          // 世界观库未命中：回退到对话角色（单人卡/挂载/世界书）
+          return matchConv(target);
         };
         const roleMap = [];
         if (dj) roleMap.push(['主播', dj]);
@@ -11451,6 +13303,7 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
   // 按标签取 guide（取节目第一个有 guide 的标签；无则空，走通用写法）
   function _radioGuideOf(prog) {
     const tags = Array.isArray(prog.tags) ? prog.tags : [];
+    // 预设标签：硬编码 guide
     for (const catId of Object.keys(_RADIO_TAGS)) {
       for (const t of _RADIO_TAGS[catId]) {
         if (tags.includes(t.name) && t.guide) {
@@ -11458,6 +13311,11 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
           return t.guide.replace(/\$1/g, t.name);
         }
       }
+    }
+    // 自建标签：按固定骨架拼装（即便"要求"留空也拼，含字数/玩法/格式块）
+    for (const tagName of tags) {
+      const hit = _radioCustomTagByName(tagName);
+      if (hit) return _radioBuildCustomGuide(hit.tag, hit.direction);
     }
     return '';
   }
@@ -11527,6 +13385,15 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
     for (const name of tags) {
       if (_RADIO_TAG_DURATION[name]) return `约 ${_RADIO_TAG_DURATION[name]} 分钟`;
     }
+    // 自建标签：按字数估算（约每分钟 100 字），无字数回退 20
+    for (const name of tags) {
+      const hit = _radioCustomTagByName(name);
+      if (hit) {
+        const wc = parseInt(hit.tag.wordCount, 10) || 0;
+        const min = wc > 0 ? Math.min(40, Math.max(8, Math.round(wc / 100))) : 20;
+        return `约 ${min} 分钟`;
+      }
+    }
     return '约 20 分钟';
   }
   // 取本期节目的时长分钟数（数值，供同步主线累计时长用）。命中标签取其值，未命中回退 20。
@@ -11534,6 +13401,14 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
     const tags = Array.isArray(prog && prog.tags) ? prog.tags : [];
     for (const name of tags) {
       if (_RADIO_TAG_DURATION[name]) return _RADIO_TAG_DURATION[name];
+    }
+    // 自建标签：按字数估算（约每分钟 100 字），无字数回退 20
+    for (const name of tags) {
+      const hit = _radioCustomTagByName(name);
+      if (hit) {
+        const wc = parseInt(hit.tag.wordCount, 10) || 0;
+        return wc > 0 ? Math.min(40, Math.max(8, Math.round(wc / 100))) : 20;
+      }
     }
     return 20;
   }
@@ -11636,7 +13511,13 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
   ];
   function _radioIsTitleOnlyRenewTag(prog) {
     const tags = Array.isArray(prog.tags) ? prog.tags : [];
-    return tags.some(t => _RADIO_TITLE_ONLY_RENEW_TAGS.includes(t));
+    if (tags.some(t => _RADIO_TITLE_ONLY_RENEW_TAGS.includes(t))) return true;
+    // 自建标签：renewMode === 'unit'（独立单元）走标题避重
+    for (const tagName of tags) {
+      const hit = _radioCustomTagByName(tagName);
+      if (hit && hit.tag.renewMode === 'unit') return true;
+    }
+    return false;
   }
 
   // 「连载类」标签清单：这类节目是"一个长故事分集播出"，续期时要发完整上期正文（接着往下讲，不避重），
@@ -11644,7 +13525,13 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
   const _RADIO_SERIAL_TAGS = ['长夜连载'];
   function _radioIsSerialTag(prog) {
     const tags = Array.isArray(prog.tags) ? prog.tags : [];
-    return tags.some(t => _RADIO_SERIAL_TAGS.includes(t));
+    if (tags.some(t => _RADIO_SERIAL_TAGS.includes(t))) return true;
+    // 自建标签：renewMode === 'serial'（连载）走承接逻辑
+    for (const tagName of tags) {
+      const hit = _radioCustomTagByName(tagName);
+      if (hit && hit.tag.renewMode === 'serial') return true;
+    }
+    return false;
   }
 
   // 新闻类播出时间限制：只在游戏内 18:30-21:00 才允许生成详情。
@@ -11744,11 +13631,19 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
   function _radioPlaysOf(prog) {
     const tags = Array.isArray(prog.tags) ? prog.tags : [];
     const ids = [];
+    // 预设标签
     for (const catId of Object.keys(_RADIO_TAGS)) {
       for (const t of _RADIO_TAGS[catId]) {
         if (tags.includes(t.name) && Array.isArray(t.plays)) {
           t.plays.forEach(id => { if (_RADIO_PLAYS[id] && !ids.includes(id)) ids.push(id); });
         }
+      }
+    }
+    // 自建标签
+    for (const tagName of tags) {
+      const hit = _radioCustomTagByName(tagName);
+      if (hit && Array.isArray(hit.tag.plays)) {
+        hit.tag.plays.forEach(id => { if (_RADIO_PLAYS[id] && !ids.includes(id)) ids.push(id); });
       }
     }
     return ids;
@@ -12087,12 +13982,14 @@ ${parts.join('\n\n')}`;
     let ctx = '';
     try {
       ctx = _isConnect
-        ? await _buildFullContext({ npcBrief: true, lite: true })
-        : await _buildFullContext({ npcBrief: !_radioNeedNpcDetail(prog), lite: true });
+        ? await _buildFullContext({ npcBrief: true, lite: true, includeConvChars: true })
+        : await _buildFullContext({ npcBrief: !_radioNeedNpcDetail(prog), lite: true, includeConvChars: true });
     } catch (_) {}
     const calBlock = await _radioCalendarBlock();
     const guide = _radioGuideOf(prog);
-    const castBlock = _radioCastBlock(prog);
+    let _castConvChars = [];
+    try { _castConvChars = await _collectChatCandidates(); } catch (_) {}
+    const castBlock = _radioCastBlock(prog, _castConvChars);
     // 地区数据源：仅 dataSource==='region' 的标签注入当前所在地区详细档案（命中才塞）
     const regionBlock = (_radioDataSourceOf(prog) === 'region') ? _radioRegionBlock() : '';
     // 论坛数据源：仅 dataSource==='forum' 的标签（热点圆桌）注入近期论坛热帖（命中才塞）
@@ -12350,7 +14247,7 @@ ${_RADIO_FORMAT_SPEC}${callerBlock}`;
     // 标了 npcDetail 的标签（娱乐头条/领域专线）读留言段也注入 NPC 详情，保持与上半段一致
     // v 所有电台内容生成都不依赖玩家面具，统一走 lite
     let ctx = '';
-    try { ctx = await _buildFullContext({ npcBrief: !_radioNeedNpcDetail(prog), lite: true }); } catch (_) {}
+    try { ctx = await _buildFullContext({ npcBrief: !_radioNeedNpcDetail(prog), lite: true, includeConvChars: true }); } catch (_) {}
     const calBlock = await _radioCalendarBlock();
     const regionBlock = (_radioDataSourceOf(prog) === 'region') ? _radioRegionBlock() : '';
 
@@ -12759,7 +14656,7 @@ if (input) { input.value = ''; input.style.height = 'auto'; }
 
     // 与节目正文同源的资料（lite + 速查表），保证连线和正文对得上号
     let ctx = '';
-    try { ctx = await _buildFullContext({ npcBrief: true, lite: true }); } catch (_) {}
+    try { ctx = await _buildFullContext({ npcBrief: true, lite: true, includeConvChars: true }); } catch (_) {}
     const calBlock = await _radioCalendarBlock();
     // 玩家勾选"发送面具"时，单独注入来电者身份块
     let callerBlock = '';
@@ -12767,7 +14664,9 @@ if (input) { input.value = ''; input.style.height = 'auto'; }
       try { callerBlock = await _radioGetCallerIdentity(); } catch (_) {}
     }
     const guide = _radioGuideOf(prog);
-    const castBlock = _radioCastBlock(prog);
+    let _castConvChars = [];
+    try { _castConvChars = await _collectChatCandidates(); } catch (_) {}
+    const castBlock = _radioCastBlock(prog, _castConvChars);
     let connectBlock = '';
     try { connectBlock = await _radioConnectMaterialBlock(prog); } catch (_) {}
 
@@ -12847,7 +14746,7 @@ ${lastBatch}
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
 
     let ctx = '';
-    try { ctx = await _buildFullContext({ npcBrief: true, lite: true }); } catch (_) {}
+    try { ctx = await _buildFullContext({ npcBrief: true, lite: true, includeConvChars: true }); } catch (_) {}
     const calBlock = await _radioCalendarBlock();
     // 玩家勾选"发送面具"时，单独注入来电者身份块（仅限玩家真的连线过的情况）
     let callerBlock = '';
@@ -12855,7 +14754,7 @@ ${lastBatch}
       try { callerBlock = await _radioGetCallerIdentity(); } catch (_) {}
     }
     const guide = _radioGuideOf(prog);
-    const castBlock = _radioCastBlock(prog);
+    const castBlock = _radioCastBlock(prog, await _collectChatCandidates().catch(() => []));
     let connectBlock = '';
     try { connectBlock = await _radioConnectMaterialBlock(prog); } catch (_) {}
     const djName = prog.dj || '主播';
@@ -12943,10 +14842,12 @@ ${_RADIO_NEXT_SPEC}`;
     if (!url || !key || !model) { return ''; }
 
     let ctx = '';
-    try { ctx = await _buildFullContext({ npcBrief: true, lite: true }); } catch (_) {}
+    try { ctx = await _buildFullContext({ npcBrief: true, lite: true, includeConvChars: true }); } catch (_) {}
     const calBlock = await _radioCalendarBlock();
     const guide = _radioGuideOf(prog);
-    const castBlock = _radioCastBlock(prog);
+    let _castConvChars = [];
+    try { _castConvChars = await _collectChatCandidates(); } catch (_) {}
+    const castBlock = _radioCastBlock(prog, _castConvChars);
     const djName = prog.dj || '主播';
     const guestName = prog.guest || '';
     const showName = prog.showName || prog.name || '本期节目';
@@ -13412,7 +15313,7 @@ ${resultLine}
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
 
     let ctx = '';
-    try { ctx = await _buildFullContext({ npcBrief: !_radioNeedNpcDetail(prog), lite: true }); } catch (_) {}
+    try { ctx = await _buildFullContext({ npcBrief: !_radioNeedNpcDetail(prog), lite: true, includeConvChars: true }); } catch (_) {}
     let calBlock = '';
     try { calBlock = await _radioCalendarBlock(); } catch (_) {}
     let regionBlock = '';
@@ -19242,11 +21143,11 @@ async function _collectChatCandidates() {
     const rows = await DB.getAll('npcAvatars');
     rows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
   } catch(_) {}
-  const add = (name, source, avatar, detail, aliases, onlineName) => {
+  const add = (name, source, avatar, detail, aliases, onlineName, id) => {
     const nm = (name || '').trim();
     if (!nm || seen.has(nm)) return;
     seen.add(nm);
-    out.push({ name: nm, source, avatar: avatar || '', detail: (detail || '').trim(), aliases: (aliases || '').trim(), onlineName: (onlineName || '').trim() });
+    out.push({ id: id || '', name: nm, source, avatar: avatar || '', detail: (detail || '').trim(), aliases: (aliases || '').trim(), onlineName: (onlineName || '').trim() });
   };
   // 拼一个 NPC/角色对象的人设描述文本
   const _detailOf = (o) => {
@@ -19271,8 +21172,8 @@ async function _collectChatCandidates() {
     if (wvId) {
       const wv = await DB.get('worldviews', wvId);
       if (wv) {
-        (wv.globalNpcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n), n.aliases || '', n.onlineName || ''));
-        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n), n.aliases || '', n.onlineName || ''))));
+        (wv.globalNpcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n), n.aliases || '', n.onlineName || '', n.id));
+        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => add(n.name, 'worldview', avatarById[n.id] || n.avatar || '', _detailOf(n), n.aliases || '', n.onlineName || '', n.id))));
       }
     }
     // 单人卡（卡本身作为联系人）
@@ -19280,7 +21181,7 @@ async function _collectChatCandidates() {
       try {
         const card = await DB.get('singleCards', conv.singleCharId);
         let scAvatar = avatarById[conv.singleCharId] || card?.avatar || '';
-        if (card?.name) add(card.name, 'single', scAvatar, _detailOf(card));
+        if (card?.name) add(card.name, 'single', scAvatar, _detailOf(card), card.aliases || '', card.onlineName || '', conv.singleCharId);
       } catch(_) {}
     }
     // 当前对话绑定的世界书 NPC
@@ -19293,7 +21194,7 @@ async function _collectChatCandidates() {
         const wv2 = wvId ? await DB.get('worldviews', wvId) : null;
         const lbs = await Lorebook.collectForChat({ conv, card, wv: wv2 });
         for (const lb of (lbs || [])) {
-          (lb.globalNpcs || []).forEach(n => add(n.name, 'lorebook', avatarById[n.id] || n.avatar || '', _detailOf(n)));
+          (lb.globalNpcs || []).forEach(n => add(n.name, 'lorebook', avatarById[n.id] || n.avatar || '', _detailOf(n), n.aliases || '', n.onlineName || '', n.id));
         }
       }
     } catch(_) {}
@@ -19301,7 +21202,7 @@ async function _collectChatCandidates() {
     try {
       if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
         const attached = await AttachedChars.resolveAll();
-        attached.forEach(c => add(c.name, 'mount', (c.id && avatarById[c.id]) || c.avatar || '', _detailOf(c)));
+        attached.forEach(c => add(c.name, 'mount', (c.id && avatarById[c.id]) || c.avatar || '', _detailOf(c), c.aliases || '', c.onlineName || '', c.id));
       }
     } catch(_) {}
   } catch(_) {}
@@ -30274,15 +32175,16 @@ _onPagesScroll,
   // 记账 App
  _renderLedger, _ledgerSwitchCur, _ledgerEditEntry, _ledgerAddManual, _ledgerCycleView, _ledgerCalPick,
 // 电台 App
-    _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioHomeTab, _radioOpenSubscribed, _radioTogglePrefsExpand, _radioOnGlobalPref,
+_renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioHomeTab, _radioOpenSubscribed, _radioDeleteSubscribed, _radioTogglePrefsExpand, _radioOnGlobalPref,
     // 阅读 App
-    _renderReading, _switchReadingHomeTab, _readingOpenBook, _readingSearch, _readingTogglePref, _readingSetMapping, _readingTogglePrefs,
+    _renderReading, _switchReadingHomeTab, _switchReadingDiscoverType, _readingToggleWvRef, _readingOpenBook, _readingSearch, _readingTogglePref, _readingSetMapping, _readingTogglePrefsExpand,
+    _readingGenToc, _readingGenMoreToc, _readingOpenToc, _readingReadChapter, _readingContinueAfterChapter, _readingOpenBookSettings, _readingSetCover, _readingRewriteLast, _readingViewOutline,
   // 小屋 App
-  _renderCottage, _cottageAddHouse, _cottageOpenHouse, _cottageEditHouse, _cottageSetCurrent, _switchCottageHomeTab, _cottageDataMenu, getCottageLayoutForLocation, _cottageOpenMall, _cottageOpenInventory, _cottageMallSettings, _cottageMallToggleTag, _cottageMallRefresh, _cottageMallBuy, _cottageInvToggleTag, _cottageInvSearch, _cottageInvDelete, _cottageInvEditTag, _cottageInvPick, _cottageShowOrders,
+  _renderCottage, _cottageAddHouse, _cottageOpenHouse, _cottageEditHouse, _cottageSetCurrent, _switchCottageHomeTab, _cottageDataMenu, getCottageLayoutForLocation, _cottageOpenMall, _cottageOpenInventory, _cottageMallSettings, _cottageMallToggleTag, _cottageMallRefresh, _cottageMallBuy, _cottageInvToggleTag, _cottageInvSearch, _cottageInvDelete, _cottageInvEdit, _cottageInvEditTag, _cottageInvPick, _cottageShowOrders,
   _cottageToggleFloorMenu, _cottageSelectFloor, _cottageAddFloor, _cottageRenameFloor, _cottageDeleteFloor, _cottageAddRoom, _cottageOpenRoom,
   _cottageAddItem, _cottageEditItem, _cottageEditRoom, _cottageAiFill, _cottageAiFillRoom,
     // 衣橱 App
-    _wardrobeAddItem, _wardrobeRemoveItem, _wardrobeItemDetail, _wardrobePickPortrait, _wardrobeSaveSuit, _wardrobeOpenSuits, _wardrobeAiGenSuits, _switchWardrobeHomeTab, _wardrobeOpenMall, _wardrobeOpenInventory, _wardrobeMallSettings, _wardrobeMallToggleTag, _wardrobeMallRefresh, _wardrobeMallBuy, _wardrobeInvToggleTag, _wardrobeInvSearch, _wardrobeInvDelete, _wardrobeInvEditTag, _wardrobeInvWear, _wardrobeShowOrders,
+    _wardrobeAddItem, _wardrobeRemoveItem, _wardrobeItemDetail, _wardrobePickPortrait, _wardrobeSaveSuit, _wardrobeOpenSuits, _wardrobeAiGenSuits, _switchWardrobeHomeTab, _wardrobeOpenMall, _wardrobeOpenInventory, _wardrobeMallSettings, _wardrobeMallToggleTag, _wardrobeMallRefresh, _wardrobeMallBuy, _wardrobeInvToggleTag, _wardrobeInvSearch, _wardrobeInvDelete, _wardrobeInvEdit, _wardrobeInvEditTag, _wardrobeInvWear, _wardrobeShowOrders,
     // 聊天 App
   _switchChatTab, _showCreateGroupDialog, _createGroup, _groupDoSend, _groupRequestReply, _openGroupSettings, _groupSaveName, _groupSaveDesc, _toggleGroupVoiceMode, _playGroupVoice, _showGroupPhotoDetail, _groupCancelQuote, _openGroupRedPacketSend, _openGroupRedPacket, _groupPickAvatar, _groupRemoveMember, _groupAddContacts, _groupAddExtra, _groupDissolve, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _onChatSettingsCallAutoPlayToggle, _onChatSettingsPhoneDownToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
   ingestChatMessages, getChatHistoryForNPCs,
