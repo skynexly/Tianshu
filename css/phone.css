@@ -1,8 +1,8 @@
 /* ===== 虚拟手机：沉浸式屏幕 ===== */
 .phone-shell {
- width: min(380px, 86vw);
- height: min(760px, 86vh);
- max-height: 86vh;
+  width: min(380px, 86vw);
+  height: min(760px, 86vh);
+  max-height: 86vh;
  border-radius: 32px;
  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 18%, var(--bg-secondary)), var(--bg));
  background-size: cover;
@@ -2378,7 +2378,7 @@ background: transparent !important;
 
 /* ===== 日历 Banner ===== */
 .phone-cal-banner {
-  margin: 20px 0 0;
+  margin: 8px 0 0;
   padding: 14px 16px 12px;
   border-radius: 18px;
   background: linear-gradient(to top, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 55%), linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.14) 100%), rgba(255,255,255,0.2);
@@ -2667,7 +2667,7 @@ background: transparent !important;
 .phone-page2-row {
   display: flex;
   gap: 12px;
-  padding-top: 16px;
+  padding-top: 10px;
   align-items: stretch;
 }
 .phone-page2-apps {
@@ -2802,7 +2802,7 @@ align-self: start;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-top: 20.5px;
+  margin-top: 8px;
 }
 .phone-widget-apps {
   margin-top: 24px;
@@ -4424,6 +4424,151 @@ align-self: start;
 .phone-call-refresh-corner.spinning svg { animation: phoneCallSpin .8s linear infinite; }
 @keyframes phoneCallSpin { to { transform: rotate(360deg); } }
 
+/* ===== 阅读 App ===== */
+.phone-reading-home { padding: 14px 14px 24px; }
+
+/* 书架顶栏：标题 + 齿轮 */
+.phone-reading-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px; position: relative;
+}
+.phone-reading-topbar-title { font-size: 15px; font-weight: 600; color: var(--text-primary, #eee); }
+.phone-reading-gear {
+  background: none; border: none; cursor: pointer; padding: 4px;
+  color: var(--text-secondary, #aaa); display: flex; align-items: center;
+  border-radius: 50%; transition: background .15s;
+}
+.phone-reading-gear:active, .phone-reading-gear.active {
+  background: var(--card-bg, rgba(255,255,255,0.08));
+}
+
+/* 设置浮窗 */
+.phone-reading-prefs-mask {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 90;
+}
+.phone-reading-prefs {
+  position: absolute; top: 100%; right: 0; z-index: 91;
+  min-width: 200px; max-width: 260px;
+  background: var(--card-bg, #1e1e2e);
+  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  border-radius: 10px; padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.phone-reading-pref-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0; font-size: 13px; color: var(--text-primary, #ddd);
+}
+.phone-reading-pref-row.disabled { opacity: 0.4; pointer-events: none; }
+.phone-reading-pref-row input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: var(--accent, #f60);
+}
+.phone-reading-mapping-btns { display: flex; gap: 6px; }
+.phone-reading-mapping-btn {
+  font-size: 11px; padding: 3px 10px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--border, rgba(255,255,255,0.15));
+  background: transparent; color: var(--text-secondary, #aaa);
+  transition: all .12s;
+}
+.phone-reading-mapping-btn.active {
+  background: var(--accent, #f60); color: #111; border-color: var(--accent, #f60);
+}
+.phone-reading-mapping-btn:active { opacity: 0.7; }
+.phone-reading-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 60px 20px; opacity: 0.55; text-align: center; gap: 10px;
+}
+.phone-reading-empty svg { opacity: 0.5; }
+.phone-reading-empty-icon { margin-bottom: 4px; }
+.phone-reading-empty-title { font-size: 14px; font-weight: 600; color: var(--text-primary, #ccc); }
+.phone-reading-empty-desc { font-size: 12px; color: var(--text-secondary, #888); }
+.phone-reading-empty-btn {
+  margin-top: 12px; padding: 6px 18px; border-radius: 16px; border: none;
+  background: var(--accent, #f60); color: #fff; font-size: 13px; cursor: pointer;
+}
+.phone-reading-empty-btn:active { opacity: 0.8; }
+
+/* 书架卡片：横向长条，左竖封面 + 右书名简介 */
+.phone-reading-shelf { display: flex; flex-direction: column; gap: 12px; }
+.phone-reading-shelf-card {
+  display: flex; align-items: stretch; gap: 12px;
+  background: var(--card-bg, rgba(255,255,255,0.06));
+  border: 1px solid var(--border, rgba(255,255,255,0.1));
+  border-radius: 12px; padding: 10px; cursor: pointer;
+  transition: transform .12s, box-shadow .12s;
+}
+.phone-reading-shelf-card:active { transform: scale(0.97); }
+.phone-reading-shelf-cover {
+  width: 56px; min-height: 76px; border-radius: 6px;
+  background: var(--accent-dim, rgba(100,100,200,0.15));
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; flex-shrink: 0;
+}
+.phone-reading-shelf-cover img {
+  width: 100%; height: 100%; object-fit: cover; border-radius: 6px;
+}
+.phone-reading-shelf-info {
+  flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  min-width: 0;
+}
+.phone-reading-shelf-title {
+  font-size: 14px; font-weight: 600; color: var(--text-primary, #eee);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.phone-reading-shelf-intro {
+  font-size: 12px; color: var(--text-secondary, #aaa);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; line-height: 1.4;
+}
+.phone-reading-shelf-meta {
+  font-size: 11px; color: var(--text-tertiary, #666); margin-top: 2px;
+}
+.phone-reading-shelf-progress {
+  font-size: 11px; color: var(--accent, #f60); margin-top: 3px;
+}
+.phone-reading-cover-fallback {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 700; color: var(--accent, #f60); opacity: 0.6;
+}
+
+/* 发现页：搜索栏（仿论坛紧凑风格）+ 推荐列表 */
+.phone-reading-discover { padding: 0; }
+.phone-reading-discover-bar {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 12px;
+}
+.phone-reading-discover-bar input {
+  flex: 1; outline: none;
+  border: 1px solid var(--border, rgba(255,255,255,0.1));
+  border-radius: 6px; padding: 6px 10px;
+  background: var(--bg-tertiary, rgba(255,255,255,0.06));
+  font-size: 13px; color: var(--text-primary, #eee);
+}
+.phone-reading-discover-bar input::placeholder { color: var(--text-tertiary, #666); }
+.phone-reading-search-btn {
+  background: var(--accent, #f60); color: #111; border: none;
+  border-radius: 6px; padding: 6px 12px; font-size: 12px;
+  cursor: pointer; white-space: nowrap;
+}
+.phone-reading-search-btn:active { opacity: 0.8; }
+
+/* 壁纸适配 */
+.phone-shell.has-custom-wallpaper .phone-reading-shelf-card {
+  background: rgba(18, 20, 28, 0.35) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-reading-shelf-title { color: rgba(255,255,255,0.96) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-shelf-intro { color: rgba(255,255,255,0.66) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-discover-bar input {
+  background: rgba(18, 20, 28, 0.35) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  color: rgba(255,255,255,0.92) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-reading-prefs {
+  background: rgba(18, 20, 28, 0.35) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-reading-topbar-title { color: rgba(255,255,255,0.96) !important; }
+
 /* ===== 电台 App ===== */
 .phone-radio-home { padding: 14px 14px 24px; }
 .phone-radio-grid {
@@ -5831,6 +5976,44 @@ align-self: start;
   60%  { opacity: 0.3; }
   100% { opacity: 0; }
 }
+
+/* ===== 问卜玩法：递交特效（卡片消散 + 符光上浮） ===== */
+/* 卡片整体淡出、微缩、轻微上浮，像化作一缕青烟散去 */
+.phone-radio-div-dissolve {
+  animation: phone-radio-div-dissolve 0.6s ease-in forwards;
+  position: relative;
+}
+@keyframes phone-radio-div-dissolve {
+  0%   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  60%  { opacity: 0.5; transform: translateY(-8px) scale(0.98); filter: blur(0.5px); }
+  100% { opacity: 0; transform: translateY(-20px) scale(0.95); filter: blur(3px); }
+}
+/* 符光层：覆盖在卡片上，不挡交互（卡片此时已锁） */
+.phone-radio-div-spark-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2;
+}
+/* 单颗光点：从卡片底部附近升起、边升边淡、伴随微光 */
+.phone-radio-div-spark {
+  position: absolute;
+  bottom: 30%;
+  border-radius: 50%;
+  background: var(--accent, #b9a3ff);
+  box-shadow: 0 0 6px 2px var(--accent, #b9a3ff);
+  opacity: 0;
+  animation-name: phone-radio-div-spark;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+@keyframes phone-radio-div-spark {
+  0%   { opacity: 0; transform: translateY(0) scale(0.6); }
+  30%  { opacity: 0.9; }
+  100% { opacity: 0; transform: translateY(-70px) scale(1.1); }
+}
+
 
 /* ===== 电台「我的」页：订阅小卡 ===== */
 .phone-radio-mine-list {

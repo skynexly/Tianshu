@@ -679,6 +679,22 @@
   color: var(--bg) !important;
 }
 
+/* 电台发现页：分类网格卡 → 实色背景 + 大圆角 + 去边框 + 柔和阴影 */
+.phone-shell.phone-theme-fudge .phone-radio-card {
+  background: var(--bg-secondary) !important;
+  border: none !important;
+  border-radius: 20px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.10);
+}
+.phone-shell.phone-theme-fudge .phone-radio-card:hover {
+  box-shadow: 0 5px 16px rgba(0,0,0,0.14);
+}
+
+/* 电台预览页：左右切换按钮 → 去边框 */
+.phone-shell.phone-theme-fudge .phone-radio-ctrl-btn {
+  border: none !important;
+}
+
 /* 电台「我的」页：订阅卡 + 下期预告块 → 实色背景 + 大圆角 */
 .phone-shell.phone-theme-fudge .phone-radio-mine-card {
   background: var(--bg-secondary) !important;

@@ -234,6 +234,9 @@ const WorldVoice = (() => {
     const mediaType = await _getMediaType();
     const mediaDesc = await _getMediaDesc();
     const wvPrompt = (typeof Phone !== 'undefined' && Phone._buildFullContext) ? await Phone._buildFullContext() : (Chat.getWorldviewPrompt() || '');
+    // 论坛呼应电台：随机抽 0-1 个已订阅电台，给 AI 当可选的呼应素材（读不到/没抽中返回 ''）
+    let radioEcho = '';
+    try { radioEcho = (typeof Phone !== 'undefined' && Phone._radioEchoBlockForForum) ? await Phone._radioEchoBlockForForum() : ''; } catch (_) {}
     const chatMessages = Chat.getMessages();
     const summaryText = await Summary.formatForPrompt(Conversations.getCurrent());
 
@@ -267,7 +270,7 @@ JSON格式（严格遵循）：
 
 所有 time 都必须使用"YYYY.MM.DD 星期X HH:mm"格式，必须和当前游戏时间同一套写法，不要自己发明别的时间样式。
 
-${wvPrompt}`;
+${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}`;
 
     let userPrompt = '';
     if (summaryText) userPrompt += `## 剧情总结\n${summaryText}\n\n`;
@@ -305,9 +308,14 @@ ${wvPrompt}`;
         if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
         const json = await resp.json();
         const content = json.choices?.[0]?.message?.content || '';
-        const jsonMatch = content.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) throw new Error('AI返回格式不正确');
-        posts = JSON.parse(jsonMatch[0]);
+        // 用 Phone 的强容错解析（截断救援 / 尾逗号 / 逐条抠取兜底）；不可用时回退裸解析
+        if (typeof Phone !== 'undefined' && Phone._parsePhoneJsonArray) {
+          posts = Phone._parsePhoneJsonArray(content);
+        } else {
+          const jsonMatch = content.match(/\[[\s\S]*\]/);
+          if (!jsonMatch) throw new Error('AI返回格式不正确');
+          posts = JSON.parse(jsonMatch[0]);
+        }
         await _savePosts();
         _hideLoadingHint();
         _renderPosts();
@@ -496,6 +504,9 @@ JSON格式：
 
 ${wvPrompt}`;
 
+    const _radioDetail = (typeof Phone !== 'undefined' && Phone._radioDetailBlockForPost) ? (await Phone._radioDetailBlockForPost(post).catch(() => '')) : '';
+    const systemPromptFull = _radioDetail ? (systemPrompt + '\n\n' + _radioDetail) : systemPrompt;
+
     const npcListStr2 = await _getNpcListForForum();
     const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人（楼主）：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}${npcListStr2}\n\n请生成完整内容和评论区。注意：正文是以楼主"${post.username}"的口吻写的，语气和内容要符合这个角色的性格。评论区中如果楼主出现，必须是以作者身份回复读者（如答疑、补充），而不是以路人视角评论自己。`;
 
@@ -513,7 +524,7 @@ ${wvPrompt}`;
           body: JSON.stringify({
             model, stream: false, temperature: 0.85, max_tokens: 8192,
             messages: [
-              { role: 'system', content: systemPrompt },
+              { role: 'system', content: systemPromptFull },
               { role: 'user', content: userPrompt }
             ]
           }),
@@ -523,9 +534,14 @@ ${wvPrompt}`;
         if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
         const json = await resp.json();
         const content = json.choices?.[0]?.message?.content || '';
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('返回格式不正确');
-        const detail = JSON.parse(jsonMatch[0]);
+        let detail;
+        if (typeof Phone !== 'undefined' && Phone._parsePhoneJsonObject) {
+          detail = Phone._parsePhoneJsonObject(content);
+        } else {
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (!jsonMatch) throw new Error('返回格式不正确');
+          detail = JSON.parse(jsonMatch[0]);
+        }
         post.fullContent = detail.content || '';
         post._comments = detail.comments || [];
         post._detailLoaded = true;
@@ -793,9 +809,14 @@ ${wvPrompt}`;
     if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
     const json = await resp.json();
     const content = json.choices?.[0]?.message?.content || '';
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('返回格式不正确');
-    const detail = JSON.parse(jsonMatch[0]);
+    let detail;
+    if (typeof Phone !== 'undefined' && Phone._parsePhoneJsonObject) {
+      detail = Phone._parsePhoneJsonObject(content);
+    } else {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('返回格式不正确');
+      detail = JSON.parse(jsonMatch[0]);
+    }
     post.fullContent = detail.content || '';
     post._comments = detail.comments || [];
     post._detailLoaded = true;
