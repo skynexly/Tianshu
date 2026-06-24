@@ -175,8 +175,8 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v704';
-const CHANGELOG = `【v704 更新内容】
+const APP_VERSION = 'v704.1';
+ const CHANGELOG = `【v704.1 更新内容】
 
 📖 全新上线：阅读 App
 - AI 生成小说：长篇连载 + 短篇

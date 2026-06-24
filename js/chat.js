@@ -705,15 +705,21 @@ const _skipNpcInjection = _hsHomecoming && (_hsPostHomeMode === 'continue' || _h
     // 1c. 单人模式：主角资料（仅文游模式发送）
     // v687.33：返航"继续日常"/epilogue 模式下跳过（单人卡主角不属于返航后的现实世界）
 if (isSingleConv && isGameMode && !_skipNpcInjection) {
-  const mainCharText = await SingleMode.getMainCharPrompt(singleSettings);
+  const mainCharText = await SingleMode.getMainCharPrompt(singleSettings, convSettings.narrPerson);
   if (mainCharText) systemParts.push(mainCharText);
 } else if (isGameMode && !isGaidenConv && !_skipNpcInjection) {
     // 1c'. 群像模式：叙事者元 prompt（让 AI 知道自己是旁白+所有 NPC 的化身，用户才是{{user}}）
+      const _gnp = convSettings.narrPerson || 'second';
+      const _groupPersonLine = _gnp === 'first'
+        ? '描写"{{user}}"时使用第二人称"你"或玩家姓名；当前主导场景的核心 NPC 可用第一人称"我"叙述自身的动作与心理（第一人称更适合单人模式，群像中多角色并存时请谨慎使用，避免视角混乱）。'
+        : _gnp === 'third'
+        ? '全程使用第三人称叙述：描写 NPC 用第三人称（"他/她/Ta" 或名字），称呼"{{user}}"也使用第三人称（"Ta" 或玩家姓名），不使用"你"。'
+        : '描写"{{user}}"时使用第二人称"你"或玩家姓名，保留代入感；描写 NPC 时使用第三人称（"他/她/Ta" 或名字）。';
       systemParts.push(`【AI 扮演角色】
 本对话为群像模式（多角色剧情）。你是"叙事者 + 所有 NPC 的扮演者"，用户扮演"{{user}}"。
 你应该：
 1. 通过场景描写、NPC 对话和环境互动推进剧情，把"用户角色卡"作为玩家的身份资料理解，不要把用户角色卡本身当成需要你扮演的对象。
-2. 描写"{{user}}"时使用第二人称"你"或玩家姓名，保留代入感；描写 NPC 时使用第三人称（"他/她/Ta" 或名字）。
+2. ${_groupPersonLine}
 3. 根据场景需要让 NPC 自然登场，不必所有 NPC 都登场。`);
     }
 
@@ -1165,7 +1171,7 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
     const _constraintDepth0 = [];
     const _constraintDepth3 = [];
     if (convSettings.constraintEcho) {
-    _constraintDepth0.push('<rules:叙述协议·边界声明>\n\n概述：你需要保护{{user}}的叙事主权，防止任何越权描述{{user}}的行为。\n\n- **不可虚构用户行为**\n  - 生成剧情时，明确{{user}}为用户控制的角色，一切{{user}}的主动行为只能由用户本人输入，你不可代替用户描写{{user}}。\n  - 禁止描写{{user}}任何主动行为，包括但不限动作、神态、语言、情绪、内心活动、决策等。禁止生成以"你"、"{{user}}"、其他代指{{user}}的词汇作为主语的句子，例如"你点了点头"、"{{user}}接过了水"、"你表情呆滞"。也禁止省略主语，但依旧属于{{user}}主动行为的句子，如"走向玄关"、"打开包装"。\n  - 禁止描写或猜测{{user}}未在设定中写明的习惯和喜好（如口味、装修、音乐品味、财力、过往经历等）。\n  - 禁止通过描写"{{user}}沉默/没有回应"来跳过{{user}}的行动，需要{{user}}做出反应的部分必须等待回复。\n\n- **你被允许的事项**\n  - 更多描写其他在场角色的举动、景色、天气、客观存在的事物。\n  - 涉及到{{user}}的部分，你可以描写{{user}}行为带来的影响，如其他角色的反应、外部环境、行为后果等不属于{{user}}可以主观控制的内容。例如"门被推开了"、"NPC被吓了一跳"、"室内只有一把椅子"\n  - 或用第三方视角描写其他角色对{{user}}的动作和观察，或环境对{{user}}造成的影响。例如"他看向{{user}}"、"狂风吹飞了帽子"、"阳光落在{{user}}的脸颊"\n\n</rules:叙述协议·边界声明>\n\n<rules:叙述协议·防止回声>\n\n概述：不要做复读机。\n\n- 回复时，严禁转述、复述、引用、扩写或加工{{user}}上一条消息的内容，不要通过旁白如"你的那句…""你的那声…"等类似表达重复{{user}}说过的话，更不要通过角色重复或反问任何{{user}}的语言，如"……在口中过了一遍""……重复了一遍"等。\n- 不得在正文中重复描述{{user}}已提及的行为，而是根据{{user}}的回复描写外部反应。\n- 不得以"等你回应"、"等待指令"等生硬描述作为结尾，应通过角色已完成的行为动作、语言、环境描写、情节转折等形成可以自然承接的结尾。\n\n</rules:叙述协议·防止回声>');
+    _constraintDepth0.push('<rules:叙述协议·边界声明>\n\n概述：你需要保护{{user}}的叙事主权，防止任何越权描述{{user}}的行为。\n\n- **不可虚构用户行为**\n  - 生成剧情时，明确{{user}}为用户控制的角色，一切{{user}}的主动行为只能由用户本人输入，你不可代替用户描写{{user}}。\n  - 禁止描写{{user}}任何主动行为，包括但不限动作、神态、语言、情绪、内心活动、决策等。禁止生成以"你"、"{{user}}"、其他代指{{user}}的词汇作为主语的句子，例如"你点了点头"、"{{user}}接过了水"、"你表情呆滞"，但允许{{user}}作为客体时使用"你"，如"他看向你"、"他为你盖好了被子"；也禁止省略主语，但依旧属于{{user}}主动行为的句子，如"走向玄关"、"打开包装"。\n  - 禁止描写或猜测{{user}}未在设定中写明的习惯和喜好（如口味、装修、音乐品味、财力、过往经历等）。\n  - 禁止通过描写"{{user}}沉默/没有回应"来跳过{{user}}的行动，需要{{user}}做出反应的部分必须等待回复。\n\n- **你被允许的事项**\n  - 更多描写其他在场角色的举动、景色、天气、客观存在的事物。\n  - 涉及到{{user}}的部分，你可以描写{{user}}行为带来的影响，如其他角色的反应、外部环境、行为后果等不属于{{user}}可以主观控制的内容。例如"门被推开了"、"NPC被吓了一跳"、"室内只有一把椅子"\n  - 或用第三方视角描写其他角色对{{user}}的动作和观察，或环境对{{user}}造成的影响。例如"他看向{{user}}"、"狂风吹飞了帽子"、"阳光落在你的脸颊"\n\n</rules:叙述协议·边界声明>\n\n<rules:叙述协议·防止回声>\n\n概述：不要做复读机。\n\n- 回复时，严禁转述、复述、引用、扩写或加工{{user}}上一条消息的内容，不要通过旁白如"你的那句…""你的那声…"等类似表达重复{{user}}说过的话，更不要通过角色重复或反问任何{{user}}的语言，如"……在口中过了一遍""……重复了一遍"等。\n- 不得在正文中重复描述{{user}}已提及的行为，而是根据{{user}}的回复描写外部反应。\n- 不得以"等你回应"、"等待指令"等生硬描述作为结尾，应通过角色已完成的行为动作、语言、环境描写、情节转折等形成可以自然承接的结尾。\n\n</rules:叙述协议·防止回声>');
   }
     if (convSettings.constraintSublime) {
       systemParts.push('回复结尾禁止进行主题升华、情感总结、哲理收束或抽象抒情。不要用"夜还很长""一切似乎刚刚开始""仿佛……""某种无法言说的……"之类的文学套话收尾。场景在哪里就停在哪里——以角色的具体动作、对白或环境的即时状态结束，保持叙事在当下，为{{user}}的下一步行动留出空间。');
@@ -5653,6 +5659,7 @@ bgImage: conv?.convBgImage || '',
         imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
     callEnabled: conv?.convCallEnabled !== false, // 默认开（来电能力）
       callFreq: conv?.convCallFreq || 'normal',     // 来电频率：'normal'(正常,默认) | 'active'(积极)
+      narrPerson: conv?.convNarrPerson || 'second', // 叙述人称：'first' | 'second'(默认) | 'third'
       suggestEnabled: conv?.convSuggestEnabled !== false, // 默认开（回复建议灵感灯泡）
     toolsMemory: !!conv?.convToolsMemory,          // 默认关（记忆类工具）
     toolsWorldview: !!conv?.convToolsWorldview,    // 默认关（世界观查询工具）
@@ -6121,6 +6128,7 @@ document.getElementById('cs-format').checked = s.format;
     const callEl = document.getElementById('cs-call-enabled');
     if (callEl) callEl.checked = s.callEnabled;
     _syncCallFreqUI(s.callFreq || 'normal');
+  _syncNarrPersonUI(s.narrPerson || 'second');
     // 工具调用
     const toolsMemEl = document.getElementById('cs-tools-memory');
     if (toolsMemEl) toolsMemEl.checked = s.toolsMemory;
@@ -6203,6 +6211,8 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     if (callSaveEl) conv.convCallEnabled = callSaveEl.checked;
     const callFreqSaveEl = document.getElementById('cs-call-freq-btn');
     if (callFreqSaveEl) conv.convCallFreq = callFreqSaveEl.dataset.value || 'normal';
+  const narrPersonSaveEl = document.getElementById('cs-narr-person-btn');
+  if (narrPersonSaveEl) conv.convNarrPerson = narrPersonSaveEl.dataset.value || 'second';
     const toolsMemSaveEl = document.getElementById('cs-tools-memory');
     if (toolsMemSaveEl) conv.convToolsMemory = toolsMemSaveEl.checked;
     const toolsWvSaveEl = document.getElementById('cs-tools-worldview');
@@ -7250,6 +7260,49 @@ async function applyLorebooksToWorldview() {
     if (dropdown) dropdown.classList.add('hidden');
   }
 
+  // ===== 叙述人称档位（对话级，第一/第二/第三人称，在对话设置弹窗内临时编辑）=====
+  const _NARR_PERSON_OPTIONS = [
+    { value: 'first', label: '第一人称（不推荐群像使用）' },
+    { value: 'second', label: '第二人称（称呼user为你）' },
+    { value: 'third', label: '第三人称（全局使用第三人称）' }
+  ];
+  function _syncNarrPersonUI(val) {
+    const v = ['first', 'second', 'third'].includes(val) ? val : 'second';
+    const btn = document.getElementById('cs-narr-person-btn');
+    const label = document.getElementById('cs-narr-person-label');
+    const opt = _NARR_PERSON_OPTIONS.find(o => o.value === v);
+    if (btn) btn.dataset.value = v;
+    if (label && opt) label.textContent = opt.label;
+  }
+  function _toggleNarrPersonDropdown() {
+    const dropdown = document.getElementById('cs-narr-person-dropdown');
+    if (!dropdown) return;
+    const isHidden = dropdown.classList.contains('hidden');
+    if (isHidden) {
+      const btn = document.getElementById('cs-narr-person-btn');
+      const curVal = (btn && btn.dataset.value) || 'second';
+      dropdown.innerHTML = _NARR_PERSON_OPTIONS.map(o =>
+        `<div class="custom-dropdown-item${o.value === curVal ? ' active' : ''}" onclick="Chat._selectNarrPerson('${o.value}')">${Utils.escapeHtml(o.label)}</div>`
+      ).join('');
+      dropdown.classList.remove('hidden');
+      setTimeout(() => {
+        document.addEventListener('click', function _close(e) {
+          if (!dropdown.contains(e.target) && !e.target.closest('#cs-narr-person-btn')) {
+            dropdown.classList.add('hidden');
+            document.removeEventListener('click', _close);
+          }
+        });
+      }, 0);
+    } else {
+      dropdown.classList.add('hidden');
+    }
+  }
+  function _selectNarrPerson(val) {
+    _syncNarrPersonUI(val);
+    const dropdown = document.getElementById('cs-narr-person-dropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+  }
+
   return {
     loadHistory, send, cancelRequest, editMessage, saveEdit,
     createBranch, switchBranch, regenerate,
@@ -7299,6 +7352,8 @@ openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
     _toggleBubbleTimeDropdown,
     // 来电频率下拉
     _toggleCallFreqDropdown, _selectCallFreq,
+    // 叙述人称下拉
+    _toggleNarrPersonDropdown, _selectNarrPerson,
     // 环境音模式下拉
     _toggleAmbientModeDropdown, _selectAmbientMode
   };

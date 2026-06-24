@@ -356,7 +356,9 @@ const container = document.getElementById('backstage-messages');
       if (window.SingleMode) {
         const singleSettings = SingleMode.getCurrentSingleSettings && SingleMode.getCurrentSingleSettings();
         if (singleSettings) {
-          const mainCharText = await SingleMode.getMainCharPrompt(singleSettings);
+          let _np = 'second';
+          try { _np = (Chat._getConvSettings && Chat._getConvSettings().narrPerson) || 'second'; } catch(_) {}
+          const mainCharText = await SingleMode.getMainCharPrompt(singleSettings, _np);
           if (mainCharText) systemParts.push(mainCharText);
         }
       }

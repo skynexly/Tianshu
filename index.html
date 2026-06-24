@@ -1410,6 +1410,16 @@
                 <span style="font-size:13px;color:var(--text);white-space:nowrap">正文字数</span>
                 <input type="number" id="cs-reply-wordcount" value="800" min="200" max="3000" step="100" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;text-align:center">
                 <span style="font-size:11px;color:var(--text-secondary)">字（建议 400-1500）</span>
+<div id="cs-narr-person-row" style="display:flex;align-items:center;gap:10px;margin-top:4px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
+                <span style="font-size:13px;color:var(--text);white-space:nowrap">叙述人称</span>
+                <div style="position:relative;flex:1;min-width:0">
+                  <button type="button" id="cs-narr-person-btn" class="custom-select-btn" style="font-size:12px;padding:6px 10px;width:100%" onclick="Chat._toggleNarrPersonDropdown()">
+                    <span id="cs-narr-person-label" style="flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">第二人称（称呼user为你）</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.7"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  <div id="cs-narr-person-dropdown" class="custom-dropdown hidden" style="max-height:200px;overflow-y:auto;left:0;right:0;white-space:nowrap"></div>
+                </div>
+              </div>
               </div>
               <div style="margin-top:4px">
                 <span style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">时间格式</span>
@@ -4001,12 +4011,12 @@ const GameLog = (() => {
 <script src="js/wv-generator.js?v=10"></script>
 <script src="js/single_card.js?v=9"></script>
 <script src="js/attached-chars.js"></script>
-<script src="js/single_mode.js?v=2"></script>
+<script src="js/single_mode.js?v=3"></script>
 <script src="js/character.js?v=5"></script>
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=6"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=54"></script>
+<script src="js/chat.js?v=57"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4014,16 +4024,16 @@ const GameLog = (() => {
 <script src="js/branch.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/gaiden.js"></script>
-<script src="js/backstage.js?v=4"></script>
+<script src="js/backstage.js?v=5"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=7"></script>
 <script src="js/status_bar.js?v=27"></script>
 <script src="js/ambient.js?v=1"></script>
-<script src="js/worldvoice.js?v=8"></script>
+<script src="js/worldvoice.js?v=9"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/phone.js?v=711"></script>
+<script src="js/phone.js?v=722"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>

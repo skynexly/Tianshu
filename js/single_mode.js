@@ -459,8 +459,14 @@ const SingleMode = (() => {
   }
 
   // 根据设定取出 AI 扮演角色的资料文本（chat.js 调用）
-  async function getMainCharPrompt(settings) {
+  async function getMainCharPrompt(settings, narrPerson) {
     if (!settings || !settings.charId) return '';
+    const _np = ['first', 'second', 'third'].includes(narrPerson) ? narrPerson : 'second';
+    const _personLine = _np === 'first'
+      ? '描写"{{char}}"时使用第一人称"我"叙述其动作、心理与感受；称呼"{{user}}"时使用第二人称"你"或玩家姓名，让玩家保有代入感（{{user}}不在场时可用第三人称提及）。'
+      : _np === 'third'
+      ? '全程使用第三人称叙述：描写"{{char}}"用第三人称（"他/她/Ta" 或名字），称呼"{{user}}"也使用第三人称（"Ta" 或玩家姓名），不使用"你"。'
+      : '描写"{{char}}"时使用第三人称（"他/她/Ta" 或名字）；称呼"{{user}}"时使用第二人称"你"或玩家姓名，让玩家保有代入感。';
     if (settings.charType === 'card') {
       const c = await SingleCard.get(settings.charId);
       if (!c) return '';
@@ -469,7 +475,7 @@ const SingleMode = (() => {
 请严格扮演"{{char}}"，确保你的回答始终符合设定。
 你应该：
 1. 将这些设定自然地融入到对话中，不要直接重复或提及这些设定内容。
-2. 描写"{{char}}"时使用第三人称（"他/她/Ta" 或名字）；称呼"{{user}}"时使用第二人称"你"或玩家姓名，让玩家保有代入感。
+2. ${_personLine}
 3. 如果世界观中存在其他角色，允许Ta们作为路人/NPC登场推动剧情。
 4. 如果{{user}}和{{char}}不在同一场景，请保持跟随{{user}}的视角，而非一味描写{{char}}。如有必要可以双线进行，但优先回应{{user}}对环境的互动，再考虑提及{{char}}的状态。
 
@@ -504,7 +510,7 @@ const SingleMode = (() => {
 请严格扮演"{{char}}"，确保你的回答始终符合设定。
 你应该：
 1. 将这些设定自然地融入到对话中，不要直接重复或提及这些设定内容。
-2. 描写"{{char}}"时使用第三人称（"他/她/Ta" 或名字）；称呼"{{user}}"时使用第二人称"你"或玩家姓名，让玩家保有代入感。
+2. ${_personLine}
 3. 如果世界观中存在其他角色，允许Ta们作为路人/NPC登场推动剧情。
 4. 如果{{user}}和{{char}}不在同一场景，请保持跟随{{user}}的视角，而非一味描写{{char}}。如有必要可以双线进行，但优先回应{{user}}对环境的互动，再考虑提及{{char}}的状态。
 

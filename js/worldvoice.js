@@ -357,9 +357,9 @@ ${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}${readingEcho ? '\n\n' + readin
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
           body: JSON.stringify({
-            model, stream: false, temperature: 0.9, max_tokens: 4096,
-            messages: [
-              { role: 'system', content: systemPrompt },
+            model, stream: false, temperature: 0.9, max_tokens: 8192,
+        messages: [
+          { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
             ]
           }),
@@ -368,7 +368,7 @@ ${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}${readingEcho ? '\n\n' + readin
 
         if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
         const json = await resp.json();
-        const content = json.choices?.[0]?.message?.content || '';
+        const content = (typeof Phone !== 'undefined' && Phone._phoneExtractContent) ? Phone._phoneExtractContent(json) : (json.choices?.[0]?.message?.content || '');
         // 用 Phone 的强容错解析（截断救援 / 尾逗号 / 逐条抠取兜底）；不可用时回退裸解析
         if (typeof Phone !== 'undefined' && Phone._parsePhoneJsonArray) {
           posts = Phone._parsePhoneJsonArray(content);
@@ -584,9 +584,9 @@ ${wvPrompt}`;
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
           body: JSON.stringify({
-            model, stream: false, temperature: 0.85, max_tokens: 8192,
-            messages: [
-              { role: 'system', content: systemPromptFull },
+            model, stream: false, temperature: 0.85, max_tokens: 16384,
+        messages: [
+          { role: 'system', content: systemPromptFull },
               { role: 'user', content: userPrompt }
             ]
           }),
@@ -595,7 +595,7 @@ ${wvPrompt}`;
 
         if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
         const json = await resp.json();
-        const content = json.choices?.[0]?.message?.content || '';
+        const content = (typeof Phone !== 'undefined' && Phone._phoneExtractContent) ? Phone._phoneExtractContent(json) : (json.choices?.[0]?.message?.content || '');
         let detail;
         if (typeof Phone !== 'undefined' && Phone._parsePhoneJsonObject) {
           detail = Phone._parsePhoneJsonObject(content);
@@ -871,11 +871,11 @@ ${wvPrompt}`;
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ model, stream: false, temperature: 0.85, max_tokens: 8192, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }] })
+      body: JSON.stringify({ model, stream: false, temperature: 0.85, max_tokens: 16384, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }] })
     });
     if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
     const json = await resp.json();
-    const content = json.choices?.[0]?.message?.content || '';
+    const content = (typeof Phone !== 'undefined' && Phone._phoneExtractContent) ? Phone._phoneExtractContent(json) : (json.choices?.[0]?.message?.content || '');
     let detail;
     if (typeof Phone !== 'undefined' && Phone._parsePhoneJsonObject) {
       detail = Phone._parsePhoneJsonObject(content);
