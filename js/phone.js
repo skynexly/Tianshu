@@ -11045,6 +11045,7 @@ ${houseDataText}`;
     let useWv = !!book.genUseWorldView;
     let useMainline = !!book.genUseMainline;
     let mapping = ['none', 'weak', 'mid', 'strong'].includes(book.genMapping) ? book.genMapping : 'none';
+    let fanfic = !!book.genFanfic;  // 标记为同人文（仅 strong/入戏 档下可勾）
     // 指定阵容：picks[id] = 'lead' | 'support' | 'cameo'（未选则无 key）
     const picks = {};
     try {
@@ -11126,7 +11127,7 @@ ${houseDataText}`;
         <label class="circle-check-label" style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:16px">
           <span class="circle-check-text">
             <span style="font-size:13px;color:var(--text)">参考近期主线剧情</span>
-            <span style="display:block;font-size:11px;color:var(--text-tertiary,#888);margin-top:2px">把最近约 10 轮主线对话作为角色相处方式的参考注入；仅供 AI 把握关系氛围，不会照搬情节</span>
+            <span style="display:block;font-size:11px;color:var(--text-tertiary,#888);margin-top:2px">把最近约 10 轮主线对话作为角色相处方式的参考注入</span>
           </span>
           <input type="checkbox" class="circle-check" id="rd-gen-mainline" ${useMainline ? 'checked' : ''}>
           <span class="circle-check-ui"></span>
@@ -11136,6 +11137,16 @@ ${houseDataText}`;
           <div style="font-size:13px;font-weight:600;color:var(--text)">${o.name}</div>
           <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${o.desc}</div>
         </div>`).join('');
+      // 标记为同人文：仅「入戏」档下显示
+      const fanficRow = (mapping === 'strong') ? `
+        <label class="circle-check-label" style="padding:11px 13px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+          <span class="circle-check-text">
+            <span style="font-size:13px;color:var(--text)">标记为同人文</span>
+            <span style="display:block;font-size:11px;color:var(--text-tertiary,#888);margin-top:2px">勾选后本书被视为同人创作</span>
+          </span>
+          <input type="checkbox" class="circle-check" id="rd-gen-fanfic" ${fanfic ? 'checked' : ''}>
+          <span class="circle-check-ui"></span>
+        </label>` : '';
       // 指定阵容（映射档非 none 时显示）
       let castSection = '';
       if (mapping !== 'none') {
@@ -11176,6 +11187,7 @@ ${houseDataText}`;
             ${mainlineRow}
             <div style="font-size:13px;font-weight:600;margin-bottom:8px">人物映射</div>
             ${mapHtml}
+            ${fanficRow}
             ${castSection}
           </div>
           <div style="display:flex;gap:10px;padding:14px 20px 18px">
@@ -11205,6 +11217,8 @@ ${houseDataText}`;
       if (wvCb) wvCb.onchange = () => { useWv = wvCb.checked; };
       const mlCb = mask.querySelector('#rd-gen-mainline');
       if (mlCb) mlCb.onchange = () => { useMainline = mlCb.checked; };
+      const ffCb = mask.querySelector('#rd-gen-fanfic');
+      if (ffCb) ffCb.onchange = () => { fanfic = ffCb.checked; };
       mask.querySelector('#rd-gen-cancel').onclick = () => mask.remove();
       mask.querySelector('#rd-gen-ok').onclick = async () => {
         // 存进 book
@@ -11214,7 +11228,21 @@ ${houseDataText}`;
           bk.genUseWorldView = !!useWv;
           bk.genUseMainline = !!useMainline;
           bk.genMapping = mapping;
+          bk.genFanfic = (mapping === 'strong') ? !!fanfic : false;  // 同人标记仅入戏档有效
           bk.genCastPick = (mapping === 'none') ? null : buildPick();
+          // 同人标记：把"xx 的同人文。"拼到简介开头（指定主角→用名字，未指定→笼统）。
+          // 防重复：先剥掉旧的同人前缀，再按当前状态决定是否重拼。
+          {
+            const FANFIC_RE = /^(?:《[^》]*》是)?[^。\n]*同人(?:文|创作)。\s*/;
+            let intro = (bk.intro || '').replace(FANFIC_RE, '').trimStart();
+            if (bk.genFanfic) {
+              const pick = bk.genCastPick;
+              const leadNames = (pick && Array.isArray(pick.leads)) ? pick.leads.map(c => (c && c.name || '').trim()).filter(Boolean) : [];
+              const prefix = leadNames.length ? `本作是 ${leadNames.join(' 与 ')} 的同人文。` : '本作为同人创作。';
+              intro = prefix + (intro ? '\n' + intro : '');
+            }
+            bk.intro = intro;
+          }
           await _savePhoneData();
         }
         // 仅保存模式（自写书参考素材设置）：存完即关，不触发生成
