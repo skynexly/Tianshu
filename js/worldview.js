@@ -5889,10 +5889,14 @@ async function openPhoneAppsEditor() {
   const shUnitEl = document.getElementById('pa-shop-deliveryUnit'); if (shUnitEl) shUnitEl.value = sh.deliveryUnit || 'day';
   setVal('pa-forum-name', fm.name);
   setVal('pa-forum-desc', fm.desc);
-  // 电台
+// 电台
   const rd = pa.radio || {};
   setVal('pa-radio-name', rd.name);
   setVal('pa-radio-desc', rd.desc);
+  // 阅读
+  const rg = pa.reading || {};
+  setVal('pa-reading-name', rg.name);
+  setVal('pa-reading-desc', rg.desc);
 
   // 小屋
   const ct = pa.cottage || {};
@@ -6096,6 +6100,14 @@ function _buildPhoneAppsEditorHTML(w) {
     <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（小说阅读）</span>
   </div>
   <div style="background:var(--bg-tertiary);padding:12px;border-radius:8px;margin-bottom:16px">
+    <label style="display:block;margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">APP 名称</span>
+      <input type="text" id="pa-reading-name" placeholder="例如：书阁 / 藏书楼 / 阅文" style="width:100%;padding:6px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+    </label>
+    <label style="display:block;margin-bottom:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">APP 描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这个世界的阅读平台画风）</span></span>
+      <textarea id="pa-reading-desc" class="auto-resize-textarea" rows="2" placeholder="例如：修真界主流小说平台，涵盖修仙、异界、都市玄幻等题材" style="width:100%;padding:8px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:50px"></textarea>
+    </label>
     <div>
       <button type="button" onclick="Worldview.openReadingCastEditor()" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">可出场作者</button>
       <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以成为书的作者</div>
@@ -6179,10 +6191,14 @@ async function closePhoneAppsEditor() {
     w.phoneApps.shop.deliveryUnit = getVal('pa-shop-deliveryUnit') || 'day';
     w.phoneApps.forum.name = getVal('pa-forum-name');
     w.phoneApps.forum.desc = getVal('pa-forum-desc');
-    // 电台（只保存 name/desc，分类数据由分类编辑器单独管理）
+// 电台（只保存 name/desc，分类数据由分类编辑器单独管理）
     w.phoneApps.radio = w.phoneApps.radio || {};
     w.phoneApps.radio.name = getVal('pa-radio-name');
     w.phoneApps.radio.desc = getVal('pa-radio-desc');
+    // 阅读（只保存 name/desc，出场作者由专用编辑器管理）
+    w.phoneApps.reading = w.phoneApps.reading || {};
+    w.phoneApps.reading.name = getVal('pa-reading-name');
+    w.phoneApps.reading.desc = getVal('pa-reading-desc');
     // 小屋
     w.phoneApps.cottage = w.phoneApps.cottage || {};
     w.phoneApps.cottage.name = getVal('pa-cottage-name');
@@ -6211,6 +6227,10 @@ async function closePhoneAppsEditor() {
     syncHidden('wv-forum-name', w.phoneApps.forum.name);
     syncHidden('wv-forum-desc', w.phoneApps.forum.desc);
     await _saveEditingWV(w);
+    // v704：刷新手机缓存，让首页图标立刻生效
+    if (typeof Phone !== 'undefined' && Phone.reloadShopMeta) {
+      await Phone.reloadShopMeta();
+    }
   }
   const overlay = document.getElementById('phone-apps-editor-overlay');
   if (overlay) overlay.remove();
@@ -6398,6 +6418,8 @@ function _renderRadioCatsEditor(overlay, w) {
         ${loreBox}`;
     }
 
+    // 重渲染前记录滚动位置（toggle 勾选不应弹回顶部）
+    const _prevScroll = (() => { const sc = overlay.querySelector('.wv-cast-scroll'); return sc ? sc.scrollTop : 0; })();
     overlay.innerHTML = `
     <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 12px;display:flex;align-items:center;justify-content:space-between">
       <div style="display:flex;align-items:center;gap:8px">
@@ -6407,13 +6429,16 @@ function _renderRadioCatsEditor(overlay, w) {
         <span style="font-size:16px;font-weight:600;color:var(--text)">可出场角色</span>
       </div>
     </div>
-    <div style="flex:1;overflow-y:auto;padding:0 16px 24px">
+    <div class="wv-cast-scroll" style="flex:1;overflow-y:auto;padding:0 16px 24px">
       <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;line-height:1.6">生成电台预览时，决定哪些角色可能出任主播 / 嘉宾。该设置只影响预览生成阶段。</div>
       ${modeBtn('default', '默认', '发送全部角色，由 AI 自行挑选合适的人出场')}
       ${modeBtn('disabled', '禁用', '不发送任何角色名单，主播 / 嘉宾全部为虚构')}
       ${modeBtn('whitelist', '勾选', '只发送下方勾选的角色，AI 只能从中挑选')}
       ${listHtml}
     </div>`;
+    // 恢复滚动位置
+    const _sc = overlay.querySelector('.wv-cast-scroll');
+    if (_sc && _prevScroll) _sc.scrollTop = _prevScroll;
   }
 
   async function closeRadioCastEditor() {
@@ -6528,6 +6553,8 @@ function _radioCastSearch(query) {
       <div>${wvGroup}${cardGroup}${noResult}</div>
       ${loreBox}`;
 
+    // 重渲染前记录滚动位置（toggle 勾选不应弹回顶部）
+    const _prevScroll = (() => { const sc = overlay.querySelector('.wv-cast-scroll'); return sc ? sc.scrollTop : 0; })();
     overlay.innerHTML = `
     <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 12px;display:flex;align-items:center;justify-content:space-between">
       <div style="display:flex;align-items:center;gap:8px">
@@ -6537,10 +6564,13 @@ function _radioCastSearch(query) {
         <span style="font-size:16px;font-weight:600;color:var(--text)">可出场作者</span>
       </div>
     </div>
-    <div style="flex:1;overflow-y:auto;padding:0 16px 24px">
+    <div class="wv-cast-scroll" style="flex:1;overflow-y:auto;padding:0 16px 24px">
       <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;line-height:1.6">设置哪些角色可以作为书的作者署名。不勾任何人则作者全部虚构；勾了谁，AI 就只能从这些人里挑选作者。此设置独立于「注入世界观」和「映射」，只决定作者身份。</div>
       ${listHtml}
     </div>`;
+    // 恢复滚动位置
+    const _sc = overlay.querySelector('.wv-cast-scroll');
+    if (_sc && _prevScroll) _sc.scrollTop = _prevScroll;
   }
 
   async function closeReadingCastEditor() {

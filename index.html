@@ -11,8 +11,8 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=141">
-<link rel="stylesheet" href="css/phone.css?v=277">
-<link rel="stylesheet" href="css/phone-fudge.css?v=12">
+<link rel="stylesheet" href="css/phone.css?v=313">
+<link rel="stylesheet" href="css/phone-fudge.css?v=16">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
 </head>
@@ -647,6 +647,9 @@
  <div class="form-group"><span class="form-label">数量</span><input type="number" id="item-edit-count" value="1" min="0"></div>
 <div class="form-group"><span class="form-label">物品描述</span><textarea id="item-edit-effect" rows="4" placeholder="物品效果描述"></textarea></div>
 <div class="form-group"><span class="form-label">入手时间</span><input type="text" id="item-edit-gotat" placeholder="如：2026年4月30日 18:30（留空则自动提取）"></div>
+  <div style="margin-top:4px">
+ <button onclick="Character.moveItemToStorage()" style="width:100%;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:10px;font-size:13px;cursor:pointer">移入仓库（衣橱 / 家具）</button>
+  </div>
   <div class="modal-actions" style="flex-shrink:0;margin-top:12px;padding-top:12px">
  <button onclick="Character.deleteItem()" style="flex:1;background:none;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));color:var(--danger)">删除</button>
  <button onclick="Character.saveItem()" style="flex:1">保存</button>
@@ -3978,7 +3981,7 @@ const GameLog = (() => {
   return { log, toggle, clear, render };
 })();
 </script>
-<script src="js/db.js?v=11"></script>
+<script src="js/db.js?v=12"></script>
 <script src="js/utils.js?v=2"></script>
 <script src="js/markdown.js?v=7"></script>
 <script src="js/api.js"></script>
@@ -3990,20 +3993,20 @@ const GameLog = (() => {
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=56"></script>
-<script src="js/worldview.js?v=58"></script>
+<script src="js/worldview.js?v=61"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js"></script>
 <script src="js/conv_gameplay.js?v=10"></script>
-<script src="js/wv-generator.js?v=9"></script>
+<script src="js/wv-generator.js?v=10"></script>
 <script src="js/single_card.js?v=9"></script>
 <script src="js/attached-chars.js"></script>
 <script src="js/single_mode.js?v=2"></script>
-<script src="js/character.js?v=3"></script>
+<script src="js/character.js?v=5"></script>
 <script src="js/prompts.js"></script>
-<script src="js/conversations.js?v=5"></script>
+<script src="js/conversations.js?v=6"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=51"></script>
+<script src="js/chat.js?v=54"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4016,10 +4019,11 @@ const GameLog = (() => {
 <script src="js/calendar.js?v=7"></script>
 <script src="js/status_bar.js?v=27"></script>
 <script src="js/ambient.js?v=1"></script>
-<script src="js/worldvoice.js?v=6"></script>
+<script src="js/worldvoice.js?v=8"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
-<script src="js/phone.js?v=648"></script>
+<script src="js/ebook-import.js?v=1"></script>
+<script src="js/phone.js?v=711"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -4038,7 +4042,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=5"></script>
-<script src="js/app.js?v=108"></script>
+<script src="js/app.js?v=109"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

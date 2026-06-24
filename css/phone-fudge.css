@@ -831,3 +831,174 @@
   border: none !important;
   border-radius: 18px !important;
 }
+
+/* ============================================================
+   阅读 App：fudge 下 .phone-body 铺主文字色深底，
+   阅读各页文字默认是 var(--text)（深色）会埋进深底里看不见。
+   策略与壁纸模式一致：主文字反成 --bg（浅色）、次要文字半透明浅色，
+   卡片改实色浅块 + 大圆角 + 无边框。
+   ============================================================ */
+
+/* ---- 书架页 ---- */
+/* 顶栏标题 / 分区标题 / 齿轮 → 浅色 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-topbar-title,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-mine-section-title,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-gear {
+  color: var(--bg) !important;
+}
+/* 书架卡：实色浅块 + 大圆角 + 去边框 + 更松内边距（原 10px/固定高 100px 偏挤；高度统一加大并固定，避免无封面占位块被内容撑长） */
+.phone-shell.phone-theme-fudge .phone-reading-shelf-card {
+  background: var(--bg-secondary) !important;
+  border: none !important;
+  border-radius: 18px;
+  padding: 14px !important;
+  height: 124px !important;
+}
+.phone-shell.phone-theme-fudge .phone-reading-shelf-swipe { border-radius: 18px; }
+/* 来源角标：fudge 圆角大、内边距大，往内挪一点避免贴边 */
+.phone-shell.phone-theme-fudge .phone-reading-shelf-dot { top: 13px; right: 13px; }
+/* 卡内文字保持原变量即可（卡片是浅底），只需保证标题/简介在浅底上是深字——默认 var(--text) 正合适，不覆盖 */
+/* 右上角「+」按钮：浅块 */
+.phone-shell.phone-theme-fudge .phone-reading-add-btn {
+  background: var(--bg-secondary) !important;
+}
+/* 空状态文字 → 浅色 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-empty-title {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-empty-desc {
+  color: color-mix(in srgb, var(--bg) 64%, transparent) !important;
+}
+
+/* ---- 发现页 ---- */
+/* 搜索栏：实色浅块 + 胶囊 */
+.phone-shell.phone-theme-fudge .phone-reading-discover-bar input {
+  background: var(--bg-secondary) !important;
+  border: none !important;
+  border-radius: 999px !important;
+}
+.phone-shell.phone-theme-fudge .phone-reading-search-btn {
+  border-radius: 999px !important;
+}
+
+/* ---- 目录页 ---- */
+/* 书名 / 作者 / 简介 / 分区标题 → 浅色（落在深底上） */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-toc-title,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-toc-section {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-toc-author,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-toc-intro {
+  color: color-mix(in srgb, var(--bg) 66%, transparent) !important;
+}
+/* 章节项文字 → 浅色，序号/已读 → 半透明浅色 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-toc-name {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-toc-idx,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-toc-item.read .phone-reading-toc-name,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-toc-lock {
+  color: color-mix(in srgb, var(--bg) 55%, transparent) !important;
+}
+.phone-shell.phone-theme-fudge .phone-reading-toc-item:active {
+  background: color-mix(in srgb, var(--bg) 12%, transparent) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-toc-gear {
+  color: var(--bg) !important;
+}
+/* 底部「开始阅读」条：深底上换成半透明浅块底 */
+.phone-shell.phone-theme-fudge .phone-reading-toc-footer {
+  background: color-mix(in srgb, var(--bg) 10%, transparent) !important;
+  border-top: none !important;
+}
+
+/* ---- 设置页 ---- */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-set-rowlabel {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-set-rowdesc {
+  color: color-mix(in srgb, var(--bg) 62%, transparent) !important;
+}
+/* 设置按钮：浅块 + 胶囊 + 去边框 */
+.phone-shell.phone-theme-fudge .phone-reading-set-btn {
+  background: color-mix(in srgb, var(--bg) 14%, transparent) !important;
+  border: none !important;
+  border-radius: 999px !important;
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge .phone-reading-set-btn.danger {
+  color: #ff9b9b !important;
+}
+
+/* ---- 阅读器正文页 ---- */
+/* 标题 / 正文 → 浅色（深底上阅读），副标题 → 半透明浅色 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-chapter-title,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-chapter-body {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-chapter-sub {
+  color: color-mix(in srgb, var(--bg) 60%, transparent) !important;
+}
+/* 段落想法图标：半透明浅色，命中态保持主题色 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-note-dot {
+  color: color-mix(in srgb, var(--bg) 60%, transparent) !important;
+}
+/* 想法卡（正文内）：半透明浅块，内文反成浅色 */
+.phone-shell.phone-theme-fudge .phone-reading-note-card {
+  background: color-mix(in srgb, var(--bg) 12%, transparent) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-note-card-tx {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-note-card-nm {
+  color: color-mix(in srgb, var(--bg) 64%, transparent) !important;
+}
+/* 底部辅助功能条（共读笔记/本章说/打赏/分享）：浅块底 + 图标文字反色 */
+.phone-shell.phone-theme-fudge .phone-reading-actionbar {
+  background: color-mix(in srgb, var(--bg) 10%, transparent) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-actionbtn-ic {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-actionbtn-tx {
+  color: color-mix(in srgb, var(--bg) 62%, transparent) !important;
+}
+/* 章节导航按钮：上一章（次按钮）改半透明浅块 + 浅字；下一章保留主题色 */
+.phone-shell.phone-theme-fudge .phone-reading-chapter-nav:not(.next) {
+  background: color-mix(in srgb, var(--bg) 14%, transparent) !important;
+  border: none !important;
+  border-radius: 999px !important;
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge .phone-reading-chapter-nav.next {
+  border-radius: 999px !important;
+  border: none !important;
+}
+/* 想法输入弹层里的已写想法行：半透明浅块 + 浅字（弹层底是 --bg 浅色时不需要，但深底主题弹层沿用打赏面板，这里保险处理文字） */
+
+/* ---- 查看大纲页 ---- */
+/* 大纲页直接铺在深底上（无卡片包裹），正文/条目文字需反成浅色 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-ol-text,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-ol-item {
+  color: var(--bg) !important;
+}
+/* 分区标题保留主题强调色（accent 在深底上可见），警示条保持自身配色，均不覆盖 */
+
+/* ---- 书评/评论区 ---- */
+/* 评论铺在深底上（无卡片包裹）：正文反成浅色，名字/计数/刷新用半透明浅色 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-cmt-tx {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-cmt-name,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-cmt-count,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-cmt-refresh {
+  color: color-mix(in srgb, var(--bg) 64%, transparent) !important;
+}
+/* 底部发送栏：半透明浅块底 + 浅字输入，发送按钮保留主题色 */
+.phone-shell.phone-theme-fudge .phone-reading-cmt-inputbar {
+  background: color-mix(in srgb, var(--bg) 10%, transparent) !important;
+  border-top: none !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-cmt-inputbar input {
+  color: var(--bg) !important;
+}

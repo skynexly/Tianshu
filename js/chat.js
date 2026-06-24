@@ -452,6 +452,8 @@ const Chat = (() => {
     if (messages.length > 0) scrollToBottom();
     // 切换对话后，从该对话的 phoneData 读回未发送的手机操作日志
     try { if (typeof Phone !== 'undefined' && Phone.reloadActionLog) Phone.reloadActionLog(); } catch(_) {}
+    // 切换对话后，预热世界观初始住所（让 AI 在玩家没打开小屋 App 时也知道住所，避免剧情错位）
+    try { if (typeof Phone !== 'undefined' && Phone.ensureInitialHouse) Phone.ensureInitialHouse(); } catch(_) {}
     // 切换对话后，刷新底部快速切换栏（不同世界观可见的面具不同）
     try { renderQuickSwitches(); } catch(_) {}
     // 异步加载 AI 头像，加载好后回填到已渲染的消息
@@ -1783,6 +1785,42 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
       }
     } catch(_) {}
 
+    // 共读记录注入：共读伙伴在场时，把「过去的共读记录」作为背景参考注入。
+    // 触发：关键词命中必发，否则 30% 概率偶发；整体受阅读「同步主线」开关控制。
+    try {
+      if (typeof Phone !== 'undefined' && Phone.getCoReadForNPCs) {
+        let _syncOn = true;
+        try {
+          const _pd = (Phone._getPhoneData) ? await Phone._getPhoneData() : null;
+          const _prefs = _pd && _pd.readingGlobalPrefs;
+          if (_prefs && typeof _prefs.syncMainline === 'boolean') _syncOn = _prefs.syncMainline;
+        } catch(_) {}
+        if (_syncOn) {
+          const _present = (typeof NPC !== 'undefined' && NPC.getPresentNPCs) ? NPC.getPresentNPCs() : [];
+          if (_present.length > 0) {
+            const _lastUser = (apiMessages.filter(m => m.role === 'user').pop()?.content || '');
+            const _crKeywords = ['共读', '一起读', '一起看', '在读', '读的那本', '那本书', '看的书', '读到', '书里', '小说', '想法'];
+            const _crKwHit = _crKeywords.some(kw => _lastUser.includes(kw));
+            if (_crKwHit || Math.random() < 0.3) {
+              const _coRead = await Promise.race([
+                Phone.getCoReadForNPCs(_present),
+                new Promise(resolve => setTimeout(() => resolve(''), 3000))
+              ]);
+              if (_coRead) {
+                const _crContent = `【{{user}}与在场角色的共读记录｜OOC·背景参考】\n以下是{{user}}和当前在场角色过去一起读书时、在书页段落上留下的想法记录，属于你们之间已经发生过的事。这只是背景参考，帮助你记得你们有过这样的共读经历与交流，不是当前正在发生的剧情。\n\n${_coRead}\n\n注意：只在剧情自然贴合时（比如聊到这本书、这段情节，或想起一起读书的时光）才淡淡提起，不要每轮复述，不要硬凹话题。`;
+                const insertIdx = apiMessages.length - 1;
+                if (insertIdx >= 0) {
+                  apiMessages.splice(insertIdx, 0, { role: 'system', content: _crContent });
+                } else {
+                  apiMessages.push({ role: 'system', content: _crContent });
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch(_) {}
+
     // 宏替换：{{user}} → 当前面具角色名；{{char}} → 单人卡角色名（如有）
     const _macroUser = char?.name || '玩家';
     let _macroChar = '';
@@ -1838,6 +1876,56 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
 
 
   /**
+   * 面具隔离引导弹窗（方案C）：新窗口首次发消息时，若当前面具已有记忆/物品，
+   * 询问玩家是否为本对话独立出一份面具。返回 Promise<void>（无论选什么都继续发消息）。
+   */
+  async function _promptMaskIsolation() {
+    try {
+      if (typeof Conversations === 'undefined' || typeof Character === 'undefined') return;
+      if (!Character.isolateMaskForConv || !Character.maskHasContent) return;
+      // 已问过 → 跳过
+      if (Conversations.isMaskIsolated && Conversations.isMaskIsolated()) return;
+      // 当前面具没内容 → 不打扰，但也标记为已处理，避免之后攒了内容反复弹
+      const hasContent = await Character.maskHasContent();
+      if (!hasContent) { await Conversations.markMaskIsolated(); return; }
+
+      const convName = Conversations.getCurrentName ? Conversations.getCurrentName() : '本对话';
+      const choice = await new Promise((resolve) => {
+        const mask = document.createElement('div');
+        mask.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:20px';
+        const esc = (s) => (typeof Utils !== 'undefined' && Utils.escapeHtml) ? Utils.escapeHtml(String(s)) : String(s);
+        const opt = (mode, title, desc) => `
+          <button type="button" data-mode="${mode}" style="width:100%;text-align:left;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:14px;cursor:pointer;margin-bottom:8px">
+            <div style="font-weight:600">${title}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${desc}</div>
+          </button>`;
+        mask.innerHTML = `
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:18px 16px;max-width:360px;width:100%;max-height:86vh;overflow-y:auto;color:var(--text)">
+            <div style="font-size:15px;font-weight:600;margin-bottom:4px">检测到这是新的窗口</div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:14px">当前面具的记忆和物品栏会和其它使用同一面具的窗口共通。是否为「${esc(convName)}」复制一份独立的面具？</div>
+            ${opt('share', '不复制', '多窗口共通记忆和物品栏（保持现状）')}
+            ${opt('mask', '仅复制面具信息', '复制人设，不带记忆和物品栏（全新开始）')}
+            ${opt('maskInv', '复制面具信息 + 物品栏', '带着物品，但记忆从零开始')}
+            ${opt('full', '完全复制', '面具信息、物品栏、记忆库全部复制一份')}
+          </div>`;
+        mask.querySelectorAll('button[data-mode]').forEach(b => {
+          b.onclick = () => { const m = b.dataset.mode; if (mask.parentNode) document.body.removeChild(mask); resolve(m); };
+        });
+        // 点遮罩不关闭，强制做选择（避免误触跳过）
+        document.body.appendChild(mask);
+      });
+
+      const r = await Character.isolateMaskForConv(Conversations.getCurrent(), convName, choice);
+      await Conversations.markMaskIsolated();
+      if (r && r.ok && !r.shared) {
+        UI.showToast('已为本对话创建独立面具', 2000);
+      }
+    } catch (e) {
+      try { GameLog.log('warn', '面具隔离引导失败：' + (e.message || e)); } catch(_) {}
+    }
+  }
+
+  /**
    * 发送消息
    */
   async function send() {
@@ -1859,6 +1947,20 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
     if (!text) return;
+
+    // 发消息前确保世界观初始住所已就位（幂等：已有住所秒返回），避免切对话后立刻发消息时住所还没克隆完
+    if (text !== '<PhoneDown/>' && text !== '<Continue the Chat/>') {
+      try { if (typeof Phone !== 'undefined' && Phone.ensureInitialHouse) await Phone.ensureInitialHouse(); } catch(_) {}
+    }
+
+    // 面具隔离引导（方案C）：普通用户消息、且本对话尚有非系统消息时，首次发言前询问
+    // 排除系统触发指令（PhoneDown / Continue）
+    if (text !== '<PhoneDown/>' && text !== '<Continue the Chat/>') {
+      const _hasUserMsg = messages.some(m => m && m.role === 'user' && !m.hidden);
+      if (!_hasUserMsg) {
+        try { await _promptMaskIsolation(); } catch(_) {}
+      }
+    }
 
     // 更新按钮状态为发送中
     updateSendButton(true);

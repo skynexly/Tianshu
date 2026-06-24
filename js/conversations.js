@@ -475,6 +475,16 @@ async function init() {
     }
   }
 
+  // 面具隔离引导：标记当前对话「已问过是否独立面具」，避免重复弹窗
+  async function markMaskIsolated() {
+    const conv = list.find(c => c.id === currentId);
+    if (conv) { conv._maskIsolated = true; await saveList(); }
+  }
+  function isMaskIsolated() {
+    const conv = list.find(c => c.id === currentId);
+    return !!(conv && conv._maskIsolated);
+  }
+
   // 设置当前对话绑定的 API 预设
   async function setPreset(presetId) {
     const conv = list.find(c => c.id === currentId);
@@ -1576,7 +1586,7 @@ const allArchives = await DB.getAll('archives');
     invalidateAvatarCache: _invalidateAvatarCache,
     refreshTopbar: _updateTopbar,
     togglePin, moveToFolder, moveConvStep, createFolder, renameFolder, deleteFolder, deleteFolderWithConvs,
-    toggleFolderCollapse, toggleFolderPin, moveFolderStep, setMask, setPreset,
+    toggleFolderCollapse, toggleFolderPin, moveFolderStep, setMask, setPreset, markMaskIsolated, isMaskIsolated,
     changeWorldview, _doChangeWorldview,
     changeFolderWorldview, _doChangeFolderWorldview,
     migrateWorldview,

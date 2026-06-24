@@ -175,12 +175,30 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v703';
-const CHANGELOG = `【v703 更新内容】
+    const APP_VERSION = 'v704';
+const CHANGELOG = `【v704 更新内容】
 
-新增「电台」APP
-新增小屋仓库、衣橱仓库的编辑按钮，可直接修改物品的名称、描述与分类
-优化了部分界面显示`;
+📖 全新上线：阅读 App
+- AI 生成小说：长篇连载 + 短篇
+- 自己写书、导入本地电子书（txt / epub）
+- 书评、章节评论、打赏作者/收读者打赏
+- 邀请角色共读，自定义 App 名
+- 论坛会冒出读者讨论你书架上的书
+
+📦 物品入库
+- 物品栏物品可放入衣橱 / 小屋仓库
+
+💬 群聊
+- 新增「AI 生成路人」：按世界观和群介绍批量生成，只作用于当前群
+- 群内路人可点击查看、编辑人设
+- 修复创建群聊弹窗误关闭
+
+🌍 世界观编辑
+- 批量生成角色的性别等信息正确写入"详细设定"
+- 「可出场角色」勾选不再跳回顶部
+
+🎭 面具
+- 新增新窗口一键复制面具（首次发消息时提醒）`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

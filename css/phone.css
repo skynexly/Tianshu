@@ -4022,8 +4022,14 @@ align-self: start;
 }
 .phone-mcomment-row {
   padding: 12px 0; border-bottom: 1px solid rgba(0,0,0,0.05);
+  display: flex; gap: 10px;
 }
 .phone-mcomment-row:last-child { border-bottom: none; }
+.phone-mcomment-av {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; object-fit: cover;
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 600;
+}
+.phone-mcomment-main { flex: 1; min-width: 0; }
 .phone-mcomment-name {
   font-size: 13px; font-weight: 600; color: var(--text);
 }
@@ -4432,7 +4438,7 @@ align-self: start;
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 10px; position: relative;
 }
-.phone-reading-topbar-title { font-size: 15px; font-weight: 600; color: var(--text-primary, #eee); }
+.phone-reading-topbar-title { font-size: 15px; font-weight: 600; color: var(--text); }
 .phone-reading-gear {
   background: none; border: none; cursor: pointer; padding: 4px;
   color: var(--text-secondary, #aaa); display: flex; align-items: center;
@@ -4456,7 +4462,7 @@ align-self: start;
 }
 .phone-reading-pref-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 0; font-size: 13px; color: var(--text-primary, #ddd);
+  padding: 6px 0; font-size: 13px; color: var(--text);
 }
 .phone-reading-pref-row.disabled { opacity: 0.4; pointer-events: none; }
 .phone-reading-pref-row input[type="checkbox"] {
@@ -4479,13 +4485,23 @@ align-self: start;
 }
 .phone-reading-empty svg { opacity: 0.5; }
 .phone-reading-empty-icon { margin-bottom: 4px; }
-.phone-reading-empty-title { font-size: 14px; font-weight: 600; color: var(--text-primary, #ccc); }
+.phone-reading-empty-title { font-size: 14px; font-weight: 600; color: var(--text); }
 .phone-reading-empty-desc { font-size: 12px; color: var(--text-secondary, #888); }
 .phone-reading-empty-btn {
   margin-top: 12px; padding: 6px 18px; border-radius: 16px; border: none;
   background: var(--accent, #f60); color: #fff; font-size: 13px; cursor: pointer;
 }
 .phone-reading-empty-btn:active { opacity: 0.8; }
+/* 书架页右上角「+」按钮 */
+.phone-reading-add-btn {
+  flex-shrink: 0; width: 34px; height: 34px; border: none; border-radius: 50%;
+  background: var(--bg-tertiary, rgba(127,127,127,0.1)); color: var(--text);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.phone-reading-add-btn:active { opacity: 0.7; }
+.phone-shell.has-custom-wallpaper .phone-reading-add-btn {
+  background: rgba(255,255,255,0.16) !important; color: #fff !important;
+}
 
 /* 书架卡片：横向长条，左竖封面 + 右书名简介 */
 .phone-reading-mine-section-title {
@@ -4494,16 +4510,61 @@ align-self: start;
   color: var(--text-secondary, #aaa);
 }
 .phone-reading-shelf { display: flex; flex-direction: column; gap: 12px; padding: 0 14px; }
+/* 书架左滑删除（仿电台 phone-radio-mine-swipe） */
+.phone-reading-shelf-swipe {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+}
+.phone-reading-shelf-swipe-content {
+  position: relative;
+  transition: transform 0.25s ease;
+  will-change: transform;
+  z-index: 1;
+}
+.phone-reading-shelf-swipe-content.swiping { transition: none; }
+.phone-reading-shelf-swipe-delete {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--danger, #e5484d);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 0 12px 12px 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.phone-reading-shelf-swipe.swiped .phone-reading-shelf-swipe-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
 .phone-reading-shelf-card {
   display: flex; align-items: stretch; gap: 12px;
   background: var(--card-bg, rgba(255,255,255,0.06));
   border: 1px solid var(--border, rgba(255,255,255,0.1));
   border-radius: 12px; padding: 10px; cursor: pointer;
+  height: 100px; box-sizing: border-box; overflow: hidden;
+  position: relative;
   transition: transform .12s, box-shadow .12s;
 }
 .phone-reading-shelf-card:active { transform: scale(0.97); }
+/* 来源角标：卡片右上角小圆点。自写=主题色，导入=装饰色，AI 生成书不渲染 */
+.phone-reading-shelf-dot {
+  position: absolute; top: 7px; right: 7px;
+  width: 8px; height: 8px; border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--card-bg, rgba(255,255,255,0.85));
+  z-index: 2; pointer-events: none;
+}
+.phone-reading-shelf-dot.dot-self { background: var(--accent); }
+.phone-reading-shelf-dot.dot-import { background: var(--decoration); }
 .phone-reading-shelf-cover {
-  width: 56px; min-height: 76px; border-radius: 6px;
+  width: 56px; height: 100%; border-radius: 6px;
   background: var(--accent-dim, rgba(100,100,200,0.15));
   display: flex; align-items: center; justify-content: center;
   overflow: hidden; flex-shrink: 0;
@@ -4513,13 +4574,17 @@ align-self: start;
 }
 .phone-reading-shelf-info {
   flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px;
-  min-width: 0;
+  min-width: 0; overflow: hidden;
+}
+/* 在读卡片：底部给绝对定位的进度行留出空间，简介不会压到进度上 */
+.phone-reading-shelf-info.has-progress {
+  justify-content: flex-start; padding-bottom: 16px;
 }
 .phone-reading-shelf-titlerow {
 display: flex; align-items: baseline; gap: 8px; min-width: 0;
 }
 .phone-reading-shelf-title {
-font-size: 14px; font-weight: 600; color: var(--text-primary, #eee);
+  font-size: 14px; font-weight: 600; color: var(--text);
 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 flex-shrink: 1; min-width: 0;
 }
@@ -4545,7 +4610,8 @@ white-space: nowrap;
   font-size: 11px; color: var(--text-tertiary, #666); margin-top: 2px;
 }
 .phone-reading-shelf-progress {
-  font-size: 11px; color: var(--accent, #f60); margin-top: 3px;
+  position: absolute; left: 78px; bottom: 9px;
+  font-size: 10px; color: var(--accent, #f60);
 }
 .phone-reading-cover-fallback {
   width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
@@ -4577,7 +4643,7 @@ white-space: nowrap;
   border: 1px solid var(--border, rgba(255,255,255,0.1));
   border-radius: 6px; padding: 6px 10px;
   background: var(--bg-tertiary, rgba(255,255,255,0.06));
-  font-size: 13px; color: var(--text-primary, #eee);
+  font-size: 13px; color: var(--text);
 }
 .phone-reading-discover-bar input::placeholder { color: var(--text-tertiary, #666); }
 .phone-reading-search-btn {
@@ -4601,14 +4667,14 @@ white-space: nowrap;
   background: var(--accent-dim, rgba(100,100,200,0.15));
 }
 .phone-reading-toc-meta { min-width: 0; flex: 1; }
-.phone-reading-toc-title { font-size: 16px; font-weight: 700; color: var(--text-primary, #eee); line-height: 1.35; }
+.phone-reading-toc-title { font-size: 16px; font-weight: 700; color: var(--text); line-height: 1.35; }
 .phone-reading-toc-author { font-size: 12px; color: var(--text-secondary, #aaa); margin-top: 6px; }
 .phone-reading-toc-intro {
   font-size: 12px; color: var(--text-secondary, #aaa); line-height: 1.6; margin-top: 8px;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
 .phone-reading-toc-section {
-  font-size: 13px; font-weight: 600; color: var(--text-primary, #eee);
+  font-size: 13px; font-weight: 600; color: var(--text);
   margin-bottom: 8px; padding-bottom: 6px;
 }
 .phone-reading-toc-list { display: flex; flex-direction: column; }
@@ -4621,10 +4687,13 @@ white-space: nowrap;
   font-size: 12px; color: var(--text-tertiary, #888); min-width: 24px; text-align: center; flex-shrink: 0;
 }
 .phone-reading-toc-name {
-  font-size: 14px; color: var(--text-primary, #eee); flex: 1; min-width: 0;
+  font-size: 14px; color: var(--text); flex: 1; min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .phone-reading-toc-item.read .phone-reading-toc-name { color: var(--text-tertiary, #888); }
+.phone-reading-toc-item.locked { cursor: default; opacity: 0.4; }
+.phone-reading-toc-item.locked:active { background: none; }
+.phone-reading-toc-lock { margin-left: auto; flex-shrink: 0; display: flex; align-items: center; color: var(--text-secondary, #888); }
 .phone-reading-toc-more {
   text-align: center; font-size: 13px; color: var(--accent, #f60);
   padding: 14px; margin-top: 6px; cursor: pointer;
@@ -4638,6 +4707,125 @@ white-space: nowrap;
   border-radius: 10px; padding: 13px 0; font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .phone-reading-toc-startbtn:active { opacity: 0.85; }
+
+/* 我要写书：目录页「去生成蓝图」引导 */
+.phone-reading-self-guide {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 48px 28px;
+}
+.phone-reading-self-guide-icon { font-size: 40px; margin-bottom: 14px; }
+.phone-reading-self-guide-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.phone-reading-self-guide-desc { font-size: 13px; color: var(--text-secondary, #888); line-height: 1.7; margin-bottom: 22px; }
+.phone-reading-self-guide-btn {
+  background: var(--accent, #f60); color: #fff; border: none; border-radius: 10px;
+  padding: 12px 28px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.phone-reading-self-guide-btn:active { opacity: 0.85; }
+
+/* 我要写书：故事蓝图编辑工作台 */
+.rd-ol-savebtn {
+  margin-left: auto; background: var(--accent, #f60); color: #fff; border: none;
+  border-radius: 8px; padding: 7px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.rd-ol-savebtn:active { opacity: 0.85; }
+.rd-ol-sec {
+  font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 12px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.rd-ol-sec.rd-ol-sec-top { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border); }
+.rd-ol-subsec {
+  font-size: 13px; font-weight: 600; color: var(--text-secondary, #888);
+  margin: 14px 0 10px;
+}
+.rd-ol-subsec.rd-ol-subsec-top { margin-top: 22px; }
+.rd-ol-opt { font-size: 11px; font-weight: 400; color: var(--text-tertiary, #999); }
+.rd-ol-fieldhint { font-size: 11.5px; color: var(--text-tertiary, #999); line-height: 1.6; margin: -2px 0 7px; }
+.rd-ol-field { margin-bottom: 14px; }
+.rd-ol-field > label {
+  display: block; font-size: 12.5px; font-weight: 600; color: var(--text); margin-bottom: 6px;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.rd-ol-field input, .rd-ol-field textarea {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 11px; font-size: 13.5px; color: var(--text); background: var(--bg-secondary);
+  font-family: inherit; line-height: 1.6; resize: none;
+}
+.rd-ol-field textarea { resize: vertical; }
+.rd-ol-field-inline { display: flex; align-items: center; gap: 10px; }
+.rd-ol-field-inline > label { margin-bottom: 0; flex-shrink: 0; min-width: 56px; }
+.rd-ol-field-inline input { flex: 1; }
+.rd-ol-card {
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px 12px 2px;
+  margin-bottom: 12px; background: var(--bg-tertiary);
+}
+.rd-ol-card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12.5px; font-weight: 600; color: var(--text); margin-bottom: 10px;
+}
+.rd-ol-del {
+  background: none; border: none; color: var(--danger, #e54); font-size: 12px;
+  cursor: pointer; padding: 2px 4px;
+}
+.rd-ol-addbtn {
+  width: 100%; background: var(--bg-tertiary); color: var(--text-secondary, #888);
+  border: 1px dashed var(--border); border-radius: 10px; padding: 10px 0;
+  font-size: 13px; cursor: pointer; margin-bottom: 8px;
+}
+.rd-ol-addbtn:active { opacity: 0.8; }
+.rd-ol-genbtn {
+  width: 100%; background: var(--accent, #f60); color: #fff; border: none;
+  border-radius: 10px; padding: 12px 0; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; margin-top: 6px;
+}
+.rd-ol-genbtn:active { opacity: 0.85; }
+.rd-ol-genbtn:disabled { opacity: 0.55; }
+.rd-ol-genbtn.rd-ol-regen { background: var(--bg-tertiary); color: var(--text); border: 1px solid var(--border); }
+.rd-ol-genbtn.rd-ol-clear { background: none; color: var(--danger, #e54); border: 1px solid var(--border); margin-top: 8px; }
+.rd-ol-empty { padding: 8px 0 4px; }
+.rd-ol-empty-desc { font-size: 13px; color: var(--text-secondary, #888); line-height: 1.7; margin-bottom: 14px; }
+
+/* 壁纸模式适配：壁纸下 --text 被强制为白色，输入框/卡片若仍是浅色背景会白底白字。
+   这里把蓝图编辑工作台的输入框、卡片改成半透明深底 + 白字，确保可读。 */
+.phone-shell.has-custom-wallpaper .rd-ol-field input,
+.phone-shell.has-custom-wallpaper .rd-ol-field textarea {
+  background: rgba(18, 20, 28, 0.42) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: rgba(255, 255, 255, 0.96) !important;
+}
+.phone-shell.has-custom-wallpaper .rd-ol-field input::placeholder,
+.phone-shell.has-custom-wallpaper .rd-ol-field textarea::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.phone-shell.has-custom-wallpaper .rd-ol-card {
+  background: rgba(18, 20, 28, 0.30) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+.phone-shell.has-custom-wallpaper .rd-ol-addbtn {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+.phone-shell.has-custom-wallpaper .rd-ol-genbtn.rd-ol-regen {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.phone-shell.has-custom-wallpaper .rd-ol-genbtn.rd-ol-clear {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-reading-text-area {
+  background: rgba(18, 20, 28, 0.42) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: rgba(255, 255, 255, 0.96) !important;
+}
+
+/* 我要写书：手动编辑正文文本框 */
+.phone-reading-text-area {
+  width: 100%; box-sizing: border-box; flex: 1; min-height: 60vh;
+  border: 1px solid var(--border); border-radius: 12px; padding: 14px;
+  font-size: 15px; color: var(--text); background: var(--bg-secondary);
+  font-family: inherit; line-height: 1.9; resize: none;
+}
 /* 壁纸适配 */
 .phone-shell.has-custom-wallpaper .phone-reading-toc-title { color: rgba(255,255,255,0.96) !important; }
 .phone-shell.has-custom-wallpaper .phone-reading-toc-name { color: rgba(255,255,255,0.92) !important; }
@@ -4650,6 +4838,89 @@ white-space: nowrap;
 .phone-reading-chapter-sub { font-size: 12px; color: var(--text-secondary); margin-top: 6px; margin-bottom: 18px; }
 .phone-reading-chapter-body { font-size: 16px; line-height: 1.9; color: var(--text); }
 .phone-reading-chapter-p { margin: 0 0 16px; text-indent: 2em; word-break: break-word; }
+.phone-reading-chapter-p.coread { position: relative; }
+/* ===== 共读：段落想法图标 + 想法卡片 ===== */
+.phone-reading-note-dot {
+  display: inline-flex; align-items: center; gap: 2px; vertical-align: middle;
+  margin-left: 6px; padding: 1px 5px; border-radius: 9px; cursor: pointer;
+  color: var(--text-secondary); opacity: 0.5; transition: all .15s; text-indent: 0;
+  background: rgba(127,127,127,0.1);
+}
+.phone-reading-note-dot:active { opacity: 1; }
+.phone-reading-note-dot.has { opacity: 1; color: var(--accent, #f60); background: rgba(255,102,0,0.12); }
+.phone-reading-note-dot i { font-style: normal; font-size: 10px; font-weight: 700; }
+.phone-reading-note-cards { margin: -6px 0 18px; display: flex; flex-direction: column; gap: 6px; text-indent: 0; }
+.phone-reading-note-card {
+  background: var(--bg-secondary, rgba(127,127,127,0.08)); border-radius: 8px;
+  padding: 8px 12px;
+}
+.phone-reading-note-card-nm { font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 2px; }
+.phone-reading-note-card.me .phone-reading-note-card-nm { color: var(--accent, #f60); }
+.phone-reading-note-card-tx { font-size: 13px; line-height: 1.55; color: var(--text); word-break: break-word; white-space: pre-wrap; }
+/* 想法输入 / 共读伙伴选择 弹层 */
+.phone-reading-note-overlay {
+  position: absolute; inset: 0; z-index: 200; display: flex; flex-direction: column; justify-content: flex-end;
+  background: rgba(0,0,0,0.45); opacity: 0; transition: opacity .2s;
+}
+.phone-reading-note-overlay.show { opacity: 1; }
+.phone-reading-note-sheet {
+  width: 100%; box-sizing: border-box; background: var(--bg, #14161e); margin-top: auto; min-height: 0;
+  border-radius: 16px 16px 0 0; padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
+  max-height: 78%; display: flex; flex-direction: column; overflow: hidden;
+}
+.phone-reading-note-body {
+  flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+}
+.phone-reading-note-sheet-hd { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 12px; flex-shrink: 0; }
+.phone-reading-note-exist { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.phone-reading-note-exist-row {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+  padding: 8px 10px; border-radius: 8px; background: rgba(127,127,127,0.08);
+  border-left: 2px solid rgba(127,127,127,0.3);
+}
+.phone-reading-note-exist-row.me { border-left-color: var(--accent, #f60); }
+.phone-reading-note-exist-nm { font-size: 11px; font-weight: 600; color: var(--text-secondary); flex-shrink: 0; }
+.phone-reading-note-exist-tx { font-size: 13px; line-height: 1.5; color: var(--text); flex: 1; min-width: 0; word-break: break-word; }
+.phone-reading-note-del { font-size: 11px; color: #e66; cursor: pointer; flex-shrink: 0; }
+.phone-reading-note-input {
+  width: 100%; box-sizing: border-box; min-height: 80px; resize: none;
+  border-radius: 10px; border: 1px solid var(--border, rgba(255,255,255,0.12));
+  background: var(--bg-secondary, #1a1c24); color: var(--text); padding: 10px 12px;
+  font-size: 14px; line-height: 1.6; outline: none;
+}
+.phone-reading-note-sheet-btns { display: flex; gap: 10px; margin-top: 14px; flex-shrink: 0; }
+.phone-reading-note-cancel, .phone-reading-note-save {
+  flex: 1; padding: 11px 0; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; border: none;
+}
+.phone-reading-note-cancel { background: var(--bg-secondary, #1a1c24); color: var(--text-secondary); border: 1px solid var(--border, rgba(255,255,255,0.12)); }
+.phone-reading-note-save { background: var(--accent, #f60); color: #fff; }
+.phone-reading-note-cancel:active, .phone-reading-note-save:active { opacity: 0.85; }
+.phone-reading-coread-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.phone-reading-coread-opt {
+  display: flex; flex-direction: column; gap: 3px; padding: 11px 12px; border-radius: 10px;
+  background: var(--bg-secondary, #1a1c24); border: 1px solid var(--border, rgba(255,255,255,0.1)); cursor: pointer;
+}
+.phone-reading-coread-opt.sel { border-color: var(--accent, #f60); background: rgba(255,102,0,0.1); }
+.phone-reading-coread-opt:active { opacity: 0.85; }
+.phone-reading-coread-nm { font-size: 14px; font-weight: 600; color: var(--text); }
+.phone-reading-coread-de { font-size: 11px; color: var(--text-secondary); line-height: 1.4; word-break: break-word; }
+/* fudge 主题：共读弹层对齐打赏面板（铺满、仅上两角圆、去多余边框） */
+.phone-shell.phone-theme-fudge .phone-reading-note-sheet {
+  border-radius: 18px 18px 0 0 !important; box-shadow: 0 -4px 20px rgba(0,0,0,0.12);
+}
+.phone-shell.phone-theme-fudge .phone-reading-coread-opt {
+  border-radius: 16px !important; border: none !important; background: var(--bg-secondary) !important;
+}
+.phone-shell.phone-theme-fudge .phone-reading-coread-opt.sel {
+  background: rgba(255,102,0,0.1) !important; box-shadow: inset 0 0 0 1.5px var(--accent, #f60);
+}
+.phone-shell.phone-theme-fudge .phone-reading-note-input {
+  border-radius: 16px !important; border: none !important; background: var(--bg-secondary) !important;
+}
+.phone-shell.phone-theme-fudge .phone-reading-note-cancel,
+.phone-shell.phone-theme-fudge .phone-reading-note-save {
+  border-radius: 999px !important; border: none !important;
+}
 .phone-reading-chapter-navrow { display: flex; gap: 12px; margin-top: 28px; }
 .phone-reading-chapter-nav {
   flex: 1; padding: 12px 0; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
@@ -4658,10 +4929,124 @@ white-space: nowrap;
 .phone-reading-chapter-nav.next { background: var(--accent, #f60); color: #fff; border-color: transparent; }
 .phone-reading-chapter-nav:active { opacity: 0.85; }
 .phone-reading-chapter-nav.disabled { opacity: 0.4; cursor: default; }
+.phone-reading-chapter-nav.rewrite { background: var(--bg-tertiary, #15171e); color: var(--text-secondary, #aaa); }
 /* 壁纸适配 */
 .phone-shell.has-custom-wallpaper .phone-reading-chapter-title,
 .phone-shell.has-custom-wallpaper .phone-reading-chapter-body { color: rgba(255,255,255,0.94) !important; }
 .phone-shell.has-custom-wallpaper .phone-reading-chapter-sub { color: rgba(255,255,255,0.6) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-chapter-nav { background: rgba(0,0,0,0.35) !important; color: rgba(255,255,255,0.92) !important; border-color: rgba(255,255,255,0.25) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-chapter-nav.next { background: var(--accent, #f60) !important; color: #fff !important; border-color: transparent !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-note-card { background: rgba(0,0,0,0.35) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-note-card-tx { color: rgba(255,255,255,0.92) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-note-card-nm { color: rgba(255,255,255,0.66) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-note-dot.has { color: #ffae73 !important; }
+
+/* ===== 阅读器底部辅助功能条（笔记/本章说/打赏/分享）===== */
+.phone-reading-actionbar {
+  display: flex; justify-content: space-around; align-items: center;
+  gap: 4px; margin-top: 26px; padding: 10px 6px;
+  background: rgba(0,0,0,0.05); border-radius: 14px;
+}
+.phone-reading-actionbtn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  background: none; border: none; cursor: pointer; padding: 4px 0;
+  color: var(--text-secondary); transition: opacity .12s;
+}
+.phone-reading-actionbtn:active { opacity: 0.55; }
+.phone-reading-actionbtn-ic { position: relative; display: flex; align-items: center; justify-content: center; color: var(--text); }
+.phone-reading-actionbtn-tx { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+.phone-reading-actionbtn-badge {
+  position: absolute; top: -6px; right: -10px; min-width: 15px; height: 15px; padding: 0 3px;
+  box-sizing: border-box; border-radius: 8px; background: var(--accent, #f60); color: #fff;
+  font-size: 9px; line-height: 15px; text-align: center; font-weight: 600;
+}
+/* 壁纸适配：半透明深底裹起来，图标/文字转白 */
+.phone-shell.has-custom-wallpaper .phone-reading-actionbar { background: rgba(0,0,0,0.28) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-actionbtn-ic { color: rgba(255,255,255,0.92) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-actionbtn-tx { color: rgba(255,255,255,0.7) !important; }
+
+/* ===== 打赏礼物宫格（底部弹层内）===== */
+.phone-reading-gift-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  padding: 6px 10px 10px;
+}
+.phone-reading-gift {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 12px 4px 10px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--bg-tertiary); cursor: pointer;
+}
+.phone-reading-gift:active { background: rgba(0,0,0,0.06); }
+.phone-reading-gift-ic { color: var(--accent); display: flex; align-items: center; justify-content: center; }
+.phone-reading-gift-nm { font-size: 12px; color: var(--text); }
+.phone-reading-gift-amt { font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+
+/* ===== 辅助条下方打赏记录小卡片 ===== */
+.phone-reading-reward-cardwrap { text-align: center; margin-top: 8px; }
+.phone-reading-reward-card {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px;
+  background: rgba(232,134,60,0.1); color: var(--accent);
+  font-size: 11px;
+}
+.phone-reading-reward-card-ic { display: flex; align-items: center; }
+.phone-reading-reward-card-tx { color: var(--accent); }
+.phone-shell.has-custom-wallpaper .phone-reading-reward-card {
+  background: rgba(0,0,0,0.28) !important; color: rgba(255,255,255,0.9) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-reading-reward-card-ic,
+.phone-shell.has-custom-wallpaper .phone-reading-reward-card-tx { color: rgba(255,255,255,0.9) !important; }
+
+/* ===== 本章说·评论区页 ===== */
+.phone-reading-cmt-page { display: flex; flex-direction: column; height: 100%; }
+.phone-reading-cmt-scroll { flex: 1; overflow-y: auto; padding: 16px 16px 32px; }
+/* 作者的话 */
+.phone-reading-authornote {
+  background: var(--bg-secondary, #1a1c24); border-radius: 12px; padding: 12px 14px; margin-bottom: 16px;
+}
+.phone-reading-authornote-hd { font-size: 12px; font-weight: 700; color: var(--accent, #f60); margin-bottom: 6px; }
+.phone-reading-authornote-tx { font-size: 14px; line-height: 1.7; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.phone-reading-addnote-btn {
+  width: 100%; background: var(--bg-secondary, #1a1c24); border: 1px dashed var(--border);
+  color: var(--text-secondary, #888); border-radius: 12px; padding: 12px 0;
+  font-size: 13px; cursor: pointer; margin-bottom: 16px;
+}
+.phone-reading-addnote-btn:active { opacity: 0.8; }
+.phone-reading-cmt-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.phone-reading-cmt-count { font-size: 12px; color: var(--text-secondary); }
+.phone-reading-cmt-refresh {
+  display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  border: none; background: none; color: var(--text-secondary); cursor: pointer; border-radius: 8px;
+}
+.phone-reading-cmt-refresh:active { opacity: 0.6; }
+.phone-reading-cmt-row { display: flex; gap: 10px; padding: 10px 0; }
+.phone-reading-cmt-av {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; object-fit: cover;
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 600;
+}
+.phone-reading-cmt-main { flex: 1; min-width: 0; }
+.phone-reading-cmt-name { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.phone-reading-cmt-npc { font-size: 10px; color: var(--accent, #f60); border: 1px solid var(--accent, #f60); border-radius: 4px; padding: 0 4px; font-weight: 500; }
+.phone-reading-cmt-me { font-size: 10px; color: #fff; background: var(--accent, #f60); border-radius: 4px; padding: 0 4px; font-weight: 500; }
+.phone-reading-cmt-tx { font-size: 14px; line-height: 1.6; color: var(--text); word-break: break-word; white-space: pre-wrap; }
+/* 底部发送评论栏 */
+.phone-reading-cmt-inputbar {
+  flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  border-top: 1px solid var(--border, rgba(255,255,255,0.08)); background: var(--bg, #14161e);
+}
+.phone-reading-cmt-send {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+  border: none; border-radius: 50%; background: var(--accent, #f60); color: #fff; cursor: pointer;
+}
+.phone-reading-cmt-send:active { opacity: 0.85; }
+/* 评论区壁纸适配 */
+.phone-shell.has-custom-wallpaper .phone-reading-authornote { background: rgba(0,0,0,0.3) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-authornote-tx,
+.phone-shell.has-custom-wallpaper .phone-reading-cmt-tx { color: rgba(255,255,255,0.92) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-cmt-name { color: rgba(255,255,255,0.66) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-cmt-count { color: rgba(255,255,255,0.6) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-cmt-refresh { color: rgba(255,255,255,0.8) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-cmt-inputbar { background: rgba(0,0,0,0.4) !important; border-top-color: rgba(255,255,255,0.12) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-cmt-inputbar input { color: rgba(255,255,255,0.92) !important; }
 
 /* ===== 书籍设置页 ===== */
 .phone-reading-toc-head { position: relative; }
@@ -4687,6 +5072,24 @@ white-space: nowrap;
 .phone-reading-set-btn.danger { color: #e66; border-color: rgba(230,102,102,0.4); }
 .phone-shell.has-custom-wallpaper .phone-reading-set-rowlabel { color: rgba(255,255,255,0.94) !important; }
 .phone-shell.has-custom-wallpaper .phone-reading-set-rowdesc { color: rgba(255,255,255,0.6) !important; }
+.phone-shell.has-custom-wallpaper .phone-reading-set-btn {
+  background: rgba(255,255,255,0.12) !important;
+  color: rgba(255,255,255,0.94) !important;
+  border-color: rgba(255,255,255,0.2) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-reading-set-btn.danger {
+  color: #ff9b9b !important;
+  border-color: rgba(255,155,155,0.45) !important;
+}
+/* 作者文风全屏页的输入框（行内 style 用 !important 覆盖） */
+.phone-shell.has-custom-wallpaper .phone-reading-style-input {
+  background: rgba(255,255,255,0.1) !important;
+  color: rgba(255,255,255,0.94) !important;
+  border-color: rgba(255,255,255,0.18) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-reading-style-input::placeholder {
+  color: rgba(255,255,255,0.4) !important;
+}
 
 /* ===== 查看大纲页 ===== */
 .phone-reading-ol-page { padding: 12px 16px 28px; }
@@ -5584,6 +5987,67 @@ white-space: nowrap;
 .phone-shell.has-custom-wallpaper .phone-radio-detail-player {
   background: rgba(18, 20, 28, 0.35);
 }
+/* 壁纸适配：详情页是盖在 phone-body 之上的全屏 overlay，本就该不透明自成一页
+   （半透明会透出底下首页卡片，叠影）。壁纸模式下 --text 被转白，浅色主题原 var(--bg)
+   会白底白字，这里用不透明深色背景，文字白色即正常。 */
+.phone-shell.has-custom-wallpaper .phone-radio-detail {
+  background: #14161e;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-detail-name,
+.phone-shell.has-custom-wallpaper .phone-radio-detail-show { color: rgba(255,255,255,0.96) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-detail-back { color: rgba(255,255,255,0.92) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-detail-host,
+.phone-shell.has-custom-wallpaper .phone-radio-detail-hint { color: rgba(255,255,255,0.7) !important; }
+/* 台词气泡：深色块 + 白字（详情页底已是深色，用稍亮的色块区分层次） */
+.phone-shell.has-custom-wallpaper .phone-radio-line-bubble {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.94) !important;
+  box-shadow: none !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-line.is-guest .phone-radio-line-bubble,
+.phone-shell.has-custom-wallpaper .phone-radio-line.is-caller .phone-radio-line-bubble {
+  background: color-mix(in srgb, var(--decoration) 30%, rgba(255, 255, 255, 0.08)) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-line-name { color: rgba(255, 255, 255, 0.7) !important; }
+/* 旁白/音效行 */
+.phone-shell.has-custom-wallpaper .phone-radio-narr {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(255, 255, 255, 0.78) !important;
+}
+/* 历史节目卡片：深色块 + 白字（在不透明深色设置 overlay 上区分层次） */
+.phone-shell.has-custom-wallpaper .phone-radio-hist-item {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-hist-name { color: rgba(255, 255, 255, 0.94) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-hist-meta,
+.phone-shell.has-custom-wallpaper .phone-radio-hist-time { color: rgba(255, 255, 255, 0.66) !important; }
+/* 设置页输入框：深色块 + 白字（在不透明深色设置 overlay 上区分层次） */
+.phone-shell.has-custom-wallpaper .phone-radio-set-field input,
+.phone-shell.has-custom-wallpaper .phone-radio-set-field textarea,
+.phone-shell.has-custom-wallpaper .phone-radio-set-field select,
+.phone-shell.has-custom-wallpaper .phone-radio-set-voice-body .phone-radio-set-field input,
+.phone-shell.has-custom-wallpaper .phone-radio-set-voice-body .phone-radio-set-field select {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.94) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-set-field input::placeholder,
+.phone-shell.has-custom-wallpaper .phone-radio-set-field textarea::placeholder {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-set-field label { color: rgba(255, 255, 255, 0.88) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-set-voice { background: rgba(255, 255, 255, 0.06) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-set-tip {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(255, 255, 255, 0.66) !important;
+}
+/* 「我的」页全局偏好折叠栏（phone-body 内容，底下是壁纸，用深色半透明玻璃块托白字） */
+.phone-shell.has-custom-wallpaper .phone-radio-prefs {
+  background: rgba(18, 20, 28, 0.42) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-radio-prefs-title,
+.phone-shell.has-custom-wallpaper .phone-radio-pref-row { color: rgba(255, 255, 255, 0.92) !important; }
+.phone-shell.has-custom-wallpaper .phone-radio-prefs-chevron { color: rgba(255, 255, 255, 0.66) !important; }
 
 /* ===== 连线（call）玩法 UI ===== */
 /* 玩家发言气泡（右对齐，区别于主播/嘉宾的台词行） */
@@ -6243,7 +6707,6 @@ white-space: nowrap;
   position: relative;
   transition: transform 0.25s ease;
   will-change: transform;
-  background: var(--bg); /* 盖住底层删除按钮 */
   z-index: 1;
   border-radius: 14px;
   overflow: hidden;
@@ -6266,6 +6729,13 @@ white-space: nowrap;
   font-weight: 600;
   cursor: pointer;
   border-radius: 0 14px 14px 0; /* 右侧圆角 */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.phone-radio-mine-swipe.swiped .phone-radio-mine-swipe-delete {
+  opacity: 1;
+  pointer-events: auto;
 }
 .phone-radio-mine-card {
   display: flex;

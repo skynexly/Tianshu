@@ -854,6 +854,8 @@ ${_stepIntro('users', '第 4 步 · 角色', '为每个势力生成 NPC 角色')
         const raw = await API.generate(sysPrompt, userMsg, { signal: _abortCtrl.signal, maxTokens: Math.min(32000, count * wordCount * 4 + 2000) });
         const data = _parseJSON(raw);
         const arr = Array.isArray(data) ? data : (data.npcs || []);
+        // v704：把性别/年龄/职业/身份合进 detail 头部（与单个补全一致；此前漏了这步，导致性别等元信息不进 detail、编辑界面看不到）
+        arr.forEach(n => { if (n) n.detail = _mergeMetaToDetail(n); });
         _genData.step4 = { npcs: arr, _userPrompt: userPrompt, _wordCount: wordCount, _count: count };
         _setLoading(false);
         _step = 5;
@@ -909,6 +911,8 @@ const dedupeHint = allExistingNames.length > 0
           arr.forEach(n => {
             n.region = t.region;
             n.faction = t.faction.name;
+            // v704：把性别/年龄/职业/身份合进 detail 头部（与单个补全一致；批量生成此前漏了这步，导致性别等元信息不进 detail、编辑界面看不到）
+            n.detail = _mergeMetaToDetail(n);
             allNpcs.push(n);
           });
           results[i] = { status: 'done', count: arr.length };

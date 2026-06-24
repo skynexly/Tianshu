@@ -109,6 +109,64 @@ const WorldVoice = (() => {
     } catch(_) { return ''; }
   }
 
+  // 构建「任意名（本名/网名/别名）→ 本名」反查映射，供论坛帖子/评论补 realName 身份键（记事本用）。
+  // 论坛 AI 输出的是网名，这里反查回本名存进 realName，显示层仍用网名。
+  async function _buildNpcRealNameMap() {
+    const map = {};
+    const add = (n) => {
+      if (!n || !n.name) return;
+      const real = n.name.trim();
+      if (!real) return;
+      const keys = [real, (n.onlineName || '').trim()];
+      String(n.aliases || '').split(/[,，、\s]+/).forEach(a => keys.push(a.trim()));
+      keys.filter(Boolean).forEach(k => { if (!map[k]) map[k] = real; });
+    };
+    try {
+      const wv = await Worldview.getCurrent();
+      if (wv && wv.regions) {
+        for (const region of wv.regions) {
+          for (const faction of (region.factions || [])) {
+            for (const n of (faction.npcs || [])) add(n);
+          }
+        }
+      }
+      if (wv && wv.globalNpcs) wv.globalNpcs.forEach(add);
+      // 世界书 NPC
+      try {
+        if (typeof Lorebook !== 'undefined' && Lorebook.collectForChat) {
+          const convId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
+          const conv = convId ? Conversations.getList().find(c => c.id === convId) : null;
+          let card = null;
+          if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+            try { card = await DB.get('singleCards', conv.singleCharId); } catch(_) {}
+          }
+          const wvId = conv?.worldviewId || conv?.singleWorldviewId;
+          const wv2 = wvId ? await DB.get('worldviews', wvId) : null;
+          const lbs = await Lorebook.collectForChat({ conv, card, wv: wv2 });
+          for (const lb of (lbs || [])) { (lb.globalNpcs || []).forEach(add); }
+        }
+      } catch(_) {}
+      // 单人卡
+      try {
+        const convId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
+        const conv = convId ? Conversations.getList().find(c => c.id === convId) : null;
+        if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+          const card = await DB.get('singleCards', conv.singleCharId);
+          if (card) add(card);
+        }
+      } catch(_) {}
+    } catch(_) {}
+    return map;
+  }
+
+  // 给一条帖子/评论补 realName 身份键（用网名/别名反查本名；查不到则不设，视为路人）
+  function _attachRealName(item, realNameMap) {
+    if (!item || !item.username || !realNameMap) return;
+    const real = realNameMap[item.username.trim()];
+    if (real) item.realName = real;
+  }
+
+
   // 更新加号菜单里的按钮名
   async function updateLabel() {
     const label = document.getElementById('world-voice-label');
@@ -235,8 +293,11 @@ const WorldVoice = (() => {
     const mediaDesc = await _getMediaDesc();
     const wvPrompt = (typeof Phone !== 'undefined' && Phone._buildFullContext) ? await Phone._buildFullContext() : (Chat.getWorldviewPrompt() || '');
     // 论坛呼应电台：随机抽 0-1 个已订阅电台，给 AI 当可选的呼应素材（读不到/没抽中返回 ''）
-    let radioEcho = '';
-    try { radioEcho = (typeof Phone !== 'undefined' && Phone._radioEchoBlockForForum) ? await Phone._radioEchoBlockForForum() : ''; } catch (_) {}
+let radioEcho = '';
+try { radioEcho = (typeof Phone !== 'undefined' && Phone._radioEchoBlockForForum) ? await Phone._radioEchoBlockForForum() : ''; } catch (_) {}
+// 论坛呼应阅读：随机抽 0-1 本书架上的书（AI/自建，排除导入），给 AI 当可选的呼应素材
+let readingEcho = '';
+try { readingEcho = (typeof Phone !== 'undefined' && Phone._readingEchoBlockForForum) ? await Phone._readingEchoBlockForForum() : ''; } catch (_) {}
     const chatMessages = Chat.getMessages();
     const summaryText = await Summary.formatForPrompt(Conversations.getCurrent());
 
@@ -270,7 +331,7 @@ JSON格式（严格遵循）：
 
 所有 time 都必须使用"YYYY.MM.DD 星期X HH:mm"格式，必须和当前游戏时间同一套写法，不要自己发明别的时间样式。
 
-${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}`;
+${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}${readingEcho ? '\n\n' + readingEcho : ''}`;
 
     let userPrompt = '';
     if (summaryText) userPrompt += `## 剧情总结\n${summaryText}\n\n`;
@@ -505,7 +566,8 @@ JSON格式：
 ${wvPrompt}`;
 
     const _radioDetail = (typeof Phone !== 'undefined' && Phone._radioDetailBlockForPost) ? (await Phone._radioDetailBlockForPost(post).catch(() => '')) : '';
-    const systemPromptFull = _radioDetail ? (systemPrompt + '\n\n' + _radioDetail) : systemPrompt;
+        const _readingDetail = (typeof Phone !== 'undefined' && Phone._readingDetailBlockForPost) ? (await Phone._readingDetailBlockForPost(post).catch(() => '')) : '';
+        const systemPromptFull = systemPrompt + (_radioDetail ? '\n\n' + _radioDetail : '') + (_readingDetail ? '\n\n' + _readingDetail : '');
 
     const npcListStr2 = await _getNpcListForForum();
     const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人（楼主）：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}${npcListStr2}\n\n请生成完整内容和评论区。注意：正文是以楼主"${post.username}"的口吻写的，语气和内容要符合这个角色的性格。评论区中如果楼主出现，必须是以作者身份回复读者（如答疑、补充），而不是以路人视角评论自己。`;
@@ -544,6 +606,11 @@ ${wvPrompt}`;
         }
         post.fullContent = detail.content || '';
         post._comments = detail.comments || [];
+        try {
+          const _rnMap = await _buildNpcRealNameMap();
+          _attachRealName(post, _rnMap);
+          (post._comments || []).forEach(c => _attachRealName(c, _rnMap));
+        } catch(_) {}
         post._detailLoaded = true;
         currentDetail = post;
         await _savePosts();
@@ -819,6 +886,11 @@ ${wvPrompt}`;
     }
     post.fullContent = detail.content || '';
     post._comments = detail.comments || [];
+    try {
+      const _rnMap = await _buildNpcRealNameMap();
+      _attachRealName(post, _rnMap);
+      (post._comments || []).forEach(c => _attachRealName(c, _rnMap));
+    } catch(_) {}
     post._detailLoaded = true;
     currentDetail = post;
     await _savePosts();

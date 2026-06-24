@@ -973,9 +973,66 @@ async function deleteItem() {
     closeItemEdit();
   }
 
-async function closeItemModal() {
-  await closeItemEdit();
-}
+  // 把当前编辑的物品移入衣橱/家具仓库（弹目的地 + 数量选择）
+  async function moveItemToStorage() {
+    if (editingItemIdx === null) return;
+    if (typeof Phone === 'undefined' || !Phone.moveInventoryToStorage) {
+      UI.showToast('仓库功能不可用', 1800); return;
+    }
+    const item = inventoryData[editingItemIdx];
+    if (!item || !(item.name || '').trim()) { UI.showToast('请先填写物品名称', 1800); return; }
+    const have = item.count || 1;
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center';
+    const esc = (s) => Utils.escapeHtml(String(s));
+    mask.innerHTML = `
+      <div style="background:var(--bg);border-radius:16px 16px 0 0;padding:18px 16px;width:100%;max-width:400px">
+        <div style="text-align:center;font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">移入仓库</div>
+        <div style="text-align:center;font-size:12px;color:var(--text-secondary);margin-bottom:14px">${esc(item.name)}（持有 ${have}）</div>
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:6px">移入数量</label>
+        <input id="mv-storage-count" type="number" inputmode="numeric" min="1" max="${have}" value="${have}" style="width:100%;box-sizing:border-box;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:10px 12px;outline:none;margin-bottom:14px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button type="button" data-dest="wardrobe" style="width:100%;text-align:left;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:14px;cursor:pointer">
+            <div style="font-weight:600">衣橱仓库</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">移入后可在着装里穿上</div>
+          </button>
+          <button type="button" data-dest="furniture" style="width:100%;text-align:left;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:14px;cursor:pointer">
+            <div style="font-weight:600">家具仓库</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">移入后可摆进小屋房间</div>
+          </button>
+        </div>
+        <button type="button" id="mv-storage-cancel" style="width:100%;background:none;border:none;color:var(--text-secondary);font-size:13px;padding:12px 0 2px;cursor:pointer">取消</button>
+      </div>`;
+    const close = () => { if (mask.parentNode) document.body.removeChild(mask); };
+    mask.addEventListener('click', (e) => { if (e.target === mask) close(); });
+    mask.querySelector('#mv-storage-cancel').onclick = close;
+    mask.querySelectorAll('button[data-dest]').forEach(b => {
+      b.onclick = async () => {
+        const dest = b.dataset.dest;
+        let n = parseInt(mask.querySelector('#mv-storage-count').value, 10) || 1;
+        if (n < 1) n = 1;
+        if (n > have) n = have;
+        close();
+        // 先落盘当前编辑内容，确保 DB 里的物品名/描述与界面一致（按名字匹配扣减）
+        await saveInventoryToData();
+        const r = await Phone.moveInventoryToStorage(editingMaskId, item.name, n, dest);
+        UI.showToast(r.msg, 2000);
+        if (r.ok) {
+          // 同步本地缓存并刷新列表
+          if (r.left > 0) inventoryData[editingItemIdx].count = r.left;
+          else inventoryData.splice(editingItemIdx, 1);
+          renderInventory(inventoryData);
+          closeItemEdit();
+        }
+      };
+    });
+    document.body.appendChild(mask);
+  }
+
+  async function closeItemModal() {
+    await closeItemEdit();
+  }
 
   async function saveInventoryToData() {
     const maskData = await DB.get('characters', editingMaskId);
@@ -1119,6 +1176,82 @@ async function closeItemModal() {
     list.push({ id: newMaskId, name: cloneName });
     await saveMaskList(list);
     return cloned;
+  }
+
+  // 为当前对话独立出一份面具（方案C：新窗口面具隔离引导）
+  // mode: 'share' 不复制(共享) | 'mask' 仅面具信息 | 'maskInv' 面具+物品栏 | 'full' 面具+物品栏+记忆
+  // 返回 { ok, newMaskId? }
+  async function isolateMaskForConv(convId, convName, mode) {
+    try {
+      const srcMaskId = getCurrentId();
+      if (!srcMaskId) return { ok: false };
+      // 选项1：不复制，仅标记已问过
+      if (mode === 'share') return { ok: true, shared: true };
+
+      const src = await DB.get('characters', srcMaskId);
+      if (!src) return { ok: false };
+      const newMaskId = 'mask_' + Utils.uuid().slice(0, 8);
+      // 备注：给玩家看，不发给 AI
+      const noteTag = `${(convName || '对话').trim()}副本`;
+      const cloned = {
+        ...src,
+        id: newMaskId,
+        memoryScope: newMaskId,
+        note: noteTag,
+      };
+      // 选项2：仅面具信息 → 物品栏清空
+      if (mode === 'mask') {
+        cloned.inventory = [];
+      }
+      // 选项3/4：面具信息 + 物品栏（直接保留 src.inventory 的深拷贝）
+      if (mode === 'maskInv' || mode === 'full') {
+        cloned.inventory = JSON.parse(JSON.stringify(src.inventory || []));
+      }
+      await DB.put('characters', cloned);
+
+      // 注册到面具列表（名字沿用原名，备注写对话名副本）
+      const list = await getMaskList();
+      const srcEntry = list.find(m => m.id === srcMaskId);
+      const keepName = srcEntry?.name || src.name || '面具';
+      list.push({ id: newMaskId, name: keepName, note: noteTag });
+      await saveMaskList(list);
+
+      // 选项4：复制记忆库（把原 scope 下所有 memories 复制一份，scope 改为新面具 id）
+      if (mode === 'full') {
+        try {
+          const all = await DB.getAll('memories');
+          const mine = all.filter(m => (m.scope || 'default') === srcMaskId);
+          for (const m of mine) {
+            const copy = { ...m, id: 'mem_' + Utils.uuid().slice(0, 8), scope: newMaskId };
+            await DB.put('memories', copy);
+          }
+        } catch (e) { console.warn('[面具隔离] 复制记忆失败', e); }
+      }
+
+      // 把对话绑定到新面具并切换激活
+      if (typeof Conversations !== 'undefined' && Conversations.setMask) {
+        await Conversations.setMask(newMaskId);
+      } else {
+        await switchMask(newMaskId);
+      }
+      try { await renderMaskList(); } catch(_) {}
+      return { ok: true, newMaskId };
+    } catch (e) {
+      console.warn('[面具隔离] 失败', e);
+      return { ok: false };
+    }
+  }
+
+  // 判断当前面具是否「有内容」（有记忆或物品栏非空），用于决定是否弹隔离引导
+  async function maskHasContent() {
+    try {
+      const maskId = getCurrentId();
+      if (!maskId) return false;
+      const mask = await DB.get('characters', maskId);
+      if (Array.isArray(mask?.inventory) && mask.inventory.length > 0) return true;
+      const all = await DB.getAll('memories');
+      return all.some(m => (m.scope || 'default') === maskId);
+    } catch(_) { return false; }
   }
 
   async function addItemDirect(rawText, gotAtOverride) {
@@ -1346,7 +1479,7 @@ return {
     createMask, deleteMask, switchMask, renderQuickSwitch, openEdit,
     _toggleWvDropdown, _selectWv,
   addAbility, removeAbility, editAbility, saveAbility, deleteAbility, closeAbilityEdit, closeAbilityModal,
-  addItem, removeItem, editItem, saveItem, deleteItem, closeItemEdit, closeItemModal, addItemDirect, removeItemByName, cloneMask, cloneMaskFrom,
+  addItem, removeItem, editItem, saveItem, deleteItem, closeItemEdit, closeItemModal, moveItemToStorage, addItemDirect, removeItemByName, cloneMask, cloneMaskFrom, isolateMaskForConv, maskHasContent,
   onAvatarPicked, pickAvatar, removeAvatar, searchMasks,
   toggleManageMode, toggleSelectAll, batchClone, batchDelete, _onCardClick, exitManageMode,
   // v616
