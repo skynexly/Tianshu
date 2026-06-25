@@ -955,14 +955,25 @@ function _isAppStillActive(appId) {
         } // v687.33: end of !_hsSkipNpc 分支
       } else if (bookExtra.globalNpcs.length || bookExtra.festivals.length || bookExtra.knowledges.length) {
         // 没世界观但有世界书（单人卡 + 世界书的场景）
+        // castFilter 同样生效：disabled 时一律不发世界书角色；whitelist 时只发名单内（或 allowLorebook 全放）。
         if (bookExtra.globalNpcs.length > 0) {
-          const lines = bookExtra.globalNpcs.map(npc => {
-            let d = npc.name || '未命名';
-            if (npc.aliases) d += `（别名：${npc.aliases}）`;
-            if (npc.detail) d += `\n${npc.detail}`;
-            return d;
-          });
-          parts.push('【NPC列表与详细资料】\n' + lines.join('\n---\n'));
+          const allow = (npc) => {
+            if (!castFilter) return true;
+            if (castFilter.mode === 'disabled') return false;
+            if (castFilter.allowLorebook) return true;
+            return !!(npc && npc.id && castFilter.ids.has(npc.id));
+          };
+          const allowed = bookExtra.globalNpcs.filter(allow);
+          if (allowed.length > 0) {
+            const lines = allowed.map(npc => {
+              let d = npc.name || '未命名';
+              if (npc.aliases) d += `（别名：${npc.aliases}）`;
+              // brief 模式只发名字+别名，不发 detail
+              if (!npcBrief && npc.detail) d += `\n${npc.detail}`;
+              return d;
+            });
+            parts.push((npcBrief ? '【世界书角色索引】\n' : '【NPC列表与详细资料】\n') + lines.join(npcBrief ? '\n' : '\n---\n'));
+          }
         }
         if (bookExtra.festivals.length > 0) {
           parts.push('【节日设定】\n' + bookExtra.festivals.map(f => `${f.name || ''}（${f.date || ''}）：${f.content || ''}`).join('\n'));
@@ -1467,8 +1478,9 @@ function _extractJsonArrayText(content) {
     youyu: `<svg ${common}><path d="M2 16s9-15 20-4C11 23 2 8 2 8"/></svg>`,
       cottage: `<svg ${common}><path d="M3 10.5 12 3l9 7.5"></path><path d="M5 9.5V21h14V9.5"></path><path d="M9 21v-6h6v6"></path><path d="M12 3V1.5"></path></svg>`,
       wardrobe: `<svg ${common}><rect x="4" y="3" width="16" height="18" rx="1.5"></rect><line x1="12" y1="3" x2="12" y2="21"></line><line x1="9.5" y1="11" x2="9.5" y2="13"></line><line x1="14.5" y1="11" x2="14.5" y2="13"></line></svg>`,
-   reading: `<svg ${common}><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg>`
-   };
+reading: `<svg ${common}><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg>`,
+      video: `<svg ${common}><rect x="2" y="5" width="15" height="14" rx="2.5"></rect><path d="M17 9.5l4.55-2.42A1 1 0 0 1 23 7.96v8.08a1 1 0 0 1-1.45.88L17 14.5z"></path><path d="M8.5 9.2v5.6l4.4-2.8z" fill="currentColor" stroke="none"></path></svg>`
+    };
  return `<span class="phone-icon-glyph phone-icon-${type}">${icons[type] || ''}</span>`;
 }
 function _uiIcon(type, size = 16) {
@@ -1642,7 +1654,7 @@ function _renderHomeIcon(a) {
       </div>
       <div class="phone-music-side-apps">
        ${_renderHomeIcon({ id: 'reading', icon: 'reading', name: (_shopMeta?.reading?.name || '阅读') })}
-       ${_renderHomeIcon({ id: '__locked4__', icon: 'locked', name: '待解锁' })}
+       ${_renderHomeIcon({ id: 'video', icon: 'video', name: (_shopMeta?.video?.name || '视频') })}
      </div>
     </div>
      <div class="phone-home-spacer"></div>
@@ -1809,6 +1821,7 @@ async function openApp(appId) {
   } catch(_) {}
   // 未完成的APP：直接拦截，不进入APP模式
   if (appId === 'email') { UI.showToast('邮箱开发中...', 1500); return; }
+  if (appId === 'video') { UI.showToast('视频开发中...', 1500); return; }
   // 记住当前页面滚动位置，返回时恢复
   try {
     const pages = document.getElementById('phone-pages');
@@ -1843,6 +1856,7 @@ async function openApp(appId) {
  case 'ledger': _renderLedger(phoneData); break;
  case 'radio': _renderRadio(phoneData); break;
       case 'reading': _renderReading(phoneData); break;
+ case 'video': _renderVideo(phoneData); break;
  case 'cottage': _renderCottage(phoneData); break;
 	case 'wardrobe': _renderWardrobe(phoneData); break;
  case 'feiniao': _renderFeiniao(phoneData); break;
@@ -10381,6 +10395,328 @@ ${houseDataText}`;
     _renderReading(await _getPhoneData());
   }
 
+  // ===== 视频 App =====
+  // 底部 tab：'discover' 发现 | 'mine' 我的（仿电台）。发现页内顶部分类 tab（直播/电影/剧集/动漫/短视频）。
+  const _VIDEO_CATS = [
+    { id: 'live', name: '直播' },
+    { id: 'movie', name: '电影' },
+    { id: 'tv', name: '剧集' },
+    { id: 'anime', name: '动漫' },
+    { id: 'short', name: '短视频' },
+  ];
+  let _videoCat = 'live';
+  let _videoHomeTab = 'discover';  // 'discover' | 'mine'
+  // 发现页生成开关：参考世界观背景 / 参考最近十轮主线（仿阅读）
+  let _videoUseWvRef = false;
+  let _videoUseMainlineRef = false;
+  function _videoToggleWvRef(cb) { _videoUseWvRef = !!(cb && cb.checked); }
+  function _videoToggleMainlineRef(cb) { _videoUseMainlineRef = !!(cb && cb.checked); }
+
+  function _switchVideoCat(catId) {
+    const c = _VIDEO_CATS.find(x => x.id === catId) ? catId : 'live';
+    if (_videoCat === c) return;
+    _videoCat = c;
+    _getPhoneData().then(pd => _renderVideo(pd));
+  }
+
+  async function _switchVideoHomeTab(tab) {
+    if (_videoHomeTab === tab) return;
+    _videoHomeTab = tab;
+    const pd = await _getPhoneData();
+    _renderVideo(pd);
+  }
+
+  async function _renderVideo(pd) {
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    document.getElementById('phone-title').textContent = (_shopMeta?.video?.name || '视频');
+    _applyWallpaper(pd);
+
+    const cat = _VIDEO_CATS.find(x => x.id === _videoCat) ? _videoCat : 'live';
+    const tabsHtml = _VIDEO_CATS.map(c => `
+      <div class="phone-video-cat-tab${c.id === cat ? ' active' : ''}" onclick="Phone._switchVideoCat('${c.id}')">${Utils.escapeHtml(c.name)}</div>`).join('');
+
+    // 发现页预览列表（按分类存 pd.videoDiscover[cat]，与阅读 readingDiscover 同构）
+    const disc = (pd.videoDiscover && typeof pd.videoDiscover === 'object' && !Array.isArray(pd.videoDiscover)) ? pd.videoDiscover : {};
+    const list = Array.isArray(disc[cat]) ? disc[cat] : [];
+
+    let gridHtml;
+    if (!list.length) {
+      const emptyDesc = (cat === 'live') ? '当前没有正在直播的频道' : (cat === 'short') ? '还没有短视频，去搜索/生成看看' : '还没有内容，去搜索/生成看看';
+      gridHtml = `
+        <div class="phone-video-empty">
+          <div class="phone-video-empty-icon">${_phoneIcon('video')}</div>
+          <div class="phone-video-empty-text">${emptyDesc}</div>
+        </div>`;
+    } else {
+      gridHtml = `<div class="phone-video-grid">${list.map(w => _videoCardHtml(w)).join('')}</div>`;
+    }
+
+    // 直播分类复用电台逻辑（后续接），本期发现页生成只对点播分类开放
+    const genApplicable = (cat !== 'live');
+    const refSwitches = genApplicable ? `
+        <div class="phone-genrow">
+          <label class="circle-check-label">
+            <span class="circle-check-text">参考世界观</span>
+            <input type="checkbox" class="circle-check" ${_videoUseWvRef ? 'checked' : ''} onchange="Phone._videoToggleWvRef(this)">
+            <span class="circle-check-ui"></span>
+          </label>
+          <label class="circle-check-label">
+            <span class="circle-check-text">参考近期主线</span>
+            <input type="checkbox" class="circle-check" ${_videoUseMainlineRef ? 'checked' : ''} onchange="Phone._videoToggleMainlineRef(this)">
+            <span class="circle-check-ui"></span>
+          </label>
+        </div>` : '';
+    const searchbarHtml = (cat === 'live') ? '' : `
+        <div class="phone-video-searchbar">
+          <input id="phone-video-search" class="phone-video-search" type="text" placeholder="搜想看的影视、动漫、短视频…">
+          <button class="phone-video-search-btn" onclick="Phone._videoSearch()">生成</button>
+        </div>
+        ${refSwitches}`;
+
+    const discoverHtml = `
+      <div class="phone-video-home">
+        <div class="phone-video-cat-tabs">${tabsHtml}</div>
+        ${searchbarHtml}
+        ${gridHtml}
+      </div>`;
+
+    const mineMaskInfo = (_videoHomeTab === 'mine') ? await _getMaskInfo() : null;
+    const mineHtml = `${_videoMineHeader(pd, mineMaskInfo)}${_renderVideoMine(pd)}`;
+
+    body.innerHTML = `
+      <div class="phone-video-shell" style="display:flex;flex-direction:column;height:100%">
+        <div style="flex:1;min-height:0;overflow-y:auto">${_videoHomeTab === 'discover' ? discoverHtml : mineHtml}</div>
+        <div class="phone-tabbar">
+          <div class="phone-tab ${_videoHomeTab === 'discover' ? 'active' : ''}" onclick="Phone._switchVideoHomeTab('discover')">发现</div>
+          <div class="phone-tab ${_videoHomeTab === 'mine' ? 'active' : ''}" onclick="Phone._switchVideoHomeTab('mine')">我的</div>
+        </div>
+      </div>`;
+    document.getElementById('phone-back-btn')?.classList.remove('hidden');
+  }
+
+  // 「我的」页顶部：个人资料头部（头像 + 网名 + 看过数），仿电台
+  function _videoMineHeader(pd, maskInfo) {
+    const userName = (maskInfo && maskInfo.username) || '我';
+    const userAvatar = (maskInfo && maskInfo.avatar) || '';
+    const works = Array.isArray(pd.videoWorks) ? pd.videoWorks : [];
+    const count = works.filter(w => w && w.watched).length;
+    const avaHtml = userAvatar
+      ? `<img class="phone-radio-mine-ava" src="${Utils.escapeHtml(userAvatar)}" alt="">`
+      : `<div class="phone-radio-mine-ava phone-radio-mine-ava-fallback">${Utils.escapeHtml((userName || '我')[0])}</div>`;
+    return `
+      <div class="phone-radio-mine-header">
+        ${avaHtml}
+        <div class="phone-radio-mine-header-info">
+          <div class="phone-radio-mine-header-name">${Utils.escapeHtml(userName)}</div>
+          <div class="phone-radio-mine-header-sub">观众 · 看过 ${count} 部</div>
+        </div>
+      </div>`;
+  }
+
+  // 「我的」页主体：看过/收藏的影视列表（暂占位）
+  function _renderVideoMine(pd) {
+    const works = Array.isArray(pd.videoWorks) ? pd.videoWorks : [];
+    const list = works.filter(w => w && (w.watched || w.faved));
+    if (!list.length) {
+      return `
+        <div class="phone-video-empty">
+          <div class="phone-video-empty-icon">${_phoneIcon('video')}</div>
+          <div class="phone-video-empty-text">还没有看过的内容</div>
+        </div>`;
+    }
+    return `<div class="phone-video-home"><div class="phone-video-grid">${list.map(w => _videoCardHtml(w)).join('')}</div></div>`;
+  }
+
+  // 单个视频缩略卡（16:9 横构图 + 时长/评分角标 + 标题 + 副信息）
+  function _videoCardHtml(w) {
+    if (!w) return '';
+    const cover = (w.cover || '').trim();
+    const coverHtml = cover
+      ? `<img src="${Utils.escapeHtml(cover)}" style="width:100%;height:100%;object-fit:cover">`
+      : `<div class="phone-video-card-coverfallback">${_phoneIcon('video')}</div>`;
+    const isLive = (w.kind === 'live');
+    const corner = isLive
+      ? `<span class="phone-video-card-live">● 直播中</span>`
+      : ((w.duration || '').trim() ? `<span class="phone-video-card-dur">${Utils.escapeHtml(w.duration.trim())}</span>` : '');
+    // 点播：评分角标（左下）
+    const ratingTag = (!isLive && w.rating) ? `<span class="phone-video-card-rating">${Utils.escapeHtml(String(w.rating))}</span>` : '';
+    // 副信息：直播显示主播/出品；点播显示「类型 · 主演」
+    let by;
+    if (isLive) {
+      by = (w.studio || w.upName || '').trim();
+    } else {
+      const cats = Array.isArray(w.category) ? w.category.slice(0, 1) : [];
+      const lead = Array.isArray(w.cast) ? w.cast.slice(0, 2) : [];
+      by = [cats.join(''), lead.join('/')].filter(Boolean).join(' · ');
+    }
+    return `
+      <div class="phone-video-card" onclick="Phone._videoOpenWork('${Utils.escapeHtml(w.id)}')">
+        <div class="phone-video-card-cover">${coverHtml}${corner}${ratingTag}</div>
+        <div class="phone-video-card-title">${Utils.escapeHtml(w.title || '未命名')}</div>
+        ${by ? `<div class="phone-video-card-by">${Utils.escapeHtml(by)}</div>` : ''}
+      </div>`;
+  }
+
+  // 视频列表生成中的骨架占位（16:9 卡形状，复用通用 wv-skeleton 微光样式）
+  function _renderVideoLoadingHtml(count) {
+    const n = count || 6;
+    return `<div class="phone-video-grid">${Array.from({ length: n }).map(() => `
+      <div class="phone-video-card">
+        <div class="wv-skeleton-line phone-video-skeleton-cover"></div>
+        <div class="wv-skeleton-line title" style="width:80%;margin:8px 0 6px"></div>
+        <div class="wv-skeleton-line" style="width:55%;height:10px"></div>
+      </div>`).join('')}</div>`;
+  }
+
+  function _videoSearch() {
+    if (_videoCat === 'live') { UI.showToast('直播暂不支持生成', 1600); return; }
+    const inp = document.getElementById('phone-video-search');
+    const kw = inp ? inp.value.trim() : '';
+    _videoGenList(_videoCat, kw);
+  }
+
+  // 视频发现页列表生成。本期实现电影（movie）；剧集/动漫/短视频后续接入。
+  // 字段：title / director / screenwriter / cast(数组) / category(数组) / year / duration / rating / intro。
+  // 世界观、最近十轮主线、可出场作者注入均复用阅读那套（_buildFullContext / _readingMainlineBlock / _readingBuildAuthorBlock）。
+  async function _videoGenList(catId, keyword) {
+    const cat = _VIDEO_CATS.find(x => x.id === catId) ? catId : 'movie';
+    if (cat === 'live') { UI.showToast('直播暂不支持生成', 1600); return; }
+    if (cat !== 'movie') { UI.showToast('该分类的生成即将上线', 1600); return; }
+    const kw = String(keyword || '').trim();
+    const pd = await _getPhoneData();
+
+    // 功能模型配置
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) {
+      UI.showToast('请先配置功能模型', 1800);
+      return;
+    }
+
+    // 进入生成中：网格区替换为骨架占位，禁用生成按钮防重复点击
+    const genBtn = document.querySelector('.phone-video-search-btn');
+    if (genBtn) { genBtn.disabled = true; genBtn.textContent = '生成中…'; }
+    const homeEl = document.querySelector('.phone-video-home');
+    const gridEl = homeEl ? (homeEl.querySelector('.phone-video-grid') || homeEl.querySelector('.phone-video-empty')) : null;
+    if (gridEl) gridEl.outerHTML = _renderVideoLoadingHtml(8);
+
+    // 世界观背景注入（仅当勾选「参考世界观背景生成」时）。列表阶段不发 NPC 人物素材。
+    let wvPrompt = '';
+    if (_videoUseWvRef) {
+      try { wvPrompt = await _buildFullContext({ npcBrief: false, lite: true, castFilter: { mode: 'disabled' } }); } catch (_) {}
+    }
+    // 最近十轮主线参考（仅当勾选时）
+    let mainlinePrompt = '';
+    if (_videoUseMainlineRef) {
+      try { mainlinePrompt = _readingMainlineBlock(true); } catch (_) {}
+    }
+    // 可出场作者名单：复用阅读那套作为「可出场演职人员」候选（导演/编剧/主演可从中挑）
+    let castBlock = '';
+    try { castBlock = await _readingBuildAuthorBlock('long'); } catch (_) {}
+
+    const kwLine = kw
+      ? `【观众想找的题材/关键词】${kw}\n请所有影片都贴合这个方向，但在符合该方向的前提下，让 8-10 部之间的题材、风格、调性尽量拉开差异，不要写成雷同的几部。`
+      : `本次无指定方向，题材完全自由发挥；让 8-10 部之间的题材、风格、调性尽量拉开差异，不要扎堆同一类。`;
+
+    // 演职人员约束：有名单→优先从名单挑（导演/编剧/主演都可以是其中的人）；无名单→全部自行创作
+    const castRule = castBlock
+      ? '\n- 导演、编剧、主演优先从【可出场人物名单】里挑选合适的人填入（同一个人既可能当导演也可能当主演，由你自然分配）；名单不够用时，其余角色请自行创作像真人的姓名。'
+      : '\n- 导演、编剧、主演请自行创作像真人的姓名。';
+
+    const sysPrompt = `你是影视推荐生成系统。请生成 8-10 部【电影】的推荐卡片。
+${kwLine}
+每部输出以下字段，严格使用 JSON 数组格式，不能返回 Markdown，不能返回代码块，不能解释，必须以 [ 开头、以 ] 结尾：
+[
+  {
+    "title": "片名",
+    "director": "导演姓名",
+    "screenwriter": "编剧姓名",
+    "cast": ["主演姓名（3-5 个）"],
+    "category": ["题材标签（你为这部自拟，1-3 个，每个简短，如 2-6 字）"],
+    "year": 上映年份（整数，1990 到 2025 之间，可有早年的老片也可有近年新片，部部错开），
+    "duration": "片长（如 118分钟）",
+    "rating": 评分（数字，保留一位小数，5.0 到 9.8 之间；要有差异化分布——有口碑佳作也有平庸之作，不要每部都九分以上），
+    "intro": "简介（120 字左右，面向观众的剧情推荐语，写出影片的剧情钩子与看点。角色的性别按剧情自然描写即可，不必中性化。用户可见）"
+  }
+]
+
+要求：
+- title 只写片名本身，不要加书名号《》或任何引号、标点包裹。
+- 人名风格要贴合世界观氛围（若提供了世界观背景，则人名风格与之一致；没有就自行把握，不强制中文名）。
+- rating 要有真实感的差异化分布，不要扎堆高分。
+- category 为 1-3 个题材标签，由你为每部自拟。
+- title/director/screenwriter/cast/category/intro 全部原创，不要套用现实中已存在的真实影片名、真实影人姓名。${castRule}
+- 只输出 JSON，不要多余解释。${castBlock ? '\n\n' + castBlock : ''}${wvPrompt ? '\n\n' + wvPrompt : ''}${mainlinePrompt ? '\n\n' + mainlinePrompt : ''}`;
+
+    let raw;
+    try {
+      raw = await _phoneJsonArrayWithRetry({
+        label: '电影列表', url, key, model,
+        temperature: 0.95, max_tokens: 4096,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: kw ? `请生成一批贴合「${kw}」的电影。` : `请生成一批电影。` }
+        ]
+      });
+    } catch (e) {
+      console.error('[视频电影列表]', e);
+      UI.showToast('生成失败，请重试', 1800);
+      _renderVideo(pd);
+      return;
+    }
+
+    // 规范化
+    const list = (Array.isArray(raw) ? raw : []).filter(m => m && m.title).map(m => {
+      let cats = [];
+      if (Array.isArray(m.category)) cats = m.category.map(c => String(c || '').trim()).filter(Boolean);
+      else if (typeof m.category === 'string') cats = m.category.split(/[,，、\s]+/).map(c => c.trim()).filter(Boolean);
+      let cast = [];
+      if (Array.isArray(m.cast)) cast = m.cast.map(c => String(c || '').trim()).filter(Boolean);
+      else if (typeof m.cast === 'string') cast = m.cast.split(/[,，、\s]+/).map(c => c.trim()).filter(Boolean);
+      let rating = parseFloat(m.rating);
+      if (!isFinite(rating)) rating = 0;
+      rating = Math.max(0, Math.min(10, rating));
+      let year = parseInt(m.year, 10);
+      if (!isFinite(year)) year = 0;
+      return {
+        id: 'vd_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        kind: cat,
+        title: String(m.title).replace(/^[《<「『\s]+|[》>」』\s]+$/g, '').slice(0, 40),
+        director: String(m.director || '').slice(0, 20),
+        screenwriter: String(m.screenwriter || '').slice(0, 20),
+        cast: cast.slice(0, 6),
+        category: cats.slice(0, 3),
+        year: year || '',
+        duration: String(m.duration || '').slice(0, 20),
+        rating: rating ? Number(rating.toFixed(1)) : '',
+        intro: String(m.intro || '').slice(0, 260),
+        cover: '',
+        studio: String(m.director || '').slice(0, 20)
+      };
+    });
+    if (list.length === 0) {
+      UI.showToast('生成结果为空，请重试', 1800);
+      _renderVideo(pd);
+      return;
+    }
+
+    if (!pd.videoDiscover || typeof pd.videoDiscover !== 'object' || Array.isArray(pd.videoDiscover)) {
+      pd.videoDiscover = {};
+    }
+    pd.videoDiscover[cat] = list;
+    await _savePhoneData();
+    _renderVideo(pd);
+    UI.showToast('已生成 ' + list.length + ' 部电影', 1500);
+  }
+
+  function _videoOpenWork(id) {
+    UI.showToast('视频详情页开发中', 1600);
+  }
+
   // 阅读首页：书架（默认）/ 发现 两个 tab
   async function _renderReading(pd) {
     const body = document.getElementById('phone-body');
@@ -10894,16 +11230,18 @@ ${houseDataText}`;
         <input id="phone-reading-search" class="phone-reading-search" type="text" placeholder="${ph}">
         <button class="phone-reading-search-btn" onclick="Phone._readingSearch()">搜索</button>
       </div>
-      <label class="phone-reading-wvref circle-check-label">
-        <span class="circle-check-text">参考世界观背景生成（不勾则纯架空）</span>
-        <input type="checkbox" class="circle-check" ${_readingUseWvRef ? 'checked' : ''} onchange="Phone._readingToggleWvRef(this.checked)">
-        <span class="circle-check-ui"></span>
-      </label>
-      <label class="phone-reading-wvref circle-check-label">
-        <span class="circle-check-text">参考最近十轮主线</span>
-        <input type="checkbox" class="circle-check" ${_readingUseMainlineRef ? 'checked' : ''} onchange="Phone._readingToggleMainlineRef(this.checked)">
-        <span class="circle-check-ui"></span>
-      </label>`;
+      <div class="phone-genrow">
+        <label class="circle-check-label">
+          <span class="circle-check-text">参考世界观</span>
+          <input type="checkbox" class="circle-check" ${_readingUseWvRef ? 'checked' : ''} onchange="Phone._readingToggleWvRef(this.checked)">
+          <span class="circle-check-ui"></span>
+        </label>
+        <label class="circle-check-label">
+          <span class="circle-check-text">参考近期主线</span>
+          <input type="checkbox" class="circle-check" ${_readingUseMainlineRef ? 'checked' : ''} onchange="Phone._readingToggleMainlineRef(this.checked)">
+          <span class="circle-check-ui"></span>
+        </label>
+      </div>`;
     let listHtml;
     if (!books.length) {
       const emptyDesc = (type === 'short') ? '搜个题材，或直接点搜索看看短篇' : '搜个题材，或直接点搜索看看连载';
@@ -16625,7 +16963,7 @@ ${nowLine}${lines.join('\n')}
         }
       } catch (_) {}
       const intro = String(p.intro || '').trim();
-      let head = `【可呼应的电台节目】\n听众里有人订阅了下面这档电台，你可以（不强制）生成一条路人听众视角的帖子来呼应它：\n- 电台名：${stationName}`;
+      let head = `【必须呼应的电台节目】\n听众里有人订阅了下面这档电台，请在这批帖子里【确保有且仅有 1 条】路人听众视角的帖子来呼应它（这条算进 80% 的日常帖里）：\n- 电台名：${stationName}`;
       if (fm) head += `\n- 频率：FM ${fm}`;
       if (concept) head += `\n- 频道核心概念：${concept}`;
       if (showName) head += `\n- 最近一期节目：${showName}`;
@@ -16634,7 +16972,7 @@ ${nowLine}${lines.join('\n')}
       } else if (intro) {
         head += `\n- 这期节目预告（听众可能还没听到具体内容）：${intro}`;
       }
-      head += `\n\n呼应要求：\n- 只是"有机会"呼应，最多生成 1 条与此电台相关的帖子，自然融进帖子流即可，不要硬塞、不要每条都提。\n- 用路人听众自己的话来转述听后感/安利/吐槽，不要照抄上面的简介或正文原文。\n- 发帖人是虚构的路人听众，绝不能是玩家本人。`;
+      head += `\n\n呼应要求：\n- 务必生成 1 条（且只 1 条）与此电台相关的帖子，自然融进帖子流，不要更多、也不要不写。\n- 用路人听众自己的话来转述听后感/安利/吐槽，不要照抄上面的简介或正文原文。\n- 发帖人是虚构的路人听众，绝不能是玩家本人。`;
       return head;
     } catch (_) { return ''; }
   }
@@ -16678,13 +17016,13 @@ ${nowLine}${lines.join('\n')}
       if (!chapterDigest && book.content) {
         chapterDigest = String(book.content).replace(/\s+/g, ' ').trim().slice(0, 450);
       }
-      let head = `【可呼应的小说】\n论坛里有人在追下面这本书，你可以（不强制）生成一条路人读者视角的帖子来呼应它：\n- 书名：${title}`;
+      let head = `【必须呼应的小说】\n论坛里有人在追下面这本书，请在这批帖子里【确保有且仅有 1 条】路人读者视角的帖子来呼应它（这条算进 80% 的日常帖里）：\n- 书名：${title}`;
       if (author) head += `\n- 作者：${author}`;
       if (intro) head += `\n- 简介：${intro}`;
       if (chapterDigest) {
         head += `\n- 最新章节${chapterTitle ? `《${chapterTitle}》` : ''}实际内容（梗概）：${chapterDigest}`;
       }
-      head += `\n\n呼应要求：\n- 只是"有机会"呼应，最多生成 1 条与这本书相关的帖子，自然融进帖子流即可，不要硬塞、不要每条都提。\n- 用路人读者自己的话来转述读后感/安利/催更/吐槽，不要照抄上面的简介或正文原文。\n- 发帖人是虚构的路人读者，绝不能是玩家本人。`;
+      head += `\n\n呼应要求：\n- 务必生成 1 条（且只 1 条）与这本书相关的帖子，自然融进帖子流，不要更多、也不要不写。\n- 用路人读者自己的话来转述读后感/安利/催更/吐槽，不要照抄上面的简介或正文原文。\n- 发帖人是虚构的路人读者，绝不能是玩家本人。`;
       return head;
     } catch (_) { return ''; }
   }
@@ -28639,10 +28977,12 @@ ${sensoryRule}
 }
 
 async function _endCall(hangupBy, aiPresent) {
-  // hangupBy: 'me'（用户挂断）| 'them'（AI主动挂断）| undefined（默认视为用户）
-  // aiPresent: boolean，仅当 AI 用了 [HANGUP:PRESENT] 时为 true
-  if (!_activeCall) return;
-  const contactId = _activeCall.contactId;
+    // hangupBy: 'me'（用户挂断）| 'them'（AI主动挂断）| undefined（默认视为用户）
+    // aiPresent: boolean，仅当 AI 用了 [HANGUP:PRESENT] 时为 true
+    if (!_activeCall) return;
+    // 立即清掉所有排队中的延迟渲染/TTS 定时器，避免挂断后回调仍往已移除的 DOM 塞节点导致卡死
+    _clearCallRenderTimers();
+    const contactId = _activeCall.contactId;
   const mode = _activeCall.mode;
   const startTime = _activeCall.startTime;
   const rounds = _activeCall.rounds;
@@ -29256,6 +29596,12 @@ function _radioCallerAvatar() {
 // 渲染一段 AI 通话内容（描述卡片 / 左对齐台词）到通话区
 // 同一批段落逐条渐次浮上：用递增 animation-delay 实现
 let _callLineSeq = 0;
+// 渲染队列里所有待执行的延迟插入/TTS 定时器，挂断或重渲染时统一清除，避免堆积卡死
+let _callRenderTimers = [];
+function _clearCallRenderTimers() {
+  try { _callRenderTimers.forEach(t => clearTimeout(t)); } catch(_) {}
+  _callRenderTimers = [];
+}
 
 // 播放单条通话台词（复用 TTS，依赖联系人 voiceId）
 async function _playCallLine(btn, text) {
@@ -29290,24 +29636,31 @@ async function _playCallLine(btn, text) {
   }
 }
 
-function _renderCallSegments(raw) {
-  const list = document.getElementById('phone-call-messages');
-  if (!list) return;
-  const segs = _parseCallReply(raw);
-  const STEP = 500; // 每条间隔 ms
-  let idx = 0;
+function _renderCallSegments(raw, immediate) {
+    const list = document.getElementById('phone-call-messages');
+    if (!list) return;
+    const segs = _parseCallReply(raw);
+    const STEP = 500; // 每条间隔 ms
+    let idx = 0;
 
-  // 真正延时插入：元素进 DOM 那刻动画才开始，逐条自然出现
-  const appendDelayed = (el) => {
-    const delay = idx * STEP;
-    setTimeout(() => {
-      try {
-        list.appendChild(el);
-        list.scrollTop = list.scrollHeight;
-      } catch(_) {}
-    }, delay);
-    idx++;
-  };
+    // 真正延时插入：元素进 DOM 那刻动画才开始，逐条自然出现
+    // immediate=true（历史回放/重渲染）时直接同步插入，不排队延迟，避免大量 setTimeout 堆积卡死
+    const appendDelayed = (el) => {
+      if (immediate) {
+        try { list.appendChild(el); list.scrollTop = list.scrollHeight; } catch(_) {}
+        idx++;
+        return;
+      }
+      const delay = idx * STEP;
+      const tid = setTimeout(() => {
+        try {
+          list.appendChild(el);
+          list.scrollTop = list.scrollHeight;
+        } catch(_) {}
+      }, delay);
+      _callRenderTimers.push(tid);
+      idx++;
+    };
 
   if (segs.length === 0) {
     // 解析不出结构就整段当描述卡片兜底
@@ -29369,10 +29722,11 @@ function _renderCallSegments(raw) {
   }
 
   // 自动播放：如果联系人开了 voiceEnabled + callAutoPlay，渲染完后自动逐条朗读台词
+  // immediate（历史回放/重渲染）时不重新朗读
   const lineSegs = segs.filter(s => s.kind === 'line');
-  if (lineSegs.length > 0 && _activeCall) {
+  if (!immediate && lineSegs.length > 0 && _activeCall) {
     const totalDelay = idx * STEP + 200; // 等所有元素渲染完
-    setTimeout(async () => {
+    const tid = setTimeout(async () => {
       try {
         if (typeof TTS === 'undefined') return;
         const pd = await _getPhoneData();
@@ -29385,6 +29739,7 @@ function _renderCallSegments(raw) {
         }
       } catch(_) {}
     }, totalDelay);
+    _callRenderTimers.push(tid);
   }
 }
 
@@ -29435,10 +29790,11 @@ function _callSaveEdit() {
   // 清空消息区并重新渲染所有轮次
   const list = document.getElementById('phone-call-messages');
   if (list) list.innerHTML = '';
+  _clearCallRenderTimers();
   _callLineSeq = 0;
   for (const round of _activeCall.rounds) {
     if (round.role === 'them') {
-      _renderCallSegments(round.text);
+      _renderCallSegments(round.text, true);
     } else {
       // 玩家消息
       const el = document.createElement('div');
@@ -35363,6 +35719,7 @@ _onPagesScroll,
 _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioHomeTab, _radioOpenSubscribed, _radioDeleteSubscribed, _radioTogglePrefsExpand, _radioOnGlobalPref,
     // 阅读 App
     _renderReading, _switchReadingHomeTab, _switchReadingDiscoverType, _readingToggleWvRef, _readingToggleMainlineRef, _readingOpenBook, _readingImportEbook, _readingOpenAddMenu, _readingShowWriteSetup, _readingEditOutline, _readingSearch, _readingTogglePref, _readingSetMapping, _readingTogglePrefsExpand,
+    _renderVideo, _switchVideoCat, _switchVideoHomeTab, _videoSearch, _videoGenList, _videoToggleWvRef, _videoToggleMainlineRef, _videoOpenWork,
     _readingGenToc, _readingGenMoreToc, _readingOpenToc, _readingReadChapter, _readingContinueAfterChapter, _readingOpenBookSettings, _readingSetCover, _readingRewriteLast, _readingRewriteChapter, _readingEditChapterText, _readingViewOutline, _readingEditAuthorStyle, _readingDeleteBook, _readingRewriteShort, _readingActionTap, _readingCollectGift, _readingRefreshComments, _readingSendComment, _readingEditAuthorNote, _readingTapPara, _readingCoReadSetup,
   // 小屋 App
   _renderCottage, _cottageAddHouse, _cottageOpenHouse, _cottageEditHouse, _cottageSetCurrent, _switchCottageHomeTab, _cottageDataMenu, getCottageLayoutForLocation, _cottageOpenMall, _cottageOpenInventory, _cottageMallSettings, _cottageMallToggleTag, _cottageMallRefresh, _cottageMallBuy, _cottageInvToggleTag, _cottageInvSearch, _cottageInvDelete, _cottageInvEdit, _cottageInvEditTag, _cottageInvPick, _cottageShowOrders,

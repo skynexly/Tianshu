@@ -298,6 +298,11 @@ try { radioEcho = (typeof Phone !== 'undefined' && Phone._radioEchoBlockForForum
 // 论坛呼应阅读：随机抽 0-1 本书架上的书（AI/自建，排除导入），给 AI 当可选的呼应素材
 let readingEcho = '';
 try { readingEcho = (typeof Phone !== 'undefined' && Phone._readingEchoBlockForForum) ? await Phone._readingEchoBlockForForum() : ''; } catch (_) {}
+// 两个都抽中时只保留一个（随机），避免两条呼应帖同时挤占帖子名额、互相竞争注意力
+if (radioEcho && readingEcho) {
+  if (Math.random() < 0.5) readingEcho = '';
+  else radioEcho = '';
+}
     const chatMessages = Chat.getMessages();
     const summaryText = await Summary.formatForPrompt(Conversations.getCurrent());
 
@@ -316,14 +321,14 @@ const userBan = banNames.length > 0
 const systemPrompt = `你是一个"${mediaType}"内容生成器。根据提供的世界观和当前剧情，生成${mediaType}上的帖子/动态。${mediaBrief}${userBan}
 
 要求：
-1. 生成6-8条帖子/动态预览
-2. 80%的内容与世界观有关但与主线剧情无直接关系（日常生态、社会话题、生活琐事）
+1. 生成8-10条帖子/动态预览
+2. 80%的内容与世界观有关但与主线剧情无直接关系（日常生态、社会话题、生活琐事；下方若提供了可呼应的电台/小说素材，那条呼应帖也算在这 80% 日常里）
 3. 20%的内容与主线正在发生的剧情有关联（但是从路人/旁观者视角，不会知道具体细节），只能涉及已经发生过的事件，不能透露或暗示尚未发生的剧情
 4. 绝大多数帖子的发帖人是虚构的路人用户（非NPC），用户名要符合世界观和${mediaType}的风格
 5. 每条帖子都是独立的原创帖/一楼，不是对其他帖子的回复。标题和摘要不能出现"回楼上""楼主""回复@"等评论区用语。帖子风格贴合${mediaType}的画风，长短皆可，有正经讨论也有水帖灌水，摘要长度不要千篇一律
 6. tags 风格也要贴合${mediaType}（论坛/贴吧偏普通词、微博偏"#话题#"、小红书偏"#标签"），无需统一形式
 7. 时间分布：80% 在当前游戏时间附近 7 天内（日常推荐流），可以有 20% 是置顶/热门/挖坟的更早老帖，time 可以更靠前；但评论时间永远不要超过当前游戏时间
-8. 6-8条帖子中仅允许1-2条（不能更多）由有设定的角色发帖，其余全部是路人。角色发帖时语气必须符合该角色性格，username 直接填该角色在列表中"-"后面的名字。角色的认知范围以当前剧情进度为准，不能提到还没发生的事。角色发布的帖子可以和主线有关，也可以完全和主线无关，可能是技术贴、求助帖、生活吐槽或者一切符合角色身份、职业、性格的帖子
+8. 8-10条帖子中仅允许1-2条（不能更多）由有设定的角色发帖，其余全部是路人。角色发帖时语气必须符合该角色性格，username 直接填该角色在列表中"-"后面的名字。角色的认知范围以当前剧情进度为准，不能提到还没发生的事。角色发布的帖子可以和主线有关，也可以完全和主线无关，可能是技术贴、求助帖、生活吐槽或者一切符合角色身份、职业、性格的帖子
 9. 返回纯JSON数组，不要包含任何其他文字
 
 JSON格式（严格遵循）：
@@ -357,7 +362,7 @@ ${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}${readingEcho ? '\n\n' + readin
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
           body: JSON.stringify({
-            model, stream: false, temperature: 0.9, max_tokens: 8192,
+            model, stream: false, temperature: 0.9, max_tokens: 16384,
         messages: [
           { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }

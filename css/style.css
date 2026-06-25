@@ -2941,6 +2941,17 @@ input[type="range"] {
 .wv-skeleton-line.summary-2 { width: 82%; margin-bottom: 10px; }
 .wv-skeleton-line.user { width: 90px; }
 .wv-skeleton-line.time { width: 56px; margin-left: auto; }
+/* 壁纸模式：骨架卡/骨架块改半透明深色，避免在壁纸上显示成突兀的浅灰实色块 */
+.phone-shell.has-custom-wallpaper .wv-skeleton-card {
+  background: rgba(18, 20, 28, 0.30) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+.phone-shell.has-custom-wallpaper .wv-skeleton-avatar,
+.phone-shell.has-custom-wallpaper .wv-skeleton-line,
+.phone-shell.has-custom-wallpaper .wv-skeleton-pill,
+.phone-shell.has-custom-wallpaper .wv-skeleton-meta {
+  background: rgba(255, 255, 255, 0.14) !important;
+}
 .wv-skeleton-tags {
   display: flex;
   gap: 6px;

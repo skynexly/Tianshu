@@ -175,30 +175,18 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v704.3';
- const CHANGELOG = `【v704.3 更新内容】
+const APP_VERSION = 'v704.5';
+ const CHANGELOG = `【v704.5 更新内容】
 
-📖 全新上线：阅读 App
-- AI 生成小说：长篇连载 + 短篇
-- 自己写书、导入本地电子书（txt / epub）
-- 书评、章节评论、打赏作者/收读者打赏
-- 邀请角色共读，自定义 App 名
-- 论坛会冒出读者讨论你书架上的书
+📞 通话体验优化
+○ 优化文字不渲染、界面卡顿等问题
 
-📦 物品入库
-- 物品栏物品可放入衣橱 / 小屋仓库
+💾 新增：轻量导出
+○ 导出文字 + 各类头像，跳过其他
 
-💬 群聊
-- 新增「AI 生成路人」：按世界观和群介绍批量生成，只作用于当前群
-- 群内路人可点击查看、编辑人设
-- 修复创建群聊弹窗误关闭
-
-🌍 世界观编辑
-- 批量生成角色的性别等信息正确写入"详细设定"
-- 「可出场角色」勾选不再跳回顶部
-
-🎭 面具
-- 新增新窗口一键复制面具（首次发消息时提醒）`;
+✨ 界面优化
+○ 部分UI微调
+○ 骨架屏适配壁纸模式，加载时不再有突兀白块`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {
@@ -232,6 +220,10 @@ const APP_VERSION = 'v704.3';
             <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;letter-spacing:0.5px">本次更新</div>
             <div style="height:1px;background:var(--border);opacity:.7;margin:0 0 14px"></div>
             <div style="white-space:pre-line;margin-bottom:18px;color:var(--text-secondary);font-size:12px;line-height:1.9">${CHANGELOG}</div>
+            <div style="background:var(--bg-secondary);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:18px;font-size:12px;line-height:1.7;color:var(--text-secondary)">
+              <div style="font-weight:600;color:var(--text);margin-bottom:4px">温馨提示</div>
+              <div>· 请及时存档，以免数据丢失</div>
+            </div>
             <div style="display:flex;justify-content:flex-end">
               <button id="changelog-ok" style="padding:8px 24px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">${force ? '关闭' : '已阅'}</button>
             </div>
