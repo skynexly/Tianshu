@@ -175,18 +175,20 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v704.5';
- const CHANGELOG = `【v704.5 更新内容】
+const APP_VERSION = 'v704.6';
+ const CHANGELOG = `【v704.6 更新内容】
 
-📞 通话体验优化
-○ 优化文字不渲染、界面卡顿等问题
+💬 社交体验升级
+○ 论坛、好友圈支持纯图发表
+○ 论坛、好友圈可出现主线路人的评论与动态
+○ 论坛评论新增楼中楼
 
-💾 新增：轻量导出
-○ 导出文字 + 各类头像，跳过其他
+🏠 新增：数据隔离
+○ 手机设置内新增衣橱、小屋的回溯数据隔离选项
 
-✨ 界面优化
-○ 部分UI微调
-○ 骨架屏适配壁纸模式，加载时不再有突兀白块`;
+🐛 问题修复
+○ 修复了部分头像显示问题
+○ 修复手机内世界书无法取消的问题`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

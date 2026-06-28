@@ -913,7 +913,7 @@ if (contentArea) contentArea.style.display = 'none';
 
   // ===== 确认弹窗 =====
 
-  function showConfirm(title, message) {
+  function showConfirm(title, message, options) {
     return new Promise((resolve) => {
       const modal = document.getElementById('confirm-modal');
       const titleEl = document.getElementById('confirm-title');
@@ -922,15 +922,31 @@ if (contentArea) contentArea.style.display = 'none';
       const cancelBtn = document.getElementById('confirm-cancel');
 
       titleEl.textContent = title || '确认';
-msgEl.textContent = message || '确定要继续吗？';
-// 确认弹窗必须挂到 body 最顶层，避免被虚拟手机/transform 父级压住
-if (modal.parentNode !== document.body) {
-document.body.appendChild(modal);
-}
+ msgEl.textContent = message || '确定要继续吗？';
+ // 可选复选框（如"下次不再提醒"）：动态注入到 message 下方，cleanup 时移除
+ const opts = options || {};
+ let checkboxWrap = null;
+ let checkboxInput = null;
+ if (opts.checkbox) {
+   checkboxWrap = document.createElement('label');
+   checkboxWrap.style.cssText = 'display:flex;align-items:center;gap:8px;margin:-8px 0 18px 0;color:var(--text-secondary);font-size:13px;cursor:pointer';
+   checkboxInput = document.createElement('input');
+   checkboxInput.type = 'checkbox';
+   checkboxInput.style.cssText = 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex-shrink:0';
+   const txt = document.createElement('span');
+   txt.textContent = opts.checkbox;
+   checkboxWrap.appendChild(checkboxInput);
+   checkboxWrap.appendChild(txt);
+   msgEl.insertAdjacentElement('afterend', checkboxWrap);
+ }
+ // 确认弹窗必须挂到 body 最顶层，避免被虚拟手机/transform 父级压住
+ if (modal.parentNode !== document.body) {
+ document.body.appendChild(modal);
+ }
     modal.style.setProperty('z-index', '2147483646', 'important');
     modal.querySelector('.modal-content')?.style.setProperty('z-index', '2147483647', 'important');
-modal.querySelector('.modal-content')?.style.setProperty('position', 'relative');
-modal.classList.remove('hidden');
+ modal.querySelector('.modal-content')?.style.setProperty('position', 'relative');
+ modal.classList.remove('hidden');
 
       const cleanup = async () => {
         modal.classList.add('closing');
@@ -942,16 +958,19 @@ modal.classList.remove('hidden');
         modal.classList.add('hidden');
         okBtn.onclick = null;
         cancelBtn.onclick = null;
+        if (checkboxWrap && checkboxWrap.parentNode) checkboxWrap.parentNode.removeChild(checkboxWrap);
       };
 
       okBtn.onclick = () => {
+        const checked = !!(checkboxInput && checkboxInput.checked);
         cleanup();
-        resolve(true);
+        resolve(opts.checkbox ? { ok: true, checked } : true);
       };
 
       cancelBtn.onclick = () => {
+        const checked = !!(checkboxInput && checkboxInput.checked);
         cleanup();
-        resolve(false);
+        resolve(opts.checkbox ? { ok: false, checked } : false);
       };
     });
   }

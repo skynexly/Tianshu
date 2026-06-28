@@ -1003,6 +1003,11 @@ function _syncBuiltinRestoreButton(w) {
     // 先加载表单数据，再切面板，避免出现"先切到空白页 → 后填内容"的视觉空白
     await _loadEditForm(id);
     UI.showPanel('worldview-edit');
+    // 面板显示后再补算一次 textarea 高度：_loadEditForm 内的重算发生在面板尚未显示时，
+    // 此时 scrollHeight 读到 0，会把高度/滚动算错，导致 AI 生成的长设定打开后无法滑动。
+    // 面板显示并完成布局后重算一次即可恢复（无需用户先手动编辑触发）。
+    requestAnimationFrame(_resizeWorldviewEditTextareas);
+    setTimeout(_resizeWorldviewEditTextareas, 120);
     _startFullSaveTimer();
   }
   // 给外部调用：编辑面板返回时的目标路径
@@ -1189,18 +1194,22 @@ _updatePhoneAppsLabel();
     // 绑定主编辑页自动保存
     requestAnimationFrame(_attachWVAutoSave);
 
-    const resizeWorldviewEdit = () => {
-      ['wv-description', 'wv-setting', 'wv-start-plot', 'wv-start-message'].forEach(id => {
-        const ta = document.getElementById(id);
-        if (!ta) return;
-        ta.style.height = 'auto';
-        ta.style.height = Math.min(ta.scrollHeight, 220) + 'px';
-        ta.style.overflowY = ta.scrollHeight > 220 ? 'auto' : 'hidden';
-      });
-    };
+    const resizeWorldviewEdit = _resizeWorldviewEditTextareas;
     requestAnimationFrame(resizeWorldviewEdit);
     setTimeout(resizeWorldviewEdit, 260);
     setTimeout(resizeWorldviewEdit, 420);
+  }
+
+  // 重算主编辑页几个自适应 textarea 的高度/滚动（抽成模块级，供 openEdit 在面板显示后再补一次，
+  // 修复 AI 生成世界观后直接打开编辑页、textarea 高度按未显示时的 scrollHeight(=0) 算错、导致内容无法滑动的问题）。
+  function _resizeWorldviewEditTextareas() {
+    ['wv-description', 'wv-setting', 'wv-start-plot', 'wv-start-message'].forEach(id => {
+      const ta = document.getElementById(id);
+      if (!ta) return;
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 220) + 'px';
+      ta.style.overflowY = ta.scrollHeight > 220 ? 'auto' : 'hidden';
+    });
   }
   
   function switchEditTab(tab) {
@@ -5893,10 +5902,15 @@ async function openPhoneAppsEditor() {
   const rd = pa.radio || {};
   setVal('pa-radio-name', rd.name);
   setVal('pa-radio-desc', rd.desc);
-  // 阅读
-  const rg = pa.reading || {};
-  setVal('pa-reading-name', rg.name);
-  setVal('pa-reading-desc', rg.desc);
+// 阅读
+    const rg = pa.reading || {};
+    setVal('pa-reading-name', rg.name);
+    setVal('pa-reading-desc', rg.desc);
+
+    // 视频
+    const vg = pa.video || {};
+    setVal('pa-video-name', vg.name);
+    setVal('pa-video-desc', vg.desc);
 
   // 小屋
   const ct = pa.cottage || {};
@@ -6114,6 +6128,58 @@ function _buildPhoneAppsEditorHTML(w) {
     </div>
   </div>
 
+  <!-- 视频 -->
+  <div style="font-size:14px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:4px;display:flex;align-items:center;gap:6px">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="15" height="14" rx="2.5"/><path d="M17 9.5l4.55-2.42A1 1 0 0 1 23 7.96v8.08a1 1 0 0 1-1.45.88L17 14.5z"/></svg>
+    视频
+    <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（影视播放）</span>
+  </div>
+  <div style="background:var(--bg-tertiary);padding:12px;border-radius:8px;margin-bottom:16px">
+    <label style="display:block;margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">APP 名称</span>
+      <input type="text" id="pa-video-name" placeholder="例如：星视 / 光影 / 优酷" style="width:100%;padding:6px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+    </label>
+    <label style="display:block;margin-bottom:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">APP 描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这个世界的影视平台画风）</span></span>
+      <textarea id="pa-video-desc" class="auto-resize-textarea" rows="2" placeholder="例如：主流影视点播平台，涵盖院线大片、剧集、纪录片等" style="width:100%;padding:8px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:50px"></textarea>
+    </label>
+    <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">真人影视（电影 / 电视剧）</div>
+    <div style="margin-bottom:10px">
+      <button type="button" onclick="Worldview.openVideoCastEditor('director')" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">导演名单</button>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以担任导演</div>
+    </div>
+    <div style="margin-bottom:10px">
+      <button type="button" onclick="Worldview.openVideoCastEditor('screenwriter')" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">编剧名单</button>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以担任编剧</div>
+    </div>
+    <div style="margin-bottom:14px">
+      <button type="button" onclick="Worldview.openVideoCastEditor('actor')" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">演员名单</button>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以担任演员</div>
+    </div>
+    <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;padding-top:8px;border-top:1px solid var(--border)">动画制作 staff</div>
+    <div style="margin-bottom:10px">
+      <button type="button" onclick="Worldview.openVideoCastEditor('animeDirector')" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">监督名单</button>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以担任动画监督</div>
+    </div>
+    <div style="margin-bottom:10px">
+      <button type="button" onclick="Worldview.openVideoCastEditor('animeScript')" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">系列构成名单</button>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以担任系列构成（脚本）</div>
+    </div>
+    <div style="margin-bottom:10px">
+      <button type="button" onclick="Worldview.openVideoCastEditor('animeCv')" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">配音演员名单</button>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以担任配音演员</div>
+    </div>
+    <div>
+      <button type="button" onclick="Worldview.openVideoCastEditor('animeArt')" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">作画名单</button>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以担任动画作画</div>
+    </div>
+    <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;padding-top:8px;border-top:1px solid var(--border)">直播</div>
+    <div>
+      <button type="button" onclick="Worldview.openVideoCastEditor('streamer')" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">主播名单</button>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以作为主播开直播（默认空=全部虚构主播）</div>
+    </div>
+  </div>
+
   <!-- 小屋 -->
   <div style="font-size:14px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:4px;display:flex;align-items:center;gap:6px">
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>
@@ -6199,6 +6265,10 @@ async function closePhoneAppsEditor() {
     w.phoneApps.reading = w.phoneApps.reading || {};
     w.phoneApps.reading.name = getVal('pa-reading-name');
     w.phoneApps.reading.desc = getVal('pa-reading-desc');
+    // 视频（只保存 name/desc，导演/编剧/演员名单由专用编辑器管理）
+    w.phoneApps.video = w.phoneApps.video || {};
+    w.phoneApps.video.name = getVal('pa-video-name');
+    w.phoneApps.video.desc = getVal('pa-video-desc');
     // 小屋
     w.phoneApps.cottage = w.phoneApps.cottage || {};
     w.phoneApps.cottage.name = getVal('pa-cottage-name');
@@ -6611,6 +6681,124 @@ function _radioCastSearch(query) {
     const overlay = document.getElementById('reading-cast-editor-overlay');
     if (!overlay) return;
     _getEditingWV().then(w => { if (w) _renderReadingCastEditor(overlay, w, query); });
+  }
+
+  // ===== 视频「导演/编剧/演员」名单编辑器 =====
+  // 真人影视（电影+电视剧共用）：director / screenwriter / actor
+  // 动画专属：animeDirector(监督) / animeScript(系列构成) / animeCv(配音演员) / animeArt(作画)
+  // 各自独立纯白名单，存进 w.phoneApps.video.{key} [{id,name}]，复用电台的角色收集器
+  const _VIDEO_CAST_ROLES = {
+    director:     { key: 'directorWhitelist',     title: '导演名单', noun: '导演' },
+    screenwriter: { key: 'screenwriterWhitelist', title: '编剧名单', noun: '编剧' },
+    actor:        { key: 'actorWhitelist',        title: '演员名单', noun: '演员' },
+    animeDirector: { key: 'animeDirectorWhitelist', title: '监督名单',   noun: '监督' },
+    animeScript:   { key: 'animeScriptWhitelist',   title: '系列构成名单', noun: '系列构成' },
+    animeCv:       { key: 'animeCvWhitelist',       title: '配音演员名单', noun: '配音演员' },
+    animeArt:      { key: 'animeArtWhitelist',      title: '作画名单',     noun: '作画' },
+    streamer:      { key: 'streamerWhitelist',      title: '主播名单',     noun: '主播' },
+  };
+  let _videoCastRole = 'director';
+
+  async function openVideoCastEditor(role) {
+    if (!_VIDEO_CAST_ROLES[role]) role = 'director';
+    _videoCastRole = role;
+    const w = await _getEditingWV();
+    if (!w) { UI.showToast('请先选择世界观', 1200); return; }
+    w.phoneApps = w.phoneApps || {};
+    w.phoneApps.video = w.phoneApps.video || {};
+    const key = _VIDEO_CAST_ROLES[role].key;
+    if (!Array.isArray(w.phoneApps.video[key])) w.phoneApps.video[key] = [];
+
+    let overlay = document.getElementById('video-cast-editor-overlay');
+    if (overlay) overlay.remove();
+    overlay = document.createElement('div');
+    overlay.id = 'video-cast-editor-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;animation:sbFadeIn .2s ease-out';
+    document.body.appendChild(overlay);
+    _renderVideoCastEditor(overlay, w);
+  }
+
+  async function _renderVideoCastEditor(overlay, w, query = '') {
+    const role = _VIDEO_CAST_ROLES[_videoCastRole] ? _videoCastRole : 'director';
+    const conf = _VIDEO_CAST_ROLES[role];
+    const video = w.phoneApps.video || (w.phoneApps.video = {});
+    if (!Array.isArray(video[conf.key])) video[conf.key] = [];
+    const picked = new Set((video[conf.key] || []).map(x => x.id));
+
+    const { wv, cards } = await _radioCollectCastChars(w);
+    const q = String(query || '').toLowerCase().trim();
+    const matchQ = (n) => !q || [n.name, n.aliases].some(v => String(v || '').toLowerCase().includes(q));
+    const charRow = (n) => {
+      const on = picked.has(n.id);
+      return `<div onclick="Worldview._videoToggleCastNpc('${n.id}')" style="display:flex;align-items:center;gap:10px;padding:8px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:var(--bg-tertiary);cursor:pointer;margin-bottom:6px">
+        <div style="width:34px;height:34px;border-radius:50%;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex-shrink:0">${n.avatar ? `<img src="${Utils.escapeHtml(n.avatar)}" style="width:100%;height:100%;object-fit:cover">` : Utils.escapeHtml((n.name || '?').slice(0,1))}</div>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.name)}${n.aliases ? `<span style="font-size:11px;color:var(--text-secondary)"> · ${Utils.escapeHtml(n.aliases)}</span>` : ''}</div>
+        </div>
+        <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+      </div>`;
+    };
+    const groupHtml = (title, arr) => {
+      const f = arr.filter(matchQ);
+      if (!f.length) return '';
+      return `<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:6px">${title}（${f.length}）</div>${f.map(charRow).join('')}`;
+    };
+    const wvGroup = groupHtml('世界观角色', wv);
+    const cardGroup = groupHtml('单人卡角色', cards);
+    const noResult = (!wvGroup && !cardGroup) ? `<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:12px">${q ? '没有匹配的角色' : '没有可选的角色'}</div>` : '';
+    const countLabel = picked.size ? `已选 ${picked.size}` : `未选 · ${conf.noun}将全部虚构`;
+    const listHtml = `
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:4px;margin-bottom:8px">勾选可担任${conf.noun}的角色（${countLabel}）</div>
+      <input id="video-cast-search" placeholder="搜索角色 / 别名" oninput="Worldview._videoCastSearch(this.value)" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;margin-bottom:8px">
+      <div>${wvGroup}${cardGroup}${noResult}</div>`;
+
+    const _prevScroll = (() => { const sc = overlay.querySelector('.wv-cast-scroll'); return sc ? sc.scrollTop : 0; })();
+    overlay.innerHTML = `
+    <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 12px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:8px">
+        <button type="button" onclick="Worldview.closeVideoCastEditor()" style="border:none;background:none;color:var(--text);cursor:pointer;padding:4px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span style="font-size:16px;font-weight:600;color:var(--text)">${conf.title}</span>
+      </div>
+    </div>
+    <div class="wv-cast-scroll" style="flex:1;overflow-y:auto;padding:0 16px 24px">
+      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;line-height:1.6">设置哪些角色可以担任${conf.noun}。不勾任何人则${conf.noun}全部虚构；勾了谁，AI 就可能从这些人里挑选担任${conf.noun}。导演、编剧、演员是三份独立名单，互不影响。</div>
+      ${listHtml}
+    </div>`;
+    const _sc = overlay.querySelector('.wv-cast-scroll');
+    if (_sc && _prevScroll) _sc.scrollTop = _prevScroll;
+  }
+
+  async function closeVideoCastEditor() {
+    const overlay = document.getElementById('video-cast-editor-overlay');
+    if (overlay) overlay.remove();
+  }
+
+  async function _videoToggleCastNpc(npcId) {
+    const w = await _getEditingWV(); if (!w) return;
+    const conf = _VIDEO_CAST_ROLES[_videoCastRole] || _VIDEO_CAST_ROLES.director;
+    w.phoneApps = w.phoneApps || {}; w.phoneApps.video = w.phoneApps.video || {};
+    if (!Array.isArray(w.phoneApps.video[conf.key])) w.phoneApps.video[conf.key] = [];
+    const list = w.phoneApps.video[conf.key];
+    const idx = list.findIndex(x => x.id === npcId);
+    if (idx >= 0) {
+      list.splice(idx, 1);
+    } else {
+      const { wv, cards } = await _radioCollectCastChars(w);
+      const npc = [...wv, ...cards].find(n => n.id === npcId);
+      if (npc) list.push({ id: npc.id, name: npc.name });
+    }
+    await _saveEditingWV(w);
+    const overlay = document.getElementById('video-cast-editor-overlay');
+    const q = (document.getElementById('video-cast-search') || {}).value || '';
+    if (overlay) _renderVideoCastEditor(overlay, w, q);
+  }
+
+  function _videoCastSearch(query) {
+    const overlay = document.getElementById('video-cast-editor-overlay');
+    if (!overlay) return;
+    _getEditingWV().then(w => { if (w) _renderVideoCastEditor(overlay, w, query); });
   }
 
 
@@ -7100,6 +7288,7 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
 openRadioCategoriesEditor, closeRadioCatsEditor, _radioTogglePreset, _radioAddCat, _radioEditCat, _radioDeleteCat,
     openRadioCastEditor, closeRadioCastEditor, _radioSetCastMode, _radioToggleCastNpc, _radioToggleCastLorebook, _radioCastSearch,
     openReadingCastEditor, closeReadingCastEditor, _readingToggleCastNpc, _readingToggleCastLorebook, _readingCastSearch,
+    openVideoCastEditor, closeVideoCastEditor, _videoToggleCastNpc, _videoCastSearch,
 _radioOpenCatEditor, _radioBackToCatsList, _radioSetCatIcon, _radioSaveCatField,
 _radioAddTag, _radioEditTag, _radioDeleteTag, _radioOpenTagEditor, _radioBackToCatEditor, _radioSaveTagField, _radioToggleTagPlay, _radioSetTagRenewMode,
     _onCalWeekDayChange, _calAddWeekDay, _calRemoveWeekDay, _calToggleDayType, _calSetMonthMode, _calSetUniformDays, _calSetMonthDays, _calAddMonth, _calRemoveMonth,

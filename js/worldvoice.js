@@ -865,10 +865,11 @@ ${wvPrompt}`;
 3. 评论者的用户名和说话风格要符合世界观和${_mt}的氛围。角色评论时 username 直接填该角色在列表中的名字，语气符合角色性格
 4. 评论时间必须晚于帖子的发帖时间、且不超过"当前游戏时间"；如果是挖坟老帖，评论可以横跨较长时间（早期评论紧贴发帖时间，近期评论紧贴当前游戏时间）
 5. 所有 time 都必须使用"YYYY.MM.DD 星期X HH:mm"格式，不要写成别的时间样式
-6. 返回纯JSON，不要包含任何其他文字
+6. 【楼中楼】部分主楼评论可以带楼中楼回复（replies），模拟真实论坛的盖楼：有人反驳、有人附和、有人接话对线、有人歪楼。给其中 2-4 条「有讨论度」的主楼挂 replies（争议帖、高赞帖、有观点的帖），其余主楼不带 replies（或留空数组）。每条带 replies 的主楼配 2-5 条楼中楼。楼中楼也是路人为主，最多一两条 NPC。楼中楼的 time 要晚于其所在主楼、且符合上面的时间规则。replyToName 留空=直接回复楼主，填某人网名=回复楼里那个人（让同一楼里几个人来回对线）。楼中楼只需 username/isNpc/content/time/likes/replyToName，不带其他字段。
+7. 返回纯JSON，不要包含任何其他文字
 
 JSON格式：
-{"content":"帖子/动态完整正文","comments":[{"username":"用户名","avatar_color":"#颜色","content":"评论内容","time":"YYYY.MM.DD 星期X HH:mm","likes":数字}]}
+{"content":"帖子/动态完整正文","comments":[{"username":"用户名","avatar_color":"#颜色","content":"评论内容","time":"YYYY.MM.DD 星期X HH:mm","likes":数字,"replies":[{"username":"回复者网名","isNpc":false,"content":"楼中楼回复","time":"YYYY.MM.DD 星期X HH:mm","likes":数字,"replyToName":""}]}]}
 
 ${wvPrompt}`;
     const npcListStr3 = await _getNpcListForForum();

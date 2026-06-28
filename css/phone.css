@@ -602,16 +602,20 @@
  font-family: inherit;
 }
 .phone-map-search-btn {
- min-height: 32px;
- padding: 0 10px;
- border: none;
- border-radius: 6px;
- background: var(--accent);
- color: #111;
- font-size: 12px;
- cursor: pointer;
- white-space: nowrap;
- font-family: inherit;
+  min-height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #111;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 .phone-map-result-card {
  background: var(--bg-tertiary);
@@ -4527,6 +4531,17 @@ align-self: start;
   color: var(--text-secondary, #aaa);
 }
 .phone-reading-shelf { display: flex; flex-direction: column; gap: 12px; padding: 0 14px; }
+/* 阅读发现页「生成中」骨架卡（仿 phone-reading-shelf-card 横向布局；wv-skeleton-card/line 自带壁纸+遮罩适配） */
+.phone-reading-skeleton-card {
+  display: flex; align-items: stretch; gap: 12px;
+  padding: 12px; margin: 0; border-radius: 12px;
+}
+.phone-reading-skeleton-cover {
+  width: 56px; height: 72px; border-radius: 6px; flex-shrink: 0;
+}
+.phone-reading-skeleton-info {
+  flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 6px; min-width: 0;
+}
 /* 书架左滑删除（仿电台 phone-radio-mine-swipe） */
 .phone-reading-shelf-swipe {
   position: relative;
@@ -4667,6 +4682,7 @@ white-space: nowrap;
   background: var(--accent, #f60); color: #111; border: none;
   border-radius: 6px; padding: 6px 12px; font-size: 12px;
   cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
 }
 .phone-reading-search-btn:active { opacity: 0.8; }
 /* 发现页：参考世界观复选框（用圆形复选框组件） */
@@ -5087,6 +5103,7 @@ white-space: nowrap;
 }
 .phone-reading-set-btn:active { opacity: 0.85; }
 .phone-reading-set-btn.danger { color: #e66; border-color: rgba(230,102,102,0.4); }
+  .phone-reading-set-btn.phone-set-btn-ghost { background: transparent; color: var(--text-secondary); }
 .phone-shell.has-custom-wallpaper .phone-reading-set-rowlabel { color: rgba(255,255,255,0.94) !important; }
 .phone-shell.has-custom-wallpaper .phone-reading-set-rowdesc { color: rgba(255,255,255,0.6) !important; }
 .phone-shell.has-custom-wallpaper .phone-reading-set-btn {
@@ -7669,6 +7686,35 @@ white-space: nowrap;
 .phone-video-cat-tab.active {
   background: var(--accent, #f60); color: #fff; font-weight: 600;
 }
+.phone-video-detail-tabs {
+  display: flex; gap: 22px;
+  padding: 4px 16px 0;
+  flex-shrink: 0;
+}
+.phone-video-detail-tab {
+  position: relative;
+  cursor: pointer;
+  padding: 6px 0 9px;
+  font-size: 14px;
+  color: var(--text-secondary, #999);
+  transition: color .18s ease;
+}
+.phone-video-detail-tab.active {
+  color: var(--accent, #f60);
+  font-weight: 700;
+}
+.phone-video-detail-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2.5px;
+  border-radius: 2px;
+  background: var(--accent, #f60);
+}
+.phone-video-detail-body {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 16px;
+}
 .phone-video-searchbar {
   display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
 }
@@ -7684,6 +7730,7 @@ white-space: nowrap;
   background: var(--accent, #f60); color: #fff; border: none;
   border-radius: 6px; padding: 6px 12px; font-size: 12px;
   cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
 }
 .phone-video-search-btn:active { opacity: 0.8; }
 /* 缩略图网格：两列，16:9 横构图 */
@@ -7723,6 +7770,30 @@ white-space: nowrap;
   font-size: 11px; padding: 1px 5px; border-radius: 4px;
   font-weight: 700;
 }
+/* 自制作品角标：左上角橙色小胶囊（与评分/时长角标区分开） */
+.phone-video-card-make {
+  position: absolute; left: 6px; top: 6px;
+  background: var(--accent, #d97706); color: #fff;
+  font-size: 10px; padding: 1px 6px; border-radius: 4px;
+  font-weight: 600; letter-spacing: 0.3px;
+}
+/* 观看历史「管理」态：卡片右上角删除角标 */
+.phone-video-card-del {
+  position: absolute; right: 5px; top: 5px;
+  width: 24px; height: 24px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(226,59,59,0.92); color: #fff;
+  border: none; border-radius: 50%; cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+}
+.phone-video-card-del:active { opacity: 0.8; }
+/* 观看历史「管理」态：顶部提示条 */
+.phone-video-mine-edittip {
+  font-size: 11px; color: var(--text-secondary, #999);
+  background: var(--bg-tertiary, rgba(255,255,255,0.06));
+  border-radius: 8px; padding: 8px 12px; margin-bottom: 12px;
+  line-height: 1.6;
+}
 /* 生成开关横排容器（视频/阅读发现页共用）：圆形复选框 + 横向排列 */
 .phone-genrow {
   display: flex; flex-wrap: wrap; gap: 8px 18px;
@@ -7750,4 +7821,966 @@ white-space: nowrap;
 .phone-video-empty-icon { color: var(--text-tertiary, #888); opacity: 0.4; }
 .phone-video-empty-icon .phone-icon-glyph svg { width: 44px; height: 44px; }
 .phone-video-empty-text { font-size: 13px; color: var(--text-secondary, #999); }
+.phone-video-mine-section {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  margin: 16px 0 8px; padding-left: 2px;
+}
+.phone-video-mine-section:first-child { margin-top: 4px; }
+
+/* 「我的」页·关注的直播：横排圆头像，左右滑 */
+.phone-live-follow-row {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.phone-live-follow-row::-webkit-scrollbar { display: none; }
+.phone-live-follow-card {
+  flex: 0 0 auto;
+  width: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.phone-live-follow-card:active { opacity: 0.7; }
+.phone-live-follow-ava {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+.phone-live-follow-ava-char {
+  color: #fff;
+  font-size: 19px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+.phone-live-follow-name {
+  max-width: 54px;
+  font-size: 11px;
+  color: var(--text-secondary, #999);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone-live-follow-del {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid #fff;
+  background: #e74c3c;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+/* ===== 直播全屏竖刷（A2）===== */
+/* 全屏模式：藏掉手机公共顶栏，竖刷顶到状态栏下 */
+.phone-shell.phone-live-fullscreen .phone-header { display: none; }
+.phone-live-feed {
+  position: relative;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+/* 顶部悬浮条：返回 + 分类 */
+.phone-live-topbar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 6;
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px 10px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.5), transparent);
+}
+.phone-live-back {
+  background: rgba(0,0,0,0.3); border: none;
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; cursor: pointer; flex-shrink: 0;
+  padding: 0;
+}
+.phone-live-back:active { opacity: 0.7; }
+.phone-live-cat-tabs {
+  display: flex; gap: 16px; flex: 1;
+}
+.phone-live-cat-tab {
+  font-size: 15px; color: rgba(255,255,255,0.7);
+  cursor: pointer; padding: 2px 0;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+.phone-live-cat-tab.active {
+  color: #fff; font-weight: 700;
+  border-bottom: 2px solid #fff;
+}
+/* 竖刷滚动容器 */
+.phone-live-scroll {
+  position: absolute; inset: 0;
+  overflow-y: auto; overflow-x: hidden;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.phone-live-scroll::-webkit-scrollbar { display: none; }
+/* 单屏直播间 */
+.phone-live-page {
+  position: relative;
+  height: 100%; width: 100%;
+  scroll-snap-align: start; scroll-snap-stop: always;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.phone-live-cover {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.phone-live-cover-img { width: 100%; height: 100%; object-fit: cover; }
+.phone-live-cover-kw {
+  position: absolute; left: 0; right: 0; bottom: 92px;
+  font-size: 11px; color: rgba(255,255,255,0.28);
+  padding: 0 36px; text-align: center; line-height: 1.6;
+  font-style: italic;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* 信息覆盖层 */
+.phone-live-overlay {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 56px 16px 70px;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, rgba(0,0,0,0.25) 0%, transparent 22%, transparent 60%, rgba(0,0,0,0.55) 100%);
+  color: #fff;
+}
+/* 顶部主播信息 */
+.phone-live-top {
+  display: flex; align-items: center; gap: 10px;
+}
+.phone-live-ava {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(255,255,255,0.22);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 700; color: #fff;
+  border: 1.5px solid rgba(255,255,255,0.6);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.phone-live-streamer { flex: 1; min-width: 0; }
+.phone-live-streamer-name {
+  font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; gap: 6px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+.phone-live-group-badge {
+  font-size: 10px; font-weight: 600;
+  background: rgba(255,255,255,0.25); border-radius: 4px;
+  padding: 1px 5px;
+}
+.phone-live-online {
+  font-size: 11px; color: rgba(255,255,255,0.85);
+  display: flex; align-items: center; gap: 4px; margin-top: 2px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.phone-live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #ff3b3b; display: inline-block;
+  box-shadow: 0 0 5px #ff3b3b;
+  animation: phone-live-pulse 1.4s ease-in-out infinite;
+}
+@keyframes phone-live-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.phone-live-tag-chip {
+  font-size: 11px; color: #fff;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 11px; padding: 3px 9px;
+  flex-shrink: 0;
+}
+/* 中部标题 + 进间按钮 */
+.phone-live-center {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 14px; text-align: center;
+}
+.phone-live-title {
+  font-size: 18px; font-weight: 700; line-height: 1.4;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  max-width: 90%;
+}
+.phone-live-intro {
+  font-size: 12px; color: rgba(255,255,255,0.85);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6); max-width: 85%;
+}
+.phone-live-enter-btn {
+  margin-top: 4px;
+  background: var(--accent, #f60); color: #fff; border: none;
+  border-radius: 22px; padding: 11px 30px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.phone-live-enter-btn:active { opacity: 0.85; transform: scale(0.97); }
+/* 底部信息 */
+.phone-live-bottom {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.phone-live-airtime {
+  font-size: 11px; color: rgba(255,255,255,0.7);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.phone-live-swipe-hint {
+  font-size: 11px; color: rgba(255,255,255,0.55);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+/* 底部 tab（直播页专用，悬浮在竖刷之上） */
+.phone-live-tabbar {
+  position: absolute; bottom: 0; left: 0; right: 0; z-index: 6;
+  background: linear-gradient(0deg, rgba(0,0,0,0.55), transparent);
+}
+.phone-live-tabbar .phone-tab { color: rgba(255,255,255,0.7); }
+.phone-live-tabbar .phone-tab.active { color: #fff; }
+/* 边界拽动黑带（顶/底各一条，高度跟随拽动，到阈值变橙） */
+.phone-live-band {
+  position: absolute; left: 0; right: 0; z-index: 7;
+  height: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, rgba(0,0,0,0.85), rgba(0,0,0,0.4));
+  transition: height .12s ease-out, background .15s ease;
+  pointer-events: none;
+}
+.phone-live-band-top { top: 0; }
+.phone-live-band-bottom { bottom: 0; background: linear-gradient(0deg, rgba(0,0,0,0.85), rgba(0,0,0,0.4)); }
+.phone-live-band-text {
+  font-size: 13px; color: rgba(255,255,255,0.9);
+  white-space: nowrap;
+}
+.phone-live-band.phone-live-band-ready {
+  background: linear-gradient(180deg, rgba(255,102,0,0.9), rgba(255,102,0,0.45));
+}
+.phone-live-band-bottom.phone-live-band-ready {
+  background: linear-gradient(0deg, rgba(255,102,0,0.9), rgba(255,102,0,0.45));
+}
+.phone-live-band.phone-live-band-ready .phone-live-band-text { font-weight: 700; color: #fff; }
+/* 全屏 loading 遮罩 */
+.phone-live-loading {
+  position: absolute; inset: 0; z-index: 9;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px;
+  background: rgba(0,0,0,0.72);
+  backdrop-filter: blur(2px);
+}
+.phone-live-spinner {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.2);
+  border-top-color: var(--accent, #f60);
+  animation: phone-live-spin 0.8s linear infinite;
+}
+@keyframes phone-live-spin { to { transform: rotate(360deg); } }
+.phone-live-loading-text { font-size: 13px; color: rgba(255,255,255,0.85); }
+/* 空态 */
+.phone-live-empty {
+  height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; color: rgba(255,255,255,0.7);
+}
+.phone-live-empty-icon { opacity: 0.4; }
+.phone-live-empty-icon .phone-icon-glyph svg { width: 48px; height: 48px; }
+.phone-live-empty-text { font-size: 13px; }
+.phone-live-empty-btn {
+  background: var(--accent, #f60); color: #fff; border: none;
+  border-radius: 20px; padding: 9px 24px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.phone-live-empty-btn:active { opacity: 0.85; }
+
+/* ===== A3 直播间详情（全屏 overlay）===== */
+.phone-liveroom {
+  position: absolute; inset: 0; z-index: 70;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  color: #fff;
+  font-size: 13px;
+}
+/* 背景层：封面图 or 渐变 */
+.phone-liveroom-bg { position: absolute; inset: 0; z-index: 0; }
+.phone-liveroom-bg img { display: block; }
+/* 压暗遮罩：上下加深，让文字/弹幕看得清 */
+.phone-liveroom-shade {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(180deg,
+    rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.12) 22%,
+    rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.45) 82%, rgba(0,0,0,0.62) 100%);
+}
+
+/* 顶部：返回 + 主播信息 + 关注 */
+.phone-liveroom-top {
+  position: relative; z-index: 4;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px 0;
+}
+.phone-liveroom-back {
+  width: 30px; height: 30px; flex-shrink: 0;
+  border: none; border-radius: 50%;
+  background: rgba(0,0,0,0.32); color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.phone-liveroom-streamer {
+  display: flex; align-items: center; gap: 7px;
+  background: rgba(0,0,0,0.32); border-radius: 20px;
+  padding: 4px 10px 4px 4px;
+}
+.phone-liveroom-ava {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(135deg,#ff8a3d,#ff5e62);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #fff;
+}
+.phone-liveroom-sname { font-size: 12px; font-weight: 600; line-height: 1.2; }
+.phone-liveroom-sonline {
+  font-size: 10px; opacity: 0.85; display: flex; align-items: center; gap: 3px;
+}
+.phone-liveroom-follow {
+  flex-shrink: 0;
+  border: none; border-radius: 16px;
+  background: var(--accent, #f60); color: #fff;
+  font-size: 12px; font-weight: 600; padding: 5px 14px; cursor: pointer;
+}
+.phone-liveroom-follow.followed { background: rgba(255,255,255,0.25); }
+/* 刷新按钮（顶部关注旁，让主播回应你的互动） */
+.phone-liveroom-refresh {
+  flex-shrink: 0; margin-left: auto;
+  width: 30px; height: 30px; border: none; border-radius: 50%;
+  background: rgba(255,255,255,0.18); color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.phone-liveroom-refresh + .phone-liveroom-follow { margin-left: 8px; }
+.phone-liveroom-refresh.loading { opacity: 0.6; pointer-events: none; }
+.phone-liveroom-refresh.loading svg { animation: phone-live-spin 0.9s linear infinite; }
+@keyframes phone-live-spin { to { transform: rotate(360deg); } }
+
+/* 打赏榜：顶部下方一角浮一个迷你榜 */
+.phone-liveroom-rank {
+  position: relative; z-index: 4;
+  align-self: flex-start;
+  margin: 8px 0 0 12px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 10px; padding: 6px 9px;
+  display: flex; flex-direction: column; gap: 3px;
+  backdrop-filter: blur(2px);
+}
+.phone-liveroom-rank-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; line-height: 1.3;
+}
+.phone-liveroom-rank-no {
+  width: 14px; height: 14px; flex-shrink: 0;
+  border-radius: 50%; font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.25); color: #fff;
+}
+.phone-liveroom-rank-no.rank-1 { background: #ffcf3a; color: #5a3d00; }
+.phone-liveroom-rank-no.rank-2 { background: #d6d6e0; color: #44444c; }
+.phone-liveroom-rank-no.rank-3 { background: #e8a877; color: #4d2a0e; }
+.phone-liveroom-rank-name { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.92; }
+.phone-liveroom-rank-amt { margin-left: auto; color: #ffd86b; font-weight: 600; }
+/* 榜单里「我」那行：高亮 */
+.phone-liveroom-rank-item.is-me .phone-liveroom-rank-name { color: var(--accent, #f60); font-weight: 700; opacity: 1; }
+.phone-liveroom-rank-item.is-me .phone-liveroom-rank-amt { color: var(--accent, #f60); }
+/* 没进前三时单独挂底的「我」那行：上方加分隔 */
+.phone-liveroom-rank-item.is-mine-row { margin-top: 3px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.18); }
+.phone-liveroom-rank-item.is-mine-row .phone-liveroom-rank-no { background: var(--accent, #f60); color: #fff; }
+
+/* 主播实况区：正中间，每次一条，淡入淡出 */
+.phone-liveroom-stage {
+  position: relative; z-index: 3;
+  flex: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px 22px;
+}
+.phone-liveroom-act {
+  max-width: 90%;
+  opacity: 0; transform: translateY(10px);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+  text-align: center;
+}
+.phone-liveroom-act.show { opacity: 1; transform: translateY(0); }
+/* 叙述/台词共用一个框（复用电台叙述卡：居中大圆角 + 半透明黑底白字） */
+.phone-liveroom-narr,
+.phone-liveroom-line {
+  display: inline-block;
+  max-width: 100%;
+  background: rgba(0,0,0,0.42);
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 12.5px; line-height: 1.7;
+  color: #fff;
+  text-align: center;
+  backdrop-filter: blur(3px);
+}
+/* 台词：只比叙述多一个主播名 */
+.phone-liveroom-line-name {
+  color: #ffce8a; font-weight: 700; margin-right: 6px;
+}
+.phone-liveroom-line-text { color: #fff; }
+
+/* 弹幕区：底部往上冒、可滚 */
+.phone-liveroom-danmu {
+  position: relative; z-index: 3;
+  flex-shrink: 0;
+  height: 168px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 0 12px 6px;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 4px;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 26px);
+  mask-image: linear-gradient(180deg, transparent 0, #000 26px);
+}
+.phone-liveroom-danmu::-webkit-scrollbar { display: none; }
+.phone-liveroom-dm {
+  align-self: flex-start; max-width: 86%;
+  background: rgba(0,0,0,0.3);
+  border-radius: 13px; padding: 4px 10px;
+  font-size: 12px; line-height: 1.5;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 0.32s ease, transform 0.32s ease;
+}
+.phone-liveroom-dm.in { opacity: 1; transform: translateY(0); }
+.phone-liveroom-dm-name { color: #8fd0ff; }
+.phone-liveroom-dm-text { color: rgba(255,255,255,0.95); }
+/* 高亮弹幕 */
+.phone-liveroom-dm.hl {
+  background: linear-gradient(90deg, rgba(255,102,0,0.5), rgba(255,140,40,0.32));
+  border: 1px solid rgba(255,190,110,0.6);
+  box-shadow: 0 0 8px rgba(255,140,40,0.4);
+}
+.phone-liveroom-dm-hl-tag {
+  display: inline-block;
+  background: #ffce5a; color: #5a3700;
+  font-size: 9px; font-weight: 700;
+  border-radius: 5px; padding: 0 4px; margin-right: 5px;
+  vertical-align: middle;
+}
+.phone-liveroom-dm.hl .phone-liveroom-dm-name { color: #fff; font-weight: 600; }
+/* 「我」发的弹幕：右侧、主色调 */
+.phone-liveroom-dm.me { align-self: flex-end; background: rgba(255,102,0,0.34); border: 1px solid rgba(255,170,90,0.5); }
+.phone-liveroom-dm.me .phone-liveroom-dm-name { color: #ffd9b0; font-weight: 600; }
+/* 打赏面板：数量行 + 实时总额 */
+.phone-live-gift-qty {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 12px 10px;
+}
+.phone-live-gift-qty-lb { font-size: 13px; color: var(--text-2, #888); }
+.phone-live-gift-qty-btn {
+  width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card, #fff); color: var(--text, #222);
+  font-size: 16px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.phone-live-gift-qty-input {
+  width: 52px; height: 28px; text-align: center;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card, #fff); color: var(--text, #222); font-size: 14px;
+}
+.phone-live-gift-qty-total { margin-left: auto; font-size: 14px; font-weight: 700; color: var(--accent, #f60); }
+/* 礼物选中态 */
+.phone-reading-gift.sel { border-color: var(--accent, #f60); background: rgba(255,102,0,0.08); }
+/* 高亮留言输入 */
+.phone-live-hl-input {
+  width: calc(100% - 24px); margin: 4px 12px 10px; box-sizing: border-box;
+  min-height: 72px; resize: none;
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 10px; font-size: 14px; line-height: 1.5;
+  background: var(--card, #fff); color: var(--text, #222);
+}
+.phone-music-sheet-btn.confirm { background: var(--accent, #f60); color: #fff; }
+
+/* 底部操作条 */
+.phone-liveroom-bar {
+  position: relative; z-index: 4;
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px 12px;
+}
+.phone-liveroom-input {
+  flex: 1; min-width: 0;
+  border: none; border-radius: 18px;
+  background: rgba(255,255,255,0.18);
+  color: #fff; font-size: 13px;
+  padding: 8px 14px; outline: none;
+}
+.phone-liveroom-input::placeholder { color: rgba(255,255,255,0.6); }
+.phone-liveroom-act-btn {
+  width: 36px; height: 36px; flex-shrink: 0;
+  border: none; border-radius: 50%;
+  background: rgba(255,255,255,0.18); color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.phone-liveroom-act-btn:active { background: rgba(255,255,255,0.3); }
+
+/* ===== 直播间设置页（全屏黑底）===== */
+.phone-liveset-top {
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+}
+.phone-liveset-back {
+  width: 30px; height: 30px; flex-shrink: 0;
+  border: none; border-radius: 50%;
+  background: rgba(255,255,255,0.1); color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.phone-liveset-title { font-size: 15px; font-weight: 600; }
+.phone-liveset-body {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 14px;
+}
+.phone-liveset-sec { margin-bottom: 22px; }
+.phone-liveset-sec-t {
+  font-size: 13px; font-weight: 700; color: #ffce8a;
+  margin-bottom: 10px;
+}
+.phone-liveset-hint {
+  font-size: 11px; color: rgba(255,255,255,0.5);
+  line-height: 1.6; margin-bottom: 8px;
+}
+/* 外观：头像 + 壁纸预览 + 换按钮 */
+.phone-liveset-face {
+  display: grid; grid-template-columns: auto 1fr; gap: 10px 14px;
+  align-items: center;
+}
+.phone-liveset-ava {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg,#ff8a3d,#ff5e62);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; color: #fff;
+  overflow: hidden;
+}
+.phone-liveset-ava img { border-radius: 50%; }
+.phone-liveset-wall {
+  width: 44px; height: 44px; border-radius: 10px;
+  background-color: #2a2a32;
+}
+.phone-liveset-btn {
+  justify-self: start;
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 16px;
+  background: rgba(255,255,255,0.08); color: #fff;
+  font-size: 12px; padding: 6px 16px; cursor: pointer;
+}
+.phone-liveset-btn:active { background: rgba(255,255,255,0.18); }
+/* 核心设定 */
+.phone-liveset-concept {
+  width: 100%; box-sizing: border-box;
+  border: 1px solid rgba(255,255,255,0.15); border-radius: 12px;
+  background: rgba(255,255,255,0.05); color: #fff;
+  font-size: 13px; line-height: 1.7; padding: 10px 12px;
+  font-family: inherit; resize: none;
+}
+.phone-liveset-save {
+  margin-top: 8px;
+  border: none; border-radius: 16px;
+  background: var(--accent, #f60); color: #fff;
+  font-size: 12px; font-weight: 600; padding: 7px 20px; cursor: pointer;
+}
+.phone-liveset-save:active { opacity: 0.85; }
+/* 观看设置开关行 */
+.phone-liveset-switch {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 12px; padding: 12px 14px;
+}
+.phone-liveset-switch-text { font-size: 13px; line-height: 1.5; }
+.phone-liveset-switch-sub { font-size: 11px; color: rgba(255,255,255,0.5); }
+/* 入口行（历史发言等二级页入口） */
+.phone-liveset-entry {
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(255,255,255,0.06);
+  border-radius: 12px; padding: 13px 14px;
+  font-size: 13px; color: rgba(255,255,255,0.9);
+  cursor: pointer;
+}
+.phone-liveset-entry:active { background: rgba(255,255,255,0.12); }
+.phone-liveset-entry svg { color: rgba(255,255,255,0.4); flex-shrink: 0; }
+/* 历史发言 */
+.phone-liveset-hist {
+  display: flex; flex-direction: column; gap: 7px;
+}
+.phone-liveset-hist-empty {
+  font-size: 12px; color: rgba(255,255,255,0.45);
+  text-align: center; padding: 20px 0;
+}
+.phone-liveset-h {
+  font-size: 12.5px; line-height: 1.55;
+  padding: 7px 11px; border-radius: 10px;
+  max-width: 92%;
+}
+.phone-liveset-h.host {
+  align-self: flex-start;
+  background: rgba(255,102,0,0.16);
+  border: 1px solid rgba(255,170,90,0.28);
+}
+.phone-liveset-h.narr {
+  align-self: center; text-align: center;
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.7);
+  font-size: 11.5px;
+}
+.phone-liveset-h.dm {
+  align-self: flex-start;
+  background: rgba(255,255,255,0.06);
+}
+.phone-liveset-h.dm.hl {
+  background: linear-gradient(90deg, rgba(255,102,0,0.32), rgba(255,140,40,0.18));
+  border: 1px solid rgba(255,190,110,0.4);
+}
+.phone-liveset-h-name { color: #ffce8a; font-weight: 700; margin-right: 6px; }
+.phone-liveset-h-dmname { color: #8fd0ff; margin-right: 5px; }
+.phone-liveset-h-text { color: rgba(255,255,255,0.95); }
+
+/* ===== 名场面演出特效层 ===== */
+/* 火光：底图明暗呼吸 */
+.phone-video-fx-fire { animation: pv-fire-flicker 2.4s ease-in-out infinite; }
+@keyframes pv-fire-flicker {
+  0%   { filter: brightness(0.82); opacity: 0.86; }
+  30%  { filter: brightness(1.12); opacity: 1; }
+  55%  { filter: brightness(0.9); opacity: 0.9; }
+  78%  { filter: brightness(1.06); opacity: 0.98; }
+  100% { filter: brightness(0.82); opacity: 0.86; }
+}
+
+/* 舞台抖动（冲击） */
+.phone-video-fx-shake { animation: pv-shake 0.6s cubic-bezier(.36,.07,.19,.97); }
+@keyframes pv-shake {
+  0%,100% { transform: translate(-50%,-50%) rotate(90deg); }
+  10% { transform: translate(calc(-50% - 4px),calc(-50% - 2px)) rotate(90deg); }
+  25% { transform: translate(calc(-50% + 5px),calc(-50% + 3px)) rotate(90deg); }
+  40% { transform: translate(calc(-50% - 5px),calc(-50% + 2px)) rotate(90deg); }
+  55% { transform: translate(calc(-50% + 4px),calc(-50% - 3px)) rotate(90deg); }
+  70% { transform: translate(calc(-50% - 3px),calc(-50% + 2px)) rotate(90deg); }
+  85% { transform: translate(calc(-50% + 2px),calc(-50% - 1px)) rotate(90deg); }
+}
+
+/* 下雨：三层不同间距/速度/明暗的雨丝，各自纯垂直无缝循环（tile高度=条纹垂直周期整数倍，避免接缝断层） */
+.phone-video-fx-rain {
+  background-image:
+    repeating-linear-gradient(100deg, transparent 0 28.54px, rgba(205,220,240,0.34) 28.54px 29.54px),
+    repeating-linear-gradient(103deg, transparent 0 18.49px, rgba(180,200,228,0.20) 18.49px 19.49px),
+    repeating-linear-gradient(99deg,  transparent 0 11.70px, rgba(160,185,215,0.12) 11.70px 12.70px);
+  background-size: 100% 300px, 100% 240px, 100% 180px;
+  animation: pv-rain-1 0.6s linear infinite, pv-rain-2 0.8s linear infinite, pv-rain-3 1.05s linear infinite;
+}
+@keyframes pv-rain-1 { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 300px, 0 0, 0 0; } }
+@keyframes pv-rain-2 { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 0, 0 240px, 0 0; } }
+@keyframes pv-rain-3 { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 0, 0 0, 0 180px; } }
+
+/* 下雪：多层圆点缓降 */
+.phone-video-fx-snow {
+  background-image:
+    radial-gradient(2px 2px at 20% 10%, rgba(255,255,255,0.9), transparent),
+    radial-gradient(2px 2px at 60% 30%, rgba(255,255,255,0.8), transparent),
+    radial-gradient(3px 3px at 80% 20%, rgba(255,255,255,0.85), transparent),
+    radial-gradient(2px 2px at 40% 60%, rgba(255,255,255,0.7), transparent),
+    radial-gradient(2px 2px at 90% 70%, rgba(255,255,255,0.8), transparent),
+    radial-gradient(3px 3px at 10% 80%, rgba(255,255,255,0.75), transparent);
+  background-size: 100% 100%;
+  animation: pv-snow 7s linear infinite;
+}
+@keyframes pv-snow { from { background-position: 0 -100%; } to { background-position: 6% 100%; } }
+
+/* 光斑：缓慢漂浮的柔光圆点 */
+.phone-video-fx-bokeh {
+  background-image:
+    radial-gradient(circle at 25% 35%, rgba(255,225,170,0.22), transparent 22%),
+    radial-gradient(circle at 70% 55%, rgba(255,240,200,0.18), transparent 18%),
+    radial-gradient(circle at 50% 80%, rgba(255,230,180,0.15), transparent 20%);
+  animation: pv-bokeh 9s ease-in-out infinite alternate;
+}
+@keyframes pv-bokeh {
+  from { transform: translate(0,0) scale(1); opacity: 0.85; }
+  to   { transform: translate(2%,-3%) scale(1.06); opacity: 1; }
+}
+
+/* 星光微闪：多层细小亮点整体明灭闪烁（梦境/浪漫/星空） */
+.phone-video-fx-sparkle {
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 18%, rgba(255,255,255,0.95), transparent),
+    radial-gradient(1px 1px at 28% 62%, rgba(210,230,255,0.85), transparent),
+    radial-gradient(2px 2px at 45% 30%, rgba(255,250,225,0.9), transparent),
+    radial-gradient(1px 1px at 60% 75%, rgba(255,255,255,0.8), transparent),
+    radial-gradient(1.5px 1.5px at 74% 22%, rgba(225,235,255,0.9), transparent),
+    radial-gradient(1px 1px at 88% 55%, rgba(255,250,230,0.85), transparent),
+    radial-gradient(2px 2px at 52% 88%, rgba(255,255,255,0.9), transparent),
+    radial-gradient(1px 1px at 18% 90%, rgba(220,230,255,0.8), transparent);
+  animation: pv-sparkle 2.6s ease-in-out infinite;
+}
+@keyframes pv-sparkle {
+  0%,100% { opacity: 0.35; transform: scale(1); }
+  50%     { opacity: 1; transform: scale(1.04); }
+}
+
+/* 萤火虫：绿色小光点飞舞，两层不同节奏的漂浮 + 整体忽明忽暗 */
+.phone-video-fx-firefly {
+  position: relative;
+}
+.phone-video-fx-firefly::before,
+.phone-video-fx-firefly::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.phone-video-fx-firefly::before {
+  background-image:
+    radial-gradient(6px 6px at 20% 40%, rgba(170,255,120,1), rgba(120,220,80,0.45) 45%, transparent 75%),
+    radial-gradient(5px 5px at 55% 70%, rgba(190,255,140,0.95), rgba(120,220,80,0.4) 45%, transparent 72%),
+    radial-gradient(7px 7px at 78% 35%, rgba(160,255,110,1), rgba(120,220,80,0.4) 45%, transparent 75%),
+    radial-gradient(5px 5px at 38% 85%, rgba(200,255,150,0.95), rgba(120,220,80,0.35) 45%, transparent 72%);
+  animation: pv-firefly-a 5.5s ease-in-out infinite alternate, pv-firefly-blink 1.9s ease-in-out infinite;
+}
+.phone-video-fx-firefly::after {
+  background-image:
+    radial-gradient(5px 5px at 35% 25%, rgba(180,255,130,0.95), rgba(120,220,80,0.4) 45%, transparent 72%),
+    radial-gradient(7px 7px at 68% 58%, rgba(150,250,100,1), rgba(120,220,80,0.4) 45%, transparent 75%),
+    radial-gradient(5px 5px at 88% 78%, rgba(200,255,150,0.95), rgba(120,220,80,0.35) 45%, transparent 72%),
+    radial-gradient(6px 6px at 14% 65%, rgba(165,255,115,1), rgba(120,220,80,0.4) 45%, transparent 75%);
+  animation: pv-firefly-b 6.8s ease-in-out infinite alternate, pv-firefly-blink 2.4s ease-in-out infinite 0.6s;
+}
+@keyframes pv-firefly-a {
+  from { transform: translate(0,0); }
+  to   { transform: translate(5%,-7%); }
+}
+@keyframes pv-firefly-b {
+  from { transform: translate(0,0); }
+  to   { transform: translate(-6%,-4%); }
+}
+@keyframes pv-firefly-blink {
+  0%,100% { opacity: 0.25; }
+  50%     { opacity: 1; }
+}
+
+/* 回忆滤镜：旧照片暖黄调 + 暗角 + 游动颗粒（即便底图黑白也看得出变化） */
+.phone-video-fx-memory {
+  /* 底层封面：降饱和 + 压暗 + 暖调 + 轻微柔焦（黑白图也会被压暗染暖） */
+  backdrop-filter: sepia(0.45) saturate(0.65) brightness(0.82) contrast(1.04) blur(0.6px);
+  -webkit-backdrop-filter: sepia(0.45) saturate(0.65) brightness(0.82) contrast(1.04) blur(0.6px);
+  /* 暖黄叠层 + 四周暗角（径向渐变，中间透、四周暗） */
+  background:
+    radial-gradient(ellipse at center, transparent 38%, rgba(20,12,4,0.32) 78%, rgba(12,7,2,0.6) 100%),
+    linear-gradient(rgba(120,86,40,0.16), rgba(90,62,28,0.2));
+  animation: pv-memory-breathe 6s ease-in-out infinite;
+}
+/* 胶片颗粒：细密噪点，缓慢游动 */
+.phone-video-fx-memory::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background-image:
+    radial-gradient(0.6px 0.6px at 10% 20%, rgba(255,255,255,0.18), transparent),
+    radial-gradient(0.6px 0.6px at 30% 60%, rgba(0,0,0,0.18), transparent),
+    radial-gradient(0.6px 0.6px at 55% 35%, rgba(255,255,255,0.15), transparent),
+    radial-gradient(0.6px 0.6px at 75% 70%, rgba(0,0,0,0.16), transparent),
+    radial-gradient(0.6px 0.6px at 88% 25%, rgba(255,255,255,0.16), transparent),
+    radial-gradient(0.6px 0.6px at 45% 85%, rgba(0,0,0,0.15), transparent);
+  background-size: 140px 140px;
+  opacity: 0.5;
+  animation: pv-memory-grain 0.5s steps(3) infinite;
+}
+/* 暖色漏光：一道斜向暖光缓慢漂移 */
+.phone-video-fx-memory::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255,196,120,0.14) 50%, transparent 70%);
+  background-size: 200% 200%;
+  animation: pv-memory-light 11s ease-in-out infinite alternate;
+}
+@keyframes pv-memory-breathe {
+  0%,100% { opacity: 0.92; }
+  50%     { opacity: 1; }
+}
+@keyframes pv-memory-grain {
+  0%   { transform: translate(0,0); }
+  33%  { transform: translate(-4px,3px); }
+  66%  { transform: translate(3px,-3px); }
+  100% { transform: translate(-2px,2px); }
+}
+@keyframes pv-memory-light {
+  from { background-position: 0% 0%; }
+  to   { background-position: 100% 100%; }
+}
+
+/* 故障花屏：RGB 色差错位 + 横向撕裂条 + 抽搐（信号损坏/数据故障/赛博入侵） */
+.phone-video-fx-glitch {
+  mix-blend-mode: screen;
+  animation: pv-glitch-shift 0.4s steps(2) infinite;
+}
+/* 青/红色差错位的两层 */
+.phone-video-fx-glitch::before,
+.phone-video-fx-glitch::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.phone-video-fx-glitch::before {
+  background: rgba(0,200,255,0.16);
+  animation: pv-glitch-cyan 0.35s steps(2) infinite;
+}
+.phone-video-fx-glitch::after {
+  /* 横向撕裂条：随机几条亮暗带，配合位移做信号断裂 */
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0 6px,
+    rgba(255,0,80,0.1) 6px 7px,
+    transparent 7px 22px,
+    rgba(255,255,255,0.06) 22px 24px,
+    transparent 24px 40px
+  );
+  animation: pv-glitch-tear 0.55s steps(4) infinite;
+}
+@keyframes pv-glitch-shift {
+  0%   { transform: translate(0,0); }
+  50%  { transform: translate(2px,-1px); }
+  100% { transform: translate(-1px,1px); }
+}
+@keyframes pv-glitch-cyan {
+  0%   { transform: translate(-3px,0); opacity: 0.6; }
+  50%  { transform: translate(3px,0); opacity: 0.9; }
+  100% { transform: translate(-2px,1px); opacity: 0.5; }
+}
+@keyframes pv-glitch-tear {
+  0%   { transform: translateY(0); opacity: 0.7; }
+  25%  { transform: translateY(-8px); opacity: 1; }
+  50%  { transform: translateY(5px); opacity: 0.5; }
+  75%  { transform: translateY(-3px); opacity: 0.9; }
+  100% { transform: translateY(6px); opacity: 0.6; }
+}
+
+/* 科技扫描：横向扫描线缓慢移动 + 青蓝 HUD 网格 + 辉光（未来/赛博/全息界面） */
+.phone-video-fx-scan {
+  background:
+    repeating-linear-gradient(0deg, rgba(0,230,255,0.05) 0 2px, transparent 2px 4px),
+    linear-gradient(rgba(0,40,60,0.12), rgba(0,30,50,0.18));
+  box-shadow: inset 0 0 60px rgba(0,200,255,0.2);
+}
+/* 移动的亮扫描线 */
+.phone-video-fx-scan::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 14%;
+  background: linear-gradient(transparent, rgba(0,235,255,0.28), transparent);
+  animation: pv-scan-line 3.4s linear infinite;
+}
+/* 青蓝网格 */
+.phone-video-fx-scan::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,220,255,0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,220,255,0.08) 1px, transparent 1px);
+  background-size: 36px 36px;
+  animation: pv-scan-grid 8s linear infinite;
+}
+@keyframes pv-scan-line {
+  from { top: -14%; }
+  to   { top: 100%; }
+}
+@keyframes pv-scan-grid {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 36px 36px, 36px 36px; }
+}
+
+/* 花瓣飘落：整张花瓣大图放大铺满，从左上极缓慢平移到右下（来回循环，不露边） */
+.phone-video-fx-petal {
+  background-image: url('img/fx/petal.png');
+  background-size: 130%;
+  background-repeat: no-repeat;
+  background-position: 0% 0%;
+  animation: pv-petal-drift 26s ease-in-out infinite alternate;
+}
+@keyframes pv-petal-drift {
+  from { background-position: 0% 0%; }
+  to   { background-position: 100% 100%; }
+}
+
+/* 气泡：整张气泡图铺满，静态浮动（轻微透明度呼吸，不死板） */
+.phone-video-fx-bubble {
+  background-image: url('img/fx/bubble.png');
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+  animation: pv-bubble-breathe 7s ease-in-out infinite;
+}
+@keyframes pv-bubble-breathe {
+  0%,100% { opacity: 0.78; }
+  50%     { opacity: 1; }
+}
+
+/* 烟雾：整张烟雾图缓慢平移+缩放，透明度大幅起伏做若隐若现。
+   主层 opacity 留给持续层进出场淡入淡出（_setPersist 控制），
+   若隐若现的起伏放到 ::before，避免和进场淡入抢 opacity。 */
+.phone-video-fx-smoke::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('img/fx/smoke.png');
+  background-size: 150%;
+  background-repeat: no-repeat;
+  background-position: center;
+  animation: pv-smoke-drift 22s ease-in-out infinite alternate, pv-smoke-fade 9s ease-in-out infinite;
+}
+@keyframes pv-smoke-drift {
+  from { background-position: 20% 40%; background-size: 150%; }
+  to   { background-position: 75% 60%; background-size: 170%; }
+}
+@keyframes pv-smoke-fade {
+  0%,100% { opacity: 0.3; }
+  50%     { opacity: 0.85; }
+}
+
+/* 心形漂浮：粉红爱心从底部缓缓升起，边飘边左右摇摆、渐隐（甜蜜/告白/少女漫） */
+.phone-video-fx-hearts .pv-heart {
+  position: absolute;
+  bottom: -8%;
+  color: #ff6f9c;
+  text-shadow: 0 0 6px rgba(255,120,160,0.7);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation-name: pv-heart-rise;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+@keyframes pv-heart-rise {
+  0%   { transform: translateY(0) translateX(0) scale(0.7); opacity: 0; }
+  12%  { opacity: 0.95; }
+  50%  { transform: translateY(-50vh) translateX(14px) scale(1); }
+  80%  { opacity: 0.9; }
+  100% { transform: translateY(-100vh) translateX(-10px) scale(1.05); opacity: 0; }
+}
+
+/* 聚焦追光：一束圆形高光打在画面中心，四周压暗（舞台/独白/高光时刻） */
+.phone-video-fx-spotlight {
+  background: radial-gradient(circle at 50% 42%,
+    transparent 0%,
+    transparent 18%,
+    rgba(0,0,0,0.32) 46%,
+    rgba(0,0,0,0.72) 78%,
+    rgba(0,0,0,0.88) 100%);
+  animation: pv-spotlight-breathe 5.5s ease-in-out infinite;
+}
+@keyframes pv-spotlight-breathe {
+  0%,100% { opacity: 0.92; }
+  50%     { opacity: 1; }
+}
 

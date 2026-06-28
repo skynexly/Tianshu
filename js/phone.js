@@ -120,17 +120,6 @@ function flushActionLog() {
   const log = _actionLog.slice();
   _actionLog = [];
   _persistActionLog();
-  // 多笔购物时追加合计，帮 AI 直接扣款无需自己加总
-  const priceRe = /，¥([\d.]+)/g;
-  let total = 0, count = 0;
-  for (const entry of log) {
-    let m;
-    while ((m = priceRe.exec(entry)) !== null) {
-      const v = parseFloat(m[1]);
-      if (!isNaN(v)) { total += v; count++; }
-    }
-  }
-  if (count > 1) log.push(`本轮购物合计：¥${total % 1 === 0 ? total : total.toFixed(2)}；若存在货币/金钱类属性，请扣除此金额`);
   // 本轮电台收听：汇总各台收听时长，追加一条总提示，引导主线 AI 据此推进时间
   try {
     const durRe = /· 收听时长：约 (\d+) 分钟/g;
@@ -300,6 +289,32 @@ function _flushChatRoundLog() {
         }
       }
       if (patched) Conversations.saveList().catch(() => {});
+      // 一次性迁移：从 videoDiscover 倒灌进 videoWorks + 补 watched 标记
+      const vw = conv.phoneData.videoWorks;
+      if (!Array.isArray(vw)) conv.phoneData.videoWorks = [];
+      const byId = {};
+      conv.phoneData.videoWorks.forEach(w => { if (w && w.id) byId[w.id] = w; });
+      let migrated = false;
+      const disc = conv.phoneData.videoDiscover;
+      if (disc && typeof disc === 'object' && !Array.isArray(disc)) {
+        Object.values(disc).forEach(list => {
+          if (!Array.isArray(list)) return;
+          list.forEach(w => {
+            if (!w || !w.id || byId[w.id]) return;
+            conv.phoneData.videoWorks.push(w);
+            byId[w.id] = w;
+            migrated = true;
+          });
+        });
+      }
+      conv.phoneData.videoWorks.forEach(w => {
+        if (w && !w.watched && (w.script || w.blueprint)) {
+          w.watched = true;
+          w.watchedAt = w.watchedAt || 0;
+          migrated = true;
+        }
+      });
+      if (migrated) Conversations.saveList().catch(() => {});
     }
     // phoneData 防丢：如果当前数据仍是初始空白态、但备份里有用户数据，自动恢复
     try {
@@ -1501,10 +1516,17 @@ function _uiIcon(type, size = 16) {
  comment: `<svg ${common}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"></path></svg>`,
  download: `<svg ${common}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>`,
  settings: `<svg ${common}><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path></svg>`,
+  more: `<svg ${common}><circle cx="12" cy="5" r="2" fill="currentColor" stroke="none"></circle><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"></circle><circle cx="12" cy="19" r="2" fill="currentColor" stroke="none"></circle></svg>`,
  check: `<svg ${common}><polyline points="20 6 9 17 4 12"></polyline></svg>`,
  box: `<svg ${common}><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg>`
  };
- return icons[type] || '';
+  return icons[type] || '';
+}
+// 克隆当前手机状态栏（时间/电量快照）给全屏 overlay 复用，去掉 id 避免重复
+function _phoneStatusBarHtml() {
+  const sb = document.querySelector('#phone-modal .phone-statusbar');
+  if (!sb) return '';
+  return sb.outerHTML.replace(/\sid="phone-time"/, '').replace(/\sid="phone-battery"/, '');
 }
 function _renderHomeIcon(a) {
 // 占位图标：渲染成空白格子（无图标、可带名字、不可点）
@@ -1830,8 +1852,9 @@ async function openApp(appId) {
   _currentApp = appId;
  document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-forum-detail-mode');
  document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-home-mode');
- document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-tomato-mode');
- document.getElementById('phone-back-btn')?.classList.remove('hidden');
+document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-tomato-mode');
+  document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-live-fullscreen');
+  document.getElementById('phone-back-btn')?.classList.remove('hidden');
  // 清空标题栏右上角（各 App 自行按需重填，避免上一个 App 的按钮残留）
  { const _hr = document.getElementById('phone-header-right'); if (_hr) _hr.innerHTML = ''; }
 
@@ -5011,10 +5034,12 @@ function _musicForm(title, fields) {
 }
 
 // 轻量底部选项弹层（项目无现成 actionSheet，这里自建）
-function _musicSheet(title, options) {
-  return new Promise((resolve) => {
-    const overlay = document.createElement('div');
-    overlay.className = 'phone-music-sheet-overlay';
+  function _musicSheet(title, options, opts) {
+    opts = opts || {};
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'phone-music-sheet-overlay';
+      if (opts.zIndex != null) overlay.style.zIndex = String(opts.zIndex);
     const btns = options.map((o, i) =>
       `<button class="phone-music-sheet-btn ${o.danger ? 'danger' : ''}" data-i="${i}">${o.html ? o.label : Utils.escapeHtml(o.label)}</button>`
     ).join('');
@@ -5035,6 +5060,31 @@ function _musicSheet(title, options) {
     // 挂到手机外壳内，跟随手机层级
     const host = document.getElementById('phone-modal') || document.body;
     host.appendChild(overlay);
+  });
+}
+
+// 角色选择弹窗（居中卡片+列表点选）——视频制作表单选导演/编剧/主演用，避免底部弹层被表单遮挡。
+function _pickCharSheet(cands) {
+  return new Promise((resolve) => {
+    const esc = Utils.escapeHtml;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:32px';
+    const rows = (cands || []).map((c, i) => `
+      <div class="pcs-row" data-i="${i}" style="padding:13px 16px;cursor:pointer;font-size:14px;color:var(--text)">${esc(c.name)}${c.isMask ? ' <span style="font-size:11px;color:var(--accent)">（我）</span>' : ''}</div>`).join('');
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:300px;width:100%;max-height:70%;display:flex;flex-direction:column;overflow:hidden;color:var(--text)">
+        <div style="padding:16px 16px 10px;font-size:15px;font-weight:700;flex-shrink:0">选择角色</div>
+        <div style="flex:1;overflow-y:auto">${rows}</div>
+        <button class="pcs-cancel" style="flex-shrink:0;border:none;border-top:1px solid var(--border);background:none;color:var(--text-secondary);font-size:14px;padding:13px 0;cursor:pointer">取消</button>
+      </div>`;
+    const close = (val) => { mask.remove(); resolve(val); };
+    mask.addEventListener('click', (e) => {
+      if (e.target === mask) { close(null); return; }
+      if (e.target.closest('.pcs-cancel')) { close(null); return; }
+      const row = e.target.closest('.pcs-row');
+      if (row) { close((cands[+row.getAttribute('data-i')] || {}).name || null); return; }
+    });
+    document.body.appendChild(mask);
   });
 }
 
@@ -7074,9 +7124,9 @@ function _refreshCalBanner() {
           <div class="phone-map-searchbar" style="margin-bottom:10px">
             <div class="phone-map-search-input-wrap">
               ${_uiIcon('search', 12)}
-              <input id="wardrobe-mall-search" type="text" placeholder="搜索服装（如：米白针织衫、阔腿裤…）" value="${Utils.escapeHtml(pd.wardrobeMallQuery || '')}">
+              <input id="wardrobe-mall-search" type="text" placeholder="搜索服装（如：米白针织衫、阔腿裤…）" value="${Utils.escapeHtml(pd.wardrobeMallQuery || '')}" oninput="Phone._syncSearchBtn('wardrobe-mall-search','wardrobe-mall-action-btn')" onkeydown="if(event.key==='Enter')Phone._wardrobeMallRefresh()">
             </div>
-            <button onclick="Phone._wardrobeMallRefresh()" class="phone-map-search-btn">搜索</button>
+            <button id="wardrobe-mall-action-btn" onclick="Phone._wardrobeMallRefresh()" class="phone-map-search-btn">${(pd.wardrobeMallQuery || '').trim() ? `${_uiIcon('search', 13)} 搜索` : `${_uiIcon('refresh', 13)} 刷新`}</button>
           </div>
           <div class="cottage-mall-chips">${tagChips}</div>
           ${orders.length ? `<div class="cottage-mall-orders-bar" onclick="Phone._wardrobeShowOrders()">${_uiIcon('box', 13)} ${orders.length} 件服装配送中，点击查看订单</div>` : ''}
@@ -8001,10 +8051,10 @@ ${contextBlock}
 
         const pd2 = await _getPhoneData();
         if (!Array.isArray(pd2.wardrobeSuits)) pd2.wardrobeSuits = [];
-        pd2.wardrobeSuits.push(...norm);
-        await _savePhoneData();
-        _log(`在衣橱用 AI 生成了 ${norm.length} 套套装`);
-        document.body.removeChild(mask);
+      pd2.wardrobeSuits.push(...norm);
+      await _savePhoneData();
+      // AI 生成套装属于元操作（玩家在整理收藏，不是剧情里换装），不写进手机操作记录
+      document.body.removeChild(mask);
         UI.showToast(`已生成 ${norm.length} 套，存入套装收藏`, 2000);
         _renderWardrobe(pd2);
       } catch (e) {
@@ -8343,9 +8393,9 @@ ${contextBlock}
           <div class="phone-map-searchbar" style="margin-bottom:10px">
             <div class="phone-map-search-input-wrap">
               ${_uiIcon('search', 12)}
-              <input id="cottage-mall-search" type="text" placeholder="搜索家具（如：北欧沙发、实木书桌…）" value="${Utils.escapeHtml(pd.furnitureMallQuery || '')}">
+              <input id="cottage-mall-search" type="text" placeholder="搜索家具（如：北欧沙发、实木书桌…）" value="${Utils.escapeHtml(pd.furnitureMallQuery || '')}" oninput="Phone._syncSearchBtn('cottage-mall-search','cottage-mall-action-btn')" onkeydown="if(event.key==='Enter')Phone._cottageMallRefresh()">
             </div>
-            <button onclick="Phone._cottageMallRefresh()" class="phone-map-search-btn">搜索</button>
+            <button id="cottage-mall-action-btn" onclick="Phone._cottageMallRefresh()" class="phone-map-search-btn">${(pd.furnitureMallQuery || '').trim() ? `${_uiIcon('search', 13)} 搜索` : `${_uiIcon('refresh', 13)} 刷新`}</button>
           </div>
           <div class="cottage-mall-chips">${tagChips}</div>
           ${orders.length ? `<div class="cottage-mall-orders-bar" onclick="Phone._cottageShowOrders()">${_uiIcon('box', 13)} ${orders.length} 件家具配送中，点击查看订单</div>` : ''}
@@ -10396,16 +10446,29 @@ ${houseDataText}`;
   }
 
   // ===== 视频 App =====
-  // 底部 tab：'discover' 发现 | 'mine' 我的（仿电台）。发现页内顶部分类 tab（直播/电影/剧集/动漫/短视频）。
+  // 底部 tab：'discover' 发现 | 'mine' 我的（仿电台）。发现页内顶部分类 tab（直播/电影/剧集/动漫）。
   const _VIDEO_CATS = [
     { id: 'live', name: '直播' },
     { id: 'movie', name: '电影' },
     { id: 'tv', name: '剧集' },
     { id: 'anime', name: '动漫' },
-    { id: 'short', name: '短视频' },
+  ];
+  // 直播标签池（10 个）：name=品类名，desc=喂给预览生成 AI 的调性说明（说清内容覆盖 + 主播形态）。
+  const _LIVE_TAGS = [
+    { name: '游戏直播', desc: '主播打游戏给观众看，边玩边唠——可以是技术流硬核操作、欢乐整活、代打、代抽卡、剧情向流程、电竞二路解说，也可以是和观众连麦开黑。涵盖各类游戏直播。主播可以是真人主播，也可以是套着皮套的虚拟主播。' },
+    { name: '单人唱歌', desc: '一个人的唱见直播间，主播弹唱/清唱/点歌台，观众点歌、刷礼物、聊天互动。主播可以是真人歌手，也可以是套着皮套的虚拟主播。' },
+    { name: '唱歌团播', desc: '多位主播一起的歌房/团播间，轮流唱、合唱、battle、互相起哄接梗、陪聊，热闹的多人唱见现场。' },
+    { name: '单人舞蹈', desc: '一个人的舞蹈直播间，主播跳宅舞/街舞/国风舞/热舞/机械舞等，陪伴聊天，观众应援、点舞、刷礼物。可以是真人，也可以是套皮套跳舞的虚拟主播。' },
+    { name: '舞蹈团播', desc: '多位主播一起的舞蹈团播间，齐舞、轮播、battle、整活。' },
+    { name: '带货卖货', desc: '电商带货直播间，主播卖货、讲解商品、上链接、催单、抽奖宠粉，观众下单、问价、参与秒杀。' },
+    { name: '颜值聊天', desc: '主打颜值和陪伴的聊天直播间，主播露脸唠嗑、和观众互动调侃、读弹幕、玩游戏，氛围轻松暧昧或欢乐。可以是真人，也可以是虚拟主播。' },
+    { name: '兴趣陪伴', desc: '主播专注做一件具体的事给观众看——画画、做手账、手工、做饭、吃播等，一边做一边碎碎念陪聊，观众围观、催更、点菜、闲聊。' },
+    { name: 'ASMR', desc: '助眠/解压向直播间，主播用各种音效、轻声细语、耳语陪伴观众放松入睡，重氛围和声音质感。可以是真人，也可以是虚拟主播。' },
+    { name: '答疑咨询', desc: '主播以某种专业身份坐镇，观众抛问题、主播实时解答——涵盖律师普法、情感咨询、心理疏导、MBTI/性格分析、塔罗占卜、命理玄学、职业规划等各类"问一答一"的咨询直播。' },
   ];
   let _videoCat = 'live';
   let _videoHomeTab = 'discover';  // 'discover' | 'mine'
+  let _videoMineEditing = false;   // 「我的」页观看历史是否处于编辑（删除）态
   // 发现页生成开关：参考世界观背景 / 参考最近十轮主线（仿阅读）
   let _videoUseWvRef = false;
   let _videoUseMainlineRef = false;
@@ -10422,6 +10485,7 @@ ${houseDataText}`;
   async function _switchVideoHomeTab(tab) {
     if (_videoHomeTab === tab) return;
     _videoHomeTab = tab;
+    _videoMineEditing = false;  // 离开/进入「我的」都退出管理态
     const pd = await _getPhoneData();
     _renderVideo(pd);
   }
@@ -10433,6 +10497,17 @@ ${houseDataText}`;
     _applyWallpaper(pd);
 
     const cat = _VIDEO_CATS.find(x => x.id === _videoCat) ? _videoCat : 'live';
+
+    // 直播分类（发现页）：全屏竖刷，藏手机顶栏（返回入口移到竖刷页内），独立接管 body
+    const shell = document.querySelector('#phone-modal .phone-shell');
+    if (cat === 'live' && _videoHomeTab === 'discover') {
+      shell?.classList.add('phone-live-fullscreen');
+      _renderLiveFeed(pd);
+      return;
+    }
+    shell?.classList.remove('phone-live-fullscreen');
+    document.getElementById('phone-back-btn')?.classList.remove('hidden');
+
     const tabsHtml = _VIDEO_CATS.map(c => `
       <div class="phone-video-cat-tab${c.id === cat ? ' active' : ''}" onclick="Phone._switchVideoCat('${c.id}')">${Utils.escapeHtml(c.name)}</div>`).join('');
 
@@ -10442,7 +10517,7 @@ ${houseDataText}`;
 
     let gridHtml;
     if (!list.length) {
-      const emptyDesc = (cat === 'live') ? '当前没有正在直播的频道' : (cat === 'short') ? '还没有短视频，去搜索/生成看看' : '还没有内容，去搜索/生成看看';
+      const emptyDesc = (cat === 'live') ? '当前没有正在直播的频道' : '还没有内容，去搜索/生成看看';
       gridHtml = `
         <div class="phone-video-empty">
           <div class="phone-video-empty-icon">${_phoneIcon('video')}</div>
@@ -10469,8 +10544,8 @@ ${houseDataText}`;
         </div>` : '';
     const searchbarHtml = (cat === 'live') ? '' : `
         <div class="phone-video-searchbar">
-          <input id="phone-video-search" class="phone-video-search" type="text" placeholder="搜想看的影视、动漫、短视频…">
-          <button class="phone-video-search-btn" onclick="Phone._videoSearch()">生成</button>
+          <input id="phone-video-search" class="phone-video-search" type="text" placeholder="搜想看的影视、动漫…" oninput="Phone._syncSearchBtn('phone-video-search','phone-video-action-btn')" onkeydown="if(event.key==='Enter')Phone._videoSearch()">
+          <button id="phone-video-action-btn" class="phone-video-search-btn" onclick="Phone._videoSearch()">${_uiIcon('refresh', 13)} 刷新</button>
         </div>
         ${refSwitches}`;
 
@@ -10495,12 +10570,22 @@ ${houseDataText}`;
     document.getElementById('phone-back-btn')?.classList.remove('hidden');
   }
 
+  // 收集所有视频作品（以 videoDiscover 为准，watched 标记设在这里的对象上）
+  function _videoAllWorks(pd) {
+    const out = [];
+    const seen = new Set();
+    const push = (w) => { if (w && w.id && !seen.has(w.id)) { seen.add(w.id); out.push(w); } };
+    const disc = (pd && pd.videoDiscover && typeof pd.videoDiscover === 'object' && !Array.isArray(pd.videoDiscover)) ? pd.videoDiscover : {};
+    Object.keys(disc).forEach(k => { (Array.isArray(disc[k]) ? disc[k] : []).forEach(push); });
+    if (Array.isArray(pd && pd.videoWorks)) pd.videoWorks.forEach(push);
+    return out;
+  }
+
   // 「我的」页顶部：个人资料头部（头像 + 网名 + 看过数），仿电台
   function _videoMineHeader(pd, maskInfo) {
     const userName = (maskInfo && maskInfo.username) || '我';
     const userAvatar = (maskInfo && maskInfo.avatar) || '';
-    const works = Array.isArray(pd.videoWorks) ? pd.videoWorks : [];
-    const count = works.filter(w => w && w.watched).length;
+    const count = _videoAllWorks(pd).filter(w => w && w.watched).length;
     const avaHtml = userAvatar
       ? `<img class="phone-radio-mine-ava" src="${Utils.escapeHtml(userAvatar)}" alt="">`
       : `<div class="phone-radio-mine-ava phone-radio-mine-ava-fallback">${Utils.escapeHtml((userName || '我')[0])}</div>`;
@@ -10511,25 +10596,1924 @@ ${houseDataText}`;
           <div class="phone-radio-mine-header-name">${Utils.escapeHtml(userName)}</div>
           <div class="phone-radio-mine-header-sub">观众 · 看过 ${count} 部</div>
         </div>
+        <button class="phone-reading-add-btn" onclick="Phone._videoOpenAddMenu(event)" title="更多">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
       </div>`;
   }
 
-  // 「我的」页主体：看过/收藏的影视列表（暂占位）
+  // 「我的」页右上角「+」菜单：管理观看历史 + 预留「我要开播 / 我要制作」入口（复用音乐库底部弹窗）。
+  async function _videoOpenAddMenu(ev) {
+    try { ev && ev.stopPropagation(); } catch (_) {}
+    const pd = await _getPhoneData();
+    const hasHistory = _videoAllWorks(pd).some(w => w && (w.watched || w.faved))
+      || (Array.isArray(pd.liveFollowed) && pd.liveFollowed.length > 0);
+    const opts = [];
+    opts.push({ label: '我要制作', value: 'make' });
+    if (hasHistory) opts.push({ label: _videoMineEditing ? '完成管理' : '管理观看历史', value: 'manage' });
+    const choice = await _musicSheet('更多', opts);
+    if (choice === 'make') {
+      _videoShowMakeMenu();
+    } else if (choice === 'manage') {
+      _videoMineEditing = !_videoMineEditing;
+      _renderVideo(await _getPhoneData());
+    }
+  }
+
+  // ===== 我要制作（视频自制）=====
+  // 加号菜单「我要制作」→ 选分类（电影/剧集/动漫）或改编已授权的自制书。
+  async function _videoShowMakeMenu() {
+    const pd = await _getPhoneData();
+    const VALID_KINDS = ['movie', 'tv', 'anime'];
+    // 已通过自制入口改编过的：selfMake + adaptedFrom → 该 book+kind 组合已做过
+    const madeSet = new Set();
+    _videoAllWorks(pd).forEach(w => {
+      if (w && w.selfMake && w.adaptedFrom && w.adaptedFrom.bookId) {
+        madeSet.add(w.adaptedFrom.bookId + '|' + (w.kind || ''));
+      }
+    });
+    // 可改编的自制书：有 licenses 或 adaptedKinds，且还有方向没通过自制入口做过
+    const licensedBooks = (Array.isArray(pd.readingBooks) ? pd.readingBooks : []).filter(b => {
+      if (!b || !b.selfWrite) return false;
+      // 收集所有可选方向（licenses 卖出的 + adaptedKinds 旧系统标记的）
+      const kinds = new Set();
+      if (Array.isArray(b.licenses)) b.licenses.forEach(l => { if (l && VALID_KINDS.includes(l.kind)) kinds.add(l.kind); });
+      if (Array.isArray(b.adaptedKinds)) b.adaptedKinds.forEach(k => { if (VALID_KINDS.includes(k)) kinds.add(k); });
+      if (!kinds.size) return false;
+      // 排除已通过自制入口做过的方向
+      for (const k of kinds) { if (!madeSet.has(b.id + '|' + k)) return true; }
+      return false;
+    });
+
+    const opts = [
+      { label: '电影', value: 'movie' },
+      { label: '电视剧', value: 'tv' },
+      { label: '动漫', value: 'anime' },
+    ];
+    if (licensedBooks.length) {
+      opts.push({ label: '── 改编已授权的书 ──', value: 'adapt' });
+    }
+
+    const choice = await _musicSheet('我要制作', opts);
+    if (!choice) return;
+    if (choice === 'movie') { _videoShowMakeForm('movie'); return; }
+    if (choice === 'tv') { _videoShowMakeForm('tv'); return; }
+    if (choice === 'anime') { _videoShowMakeForm('anime'); return; }
+    if (choice === 'adapt') { _videoAdaptLicensedBook(licensedBooks); return; }
+    UI.showToast('该类型的自制即将上线', 1600);
+  }
+
+  // 改编已授权的书：选书 → 选方向 → 进制作表单（预填书信息）
+  async function _videoAdaptLicensedBook(books) {
+    const KL = { movie: '电影', tv: '电视剧', anime: '动漫' };
+    const VALID_KINDS = ['movie', 'tv', 'anime'];
+    // 选书
+    const bookOpts = books.map(b => ({ label: b.title || '未命名', value: b.id }));
+    const bookId = await _musicSheet('选择要改编的书', bookOpts);
+    if (!bookId) return;
+    const book = books.find(b => b.id === bookId);
+    if (!book) return;
+
+    // 已通过自制入口做过的方向
+    const pd = await _getPhoneData();
+    const madeKinds = new Set();
+    _videoAllWorks(pd).forEach(w => {
+      if (w && w.selfMake && w.adaptedFrom && w.adaptedFrom.bookId === book.id) {
+        madeKinds.add(w.kind || '');
+      }
+    });
+
+    // 该书可选的方向：licenses + adaptedKinds 合集，排除已自制过的
+    const allKinds = new Set();
+    if (Array.isArray(book.licenses)) book.licenses.forEach(l => { if (l && VALID_KINDS.includes(l.kind)) allKinds.add(l.kind); });
+    if (Array.isArray(book.adaptedKinds)) book.adaptedKinds.forEach(k => { if (VALID_KINDS.includes(k)) allKinds.add(k); });
+    const available = [...allKinds].filter(k => !madeKinds.has(k));
+    if (!available.length) { UI.showToast('该书所有方向都已制作', 1600); return; }
+
+    let kind;
+    if (available.length === 1) {
+      kind = available[0];
+    } else {
+      const kindChoice = await _musicSheet('选择改编方向', available.map(k => ({ label: KL[k] || k, value: k })));
+      if (!kindChoice) return;
+      kind = kindChoice;
+    }
+
+    // 进表单，传入原著信息（电影 / 电视剧 / 动漫均已支持）
+    _videoShowMakeForm(kind, { adaptFrom: book });
+  }
+
+  // 电影制作表单：片名 / 名单（导演·编剧·主演，留空 AI 生成，可选角色）/ 主类型 / 氛围标签 /
+  // 参考开关 / 创作方向 → 下一步生成简介卡确认 → 确认后建空壳进详情页（不自动生成，去编辑剧本）。
+  // opts.adaptFrom：传入原著 book 对象时，表示是改编已授权的自制书。
+  async function _videoShowMakeForm(cat, opts) {
+    const adaptBook = opts && opts.adaptFrom ? opts.adaptFrom : null;
+    const GENRES_MOVIE = ['科幻','动作','爱情','悬疑','恐怖','喜剧','剧情','战争','历史','犯罪','奇幻','纪录','音乐'];
+    const GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','喜剧','青春'];
+    const GENRES_ANIME = ['热血','恋爱','日常','奇幻','异世界','科幻','悬疑','治愈','校园','战斗','搞笑','古风','魔法少女','运动','偶像'];
+    const GENRES = cat === 'tv' ? GENRES_TV : (cat === 'anime' ? GENRES_ANIME : GENRES_MOVIE);
+    let selGenre = '';
+    // 当前世界观年份（贴合时代）
+    let curYear = 0, gameTimeStr = '';
+    try {
+      gameTimeStr = _getGameTime() || '';
+      const ym = gameTimeStr.match(/(\d{3,4})\s*年/) || gameTimeStr.match(/^\s*(\d{3,4})[.\-/]/) || gameTimeStr.match(/(\d{4})/);
+      if (ym) curYear = parseInt(ym[1], 10);
+    } catch (_) {}
+    if (!isFinite(curYear) || curYear < 1) curYear = new Date().getFullYear();
+
+    // 分类标签 / 是否剧集（多集结构：电视剧 / 动漫）
+    const catLabel = cat === 'tv' ? '电视剧' : (cat === 'anime' ? '动漫' : '电影');
+    const isSeries = (cat === 'tv' || cat === 'anime');
+    const isAnime = (cat === 'anime');
+    // 工种措辞：动漫=监督/系列构成/CV，电视剧=监督导演/编剧/主演，电影=导演/编剧/主演
+    const roleDir = isAnime ? '监督' : (isSeries ? '监督/导演' : '导演');
+    const roleWriter = isAnime ? '系列构成/脚本' : '编剧';
+    const roleCast = isAnime ? 'CV/配音演员' : '主演';
+    // 表单状态（重渲染时回填，避免生成失败丢输入）
+    const formState = { title:'', director:'', screenwriter:'', cast:'', studio:'', artDirector:'', tag1:'', tag2:'', useWv:false, useMainline:false, guide:'', episodes: isSeries ? 12 : 0 };
+    // 改编模式：预填创作方向
+    if (adaptBook) {
+      formState.guide = `改编自小说《${adaptBook.title || ''}》（${adaptBook.author || '佚名'}）。请据原著设定进行影视化改编。`;
+      const cats = Array.isArray(adaptBook.category) ? adaptBook.category.filter(Boolean) : [];
+      if (cats[0]) formState.tag1 = cats[0];
+      if (cats[1]) formState.tag2 = cats[1];
+    }
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px';
+    _maskCloseOnBg(mask, () => { if (mask.dataset.busy !== '1') mask.remove(); });
+
+    const renderLoading = (txt) => {
+      mask.dataset.busy = '1';
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:300px;width:100%;padding:36px 24px;display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--text)">
+          <div style="width:34px;height:34px;border:3px solid color-mix(in srgb, var(--accent) 22%, transparent);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite"></div>
+          <div style="font-size:13px;color:var(--text-secondary);text-align:center;line-height:1.6">${Utils.escapeHtml(txt || '正在生成…')}</div>
+        </div>`;
+    };
+
+    // 表单视图
+    const renderForm = () => {
+      mask.dataset.busy = '';
+      const esc = Utils.escapeHtml;
+      const genreChips = GENRES.map(g =>
+        `<span class="vmk-genre" data-g="${g}" style="font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer;border:1px solid ${selGenre===g?'var(--accent)':'var(--border)'};background:${selGenre===g?'var(--accent)':'transparent'};color:${selGenre===g?'#fff':'var(--text-secondary)'}">${g}</span>`
+      ).join('');
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:360px;width:100%;max-height:88%;display:flex;flex-direction:column;overflow:hidden;color:var(--text)">
+          <div style="padding:20px 20px 0;overflow-y:auto">
+            <div style="font-size:16px;font-weight:700">制作${catLabel}</div>
+            <div style="font-size:12px;color:var(--text-tertiary,#888);margin:6px 0 16px">填写制作信息，名单留空交给 AI。下一步生成简介，确认后进${isSeries?'编辑蓝图':'编辑剧本'}。</div>
+
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">片名</label>
+            <input id="vmk-title" type="text" maxlength="40" value="${esc(formState.title)}" placeholder="给${catLabel}起个名字" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);margin-bottom:14px">
+
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">${roleDir}<span style="font-weight:400;color:var(--text-tertiary,#888);font-size:11px">　留空 AI 生成</span></label>
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <input id="vmk-director" type="text" maxlength="20" value="${esc(formState.director)}" placeholder="${roleDir}姓名" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary)">
+              <button class="vmk-pick" data-field="vmk-director" data-append="0" style="flex-shrink:0;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:12px;padding:0 12px;cursor:pointer">选角色</button>
+            </div>
+
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">${roleWriter}<span style="font-weight:400;color:var(--text-tertiary,#888);font-size:11px">　留空 AI 生成</span></label>
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <input id="vmk-writer" type="text" maxlength="20" value="${esc(formState.screenwriter)}" placeholder="${roleWriter}姓名" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary)">
+              <button class="vmk-pick" data-field="vmk-writer" data-append="0" style="flex-shrink:0;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:12px;padding:0 12px;cursor:pointer">选角色</button>
+            </div>
+
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">${roleCast}<span style="font-weight:400;color:var(--text-tertiary,#888);font-size:11px">　多个用、隔开，留空 AI 生成</span></label>
+            <div style="display:flex;gap:8px;margin-bottom:14px">
+              <input id="vmk-cast" type="text" maxlength="120" value="${esc(formState.cast)}" placeholder="${roleCast}姓名" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary)">
+              <button class="vmk-pick" data-field="vmk-cast" data-append="1" style="flex-shrink:0;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:12px;padding:0 12px;cursor:pointer">选角色</button>
+            </div>
+
+            ${isAnime ? `<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">作画/美术担当<span style="font-weight:400;color:var(--text-tertiary,#888);font-size:11px">　留空 AI 生成</span></label>
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <input id="vmk-art" type="text" maxlength="20" value="${esc(formState.artDirector)}" placeholder="作画/美术担当姓名" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary)">
+              <button class="vmk-pick" data-field="vmk-art" data-append="0" style="flex-shrink:0;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:12px;padding:0 12px;cursor:pointer">选角色</button>
+            </div>
+
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">制作公司<span style="font-weight:400;color:var(--text-tertiary,#888);font-size:11px">　留空 AI 生成</span></label>
+            <input id="vmk-studio" type="text" maxlength="30" value="${esc(formState.studio)}" placeholder="动画制作公司名" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);margin-bottom:14px">` : ''}
+
+            ${isSeries ? `<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">集数</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+              <input id="vmk-eps" type="number" min="1" max="120" value="${esc(String(formState.episodes || 12))}" placeholder="如 12 / 24" style="width:100px;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary)">
+              <span style="font-size:12px;color:var(--text-tertiary,#888)">集（1~120）</span>
+            </div>` : ''}
+
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px">主类型</label>
+            <div id="vmk-genres" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px">${genreChips}</div>
+
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">氛围标签<span style="font-weight:400;color:var(--text-tertiary,#888);font-size:11px">　选填，留空 AI 补</span></label>
+            <div style="display:flex;gap:8px;margin-bottom:14px">
+              <input id="vmk-tag1" type="text" maxlength="8" value="${esc(formState.tag1)}" placeholder="标签1" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary)">
+              <input id="vmk-tag2" type="text" maxlength="8" value="${esc(formState.tag2)}" placeholder="标签2" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary)">
+            </div>
+
+            <label class="circle-check-label" style="padding:11px 13px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+              <span class="circle-check-text"><span style="font-size:13px;color:var(--text)">参考世界观背景</span></span>
+              <input type="checkbox" class="circle-check" id="vmk-wv" ${formState.useWv?'checked':''}>
+              <span class="circle-check-ui"></span>
+            </label>
+            <label class="circle-check-label" style="padding:11px 13px;border:1px solid var(--border);border-radius:10px;margin-bottom:14px">
+              <span class="circle-check-text"><span style="font-size:13px;color:var(--text)">参考最近十轮主线</span></span>
+              <input type="checkbox" class="circle-check" id="vmk-mainline" ${formState.useMainline?'checked':''}>
+              <span class="circle-check-ui"></span>
+            </label>
+
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">想要个什么故事</label>
+            <textarea id="vmk-guide" rows="4" placeholder="比如：一个潜入海底废弃空间站的科幻悬疑，主角逐渐发现同伴早已死去，基调冷峻孤绝，结尾反转……" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:11px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6;margin-bottom:6px">${esc(formState.guide)}</textarea>
+          </div>
+          <div style="display:flex;gap:10px;padding:14px 20px 18px">
+            <button id="vmk-cancel" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">取消</button>
+            <button id="vmk-next" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">下一步</button>
+          </div>
+        </div>`;
+      // 主类型点选（就地改样式，不重渲染避免丢输入）
+      mask.querySelectorAll('.vmk-genre').forEach(el => {
+        el.onclick = () => {
+          selGenre = el.getAttribute('data-g');
+          mask.querySelectorAll('.vmk-genre').forEach(x => {
+            const on = x.getAttribute('data-g') === selGenre;
+            x.style.background = on ? 'var(--accent)' : 'transparent';
+            x.style.color = on ? '#fff' : 'var(--text-secondary)';
+            x.style.borderColor = on ? 'var(--accent)' : 'var(--border)';
+          });
+        };
+      });
+      // 选角色（复用阅读的候选收集，含玩家面具）
+      mask.querySelectorAll('.vmk-pick').forEach(btn => {
+        btn.onclick = async () => {
+          const fieldId = btn.getAttribute('data-field');
+          const append = btn.getAttribute('data-append') === '1';
+          const input = mask.querySelector('#' + fieldId);
+          if (!input) return;
+          let cands = [];
+          try { cands = await _readingCollectPickCandidates(); } catch (_) {}
+          if (!cands.length) { UI.showToast('当前没有可选的角色', 1500); return; }
+          const pick = await _pickCharSheet(cands);
+          if (!pick) return;
+          if (append) {
+            const cur = (input.value || '').trim();
+            const arr = cur ? cur.split(/[、,，\s]+/).filter(Boolean) : [];
+            if (!arr.includes(pick)) arr.push(pick);
+            input.value = arr.join('、');
+          } else {
+            input.value = pick;
+          }
+        };
+      });
+      mask.querySelector('#vmk-cancel').onclick = () => mask.remove();
+      mask.querySelector('#vmk-next').onclick = () => { collectForm(); doGenerate(); };
+    };
+
+    // 从表单 input 收集进 formState（仅表单态有 input 时调用）
+    const collectForm = () => {
+      const g = (id) => { const el = mask.querySelector('#' + id); return el ? (el.value || '').trim() : ''; };
+      formState.title = g('vmk-title');
+      formState.director = g('vmk-director');
+      formState.screenwriter = g('vmk-writer');
+      formState.cast = g('vmk-cast');
+      if (isAnime) formState.studio = g('vmk-studio');
+      if (isAnime) formState.artDirector = g('vmk-art');
+      formState.tag1 = g('vmk-tag1');
+      formState.tag2 = g('vmk-tag2');
+      formState.guide = g('vmk-guide');
+      if (isSeries) {
+        const epEl = mask.querySelector('#vmk-eps');
+        let ep = epEl ? parseInt(epEl.value, 10) : 12;
+        if (!isFinite(ep) || ep < 1) ep = 12;
+        if (ep > 120) ep = 120;
+        formState.episodes = ep;
+      }
+      const wv = mask.querySelector('#vmk-wv'); formState.useWv = !!(wv && wv.checked);
+      const ml = mask.querySelector('#vmk-mainline'); formState.useMainline = !!(ml && ml.checked);
+    };
+
+    // 用 formState 生成简介卡，进确认态
+    const doGenerate = async () => {
+      if (!formState.title) { UI.showToast('请先填片名', 1500); renderForm(); return; }
+      renderLoading('正在生成简介…');
+      const castArr = formState.cast ? formState.cast.split(/[、,，\s]+/).filter(Boolean) : [];
+      const cats = [formState.tag1, formState.tag2].filter(Boolean);
+      const genre = selGenre || (cat === 'tv' ? '都市' : (cat === 'anime' ? '日常' : '剧情'));
+      let gen = null;
+      try {
+        gen = await _videoGenMakeIntro({
+        cat, title: formState.title, director: formState.director, screenwriter: formState.screenwriter,
+        cast: castArr, studio: formState.studio, artDirector: formState.artDirector, genre, cats, guide: formState.guide, useWv: formState.useWv, useMainline: formState.useMainline, curYear,
+        adaptBook
+        });
+      } catch (e) { console.warn('[制作简介]', e); }
+      if (!gen) { UI.showToast('生成失败，请重试', 1700); renderForm(); return; }
+      const data = {
+        title: formState.title, genre, cats,
+        director: formState.director || gen.director || '',
+        screenwriter: formState.screenwriter || gen.screenwriter || '',
+        cast: castArr.length ? castArr : (Array.isArray(gen.cast) ? gen.cast : []),
+        studio: isAnime ? (formState.studio || gen.studio || '') : '',
+        artDirector: isAnime ? (formState.artDirector || gen.artDirector || '') : '',
+        intro: gen.intro || '', year: gen.year || curYear,
+        duration: (() => { const s = String(gen.duration || '').trim(); const hm = s.match(/(\d+)\s*h[^\d]*(\d+)?/i); if (hm) return (+hm[1] * 60 + (hm[2] ? +hm[2] : 0)) + '分钟'; const mm = s.match(/(\d+)/); return mm ? mm[1] + '分钟' : ''; })(),
+        guide: formState.guide, useWv: formState.useWv, useMainline: formState.useMainline,
+        episodes: isSeries ? (formState.episodes || 12) : 0
+      };
+      renderConfirm(data);
+    };
+
+    // 简介确认态：展示生成的简介卡，确认/重新生成/返回修改
+    const renderConfirm = (data) => {
+      mask.dataset.busy = '';
+      const esc = Utils.escapeHtml;
+      const tagsHtml = [data.genre, ...data.cats].filter(Boolean)
+        .map(t => `<span style="font-size:11px;color:var(--text-secondary);background:var(--bg-tertiary);border-radius:999px;padding:2px 10px">${esc(t)}</span>`).join('');
+      const rows = [];
+      if (data.director) rows.push([isAnime ? '监督' : '导演', data.director]);
+      if (data.screenwriter) rows.push([isAnime ? '系列构成' : '编剧', data.screenwriter]);
+      if (isAnime && data.artDirector) rows.push(['作画', data.artDirector]);
+      if (isAnime && data.studio) rows.push(['制作', data.studio]);
+      if (data.cast && data.cast.length) rows.push([isAnime ? 'CV' : '主演', data.cast.join(' / ')]);
+      const durNum = (() => { const mm = String(data.duration || '').match(/\d+/); return mm ? mm[0] : ''; })();
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:360px;width:100%;max-height:88%;display:flex;flex-direction:column;overflow:hidden;color:var(--text)">
+          <div style="padding:20px 20px 0;overflow-y:auto">
+            <div style="font-size:16px;font-weight:700;margin-bottom:4px">简介确认</div>
+            <div style="font-size:12px;color:var(--text-tertiary,#888);margin-bottom:16px">满意就确认制作，进${isSeries?'编辑蓝图（分集结构）':'编辑剧本生成名场面'}。年份/${isSeries?'集数':'片长'}可直接改。</div>
+            <div style="font-size:18px;font-weight:700;line-height:1.3">${esc(data.title)}</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--text-secondary)">
+              <span>上映年份</span>
+              <input id="vmk-c-year" type="number" value="${esc(String(data.year || ''))}" placeholder="年份" style="width:72px;box-sizing:border-box;border:1px solid var(--border);border-radius:7px;padding:4px 8px;font-size:12px;color:var(--text);background:var(--bg-secondary)">
+              ${isSeries
+                ? `<span style="margin-left:6px">集数</span>
+              <input id="vmk-c-eps" type="number" value="${esc(String(data.episodes || 12))}" placeholder="集数" style="width:64px;box-sizing:border-box;border:1px solid var(--border);border-radius:7px;padding:4px 8px;font-size:12px;color:var(--text);background:var(--bg-secondary)">
+              <span>集</span>`
+                : `<span style="margin-left:6px">片长</span>
+              <input id="vmk-c-dur" type="number" value="${esc(durNum)}" placeholder="分钟" style="width:64px;box-sizing:border-box;border:1px solid var(--border);border-radius:7px;padding:4px 8px;font-size:12px;color:var(--text);background:var(--bg-secondary)">
+              <span>分钟</span>`}
+            </div>
+            ${tagsHtml?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 6px">${tagsHtml}</div>`:''}
+            <div style="margin-top:8px">${rows.map(([k,v])=>`<div style="display:flex;gap:8px;font-size:12px;line-height:1.8"><span style="color:var(--text-secondary);width:36px;flex-shrink:0">${esc(k)}</span><span style="flex:1;min-width:0">${esc(v)}</span></div>`).join('')}</div>
+            <div style="font-size:13px;line-height:1.8;color:var(--text-secondary);margin-top:12px;white-space:pre-wrap">${esc(data.intro)}</div>
+          </div>
+          <div style="display:flex;gap:8px;padding:14px 20px 18px">
+            <button id="vmk-back" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">返回修改</button>
+            <button id="vmk-regen" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">重新生成</button>
+            <button id="vmk-confirm" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">确认制作</button>
+          </div>
+        </div>`;
+      mask.querySelector('#vmk-back').onclick = () => renderForm();
+      mask.querySelector('#vmk-regen').onclick = () => doGenerate();
+      mask.querySelector('#vmk-confirm').onclick = () => {
+        // 读回年份/片长（或集数）输入框，覆盖 data
+        const yEl = mask.querySelector('#vmk-c-year');
+        const yv = yEl ? parseInt(yEl.value, 10) : NaN;
+        if (!isNaN(yv) && yv > 0) data.year = yv;
+        if (isSeries) {
+          const eEl = mask.querySelector('#vmk-c-eps');
+          let ev = eEl ? parseInt(eEl.value, 10) : NaN;
+          if (!isNaN(ev) && ev > 0) { if (ev > 120) ev = 120; data.episodes = ev; }
+        } else {
+          const dEl = mask.querySelector('#vmk-c-dur');
+          const dv = dEl ? parseInt(dEl.value, 10) : NaN;
+          if (!isNaN(dv) && dv > 0) data.duration = dv + '分钟';
+        }
+        doCreate(data);
+      };
+    };
+
+    // 确认制作：建空壳 work（selfMake 标记）→ 写入观看历史 → 进详情页（不自动生成，去编辑剧本）
+    const doCreate = async (data) => {
+      const work = {
+        id: 'vdm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        kind: cat,
+        selfMake: true,
+        title: (data.title || '未命名').slice(0, 40),
+        director: (data.director || '').slice(0, 20),
+        screenwriter: (data.screenwriter || '').slice(0, 20),
+        cast: (data.cast || []).slice(0, 6),
+        genre: data.genre || '剧情',
+        category: (data.cats || []).slice(0, 3),
+        year: data.year || curYear,
+        duration: (data.duration || '').slice(0, 20),
+        rating: '',
+        intro: (data.intro || '').slice(0, 260),
+        cover: _videoPickCover(data.genre || '剧情'),
+        makeGuide: (data.guide || '').slice(0, 600),
+        makeUseWv: !!data.useWv,
+        makeUseMainline: !!data.useMainline,
+        studio: cat === 'anime' ? (data.studio || '').slice(0, 30) : (data.director || '').slice(0, 20),
+        watched: true,
+        watchedAt: Date.now(),
+        createdAt: Date.now()
+      };
+      // 剧集/动漫：带上集数，初始无蓝图（进详情页后去编辑蓝图）
+      if (isSeries) {
+        let ep = parseInt(data.episodes, 10);
+        if (!isFinite(ep) || ep < 1) ep = 12;
+        if (ep > 120) ep = 120;
+        work.episodes = ep;
+      }
+      // 动漫：作画/美术担当
+      if (cat === 'anime') work.artDirector = (data.artDirector || '').slice(0, 20);
+      // 改编模式：打 adaptedFrom 标记 + 原著打 adaptedKinds
+      if (adaptBook) {
+        work.adaptedFrom = { bookId: adaptBook.id, title: adaptBook.title || '' };
+      }
+      const pd = await _getPhoneData();
+      if (!Array.isArray(pd.videoWorks)) pd.videoWorks = [];
+      pd.videoWorks.unshift(work);
+      // 改编模式：给原著标记 adaptedKinds
+      if (adaptBook) {
+        const bk = (pd.readingBooks || []).find(b => b && b.id === adaptBook.id);
+        if (bk) {
+          if (!Array.isArray(bk.adaptedKinds)) bk.adaptedKinds = [];
+          if (!bk.adaptedKinds.includes(cat)) bk.adaptedKinds.push(cat);
+        }
+      }
+      await _savePhoneData(pd);
+      mask.remove();
+      UI.showToast(`已建《${work.title}》，去${isSeries?'编辑蓝图':'编辑剧本生成名场面'}`, 2400);
+      // 电视剧/动漫进剧集页（自制无蓝图会引导去编辑蓝图）；电影进详情页（去编辑剧本）
+      if (isSeries) _videoOpenEpisodes(work);
+      else _videoOpenDetail(work);
+    };
+
+    document.body.appendChild(mask);
+    renderForm();
+  }
+
+  // 生成自制电影的简介卡：据制作信息产出客观简介 + 上映年份 + 片长，并补全留空的导演/编剧/主演。
+  async function _videoGenMakeIntro(p) {
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return null; }
+
+    let wvBlock = '';
+    const isSeriesIntro = (p.cat === 'tv' || p.cat === 'anime');
+    const kindWord = p.cat === 'tv' ? '电视剧' : (p.cat === 'anime' ? '动漫' : '电影');
+    if (p.useWv) { try { const wv = await _buildFullContext({ npcBrief: false, lite: true, castFilter: { mode: 'disabled' } }); if (wv) wvBlock = `\n\n【世界观背景】这部${kindWord}诞生于下面这个世界，可与之呼应（不强求生硬套用）：\n${wv}`; } catch (_) {} }
+    let mlBlock = '';
+    if (p.useMainline) { try { const ml = _readingMainlineBlock(true); if (ml) mlBlock = `\n\n【最近主线动态】（可作灵感，不强求关联）：\n${ml}`; } catch (_) {} }
+
+    // 改编模式：注入原著素材
+    let adaptBlock = '';
+    if (p.adaptBook) {
+      const ab = p.adaptBook;
+      const bits = [];
+      if (ab.intro) bits.push('原著简介：' + String(ab.intro).trim().slice(0, 300));
+      if (ab.writeHint) bits.push('创作方向：' + String(ab.writeHint).trim().slice(0, 200));
+      const bp = (ab.blueprint && typeof ab.blueprint === 'object') ? ab.blueprint : null;
+      if (bp) {
+        if (bp.mainPlot) bits.push('明线：' + String(bp.mainPlot).trim().slice(0, 200));
+        if (bp.darkPlot) bits.push('暗线：' + String(bp.darkPlot).trim().slice(0, 200));
+        const chars = Array.isArray(bp.characters) ? bp.characters : [];
+        if (chars.length) {
+          bits.push('主要人物：' + chars.slice(0, 8).map(c => {
+            const nm = (c.name || '').trim(); if (!nm) return '';
+            return `${nm}（${(c.role || '').trim() || '配角'}）`;
+          }).filter(Boolean).join('、'));
+        }
+      }
+      if (bits.length) adaptBlock = `\n\n【原著素材（改编自小说《${ab.title || ''}》）】\n${bits.join('\n')}`;
+    }
+
+    const isAnimeIntro = (p.cat === 'anime');
+    // 角色工种措辞：动漫=监督/系列构成/CV，电视剧=监督导演/编剧/主演，电影=导演/编剧/主演
+    const dirLabel = isAnimeIntro ? '监督' : (isSeriesIntro ? '监督/导演' : '导演');
+    const writerLabel = isAnimeIntro ? '系列构成/脚本' : '编剧';
+    const castLabel = isAnimeIntro ? 'CV/配音演员' : '主演';
+
+    const needNames = [];
+    if (!p.director) needNames.push(`director（${dirLabel}，1 个）`);
+    if (!p.screenwriter) needNames.push(`screenwriter（${writerLabel}，1 个）`);
+    if (!p.cast || !p.cast.length) needNames.push(`cast（${castLabel}，3-5 个，数组）`);
+    // 动漫专属：作画 + 制作公司
+    if (isAnimeIntro && !p.artDirector) needNames.push('artDirector（作画/美术担当，1 个）');
+    if (isAnimeIntro && !p.studio) needNames.push('studio（制作公司名，1 个）');
+    const nameRule = needNames.length
+      ? `\n- 以下字段用户留空，请生成填上（已填字段原样回传、不要改）：${needNames.join('、')}。人名要像这个世界里的真人、自然，不要套用现实中知名影人的姓名；制作公司名也要完全虚构、不要使用现实中真实存在的动画公司名或其谐音变体。`
+      : `\n- ${dirLabel}/${writerLabel}/${castLabel}用户都已填好，原样回传即可。`;
+
+    const epLine = isSeriesIntro ? `\n【集数】共 ${p.episodes || 12} 集` : '';
+    const introField = isSeriesIntro
+      ? `"intro": "客观剧情简介（110-140 字）。讲清这部${kindWord}讲了什么故事、主线围绕什么展开、整季的看点。不要任何主观评价或推荐语，不要剧透结局。",`
+      : `"intro": "客观剧情简介（110-140 字）。讲清这部电影讲了什么故事、主线围绕什么展开。不要任何主观评价或推荐语，不要剧透结局。",`;
+    const durField = isSeriesIntro
+      ? `"duration": "单集时长，必须是「整数+分钟」格式（如 45分钟），剧集一般 40-50 分钟、动漫一般 24 分钟",`
+      : `"duration": "片长，必须是「整数+分钟」格式（如 118分钟），不要用 1h58m 这种写法",`;
+    // 动漫多出 artDirector（作画）+ studio（制作公司）两个产出字段
+    const animeExtraField = isAnimeIntro
+      ? `\n  "artDirector": "作画/美术担当姓名",\n  "studio": "制作公司名（完全虚构，不要用现实公司名）",`
+      : '';
+    const animeExtraInfo = isAnimeIntro
+      ? `\n【作画/美术担当】${p.artDirector || '（留空，待生成）'}\n【制作公司】${p.studio || '（留空，待生成）'}`
+      : '';
+
+    const sys = `你是影视企划。根据下面的制作信息，为这部${kindWord}写一段客观剧情简介，并补全留空的演职人员。
+【片名】${p.title}
+【主类型】${p.genre}${p.cats && p.cats.length ? '\n【氛围标签】' + p.cats.join('、') : ''}${epLine}
+【${dirLabel}】${p.director || '（留空，待生成）'}
+【${writerLabel}】${p.screenwriter || '（留空，待生成）'}
+【${castLabel}】${(p.cast && p.cast.length) ? p.cast.join('、') : '（留空，待生成）'}${animeExtraInfo}
+【创作方向】${p.guide || '（未填，自由发挥）'}${adaptBlock}${wvBlock}${mlBlock}
+
+只输出 JSON，不要解释、不要代码块、不要 Markdown，必须以 { 开头、以 } 结尾：
+{
+  ${introField}
+  "year": 上映年份（整数，${p.curYear - 35} 到 ${p.curYear} 之间，绝不能晚于 ${p.curYear}）,
+  ${durField}
+  "director": "${dirLabel}姓名",
+  "screenwriter": "${writerLabel}姓名",${animeExtraField}
+  "cast": ["${castLabel}姓名"]
+}${nameRule}`;
+
+    const text = await _phoneTextWithRetry({
+      label: '电影简介', url, key, model,
+      temperature: 0.9, max_tokens: 800,
+      messages: [{ role: 'system', content: sys }, { role: 'user', content: `请为《${p.title}》生成简介与演职人员。` }]
+    });
+    let c = (text || '').replace(/```json|```/g, '').trim();
+    const s = c.indexOf('{'); const e = c.lastIndexOf('}');
+    if (s >= 0 && e > s) c = c.slice(s, e + 1);
+    const obj = JSON.parse(c);
+    let year = parseInt(obj.year, 10);
+    if (!isFinite(year)) year = p.curYear;
+    year = Math.max(p.curYear - 35, Math.min(p.curYear, year));
+    let cast = [];
+    if (Array.isArray(obj.cast)) cast = obj.cast.map(x => String(x || '').trim()).filter(Boolean);
+    else if (typeof obj.cast === 'string') cast = obj.cast.split(/[、,，\s]+/).filter(Boolean);
+    return {
+      intro: String(obj.intro || '').trim().slice(0, 260),
+      year,
+      duration: String(obj.duration || '').trim().slice(0, 20),
+      director: String(obj.director || '').trim().slice(0, 20),
+      screenwriter: String(obj.screenwriter || '').trim().slice(0, 20),
+      cast: cast.slice(0, 6),
+      artDirector: isAnimeIntro ? String(obj.artDirector || '').trim().slice(0, 20) : '',
+      studio: isAnimeIntro ? String(obj.studio || '').trim().slice(0, 30) : ''
+    };
+  }
+
+  // ===== 自制电影：编辑剧本工作台 =====
+  // 全屏 overlay：创作方向 / 剧情梗概 / 气质风格 / 人物表 / 名场面脚本逐块可编辑，可整体重新生成。
+  // 复用 _videoGenScript（会读 work.makeGuide / makeUseWv / makeUseMainline）。仅自制电影用。
+  function _videoEditScript(work) {
+    if (!work) return;
+    const esc = Utils.escapeHtml;
+    const POS = ['主角', '配角', '特邀'];
+    // 进组拍摄（电影固定为拍摄/杀青/上映措辞），参演身份异步判定
+    let shootIdentity = null; // null=判定中, ''=未参演, 非空=参演身份
+    const FX_OPTS = [['','无特效'],['blood','血溅'],['fire','火光'],['rain','下雨'],['snow','下雪'],['bokeh','柔光'],['sparkle','星光'],['firefly','萤火虫'],['memory','回忆'],['glitch','故障'],['scan','扫描'],['petal','花瓣'],['bubble','气泡'],['smoke','烟雾'],['glass','玻璃碎'],['hearts','爱心'],['spotlight','聚光'],['firework','烟花'],['ripple','水波'],['lightning','闪电'],['flash','白光'],['shake','抖动']];
+    const loadDraft = () => {
+      const sc = (work.script && typeof work.script === 'object') ? work.script : {};
+      return {
+        guide: work.makeGuide || '',
+        year: work.year || '',
+        duration: (() => { const mm = String(work.duration || '').match(/\d+/); return mm ? mm[0] : ''; })(),
+        hasScript: !!(sc.synopsis || (Array.isArray(sc.characters) && sc.characters.length)),
+        synopsis: sc.synopsis || '',
+        style: sc.style || '',
+        characters: (Array.isArray(sc.characters) ? sc.characters : []).map(c => ({ ...c })),
+        scene: (Array.isArray(sc.scene) ? sc.scene : []).map(b => ({ ...b })),
+      };
+    };
+    let draft = loadDraft();
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:75;background:var(--bg);display:flex;flex-direction:column';
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+
+    const syncToWork = async () => {
+      work.makeGuide = (draft.guide || '').slice(0, 600);
+      const yv = parseInt(draft.year, 10);
+      if (!isNaN(yv) && yv > 0) work.year = yv;
+      const dv = parseInt(draft.duration, 10);
+      if (!isNaN(dv) && dv > 0) work.duration = dv + '分钟';
+      if (draft.hasScript) {
+        work.script = {
+          synopsis: (draft.synopsis || '').trim().slice(0, 700),
+          style: (draft.style || '').trim().slice(0, 200),
+          characters: draft.characters.filter(c => (c.name || '').trim()).map(c => ({
+            position: POS.includes((c.position || '').trim()) ? (c.position || '').trim() : '配角',
+            name: (c.name || '').trim().slice(0, 24),
+            actor: (c.actor || '').trim().slice(0, 24),
+            gender: (c.gender || '').trim().slice(0, 8),
+            identity: (c.identity || '').trim().slice(0, 40),
+            personality: (c.personality || '').trim().slice(0, 40),
+            goal: (c.goal || '').trim().slice(0, 80),
+            relation: (c.relation || '').trim().slice(0, 60)
+          })),
+          scene: draft.scene.filter(b => (b.text || '').trim()).map(b => {
+            const type = b.type === 'line' ? 'line' : 'narration';
+            const o = { type, text: (b.text || '').trim().slice(0, type === 'line' ? 40 : 120) };
+            if (type === 'line') o.speaker = (b.speaker || '').trim().slice(0, 24);
+            const fx = (b.fx || '').trim();
+            if (fx) o.fx = fx;
+            return o;
+          })
+        };
+      }
+      await _savePhoneData();
+    };
+
+    const back = async () => {
+      await syncToWork();
+      overlay.remove();
+      if (_videoDetailWork === work) _videoRenderTab(_videoDetailTab);
+    };
+
+    const showLoading = (txt) => {
+      overlay.innerHTML = `
+        ${_phoneStatusBarHtml()}
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--text-secondary)">
+          <div style="width:34px;height:34px;border:3px solid color-mix(in srgb, var(--accent) 22%, transparent);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite"></div>
+          <div style="font-size:13px">${esc(txt || '正在生成…')}</div>
+        </div>`;
+    };
+
+    const doGen = async () => {
+      await syncToWork();
+      showLoading('正在生成剧本…（梗概·人物·名场面）');
+      let ok = false;
+      try { ok = await _videoGenScript(work); } catch (_) {}
+      if (ok) {
+        draft = loadDraft();
+        UI.showToast('剧本已生成', 1400);
+        _videoEnsureContent(work);
+        render();
+        // 剧本刚生成：判定参演身份，让进组区块直接显示
+        if (!work.shootChainId) { shootIdentity = null; resolveIdentity(); }
+      } else {
+        UI.showToast('生成失败，请重试', 1700);
+        render();
+      }
+    };
+
+    const fld = (label, key, rows, ph) => `
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">${label}</label>
+        <textarea data-field="${key}" rows="${rows || 3}" placeholder="${ph || ''}" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6">${esc(draft[key] || '')}</textarea>
+      </div>`;
+
+    const charCard = (c, i) => {
+      const inp = (key, label, ph) => `<div style="margin-bottom:7px"><label style="display:block;font-size:11px;color:var(--text-secondary);margin-bottom:3px">${label}</label><input data-ci="${i}" data-key="${key}" value="${esc(c[key] || '')}" placeholder="${ph || ''}" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);background:var(--bg-secondary)"></div>`;
+      return `
+        <div style="border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <select data-ci="${i}" data-key="position" style="font-size:12px;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--text);background:var(--bg-secondary)">${POS.map(p => `<option ${((c.position || '配角') === p) ? 'selected' : ''}>${p}</option>`).join('')}</select>
+            <button class="ves-act" data-act="del-char" data-i="${i}" style="border:none;background:none;color:#e66;font-size:12px;cursor:pointer">删除</button>
+          </div>
+          ${inp('name', '姓名', '角色名')}
+          ${inp('actor', '演员', '饰演该角色的演员')}
+          ${inp('gender', '性别')}
+          ${inp('identity', '身份')}
+          ${inp('personality', '性格', '四组四字词语')}
+          ${inp('goal', '核心目标')}
+          ${inp('relation', '与其他角色关系')}
+        </div>`;
+    };
+
+    const sceneCard = (b, i) => {
+      const isLine = b.type === 'line';
+      return `
+        <div style="border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <select data-si="${i}" data-key="type" style="font-size:12px;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--text);background:var(--bg-secondary)">
+              <option value="narration" ${!isLine ? 'selected' : ''}>叙述</option>
+              <option value="line" ${isLine ? 'selected' : ''}>台词</option>
+            </select>
+            <button class="ves-act" data-act="del-scene" data-i="${i}" style="border:none;background:none;color:#e66;font-size:12px;cursor:pointer">删除</button>
+          </div>
+          ${isLine ? `<input data-si="${i}" data-key="speaker" value="${esc(b.speaker || '')}" placeholder="说话角色名" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);background:var(--bg-secondary);margin-bottom:7px">` : ''}
+          <textarea data-si="${i}" data-key="text" rows="2" placeholder="${isLine ? '台词内容' : '叙述/场景描写'}" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6;margin-bottom:7px">${esc(b.text || '')}</textarea>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--text-secondary)">特效</span>
+            <select data-si="${i}" data-key="fx" style="flex:1;font-size:12px;border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);background:var(--bg-secondary)">${FX_OPTS.map(([v, l]) => `<option value="${v}" ${((b.fx || '') === v) ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          </div>
+        </div>`;
+    };
+
+    const render = () => {
+      let body = `
+        <div style="margin-bottom:18px">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">剧本创作方向</label>
+          <div style="font-size:11px;color:var(--text-tertiary,#888);line-height:1.6;margin-bottom:7px">想要怎样的剧情、基调、人物走向。生成剧本时会遵循。</div>
+          <textarea data-field="guide" rows="4" placeholder="比如：双男主对峙戏，前期隐忍后期爆发，基调冷硬克制，要有一次关键反转……" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:11px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6">${esc(draft.guide || '')}</textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:18px;font-size:12px;color:var(--text-secondary)">
+          <span>上映年份</span>
+          <input data-field="year" type="number" value="${esc(String(draft.year || ''))}" placeholder="年份" style="width:72px;box-sizing:border-box;border:1px solid var(--border);border-radius:7px;padding:5px 8px;font-size:12px;color:var(--text);background:var(--bg-secondary)">
+          <span style="margin-left:6px">片长</span>
+          <input data-field="duration" type="number" value="${esc(String(draft.duration || ''))}" placeholder="分钟" style="width:64px;box-sizing:border-box;border:1px solid var(--border);border-radius:7px;padding:5px 8px;font-size:12px;color:var(--text);background:var(--bg-secondary)">
+          <span>分钟</span>
+        </div>`;
+
+      if (!draft.hasScript) {
+        body += `
+          <div style="text-align:center;padding:24px 16px;border:1px dashed var(--border);border-radius:12px">
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:14px">填好创作方向，点下面生成剧本。生成后梗概、风格、人物、名场面都可逐条编辑。</div>
+            <button class="ves-act" data-act="gen" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成剧本</button>
+          </div>`;
+      } else {
+        body += `<div style="height:1px;background:var(--border);margin:6px 0 16px"></div>`;
+        body += fld('剧情梗概', 'synopsis', 6, '完整的来龙去脉');
+        body += fld('气质风格', 'style', 3, '整体基调、节奏、视听气质');
+        body += `<div style="font-size:13px;font-weight:700;color:var(--accent);margin:8px 0 10px">角色</div>`;
+        body += draft.characters.map((c, i) => charCard(c, i)).join('');
+        body += `<button class="ves-act" data-act="add-char" style="width:100%;border:1px dashed var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:12px;padding:9px 0;cursor:pointer;margin-bottom:18px">+ 添加角色</button>`;
+        body += `<div style="font-size:13px;font-weight:700;color:var(--accent);margin:8px 0 10px">名场面脚本</div>`;
+        body += draft.scene.map((b, i) => sceneCard(b, i)).join('');
+        body += `<button class="ves-act" data-act="add-scene" style="width:100%;border:1px dashed var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:12px;padding:9px 0;cursor:pointer;margin-bottom:18px">+ 添加一条</button>`;
+        body += `<div style="text-align:center;padding:4px 0 8px"><button class="ves-act" data-act="gen" style="border:1px solid var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:12px;padding:8px 20px;cursor:pointer">按当前方向重新生成整份剧本</button></div>`;
+
+        // 进组拍摄区块（仅剧本已生成时显示）
+        body += `<div style="height:1px;background:var(--border);margin:18px 0 14px"></div>`;
+        body += `<div style="font-size:13px;font-weight:700;color:var(--accent);margin:0 0 10px">进组拍摄</div>`;
+        if (work.shootChainId) {
+          const done = !!work.shootDone;
+          const prog = _videoShootChainProgress(work.shootChainId);
+          const progLine = prog.total > 0
+            ? `已完成 <span style="color:var(--accent);font-weight:600">${prog.done}/${prog.total}</span> 个剧情节点。`
+            : `剧情线节点尚未就绪。`;
+          body += `
+            <div style="border:1px solid var(--border);border-radius:12px;padding:14px 14px">
+              <div style="font-size:12px;color:var(--text-secondary);line-height:1.7">
+                ${done
+                  ? `这部电影已杀青，拍摄期剧情线已完成。现在可以去详情设置里申请上映。`
+                  : `已生成拍摄期剧情线，事件已加入当前对话的事件链。${progLine} 在主线里推进剧情，也可在「对话设置 → 事件配置」里续写更多节点。所有节点完成后，去<span style="color:var(--accent)">详情页右上角设置</span>里确认杀青。`}
+              </div>
+              <div style="font-size:11px;color:var(--text-tertiary,#888);line-height:1.6;margin-top:8px">可在「对话设置 → 事件配置」里查看/管理/续写这条剧情线的所有事件。</div>
+            </div>`;
+        } else if (shootIdentity == null) {
+          body += `<div style="text-align:center;padding:16px;border:1px dashed var(--border);border-radius:12px;font-size:12px;color:var(--text-secondary)">正在确认你的参演身份…</div>`;
+        } else if (shootIdentity) {
+          body += `
+            <div style="border:1px solid var(--border);border-radius:12px;padding:16px 14px;text-align:center">
+              <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:6px">你将以 <span style="color:var(--accent);font-weight:600">${esc(shootIdentity)}</span> 的身份进组拍摄。</div>
+              <div style="font-size:11px;color:var(--text-tertiary,#888);line-height:1.6;margin-bottom:14px">生成后会以这部电影为背景，在主线里展开一条拍摄期剧情线（进组、对手戏、片场日常、突发状况……）。拍摄期间将暂时无法申请上映，杀青后解锁。</div>
+              <button class="ves-act" data-act="gen-shoot" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成拍摄期剧情线</button>
+            </div>`;
+        } else {
+          body += `
+            <div style="border:1px dashed var(--border);border-radius:12px;padding:16px 14px;font-size:12px;color:var(--text-secondary);line-height:1.7">
+              你没有参与这部电影的制作。如果想亲自进组拍摄，回到制作流程，把自己（你的面具）选进导演 / 编剧 / 主演等职位，再回来就能生成拍摄期剧情线了。
+            </div>`;
+        }
+      }
+
+      overlay.innerHTML = `
+        ${_phoneStatusBarHtml()}
+        <div style="display:flex;align-items:center;padding:4px 16px 8px;flex-shrink:0;color:var(--text)">
+          <button id="ves-back" class="phone-nav-btn">${_uiIcon('back', 18)}</button>
+          <span style="font-weight:750;font-size:15px;flex:1;text-align:center;letter-spacing:.03em">编辑剧本</span>
+          <button id="ves-save" style="flex-shrink:0;border:none;background:none;color:var(--accent);font-size:14px;font-weight:600;cursor:pointer;padding:4px 8px">保存</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:16px 16px 32px">${body}</div>`;
+
+      overlay.querySelector('#ves-back').onclick = back;
+      overlay.querySelector('#ves-save').onclick = async () => { await syncToWork(); UI.showToast('已保存', 1200); };
+    };
+
+    // 输入实时写 draft
+    overlay.addEventListener('input', (e) => {
+      const el = e.target;
+      const f = el.getAttribute && el.getAttribute('data-field');
+      if (f) { draft[f] = el.value; return; }
+      const ci = el.getAttribute && el.getAttribute('data-ci');
+      if (ci != null && draft.characters[+ci]) { draft.characters[+ci][el.getAttribute('data-key')] = el.value; return; }
+      const si = el.getAttribute && el.getAttribute('data-si');
+      if (si != null && draft.scene[+si]) { draft.scene[+si][el.getAttribute('data-key')] = el.value; return; }
+    });
+    // select 变更（type 需重渲染切换 speaker 显隐）
+    overlay.addEventListener('change', (e) => {
+      const el = e.target;
+      if (el.tagName !== 'SELECT') return;
+      const ci = el.getAttribute('data-ci');
+      if (ci != null && draft.characters[+ci]) { draft.characters[+ci][el.getAttribute('data-key')] = el.value; return; }
+      const si = el.getAttribute('data-si');
+      if (si != null && draft.scene[+si]) {
+        const key = el.getAttribute('data-key');
+        draft.scene[+si][key] = el.value;
+        if (key === 'type') render();
+        return;
+      }
+    });
+    // 结构性操作
+    overlay.addEventListener('click', (e) => {
+      const btn = e.target.closest && e.target.closest('.ves-act');
+      if (!btn) return;
+      const act = btn.getAttribute('data-act');
+      if (act === 'gen') { doGen(); return; }
+      if (act === 'add-char') { draft.characters.push({ position: '配角', name: '' }); render(); return; }
+      if (act === 'del-char') { draft.characters.splice(+btn.getAttribute('data-i'), 1); render(); return; }
+      if (act === 'add-scene') { draft.scene.push({ type: 'narration', text: '' }); render(); return; }
+      if (act === 'del-scene') { draft.scene.splice(+btn.getAttribute('data-i'), 1); render(); return; }
+      if (act === 'gen-shoot') { doGenShoot(); return; }
+    });
+
+    // 生成拍摄期剧情线
+    const doGenShoot = async () => {
+      if (work.shootChainId) { UI.showToast('已生成过剧情线', 1500); return; }
+      if (!shootIdentity) { UI.showToast('未参演，无法生成', 1500); return; }
+      const opt = await _videoShootGenDialog('拍摄期', false);
+      if (!opt) return;
+      await syncToWork();
+      showLoading('正在生成拍摄期剧情线…');
+      let ok = false;
+      try { ok = await _videoGenShootChain(work, shootIdentity, opt.count, opt.direction); } catch (e) { console.warn('[拍摄链]', e); }
+      if (ok) {
+        UI.showToast('拍摄期剧情线已生成，去主线里推进吧', 2600);
+      } else {
+        UI.showToast('生成失败，请重试', 1700);
+      }
+      render();
+    };
+
+    // 异步判定参演身份
+    const resolveIdentity = async () => {
+      try { shootIdentity = await _videoGetPlayShootIdentity(work); }
+      catch (_) { shootIdentity = ''; }
+      render();
+    };
+
+    render();
+    // 剧本已生成、且还没拍摄链时，才需要判定参演身份
+    if (draft.hasScript && !work.shootChainId) resolveIdentity();
+  }
+
+  // ===== 自制电视剧/动漫：编辑蓝图工作台 =====
+  // 全屏 overlay：没蓝图时引导生成；有蓝图后 style / 明线 / 暗线 / 结构 / 人物 / 分集列表逐块可编辑。
+  // 复用 _videoGenBlueprint（读 work.makeGuide / 改编源 / 世界观开关等）。仅自制剧集用。
+  function _videoEditBlueprint(work) {
+    if (!work) return;
+    const esc = Utils.escapeHtml;
+    const isAnime = work.kind === 'anime';
+    const J = isAnime ? '话' : '集';
+    const KIND_WORD = isAnime ? '动漫' : '电视剧';
+    // 进组拍摄措辞 + 参演身份（异步判定，算完刷新）
+    const W = isAnime
+      ? { act: '制作', period: '制作期', wrap: '制作完成', apply: '开播' }
+      : { act: '拍摄', period: '拍摄期', wrap: '杀青', apply: '上映' };
+    let shootIdentity = null; // null=判定中, ''=未参演, 非空=参演身份
+    let shootReady = false;
+
+    const loadDraft = () => {
+      const bp = (work.blueprint && typeof work.blueprint === 'object') ? work.blueprint : null;
+      const dl = (bp && bp.darkline && typeof bp.darkline === 'object') ? bp.darkline : {};
+      const ch = (bp && bp.characters && typeof bp.characters === 'object') ? bp.characters : {};
+      return {
+        guide: work.makeGuide || '',
+        year: work.year || '',
+        episodes: work.episodes || 12,
+        duration: (() => { const mm = String(work.duration || '').match(/\d+/); return mm ? mm[0] : ''; })(),
+        hasBp: !!bp,
+        style: bp ? (bp.style || '') : '',
+        mainline: bp ? (bp.mainline || '') : '',
+        dlTruth: dl.truth || '',
+        dlPace: dl.revealPace || '',
+        structure: (bp && Array.isArray(bp.structure) ? bp.structure : []).map(s => ({ ...s })),
+        protagonist: (Array.isArray(ch.protagonist) ? ch.protagonist : []).map(c => ({ ...c })),
+        supporting: (Array.isArray(ch.supporting) ? ch.supporting : []).map(c => ({ ...c })),
+        epList: (bp && Array.isArray(bp.episodes) ? bp.episodes : []).map(e => ({ ...e })),
+      };
+    };
+    let draft = loadDraft();
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:75;background:var(--bg);display:flex;flex-direction:column';
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+
+    const syncToWork = async () => {
+      work.makeGuide = (draft.guide || '').slice(0, 600);
+      const yv = parseInt(draft.year, 10);
+      if (!isNaN(yv) && yv > 0) work.year = yv;
+      let ev = parseInt(draft.episodes, 10);
+      if (!isNaN(ev) && ev > 0) { if (ev > 120) ev = 120; work.episodes = ev; }
+      const dv = parseInt(draft.duration, 10);
+      if (!isNaN(dv) && dv > 0) work.duration = dv + '分钟';
+      if (draft.hasBp) {
+        // 分集列表重排 idx（按当前顺序 1..N）
+        const eps = draft.epList.filter(e => (e.title || '').trim()).map((e, i) => ({
+          idx: i + 1,
+          title: (e.title || '').trim().slice(0, 40),
+          summary: (e.summary || '').trim().slice(0, 500)
+        }));
+        work.blueprint = {
+          style: (draft.style || '').trim().slice(0, 300),
+          structure: draft.structure.filter(s => (s.phase || '').trim()).map(s => ({
+            phase: (s.phase || '').trim().slice(0, 30),
+            episodeRange: (s.episodeRange || '').trim().slice(0, 20),
+            summary: (s.summary || '').trim().slice(0, 300)
+          })),
+          mainline: (draft.mainline || '').trim().slice(0, 400),
+          darkline: { truth: (draft.dlTruth || '').trim().slice(0, 400), revealPace: (draft.dlPace || '').trim().slice(0, 300) },
+          characters: {
+            protagonist: draft.protagonist.filter(c => (c.name || '').trim()).map(c => _videoBpCharClean(c)),
+            supporting: draft.supporting.filter(c => (c.name || '').trim()).map(c => _videoBpCharClean(c))
+          },
+          episodes: eps
+        };
+      }
+      await _savePhoneData();
+      // 改编作品：蓝图已落地（含手动逐块编辑的情况，不只 AI 生成）→ 补标记原著 + 快照影视信息。
+      // _videoMarkBookAdapted 自带 kind+title 去重，重复调用安全。
+      if (work.adaptedFrom && work.adaptedFrom.bookId && work.blueprint) {
+        try { if (await _videoMarkBookAdapted(work)) await _savePhoneData(); } catch (_) {}
+      }
+    };
+
+    const back = async () => {
+      await syncToWork();
+      overlay.remove();
+    };
+
+    const showLoading = (txt) => {
+      overlay.innerHTML = `
+        ${_phoneStatusBarHtml()}
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--text-secondary)">
+          <div style="width:34px;height:34px;border:3px solid color-mix(in srgb, var(--accent) 22%, transparent);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite"></div>
+          <div style="font-size:13px">${esc(txt || '正在生成…')}</div>
+        </div>`;
+    };
+
+    const doGen = async () => {
+      await syncToWork();
+      showLoading(`正在生成${KIND_WORD}蓝图…（总纲·人物·分${J}）`);
+      let ok = false;
+      try { ok = await _videoGenBlueprint(work); } catch (_) {}
+      if (ok) {
+        draft = loadDraft();
+        UI.showToast('蓝图已生成', 1400);
+        render();
+        // 蓝图刚生成：判定参演身份，让进组区块直接显示
+        if (!work.shootChainId) { shootIdentity = null; resolveIdentity(); }
+      } else {
+        UI.showToast('生成失败，请重试', 1700);
+        render();
+      }
+    };
+
+    const fld = (label, key, rows, ph) => `
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">${label}</label>
+        <textarea data-field="${key}" rows="${rows || 3}" placeholder="${ph || ''}" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6">${esc(draft[key] || '')}</textarea>
+      </div>`;
+
+    // 结构阶段卡
+    const structCard = (s, i) => {
+      const inp = (key, label, ph) => `<div style="margin-bottom:7px"><label style="display:block;font-size:11px;color:var(--text-secondary);margin-bottom:3px">${label}</label><input data-sti="${i}" data-key="${key}" value="${esc(s[key] || '')}" placeholder="${ph || ''}" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);background:var(--bg-secondary)"></div>`;
+      const txt = (key, label, ph) => `<div style="margin-bottom:7px"><label style="display:block;font-size:11px;color:var(--text-secondary);margin-bottom:3px">${label}</label><textarea data-sti="${i}" data-key="${key}" rows="2" placeholder="${ph || ''}" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6">${esc(s[key] || '')}</textarea></div>`;
+      return `
+        <div style="border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-size:12px;color:var(--text-secondary)">阶段 ${i + 1}</span>
+            <button class="veb-act" data-act="del-struct" data-i="${i}" style="border:none;background:none;color:#e66;font-size:12px;cursor:pointer">删除</button>
+          </div>
+          ${inp('phase', '阶段名', '如 开端 / 转折 / 高潮')}
+          ${inp('episodeRange', `${J}范围`, '如 1-4')}
+          ${txt('summary', '本阶段概述', '这一阶段发生什么')}
+        </div>`;
+    };
+
+    // 人物卡（group=protagonist|supporting）
+    const charCard = (c, i, group) => {
+      const inp = (key, label, ph) => `<div style="margin-bottom:7px"><label style="display:block;font-size:11px;color:var(--text-secondary);margin-bottom:3px">${label}</label><input data-chi="${i}" data-grp="${group}" data-key="${key}" value="${esc(c[key] || '')}" placeholder="${ph || ''}" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);background:var(--bg-secondary)"></div>`;
+      return `
+        <div style="border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-size:12px;color:var(--text-secondary)">${group === 'protagonist' ? '主角' : '配角/反派'} ${i + 1}</span>
+            <button class="veb-act" data-act="del-char" data-grp="${group}" data-i="${i}" style="border:none;background:none;color:#e66;font-size:12px;cursor:pointer">删除</button>
+          </div>
+          ${inp('name', '姓名', '角色名')}
+          ${inp('actor', isAnime ? 'CV' : '饰演者', '留空表示无对应演员')}
+          ${inp('gender', '性别')}
+          ${inp('age', '年龄')}
+          ${inp('identity', '身份')}
+          ${inp('appearance', '外貌')}
+          ${inp('personality', '性格', '四组四字词语')}
+          ${inp('desire', '核心目标/欲望')}
+          ${group === 'protagonist' ? inp('arc', '成长弧光') : inp('position', '定位（主角的什么人）')}
+          ${group === 'supporting' ? inp('debut', `出场${J}数`) : ''}
+        </div>`;
+    };
+
+    // 分集卡
+    const epCard = (e, i) => `
+      <div style="border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:600;color:var(--accent)">第 ${i + 1} ${J}</span>
+          <button class="veb-act" data-act="del-ep" data-i="${i}" style="border:none;background:none;color:#e66;font-size:12px;cursor:pointer">删除</button>
+        </div>
+        <div style="margin-bottom:7px"><input data-epi="${i}" data-key="title" value="${esc(e.title || '')}" placeholder="本${J}标题" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);background:var(--bg-secondary)"></div>
+        <textarea data-epi="${i}" data-key="summary" rows="3" placeholder="本${J}大纲（150字左右，作为单${J}剧本创作依据）" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6">${esc(e.summary || '')}</textarea>
+      </div>`;
+
+    const render = () => {
+      let body = `
+        <div style="margin-bottom:18px">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">创作方向</label>
+          <div style="font-size:11px;color:var(--text-tertiary,#888);line-height:1.6;margin-bottom:7px">想要怎样的故事、基调、人物走向。生成蓝图时会遵循。</div>
+          <textarea data-field="guide" rows="4" placeholder="比如：一个权谋与成长交织的群像剧，明线夺嫡、暗线复仇，基调厚重……" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:11px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6">${esc(draft.guide || '')}</textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:12px;color:var(--text-secondary)">
+          <span>上映年份</span>
+          <input data-field="year" type="number" value="${esc(String(draft.year || ''))}" placeholder="年份" style="width:72px;box-sizing:border-box;border:1px solid var(--border);border-radius:7px;padding:5px 8px;font-size:12px;color:var(--text);background:var(--bg-secondary)">
+          <span style="margin-left:6px">集数</span>
+          <input data-field="episodes" type="number" value="${esc(String(draft.episodes || 12))}" placeholder="集数" style="width:64px;box-sizing:border-box;border:1px solid var(--border);border-radius:7px;padding:5px 8px;font-size:12px;color:var(--text);background:var(--bg-secondary)">
+          <span>${J}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:18px;font-size:12px;color:var(--text-secondary)">
+          <span>每${J}时长</span>
+          <input data-field="duration" type="number" value="${esc(String(draft.duration || ''))}" placeholder="分钟" style="width:64px;box-sizing:border-box;border:1px solid var(--border);border-radius:7px;padding:5px 8px;font-size:12px;color:var(--text);background:var(--bg-secondary)">
+          <span>分钟</span>
+        </div>`;
+
+      if (!draft.hasBp) {
+        body += `
+          <div style="text-align:center;padding:24px 16px;border:1px dashed var(--border);border-radius:12px">
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:14px">填好创作方向和集数，点下面生成蓝图。生成后总纲、明暗线、人物、分${J}大纲都可逐条编辑，再逐${J}创作剧本。</div>
+            <button class="veb-act" data-act="gen" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成蓝图</button>
+          </div>`;
+      } else {
+        body += `<div style="height:1px;background:var(--border);margin:6px 0 16px"></div>`;
+        body += fld(isAnime ? '美术风格' : '气质风格', 'style', 4, '整部的基调、节奏、视听气质');
+        body += fld('明线', 'mainline', 4, '主角的核心动力、目标、出发点');
+        body += `<div style="font-size:13px;font-weight:700;color:var(--accent);margin:8px 0 10px">暗线</div>`;
+        body += fld('隐藏真相', 'dlTruth', 4, '幕后推手、各方博弈');
+        body += fld('揭示节奏', 'dlPace', 3, '何时埋线、何时露线索、何时揭晓');
+        body += `<div style="font-size:13px;font-weight:700;color:var(--accent);margin:8px 0 10px">故事结构</div>`;
+        body += draft.structure.map((s, i) => structCard(s, i)).join('');
+        body += `<button class="veb-act" data-act="add-struct" style="width:100%;border:1px dashed var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:12px;padding:9px 0;cursor:pointer;margin-bottom:18px">+ 添加阶段</button>`;
+        body += `<div style="font-size:13px;font-weight:700;color:var(--accent);margin:8px 0 10px">主角</div>`;
+        body += draft.protagonist.map((c, i) => charCard(c, i, 'protagonist')).join('');
+        body += `<button class="veb-act" data-act="add-char" data-grp="protagonist" style="width:100%;border:1px dashed var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:12px;padding:9px 0;cursor:pointer;margin-bottom:18px">+ 添加主角</button>`;
+        body += `<div style="font-size:13px;font-weight:700;color:var(--accent);margin:8px 0 10px">配角/反派</div>`;
+        body += draft.supporting.map((c, i) => charCard(c, i, 'supporting')).join('');
+        body += `<button class="veb-act" data-act="add-char" data-grp="supporting" style="width:100%;border:1px dashed var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:12px;padding:9px 0;cursor:pointer;margin-bottom:18px">+ 添加配角</button>`;
+        body += `<div style="font-size:13px;font-weight:700;color:var(--accent);margin:8px 0 10px">分${J}大纲（共 ${draft.epList.length} ${J}）</div>`;
+        body += draft.epList.map((e, i) => epCard(e, i)).join('');
+        body += `<button class="veb-act" data-act="add-ep" style="width:100%;border:1px dashed var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:12px;padding:9px 0;cursor:pointer;margin-bottom:18px">+ 添加一${J}</button>`;
+        body += `<div style="text-align:center;padding:4px 0 8px"><button class="veb-act" data-act="gen" style="border:1px solid var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:12px;padding:8px 20px;cursor:pointer">按当前方向重新生成整份蓝图</button></div>`;
+        body += `<div style="font-size:11px;color:var(--text-tertiary,#888);text-align:center;line-height:1.6;margin-top:8px">提示：改了分${J}后，去剧集列表逐${J}生成/编辑剧本。已生成的${J}不会自动同步蓝图改动。</div>`;
+
+        // 进组拍摄区块（仅蓝图已生成时显示）
+        body += `<div style="height:1px;background:var(--border);margin:18px 0 14px"></div>`;
+        body += `<div style="font-size:13px;font-weight:700;color:var(--accent);margin:0 0 10px">进组${W.act}</div>`;
+        if (work.shootChainId) {
+          // 已生成拍摄链
+          const done = !!work.shootDone;
+          const prog = _videoShootChainProgress(work.shootChainId);
+          const progLine = prog.total > 0
+            ? `已完成 <span style="color:var(--accent);font-weight:600">${prog.done}/${prog.total}</span> 个剧情节点。`
+            : `剧情线节点尚未就绪。`;
+          body += `
+            <div style="border:1px solid var(--border);border-radius:12px;padding:14px 14px">
+              <div style="font-size:12px;color:var(--text-secondary);line-height:1.7">
+                ${done
+                  ? `这部作品已${W.wrap}，${W.period}剧情线已完成。现在可以去剧集列表页的设置里申请${W.apply}。`
+                  : `已生成${W.period}剧情线，事件已加入当前对话的事件链。${progLine} 在主线里推进剧情，也可在「对话设置 → 事件配置」里续写更多节点。所有节点完成后，去<span style="color:var(--accent)">剧集列表页右上角设置</span>里确认${W.wrap}。`}
+              </div>
+              <div style="font-size:11px;color:var(--text-tertiary,#888);line-height:1.6;margin-top:8px">可在「对话设置 → 事件配置」里查看/管理/续写这条剧情线的所有事件。</div>
+            </div>`;
+        } else if (shootIdentity == null) {
+          // 判定中
+          body += `<div style="text-align:center;padding:16px;border:1px dashed var(--border);border-radius:12px;font-size:12px;color:var(--text-secondary)">正在确认你的参演身份…</div>`;
+        } else if (shootIdentity) {
+          // 参演了
+          body += `
+            <div style="border:1px solid var(--border);border-radius:12px;padding:16px 14px;text-align:center">
+              <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:6px">你将以 <span style="color:var(--accent);font-weight:600">${esc(shootIdentity)}</span> 的身份进组${W.act}。</div>
+              <div style="font-size:11px;color:var(--text-tertiary,#888);line-height:1.6;margin-bottom:14px">生成后会以这部作品为背景，在主线里展开一条${W.period}剧情线（进组、对手戏、片场日常、突发状况……）。${W.period}期间将暂时无法申请${W.apply}，走到${W.wrap}后解锁。</div>
+              <button class="veb-act" data-act="gen-shoot" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成${W.period}剧情线</button>
+            </div>`;
+        } else {
+          // 未参演（staff 里没有玩家面具）
+          body += `
+            <div style="border:1px dashed var(--border);border-radius:12px;padding:16px 14px;font-size:12px;color:var(--text-secondary);line-height:1.7">
+              你没有参与这部作品的制作。如果想亲自进组${W.act}，回到制作流程，把自己（你的面具）选进${isAnime ? '监督 / 系列构成 / 作画 / CV' : '导演 / 编剧 / 主演'}等职位，再回来就能生成${W.period}剧情线了。
+            </div>`;
+        }
+      }
+
+      overlay.innerHTML = `
+        ${_phoneStatusBarHtml()}
+        <div style="display:flex;align-items:center;padding:4px 16px 8px;flex-shrink:0;color:var(--text)">
+          <button id="veb-back" class="phone-nav-btn">${_uiIcon('back', 18)}</button>
+          <span style="font-weight:750;font-size:15px;flex:1;text-align:center;letter-spacing:.03em">编辑蓝图</span>
+          <button id="veb-save" style="flex-shrink:0;border:none;background:none;color:var(--accent);font-size:14px;font-weight:600;cursor:pointer;padding:4px 8px">保存</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:16px 16px 32px">${body}</div>`;
+
+      overlay.querySelector('#veb-back').onclick = back;
+      overlay.querySelector('#veb-save').onclick = async () => { await syncToWork(); UI.showToast('已保存', 1200); };
+    };
+
+    // 输入实时写 draft
+    overlay.addEventListener('input', (e) => {
+      const el = e.target;
+      const f = el.getAttribute && el.getAttribute('data-field');
+      if (f) { draft[f] = el.value; return; }
+      const sti = el.getAttribute && el.getAttribute('data-sti');
+      if (sti != null && draft.structure[+sti]) { draft.structure[+sti][el.getAttribute('data-key')] = el.value; return; }
+      const chi = el.getAttribute && el.getAttribute('data-chi');
+      if (chi != null) { const grp = el.getAttribute('data-grp'); const arr = draft[grp]; if (arr && arr[+chi]) arr[+chi][el.getAttribute('data-key')] = el.value; return; }
+      const epi = el.getAttribute && el.getAttribute('data-epi');
+      if (epi != null && draft.epList[+epi]) { draft.epList[+epi][el.getAttribute('data-key')] = el.value; return; }
+    });
+    // 结构性操作
+    overlay.addEventListener('click', (e) => {
+      const btn = e.target.closest && e.target.closest('.veb-act');
+      if (!btn) return;
+      const act = btn.getAttribute('data-act');
+      if (act === 'gen') { doGen(); return; }
+      if (act === 'add-struct') { draft.structure.push({ phase: '', episodeRange: '', summary: '' }); render(); return; }
+      if (act === 'del-struct') { draft.structure.splice(+btn.getAttribute('data-i'), 1); render(); return; }
+      if (act === 'add-char') { const grp = btn.getAttribute('data-grp'); draft[grp].push({ name: '' }); render(); return; }
+      if (act === 'del-char') { const grp = btn.getAttribute('data-grp'); draft[grp].splice(+btn.getAttribute('data-i'), 1); render(); return; }
+      if (act === 'add-ep') { draft.epList.push({ title: '', summary: '' }); render(); return; }
+      if (act === 'del-ep') { draft.epList.splice(+btn.getAttribute('data-i'), 1); render(); return; }
+      if (act === 'gen-shoot') { doGenShoot(); return; }
+    });
+
+    // 生成拍摄/制作剧情线
+    const doGenShoot = async () => {
+      if (work.shootChainId) { UI.showToast('已生成过剧情线', 1500); return; }
+      if (!shootIdentity) { UI.showToast('未参演，无法生成', 1500); return; }
+      const opt = await _videoShootGenDialog(W.period, false);
+      if (!opt) return;
+      await syncToWork();
+      showLoading(`正在生成${W.period}剧情线…`);
+      let ok = false;
+      try { ok = await _videoGenShootChain(work, shootIdentity, opt.count, opt.direction); } catch (e) { console.warn('[拍摄链]', e); }
+      if (ok) {
+        UI.showToast(`${W.period}剧情线已生成，去主线里推进吧`, 2600);
+      } else {
+        UI.showToast('生成失败，请重试', 1700);
+      }
+      render();
+    };
+
+    // 异步判定参演身份，算完刷新进组区块
+    const resolveIdentity = async () => {
+      try { shootIdentity = await _videoGetPlayShootIdentity(work); }
+      catch (_) { shootIdentity = ''; }
+      shootReady = true;
+      render();
+    };
+
+    render();
+    // 蓝图已生成、且还没拍摄链时，才需要判定参演身份
+    if (work.blueprint && !work.shootChainId) resolveIdentity();
+  }
+
+  // ===== 参演拍摄事件链（演员/主创参与作品制作的剧情线）=====
+
+  // 判定玩家面具是否在作品 staff 里，返回参演身份描述（如「主演·饰演林夏」「监督」），不在则返回 ''。
+  // staff 比对范围：director / screenwriter / artDirector / cast（按名字精确比对面具名/别名）。
+  async function _videoGetPlayShootIdentity(work) {
+    if (!work) return '';
+    let mask = null;
+    try { mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null; } catch (_) {}
+    if (!mask || !mask.name) return '';
+    const isAnime = work.kind === 'anime';
+    // 面具的可匹配名字集合（名字 + 别名拆分）
+    const names = new Set();
+    const addName = (s) => { const t = String(s || '').trim(); if (t) names.add(t); };
+    addName(mask.name);
+    (String(mask.aliases || '').split(/[、,，\s]+/)).forEach(addName);
+    const hit = (v) => { const t = String(v || '').trim(); return t && names.has(t); };
+    // 单人岗
+    if (hit(work.director)) return isAnime ? '监督' : (work.kind === 'tv' ? '导演' : '导演');
+    if (hit(work.screenwriter)) return isAnime ? '系列构成/脚本' : '编剧';
+    if (isAnime && hit(work.artDirector)) return '作画/美术担当';
+    // 主演/CV：在 cast 数组里
+    const cast = Array.isArray(work.cast) ? work.cast : [];
+    for (const c of cast) {
+      if (hit(c)) {
+        // 尝试从蓝图人物表里找该演员饰演的角色名
+        let role = '';
+        try { role = _videoFindRoleByActor(work, String(c).trim()); } catch (_) {}
+        const post = isAnime ? 'CV' : '主演';
+        return role ? `${post}·${isAnime ? '配音' : '饰演'}${role}` : post;
+      }
+    }
+    return '';
+  }
+
+  // 从作品蓝图/剧本人物表里，按演员名反查其饰演的角色名（找不到返回 ''）。
+  function _videoFindRoleByActor(work, actorName) {
+    const an = String(actorName || '').trim();
+    if (!an) return '';
+    // 电影：script.characters[{name, actor}]
+    const sc = (work.script && typeof work.script === 'object') ? work.script : null;
+    if (sc && Array.isArray(sc.characters)) {
+      const f = sc.characters.find(c => c && String(c.actor || '').trim() === an);
+      if (f) return String(f.name || '').trim();
+    }
+    // 剧集/动漫：blueprint.characters.{protagonist,supporting}[{name, actor}]
+    const bp = (work.blueprint && typeof work.blueprint === 'object') ? work.blueprint : null;
+    if (bp && bp.characters && typeof bp.characters === 'object') {
+      const all = [].concat(Array.isArray(bp.characters.protagonist) ? bp.characters.protagonist : [],
+                            Array.isArray(bp.characters.supporting) ? bp.characters.supporting : []);
+      const f = all.find(c => c && String(c.actor || '').trim() === an);
+      if (f) return String(f.name || '').trim();
+    }
+    return '';
+  }
+
+  // 把作品的完整蓝图/剧本格式化成喂给拍摄链生成器的文本块。
+  function _videoBuildWorkBlueprintText(work) {
+    if (!work) return '';
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const isAnime = work.kind === 'anime';
+    const parts = [];
+    parts.push(`作品名：${esc(work.title) || '未命名'}`);
+    parts.push(`类型：${esc(work.genre) || '剧情'}${Array.isArray(work.category) && work.category.length ? '（' + work.category.filter(Boolean).join('、') + '）' : ''}`);
+    if (esc(work.intro)) parts.push(`简介：${esc(work.intro)}`);
+    // 职员
+    const staff = [];
+    if (esc(work.director)) staff.push(`${isAnime ? '监督' : '导演'}：${esc(work.director)}`);
+    if (esc(work.screenwriter)) staff.push(`${isAnime ? '系列构成' : '编剧'}：${esc(work.screenwriter)}`);
+    if (isAnime && esc(work.artDirector)) staff.push(`作画：${esc(work.artDirector)}`);
+    if (isAnime && esc(work.studio)) staff.push(`制作公司：${esc(work.studio)}`);
+    if (Array.isArray(work.cast) && work.cast.length) staff.push(`${isAnime ? 'CV' : '主演'}：${work.cast.join('、')}`);
+    if (staff.length) parts.push('职员表：\n' + staff.map(s => '  ' + s).join('\n'));
+
+    // 电影：script
+    const sc = (work.script && typeof work.script === 'object') ? work.script : null;
+    if (sc) {
+      if (esc(sc.synopsis)) parts.push(`剧情梗概：\n${esc(sc.synopsis)}`);
+      if (esc(sc.style)) parts.push(`气质风格：${esc(sc.style)}`);
+      if (Array.isArray(sc.characters) && sc.characters.length) {
+        const cl = sc.characters.map(c => {
+          const bits = [esc(c.name)];
+          if (esc(c.actor)) bits.push(`饰演者${esc(c.actor)}`);
+          if (esc(c.identity)) bits.push(esc(c.identity));
+          if (esc(c.personality)) bits.push(esc(c.personality));
+          if (esc(c.goal)) bits.push('目标：' + esc(c.goal));
+          if (esc(c.relation)) bits.push('关系：' + esc(c.relation));
+          return '  ' + bits.filter(Boolean).join('｜');
+        }).join('\n');
+        parts.push('角色：\n' + cl);
+      }
+    }
+
+    // 剧集/动漫：blueprint
+    const bp = (work.blueprint && typeof work.blueprint === 'object') ? work.blueprint : null;
+    if (bp) {
+      if (esc(bp.style)) parts.push(`${isAnime ? '美术风格' : '气质风格'}：${esc(bp.style)}`);
+      if (esc(bp.mainline)) parts.push(`明线：${esc(bp.mainline)}`);
+      if (bp.darkline && typeof bp.darkline === 'object') {
+        const dl = [];
+        if (esc(bp.darkline.truth)) dl.push('隐藏真相：' + esc(bp.darkline.truth));
+        if (esc(bp.darkline.revealPace)) dl.push('揭示节奏：' + esc(bp.darkline.revealPace));
+        if (dl.length) parts.push('暗线：\n  ' + dl.join('\n  '));
+      }
+      if (Array.isArray(bp.structure) && bp.structure.length) {
+        const st = bp.structure.map(s => `  ${esc(s.phase)}（${esc(s.episodeRange)}）：${esc(s.summary)}`).filter(Boolean).join('\n');
+        if (st) parts.push('故事结构：\n' + st);
+      }
+      if (bp.characters && typeof bp.characters === 'object') {
+        const fmt = (c) => {
+          const bits = [esc(c.name)];
+          if (esc(c.actor)) bits.push(`${isAnime ? 'CV' : '饰演者'}${esc(c.actor)}`);
+          if (esc(c.identity)) bits.push(esc(c.identity));
+          if (esc(c.personality)) bits.push(esc(c.personality));
+          if (esc(c.desire)) bits.push('目标：' + esc(c.desire));
+          if (esc(c.arc)) bits.push('弧光：' + esc(c.arc));
+          if (esc(c.position)) bits.push(esc(c.position));
+          return '  ' + bits.filter(Boolean).join('｜');
+        };
+        const pro = Array.isArray(bp.characters.protagonist) ? bp.characters.protagonist.map(fmt).join('\n') : '';
+        const sup = Array.isArray(bp.characters.supporting) ? bp.characters.supporting.map(fmt).join('\n') : '';
+        if (pro) parts.push('主角：\n' + pro);
+        if (sup) parts.push('配角/反派：\n' + sup);
+      }
+      if (Array.isArray(bp.episodes) && bp.episodes.length) {
+        const J = isAnime ? '话' : '集';
+        const ep = bp.episodes.map(e => `  第${e.idx}${J}《${esc(e.title)}》：${esc(e.summary)}`).filter(Boolean).join('\n');
+        if (ep) parts.push(`分${J}大纲：\n` + ep);
+      }
+    }
+    return parts.join('\n\n');
+  }
+
+  // 拍摄链生成弹窗：让玩家填「生成几个事件 + 推进方向」。
+  // 返回 Promise<{count, direction} | null>，取消返回 null。periodLabel 用于文案（拍摄期/制作期）。
+  function _videoShootGenDialog(periodLabel, isAppend) {
+    return new Promise((resolve) => {
+      const _pl = periodLabel || '拍摄期';
+      const title = isAppend ? `续写${_pl}剧情` : `生成${_pl}剧情`;
+      const hint = isAppend
+        ? `会接着当前剧情往后写，自动带上这部作品的剧本资料。想推到哪、发生什么由你决定。`
+        : `生成一段${_pl}开篇剧情（不会一次写到杀青/完成）。后续可以一边玩一边在事件管理里续写，何时完成由你决定。`;
+      const mask = document.createElement('div');
+      mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+      mask.innerHTML = `
+        <div style="background:var(--bg,#fff);border-radius:16px;padding:20px;width:100%;max-width:380px;box-sizing:border-box" onclick="event.stopPropagation()">
+          <h3 style="margin:0 0 6px 0;font-size:16px;color:var(--accent)">${title}</h3>
+          <div style="font-size:11px;color:var(--text-secondary,#888);line-height:1.6;margin-bottom:14px">${hint}</div>
+          <label style="font-size:12px;color:var(--text-secondary,#888);display:block;margin-bottom:4px">推进方向（可选）</label>
+          <textarea id="vsg-dir" rows="3" placeholder="例如：进组初期和挑剔的导演磨合；和对手演员的第一场重头戏" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border,#ccc);background:var(--bg-secondary,#f5f5f5);color:var(--text,#000);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+          <label style="font-size:12px;color:var(--text-secondary,#888);display:block;margin:12px 0 4px">生成事件数（1-10）</label>
+          <input type="number" id="vsg-count" value="5" min="1" max="10" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border,#ccc);background:var(--bg-secondary,#f5f5f5);color:var(--text,#000);font-size:14px;box-sizing:border-box">
+          <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+            <button id="vsg-cancel" style="padding:8px 14px;border:1px solid var(--border,#ccc);border-radius:8px;background:transparent;color:var(--text,#000);font-size:13px;cursor:pointer">取消</button>
+            <button id="vsg-ok" style="padding:8px 14px;border:none;border-radius:8px;background:var(--accent,#e8772e);color:#fff;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          </div>
+        </div>`;
+      mask.addEventListener('click', (e) => { if (e.target === mask) { document.body.removeChild(mask); resolve(null); } });
+      mask.querySelector('#vsg-cancel').onclick = () => { document.body.removeChild(mask); resolve(null); };
+      mask.querySelector('#vsg-ok').onclick = () => {
+        const count = Math.max(1, Math.min(10, parseInt(mask.querySelector('#vsg-count').value) || 5));
+        const direction = (mask.querySelector('#vsg-dir').value || '').trim();
+        document.body.removeChild(mask);
+        resolve({ count, direction });
+      };
+      document.body.appendChild(mask);
+    });
+  }
+
+  // 统计某条拍摄链的进度：返回 { total, done, allDone }。
+  // 数据源是当前对话的 convEvents（按 chainId 匹配），状态读 conv.eventStates。
+  function _videoShootChainProgress(chainId) {
+    const res = { total: 0, done: 0, allDone: false };
+    if (!chainId) return res;
+    try {
+      const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(cv => cv.id === Conversations.getCurrent()) : null;
+      if (!conv || !Array.isArray(conv.convEvents)) return res;
+      const states = conv.eventStates || {};
+      const list = conv.convEvents.filter(e => e && e.chainId === chainId);
+      res.total = list.length;
+      res.done = list.filter(e => states[e.id] === 'done').length;
+      res.allDone = res.total > 0 && res.done === res.total;
+    } catch (_) {}
+    return res;
+  }
+
+  // 玩家手动确认作品制作完成 → 杀青/制作完成，开放申请上映/开播。
+  // 前置：拍摄链全部 done。二次确认后置 work.shootDone=true 并存盘。返回是否成功确认。
+  async function _videoConfirmShootDone(work, onAfter) {
+    if (!work || !work.shootChainId) return false;
+    const prog = _videoShootChainProgress(work.shootChainId);
+    if (!prog.allDone) {
+      UI.showToast('还有剧情线节点未完成，无法确认', 2000);
+      return false;
+    }
+    const isAnime = work.kind === 'anime';
+    const wrapWord = isAnime ? '制作完成' : (work.kind === 'movie' ? '杀青' : '杀青');
+    const applyWord = isAnime ? '开播' : (work.kind === 'movie' ? '上映' : '开播');
+    const title = work.title || '本作';
+    let ok = false;
+    try {
+      ok = await UI.showConfirm(`确认《${title}》${wrapWord}？`, `确认后这部作品将标记为${wrapWord}，可以申请${applyWord}。此操作不可撤销。`);
+    } catch (_) { ok = false; }
+    if (!ok) return false;
+    work.shootDone = true;
+    try { await _savePhoneData(); } catch (_) {}
+    UI.showToast(`《${title}》已${wrapWord}，可申请${applyWord}了`, 2400);
+    if (typeof onAfter === 'function') { try { onAfter(); } catch (_) {} }
+    return true;
+  }
+
+  // Phase 2：给「事件管理续写」用的拍摄链上下文接口。
+  // 入参 workId（拍摄链事件上存的 shootWorkId），返回 { blueprintText, sysPromptExtra } 或 null。
+  // - blueprintText：作品蓝图文本（背景壳子），拼进续写的 user 消息
+  // - sysPromptExtra：拍摄链专属的舞台/身份/写法说明，追加到通用 appendSys 之后，
+  //   让续写的事件保持"剧组拍摄期"的舞台定位，而不是退回普通主线续写。
+  function getShootChainGenContext(workId) {
+    try {
+      if (!workId) return null;
+      const pd = _getPhoneDataSync ? _getPhoneDataSync() : null;
+      const works = (pd && Array.isArray(pd.videoWorks)) ? pd.videoWorks : null;
+      if (!works) return null;
+      const work = works.find(w => w && w.id === workId);
+      if (!work || !work.shootChainId) return null;
+
+      const isAnime = work.kind === 'anime';
+      const W = isAnime
+        ? { act: '制作', noun: '制作', period: '制作期', worker: '动画从业者', stage: '制作组/工作室/制作期', wrap: '制作完成' }
+        : { act: '拍摄', noun: '拍摄', period: '拍摄期', worker: '影视从业者', stage: '片场/剧组/拍摄期', wrap: '杀青' };
+      const identity = work.shootIdentity || '主创';
+      const bpText = _videoBuildWorkBlueprintText(work);
+
+      const sysPromptExtra = `\n\n【重要：这是一条"${W.period}剧情线"的续写】\n` +
+        `- {{user}} 是一名${W.worker}，正以「${identity}」的身份参与《${work.title || '本作'}》的${W.noun}。\n` +
+        `- 这条事件链的舞台是"${W.stage}"，演绎的是 {{user}} ${W.act}这部作品期间、剧组内外发生的故事（进组、对手戏、片场日常、人际关系、突发状况、宣传、舆论等），不是复刻作品本身的虚构剧情。作品蓝图只是背景壳子。\n` +
+        `- 续写要紧扣 {{user}} 的「${identity}」身份，承接原链条已经推进到的${W.period}处境，自然往后推进剧情，时间跨度要小、连贯。\n` +
+        `- 不要写到"${W.wrap}"或安排收尾——${W.act}何时结束由玩家决定，你只负责自然往后续写。\n` +
+        `- content 和 finishRule 都是写给运行时 AI 看的剧情指令，全程第三人称客观叙述，用"{{user}}"指代玩家，绝对不要用"你"；只写外部环境、他人反应、客观状况和压力，不写死 {{user}} 的反应、动作、台词，也不发号施令。\n\n` +
+        `## 作品蓝图（背景壳子，可从中取关键剧情、走向、角色细节）\n${bpText}`;
+
+      return { blueprintText: bpText, sysPromptExtra: sysPromptExtra };
+    } catch (e) { console.warn('[拍摄链] getShootChainGenContext failed', e); return null; }
+  }
+
+  // 运行时背景卡：给「跑主线的 AI」用，让它知道 {{user}} 正在参与的是哪部作品。
+  // 入参 workId（拍摄链事件上存的 shootWorkId），返回一段精简背景文本 或 null。
+  // 内容：作品名 + 类型 + 完整简介 + 主要 staff + 玩家身份。不含完整蓝图（那个太长，是给生成器的）。
+  // 杀青/制作完成后（work.shootDone）返回 null —— 剧情已离开拍摄期，背景卡停止注入。
+  function getShootChainBriefForRuntime(workId) {
+    try {
+      if (!workId) return null;
+      const pd = _getPhoneDataSync ? _getPhoneDataSync() : null;
+      const works = (pd && Array.isArray(pd.videoWorks)) ? pd.videoWorks : null;
+      if (!works) return null;
+      const work = works.find(w => w && w.id === workId);
+      if (!work || !work.shootChainId) return null;
+      if (work.shootDone) return null; // 杀青后不再注入
+
+      const esc = (s) => String(s == null ? '' : s).trim();
+      const isAnime = work.kind === 'anime';
+      const kindWord = isAnime ? '动画' : (work.kind === 'movie' ? '电影' : '电视剧');
+      const periodWord = isAnime ? '制作期' : '拍摄期';
+      const identity = work.shootIdentity || '主创';
+
+      const lines = [];
+      lines.push(`作品名：《${esc(work.title) || '未命名'}》`);
+      lines.push(`类型：${kindWord}${esc(work.genre) ? '·' + esc(work.genre) : ''}${Array.isArray(work.category) && work.category.length ? '（' + work.category.filter(Boolean).join('、') + '）' : ''}`);
+      if (esc(work.intro)) lines.push(`简介：${esc(work.intro)}`);
+      // 主要 staff
+      const staff = [];
+      if (esc(work.director)) staff.push(`${isAnime ? '监督' : '导演'}：${esc(work.director)}`);
+      if (esc(work.screenwriter)) staff.push(`${isAnime ? '系列构成' : '编剧'}：${esc(work.screenwriter)}`);
+      if (isAnime && esc(work.studio)) staff.push(`制作公司：${esc(work.studio)}`);
+      if (Array.isArray(work.cast) && work.cast.length) staff.push(`${isAnime ? 'CV' : '主演'}：${work.cast.filter(Boolean).join('、')}`);
+      if (staff.length) lines.push(`主要${isAnime ? '制作人员' : '主创'}：${staff.join('；')}`);
+      lines.push(`{{user}} 在本作中的身份：${identity}`);
+
+      return `【拍摄期作品背景】\n以下是 {{user}} 当前正在参与${periodWord}的作品背景，仅供你理解当前剧情所处的语境（{{user}} 正在${isAnime ? '制作' : '拍摄'}这部${kindWord}）。请把它作为背景事实自然融入剧情，不要生硬复述给玩家，也不要把它当成正在演绎的虚构剧情本身。\n${lines.join('\n')}`;
+    } catch (e) { console.warn('[拍摄链] getShootChainBriefForRuntime failed', e); return null; }
+  }
+
+  // 生成「拍摄/制作剧情线」事件链（开篇模式），写入 conv.convEvents，首条直接置 active，标记 work.shootChainId。
+  // identity：玩家在 staff 里的参演身份（如「主演·饰演林夏」）。
+  // count：本次生成的事件数（1-10，默认5）；direction：用户填写的推进方向（可选）。
+  // 注意：开篇模式不预设杀青/制作完成，不写收尾事件，后续由玩家在事件管理里续写、并在手机里手动确认完成。返回 true/false。
+  async function _videoGenShootChain(work, identity, count, direction) {
+    if (!work) return false;
+    const _count = Math.max(1, Math.min(10, parseInt(count) || 5));
+    const _direction = String(direction || '').trim();
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return false; }
+
+    const isAnime = work.kind === 'anime';
+    // kind 措辞
+    const W = isAnime
+      ? { act: '制作', noun: '制作', period: '制作期', worker: '动画从业者', stage: '制作组/工作室/制作期', wrap: '制作完成' }
+      : { act: '拍摄', noun: '拍摄', period: '拍摄期', worker: '影视从业者', stage: '片场/剧组/拍摄期', wrap: '杀青' };
+
+    const bpText = _videoBuildWorkBlueprintText(work);
+
+    // 主线最近剧情（让首条能自然承接）
+    let recentMessages = '';
+    let maskName = '{{user}}';
+    try {
+      const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+      if (mask && mask.name) maskName = mask.name;
+    } catch (_) {}
+    try {
+      const msgs = (typeof Chat !== 'undefined' && Chat.getMessages) ? (Chat.getMessages() || []) : [];
+      const recent = msgs.filter(m => m.role === 'user' || m.role === 'assistant').slice(-10);
+      if (recent.length) {
+        recentMessages = recent.map(m => {
+          const role = m.role === 'user' ? maskName : 'AI';
+          const text = String(m.content || '').replace(/```[\s\S]*?```/g, '').slice(0, 500);
+          return `[${role}] ${text}`;
+        }).join('\n\n');
+      }
+    } catch (_) {}
+
+    const sys = `你是一个文字冒险游戏的当前主线事件链设计师。{{user}} 是一名${W.worker}，即将以特定身份参与一部作品的${W.noun}。请根据当前主线剧情、这部作品的设定和玩家角色，生成一条围绕"${W.period}"展开的连续剧情事件链。
+
+这些事件属于"对话级事件链"，只服务于当前这一次对话和当前主线。它应当像一段主线骨架，用事件 A → 事件 B → 事件 C 的方式推动当前剧情继续发展。
+
+【这条事件链的舞台】
+- 舞台是"${W.stage}"，演绎的是 {{user}} ${W.act}这部作品期间、剧组内外发生的故事（进组、对手戏、片场日常、人际关系、突发状况等），不是复刻作品本身的虚构剧情。
+- 作品的剧本/蓝图只是背景壳子：根据 {{user}} 的身份（${identity || '主创'}）产生该身份在${W.period}可能遇到的事。例如导演面试演员、和资方接触；编剧临时改本、讨论人设；演员揣摩角色、和对手演员搭戏；作画遇到拖稿、调人设。也可有路透、宣传、换角、绯闻、舆论等，不拘泥于以上，参考主线和 {{user}} 设定灵活安排。
+- 重点是让 {{user}} 与剧组/制作组的人产生联系，经历有张力、符合真实娱乐圈${W.noun}的剧情。
+
+【{{user}} 的身份】
+{{user}} 在这部作品里担任：${identity || '主创'}
+（事件链要紧扣这个身份来设计 ta 在剧组里的情节）
+
+【作品蓝图（背景壳子，可从中取关键剧情、走向、角色细节）】
+${bpText}
+${_direction ? `\n【本次生成的推进方向（用户指定，请重点围绕它展开）】\n${_direction}\n` : ''}
+事件链定位：
+- 事件链必须从当前主线自然延续出来，承接最近剧情中 {{user}} 走到的处境。
+- 第一个事件要顺接当前主线，自然地把 {{user}} 引向${W.period}的开端，不要凭空跳到几个月后。第一个事件会被系统直接激活，所以它的开头要能顺接当前主线，不要写成需要某个条件才触发的样子。
+
+【重要：这是一段开篇，不是完整流程】
+- 你只需要生成 ${_count} 个事件，表现${W.period}**初期**自然展开的剧情。
+- 不要试图在这条链里覆盖整个${W.period}，更不要写到"${W.wrap}"或任何收尾。${W.act}是否结束、何时结束，由玩家后续自行决定，你不需要安排${W.wrap}。
+- 事件之间紧贴推进，时间跨度要小、连贯自然，避免相邻事件相隔很久导致剧情跳跃。后续剧情玩家会让你续写。
+
+【事件节奏】
+- 每个事件开头先以合理、自然的情节从上一个事件过渡过来，防止生硬转折和无视时间流逝的突发情况。
+- 每个事件中途聚焦一个核心情节（本节点的重头戏）。
+- 每个事件尾部合理收场，与 finishRule 呼应，让运行时 AI 能明确判断本事件是否结束。
+- 事件禁止写死 {{user}} 的反应，事件链是为 {{user}} 搭建舞台——外部环境、他人反应、客观状况，给 {{user}} 留足发挥余地。
+
+【字段写法】
+- content（事件内容）和 finishRule（结束判断）都是写给"运行时 AI"看的剧情指令，不是写给玩家看的旁白。必须全程用第三人称客观叙述：用"{{user}}"指代玩家，绝对不要用"你"来称呼玩家。
+- content：写本事件的"过渡铺垫 + 核心情节舞台 + 可能的收场走向"。只写外部环境、他人（导演、对手演员、其他主创等）的反应、客观状况和压力，给 {{user}} 留发挥余地。不要写死 {{user}} 的反应、动作、台词，也不要发号施令（不要写"{{user}}必须……""导演会……"）。100-300 字。
+- finishRule：用第三人称写清本事件的核心情节推进到什么程度算结束，与 content 尾部收场呼应。
+
+字段格式要求：
+- keys 使用中文逗号或英文逗号分隔都可以，但不要换行。
+- completeKey 只能包含英文大写字母、数字、下划线，格式必须是 __EVENT_COMPLETE_XXXX__，每个事件唯一。
+- content 不要包含 completeKey。
+- 不要输出 Markdown、注释、解释。
+
+链式规则：
+- 事件按数组顺序组成一条严格的线性链，必须一个接一个推进，不能跳跃、不能并行。
+- keys（触发关键词）只用于把事件串成链：第一个事件的 keys 留空（它会被系统直接激活）；从第二个事件开始，keys 只能填上一个事件的 completeKey，禁止填入任何剧情词、场景词、人名等普通关键词——否则会导致多个事件被同时错误触发。
+- completeKey 是本事件的结束标记。只有当 finishRule 描述的结束条件在剧情里真正达成时，才应该输出它；事件刚开始、核心情节还没推进时绝对不要提前输出 completeKey。
+- 每个事件的 content 必须承接上一个事件完成后的局面。
+
+输出纯 JSON 对象，格式：
+{"chainName":"事件链名称","events":[{"name":"事件名称","keys":"关键词1,关键词2","completeKey":"__EVENT_COMPLETE_XXXX__","finishRule":"结束条件","content":"事件内容"}]}`;
+
+    const userMsg = `请为 {{user}}（${maskName}）以「${identity || '主创'}」身份参与《${work.title || '本作'}》的${W.noun}，生成 ${_count} 个事件，作为${W.period}剧情线的开篇（不要写到${W.wrap}）。${_direction ? '\n本次推进方向：' + _direction : ''}\n\n## 当前主线最近剧情\n${recentMessages || '（无）'}`;
+
+    let text = '';
+    try {
+      text = await _phoneTextWithRetry({
+        label: '拍摄剧情线', url, key, model,
+        temperature: 0.9, max_tokens: 12000,
+        messages: [{ role: 'system', content: sys }, { role: 'user', content: userMsg }]
+      });
+    } catch (e) { console.warn('[拍摄链]', e); return false; }
+
+    let c = (text || '').replace(/```json|```/g, '').trim();
+    const s = c.indexOf('{'); const e = c.lastIndexOf('}');
+    if (s >= 0 && e > s) c = c.slice(s, e + 1);
+    let parsed = null;
+    try { parsed = JSON.parse(c); } catch (_) { return false; }
+    const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.events) ? parsed.events : []);
+    if (!Array.isArray(arr) || !arr.length) return false;
+
+    // 写入对话级事件链
+    const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(cv => cv.id === Conversations.getCurrent()) : null;
+    if (!conv) { UI.showToast('找不到当前对话', 1800); return false; }
+    if (!Array.isArray(conv.convEvents)) conv.convEvents = [];
+    if (!conv.eventStates) conv.eventStates = {};
+
+    // 清理本作品的旧拍摄链：重新生成时，先把上一条链的事件和它们的状态全删掉，
+    // 否则旧链事件残留在 convEvents、旧 active 残留在 eventStates，会出现「幽灵 active 事件」永远清不掉。
+    if (work.shootChainId) {
+      const _oldIds = conv.convEvents.filter(e => e && e.chainId === work.shootChainId).map(e => e.id);
+      conv.convEvents = conv.convEvents.filter(e => !(e && e.chainId === work.shootChainId));
+      _oldIds.forEach(id => { try { delete conv.eventStates[id]; } catch (_) {} });
+    }
+    // 兜底防御：清掉所有「在 eventStates 里有状态、但已不在 convEvents 里」的幽灵 id（历史脏数据）。
+    try {
+      const _liveIds = new Set(conv.convEvents.map(e => e && e.id).filter(Boolean));
+      Object.keys(conv.eventStates).forEach(id => { if (!_liveIds.has(id)) delete conv.eventStates[id]; });
+    } catch (_) {}
+
+    const chainId = 'chain_shoot_' + Math.random().toString(36).slice(2, 8);
+    const chainName = (parsed.chainName || `《${work.title || '本作'}》${W.noun}剧情线`).slice(0, 40);
+    const newEvents = [];
+    let idx = 0;
+    for (const item of arr) {
+      if (!item || !item.name) continue;
+      const id = 'evt_' + Math.random().toString(36).slice(2, 10);
+      const completeKey = String(item.completeKey || ('__EVENT_COMPLETE_SHOOT' + idx + '__')).slice(0, 60);
+      newEvents.push({
+        id,
+        name: String(item.name || '').slice(0, 40),
+        keys: '', // 链式 keys 在下方统一重排（强制只含上一条 completeKey），不用 AI 给的
+        triggerType: 'keyword',
+        attrConditions: [],
+        completeKey,
+        finishRule: String(item.finishRule || '').slice(0, 300),
+        content: String(item.content || '').slice(0, 600),
+        triggerMode: 'event',
+        chainId,
+        chainName,
+        chainIndex: idx,
+        shootWorkId: work.id // 标记这是某部作品的拍摄链事件，供续写时识别并喂剧本资料
+      });
+      idx++;
+    }
+    if (!newEvents.length) return false;
+
+    // 强制链式正确：第一条无触发关键词（直接激活），从第二条起 keys 只放上一条的 completeKey。
+    // 防止 AI 在 keys 里塞普通剧情词导致多个事件被同时勾出来。
+    for (let i = 0; i < newEvents.length; i++) {
+      newEvents[i].keys = i === 0 ? '' : newEvents[i - 1].completeKey;
+    }
+
+    conv.convEvents.push(...newEvents);
+    // 首条直接激活，不靠关键词触发
+    conv.eventStates[newEvents[0].id] = 'active';
+    try { await Conversations.saveList(); } catch (_) {}
+
+    // 标记 work（开篇模式：不再预设 shootChainLastId，杀青/完成由玩家在手机里手动确认）
+    work.shootChainId = chainId;
+    work.shootDone = false;
+    work.shootIdentity = identity || '主创'; // 存参演身份，供事件管理续写时复用（Phase 2/3）
+    try { delete work.shootChainLastId; } catch (_) {}
+    try { await _savePhoneData(); } catch (_) {}
+
+    try { GameLog.log('info', `[拍摄链] 已为《${work.title}》生成${newEvents.length}个开篇事件，首条已激活`); } catch (_) {}
+    return true;
+  }
+
+  // 蓝图人物字段清洗（保留蓝图人物结构所有字段）
+  function _videoBpCharClean(c) {
+    const t = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+    const o = {
+      name: t(c.name, 24), actor: t(c.actor, 24), gender: t(c.gender, 8), age: t(c.age, 12),
+      identity: t(c.identity, 40), appearance: t(c.appearance, 80), personality: t(c.personality, 40),
+      desire: t(c.desire, 80)
+    };
+    if (c.arc != null) o.arc = t(c.arc, 100);
+    if (c.position != null) o.position = t(c.position, 40);
+    if (c.debut != null) o.debut = t(c.debut, 12);
+    return o;
+  }
+
+  // ===== 自制电视剧/动漫：编辑单集剧本工作台 =====
+  // 全屏 overlay：没该集剧本时引导生成（按蓝图本集大纲）；有剧本后 synopsis + 名场面逐块可编辑。
+  // 复用 _videoGenEpisode（按蓝图扩展）。仅自制剧集用。
+  function _videoEditEpisode(parentWork, idx) {
+    if (!parentWork || !parentWork.blueprint) { UI.showToast('请先生成蓝图', 1600); return; }
+    const esc = Utils.escapeHtml;
+    const isAnime = parentWork.kind === 'anime';
+    const J = isAnime ? '话' : '集';
+    const FX_OPTS = [['','无特效'],['blood','血溅'],['fire','火光'],['rain','下雨'],['snow','下雪'],['bokeh','柔光'],['sparkle','星光'],['firefly','萤火虫'],['memory','回忆'],['glitch','故障'],['scan','扫描'],['petal','花瓣'],['bubble','气泡'],['smoke','烟雾'],['glass','玻璃碎'],['hearts','爱心'],['spotlight','聚光'],['firework','烟花'],['ripple','水波'],['lightning','闪电'],['flash','白光'],['shake','抖动']];
+    const bpEps = Array.isArray(parentWork.blueprint.episodes) ? parentWork.blueprint.episodes : [];
+    const bpEp = bpEps.find(e => e && e.idx === idx) || { idx, title: '第' + idx + J, summary: '' };
+
+    const loadDraft = () => {
+      const unit = (parentWork._epScripts || {})[idx];
+      const sc = (unit && unit.script && typeof unit.script === 'object') ? unit.script : {};
+      return {
+        hasScript: !!(sc.synopsis || (Array.isArray(sc.scene) && sc.scene.length)),
+        synopsis: sc.synopsis || '',
+        scene: (Array.isArray(sc.scene) ? sc.scene : []).map(b => ({ ...b })),
+      };
+    };
+    let draft = loadDraft();
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:76;background:var(--bg);display:flex;flex-direction:column';
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+
+    const syncToWork = async () => {
+      if (!draft.hasScript) return;
+      if (!parentWork._epScripts || typeof parentWork._epScripts !== 'object') parentWork._epScripts = {};
+      const prevUnit = parentWork._epScripts[idx];
+      const scene = draft.scene.filter(b => (b.text || '').trim()).map(b => {
+        const type = b.type === 'line' ? 'line' : 'narration';
+        const o = { type, text: (b.text || '').trim().slice(0, type === 'line' ? 40 : 120) };
+        if (type === 'line') o.speaker = (b.speaker || '').trim().slice(0, 24);
+        const fx = (b.fx || '').trim();
+        if (fx) o.fx = fx;
+        return o;
+      });
+      parentWork._epScripts[idx] = {
+        idx,
+        epTitle: (prevUnit && prevUnit.epTitle) || bpEp.title || ('第' + idx + J),
+        script: { synopsis: (draft.synopsis || '').trim().slice(0, 700), scene },
+        reviews: (prevUnit && Array.isArray(prevUnit.reviews)) ? prevUnit.reviews : [],
+        danmu: (prevUnit && Array.isArray(prevUnit.danmu)) ? prevUnit.danmu : [],
+        generatedAt: (prevUnit && prevUnit.generatedAt) || Date.now()
+      };
+      await _savePhoneData();
+      _videoUnlockNextEpItem(idx);
+    };
+
+    const back = async () => {
+      await syncToWork();
+      overlay.remove();
+    };
+
+    const showLoading = (txt) => {
+      overlay.innerHTML = `
+        ${_phoneStatusBarHtml()}
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--text-secondary)">
+          <div style="width:34px;height:34px;border:3px solid color-mix(in srgb, var(--accent) 22%, transparent);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite"></div>
+          <div style="font-size:13px">${esc(txt || '正在生成…')}</div>
+        </div>`;
+    };
+
+    const doGen = async (hint) => {
+      await syncToWork();
+      showLoading(`正在生成第 ${idx} ${J}剧情…`);
+      let fresh = null;
+      try { fresh = await _videoGenEpisode(parentWork, idx, null, hint || ''); } catch (_) {}
+      if (fresh) {
+        draft = loadDraft();
+        UI.showToast('本' + J + '剧本已生成', 1400);
+      } else {
+        UI.showToast('生成失败，请重试', 1700);
+      }
+      render();
+    };
+
+    const sceneCard = (b, i) => {
+      const isLine = b.type === 'line';
+      return `
+        <div style="border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <select data-si="${i}" data-key="type" style="font-size:12px;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--text);background:var(--bg-secondary)">
+              <option value="narration" ${!isLine ? 'selected' : ''}>叙述</option>
+              <option value="line" ${isLine ? 'selected' : ''}>台词</option>
+            </select>
+            <button class="vee-act" data-act="del-scene" data-i="${i}" style="border:none;background:none;color:#e66;font-size:12px;cursor:pointer">删除</button>
+          </div>
+          ${isLine ? `<input data-si="${i}" data-key="speaker" value="${esc(b.speaker || '')}" placeholder="说话角色名" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);background:var(--bg-secondary);margin-bottom:7px">` : ''}
+          <textarea data-si="${i}" data-key="text" rows="2" placeholder="${isLine ? '台词内容' : '叙述/场景描写'}" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6;margin-bottom:7px">${esc(b.text || '')}</textarea>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--text-secondary)">特效</span>
+            <select data-si="${i}" data-key="fx" style="flex:1;font-size:12px;border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);background:var(--bg-secondary)">${FX_OPTS.map(([v, l]) => `<option value="${v}" ${((b.fx || '') === v) ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          </div>
+        </div>`;
+    };
+
+    const render = () => {
+      let body = `
+        <div style="border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:16px;background:var(--bg-secondary)">
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">本${J}蓝图大纲（来自蓝图，仅供参考）</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">第${idx}${J}《${esc(bpEp.title || '')}》</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.6">${esc(bpEp.summary || '（无大纲）')}</div>
+        </div>`;
+
+      if (!draft.hasScript) {
+        body += `
+          <div style="text-align:center;padding:24px 16px;border:1px dashed var(--border);border-radius:12px">
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:14px">点下面按蓝图本${J}大纲生成剧本，生成后简介和名场面都可逐条编辑。</div>
+            <button class="vee-act" data-act="gen" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成本${J}剧本</button>
+          </div>`;
+      } else {
+        body += `
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">本${J}简介</label>
+            <textarea data-field="synopsis" rows="6" placeholder="本${J}来龙去脉" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6">${esc(draft.synopsis || '')}</textarea>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:var(--accent);margin:8px 0 10px">名场面脚本</div>`;
+        body += draft.scene.map((b, i) => sceneCard(b, i)).join('');
+        body += `<button class="vee-act" data-act="add-scene" style="width:100%;border:1px dashed var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:12px;padding:9px 0;cursor:pointer;margin-bottom:18px">+ 添加一条</button>`;
+        body += `<div style="text-align:center;padding:4px 0 8px"><button class="vee-act" data-act="gen" style="border:1px solid var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:12px;padding:8px 20px;cursor:pointer">按蓝图重新生成本${J}</button></div>`;
+      }
+
+      overlay.innerHTML = `
+        ${_phoneStatusBarHtml()}
+        <div style="display:flex;align-items:center;padding:4px 16px 8px;flex-shrink:0;color:var(--text)">
+          <button id="vee-back" class="phone-nav-btn">${_uiIcon('back', 18)}</button>
+          <span style="font-weight:750;font-size:15px;flex:1;text-align:center;letter-spacing:.03em">编辑第${idx}${J}</span>
+          <button id="vee-save" style="flex-shrink:0;border:none;background:none;color:var(--accent);font-size:14px;font-weight:600;cursor:pointer;padding:4px 8px">保存</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:16px 16px 32px">${body}</div>`;
+
+      overlay.querySelector('#vee-back').onclick = back;
+      overlay.querySelector('#vee-save').onclick = async () => { await syncToWork(); UI.showToast('已保存', 1200); };
+    };
+
+    overlay.addEventListener('input', (e) => {
+      const el = e.target;
+      const f = el.getAttribute && el.getAttribute('data-field');
+      if (f) { draft[f] = el.value; return; }
+      const si = el.getAttribute && el.getAttribute('data-si');
+      if (si != null && draft.scene[+si]) { draft.scene[+si][el.getAttribute('data-key')] = el.value; return; }
+    });
+    overlay.addEventListener('change', (e) => {
+      const el = e.target;
+      if (el.tagName !== 'SELECT') return;
+      const si = el.getAttribute('data-si');
+      if (si != null && draft.scene[+si]) {
+        const key = el.getAttribute('data-key');
+        draft.scene[+si][key] = el.value;
+        if (key === 'type') render();
+        return;
+      }
+    });
+    overlay.addEventListener('click', (e) => {
+      const btn = e.target.closest && e.target.closest('.vee-act');
+      if (!btn) return;
+      const act = btn.getAttribute('data-act');
+      if (act === 'gen') { doGen(); return; }
+      if (act === 'add-scene') { draft.scene.push({ type: 'narration', text: '' }); render(); return; }
+      if (act === 'del-scene') { draft.scene.splice(+btn.getAttribute('data-i'), 1); render(); return; }
+    });
+
+    render();
+  }
+  async function _videoDeleteWork(id) {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    if (Array.isArray(pd.videoWorks)) {
+      pd.videoWorks = pd.videoWorks.filter(w => !(w && w.id === id));
+    }
+    const disc = (pd.videoDiscover && typeof pd.videoDiscover === 'object' && !Array.isArray(pd.videoDiscover)) ? pd.videoDiscover : null;
+    if (disc) {
+      Object.keys(disc).forEach(k => {
+        if (Array.isArray(disc[k])) disc[k] = disc[k].filter(w => !(w && w.id === id));
+      });
+    }
+    await _savePhoneData();
+    // 删空了就退出编辑态
+    if (!_videoAllWorks(pd).some(w => w && (w.watched || w.faved))) _videoMineEditing = false;
+    _renderVideo(pd);
+  }
+
+  // 「我的」页编辑态取消关注直播间：移除快照后重渲，删空了退出编辑态
+  async function _liveUnfollowFromMine(id) {
+    await _liveUnfollowRoom(id);
+    const pd = await _getPhoneData();
+    const hasHistory = _videoAllWorks(pd).some(w => w && (w.watched || w.faved));
+    const hasFollow = Array.isArray(pd && pd.liveFollowed) && pd.liveFollowed.length > 0;
+    if (!hasHistory && !hasFollow) _videoMineEditing = false;
+    _renderVideo(pd);
+  }
+
+  // 「我的」页主体：看过/收藏的影视列表，按类型分组分段
   function _renderVideoMine(pd) {
-    const works = Array.isArray(pd.videoWorks) ? pd.videoWorks : [];
+    const works = _videoAllWorks(pd);
     const list = works.filter(w => w && (w.watched || w.faved));
-    if (!list.length) {
+    const followedLive = (pd && Array.isArray(pd.liveFollowed)) ? pd.liveFollowed.filter(x => x && x.id) : [];
+    if (!list.length && !followedLive.length) {
       return `
         <div class="phone-video-empty">
           <div class="phone-video-empty-icon">${_phoneIcon('video')}</div>
           <div class="phone-video-empty-text">还没有看过的内容</div>
         </div>`;
     }
-    return `<div class="phone-video-home"><div class="phone-video-grid">${list.map(w => _videoCardHtml(w)).join('')}</div></div>`;
+    const editing = _videoMineEditing;
+    let html = '<div class="phone-video-home">';
+    if (editing) html += `<div class="phone-video-mine-edittip">管理模式：点卡片右上角 × 删除，删完点右上角「完成管理」退出</div>`;
+    // 直播关注段：横排圆头像，左右滑，点头像进直播间
+    if (followedLive.length) {
+      html += `<div class="phone-video-mine-section">关注的直播</div>`;
+      html += `<div class="phone-live-follow-row">${followedLive.map(w => _liveFollowCardHtml(w, editing)).join('')}</div>`;
+    }
+    // 分组：电影 / 电视剧 / 动漫 / 其他，组内按观看时间倒序
+    const groups = [
+      { key: 'movie', label: '电影' },
+      { key: 'tv', label: '电视剧' },
+      { key: 'anime', label: '动漫' }
+    ];
+    const used = new Set();
+    groups.forEach(g => {
+      const items = list.filter(w => w.kind === g.key)
+        .sort((a, b) => (b.watchedAt || 0) - (a.watchedAt || 0));
+      items.forEach(w => used.add(w));
+      if (!items.length) return;
+      html += `<div class="phone-video-mine-section">${Utils.escapeHtml(g.label)}</div>`;
+      html += `<div class="phone-video-grid">${items.map(w => _videoCardHtml(w, editing)).join('')}</div>`;
+    });
+    // 其他类型兜底，避免漏项
+    const rest = list.filter(w => !used.has(w))
+      .sort((a, b) => (b.watchedAt || 0) - (a.watchedAt || 0));
+    if (rest.length) {
+      html += `<div class="phone-video-mine-section">其他</div>`;
+      html += `<div class="phone-video-grid">${rest.map(w => _videoCardHtml(w, editing)).join('')}</div>`;
+    }
+    html += '</div>';
+    return html;
   }
 
-  // 单个视频缩略卡（16:9 横构图 + 时长/评分角标 + 标题 + 副信息）
-  function _videoCardHtml(w) {
+  // 关注的直播：圆头像 + 名字小卡（横滑用）。editing=true 时叠加取消关注角标、点卡不进间。
+  function _liveFollowCardHtml(w, editing) {
+    if (!w) return '';
+    const esc = Utils.escapeHtml;
+    const realName = w.streamerName || '';
+    const displayName = (_ltGetDisplayName(realName) || realName || '神秘主播');
+    const avaChar = (displayName || '主')[0] || '主';
+    const grad = _liveTagGrad(w.tags);
+    const avaInner = (w.streamerAvatar || '').trim()
+      ? `<img src="${esc(w.streamerAvatar)}" style="width:100%;height:100%;object-fit:cover">`
+      : `<span class="phone-live-follow-ava-char">${esc(avaChar)}</span>`;
+    const del = editing
+      ? `<button class="phone-live-follow-del" onclick="event.stopPropagation();Phone._liveUnfollowFromMine('${esc(w.id)}')" title="取消关注">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>`
+      : '';
+    const clickAttr = editing ? '' : ` onclick="Phone._liveEnterRoom('${esc(w.id)}')"`;
+    return `
+      <div class="phone-live-follow-card"${clickAttr}>
+        <div class="phone-live-follow-ava" style="background:${grad}">${avaInner}${del}</div>
+        <div class="phone-live-follow-name">${esc(displayName)}</div>
+      </div>`;
+  }
+
+  // 单个视频缩略卡（16:9 横构图 + 时长/评分角标 + 标题 + 副信息）。editing=true 时叠加删除角标、点卡不进详情。
+  function _videoCardHtml(w, editing) {
     if (!w) return '';
     const cover = (w.cover || '').trim();
     const coverHtml = cover
@@ -10541,6 +12525,8 @@ ${houseDataText}`;
       : ((w.duration || '').trim() ? `<span class="phone-video-card-dur">${Utils.escapeHtml(w.duration.trim())}</span>` : '');
     // 点播：评分角标（左下）
     const ratingTag = (!isLive && w.rating) ? `<span class="phone-video-card-rating">${Utils.escapeHtml(String(w.rating))}</span>` : '';
+    // 自制作品角标（左上）
+    const makeTag = (!isLive && w.selfMake) ? `<span class="phone-video-card-make">自制</span>` : '';
     // 副信息：直播显示主播/出品；点播显示「类型 · 主演」
     let by;
     if (isLive) {
@@ -10548,11 +12534,20 @@ ${houseDataText}`;
     } else {
       const cats = Array.isArray(w.category) ? w.category.slice(0, 1) : [];
       const lead = Array.isArray(w.cast) ? w.cast.slice(0, 2) : [];
-      by = [cats.join(''), lead.join('/')].filter(Boolean).join(' · ');
+      // 主类型 genre 作为第一个标签，没有则退回 category 第一个
+      const firstTag = (w.genre || '').trim() || cats.join('');
+      by = [firstTag, lead.join('/')].filter(Boolean).join(' · ');
     }
+    const _id = Utils.escapeHtml(w.id);
+    const delBadge = editing
+      ? `<button class="phone-video-card-del" onclick="event.stopPropagation();Phone._videoDeleteWork('${_id}')" title="删除">
+           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+         </button>`
+      : '';
+    const onclick = editing ? '' : ` onclick="Phone._videoOpenWork('${_id}')"`;
     return `
-      <div class="phone-video-card" onclick="Phone._videoOpenWork('${Utils.escapeHtml(w.id)}')">
-        <div class="phone-video-card-cover">${coverHtml}${corner}${ratingTag}</div>
+      <div class="phone-video-card"${onclick}>
+        <div class="phone-video-card-cover">${coverHtml}${corner}${ratingTag}${makeTag}${delBadge}</div>
         <div class="phone-video-card-title">${Utils.escapeHtml(w.title || '未命名')}</div>
         ${by ? `<div class="phone-video-card-by">${Utils.escapeHtml(by)}</div>` : ''}
       </div>`;
@@ -10569,20 +12564,46 @@ ${houseDataText}`;
       </div>`).join('')}</div>`;
   }
 
+  // 通用：搜索框动态按钮文案——有输入显示「搜索」，为空显示「刷新」。
+  function _syncSearchBtn(inputId, btnId, searchLabel, refreshLabel) {
+    const input = document.getElementById(inputId);
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const hasQuery = !!(input && input.value.trim());
+    const sl = searchLabel || `${_uiIcon('search', 13)} 搜索`;
+    const rl = refreshLabel || `${_uiIcon('refresh', 13)} 刷新`;
+    btn.innerHTML = hasQuery ? sl : rl;
+  }
+
   function _videoSearch() {
-    if (_videoCat === 'live') { UI.showToast('直播暂不支持生成', 1600); return; }
     const inp = document.getElementById('phone-video-search');
     const kw = inp ? inp.value.trim() : '';
+    if (_videoCat === 'live') { _liveGenPreview(kw); return; }
     _videoGenList(_videoCat, kw);
   }
 
-  // 视频发现页列表生成。本期实现电影（movie）；剧集/动漫/短视频后续接入。
+  // 改编命中概率：每次刷新发现页有此概率，从书架挑一本合格的 AI 书改编成本分类作品。
+  const _VIDEO_ADAPT_RATE = 0.4;
+
+  // 从书架挑一本「可改编为本分类」的书：AI 书（非自建 selfWrite、非导入、非同人），
+  // 有蓝图且该分类没改编过（adaptedKinds 不含 cat）。自建书通过专门的制片入口改编，不走随机。
+  function _videoPickAdaptSource(pd, cat) {
+    const books = Array.isArray(pd && pd.readingBooks) ? pd.readingBooks : [];
+    const pool = books.filter(b =>
+      b && !b.selfWrite && !b.imported && !b.genFanfic && b.blueprint && b.title &&
+      !(Array.isArray(b.adaptedKinds) && b.adaptedKinds.includes(cat))
+    );
+    if (!pool.length) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // 视频发现页列表生成。本期实现电影（movie）；剧集/动漫后续接入。
   // 字段：title / director / screenwriter / cast(数组) / category(数组) / year / duration / rating / intro。
   // 世界观、最近十轮主线、可出场作者注入均复用阅读那套（_buildFullContext / _readingMainlineBlock / _readingBuildAuthorBlock）。
   async function _videoGenList(catId, keyword) {
     const cat = _VIDEO_CATS.find(x => x.id === catId) ? catId : 'movie';
-    if (cat === 'live') { UI.showToast('直播暂不支持生成', 1600); return; }
-    if (cat !== 'movie') { UI.showToast('该分类的生成即将上线', 1600); return; }
+    if (cat === 'live') { return _liveGenPreview(keyword); }
+    if (cat !== 'movie' && cat !== 'tv' && cat !== 'anime') { UI.showToast('该分类的生成即将上线', 1600); return; }
     const kw = String(keyword || '').trim();
     const pd = await _getPhoneData();
 
@@ -10599,7 +12620,7 @@ ${houseDataText}`;
 
     // 进入生成中：网格区替换为骨架占位，禁用生成按钮防重复点击
     const genBtn = document.querySelector('.phone-video-search-btn');
-    if (genBtn) { genBtn.disabled = true; genBtn.textContent = '生成中…'; }
+    if (genBtn) { genBtn.disabled = true; genBtn.textContent = '搜索中…'; }
     const homeEl = document.querySelector('.phone-video-home');
     const gridEl = homeEl ? (homeEl.querySelector('.phone-video-grid') || homeEl.querySelector('.phone-video-empty')) : null;
     if (gridEl) gridEl.outerHTML = _renderVideoLoadingHtml(8);
@@ -10614,21 +12635,124 @@ ${houseDataText}`;
     if (_videoUseMainlineRef) {
       try { mainlinePrompt = _readingMainlineBlock(true); } catch (_) {}
     }
-    // 可出场作者名单：复用阅读那套作为「可出场演职人员」候选（导演/编剧/主演可从中挑）
+    // 演职人员名单：动画读监督/系列构成/配音演员/作画四份，真人读导演/编剧/演员三份
     let castBlock = '';
-    try { castBlock = await _readingBuildAuthorBlock('long'); } catch (_) {}
+    try { castBlock = await _videoBuildCastBlock(cat); } catch (_) {}
 
     const kwLine = kw
       ? `【观众想找的题材/关键词】${kw}\n请所有影片都贴合这个方向，但在符合该方向的前提下，让 8-10 部之间的题材、风格、调性尽量拉开差异，不要写成雷同的几部。`
       : `本次无指定方向，题材完全自由发挥；让 8-10 部之间的题材、风格、调性尽量拉开差异，不要扎堆同一类。`;
 
-    // 演职人员约束：有名单→优先从名单挑（导演/编剧/主演都可以是其中的人）；无名单→全部自行创作
-    const castRule = castBlock
-      ? '\n- 导演、编剧、主演优先从【可出场人物名单】里挑选合适的人填入（同一个人既可能当导演也可能当主演，由你自然分配）；名单不够用时，其余角色请自行创作像真人的姓名。'
-      : '\n- 导演、编剧、主演请自行创作像真人的姓名。';
+    // 演职人员约束：有名单→按工种从对应名单挑（各工种独立）；无名单→全部自行创作。动画与真人措辞不同。
+    const castRule = cat === 'anime'
+      ? (castBlock
+        ? '\n- 监督、系列构成、配音演员、作画请按工种分别从下方对应的真实人物名单里挑选合适的人填入（监督从监督名单、系列构成从系列构成名单、配音演员从配音演员名单、作画从作画名单，各类严格区分不可混用）；名单不够用或不契合时，其余 staff 自行创作像真人的姓名。\n- 这些真人参与的作品，不会和他们本人高度重合：作品名、剧情、角色设定都跟着题材走，不要把他们本人的身份、经历、能力投射进剧情或角色。'
+        : '\n- 监督、系列构成、配音演员、作画请自行创作像真人的姓名。')
+      : (castBlock
+        ? '\n- 导演、编剧、主演请按工种分别从下方对应的真实人物名单里挑选合适的人填入（导演从导演名单、编剧从编剧名单、主演从演员名单，三类严格区分不可混用）；名单不够用或不契合时，其余演职人员自行创作像真人的姓名。\n- 这些真人创作/出演的作品，不会和他们本人高度重合：片名、剧情、角色设定都跟着影片题材走，不要把演职人员本人的身份、经历、能力投射进剧情或角色。'
+        : '\n- 导演、编剧、主演请自行创作像真人的姓名。');
 
-    const sysPrompt = `你是影视推荐生成系统。请生成 8-10 部【电影】的推荐卡片。
-${kwLine}
+    // 当前世界观年份：从游戏时间提取，让上映年份贴合世界观时代（避免设定 2064 年却生成 2012 上映）
+    let curYear = 0;
+    let gameTimeStr = '';
+    try {
+      gameTimeStr = _getGameTime() || '';
+      // _getGameTime 经 _formatPhoneTime 处理后是 "2065.03.27 ..." 点分格式（无"年"字），
+      // 也可能是别处传来的 "2065年..." 原格式，两种都要能取到年份。
+      const ym = gameTimeStr.match(/(\d{3,4})\s*年/) || gameTimeStr.match(/^\s*(\d{3,4})[.\-/]/) || gameTimeStr.match(/(\d{4})/);
+      if (ym) curYear = parseInt(ym[1], 10);
+    } catch (_) {}
+    if (!isFinite(curYear) || curYear < 1) curYear = new Date().getFullYear();
+    const yearFrom = curYear - 35;
+    const yearRule = `上映年份（整数，${yearFrom} 到 ${curYear} 之间，以当前年份 ${curYear} 为上限，可有早年的老片也可有近年新片，部部错开。绝不能超过 ${curYear} 年）`;
+    // 把当前时间原样告诉 AI，让它自己判断"现在是什么年代"，比单纯给数字范围更可靠
+    const timeDeclare = `【重要·当前时间】现在是公元 ${curYear} 年（世界观当前时间：${gameTimeStr || curYear + '年'}）。你生成的${cat === 'tv' ? '剧集是这个时代「当下及以前」已经播出的电视剧' : cat === 'anime' ? '动漫是这个时代「当下及以前」已经播出的动画作品' : '影片是这个时代「当下及以前」已经上映的电影'}，${cat === 'tv' ? '首播' : cat === 'anime' ? '首播' : '上映'}年份绝不能晚于 ${curYear} 年——不要套用你训练数据里的现实年份（如 2012、2019 等），一切以这个世界的当前年份 ${curYear} 为准。\n`;
+
+    // 书籍改编搜索：搜索词精确命中书架某本书的书名（去书名号比对）且非同人 → 走改编搜索分支，
+    // 一次性生成「真改编置顶 + 沾边联想」一页结果。同人涉及版权不可影视化，排除（与随机改编一致）。
+    if (kw) {
+      const _strip = (s) => String(s || '').replace(/^[《<「『\s]+|[》>」』\s]+$/g, '').trim();
+      const kwBare = _strip(kw);
+      if (kwBare) {
+        const hitBook = (Array.isArray(pd.readingBooks) ? pd.readingBooks : [])
+          .find(b => b && !b.genFanfic && b.title && _strip(b.title) === kwBare);
+        if (hitBook) {
+          await _videoGenSearchAdapt(hitBook, cat, { url, key, model, curYear, yearFrom, castBlock, castRule, timeDeclare }, pd);
+          if (genBtn) { genBtn.disabled = false; genBtn.textContent = '搜索'; }
+          return;
+        }
+      }
+    }
+
+    const sysPrompt = cat === 'anime' ? `你是影视推荐生成系统。请生成 8-10 部【动漫/动画】的推荐卡片。
+${timeDeclare}${kwLine}
+每部输出以下字段，严格使用 JSON 数组格式，不能返回 Markdown，不能返回代码块，不能解释，必须以 [ 开头、以 ] 结尾：
+[
+  {
+    "title": "作品名",
+    "director": "监督姓名",
+    "screenwriter": "系列构成/脚本姓名",
+    "artDirector": "作画/美术担当姓名",
+    "studio": "制作公司名",
+    "cast": ["主要CV/配音演员姓名（3-5 个）"],
+    "genre": "主类型（必须从以下 15 个里选且只选 1 个，原样填写不要改字：热血、恋爱、日常、奇幻、异世界、科幻、悬疑、治愈、校园、战斗、搞笑、古风、魔法少女、运动、偶像。拿不准时选最接近的，实在难归类就填 日常）",
+    "category": ["题材/氛围标签（你为这部自拟，1-3 个，每个简短，如 2-6 字，可发挥气质类词如 致郁、龙傲天、群像、百合、穿越、废萌、硬核、乙女 等，与上面的主类型互不影响）"],
+    "episodes": 集数（整数，季番 12-13 集、半年番 24-26 集、长篇可 50+ 集，要有差异），
+    "duration": "单集时长（如 24分钟/集、12分钟/集、5分钟/集）",
+    "status": "播出状态（只能填：已完结、连载中 二选一。多数填已完结，少量可填连载中）",
+    "year": ${yearRule},
+    "rating": 评分（数字，保留一位小数，5.0 到 9.8 之间；要有差异化分布），
+    "intro": "客观剧情简介（120 字左右，只做中立的剧情梗概。status 为「连载中」的不写结局。用户可见）",
+    "hotComment": { "user": "热评用户昵称（自拟一个像真实追番网友的网名）", "text": "一条高赞热评（40-80 字，带追番观众的个人色彩——可以催更、吹爆作画、骂经费不足、磕角色CP、评价OP/ED、讨论声优演技等，像真实番剧评论区那样有态度）", "likes": 点赞数（整数） }
+  }
+]
+
+要求：
+- title 只写作品名本身，不要加书名号《》或任何引号、标点包裹。
+- 人名风格要贴合世界观氛围（若提供了世界观背景，则人名风格与之一致；没有就自行把握）。
+- rating 要有真实感的差异化分布，不要扎堆高分。
+- intro 必须客观中立，只描述剧情，主观评价一律放到 hotComment 里。
+- category 为 1-3 个题材标签，由你为每部自拟。
+- episodes 要有差异：泡面番配 12 集但单集 3-5 分钟、季番 12-13 集、半年番 24-26 集、长篇 50+ 集，部部错开。
+- studio（制作公司）：如果上面的世界观背景里提到了动画制作公司/工作室，可以使用它们的名字；如果没有提到，请完全虚构制作公司名（不要使用现实中已存在的真实动画公司名，也不要谐音/变体来暗示真实公司）。
+- title、剧情、监督/脚本/作画/CV 姓名全部原创，不要套用现实中已存在的真实作品名、真实影人姓名；但下方真实人物名单里的人可以按工种使用其本名。${castRule}
+- 真实人物名单里的人不必每部都用：只有当这部作品的题材、风格确实适合某位真实人物时才安排 ta 参与，不合适就不写，全部自拟也完全可以。不要为了用而用。
+- 只输出 JSON，不要多余解释。${castBlock ? '\n\n' + castBlock : ''}${wvPrompt ? '\n\n' + wvPrompt : ''}${mainlinePrompt ? '\n\n' + mainlinePrompt : ''}`
+
+    : cat === 'tv' ? `你是影视推荐生成系统。请生成 8-10 部【电视剧/剧集】的推荐卡片。
+${timeDeclare}${kwLine}
+每部输出以下字段，严格使用 JSON 数组格式，不能返回 Markdown，不能返回代码块，不能解释，必须以 [ 开头、以 ] 结尾：
+[
+  {
+    "title": "剧名",
+    "director": "导演姓名",
+    "screenwriter": "编剧姓名",
+    "cast": ["主演姓名（4-6 个）"],
+    "genre": "主类型（必须从以下 13 个里选且只选 1 个，原样填写不要改字：古偶、现偶、都市、古装、悬疑、犯罪、家庭、历史、战争、武侠、科幻、喜剧、青春。拿不准时选最接近的，实在难归类就填 都市。注意：动画/动漫不在此列，本分类只生成真人剧集）",
+    "category": ["题材/氛围标签（你为这部自拟，1-3 个，每个简短，如 2-6 字，可发挥气质类词如 甜宠、权谋、烧脑、双强、群像、复仇 等，与上面的主类型互不影响）"],
+    "episodes": 集数（整数，如 24、36、40，短剧 12-16 集，长剧可到 40-50 集，要有差异），
+    "duration": "单集时长（如 45分钟/集、30分钟/集）",
+    "status": "播出状态（只能填：已完结、连载中 二选一。多数填已完结，少量可填连载中增加真实感）",
+    "year": ${yearRule},
+    "rating": 评分（数字，保留一位小数，5.0 到 9.8 之间；要有差异化分布——有口碑佳作也有平庸之作，不要每部都九分以上），
+    "intro": "客观剧情简介（120 字左右，只做中立的剧情梗概——讲清这部剧讲了什么故事、主线是什么、围绕什么展开。不要写任何主观评价、推荐语、看点吹捧。status 为「连载中」的剧不要写结局，只写已播出部分的主线方向。角色性别按剧情自然描写即可。用户可见）",
+    "hotComment": { "user": "热评用户昵称（自拟一个像真实追剧网友的网名）", "text": "一条高赞热评（40-80 字，带追剧观众的个人色彩——可以磕CP、吐槽编剧、夸演技、骂烂尾、催更、安利等，像真实弹幕/短评区那样有态度，与这部剧的 rating 大致匹配）", "likes": 点赞数（整数，几十到几万都行） }
+  }
+]
+
+要求：
+- title 只写剧名本身，不要加书名号《》或任何引号、标点包裹。
+- 人名风格要贴合世界观氛围（若提供了世界观背景，则人名风格与之一致；没有就自行把握，不强制中文名）。
+- rating 要有真实感的差异化分布，不要扎堆高分。
+- intro 必须客观中立，只描述剧情，主观评价一律放到 hotComment 里。
+- category 为 1-3 个题材标签，由你为每部自拟。
+- episodes 要有差异：短剧 12-16 集、标准剧 24-30 集、长剧 36-50 集，部部错开。
+- title 与剧情、以及名单之外的演职人员姓名全部原创，不要套用现实中已存在的真实剧名、真实影人姓名；但下方真实人物名单里的人可以按工种使用其本名。${castRule}
+- 真实人物名单里的导演/编剧/演员不必每部都用：只有当这部作品的题材、风格确实适合某位真实人物时才安排 ta 参与，不合适就不写，全部自拟也完全可以。不要为了用而用。
+- 只输出 JSON，不要多余解释。${castBlock ? '\n\n' + castBlock : ''}${wvPrompt ? '\n\n' + wvPrompt : ''}${mainlinePrompt ? '\n\n' + mainlinePrompt : ''}`
+
+    : `你是影视推荐生成系统。请生成 8-10 部【电影】的推荐卡片。
+${timeDeclare}${kwLine}
 每部输出以下字段，严格使用 JSON 数组格式，不能返回 Markdown，不能返回代码块，不能解释，必须以 [ 开头、以 ] 结尾：
 [
   {
@@ -10636,11 +12760,13 @@ ${kwLine}
     "director": "导演姓名",
     "screenwriter": "编剧姓名",
     "cast": ["主演姓名（3-5 个）"],
-    "category": ["题材标签（你为这部自拟，1-3 个，每个简短，如 2-6 字）"],
-    "year": 上映年份（整数，1990 到 2025 之间，可有早年的老片也可有近年新片，部部错开），
+    "genre": "主类型（必须从以下 13 个里选且只选 1 个，原样填写不要改字：科幻、动作、爱情、悬疑、恐怖、喜剧、剧情、战争、历史、犯罪、奇幻、纪录、音乐。拿不准时选最接近的，实在难归类就填 剧情。注意：动画/动漫不在此列，本分类只生成真人电影）",
+    "category": ["题材/氛围标签（你为这部自拟，1-3 个，每个简短，如 2-6 字，可发挥气质类词如 文艺、烧脑、治愈 等，与上面的主类型互不影响）"],
+    "year": ${yearRule},
     "duration": "片长（如 118分钟）",
     "rating": 评分（数字，保留一位小数，5.0 到 9.8 之间；要有差异化分布——有口碑佳作也有平庸之作，不要每部都九分以上），
-    "intro": "简介（120 字左右，面向观众的剧情推荐语，写出影片的剧情钩子与看点。角色的性别按剧情自然描写即可，不必中性化。用户可见）"
+    "intro": "客观剧情简介（120 字左右，只做中立的剧情梗概——讲清这部电影讲了什么故事、主线是什么、围绕什么展开。不要写任何主观评价、推荐语、看点吹捧、好坏判断或观影建议，纯客观描述剧情本身。角色的性别按剧情自然描写即可，不必中性化。用户可见）",
+    "hotComment": { "user": "热评用户昵称（自拟一个像真实网友的网名）", "text": "一条高赞热评（40-80 字，带个人色彩的主观评价——可褒可贬可吐槽，像真实观众短评那样有态度、敢表态，与这部片的 rating 大致匹配：高分片好评为主，低分片可有犀利吐槽）", "likes": 点赞数（整数，几十到几万都行，与评分热度匹配） }
   }
 ]
 
@@ -10648,32 +12774,47 @@ ${kwLine}
 - title 只写片名本身，不要加书名号《》或任何引号、标点包裹。
 - 人名风格要贴合世界观氛围（若提供了世界观背景，则人名风格与之一致；没有就自行把握，不强制中文名）。
 - rating 要有真实感的差异化分布，不要扎堆高分。
+- intro 必须客观中立，只描述剧情，主观评价一律放到 hotComment 里，不要混进 intro。
 - category 为 1-3 个题材标签，由你为每部自拟。
-- title/director/screenwriter/cast/category/intro 全部原创，不要套用现实中已存在的真实影片名、真实影人姓名。${castRule}
+- title 与剧情、以及名单之外的演职人员姓名全部原创，不要套用现实中已存在的真实影片名、真实影人姓名；但下方真实人物名单里的人可以按工种使用其本名。${castRule}
+- 真实人物名单里的导演/编剧/演员不必每部都用：只有当这部作品的题材、风格确实适合某位真实人物时才安排 ta 参与，不合适就不写，全部自拟也完全可以。不要为了用而用。
 - 只输出 JSON，不要多余解释。${castBlock ? '\n\n' + castBlock : ''}${wvPrompt ? '\n\n' + wvPrompt : ''}${mainlinePrompt ? '\n\n' + mainlinePrompt : ''}`;
 
     let raw;
+    const catLabel = cat === 'tv' ? '剧集列表' : cat === 'anime' ? '动漫列表' : '电影列表';
+    const catNoun = cat === 'tv' ? '电视剧' : cat === 'anime' ? '动漫' : '电影';
     try {
       raw = await _phoneJsonArrayWithRetry({
-        label: '电影列表', url, key, model,
+        label: catLabel, url, key, model,
         temperature: 0.95, max_tokens: 4096,
         messages: [
           { role: 'system', content: sysPrompt },
-          { role: 'user', content: kw ? `请生成一批贴合「${kw}」的电影。` : `请生成一批电影。` }
+          { role: 'user', content: kw ? `请生成一批贴合「${kw}」的${catNoun}。` : `请生成一批${catNoun}。` }
         ]
       });
     } catch (e) {
-      console.error('[视频电影列表]', e);
+      console.error(`[视频${catLabel}]`, e);
       UI.showToast('生成失败，请重试', 1800);
       _renderVideo(pd);
       return;
     }
 
     // 规范化
+    const GENRES_MOVIE = ['科幻','动作','爱情','悬疑','恐怖','喜剧','剧情','战争','历史','犯罪','奇幻','纪录','音乐'];
+    const GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','喜剧','青春'];
+    const GENRES_ANIME = ['热血','恋爱','日常','奇幻','异世界','科幻','悬疑','治愈','校园','战斗','搞笑','古风','魔法少女','运动','偶像'];
+    const GENRES = cat === 'tv' ? GENRES_TV : cat === 'anime' ? GENRES_ANIME : GENRES_MOVIE;
+    const genreDefault = cat === 'tv' ? '都市' : cat === 'anime' ? '日常' : '剧情';
     const list = (Array.isArray(raw) ? raw : []).filter(m => m && m.title).map(m => {
       let cats = [];
       if (Array.isArray(m.category)) cats = m.category.map(c => String(c || '').trim()).filter(Boolean);
       else if (typeof m.category === 'string') cats = m.category.split(/[,，、\s]+/).map(c => c.trim()).filter(Boolean);
+      // 主类型：必须落在固定枚举内；越界或缺失统一兜底
+      let genre = String(m.genre || '').trim();
+      if (!GENRES.includes(genre)) {
+        const hit = GENRES.find(g => genre.includes(g));
+        genre = hit || genreDefault;
+      }
       let cast = [];
       if (Array.isArray(m.cast)) cast = m.cast.map(c => String(c || '').trim()).filter(Boolean);
       else if (typeof m.cast === 'string') cast = m.cast.split(/[,，、\s]+/).map(c => c.trim()).filter(Boolean);
@@ -10682,21 +12823,50 @@ ${kwLine}
       rating = Math.max(0, Math.min(10, rating));
       let year = parseInt(m.year, 10);
       if (!isFinite(year)) year = 0;
-      return {
+      if (year && curYear) year = Math.max(yearFrom, Math.min(curYear, year));
+      // 高赞热评
+      let hot = null;
+      const hc = m.hotComment || m.hot_comment;
+      if (hc && typeof hc === 'object' && !Array.isArray(hc)) {
+        const text = String(hc.text || '').trim().slice(0, 120);
+        if (text) {
+          let likes = parseInt(hc.likes, 10);
+          if (!isFinite(likes) || likes < 0) likes = 0;
+          hot = { user: String(hc.user || '影迷').trim().slice(0, 20) || '影迷', text, likes };
+        }
+      } else if (typeof hc === 'string' && hc.trim()) {
+        hot = { user: '影迷', text: hc.trim().slice(0, 120), likes: 0 };
+      }
+      // 电视剧/动漫额外字段
+      let episodes = 0;
+      let status = '';
+      if (cat === 'tv' || cat === 'anime') {
+        episodes = parseInt(m.episodes, 10);
+        if (!isFinite(episodes) || episodes < 1) episodes = cat === 'anime' ? 12 : 24;
+        episodes = Math.min(episodes, 500);
+        const st = String(m.status || '').trim();
+        status = (st === '连载中') ? '连载中' : '已完结';
+      }
+      const item = {
         id: 'vd_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         kind: cat,
         title: String(m.title).replace(/^[《<「『\s]+|[》>」』\s]+$/g, '').slice(0, 40),
         director: String(m.director || '').slice(0, 20),
         screenwriter: String(m.screenwriter || '').slice(0, 20),
         cast: cast.slice(0, 6),
+        genre: genre,
         category: cats.slice(0, 3),
         year: year || '',
         duration: String(m.duration || '').slice(0, 20),
         rating: rating ? Number(rating.toFixed(1)) : '',
         intro: String(m.intro || '').slice(0, 260),
-        cover: '',
-        studio: String(m.director || '').slice(0, 20)
+        hotComment: hot,
+        cover: _videoPickCover(genre),
+        studio: cat === 'anime' ? String(m.studio || '').trim().slice(0, 30) : String(m.director || '').slice(0, 20)
       };
+      if (cat === 'anime') item.artDirector = String(m.artDirector || '').trim().slice(0, 20);
+      if (cat === 'tv' || cat === 'anime') { item.episodes = episodes; item.status = status; }
+      return item;
     });
     if (list.length === 0) {
       UI.showToast('生成结果为空，请重试', 1800);
@@ -10704,17 +12874,6586 @@ ${kwLine}
       return;
     }
 
+    // 改编：按概率从书架挑一本合格 AI 书，生成一张「改编卡」混进本批列表最前面。
+    // 列表阶段只喂书名/作者/简介（蓝图留到生成详情/蓝图时再喂），让 AI 据此产出一张改编作品卡。
+    // 注意：列表阶段不在原著上打任何标记——「被改编」是用户真正点开生成剧本/蓝图后才落地的真实事件
+    // （见 _videoMarkBookAdapted）。所以同一本书反复刷可能出多张「待定改编企划」，只有看了的那张才成真。
+    try {
+      if (Math.random() < _VIDEO_ADAPT_RATE) {
+        const srcBook = _videoPickAdaptSource(pd, cat);
+        if (srcBook) {
+          const adaptCard = await _videoGenAdaptCard(srcBook, cat, {
+            url, key, model, curYear, yearFrom, GENRES, genreDefault
+          });
+          if (adaptCard) {
+            list.unshift(adaptCard);
+          }
+        }
+      }
+    } catch (e) { console.warn('[改编卡]', e); }
+
+    if (!pd.videoDiscover || typeof pd.videoDiscover !== 'object' || Array.isArray(pd.videoDiscover)) {
+      pd.videoDiscover = {};
+    }
+pd.videoDiscover[cat] = list;
+      // 同步写入 videoWorks（观看历史源），已存在则更新，不存在则追加以 id 去重
+      if (!Array.isArray(pd.videoWorks)) pd.videoWorks = [];
+      const byId = {};
+      pd.videoWorks.forEach(w => { if (w && w.id) byId[w.id] = w; });
+      list.forEach(item => {
+        if (!item || !item.id) return;
+        if (byId[item.id]) {
+          // 更新字段（保留 watched/faved 等运行时标记）
+          Object.keys(item).forEach(k => { if (k !== 'watched' && k !== 'faved' && k !== 'watchedAt') byId[item.id][k] = item[k]; });
+        } else {
+          pd.videoWorks.push(item);
+          byId[item.id] = item;
+        }
+      });
+      await _savePhoneData();
+    _renderVideo(pd);
+    UI.showToast('已找到 ' + list.length + ' 部影片', 1500);
+  }
+
+  // 生成一张「改编卡」：把书架某本 AI 书改编成 cat（movie/tv/anime）作品。
+  // 列表阶段只喂书名/作者/简介，让 AI 起改编名、配演职、写改编简介。返回规范化后的 item（带 adaptedFrom）或 null。
+  async function _videoGenAdaptCard(book, cat, ctx) {
+    const { url, key, model, curYear, yearFrom, GENRES, genreDefault } = ctx;
+    if (!url || !key || !model || !book) return null;
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const isAnime = cat === 'anime';
+    const catNoun = cat === 'tv' ? '电视剧' : isAnime ? '动画' : '电影';
+
+    // 演职人员名单（与列表生成同源）
+    let castBlock = '';
+    try { castBlock = await _videoBuildCastBlock(cat); } catch (_) {}
+    const castRule = castBlock
+      ? (isAnime
+        ? '\n- 监督、系列构成、配音演员、作画请按工种分别从下方对应的真实人物名单里挑合适的人填入（各工种严格区分不可混用）；名单不够用就自行创作像真人的姓名。'
+        : '\n- 导演、编剧、主演请按工种分别从下方对应的真实人物名单里挑合适的人填入（三类严格区分不可混用）；名单不够用就自行创作像真人的姓名。')
+      : (isAnime
+        ? '\n- 监督、系列构成、配音演员、作画请自行创作像真人的姓名。'
+        : '\n- 导演、编剧、主演请自行创作像真人的姓名。');
+
+    const yearRule = `上映/首播年份（整数，${yearFrom} 到 ${curYear} 之间，不能晚于 ${curYear}）`;
+    const bookCats = Array.isArray(book.category) ? book.category.filter(Boolean).join('、') : '';
+
+    const fields = isAnime ? `
+  {
+    "title": "改编${catNoun}名（可沿用原著名，也可起一个体现「动画版」的名字）",
+    "director": "监督姓名",
+    "screenwriter": "系列构成/脚本姓名",
+    "artDirector": "作画/美术担当姓名",
+    "studio": "制作公司名",
+    "cast": ["主要配音演员姓名（3-5 个）"],
+    "genre": "主类型（从以下里选 1 个原样填写：${GENRES.join('、')}。难归类填 ${genreDefault}）",
+    "category": ["题材/氛围标签（1-3 个，简短）"],
+    "episodes": 集数（整数，季番 12-13、半年番 24-26、长篇 50+，按原著体量定），
+    "duration": "单集时长（如 24分钟/集）",
+    "status": "播出状态（已完结 / 连载中 二选一，多数已完结）",
+    "year": ${yearRule},
+    "rating": 评分（数字，保留一位小数，5.0 到 9.8），
+    "intro": "改编${catNoun}的客观剧情简介（120 字左右，体现这是基于原著的影视化改编，可有改动）",
+    "hotComment": { "user": "热评用户昵称（自拟一个像真实网友的网名）", "text": "一条高赞热评（40-80 字。只表达对这次改编的态度与观感，不要描述具体剧情桥段——可聊还原度、夸或骂魔改、评选角/选CV、原著粉的整体情绪、值不值得追、安利没看过原著的人去补书等，像真实评论区那样有态度，与 rating 大致匹配）", "likes": 点赞数（整数） }
+  }` : `
+  {
+    "title": "改编${catNoun}名（可沿用原著名，也可起一个体现「${cat === 'tv' ? '剧版' : '电影版'}」的名字）",
+    "director": "导演姓名",
+    "screenwriter": "编剧姓名",
+    "cast": ["主演姓名（${cat === 'tv' ? '4-6' : '3-5'} 个）"],
+    "genre": "主类型（从以下里选 1 个原样填写：${GENRES.join('、')}。难归类填 ${genreDefault}）",
+    "category": ["题材/氛围标签（1-3 个，简短）"],${cat === 'tv' ? `
+    "episodes": 集数（整数，短剧 12-16、标准 24-30、长剧 36-50，按原著体量定），
+    "duration": "单集时长（如 45分钟/集）",
+    "status": "播出状态（已完结 / 连载中 二选一，多数已完结）",` : `
+    "duration": "片长（如 118分钟）",`}
+    "year": ${yearRule},
+    "rating": 评分（数字，保留一位小数，5.0 到 9.8），
+    "intro": "改编${catNoun}的客观剧情简介（120 字左右，体现这是基于原著的影视化改编，可有改动）",
+    "hotComment": { "user": "热评用户昵称（自拟一个像真实网友的网名）", "text": "一条高赞热评（40-80 字。只表达对这次改编的态度与观感，不要描述具体剧情桥段——可聊还原度、夸或骂魔改、评选角、原著粉的整体情绪、值不值得追、安利没看过原著的人去补书等，像真实评论区那样有态度，与 rating 大致匹配）", "likes": 点赞数（整数） }
+  }`;
+
+    const sysPrompt = `你是影视改编企划生成系统。下面这部小说要被改编成一部【${catNoun}】，请你为它生成一张改编作品卡。
+
+【原著信息】
+书名：${esc(book.title)}
+作者：${esc(book.author) || '佚名'}${bookCats ? '\n题材标签：' + bookCats : ''}
+简介：${esc(book.intro) || '（无）'}
+
+这是一部【基于原著的${catNoun}改编】，不是原创：保留原著的核心故事与气质，但允许影视化的合理改动。请输出以下字段，严格使用 JSON 对象格式，不能返回 Markdown、代码块或解释，必须以 { 开头、以 } 结尾：
+${fields}
+
+要求：
+- title 只写作品名本身，不要加书名号或引号。
+- intro 必须客观中立，只描述剧情。
+- 人名风格贴合世界观氛围。${castRule}
+- 只输出 JSON。${castBlock ? '\n\n' + castBlock : ''}`;
+
+    let m;
+    try {
+      m = await _phoneJsonObjectWithRetry({
+        label: '改编卡', url, key, model,
+        temperature: 0.9, max_tokens: 2048,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: `请把《${esc(book.title)}》改编成一部${catNoun}。` }
+        ]
+      });
+    } catch (e) { console.error('[改编卡]', e); return null; }
+    if (!m || typeof m !== 'object' || !m.title) return null;
+
+    // 规范化（与 _videoGenList 的 normalize 对齐）
+    let cats = [];
+    if (Array.isArray(m.category)) cats = m.category.map(c => String(c || '').trim()).filter(Boolean);
+    else if (typeof m.category === 'string') cats = m.category.split(/[,，、\s]+/).map(c => c.trim()).filter(Boolean);
+    let genre = String(m.genre || '').trim();
+    if (!GENRES.includes(genre)) { const hit = GENRES.find(g => genre.includes(g)); genre = hit || genreDefault; }
+    let cast = [];
+    if (Array.isArray(m.cast)) cast = m.cast.map(c => String(c || '').trim()).filter(Boolean);
+    else if (typeof m.cast === 'string') cast = m.cast.split(/[,，、\s]+/).map(c => c.trim()).filter(Boolean);
+    let rating = parseFloat(m.rating);
+    if (!isFinite(rating)) rating = 0;
+    rating = Math.max(0, Math.min(10, rating));
+    let year = parseInt(m.year, 10);
+    if (!isFinite(year)) year = 0;
+    if (year && curYear) year = Math.max(yearFrom, Math.min(curYear, year));
+    let episodes = 0, status = '';
+    if (cat === 'tv' || cat === 'anime') {
+      episodes = parseInt(m.episodes, 10);
+      if (!isFinite(episodes) || episodes < 1) episodes = isAnime ? 12 : 24;
+      episodes = Math.min(episodes, 500);
+      status = (String(m.status || '').trim() === '连载中') ? '连载中' : '已完结';
+    }
+    // 高赞热评（改编向态度）
+    let hot = null;
+    const hc = m.hotComment || m.hot_comment;
+    if (hc && typeof hc === 'object' && !Array.isArray(hc)) {
+      const text = String(hc.text || '').trim().slice(0, 120);
+      if (text) {
+        let likes = parseInt(hc.likes, 10);
+        if (!isFinite(likes) || likes < 0) likes = 0;
+        hot = { user: String(hc.user || '影迷').trim().slice(0, 20) || '影迷', text, likes };
+      }
+    } else if (typeof hc === 'string' && hc.trim()) {
+      hot = { user: '影迷', text: hc.trim().slice(0, 120), likes: 0 };
+    }
+    const item = {
+      id: 'vd_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      kind: cat,
+      title: String(m.title).replace(/^[《<「『\s]+|[》>」』\s]+$/g, '').slice(0, 40),
+      director: String(m.director || '').slice(0, 20),
+      screenwriter: String(m.screenwriter || '').slice(0, 20),
+      cast: cast.slice(0, 6),
+      genre: genre,
+      category: cats.slice(0, 3),
+      year: year || '',
+      duration: String(m.duration || '').slice(0, 20),
+      rating: rating ? Number(rating.toFixed(1)) : '',
+      intro: String(m.intro || '').slice(0, 260),
+      hotComment: hot,
+      cover: (book.cover || '').trim() || _videoPickCover(genre),
+      studio: isAnime ? String(m.studio || '').trim().slice(0, 30) : String(m.director || '').slice(0, 20),
+      // 改编来源标记：生成蓝图/剧本时据此取原著蓝图；详情页据此显示「改编自/原著」
+      adaptedFrom: { bookId: book.id, bookTitle: book.title || '', author: book.author || '' }
+    };
+    if (isAnime) item.artDirector = String(m.artDirector || '').trim().slice(0, 20);
+    if (cat === 'tv' || cat === 'anime') { item.episodes = episodes; item.status = status; }
+    return item;
+  }
+
+  // 「书籍改编搜索」：搜索框精确命中书架某本书的书名时，一次性生成一页搜索结果。
+  // 第 1 条是这本书的真改编（代码强制挂 adaptedFrom + 书封面，看了详情才标记原著）；
+  // 其余 5-7 条是搜索引擎式的「沾边但不是」联想（撞名/同类型/蹭IP/同演员/同作者其他/同导演其他），
+  // 全部虚构、不带任何原著标记。AI 编歪也不影响——真改编身份由代码持有。生成后落盘并渲染。
+  async function _videoGenSearchAdapt(book, cat, ctx, pd) {
+    const { url, key, model, curYear, yearFrom, castBlock, castRule, timeDeclare } = ctx;
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const isAnime = cat === 'anime';
+    const catNoun = cat === 'tv' ? '电视剧' : isAnime ? '动画' : '电影';
+    const GENRES_MOVIE = ['科幻','动作','爱情','悬疑','恐怖','喜剧','剧情','战争','历史','犯罪','奇幻','纪录','音乐'];
+    const GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','喜剧','青春'];
+    const GENRES_ANIME = ['热血','恋爱','日常','奇幻','异世界','科幻','悬疑','治愈','校园','战斗','搞笑','古风','魔法少女','运动','偶像'];
+    const GENRES = cat === 'tv' ? GENRES_TV : isAnime ? GENRES_ANIME : GENRES_MOVIE;
+    const genreDefault = cat === 'tv' ? '都市' : isAnime ? '日常' : '剧情';
+    const yearRule = `年份（整数，${yearFrom} 到 ${curYear} 之间，不能晚于 ${curYear}）`;
+    const bookCats = Array.isArray(book.category) ? book.category.filter(Boolean).join('、') : '';
+
+    const itemFields = isAnime ? `{
+    "title": "作品名（不含书名号）", "director": "监督姓名", "screenwriter": "系列构成/脚本姓名",
+    "artDirector": "作画/美术担当姓名", "studio": "制作公司名", "cast": ["主要CV姓名（3-5个）"],
+    "genre": "主类型（从以下选1个原样填：${GENRES.join('、')}）", "category": ["氛围标签（1-3个，简短）"],
+    "episodes": 集数（整数）, "duration": "单集时长（如 24分钟/集）", "status": "已完结 或 连载中",
+    "year": ${yearRule}, "rating": 评分（数字，一位小数，5.0-9.8）,
+    "intro": "客观剧情简介（100字左右，只描述剧情）",
+    "hotComment": { "user": "网名", "text": "一条高赞热评（40-80字，只表态度观感不剧透具体桥段）", "likes": 点赞数（整数） }
+  }` : `{
+    "title": "作品名（不含书名号）", "director": "导演姓名", "screenwriter": "编剧姓名",
+    "cast": ["主演姓名（${cat === 'tv' ? '4-6' : '3-5'}个）"],
+    "genre": "主类型（从以下选1个原样填：${GENRES.join('、')}）", "category": ["氛围标签（1-3个，简短）"],${cat === 'tv' ? `
+    "episodes": 集数（整数）, "duration": "单集时长（如 45分钟/集）", "status": "已完结 或 连载中",` : `
+    "duration": "片长（如 118分钟）",`}
+    "year": ${yearRule}, "rating": 评分（数字，一位小数，5.0-9.8）,
+    "intro": "客观剧情简介（100字左右，只描述剧情）",
+    "hotComment": { "user": "网名", "text": "一条高赞热评（40-80字，只表态度观感不剧透具体桥段）", "likes": 点赞数（整数） }
+  }`;
+
+    const sysPrompt = `你是影视 App 的「搜索结果生成系统」。用户在${catNoun}搜索框里搜了一部小说《${esc(book.title)}》，请生成一页搜索结果（JSON 数组，共 6-8 项）。
+${timeDeclare}
+【第 1 项·精确命中】数组第 1 项必须是这部小说《${esc(book.title)}》的官方影视化改编（${catNoun}）。用下面的原著信息生成它——保留原著核心故事与气质，允许影视化的合理改动：
+书名：${esc(book.title)}
+作者：${esc(book.author) || '佚名'}${bookCats ? '\n题材：' + bookCats : ''}
+简介：${esc(book.intro) || '（无）'}
+
+【第 2 项起·相关结果】模拟真实搜索引擎的"相关结果"：生成 5-7 部【确实不是这部改编、却会一起被搜出来】的其他作品，类型混杂，覆盖以下几种"沾边"关系（每种 0-2 部，不必都齐）：
+- 名字撞了但内容完全无关的作品（同名不同作）
+- 题材/类型相近但名字不同的作品
+- 名字和类型都有点像、容易被误认其实不是这部的作品（蹭 IP/山寨感）
+- 有相同演员/CV参演的其他作品
+- 同一原著作者其他作品的改编
+- 同一导演/监督的其他作品
+这些全部是与《${esc(book.title)}》原著无关的、独立虚构的作品，绝不要把原著的剧情、人物安到它们身上。
+
+每项字段，严格用 JSON 数组格式，不能返回 Markdown、代码块或解释，必须以 [ 开头、以 ] 结尾，每项形如：
+${itemFields}
+
+要求：
+- 第 1 项的 title 可沿用原著名或起一个改编名；intro 客观描述改编后的剧情。
+- 第 2 项起的 title 与剧情全部原创，体现"沾边但不是"，绝不复用原著剧情。
+- intro 一律客观中立只描述剧情；主观评价放进 hotComment，且热评只表态度不描述具体剧情桥段。
+- 人名风格贴合世界观氛围。${castRule}
+- 只输出 JSON 数组。${castBlock ? '\n\n' + castBlock : ''}`;
+
+    let raw;
+    try {
+      raw = await _phoneJsonArrayWithRetry({
+        label: '改编搜索', url, key, model,
+        temperature: 0.95, max_tokens: 4096,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: `用户搜索了《${esc(book.title)}》，请生成这一页搜索结果，第 1 项是它的改编。` }
+        ]
+      });
+    } catch (e) {
+      console.error('[改编搜索]', e);
+      UI.showToast('生成失败，请重试', 1800);
+      _renderVideo(pd);
+      return;
+    }
+
+    const arr = (Array.isArray(raw) ? raw : []).filter(m => m && m.title);
+    if (arr.length === 0) {
+      UI.showToast('生成结果为空，请重试', 1800);
+      _renderVideo(pd);
+      return;
+    }
+
+    const list = arr.map((m, mi) => {
+      let cats = [];
+      if (Array.isArray(m.category)) cats = m.category.map(c => String(c || '').trim()).filter(Boolean);
+      else if (typeof m.category === 'string') cats = m.category.split(/[,，、\s]+/).map(c => c.trim()).filter(Boolean);
+      let genre = String(m.genre || '').trim();
+      if (!GENRES.includes(genre)) { const hit = GENRES.find(g => genre.includes(g)); genre = hit || genreDefault; }
+      let cast = [];
+      if (Array.isArray(m.cast)) cast = m.cast.map(c => String(c || '').trim()).filter(Boolean);
+      else if (typeof m.cast === 'string') cast = m.cast.split(/[,，、\s]+/).map(c => c.trim()).filter(Boolean);
+      let rating = parseFloat(m.rating);
+      if (!isFinite(rating)) rating = 0;
+      rating = Math.max(0, Math.min(10, rating));
+      let year = parseInt(m.year, 10);
+      if (!isFinite(year)) year = 0;
+      if (year && curYear) year = Math.max(yearFrom, Math.min(curYear, year));
+      let hot = null;
+      const hc = m.hotComment || m.hot_comment;
+      if (hc && typeof hc === 'object' && !Array.isArray(hc)) {
+        const text = String(hc.text || '').trim().slice(0, 120);
+        if (text) {
+          let likes = parseInt(hc.likes, 10);
+          if (!isFinite(likes) || likes < 0) likes = 0;
+          hot = { user: String(hc.user || '影迷').trim().slice(0, 20) || '影迷', text, likes };
+        }
+      } else if (typeof hc === 'string' && hc.trim()) {
+        hot = { user: '影迷', text: hc.trim().slice(0, 120), likes: 0 };
+      }
+      let episodes = 0, status = '';
+      if (cat === 'tv' || cat === 'anime') {
+        episodes = parseInt(m.episodes, 10);
+        if (!isFinite(episodes) || episodes < 1) episodes = isAnime ? 12 : 24;
+        episodes = Math.min(episodes, 500);
+        status = (String(m.status || '').trim() === '连载中') ? '连载中' : '已完结';
+      }
+      const isHit = (mi === 0);   // 第 1 项 = 精确命中的真改编
+      const item = {
+        id: 'vd_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + mi,
+        kind: cat,
+        title: String(m.title).replace(/^[《<「『\s]+|[》>」』\s]+$/g, '').slice(0, 40),
+        director: String(m.director || '').slice(0, 20),
+        screenwriter: String(m.screenwriter || '').slice(0, 20),
+        cast: cast.slice(0, 6),
+        genre: genre,
+        category: cats.slice(0, 3),
+        year: year || '',
+        duration: String(m.duration || '').slice(0, 20),
+        rating: rating ? Number(rating.toFixed(1)) : '',
+        intro: String(m.intro || '').slice(0, 260),
+        hotComment: hot,
+        cover: isHit ? ((book.cover || '').trim() || _videoPickCover(genre)) : _videoPickCover(genre),
+        studio: isAnime ? String(m.studio || '').trim().slice(0, 30) : String(m.director || '').slice(0, 20)
+      };
+      if (isAnime) item.artDirector = String(m.artDirector || '').trim().slice(0, 20);
+      if (cat === 'tv' || cat === 'anime') { item.episodes = episodes; item.status = status; }
+      // 只有第 1 项挂 adaptedFrom —— 真改编身份由代码持有，不靠 AI 自觉
+      if (isHit) item.adaptedFrom = { bookId: book.id, bookTitle: book.title || '', author: book.author || '' };
+      return item;
+    });
+
     if (!pd.videoDiscover || typeof pd.videoDiscover !== 'object' || Array.isArray(pd.videoDiscover)) {
       pd.videoDiscover = {};
     }
     pd.videoDiscover[cat] = list;
+    if (!Array.isArray(pd.videoWorks)) pd.videoWorks = [];
+    const byId = {};
+    pd.videoWorks.forEach(w => { if (w && w.id) byId[w.id] = w; });
+    list.forEach(item => {
+      if (!item || !item.id) return;
+      if (byId[item.id]) {
+        Object.keys(item).forEach(k => { if (k !== 'watched' && k !== 'faved' && k !== 'watchedAt') byId[item.id][k] = item[k]; });
+      } else {
+        pd.videoWorks.push(item);
+        byId[item.id] = item;
+      }
+    });
     await _savePhoneData();
     _renderVideo(pd);
-    UI.showToast('已生成 ' + list.length + ' 部电影', 1500);
+    UI.showToast('找到《' + (book.title || '') + '》及相关 ' + list.length + ' 条', 1600);
   }
 
-  function _videoOpenWork(id) {
-    UI.showToast('视频详情页开发中', 1600);
+  async function _videoOpenWork(id) {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    // 在「发现页缓存 + 观看历史（videoWorks）」全集里按 id 找回完整作品对象，
+    // 这样即便发现页刷新后该作品已不在 videoDiscover，只要进过观看历史仍点得开。
+    const work = _videoAllWorks(pd).find(w => w && w.id === id) || null;
+    if (!work) { UI.showToast('未找到该作品', 1500); return; }
+
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const cover = (work.cover || '').trim();
+    const coverHtml = cover
+      ? `<img src="${esc(cover)}" style="width:100%;height:100%;object-fit:cover">`
+      : `<div class="phone-video-card-coverfallback" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center">${_phoneIcon('video')}</div>`;
+    // 元信息行：年份 / 集数 / 时长 / 评分
+    const metaBits = [];
+    if (work.year) metaBits.push(esc(work.year));
+    if (work.episodes && (work.kind === 'tv' || work.kind === 'anime')) metaBits.push(esc(work.episodes + '集'));
+    if ((work.duration || '').trim()) metaBits.push(esc(work.duration.trim()));
+    const metaLine = metaBits.join(' · ');
+    const ratingHtml = work.rating ? `<span style="color:var(--accent);font-weight:700;font-size:16px">${esc(work.rating)}</span><span style="font-size:11px;color:var(--text-secondary)">分</span>` : '';
+    const cats = Array.isArray(work.category) ? work.category : [];
+    // 主类型 genre 作为第一个标签，和自由标签同样式
+    const allTags = [(work.genre || '').trim(), ...cats].filter(Boolean);
+    const catsHtml = allTags.length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${allTags.map(c => `<span style="font-size:11px;color:var(--text-secondary);background:var(--bg-tertiary);border-radius:999px;padding:2px 10px">${esc(c)}</span>`).join('')}</div>`
+      : '';
+    // 详细字段（按分类切换标签名）
+    const isAnime = work.kind === 'anime';
+    const rows = [];
+    if ((work.director || '').trim()) rows.push([isAnime ? '监督' : '导演', work.director]);
+    if ((work.screenwriter || '').trim()) rows.push([isAnime ? '脚本' : '编剧', work.screenwriter]);
+    if (isAnime && (work.artDirector || '').trim()) rows.push(['作画', work.artDirector]);
+    if (isAnime && (work.studio || '').trim()) rows.push(['制作', work.studio]);
+    if (Array.isArray(work.cast) && work.cast.length) rows.push([isAnime ? 'CV' : '主演', work.cast.join(' / ')]);
+    if (work.adaptedFrom && (work.adaptedFrom.bookTitle || '').trim()) {
+      const _ab = work.adaptedFrom;
+      rows.push(['原著', '《' + _ab.bookTitle + '》' + ((_ab.author || '').trim() ? ' ' + _ab.author : '')]);
+    }
+    const rowsHtml = rows.map(([k, v]) => `
+      <div style="display:flex;gap:8px;font-size:12px;line-height:1.7;margin-bottom:2px">
+        <span style="color:var(--text-secondary);flex-shrink:0;width:36px">${esc(k)}</span>
+        <span style="color:var(--text);flex:1;min-width:0">${esc(v)}</span>
+      </div>`).join('');
+    const introHtml = (work.intro || '').trim()
+      ? `<div style="font-size:12px;color:var(--text-secondary);line-height:1.8;margin-top:10px;white-space:pre-wrap">${esc(work.intro.trim())}</div>`
+      : '';
+    // 高赞热评（主观评价）：与客观简介分开呈现
+    const hc = work.hotComment;
+    const _likesStr = (n) => {
+      const v = parseInt(n, 10);
+      if (!isFinite(v) || v <= 0) return '';
+      if (v >= 10000) return (v / 10000).toFixed(1).replace(/\.0$/, '') + '万';
+      return String(v);
+    };
+    const hotHtml = (hc && (hc.text || '').trim())
+      ? `<div style="margin-top:14px;background:transparent;border:1px dashed var(--border);border-radius:10px;padding:11px 12px">
+           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px">
+             <span style="font-size:12px;font-weight:600;color:var(--text)">${esc(hc.user || '影迷')}</span>
+             <span style="font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"/></svg>${esc(_likesStr(hc.likes))}</span>
+           </div>
+           <div style="font-size:12px;color:var(--text-secondary);line-height:1.7">${esc(hc.text.trim())}</div>
+         </div>`
+      : '';
+
+    const mask = document.createElement('div');
+    mask.className = 'phone-mask';
+    mask.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);padding:24px';
+    mask.innerHTML = `
+      <div style="width:100%;max-width:340px;background:var(--bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;max-height:84vh;display:flex;flex-direction:column">
+        <div style="width:100%;aspect-ratio:16/9;background:var(--bg-tertiary);flex-shrink:0">${coverHtml}</div>
+        <div style="padding:16px 18px 0;overflow-y:auto;flex:1;min-height:0">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px">
+            <div style="font-size:17px;font-weight:700;color:var(--text);line-height:1.3;flex:1;min-width:0">${esc(work.title || '未命名')}</div>
+            ${ratingHtml ? `<div style="flex-shrink:0;display:flex;align-items:baseline;gap:1px">${ratingHtml}</div>` : ''}
+          </div>
+          ${metaLine ? `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">${metaLine}</div>` : ''}
+          ${catsHtml}
+          ${rowsHtml}
+          ${introHtml}
+          ${hotHtml}
+        </div>
+        <div style="display:flex;gap:10px;padding:14px 18px 16px;flex-shrink:0">
+          <button id="video-detail-cancel" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
+          <button id="video-detail-play" style="flex:1;padding:11px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${(work.kind === 'tv' || work.kind === 'anime') ? '查看剧集' : '播放'}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => { try { document.body.removeChild(mask); } catch(_) {} };
+    mask.querySelector('#video-detail-cancel').onclick = close;
+    mask.querySelector('#video-detail-play').onclick = () => {
+      close();
+      if (work.kind === 'tv' || work.kind === 'anime') {
+        _videoOpenEpisodes(work);
+      } else {
+        _videoOpenDetail(work);
+      }
+    };
+    _maskCloseOnBg(mask, close);
+  }
+
+  // 视频详情页（全屏 overlay）：顶部封面+播放器，下面 剧本/名场面/影评/弹幕 四个 tab
+  let _videoDetailTab = 'script';
+  let _videoDetailWork = null;     // 当前详情页的电影对象（tab 切换/生成时引用）
+  let _videoDetailOverlay = null;  // 当前详情页 overlay DOM 引用
+  // 剧本主类型枚举（与 _videoGenList 的 GENRES 保持一致）
+  const _VIDEO_GENRES = ['科幻','动作','爱情','悬疑','恐怖','喜剧','剧情','战争','历史','犯罪','奇幻','纪录','音乐'];
+  // 剧集主类型枚举（占位，待剧集生成逻辑接入时启用）
+  const _VIDEO_GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','喜剧','青春'];
+  // 动漫主类型枚举（占位，待动漫生成逻辑接入时启用）
+  const _VIDEO_GENRES_ANIME = ['热血','恋爱','日常','奇幻','异世界','科幻','悬疑','治愈','校园','战斗','搞笑','古风','魔法少女','运动','偶像'];
+  // ===== 封面图池（编号 + 标签映射，一张图可挂多个标签跨分类复用）=====
+  // 图片存 img/covers/cover_xxx.jpg。每项登记该图适用的标签（与三套 genre 枚举里的词对应）。
+  // 生成作品时按 genre 从"标签包含该词"的图里随机抽一张。作者出图后在此登记即可，留空则暂用占位/纯色。
+  const _VIDEO_COVER_DIR = 'img/covers/';
+  // 标签归并表：画面调性相同的同义词归到同一代表词。登记封面时只写「代表词」即可，
+  // 抽图时会把作品的 genre 先归一化到代表词再匹配，于是同组的不同 genre 共用一套图。
+  // 作者出的是「纯氛围图」，按情绪基调归大类：
+  //   古风 ← 古风/古装/古偶/武侠      恋爱 ← 恋爱/爱情/现偶
+  //   喜剧 ← 喜剧/搞笑                奇幻 ← 奇幻/异世界
+  //   悬疑 ← 悬疑/犯罪/恐怖            动作 ← 动作/战斗/热血
+  //   日常 ← 日常/治愈                音乐 ← 音乐/偶像
+  // 其余 genre 各归各（科幻/战争/历史/纪录/都市/家庭/青春/校园/运动/剧情/魔法少女 等）。
+  const _VIDEO_TAG_ALIAS = {
+    '古装': '古风', '古偶': '古风', '武侠': '古风',
+    '爱情': '恋爱', '现偶': '恋爱',
+    '搞笑': '喜剧',
+    '异世界': '奇幻',
+    '犯罪': '悬疑', '恐怖': '悬疑',
+    '战斗': '动作', '热血': '动作',
+    '治愈': '日常',
+    '偶像': '音乐'
+  };
+  const _videoTagCanon = (t) => _VIDEO_TAG_ALIAS[String(t || '').trim()] || String(t || '').trim();
+  const _VIDEO_COVER_POOL = [
+    { file: 'cover_001.jpg', tags: ['音乐','都市','家庭','日常'] },
+    { file: 'cover_002.jpg', tags: ['剧情','动作','喜剧'] },
+    { file: 'cover_003.jpg', tags: ['剧情','动作','喜剧'] },
+    { file: 'cover_004.jpg', tags: ['剧情','家庭','喜剧'] },
+    { file: 'cover_005.jpg', tags: ['剧情','家庭','纪录'] },
+    { file: 'cover_006.jpg', tags: ['剧情','家庭','魔法少女','纪录'] },
+    { file: 'cover_007.jpg', tags: ['剧情','家庭'] },
+    { file: 'cover_008.jpg', tags: ['剧情','科幻'] },
+    { file: 'cover_009.jpg', tags: ['剧情','纪录','魔法少女'] },
+    { file: 'cover_010.jpg', tags: ['剧情','音乐','纪录'] },
+    { file: 'cover_011.jpg', tags: ['剧情','魔法少女'] },
+    { file: 'cover_012.jpg', tags: ['剧情'] },
+    { file: 'cover_013.jpg', tags: ['动作','喜剧','都市'] },
+    { file: 'cover_014.jpg', tags: ['动作','悬疑'] },
+    { file: 'cover_015.jpg', tags: ['动作','运动','日常','青春'] },
+    { file: 'cover_016.jpg', tags: ['历史','古风'] },
+    { file: 'cover_017.jpg', tags: ['古风','历史','悬疑'] },
+    { file: 'cover_018.jpg', tags: ['古风','历史'] },
+    { file: 'cover_019.jpg', tags: ['古风','历史','日常'] },
+    { file: 'cover_020.jpg', tags: ['古风'] },
+    { file: 'cover_021.jpg', tags: ['古风'] },
+    { file: 'cover_022.jpg', tags: ['古风','日常'] },
+    { file: 'cover_023.jpg', tags: ['奇幻','悬疑','古风','纪录'] },
+    { file: 'cover_024.jpg', tags: ['奇幻','悬疑','日常','恋爱','青春'] },
+    { file: 'cover_025.jpg', tags: ['奇幻','魔法少女','日常','校园','恋爱'] },
+    { file: 'cover_026.jpg', tags: ['家庭','青春','日常','校园','恋爱'] },
+    { file: 'cover_027.jpg', tags: ['恋爱','音乐','都市','古风'] },
+    { file: 'cover_028.jpg', tags: ['恋爱','日常','青春','校园'] },
+    { file: 'cover_029.jpg', tags: ['悬疑','战争'] },
+    { file: 'cover_030.jpg', tags: ['悬疑','奇幻','音乐'] },
+    { file: 'cover_031.jpg', tags: ['悬疑'] },
+    { file: 'cover_032.jpg', tags: ['悬疑'] },
+    { file: 'cover_033.jpg', tags: ['战争','历史','古风'] },
+    { file: 'cover_034.jpg', tags: ['战争','历史'] },
+    { file: 'cover_035.jpg', tags: ['日常','音乐','恋爱'] },
+    { file: 'cover_036.jpg', tags: ['悬疑'] },
+    { file: 'cover_037.jpg', tags: ['科幻','奇幻','悬疑'] },
+    { file: 'cover_038.jpg', tags: ['科幻','奇幻'] },
+    { file: 'cover_039.jpg', tags: ['科幻','悬疑','奇幻'] },
+    { file: 'cover_040.jpg', tags: ['科幻'] },
+    { file: 'cover_041.jpg', tags: ['科幻'] },
+    { file: 'cover_042.jpg', tags: ['纪录','悬疑','战争'] },
+    { file: 'cover_043.jpg', tags: ['运动','动作','青春'] },
+    { file: 'cover_044.jpg', tags: ['运动','青春','动作'] },
+    { file: 'cover_045.jpg', tags: ['都市','动作','喜剧'] },
+    { file: 'cover_046.jpg', tags: ['都市','家庭','动作','喜剧'] },
+    { file: 'cover_047.jpg', tags: ['青春','校园','日常'] },
+    { file: 'cover_048.jpg', tags: ['青春','运动'] },
+    { file: 'cover_049.jpg', tags: ['音乐','剧情','恋爱','青春','日常'] },
+    { file: 'cover_050.jpg', tags: ['音乐','纪录','都市','奇幻','青春'] },
+    { file: 'cover_051.jpg', tags: ['魔法少女','日常','恋爱','音乐'] },
+    { file: 'cover_052.jpg', tags: ['魔法少女','日常','恋爱','音乐'] },
+  ];
+  // 按标签随机抽一张封面文件路径；池里没有匹配的返回空串（调用方自行兜底）
+  function _videoPickCover(genre) {
+    const g = _videoTagCanon(genre);
+    if (!g) return '';
+    const hits = _VIDEO_COVER_POOL.filter(c => {
+      if (!c || !c.file || !Array.isArray(c.tags)) return false;
+      return c.tags.some(t => _videoTagCanon(t) === g);
+    });
+    if (!hits.length) return '';
+    const pick = hits[Math.floor(Math.random() * hits.length)];
+    return _VIDEO_COVER_DIR + pick.file;
+  }
+  // 各主类型的文风示范（由作者亲自填写；只写「怎么写」的笔法层面——句式、节奏、用词、氛围，
+  // 不写具体剧情设定）。留空的类型不拼进 prompt，AI 自由发挥。生成剧本时按 work.genre 取用。
+  const _VIDEO_GENRE_STYLE = {
+    '科幻': '',
+    '动作': '',
+    '爱情': '',
+    '悬疑': '',
+    '恐怖': '',
+    '喜剧': '',
+    '剧情': '',
+    '战争': '',
+    '历史': '',
+    '犯罪': '',
+    '奇幻': '',
+    '纪录': '',
+    '音乐': ''
+  };
+  function _videoOpenDetail(work) {
+    if (!work) return;
+    // 兜底：自制改编作品若已生成内容（电影有剧本 / 剧集有蓝图）却没补过原著快照，补调一次。
+    // 修复历史数据——早期 _videoMarkBookAdapted 用 adaptedKinds 判重导致快照从未写入，本章说读不到改编信息。
+    if (work.selfMake && work.adaptedFrom && work.adaptedFrom.bookId &&
+        ((work.kind === 'movie' && work.script) ||
+         ((work.kind === 'tv' || work.kind === 'anime') && work.blueprint))) {
+      _videoMarkBookAdapted(work).then(ok => { if (ok) { try { _savePhoneData(); } catch (_) {} } }).catch(() => {});
+    }
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    _videoDetailTab = 'script';
+    const cover = (work.cover || '').trim();
+    const coverHtml = cover
+      ? `<img src="${esc(cover)}" style="width:100%;height:100%;object-fit:cover">`
+      : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);opacity:0.4">${_phoneIcon('video')}</div>`;
+    const metaBits = [];
+    if (work.year) metaBits.push(esc(work.year));
+    if (work.episodes && (work.kind === 'tv' || work.kind === 'anime')) metaBits.push(esc(work.episodes + '集'));
+    if ((work.duration || '').trim()) metaBits.push(esc(work.duration.trim()));
+    if (work.rating) metaBits.push(esc(work.rating) + '分');
+    const metaLine = metaBits.join(' · ');
+
+    const TABS = [
+      { id: 'script', name: '简介' },
+      { id: 'scenes', name: '名场面' },
+      { id: 'reviews', name: '影评' },
+      { id: 'danmaku', name: '弹幕' },
+    ];
+    const tabsHtml = TABS.map(t =>
+      `<div class="phone-video-detail-tab${t.id === _videoDetailTab ? ' active' : ''}" data-vtab="${t.id}">${esc(t.name)}</div>`
+    ).join('');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'phone-video-detail';
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column';
+    overlay.innerHTML = `
+      <div style="position:relative;width:100%;aspect-ratio:16/9;background:#000;flex-shrink:0;overflow:hidden">
+        ${coverHtml}
+        <button id="video-detail-back" style="position:absolute;top:12px;left:12px;width:34px;height:34px;border:none;border-radius:50%;background:rgba(0,0,0,0.45);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+        </button>
+        ${(!work._isEpisode && (work.kind === 'movie' || (work.selfMake && (work.kind === 'tv' || work.kind === 'anime')))) ? `<button id="video-detail-setting" style="position:absolute;top:12px;right:12px;width:34px;height:34px;border:none;border-radius:50%;background:rgba(0,0,0,0.45);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>` : ''}
+        <button id="video-detail-playbtn" class="phone-video-detail-playbtn" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);${(work.kind === 'tv' || work.kind === 'anime') ? 'width:auto;padding:0 18px;height:44px;border-radius:22px' : 'width:56px;height:56px;border-radius:50%'};border:none;background:rgba(0,0,0,0.5);color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer">
+          ${(work.kind === 'tv' || work.kind === 'anime')
+            ? `<svg class="ic-play" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg><span class="ic-play" style="font-size:13px;font-weight:600">查看剧集</span>`
+            : `<svg class="ic-play" viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`}
+          <span class="ic-loading" style="display:none;width:24px;height:24px;border:3px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:phoneSpin .8s linear infinite"></span>
+        </button>
+      </div>
+      <div style="padding:10px 16px 4px;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-secondary)">
+          <span style="flex-shrink:0">00:00</span>
+          <div style="flex:1;height:3px;background:var(--bg-tertiary);border-radius:2px;overflow:hidden"><div style="width:0%;height:100%;background:var(--accent)"></div></div>
+          <span style="flex-shrink:0">${esc((work.duration || '').trim() || '--:--')}</span>
+        </div>
+      </div>
+      <div style="padding:8px 16px 4px;flex-shrink:0">
+        <div style="display:flex;align-items:flex-start;gap:8px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:16px;font-weight:700;color:var(--text);line-height:1.3">${esc(work.title || '未命名')}</div>
+            ${metaLine ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:3px">${metaLine}</div>` : ''}
+          </div>
+          <button id="video-detail-share" style="flex-shrink:0;background:none;border:none;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;padding:4px;margin-top:2px" title="分享">${_uiIcon('share', 18)}</button>
+        </div>
+      </div>
+      <div class="phone-video-detail-tabs">
+        ${tabsHtml}
+      </div>
+      <div id="video-detail-tabbody" class="phone-video-detail-body">
+        ${_videoDetailTabBody(_videoDetailTab)}
+      </div>`;
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+    _videoDetailWork = work;
+    _videoDetailOverlay = overlay;
+
+    const back = overlay.querySelector('#video-detail-back');
+    if (back) back.onclick = () => {
+      try { overlay.remove(); } catch(_) {}
+      _videoDetailOverlay = null;
+      // 返回后刷新视频主页（新建/改编作品才能立刻出现在「我的」）
+      try { const _pd = _getPhoneDataSync(); if (_pd) _renderVideo(_pd); } catch(_) {}
+    };
+    const setBtn = overlay.querySelector('#video-detail-setting');
+    if (setBtn) setBtn.onclick = () => {
+      if (work.kind === 'tv' || work.kind === 'anime') { _videoEpSettings(work, overlay); }
+      else { _videoMovieSettings(work, overlay); }
+    };
+    const shareBtn = overlay.querySelector('#video-detail-share');
+    if (shareBtn) shareBtn.onclick = () => { _videoShareWork(work); };
+    const playBtn = overlay.querySelector('#video-detail-playbtn');
+    if (playBtn) playBtn.onclick = () => {
+      const w = _videoDetailWork;
+      if (!w) return;
+      // 电视剧/动漫：打开剧集列表
+      if (w.kind === 'tv' || w.kind === 'anime') {
+        // 自制剧集没蓝图：引导去编辑蓝图，不自动生成
+        if (w.selfMake && !w.blueprint) {
+          _videoEditBlueprint(w);
+          return;
+        }
+        _videoOpenEpisodes(w);
+        return;
+      }
+      // 电影：必须等剧本和影评弹幕都备齐才能播放
+      if (!w.script || typeof w.script !== 'object') {
+        UI.showToast(w._scriptLoading ? '视频加载中，请稍候' : '剧本还没生成', 1600);
+        return;
+      }
+      // 自制/改编电影：上映前不能播放（成片还没和观众见面）
+      if (w.selfMake && !w.released) {
+        UI.showToast(w.shootChainId && !w.shootDone ? '影片还在拍摄中' : '影片还未上映，去详情设置里申请上映', 1800);
+        return;
+      }
+      if (!Array.isArray(w.reviews) || !w.reviews.length || !Array.isArray(w.danmu) || !w.danmu.length) {
+        UI.showToast(w._reviewsLoading ? '弹幕装填中，请稍候' : '影评弹幕还没生成', 1600);
+        return;
+      }
+      _videoOpenWatch(w);
+    };
+    // tab 切换
+    overlay.querySelectorAll('.phone-video-detail-tab').forEach(el => {
+      el.onclick = () => {
+        const tab = el.getAttribute('data-vtab');
+        if (!tab || tab === _videoDetailTab) return;
+        _videoDetailTab = tab;
+        overlay.querySelectorAll('.phone-video-detail-tab').forEach(x => x.classList.toggle('active', x.getAttribute('data-vtab') === tab));
+        _videoRenderTab(tab);
+      };
+    });
+    // 进入时按当前 tab 触发渲染（loading 占位）
+    _videoRenderTab(_videoDetailTab);
+    // 方案 A：进详情页即串行预生成（剧本名场面 → 影评弹幕），不必等用户切 tab
+    _videoEnsureContent(work);
+  }
+
+  // 渲染指定 tab 的内容。生成由 _videoEnsureContent 串行编排，这里只负责按状态渲染。
+  function _videoRenderTab(tab) {
+    const overlay = _videoDetailOverlay;
+    const work = _videoDetailWork;
+    if (!overlay || !work) return;
+    const bodyEl = overlay.querySelector('#video-detail-tabbody');
+    if (!bodyEl) return;
+    const isEp = !!work._isEpisode;
+    // 自制/改编作品上映前不生成影评弹幕（单集取父作品的标记）
+    const _selfSrc = isEp ? (work._parent || {}) : work;
+    const _preRelease = !!(_selfSrc.selfMake && !_selfSrc.released);
+    const _preReleaseKind = _selfSrc.kind;
+    if (tab === 'script') {
+      if (work.script && typeof work.script === 'object' && (work.script.synopsis || (isEp && Array.isArray(work.script.scene) && work.script.scene.length))) {
+        bodyEl.innerHTML = isEp ? _videoEpSynopsisHtml(work.script, work._parent && work._parent.blueprint, work._parent && work._parent.kind === 'anime', work._parent && work._parent.themeSong) : _videoScriptHtml(work.script, work.themeSong, work);
+      } else if (work._scriptLoading) {
+        bodyEl.innerHTML = _videoTabLoading('视频加载中…');
+      } else if (work.selfMake && !isEp && work.kind === 'movie') {
+        // 自制电影还没生成剧本：引导去右上角编辑剧本（不自动发请求）
+        bodyEl.innerHTML = `<div style="text-align:center;padding:44px 20px;color:var(--text-secondary)">
+          <div style="font-size:34px;margin-bottom:12px">🎬</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">还没有剧本</div>
+          <div style="font-size:12px;line-height:1.7;margin-bottom:16px">这是你自制的电影。点右上角设置进入「编辑剧本」，填好创作方向就能生成剧情梗概、人物和名场面。</div>
+          <button id="video-selfmake-edit" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑剧本</button>
+        </div>`;
+        setTimeout(() => {
+          const b = overlay.querySelector('#video-selfmake-edit');
+          if (b) b.onclick = () => _videoEditScript(work);
+        }, 0);
+      } else if (work.selfMake && !isEp && (work.kind === 'tv' || work.kind === 'anime')) {
+        // 自制剧集/动漫还没生成蓝图：引导去编辑蓝图工作台（不是电影的编辑剧本）
+        const _isAni = work.kind === 'anime';
+        bodyEl.innerHTML = `<div style="text-align:center;padding:44px 20px;color:var(--text-secondary)">
+          <div style="font-size:34px;margin-bottom:12px">${_isAni ? '🎉' : '📺'}</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">还没有故事蓝图</div>
+          <div style="font-size:12px;line-height:1.7;margin-bottom:16px">这是你自制的${_isAni ? '动画' : '电视剧'}。先去编辑蓝图，定好总纲、明暗线、人物和分${_isAni ? '话' : '集'}大纲，再逐${_isAni ? '话' : '集'}创作剧情。</div>
+          <button id="video-selfmake-editbp" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑蓝图</button>
+        </div>`;
+        setTimeout(() => {
+          const b = overlay.querySelector('#video-selfmake-editbp');
+          if (b) b.onclick = () => _videoEditBlueprint(work);
+        }, 0);
+      } else {
+        // 没数据也没在生成（生成失败或被中断）：显示可重试的错误态，不再自动发请求
+        bodyEl.innerHTML = _videoTabError(isEp ? ((work._parent && work._parent.kind === 'anime') ? '暂无本话内容，点此重新生成' : '暂无本集内容，点此重新生成') : '暂无剧本，点此重新生成');
+        setTimeout(_videoBindTabRetry, 0);
+      }
+      return;
+    }
+    if (tab === 'scenes') {
+      if (work.script && Array.isArray(work.script.scene) && work.script.scene.length) {
+        bodyEl.innerHTML = _videoSceneHtml(work.script.scene);
+      } else if (work._scriptLoading) {
+        bodyEl.innerHTML = _videoTabLoading('视频加载中…');
+      } else if (work.selfMake && !isEp && work.kind === 'movie') {
+        bodyEl.innerHTML = `<div style="text-align:center;padding:44px 20px;color:var(--text-secondary)">
+          <div style="font-size:34px;margin-bottom:12px">🎬</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">还没有名场面</div>
+          <div style="font-size:12px;line-height:1.7;margin-bottom:16px">先去右上角「编辑剧本」生成剧本，名场面会一并产出。</div>
+          <button id="video-selfmake-edit2" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑剧本</button>
+        </div>`;
+        setTimeout(() => {
+          const b = overlay.querySelector('#video-selfmake-edit2');
+          if (b) b.onclick = () => _videoEditScript(work);
+        }, 0);
+      } else if (work.selfMake && !isEp && (work.kind === 'tv' || work.kind === 'anime')) {
+        const _isAni = work.kind === 'anime';
+        bodyEl.innerHTML = `<div style="text-align:center;padding:44px 20px;color:var(--text-secondary)">
+          <div style="font-size:34px;margin-bottom:12px">${_isAni ? '🎉' : '📺'}</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">还没有故事蓝图</div>
+          <div style="font-size:12px;line-height:1.7;margin-bottom:16px">名场面在逐${_isAni ? '话' : '集'}创作时产出。先去编辑蓝图，再逐${_isAni ? '话' : '集'}创作剧情。</div>
+          <button id="video-selfmake-editbp2" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑蓝图</button>
+        </div>`;
+        setTimeout(() => {
+          const b = overlay.querySelector('#video-selfmake-editbp2');
+          if (b) b.onclick = () => _videoEditBlueprint(work);
+        }, 0);
+      } else {
+        // 剧本已生成但没名场面，或生成失败/被中断：可重试
+        bodyEl.innerHTML = _videoTabError('暂无名场面，点此重新生成剧本');
+        setTimeout(_videoBindTabRetry, 0);
+      }
+      return;
+    }
+    if (tab === 'reviews') {
+      if (Array.isArray(work.reviews) && work.reviews.length) {
+        bodyEl.innerHTML = _videoReviewsHtml(work.reviews, work.rating);
+      } else if (work._reviewsLoading) {
+        bodyEl.innerHTML = _videoTabLoading('弹幕装填中…');
+      } else if (work._scriptLoading) {
+        bodyEl.innerHTML = _videoTabLoading('视频加载中…');
+      } else if (_preRelease) {
+        // 自制/改编作品上映前没有影评（观众还没看到）
+        const tip = (_preReleaseKind === 'tv' || _preReleaseKind === 'anime')
+          ? '这部作品还未开播，开播后才会有观众评论。去详情设置里申请开播吧。'
+          : '这部影片还未上映，上映后才会有观众影评。去详情设置里申请上映吧。';
+        bodyEl.innerHTML = _videoTabHint(tip);
+      } else {
+        // 没数据也没在生成（剧本失败没续上，或影评生成失败/被中断）：可重试，不自动发请求
+        bodyEl.innerHTML = _videoTabError('暂无影评，点此重新生成');
+        setTimeout(_videoBindTabRetry, 0);
+      }
+      return;
+    }
+    if (tab === 'danmaku') {
+      if (Array.isArray(work.danmu) && work.danmu.length) {
+        bodyEl.innerHTML = _videoDanmuHtml(work.danmu);
+      } else if (work._reviewsLoading) {
+        bodyEl.innerHTML = _videoTabLoading('弹幕装填中…');
+      } else if (work._scriptLoading) {
+        bodyEl.innerHTML = _videoTabLoading('视频加载中…');
+      } else if (_preRelease) {
+        const tip = (_preReleaseKind === 'tv' || _preReleaseKind === 'anime')
+          ? '这部作品还未开播，开播后才会有弹幕。'
+          : '这部影片还未上映，上映后才会有弹幕。';
+        bodyEl.innerHTML = _videoTabHint(tip);
+      } else {
+        bodyEl.innerHTML = _videoTabError('暂无弹幕，点此重新生成');
+        setTimeout(_videoBindTabRetry, 0);
+      }
+      return;
+    }
+    bodyEl.innerHTML = _videoDetailTabBody(tab);
+  }
+
+  // tab 加载中占位：转圈动画 + 文字
+  function _videoTabLoading(text) {
+    return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:56px 16px;color:var(--text-secondary)">
+      <div class="phone-generation-spinner"></div>
+      <div style="font-size:13px">${Utils.escapeHtml(text)}</div>
+    </div>`;
+  }
+
+  // tab 出错占位（带重试）
+  function _videoTabError(text) {
+    return `<div style="text-align:center;padding:40px 16px">
+      <div style="color:var(--text-secondary);font-size:13px;margin-bottom:14px">${Utils.escapeHtml(text)}</div>
+      <button class="phone-video-tab-retry" style="border:1px solid var(--border);border-radius:8px;background:none;color:var(--accent);font-size:13px;padding:7px 18px;cursor:pointer">重新生成</button>
+    </div>`;
+  }
+
+  // tab 纯提示占位（无重试按钮，用于上映前无影评弹幕等场景）
+  function _videoTabHint(text) {
+    return `<div style="text-align:center;padding:44px 24px;color:var(--text-secondary);font-size:13px;line-height:1.7">${Utils.escapeHtml(text)}</div>`;
+  }
+
+  // 构建视频「演职人员」名单块：读当前世界观的白名单，喂给生成。
+  // kind='anime' 读动画四份（监督/系列构成/配音演员/作画）；否则读真人三份（导演/编剧/演员）。
+  // 各份独立，必须让 AI 清楚区分工种，不可混用（除非同一人在多份名单里）。
+  async function _videoBuildCastBlock(kind) {
+    let video = null;
+    try {
+      const wv = (typeof Worldview !== 'undefined' && Worldview.getCurrent) ? await Worldview.getCurrent() : null;
+      video = wv && wv.phoneApps ? wv.phoneApps.video : null;
+    } catch (_) {}
+    if (!video) return '';
+    const pick = (key) => (Array.isArray(video[key]) ? video[key] : []).filter(x => x && (x.id || x.name));
+
+    // 取角色详情（名+简介），用于让 AI 了解这些真人
+    let candidates = [];
+    try { candidates = await _collectChatCandidates(); } catch (_) { candidates = []; }
+    const detailOf = (item) => {
+      const nm = String(item.name || '').trim();
+      const c = candidates.find(x => (x.id && item.id && x.id === item.id) || (x.name && x.name.trim() === nm));
+      let s = `- ${nm}`;
+      if (c) {
+        if (c.aliases) s += `（别名：${c.aliases}）`;
+        if (c.detail) s += `\n  ${c.detail.replace(/\n+/g, ' ').slice(0, 160)}`;
+      }
+      return s;
+    };
+    const seg = (title, arr) => arr.length ? `\n【可出任${title}的真实人物】\n${arr.map(detailOf).join('\n')}` : '';
+
+    if (kind === 'anime') {
+      const dirs = pick('animeDirectorWhitelist');
+      const scrs = pick('animeScriptWhitelist');
+      const cvs  = pick('animeCvWhitelist');
+      const arts = pick('animeArtWhitelist');
+      if (!dirs.length && !scrs.length && !cvs.length && !arts.length) return '';
+      return `\n\n【真实人物参与名单】以下是这个世界里真实存在的人物，被指定可以参与动画制作的特定工种。请在合适的作品里安排他们担任对应工种（用其本名）；不契合的作品可以不用，宁缺勿滥，不要每部都硬塞。\n切记：这几类工种完全不同，必须严格区分——监督负责统筹执导、系列构成负责编写脚本、配音演员负责为角色配音、作画负责画面作画。一个人只能担任他所在名单对应的工种（除非同一人同时出现在多份名单里）。绝不能让只在配音演员名单里的人去当监督，也不能让只在作画名单里的人去配音。${seg('监督', dirs)}${seg('系列构成', scrs)}${seg('配音演员', cvs)}${seg('作画', arts)}`;
+    }
+
+    const dirs = pick('directorWhitelist');
+    const scrs = pick('screenwriterWhitelist');
+    const acts = pick('actorWhitelist');
+    if (!dirs.length && !scrs.length && !acts.length) return '';
+
+    return `\n\n【真实人物参演名单】以下是这个世界里真实存在的人物，被指定可以出任电影的特定工种。请在合适的影片里安排他们担任对应工种（用其本名）；不契合的影片可以不用，宁缺勿滥，不要每部都硬塞。\n切记：这三类工种完全不同，必须严格区分——导演负责执导、编剧负责写剧本、演员负责出演角色。一个人只能担任他所在名单对应的工种（除非同一人同时出现在多份名单里）。绝不能让只在演员名单里的人去当导演，也不能让只在导演名单里的人去演角色。${seg('导演', dirs)}${seg('编剧', scrs)}${seg('演员', acts)}`;
+  }
+
+  // 直播版「可出场主播名单」：读 w.phoneApps.video.streamerWhitelist（单维度，仿 _videoBuildCastBlock）。
+  // 默认空=全虚构，返回 ''；有名单则拼成段落让 AI 优先用、按人设契合度审慎判断。
+  async function _liveBuildCastBlock() {
+    let video = null;
+    try {
+      const wv = (typeof Worldview !== 'undefined' && Worldview.getCurrent) ? await Worldview.getCurrent() : null;
+      video = wv && wv.phoneApps ? wv.phoneApps.video : null;
+    } catch (_) {}
+    if (!video) return '';
+    let list = (Array.isArray(video.streamerWhitelist) ? video.streamerWhitelist : []).filter(x => x && (x.id || x.name));
+    if (!list.length) return '';
+
+    // 已关注的真人主播不再发给预览 AI（避免和关注列表重复刷出、数据分裂）：白名单 ∩ 未关注
+    try {
+      const pd = _getPhoneDataSync();
+      const followed = (pd && Array.isArray(pd.liveFollowed)) ? pd.liveFollowed : [];
+      if (followed.length) {
+        const fNames = new Set(followed.map(f => String(f && f.streamerName || '').trim()).filter(Boolean));
+        if (fNames.size) {
+          list = list.filter(x => !fNames.has(String(x.name || '').trim()));
+        }
+      }
+    } catch (_) {}
+    if (!list.length) return '';
+
+    let candidates = [];
+    try { candidates = await _collectChatCandidates(); } catch (_) { candidates = []; }
+    const detailOf = (item) => {
+      const nm = String(item.name || '').trim();
+      const c = candidates.find(x => (x.id && item.id && x.id === item.id) || (x.name && x.name.trim() === nm));
+      let s = `- ${nm}`;
+      if (c) {
+        if (c.aliases) s += `（别名：${c.aliases}）`;
+        if (c.detail) s += `\n  ${c.detail.replace(/\n+/g, ' ').slice(0, 160)}`;
+      }
+      return s;
+    };
+
+    return `\n\n【可出场主播名单】以下是这个世界里真实存在的人物，被指定可以作为主播开直播。可以在合适的直播间里安排他们当主播（用其本名）；不契合的直播间不要硬塞，宁缺勿滥，全部新编虚拟主播也完全可以。\n切记：一个主播是否适合某种直播（如团播、套皮套唱跳），完全取决于 ta 的人设是否合理，请审慎判断，绝不为了用上真人而扭曲角色设定——比如不要把一个清冷严肃的角色硬塞进欢乐整活团播。\n【重要·是否此刻在播】还要结合【当前时间】和【主线近况/人物处境】判断 ta 此刻是不是真的会在直播：如果以 ta 的身份、职业、性格、当下处境，这个时间点根本不可能在开播（比如正在忙主线里的要紧事、身份不是会公开直播的人、时段对 ta 不合理），就不要让 ta 出现，**绝不为了凑名单硬把人塞进来直播**。名单只是"允许出现"，不是"必须每次都出现"——一个都不用、整批全虚构都没问题。\n${list.map(detailOf).join('\n')}`;
+  }
+
+  // ===== 直播预览生成（A1，仿 _videoGenList 骨架 + 电台式累积存储）=====
+  // 入口：_videoSearch / _videoGenList 在 cat==='live' 时路由到这里。
+  // 产出 10-12 个直播间预览 JSON，写入 pd.videoDiscover['live']：累积、去重、新的在前、上限 20。
+  // 封面字段先留空（直播封面强绑具体的人，固定图池会精神分裂，等素材到位再接）。
+  async function _liveGenPreview(keyword) {
+    const kw = String(keyword || '').trim();
+    const pd = await _getPhoneData();
+
+    // 功能模型配置
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+    // 进入生成中：在直播页盖一层全屏 loading 遮罩（转圈 + 文案）
+    _liveShowLoading(true);
+
+    // 世界观背景注入（无条件发）：基础设定 + 地区势力速查 + 节日 + 知识，不含 NPC。
+    let wvPrompt = '';
+    try { wvPrompt = await _readingWorldviewBlock(false); } catch (_) {}
+    // 最近主线（无条件发）：让此刻在播的直播间贴合当下世界的近况，仅供参考、不直接复述。
+    let mainlinePrompt = '';
+    try {
+      const _plot = _buildRecentPlotBlock();
+      if (_plot) mainlinePrompt = `【最近发生的事·仅供把握当下氛围】\n下面是这个世界最近发生的一些事，帮你让"此刻正在播的直播间"贴合当下的时事与气氛。仅供参考——不要在直播间标题/简介里直接复述或点名这些事，只用来让内容自然贴合当下。\n${_plot}`;
+    } catch (_) {}
+    // 可出场主播名单（单维度白名单，空则为空串=全虚构）
+    let castBlock = '';
+    try { castBlock = await _liveBuildCastBlock(); } catch (_) {}
+
+    // 当前游戏时间约束（路线一）：把此刻时间塞进提示词，让 AI 只产此刻在播的间
+    let gameTimeStr = '';
+    try { gameTimeStr = _getGameTime() || ''; } catch (_) {}
+    let curHour = -1;
+    try {
+      const hm = gameTimeStr.match(/(\d{1,2}):(\d{2})/);
+      if (hm) curHour = parseInt(hm[1], 10);
+    } catch (_) {}
+    const timeDeclare = gameTimeStr
+      ? `【重要·当前时间】现在是 ${gameTimeStr}${(curHour >= 0) ? `（${curHour} 点）` : ''}。你生成的是【此刻正在直播】的直播间——按现在的时段调整品类分布要合理：深夜（0-5 点）以 ASMR、情感答疑、深夜唠嗑、夜猫子游戏为主；清晨/上午人少，多是早八打游戏、做饭吃播；下午到晚上是高峰，各品类都活跃；带货卖货多在晚上的黄金档。airTime 字段如实写明该间今天的开播时段，要和"此刻在播"自洽（即现在时间落在它的开播时段内）。\n`
+      : '';
+
+    const tagLines = _LIVE_TAGS.map(t => `- ${t.name}：${t.desc}`).join('\n');
+    const tagNames = _LIVE_TAGS.map(t => t.name).join('、');
+
+    const kwLine = kw
+      ? `【观众想找的方向/关键词】${kw}\n请所有直播间都贴合这个方向，但在符合该方向的前提下，让这一批之间的主播、调性、玩法尽量拉开差异，不要雷同。`
+      : `本次无指定方向，品类自由发挥；让这一批直播间之间的品类、主播、调性尽量拉开差异，不要扎堆同一类。`;
+
+    const sysPrompt = `你是直播平台的开播策划系统。根据以下品类信息与世界观资料，生成 10-12 个风格各异、【此刻正在直播】的直播间预览（数量你自己定）。
+${timeDeclare}${kwLine}
+
+【可挂标签】（每个直播间只能挂 1 个，从下面选最贴切的，原样填写不要改字）
+${tagLines}
+
+每个直播间输出以下字段，严格使用 JSON 数组格式，不能返回 Markdown，不能返回代码块，不能解释，必须以 [ 开头、以 ] 结尾：
+[
+  {
+    "title": "直播间标题（像真实直播间那样有吸引力、口语化，10-20 字，可带情绪/招牌梗，不要书名号）",
+    "tags": "品类标签（必须从上面 10 个里选且只选 1 个，原样填写）",
+    "isGroup": 是否团播（true 或 false。唱歌团播、舞蹈团播为 true，其余按内容判断，单人则 false），
+    "concept": "直播间核心概念（200 字左右，【重中之重】，必须说清四块：① 主播是谁——单人就写这个主播的人设（性别、年龄段、风格气质、招牌特点），团播就写有几个人、各自的设定和分工；② 这个直播间主打什么内容、什么调性；③ 主播的招牌玩法/口头禅/和观众的互动习惯；④ 直播间的气氛标签。进直播间后会据此生成现场内容，所以要把人设和玩法说扎实，不要泛泛而谈)",
+    "intro": "一句话简介（30 字内，用户在预览页可见的氛围标语）",
+    "streamerName": "主播名/团播间名（像真实主播 ID，可带前缀后缀，团播写团名或主理人名）",
+    "airTime": "今日开播时段（纯文本，例如 每晚20点到24点、今天14点开播，要和当前时间自洽——现在时间落在这个时段内）",
+    "onlineHint": "在线人数文本（像真实直播间那样，例如 1.2万、8923、3.5万，按品类和时段给合理量级——大主播或黄金档高，小众或冷门时段低）",
+    "coverKeyword": "封面画面描述（一句话，描述这个直播间封面长什么样，供以后接图用，不渲染）"
+  }
+]
+
+要求：
+- 10-12 个直播间，品类、主播形态（真人/虚拟主播）、调性尽量拉开差异，不要扎堆。
+- tags 严格单选，从给定 10 个里原样填写。
+- concept 是重中之重，决定进间后的现场生成质量，务必把主播人设和玩法写扎实。
+- 主播、直播间、观众网名等全部新编虚拟人物（除非命中下方主播名单），人名/ID 风格贴合世界观氛围。
+- streamerName 命名规则（重要）：如果这个直播间的主播命中了下方「可出场主播名单」里的真人，streamerName 必须填该真人的【本名】（不要给真人另起网名/马甲，系统会自己处理显示）；如果是虚构主播，streamerName 自由编一个符合直播平台风格的网名/主播 ID 即可，这个虚构主播的人设已经写在 concept 里，名字只要好记、贴合人设就行。
+- 虚拟主播（套皮套的）可以适当出现在唱歌/舞蹈/颜值/ASMR 等品类，但以真人主播为主，不要过半。
+- 严格扣紧世界观，绝不出现现实世界的专有名词（如王者荣耀、淘宝、抖音、原神等具体真实品牌/游戏/平台名）；要提到游戏/商品/平台时用世界观内的或泛称（"一款热门 MOBA""平台""某国货美妆"）。
+- 这是手机里的直播 App，绝不在生成内容里暴露你是 AI、不提"提示词""生成""模型"等系统词汇，完全以一个真实直播平台的口吻产出。
+- 只输出 JSON，不要多余解释。${castBlock}${wvPrompt ? '\n\n' + wvPrompt : ''}${mainlinePrompt ? '\n\n' + mainlinePrompt : ''}`;
+
+    let arr = [];
+    try {
+      arr = await _phoneJsonArrayWithRetry({
+        label: '直播间', url, key, model,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: kw ? `请生成一批贴合「${kw}」的、此刻正在播的直播间。` : '请生成一批此刻正在播的直播间。' }
+        ],
+        temperature: 0.95, max_tokens: 9000
+      });
+    } catch (e) {
+      _liveShowLoading(false);
+      UI.showToast('直播间生成失败：' + (e.message || '请重试'), 2000);
+      _renderVideo(pd);
+      return;
+    }
+
+    const validTag = (t) => _LIVE_TAGS.some(x => x.name === t);
+    const list = (Array.isArray(arr) ? arr : []).map(m => {
+      if (!m || !m.title) return null;
+      let tag = String(m.tags || '').trim();
+      if (!validTag(tag)) tag = _LIVE_TAGS[0].name;
+      return {
+        id: 'live_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        kind: 'live',
+        title: String(m.title).replace(/^[《<「『\s]+|[》>」』\s]+$/g, '').slice(0, 40),
+        tags: tag,
+        isGroup: !!m.isGroup,
+        concept: String(m.concept || '').slice(0, 400),
+        intro: String(m.intro || '').slice(0, 60),
+        streamerName: String(m.streamerName || '').slice(0, 30),
+        airTime: String(m.airTime || '').slice(0, 40),
+        onlineHint: String(m.onlineHint || '').slice(0, 20),
+        coverKeyword: String(m.coverKeyword || '').slice(0, 80),
+        cover: '',  // 封面留空，等素材到位再接
+        streamerAvatar: '',  // NPC 主播头像（保存前按 streamerName 抓填）
+        createdAt: Date.now()
+      };
+    }).filter(Boolean);
+
+    if (list.length === 0) {
+      _liveShowLoading(false);
+      UI.showToast('生成结果为空，请重试', 1800);
+      _renderVideo(pd);
+      return;
+    }
+
+    // 直播是即时流，不做累积存储——每次刷新整批替换为此刻在播的间（批内按 streamerName+title 去重防重复）
+    if (!pd.videoDiscover || typeof pd.videoDiscover !== 'object' || Array.isArray(pd.videoDiscover)) {
+      pd.videoDiscover = {};
+    }
+    const seen = new Set();
+    const fresh = [];
+    for (const it of list) {
+      if (!it) continue;
+      const k = (String(it.streamerName || '') + '|' + String(it.title || '')).trim();
+      if (k && seen.has(k)) continue;
+      if (k) seen.add(k);
+      fresh.push(it);
+    }
+    pd.videoDiscover['live'] = fresh;
+
+    // 命中 NPC 的主播：保存前抓 NPC 头像存进 streamerAvatar（列表卡片 + 详情页直接复用）
+    try {
+      await _ensureForumNpcAvatarMap();
+      for (const it of fresh) {
+        if (it && !(it.streamerAvatar || '').trim() && it.streamerName) {
+          const url = await _liveFetchNpcAvatar(it.streamerName);
+          if (url) it.streamerAvatar = url;
+        }
+      }
+    } catch (_) {}
+
+    await _savePhoneData();
+    _liveShowLoading(false);
+    _renderVideo(pd);
+    UI.showToast('刷出 ' + fresh.length + ' 个直播间', 1500);
+  }
+
+  // 直播页全屏 loading 遮罩
+  function _liveShowLoading(show) {
+    const feed = document.querySelector('.phone-live-feed');
+    if (!feed) return;
+    let mask = feed.querySelector('.phone-live-loading');
+    if (show) {
+      if (!mask) {
+        mask = document.createElement('div');
+        mask.className = 'phone-live-loading';
+        mask.innerHTML = `<div class="phone-live-spinner"></div><div class="phone-live-loading-text">正在加载中…</div>`;
+        feed.appendChild(mask);
+      }
+    } else if (mask) {
+      mask.remove();
+    }
+  }
+
+  // ===== 直播全屏竖刷（A2）=====
+  // 标签 → 封面渐变色（封面图未接入前的兜底背景，按品类区分色调）
+  const _LIVE_TAG_GRAD = {
+    '游戏直播': 'linear-gradient(160deg,#3a2a6e,#5b3aa6,#7e57c2)',
+    '单人唱歌': 'linear-gradient(160deg,#7a2e63,#b03f7a,#e06aa0)',
+    '唱歌团播': 'linear-gradient(160deg,#8a2b52,#c23d6b,#f06a93)',
+    '单人舞蹈': 'linear-gradient(160deg,#2e5a7a,#3f88b0,#5bb0d6)',
+    '舞蹈团播': 'linear-gradient(160deg,#1f6e6e,#2fa0a0,#4ecaca)',
+    '带货卖货': 'linear-gradient(160deg,#a6532a,#d6783f,#f0a05b)',
+    '颜值聊天': 'linear-gradient(160deg,#8a2e5a,#c23f88,#e86ab0)',
+    '兴趣陪伴': 'linear-gradient(160deg,#5a6e2e,#88b03f,#b0d65b)',
+    'ASMR': 'linear-gradient(160deg,#2a2a4a,#3f3f6e,#5b5ba0)',
+    '答疑咨询': 'linear-gradient(160deg,#2e4a6e,#3f6ba6,#5b8ed6)',
+  };
+  function _liveTagGrad(tag) { return _LIVE_TAG_GRAD[tag] || 'linear-gradient(160deg,#3a3a4a,#5b5b6e,#7e7e96)'; }
+
+  // 单屏直播间预览卡片（封面层 + 信息覆盖层）
+  function _liveFeedPageHtml(w, idx) {
+    const esc = Utils.escapeHtml;
+    const grad = _liveTagGrad(w.tags);
+    // 封面：优先壁纸 cover，没有就用 NPC 头像铺底，都没有则纯渐变背景
+    const cover = (w.cover || '').trim()
+      ? `<img class="phone-live-cover-img" src="${esc(w.cover)}" alt="">`
+      : ((w.streamerAvatar || '').trim()
+        ? `<img class="phone-live-cover-img" src="${esc(w.streamerAvatar)}" alt="">`
+        : '');
+    const groupBadge = w.isGroup ? `<span class="phone-live-group-badge">团播</span>` : '';
+    // 显示名：真人主播按本名查 NPC 网名显示（查到用网名），虚构主播直接用 streamerName
+    const realName = w.streamerName || '';
+    const displayName = (_ltGetDisplayName(realName) || realName || '神秘主播');
+    const avaChar = (displayName || '主')[0] || '主';
+    const avaInner = (w.streamerAvatar || '').trim()
+      ? `<img src="${esc(w.streamerAvatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+      : esc(avaChar);
+    return `
+      <div class="phone-live-page" data-idx="${idx}" style="background:${grad}">
+        <div class="phone-live-cover">${cover}</div>
+        <div class="phone-live-overlay">
+          <div class="phone-live-top">
+            <div class="phone-live-ava">${avaInner}</div>
+            <div class="phone-live-streamer">
+              <div class="phone-live-streamer-name">${esc(displayName)}${groupBadge}</div>
+              <div class="phone-live-online"><span class="phone-live-dot"></span>${esc(w.onlineHint || '0')} 在线</div>
+            </div>
+            <span class="phone-live-tag-chip">${esc(w.tags || '')}</span>
+          </div>
+          <div class="phone-live-center">
+            <div class="phone-live-title">${esc(w.title || '')}</div>
+            ${w.intro ? `<div class="phone-live-intro">${esc(w.intro)}</div>` : ''}
+            <button class="phone-live-enter-btn" onclick="Phone._liveEnterRoom('${esc(w.id)}')">点击进入直播间</button>
+          </div>
+          <div class="phone-live-bottom">
+            ${w.airTime ? `<div class="phone-live-airtime">${esc(w.airTime)}</div>` : ''}
+            <div class="phone-live-swipe-hint">上下滑动切换 · ${idx + 1}/${_liveFeedTotal}</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  let _liveFeedTotal = 0;
+
+  function _renderLiveFeed(pd) {
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    const disc = (pd.videoDiscover && typeof pd.videoDiscover === 'object' && !Array.isArray(pd.videoDiscover)) ? pd.videoDiscover : {};
+    const list = Array.isArray(disc['live']) ? disc['live'] : [];
+    _liveFeedTotal = list.length;
+
+    // 顶部悬浮分类条（直播/电影/剧集/动漫）+ 左侧返回桌面，让用户能切走/退出
+    const tabsHtml = _VIDEO_CATS.map(c => `
+      <div class="phone-live-cat-tab${c.id === 'live' ? ' active' : ''}" onclick="Phone._switchVideoCat('${c.id}')">${Utils.escapeHtml(c.name)}</div>`).join('');
+
+    let scrollInner;
+    if (!list.length) {
+      scrollInner = `
+        <div class="phone-live-empty">
+          <div class="phone-live-empty-icon">${_phoneIcon('video')}</div>
+          <div class="phone-live-empty-text">下拉刷新，看看现在谁在播</div>
+          <button class="phone-live-empty-btn" onclick="Phone._liveGenPreview('')">刷新直播</button>
+        </div>`;
+    } else {
+      scrollInner = list.map((w, i) => _liveFeedPageHtml(w, i)).join('');
+    }
+
+    body.innerHTML = `
+      <div class="phone-live-feed">
+        <div class="phone-live-topbar">
+          <button class="phone-live-back" onclick="Phone.goBack()" aria-label="返回">${_uiIcon('back', 18)}</button>
+          <div class="phone-live-cat-tabs">${tabsHtml}</div>
+        </div>
+        <div class="phone-live-band phone-live-band-top" id="phone-live-band-top"><div class="phone-live-band-text"></div></div>
+        <div class="phone-live-scroll" id="phone-live-scroll">${scrollInner}</div>
+        <div class="phone-live-band phone-live-band-bottom" id="phone-live-band-bottom"><div class="phone-live-band-text"></div></div>
+        <div class="phone-tabbar phone-live-tabbar">
+          <div class="phone-tab active" onclick="Phone._switchVideoHomeTab('discover')">发现</div>
+          <div class="phone-tab" onclick="Phone._switchVideoHomeTab('mine')">我的</div>
+        </div>
+      </div>`;
+
+    if (list.length) _bindLiveFeedGestures();
+  }
+
+  // 边界拽动刷新：必须「起手时就在该屏边界」+「拽过阈值」+「松手」+「二次确认」四道闸，杜绝切屏误触。
+  // scroll-snap 负责切屏；本手势只在停在某屏的顶/底继续拽时介入，拽出黑带，可滑回取消。
+  function _bindLiveFeedGestures() {
+    const sc = document.getElementById('phone-live-scroll');
+    if (!sc) return;
+    const topBand = document.getElementById('phone-live-band-top');
+    const botBand = document.getElementById('phone-live-band-bottom');
+    const THRESHOLD = 100;   // 拽到此距离才算「可刷新」
+    const DEAD = 6;          // 边界判定容差
+    let startY = 0, startEdge = '', edge = '', overscroll = 0, tracking = false;
+
+    const bandOf = (e) => e === 'top' ? topBand : e === 'bottom' ? botBand : null;
+    const resetBands = () => {
+      [topBand, botBand].forEach(b => {
+        if (!b) return;
+        b.style.height = '0px';
+        b.classList.remove('phone-live-band-ready');
+        b.querySelector('.phone-live-band-text').textContent = '';
+      });
+    };
+
+    sc.addEventListener('touchstart', (e) => {
+      if (!e.touches || !e.touches.length) return;
+      startY = e.touches[0].clientY;
+      overscroll = 0; edge = ''; tracking = true;
+      // 起手那一刻就在边界，才有资格触发刷新（中途滑到边界不算）
+      const atTop = sc.scrollTop <= DEAD;
+      const atBottom = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - DEAD;
+      startEdge = atTop ? 'top' : atBottom ? 'bottom' : '';
+    }, { passive: true });
+
+    sc.addEventListener('touchmove', (e) => {
+      if (!tracking || !startEdge || !e.touches || !e.touches.length) return;
+      const dy = e.touches[0].clientY - startY;
+      // 起手在顶部→只认下拉(dy>0)；起手在底部→只认上拉(dy<0)
+      let os = 0, ed = '';
+      if (startEdge === 'top' && dy > 0 && sc.scrollTop <= DEAD) { ed = 'top'; os = dy; }
+      else if (startEdge === 'bottom' && dy < 0 && sc.scrollTop + sc.clientHeight >= sc.scrollHeight - DEAD) { ed = 'bottom'; os = -dy; }
+      edge = ed; overscroll = os;
+      // 渲染黑带（高度跟随拽动，带阻尼，可回滚）
+      [topBand, botBand].forEach(b => { if (b && bandOf(edge) !== b) { b.style.height = '0px'; b.classList.remove('phone-live-band-ready'); } });
+      const band = bandOf(edge);
+      if (band) {
+        const h = Math.min(140, os * 0.6);   // 阻尼
+        band.style.height = h + 'px';
+        const ready = os >= THRESHOLD;
+        band.classList.toggle('phone-live-band-ready', ready);
+        const txt = band.querySelector('.phone-live-band-text');
+        if (txt) txt.textContent = ready ? '松手刷新' : (edge === 'top' ? '继续下拉刷新' : '继续上拉刷新');
+      }
+    }, { passive: true });
+
+    sc.addEventListener('touchend', async () => {
+      const trigger = startEdge && edge && overscroll >= THRESHOLD;
+      tracking = false; startEdge = ''; edge = ''; overscroll = 0;
+      resetBands();
+      if (!trigger) return;
+      // 第四道闸：二次确认
+      const ok = await UI.showConfirm('刷新直播', '重新生成一批此刻正在播的直播间？');
+      if (ok) _liveGenPreview('');
+    }, { passive: true });
+  }
+
+  // ===== A3 直播间详情（全屏 overlay，当前用假数据跑 UI 效果）=====
+  // 一次性数据：主播实况脚本(acts) + 弹幕池(danmu) + 打赏榜(rank)。
+  // 真接 AI 后由 _liveGenRoom 产出同构数据，每次互动追加一批 acts+danmu+榜单变动。
+  const _LIVE_FAKE_ROOM = {
+    acts: [
+      { type: 'narration', text: '主播刚拿下一波团灭，正靠在椅背上喝水，镜头里能看到他额角的汗。' },
+      { type: 'line', text: '哈，这波打得漂亮吧？刚才那个绕后他们根本没想到。' },
+      { type: 'narration', text: '他重新坐直，手指在键盘上敲了两下，准备开下一把。' },
+      { type: 'line', text: '来来来，下一把我打野，给我抬一手，今天必须上分。' },
+      { type: 'narration', text: '游戏进入读条画面，主播一边等一边瞥了眼弹幕。' },
+      { type: 'line', text: '有人问我用的什么鼠标？回头挂个链接，别催了哈哈。' },
+      { type: 'narration', text: '开局了，主播迅速控制角色往野区移动，操作行云流水。' },
+      { type: 'line', text: '反蓝反蓝，蓝buff我先拿，辅助跟我来。' },
+      { type: 'narration', text: '一波精彩的入侵成功偷掉对方红buff，主播得意地笑了。' },
+      { type: 'line', text: '看到没？这就是节奏，开局就拉开差距。' },
+      { type: 'narration', text: '主播喝了口水，语气放松下来，开始和观众唠嗑。' },
+      { type: 'line', text: '今天人挺多啊，新来的点点关注，老观众都懂的。' },
+    ],
+    danmu: [
+      { at: 0.05, name: '夜行的猫', text: '主播这波秀啊', highlight: false },
+      { at: 0.08, name: '奶茶续命中', text: '2333绕后绝了', highlight: false },
+      { at: 0.12, name: '一只咸鱼', text: '前排前排', highlight: false },
+      { at: 0.18, name: '冰镇西瓜', text: '什么鼠标求链接', highlight: false },
+      { at: 0.22, name: '路过的风', text: '打野带飞球球', highlight: true },
+      { at: 0.28, name: '深海里的鱼', text: '反蓝意识真好', highlight: false },
+      { at: 0.34, name: '柠檬不酸', text: 'awsl这操作', highlight: false },
+      { at: 0.4, name: '今天也要努力', text: '偷红了偷红了哈哈', highlight: false },
+      { at: 0.46, name: '晚风温柔', text: '节奏起来了', highlight: false },
+      { at: 0.52, name: '会飞的猪', text: '主播声音好好听', highlight: true },
+      { at: 0.58, name: '小困神', text: '关注了关注了', highlight: false },
+      { at: 0.64, name: '一杯冰美式', text: '求带上分啊主播', highlight: false },
+      { at: 0.7, name: '雾里看花', text: '这把稳了', highlight: false },
+      { at: 0.78, name: '橘子汽水', text: '哈哈哈哈太强了', highlight: false },
+      { at: 0.84, name: '安静的角落', text: '老观众打卡', highlight: false },
+      { at: 0.92, name: '星河滚烫', text: '下播别走啊', highlight: false },
+    ],
+    rank: [
+      { name: '豪气的大哥', amount: 8888 },
+      { name: '默默守护', amount: 5200 },
+      { name: '路过送个火箭', amount: 3344 },
+    ],
+  };
+
+  let _liveRoomTimer = null;     // 实况逐条播放定时器
+  let _liveRoomActIdx = 0;       // 当前播到第几条 act
+  let _liveRoomDanmuIdx = 0;     // 弹幕池游标
+  let _liveRoomOverlay = null;   // 当前直播间 overlay 引用
+let _liveRoomCtx = null;       // 当前直播间上下文 { w, displayName, followed, dirty }
+let _liveRoomHistory = [];     // 历史发言（主播实况 + 弹幕，混排）
+let _liveRoomDanmuSticky = true; // 弹幕区是否吸底（用户手动上翻则置 false，停止自动滚到底）
+
+  // 抓主播命中的真人 NPC 详细资料（只发这一个人，供详情生成扮演用）。查不到返回 ''。
+  async function _liveStreamerProfile(streamerName) {
+    const nm = String(streamerName || '').trim();
+    if (!nm) return '';
+    try {
+      let candidates = [];
+      try { candidates = await _collectChatCandidates(); } catch (_) { candidates = []; }
+      const c = candidates.find(x => x && x.name && x.name.trim() === nm);
+      if (c && (c.detail || c.aliases)) {
+        let s = `【本场主播的真实身份资料】这个直播间的主播是这个世界里真实存在的人物，请严格按 ta 的人设来演，不要跑偏：\n- ${nm}`;
+        if (c.aliases) s += `（别名：${c.aliases}）`;
+        if (c.detail) s += `\n  ${c.detail.replace(/\n+/g, ' ').slice(0, 400)}`;
+        return s;
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  // 公共注入块：世界观 + 主播身份 + 主线 + 面具，详情生成和主播回应共用。
+  async function _liveBuildInject(w) {
+    let wvBlock = '';
+    try { wvBlock = await _readingWorldviewBlock(false); } catch (_) {}
+    let streamerBlock = '';
+    try { streamerBlock = await _liveStreamerProfile(w && w.streamerName); } catch (_) {}
+    let mainlineBlock = '';
+    try {
+      const _plot = _buildRecentPlotBlock();
+      if (_plot) mainlineBlock = `【最近发生的事·仅供把握当下氛围】\n下面是这个世界最近发生的一些事。仅供你把握当下的时事与气氛，让直播内容自然贴合当下——除非本场主播本人正是其中的当事人，否则不要在直播里直接提及、复述或点名这些事。\n${_plot}`;
+    } catch (_) {}
+    let maskBlock = '';
+    if (_liveTellIdentity()) {
+      try {
+        const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+        if (mask && mask.name) {
+          const mi = await _getMaskInfo();
+          let s = `【观众席里有"你"·仅作背景信息】此刻这场直播的观众里有用户本人，ta 的资料如下，仅供你了解"屏幕前看播的人是谁"：\n- 直播间用名：${mi.username || mask.name}`;
+          const bg = mask.background || mask.description || '';
+          if (bg) s += `\n- 身份设定：${String(bg).slice(0, 200)}`;
+          s += `\n【绝对禁止】这是给你的背景信息，不是让你替 ta 发言。你生成的所有弹幕都只能是【其他观众】发的，绝对不要以用户本人的名义、用名或身份发表任何一条弹幕，也不要让主播点名/回应"用户本人"。用户的弹幕只会由用户亲自发出，与你无关。`;
+          maskBlock = s;
+        }
+      } catch (_) {}
+    }
+    return { wvBlock, streamerBlock, mainlineBlock, maskBlock };
+  }
+
+  // 详情生成（A3）：进直播间时一次性生成「一整轮」实况——主播实况脚本 acts + 弹幕池 danmu + 打赏榜 rank。
+  // 通用版（不分标签）：先跑通整条链路，标签专属提示词后续在 tagGuide 处加。
+  // 返回同构对象 { acts:[{type,text}], danmu:[{at,name,text,highlight}], rank:[{name,amount}] }，失败返回 null。
+  async function _liveGenRoom(w) {
+    if (!w) return null;
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return null; }
+
+    // 注入块（详情/回应共用）
+    const { wvBlock, streamerBlock, mainlineBlock, maskBlock } = await _liveBuildInject(w);
+
+    // 标签专属生成倾向（先留通用占位，后续逐标签填）
+    const tagGuide = '';
+
+    const tag = (w.tags || '').trim();
+    const sysPrompt = `你是一个直播平台的「直播间实况生成系统」。现在用户点进了一个【正在直播】的直播间，你要为这一场直播生成"此刻这一整轮正在发生的现场实况"——包括主播的行为与台词、观众弹幕、以及打赏榜。
+
+【这个直播间是什么】
+- 标题：${w.title || ''}
+- 品类标签：${tag || '（综合）'}
+- 简介：${w.intro || ''}
+- 核心设定（主播是谁、主打什么、招牌玩法、气氛）：
+${w.concept || '（无，请按标题与品类自行把握一个合理的主播人设与直播内容）'}
+${streamerBlock ? '\n' + streamerBlock + '\n' : ''}
+【生成要求】
+1. 你生成的是"此刻正在直播的现场"，是进行时、实时感强。主播正在做某件事（按品类：游戏就在打游戏、唱歌就在唱、带货就在卖货、答疑就在解答……），一边做一边和观众互动。
+2. 必须严格贴合上面的核心设定与主播人设——主播的性别、性格、说话方式、招牌玩法都要对得上。${streamerBlock ? '本场主播是真实人物，更要扣紧 ta 的资料。' : ''}
+3. 必须贴合「${tag || '该品类'}」这个品类的直播形式：内容、节奏、互动方式都要像这一类直播间该有的样子。
+4. acts 是主播实况脚本，narration（叙述主播在做什么，第三人称客观描述）和 line（主播说的话，第一人称口语）【交错】出现，10-14 条，像真实直播流一样自然推进。
+5. danmu 是观众弹幕，14-18 条，紧扣主播当下的行为做出真实反应（吐槽、刷梗、提问、应援、催更……），口语化、错落、有网感。其中【至少 3-4 条要是观众在刷礼物/打赏的弹幕】（如"XX 送出了火箭""谢谢老板的守护""又有人刷钻石了"这类，体现直播间有人在花钱）。另有 1-3 条标记 highlight:true（付费高亮留言，更显眼、主播更可能回应）。at 是该弹幕出现的时间进度（0~1 的小数，按时序分布）。【重要】弹幕（含高亮留言）都是【水友/观众】发的，发言人绝对不能是主播本人，也不要冒用主播的名字。
+6. rank 是【本直播间的粉丝打赏榜】前三——榜上的是这个直播间的"大哥大姐"（本场打赏最多的几位粉丝），name 是打赏者网名、amount 是 ta 在这个直播间的【累计打赏金额】（数字，降序），金额量级要符合直播间的热度。【重要】这是粉丝给主播打赏的排名，绝对不能出现主播本人的名字——主播不会给自己打赏。
+7. 弹幕网名、打赏者网名全部新编，符合这个世界观和直播平台的网感，不要雷同。
+8. 这是手机里的直播 App，绝不暴露你是 AI、不提"提示词""生成""模型"等系统词汇，完全以一个真实直播平台的实况口吻产出。
+9. 严格扣紧世界观，绝不出现现实世界的专有名词（具体真实品牌/游戏/平台/明星名）；要提到时用世界观内的或泛称。
+${tagGuide ? '\n' + tagGuide + '\n' : ''}
+输出严格使用 JSON 对象格式，不能返回 Markdown，不能返回代码块，不能解释，必须以 { 开头、以 } 结尾：
+{
+  "acts": [ { "type": "narration", "text": "主播正在做的事" }, { "type": "line", "text": "主播说的话" } ],
+  "danmu": [ { "at": 0.05, "name": "观众网名", "text": "弹幕内容", "highlight": false } ],
+  "rank": [ { "name": "打赏者网名", "amount": 8888 } ]
+}
+${wvBlock ? '\n\n' + wvBlock : ''}${mainlineBlock ? '\n\n' + mainlineBlock : ''}${maskBlock ? '\n\n' + maskBlock : ''}`;
+
+    let obj = null;
+    try {
+      obj = await _phoneJsonObjectWithRetry({
+        label: '直播实况', url, key, model,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: '请生成这个直播间此刻正在直播的一整轮现场实况。' }
+        ],
+        temperature: 0.95, max_tokens: 6000
+      });
+    } catch (e) {
+      return null;
+    }
+    if (!obj || typeof obj !== 'object') return null;
+
+    // 清洗 + 兜底成同构结构
+    const clean = (s) => _stripMainlineArtifacts(String(s || '')).trim();
+    const acts = (Array.isArray(obj.acts) ? obj.acts : [])
+      .map(a => a && a.text ? { type: (a.type === 'line' ? 'line' : 'narration'), text: clean(a.text) } : null)
+      .filter(x => x && x.text);
+    const danmu = (Array.isArray(obj.danmu) ? obj.danmu : [])
+      .map(d => d && d.text ? { at: (typeof d.at === 'number' ? Math.max(0, Math.min(1, d.at)) : Math.random()), name: clean(d.name) || '观众', text: clean(d.text), highlight: !!d.highlight } : null)
+      .filter(Boolean)
+      .sort((x, y) => x.at - y.at);
+    const rank = (Array.isArray(obj.rank) ? obj.rank : [])
+      .map(r => r && r.name ? { name: clean(r.name), amount: parseInt(r.amount, 10) || 0 } : null)
+      .filter(Boolean)
+      .slice(0, 3);
+    if (!acts.length || !danmu.length) return null;
+    return { acts, danmu, rank };
+  }
+
+  // ===== A4 用户互动 =====
+  // 直播礼物档位：沿用阅读的金额，改成直播场景的名字。
+  const _LIVE_GIFTS = [
+    { id: 'soda',    name: '汽水',   amount: 6,    svg: '<path d="M5 8h11l-1 11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 8z"/><path d="M16 11h2a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-2"/><path d="M7 8a3 3 0 0 1 3-3 2.5 2.5 0 0 1 4-1 2.5 2.5 0 0 1 2 4"/>' },
+    { id: 'flower',  name: '鲜花',   amount: 66,   svg: '<circle cx="12" cy="8" r="3"/><path d="M12 11v10"/><path d="M9 21h6"/><path d="M12 14c-2 0-4-1-4-3M12 14c2 0 4-1 4-3"/>' },
+    { id: 'cheer',   name: '应援棒', amount: 99,   svg: '<path d="M4 21h16v-7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2z"/><path d="M4 16h16"/><path d="M12 8V5"/><circle cx="12" cy="4" r="1"/>' },
+    { id: 'rocket',  name: '小火箭', amount: 188,  svg: '<path d="M12 2c3 2 5 6 5 10l-5 4-5-4c0-4 2-8 5-10z"/><circle cx="12" cy="9" r="1.6"/><path d="M7 16l-3 4M17 16l3 4M12 18v3"/>' },
+    { id: 'heart',   name: '比心',   amount: 520,  svg: '<path d="M19 5a4.5 4.5 0 0 0-7 1 4.5 4.5 0 0 0-7-1 4.8 4.8 0 0 0 0 7l7 7 7-7a4.8 4.8 0 0 0 0-7z"/>' },
+    { id: 'crown',   name: '守护',   amount: 666,  svg: '<path d="M3 8l4 4 5-7 5 7 4-4v10H3z"/><path d="M3 20h18"/>' },
+    { id: 'diamond', name: '钻石',   amount: 999,  svg: '<path d="M6 3h12l3 6-9 12L3 9z"/><path d="M3 9h18M9 3l-3 6 6 12M15 3l3 6-6 12"/>' },
+    { id: 'galaxy',  name: '星河',   amount: 1314, svg: '<path d="M12 2l2.6 6.6L22 9.3l-5 4.7 1.4 7L12 17.8 5.6 21l1.4-7-5-4.7 7.4-.7z"/>' },
+  ];
+  const _LIVE_HIGHLIGHT_PRICE = 30; // 高亮留言固定价
+
+  // 把直播间的累计花费 / 关注态等持久字段写回 pd.videoDiscover['live']（按 id 定位）
+  async function _liveSaveRoomState(w) {
+    try {
+      const pd = await _getPhoneData();
+      if (!pd) return;
+      const disc = (pd.videoDiscover && typeof pd.videoDiscover === 'object') ? pd.videoDiscover : (pd.videoDiscover = {});
+      const list = Array.isArray(disc['live']) ? disc['live'] : [];
+      const t = list.find(x => x && x.id === w.id);
+      if (t) {
+        t.mySpent = Math.max(0, Number(w.mySpent) || 0);
+        if (typeof w.followed === 'boolean') t.followed = w.followed;
+      }
+      // 已关注的间，把最新累计同步回关注列表那份快照（保持数据单一来源）
+      const fl = Array.isArray(pd.liveFollowed) ? pd.liveFollowed : [];
+      const ft = fl.find(x => x && x.id === w.id);
+      if (ft) ft.mySpent = Math.max(0, Number(w.mySpent) || 0);
+      await _savePhoneData();
+    } catch (_) {}
+  }
+
+  // 取关注列表（直播间快照数组），保证是数组
+  function _liveFollowedList(pd) {
+    if (!pd) return [];
+    if (!Array.isArray(pd.liveFollowed)) pd.liveFollowed = [];
+    return pd.liveFollowed;
+  }
+
+  // 是否已关注某直播间（按 id）
+  function _liveIsFollowed(pd, id) {
+    return _liveFollowedList(pd).some(x => x && x.id === id);
+  }
+
+  // 关注：把当前直播间的完整快照存进 pd.liveFollowed（已存则更新）。w 为直播间数据对象。
+  async function _liveFollowRoom(w) {
+    try {
+      const pd = await _getPhoneData();
+      if (!pd || !w || !w.id) return false;
+      const fl = _liveFollowedList(pd);
+      // 存间的完整快照：保留进直播间需要的所有字段（含 concept/mySpent/头像/标签等）
+      const snap = {
+        id: w.id,
+        title: w.title || '',
+        intro: w.intro || '',
+        concept: w.concept || '',
+        tags: w.tags || '',
+        streamerName: w.streamerName || '',
+        streamerAvatar: w.streamerAvatar || '',
+        cover: w.cover || '',
+        onlineHint: w.onlineHint || '',
+        airTime: w.airTime || '',
+        mySpent: Math.max(0, Number(w.mySpent) || 0),
+        followed: true,
+        followedAt: Date.now()
+      };
+      const idx = fl.findIndex(x => x && x.id === w.id);
+      if (idx >= 0) fl[idx] = Object.assign({}, fl[idx], snap);
+      else fl.unshift(snap);
+      // 同步即时流那份的 followed 标记（若还在即时流里）
+      const disc = (pd.videoDiscover && typeof pd.videoDiscover === 'object') ? pd.videoDiscover : null;
+      const list = disc && Array.isArray(disc['live']) ? disc['live'] : [];
+      const t = list.find(x => x && x.id === w.id);
+      if (t) t.followed = true;
+      await _savePhoneData();
+      return true;
+    } catch (_) { return false; }
+  }
+
+  // 取消关注：从 pd.liveFollowed 移除
+  async function _liveUnfollowRoom(id) {
+    try {
+      const pd = await _getPhoneData();
+      if (!pd || !id) return false;
+      const fl = _liveFollowedList(pd);
+      const idx = fl.findIndex(x => x && x.id === id);
+      if (idx >= 0) fl.splice(idx, 1);
+      const disc = (pd.videoDiscover && typeof pd.videoDiscover === 'object') ? pd.videoDiscover : null;
+      const list = disc && Array.isArray(disc['live']) ? disc['live'] : [];
+      const t = list.find(x => x && x.id === id);
+      if (t) t.followed = false;
+      await _savePhoneData();
+      return true;
+    } catch (_) { return false; }
+  }
+
+  // 退出时把本场直播记录存进关注快照的 sessions（整场含弹幕，留最近 10 场）。
+  // 只有【已关注 + 本场刷新过】才存；hist 为本场 _liveRoomHistory 快照。
+  const _LIVE_SESSION_MAX = 10;
+  async function _liveArchiveSession(id, hist) {
+    try {
+      if (!id || !Array.isArray(hist) || !hist.length) return;
+      const pd = await _getPhoneData();
+      if (!pd) return;
+      const fl = _liveFollowedList(pd);
+      const ft = fl.find(x => x && x.id === id);
+      if (!ft) return;  // 没关注 → 不存
+      if (!Array.isArray(ft.sessions)) ft.sessions = [];
+      // 整场记录：主播实况 + 弹幕，按时序原样保存
+      const records = hist.map(h => ({
+        kind: h.kind,
+        name: h.name || '',
+        text: h.text || '',
+        highlight: !!h.highlight,
+        me: !!h.me
+      }));
+      let gameTime = '';
+      try { gameTime = _getGameTime() || ''; } catch (_) {}
+      ft.sessions.unshift({
+        id: 'lvs_' + Date.now(),
+        at: Date.now(),
+        gameTime: gameTime,
+        records: records
+      });
+      // 留最近 N 场
+      if (ft.sessions.length > _LIVE_SESSION_MAX) ft.sessions = ft.sessions.slice(0, _LIVE_SESSION_MAX);
+      await _savePhoneData();
+    } catch (_) {}
+  }
+
+  // 选钱包货币（多种弹选，单种直接用），返回 currency 对象或 null
+  async function _livePickCurrency(titleText) {
+    const esc = Utils.escapeHtml;
+    const currencies = _getWalletCurrencyInfos();
+    if (!currencies.length) { UI.showToast('请先在钱包中绑定货币', 2200); return null; }
+    if (currencies.length === 1) return currencies[0];
+    const pickId = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'phone-music-sheet-overlay';
+      const btns = currencies.map(c => `<button class="phone-music-sheet-btn" data-cid="${esc(c.id)}">${esc(c.name)}（余额 ${c.balance}）</button>`).join('');
+      overlay.innerHTML = `
+        <div class="phone-music-sheet">
+          <div class="phone-music-sheet-title">${esc(titleText || '用哪种货币')}</div>
+          ${btns}
+          <button class="phone-music-sheet-btn cancel" data-cid="">取消</button>
+        </div>`;
+      const close = (val) => { overlay.remove(); resolve(val); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { close(''); return; }
+        const b = e.target.closest('.phone-music-sheet-btn');
+        if (b) close(b.dataset.cid || '');
+      });
+      const host = document.getElementById('phone-modal') || document.body;
+      host.appendChild(overlay);
+    });
+    if (!pickId) return null;
+    return currencies.find(c => c.id === pickId) || null;
+  }
+
+  // 扣款（前端即扣 + 记账）。成功返回 true。
+  async function _liveChargeCurrency(currency, amount, note) {
+    const total = Math.abs(Number(amount) || 0);
+    if (total <= 0) return false;
+    try {
+      const sb = Conversations.getStatusBar() || {};
+      sb.customAttrs = sb.customAttrs || {};
+      sb.customAttrs.global = sb.customAttrs.global || {};
+      const balance = Number(sb.customAttrs.global[currency.id]) || 0;
+      if (balance < total) { UI.showToast(`${currency.name}余额不足（需 ${total}，当前 ${balance}）`, 2600); return false; }
+      sb.customAttrs.global[currency.id] = balance - total;
+      await Conversations.setStatusBar(sb);
+      if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
+    } catch (_) { UI.showToast('扣款失败', 1500); return false; }
+    try {
+      await _addLedgerEntry({
+        currencyId: currency.id,
+        amount: -total,
+        category: '打赏',
+        note: note || '直播打赏',
+        platform: '直播',
+        source: 'live_reward',
+        editable: true,
+      });
+    } catch (_) {}
+    return true;
+  }
+
+  // 当前直播间累计花费 + 重渲榜单
+  function _liveAddSpentAndRerank(w, amount) {
+    w.mySpent = Math.max(0, (Number(w.mySpent) || 0) + (Number(amount) || 0));
+    const ctx = _liveRoomCtx;
+    if (ctx && ctx.room && _liveRoomOverlay) {
+      const rankEl = _liveRoomOverlay.querySelector('.phone-liveroom-rank');
+      if (rankEl) rankEl.innerHTML = _liveRankHtml(ctx.room, w);
+    }
+  }
+
+  // 把一条"我"的发言飘到弹幕区（上屏），不写进 pending（pending 单独 push）
+  function _livePushMyDanmu(text, highlight) {
+    const danmuEl = _liveRoomOverlay && _liveRoomOverlay.querySelector('#liveroom-danmu');
+    if (!danmuEl) return;
+    const esc = Utils.escapeHtml;
+    const name = esc(_ltUserName || '我');
+    const row = document.createElement('div');
+    row.className = 'phone-liveroom-dm me' + (highlight ? ' hl' : '');
+    row.innerHTML = highlight
+      ? `<span class="phone-liveroom-dm-hl-tag">高亮</span><span class="phone-liveroom-dm-name">${name}</span><span class="phone-liveroom-dm-text">${esc(text || '')}</span>`
+      : `<span class="phone-liveroom-dm-name">${name}：</span><span class="phone-liveroom-dm-text">${esc(text || '')}</span>`;
+    danmuEl.appendChild(row);
+    requestAnimationFrame(() => row.classList.add('in'));
+    while (danmuEl.children.length > 40) danmuEl.removeChild(danmuEl.firstChild);
+    // 自己发的弹幕：恢复吸底并滚到底
+    _liveRoomDanmuSticky = true;
+    danmuEl.scrollTop = danmuEl.scrollHeight;
+  }
+
+  // 发普通弹幕（免费）：上屏 + 写历史 + 攒进 pending
+  function _liveSendDanmu(text) {
+    const t = String(text || '').trim();
+    if (!t) return;
+    const ctx = _liveRoomCtx;
+    if (!ctx) return;
+    _livePushMyDanmu(t, false);
+    _liveRoomHistory.push({ _t: 1, kind: 'danmu', name: _ltUserName || '我', text: t, highlight: false, me: true });
+    ctx.myActions = ctx.myActions || [];
+    ctx.myActions.push({ kind: 'danmu', text: t });
+  }
+
+  // 打赏面板：礼物档位 + 数量输入 + 实时总额 → 选货币扣钱 → 累计 + 重渲榜 + 上屏 + pending
+  async function _liveShowRewardSheet() {
+    const ctx = _liveRoomCtx;
+    if (!ctx || !ctx.w) { UI.showToast('直播间已关闭', 1400); return; }
+    const w = ctx.w;
+    const esc = Utils.escapeHtml;
+    const giftCards = _LIVE_GIFTS.map(g => `
+      <button class="phone-reading-gift" data-gid="${g.id}">
+        <span class="phone-reading-gift-ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${g.svg}</svg></span>
+        <span class="phone-reading-gift-nm">${esc(g.name)}</span>
+        <span class="phone-reading-gift-amt">${g.amount}</span>
+      </button>`).join('');
+
+    const picked = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'phone-music-sheet-overlay';
+      overlay.innerHTML = `
+        <div class="phone-music-sheet">
+          <div class="phone-music-sheet-title">打赏主播</div>
+          <div class="phone-reading-gift-grid">${giftCards}</div>
+          <div class="phone-live-gift-qty">
+            <span class="phone-live-gift-qty-lb">数量</span>
+            <button class="phone-live-gift-qty-btn" data-q="minus">−</button>
+            <input class="phone-live-gift-qty-input" id="live-gift-qty" type="number" min="1" max="999" value="1">
+            <button class="phone-live-gift-qty-btn" data-q="plus">＋</button>
+            <span class="phone-live-gift-qty-total" id="live-gift-total">合计 —</span>
+          </div>
+          <button class="phone-music-sheet-btn confirm" data-act="confirm">确认打赏</button>
+          <button class="phone-music-sheet-btn cancel" data-act="cancel">取消</button>
+        </div>`;
+      let curGid = '';
+      const qtyEl = overlay.querySelector('#live-gift-qty');
+      const totalEl = overlay.querySelector('#live-gift-total');
+      const giftEls = overlay.querySelectorAll('.phone-reading-gift');
+      const recompute = () => {
+        const g = _LIVE_GIFTS.find(x => x.id === curGid);
+        const q = Math.max(1, Math.min(999, parseInt(qtyEl.value, 10) || 1));
+        totalEl.textContent = g ? `合计 ${g.amount * q}` : '合计 —';
+      };
+      const close = (val) => { overlay.remove(); resolve(val); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { close(null); return; }
+        const cancel = e.target.closest('[data-act="cancel"]');
+        if (cancel) { close(null); return; }
+        const g = e.target.closest('.phone-reading-gift');
+        if (g) {
+          curGid = g.dataset.gid;
+          giftEls.forEach(x => x.classList.toggle('sel', x === g));
+          recompute();
+          return;
+        }
+        const qb = e.target.closest('.phone-live-gift-qty-btn');
+        if (qb) {
+          let q = parseInt(qtyEl.value, 10) || 1;
+          q += (qb.dataset.q === 'plus' ? 1 : -1);
+          qtyEl.value = Math.max(1, Math.min(999, q));
+          recompute();
+          return;
+        }
+        const conf = e.target.closest('[data-act="confirm"]');
+        if (conf) {
+          if (!curGid) { UI.showToast('先选一个礼物', 1400); return; }
+          const q = Math.max(1, Math.min(999, parseInt(qtyEl.value, 10) || 1));
+          close({ gid: curGid, qty: q });
+        }
+      });
+      overlay.querySelector('#live-gift-qty').addEventListener('input', recompute);
+      const host = document.getElementById('phone-modal') || document.body;
+      host.appendChild(overlay);
+    });
+    if (!picked) return;
+
+    const gift = _LIVE_GIFTS.find(g => g.id === picked.gid);
+    if (!gift) return;
+    const qty = Math.max(1, Math.min(999, picked.qty || 1));
+    const total = gift.amount * qty;
+
+    const currency = await _livePickCurrency(`用哪种货币打赏 ${gift.name}×${qty}（${total}）`);
+    if (!currency) return;
+
+    const ok = await _liveChargeCurrency(currency, total, `直播打赏「${ctx.displayName}」${gift.name}×${qty}`);
+    if (!ok) return;
+
+    _liveAddSpentAndRerank(w, total);
+    await _liveSaveRoomState(w);
+    const txt = `送出 ${gift.name} ×${qty}`;
+    _livePushMyDanmu(txt, false);
+    _liveRoomHistory.push({ _t: 1, kind: 'danmu', name: _ltUserName || '我', text: txt, highlight: false, me: true });
+    ctx.myActions = ctx.myActions || [];
+    ctx.myActions.push({ kind: 'gift', gift: gift.name, qty: qty, amount: total });
+    UI.showToast(`已打赏 ${gift.name} ×${qty}`, 1600);
+  }
+
+  // 高亮付费留言：固定价 → 填留言 → 扣钱 → 累计 + 重渲榜 + 高亮上屏 + pending
+  async function _liveShowHighlightSheet() {
+    const ctx = _liveRoomCtx;
+    if (!ctx || !ctx.w) { UI.showToast('直播间已关闭', 1400); return; }
+    const w = ctx.w;
+    const esc = Utils.escapeHtml;
+    const text = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'phone-music-sheet-overlay';
+      overlay.innerHTML = `
+        <div class="phone-music-sheet">
+          <div class="phone-music-sheet-title">高亮留言（${_LIVE_HIGHLIGHT_PRICE}）</div>
+          <textarea class="phone-live-hl-input" id="live-hl-input" placeholder="付费高亮，主播更可能看到并回应…" maxlength="60"></textarea>
+          <button class="phone-music-sheet-btn confirm" data-act="confirm">付费发送（${_LIVE_HIGHLIGHT_PRICE}）</button>
+          <button class="phone-music-sheet-btn cancel" data-act="cancel">取消</button>
+        </div>`;
+      const close = (val) => { overlay.remove(); resolve(val); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { close(null); return; }
+        if (e.target.closest('[data-act="cancel"]')) { close(null); return; }
+        if (e.target.closest('[data-act="confirm"]')) {
+          const v = (overlay.querySelector('#live-hl-input').value || '').trim();
+          if (!v) { UI.showToast('写点内容吧', 1400); return; }
+          close(v);
+        }
+      });
+      const host = document.getElementById('phone-modal') || document.body;
+      host.appendChild(overlay);
+      setTimeout(() => { try { overlay.querySelector('#live-hl-input').focus(); } catch (_) {} }, 60);
+    });
+    if (!text) return;
+
+    const currency = await _livePickCurrency(`用哪种货币付费高亮（${_LIVE_HIGHLIGHT_PRICE}）`);
+    if (!currency) return;
+    const ok = await _liveChargeCurrency(currency, _LIVE_HIGHLIGHT_PRICE, `直播高亮留言「${ctx.displayName}」`);
+    if (!ok) return;
+
+    _liveAddSpentAndRerank(w, _LIVE_HIGHLIGHT_PRICE);
+    await _liveSaveRoomState(w);
+    _livePushMyDanmu(text, true);
+    _liveRoomHistory.push({ _t: 1, kind: 'danmu', name: _ltUserName || '我', text: text, highlight: true, me: true });
+    ctx.myActions = ctx.myActions || [];
+    ctx.myActions.push({ kind: 'highlight', text: text, amount: _LIVE_HIGHLIGHT_PRICE });
+    UI.showToast('高亮留言已发送', 1600);
+  }
+
+  // 历史 → 文本（喂给主播回应，最近若干条）
+  function _liveHistoryToText(maxItems) {
+    const hist = Array.isArray(_liveRoomHistory) ? _liveRoomHistory : [];
+    const tail = hist.slice(-(maxItems || 30));
+    return tail.map(h => {
+      if (h.kind === 'host_line') return `主播：${h.text || ''}`;
+      if (h.kind === 'host_narr') return `（${h.text || ''}）`;
+      const nm = h.me ? (_ltUserName || '我') : (h.name || '观众');
+      return h.highlight ? `[高亮]${nm}：${h.text || ''}` : `${nm}：${h.text || ''}`;
+    }).join('\n');
+  }
+
+  // 主播回应生成：注入同详情 + 整个直播间历史 + 用户这批动作，返回追加的 acts + 新弹幕
+  async function _liveGenRoomReply(w, batch) {
+    if (!w) return null;
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return null; }
+
+    const { wvBlock, streamerBlock, mainlineBlock, maskBlock } = await _liveBuildInject(w);
+    const tag = (w.tags || '').trim();
+    const myName = _ltUserName || '我';
+
+    // 用户这批动作整理
+    const acts = (Array.isArray(batch) ? batch : []);
+    const actLines = acts.map(a => {
+      if (a.kind === 'danmu') return `· ${myName} 发了弹幕：${a.text}`;
+      if (a.kind === 'gift') return `· ${myName} 打赏了 ${a.gift} ×${a.qty}（价值 ${a.amount}）`;
+      if (a.kind === 'highlight') return `· ${myName} 花钱发了【高亮留言】：${a.text}`;
+      return '';
+    }).filter(Boolean).join('\n');
+
+    // 进前三告诉主播
+    const mySpent = Math.max(0, Number(w.mySpent) || 0);
+    let rankHint = '';
+    try {
+      const ctx = _liveRoomCtx;
+      const aiRank = (ctx && ctx.room && Array.isArray(ctx.room.rank)) ? ctx.room.rank.slice(0, 3) : [];
+      const merged = aiRank.map(r => Number(r.amount) || 0);
+      merged.push(mySpent);
+      merged.sort((a, b) => b - a);
+      const myRank = merged.indexOf(mySpent) + 1;
+      if (mySpent > 0 && myRank <= 3) rankHint = `\n【榜单提示】${myName} 现在累计打赏已经冲上了打赏榜第 ${myRank} 名，是这个直播间的"大哥/大姐"，主播在回应时可以自然地提到 ta 的名字、表达感谢。`;
+    } catch (_) {}
+
+    const histText = _liveHistoryToText(30);
+    const hasActs = !!actLines;
+    const sysPrompt = `你是一个直播平台的「直播间实况续写系统」。这个直播间正在直播，${hasActs ? `刚才观众"${myName}"做了一些互动（发弹幕/打赏/高亮留言），现在要生成主播【对这些互动的实时回应】，以及随之而来的一小波新弹幕。` : `观众"${myName}"这会儿没有新互动，只是在安静地看播，现在要生成【主播继续直播的一段实况】，以及这段时间里其他观众的弹幕。`}
+
+【这个直播间是什么】
+- 标题：${w.title || ''}
+- 品类标签：${tag || '（综合）'}
+- 简介：${w.intro || ''}
+- 核心设定：
+${w.concept || '（按标题与品类自行把握）'}
+${streamerBlock ? '\n' + streamerBlock + '\n' : ''}
+【刚刚发生的直播现场（节选，最新在最后）】
+${histText || '（直播刚开始）'}
+
+【观众"${myName}"刚刚的互动】
+${actLines || ('（无新互动——观众只是在看，主播自然地继续直播即可，不用硬找话题搭理 ' + myName + '）')}
+${rankHint}
+【生成要求】
+1. 【主播守则·最重要】主播此刻最要紧的事是【把这场直播继续下去】——该打游戏就接着打、该唱歌就接着唱、该带货就接着卖、该答疑就接着答。acts 要先体现主播在【继续做本职的直播内容】，回应弹幕是穿插在直播过程里的，不能为了回弹幕把正事丢下。${hasActs ? '' : '这次观众没有新互动，主播就专心做自己的事、自然碎碎念，不用刻意去找谁搭话。'}
+2. ${hasActs ? `在继续直播的同时，主播会照顾直播间的互动——【不要只回 ${myName} 一个人】。${myName} 的互动要回应（打赏要感谢、高亮留言要念出来回、普通弹幕可挑着搭话，称呼用 ${myName}），同时也要像真主播那样【念出并感谢其他观众】的弹幕、别人的付费高亮留言、别人刷的打赏礼物（"谢谢 XX 老板的火箭""XX 说得对"……）。这是主播该有的待客之道。` : `主播可以像真主播那样，偶尔念两句直播间里其他观众的弹幕、搭句话活跃气氛，但重点还是把自己手头的直播内容做下去。`}
+3. acts 是主播实况，narration（描述主播在做什么/反应）和 line（主播说的话）交错，【6-10 条】，自然承接现场。主播是话比较多的——line（台词）要占多数，让主播多开口说话、把当下在做的事、心里的想法、对观众的回应都讲出来，别太惜字如金、别让画面冷场。每条 line 可以是一两句完整的话，口语、有网感、贴合人设。
+4. danmu 是这一小波的新观众弹幕，6-10 条，是【其他观众】的真实反应（起哄、跟刷、调侃大哥大姐、有人也刷礼物打赏……）。【重要】这些弹幕发言人绝对不能是主播本人、也不能是 ${myName} 本人（${myName} 的发言只会由 ta 自己发），也不要冒用主播的名字。
+5. rank 是【更新后的本直播间粉丝打赏榜】前三——榜上的是这个直播间的"大哥大姐"（本场打赏最多的几位粉丝），name 是打赏者网名、amount 是 ta 在这个直播间的【累计打赏金额】（数字，降序）。除了 ${myName}，别的路人粉丝也在打赏，所以榜单和金额会变化、可以有人冲上来。【重要】这是粉丝给主播打赏的排名，绝对不能出现主播本人的名字，也不要把 ${myName} 写进来（${myName} 的名次由系统单独算）。
+6. 严格贴合主播人设、品类形式、世界观；绝不暴露你是 AI，绝不出现现实世界专有名词。
+7. at 是弹幕出现的时间进度（0~1 小数，按时序）。
+8. elapsedMin 是【观众看这一波直播 + 做这些互动，现实里大概过去了多少分钟】（整数，单位分钟）。看直播是实时连续的过程，要按这波内容的体量合理估：互动多、主播回应长就多一点，简短互动就少一点，通常 3~20 分钟之间，绝不要给 0 或负数，也不要离谱地大。
+${maskBlock ? '\n' + maskBlock + '\n' : ''}
+输出严格使用 JSON 对象格式，不能返回 Markdown/代码块/解释，必须以 { 开头、以 } 结尾：
+{
+  "acts": [ { "type": "narration", "text": "主播在继续直播/反应" }, { "type": "line", "text": "主播说的话" } ],
+  "danmu": [ { "at": 0.2, "name": "观众网名", "text": "弹幕", "highlight": false } ],
+  "rank": [ { "name": "其他打赏者网名", "amount": 8888 } ],
+  "elapsedMin": 8
+}
+${wvBlock ? '\n\n' + wvBlock : ''}${mainlineBlock ? '\n\n' + mainlineBlock : ''}`;
+
+    let obj = null;
+    try {
+      obj = await _phoneJsonObjectWithRetry({
+        label: '直播回应', url, key, model,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: hasActs ? '请生成主播对这位观众互动的实时回应，以及随之而来的新弹幕。' : '请生成主播继续直播的一段实况，以及这段时间的观众弹幕。' }
+        ],
+        temperature: 0.95, max_tokens: 4000
+      });
+    } catch (_) { return null; }
+    if (!obj || typeof obj !== 'object') return null;
+
+    const clean = (s) => _stripMainlineArtifacts(String(s || '')).trim();
+    const rActs = (Array.isArray(obj.acts) ? obj.acts : [])
+      .map(a => a && a.text ? { type: (a.type === 'line' ? 'line' : 'narration'), text: clean(a.text) } : null)
+      .filter(x => x && x.text);
+    const rDanmu = (Array.isArray(obj.danmu) ? obj.danmu : [])
+      .map(d => d && d.text ? { at: (typeof d.at === 'number' ? Math.max(0, Math.min(1, d.at)) : Math.random()), name: clean(d.name) || '观众', text: clean(d.text), highlight: !!d.highlight } : null)
+      .filter(Boolean)
+      .sort((x, y) => x.at - y.at);
+    const rRank = (Array.isArray(obj.rank) ? obj.rank : [])
+      .map(r => r && r.name ? { name: clean(r.name), amount: parseInt(r.amount, 10) || 0 } : null)
+      .filter(Boolean)
+      .slice(0, 3);
+    // 本波看播+互动消耗的游戏时间（分钟）：限制在合理区间，异常值兜底
+    let elapsedMin = parseInt(obj.elapsedMin, 10);
+    if (!Number.isFinite(elapsedMin) || elapsedMin <= 0) elapsedMin = 5;
+    elapsedMin = Math.max(1, Math.min(120, elapsedMin));
+    if (!rActs.length) return null;
+    return { acts: rActs, danmu: rDanmu, rank: rRank, elapsedMin };
+  }
+
+  // 续播一波主播回应（追加到舞台 + 弹幕区，逐条出），并写进历史
+  function _livePlayReply(reply, streamerName) {
+    const esc = Utils.escapeHtml;
+    const acts = Array.isArray(reply && reply.acts) ? reply.acts : [];
+    const danmu = Array.isArray(reply && reply.danmu) ? reply.danmu : [];
+    // 路人榜更新：用回应里的新 rank 替换 ctx.room.rank，重渲（"我"的名次会跟着重算）
+    const ctx = _liveRoomCtx;
+    if (ctx && ctx.room && Array.isArray(reply && reply.rank) && reply.rank.length) {
+      ctx.room.rank = reply.rank;
+      if (_liveRoomOverlay) {
+        const rankEl = _liveRoomOverlay.querySelector('.phone-liveroom-rank');
+        if (rankEl) rankEl.innerHTML = _liveRankHtml(ctx.room, ctx.w);
+      }
+    }
+    // 看播+互动消耗游戏时间：把 elapsedMin 累加到状态栏 time（只增不减，仿线上聊天那套）。
+    // 只更新 time 字段，不动 timePeriod/season —— 留给下一次主线 AI 回复时检测跨段/跨季并注入过渡描写。
+    const elapsedMin = Math.max(0, parseInt(reply && reply.elapsedMin, 10) || 0);
+    if (elapsedMin > 0) {
+      (async () => {
+        try {
+          if (typeof Calendar === 'undefined' || !Calendar.parseAbsoluteTime || !Calendar.format) return;
+          await _refreshCalRulesCache();
+          const sb = (typeof Conversations !== 'undefined') ? Conversations.getStatusBar() : null;
+          const oldTimeStr = sb && sb.time ? sb.time : '';
+          if (!sb || !oldTimeStr) return;
+          const timeObj = Calendar.parseAbsoluteTime(oldTimeStr);
+          if (!timeObj) return;
+          // 在当前游戏时间基础上 +elapsedMin 分钟，再标准化写回
+          const advanced = (typeof Calendar.addDelta === 'function')
+            ? Calendar.addDelta(timeObj, { minutes: elapsedMin }, _calRulesCache)
+            : null;
+          const target = advanced || timeObj;
+          const newTimeStr = Calendar.format(target, _calRulesCache);
+          if (!newTimeStr) return;
+          // 只增不减兜底
+          const newScore = _parsePhoneTimeScore(newTimeStr);
+          const oldScore = _parsePhoneTimeScore(oldTimeStr);
+          if (newScore > oldScore) {
+            sb.time = newTimeStr;
+            await Conversations.setStatusBar(sb);
+            if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
+          }
+        } catch (e) { console.warn('[Phone] 看直播推进状态栏时间失败', e); }
+      })();
+    }
+    const actEl = _liveRoomOverlay && _liveRoomOverlay.querySelector('#liveroom-act');
+    const danmuEl = _liveRoomOverlay && _liveRoomOverlay.querySelector('#liveroom-danmu');
+    // 写历史
+    acts.forEach(a => _liveRoomHistory.push({ _t: 1, kind: a.type === 'line' ? 'host_line' : 'host_narr', name: streamerName, text: a.text || '' }));
+    danmu.forEach(d => _liveRoomHistory.push({ _t: 1, kind: 'danmu', name: _ltGetDisplayName(d.name) || d.name || '观众', text: d.text || '', highlight: !!d.highlight }));
+
+    // 清掉旧定时器，逐条播回应
+    if (_liveRoomTimer) { clearInterval(_liveRoomTimer); _liveRoomTimer = null; }
+    let ai = 0;
+    const total = acts.length || 1;
+    const showAct = (idx) => {
+      if (!actEl || !acts[idx]) return;
+      const a = acts[idx];
+      const inner = a.type === 'line'
+        ? `<div class="phone-liveroom-line"><span class="phone-liveroom-line-name">${esc(streamerName)}</span><span class="phone-liveroom-line-text">${esc(a.text || '')}</span></div>`
+        : `<div class="phone-liveroom-narr">${esc(a.text || '')}</div>`;
+      actEl.classList.remove('show');
+      setTimeout(() => { actEl.innerHTML = inner; actEl.classList.add('show'); }, 180);
+    };
+    let di = 0;
+    const pushDanmu = (progress) => {
+      if (!danmuEl) return;
+      while (di < danmu.length && (danmu[di].at || 0) <= progress) {
+        const d = danmu[di]; di++;
+        const name = esc(_ltGetDisplayName(d.name) || d.name || '观众');
+        const row = document.createElement('div');
+        row.className = 'phone-liveroom-dm' + (d.highlight ? ' hl' : '');
+        row.innerHTML = d.highlight
+          ? `<span class="phone-liveroom-dm-hl-tag">高亮</span><span class="phone-liveroom-dm-name">${name}</span><span class="phone-liveroom-dm-text">${esc(d.text || '')}</span>`
+          : `<span class="phone-liveroom-dm-name">${name}：</span><span class="phone-liveroom-dm-text">${esc(d.text || '')}</span>`;
+        danmuEl.appendChild(row);
+        requestAnimationFrame(() => row.classList.add('in'));
+        while (danmuEl.children.length > 40) danmuEl.removeChild(danmuEl.firstChild);
+        if (_liveRoomDanmuSticky) danmuEl.scrollTop = danmuEl.scrollHeight;
+      }
+    };
+    showAct(0); pushDanmu(0.001);
+    _liveRoomTimer = setInterval(() => {
+      ai++;
+      if (ai >= acts.length) { pushDanmu(1.01); clearInterval(_liveRoomTimer); _liveRoomTimer = null; return; }
+      showAct(ai); pushDanmu(ai / total);
+    }, 3200);
+  }
+
+  // 刷新：把攒的 pending 动作打包发给主播，拿回应续播。仿电台连线（busy 锁 + 失败退回 pending）。
+  async function _liveRefresh() {
+    const ctx = _liveRoomCtx;
+    if (!ctx || !ctx.w) { UI.showToast('直播间已关闭', 1400); return; }
+    if (ctx.busy) { UI.showToast('主播正在回应中…', 1400); return; }
+    const batch = (ctx.myActions || []).slice();
+    // 空互动也能刷新：主播继续做自己的事，推进一段直播
+    ctx.busy = true;
+    ctx.myActions = [];
+    const btn = _liveRoomOverlay && _liveRoomOverlay.querySelector('.phone-liveroom-refresh');
+    let btnHtml = '';
+    if (btn) {
+      btnHtml = btn.innerHTML;
+      // 复用聊天那个缺口圆环 spinner
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:phone-live-spin 0.9s linear infinite"><path d="M21 12a9 9 0 1 1-6.74-8.74"/></svg>';
+      btn.classList.add('loading');
+    }
+    let reply = null;
+    try { reply = await _liveGenRoomReply(ctx.w, batch); } catch (_) { reply = null; }
+    if (btn) { btn.classList.remove('loading'); if (btnHtml) btn.innerHTML = btnHtml; }
+    ctx.busy = false;
+    if (!reply) {
+      // 失败退回 pending（合并新攒的）
+      ctx.myActions = batch.concat(ctx.myActions || []);
+      UI.showToast('主播没接住，稍后再刷新试试', 1800);
+      return;
+    }
+    ctx.refreshed = true;  // 标记本场刷新过 → 退出时才存开播记录
+    _livePlayReply(reply, ctx.displayName);
+  }
+
+  // 打赏榜渲染：AI 生成的榜 + 用户本场累计花费混排。
+// 用户进前三 → 在榜内对应名次高亮；没进前三 → 前三照旧，榜单底部单独挂一行真实名次。
+function _liveRankHtml(room, w) {
+  const esc = Utils.escapeHtml;
+  const aiRank = Array.isArray(room && room.rank) ? room.rank.slice(0, 3) : [];
+  const mySpent = Math.max(0, Number((w && w.mySpent) || 0));
+  const myName = _ltUserName || '我';
+  const aiRow = (r, i) => `
+      <div class="phone-liveroom-rank-item">
+        <span class="phone-liveroom-rank-no rank-${i + 1}">${i + 1}</span>
+        <span class="phone-liveroom-rank-name">${esc(_ltGetDisplayName(r.name) || r.name)}</span>
+        <span class="phone-liveroom-rank-amt">${esc(String(r.amount))}</span>
+      </div>`;
+  // 没花钱：只渲染 AI 榜前三
+  if (mySpent <= 0) return aiRank.map(aiRow).join('');
+  // 合并用户进榜、按金额降序定位名次
+  const merged = aiRank.map(r => ({ name: _ltGetDisplayName(r.name) || r.name, amount: Number(r.amount) || 0, isMe: false }));
+  merged.push({ name: myName, amount: mySpent, isMe: true });
+  merged.sort((a, b) => b.amount - a.amount);
+  const myRank = merged.findIndex(x => x.isMe) + 1;
+  if (myRank <= 3) {
+    return merged.slice(0, 3).map((r, i) => `
+      <div class="phone-liveroom-rank-item${r.isMe ? ' is-me' : ''}">
+        <span class="phone-liveroom-rank-no rank-${i + 1}">${i + 1}</span>
+        <span class="phone-liveroom-rank-name">${esc(r.name)}</span>
+        <span class="phone-liveroom-rank-amt">${esc(String(r.amount))}</span>
+      </div>`).join('');
+  }
+  // 没进前三：前三照旧 + 底部单独挂"我"那行
+  const mine = `
+      <div class="phone-liveroom-rank-item is-me is-mine-row">
+        <span class="phone-liveroom-rank-no">${myRank}</span>
+        <span class="phone-liveroom-rank-name">${esc(myName)}</span>
+        <span class="phone-liveroom-rank-amt">${esc(String(mySpent))}</span>
+      </div>`;
+  return aiRank.map(aiRow).join('') + mine;
+}
+
+// 点击进入直播间：建全屏 overlay + 真生成动态播放
+async function _liveEnterRoom(id) {
+    let w = null;
+    let alreadyFollowed = false;
+    try {
+      const pd = _getPhoneDataSync();
+      const disc = (pd && pd.videoDiscover && typeof pd.videoDiscover === 'object') ? pd.videoDiscover : {};
+      const list = Array.isArray(disc['live']) ? disc['live'] : [];
+      w = list.find(x => x && x.id === id) || null;
+      // 即时流里没有（已关注的间会被覆盖刷掉）→ 从关注列表取快照
+      if (!w) {
+        const fl = (pd && Array.isArray(pd.liveFollowed)) ? pd.liveFollowed : [];
+        w = fl.find(x => x && x.id === id) || null;
+      }
+      alreadyFollowed = !!(pd && Array.isArray(pd.liveFollowed) && pd.liveFollowed.some(x => x && x.id === id));
+    } catch (_) {}
+    if (!w) { UI.showToast('直播间已下播', 1500); return; }
+
+    // 确保拿到用户网名（主播称呼/弹幕/榜单要用）：不依赖别处恰好赋过值，进间主动拉一次面具网名
+    try {
+      const mi = await _getMaskInfo();
+      if (mi && mi.username) _ltUserName = mi.username;
+      if (mi && mi.avatar) _ltUserAvatar = mi.avatar;
+    } catch (_) {}
+
+    const esc = Utils.escapeHtml;
+    const grad = _liveTagGrad(w.tags);
+    const realName = w.streamerName || '';
+    const displayName = (_ltGetDisplayName(realName) || realName || '神秘主播');
+    const avaChar = (displayName || '主')[0] || '主';
+    const avaInner = (w.streamerAvatar || '').trim()
+      ? `<img src="${esc(w.streamerAvatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+      : esc(avaChar);
+
+    // 进间生成：一整轮实况（loading → 生成 → 失败则退出，不建 overlay）
+    _liveShowLoading(true);
+    let room = null;
+    try { room = await _liveGenRoom(w); } catch (_) { room = null; }
+    _liveShowLoading(false);
+    if (!room) { UI.showToast('直播间连接失败，请稍后重试', 1800); return; }
+
+    // 背景：优先用户设的壁纸 cover，没有就用 NPC 头像铺底，都没有则纯渐变
+    const coverInner = (w.cover || '').trim()
+      ? `<img src="${esc(w.cover)}" style="width:100%;height:100%;object-fit:cover">`
+      : ((w.streamerAvatar || '').trim()
+        ? `<img src="${esc(w.streamerAvatar)}" style="width:100%;height:100%;object-fit:cover">`
+        : '');
+
+    const rankHtml = _liveRankHtml(room, w);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'phone-liveroom';
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:70;overflow:hidden;display:flex;flex-direction:column';
+    overlay.innerHTML = `
+      <div class="phone-liveroom-bg" style="background:${grad}">${coverInner}</div>
+      <div class="phone-liveroom-shade"></div>
+
+      <div class="phone-liveroom-top">
+        <button class="phone-liveroom-back">${_uiIcon('back', 18)}</button>
+        <div class="phone-liveroom-streamer">
+          <div class="phone-liveroom-ava">${avaInner}</div>
+          <div class="phone-liveroom-sinfo">
+            <div class="phone-liveroom-sname">${esc(displayName)}</div>
+            <div class="phone-liveroom-sonline"><span class="phone-live-dot"></span>${esc(w.onlineHint || '0')} 在线</div>
+          </div>
+        </div>
+        <button class="phone-liveroom-refresh" title="刷新（让主播回应你的互动）">${_uiIcon('refresh', 16)}</button>
+        <button class="phone-liveroom-follow${alreadyFollowed ? ' followed' : ''}">${alreadyFollowed ? '已关注' : '关注'}</button>
+      </div>
+
+      <div class="phone-liveroom-rank">${rankHtml}</div>
+
+      <div class="phone-liveroom-stage">
+        <div class="phone-liveroom-act" id="liveroom-act"></div>
+      </div>
+
+      <div class="phone-liveroom-danmu" id="liveroom-danmu"></div>
+
+      <div class="phone-liveroom-bar">
+        <input class="phone-liveroom-input" id="liveroom-input" placeholder="说点什么…" readonly>
+        <button class="phone-liveroom-act-btn" data-act="gift" title="打赏">${_liveRoomIcon('gift')}</button>
+        <button class="phone-liveroom-act-btn" data-act="highlight" title="高亮留言">${_liveRoomIcon('star')}</button>
+        <button class="phone-liveroom-act-btn" data-act="setting" title="设置">${_liveRoomIcon('more')}</button>
+      </div>`;
+
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+    _liveRoomOverlay = overlay;
+    // 记录当前直播间上下文（设置页/历史发言/退出提醒用）
+    // myActions：本次刷新前攒的玩家动作 pending；busy：刷新请求进行中锁
+    _liveRoomCtx = { w: w, room: room, displayName: displayName, followed: alreadyFollowed, dirty: false, myActions: [], busy: false };
+    // 历史发言 = 这一整轮 AI 已生成好的完整内容（主播实况 + 弹幕，按时序混排），进来即完整
+    _liveRoomHistory = _liveBuildHistory(room, displayName);
+
+    overlay.querySelector('.phone-liveroom-back').onclick = () => _liveCloseRoom();
+    overlay.querySelector('.phone-liveroom-follow').onclick = async (e) => {
+      const btn = e.currentTarget;
+      const willFollow = !btn.classList.contains('followed');
+      btn.disabled = true;
+      try {
+        if (willFollow) {
+          const ok = await _liveFollowRoom(_liveRoomCtx.w);
+          if (ok) {
+            btn.classList.add('followed');
+            btn.textContent = '已关注';
+            _liveRoomCtx.followed = true;
+            UI.showToast('已关注，可在「我的」里找到 ta', 1500);
+          } else UI.showToast('关注失败', 1400);
+        } else {
+          const ok = await _liveUnfollowRoom(_liveRoomCtx.w.id);
+          if (ok) {
+            btn.classList.remove('followed');
+            btn.textContent = '关注';
+            _liveRoomCtx.followed = false;
+            UI.showToast('已取消关注', 1400);
+          } else UI.showToast('操作失败', 1400);
+        }
+      } finally { btn.disabled = false; }
+    };
+    // 刷新：把攒的互动打包发给主播，拿回应续播
+    const refreshBtn = overlay.querySelector('.phone-liveroom-refresh');
+    if (refreshBtn) refreshBtn.onclick = () => _liveRefresh();
+    // 弹幕区滚动：接近底部=吸底自动跟随；用户手动往上翻则停止自动滚到底
+    _liveRoomDanmuSticky = true;
+    const danmuScrollEl = overlay.querySelector('#liveroom-danmu');
+    if (danmuScrollEl) {
+      danmuScrollEl.addEventListener('scroll', () => {
+        const gap = danmuScrollEl.scrollHeight - danmuScrollEl.scrollTop - danmuScrollEl.clientHeight;
+        _liveRoomDanmuSticky = gap <= 24;
+      }, { passive: true });
+    }
+    // 互动按钮：打赏 / 高亮 / 设置
+    overlay.querySelectorAll('.phone-liveroom-act-btn').forEach(b => {
+      const act = b.getAttribute('data-act');
+      if (act === 'setting') b.onclick = () => _liveOpenRoomSettings();
+      else if (act === 'gift') b.onclick = () => _liveShowRewardSheet();
+      else if (act === 'highlight') b.onclick = () => _liveShowHighlightSheet();
+    });
+    // 弹幕输入：回车发送（免费）
+    const input = overlay.querySelector('#liveroom-input');
+    if (input) {
+      input.removeAttribute('readonly');
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          const v = (input.value || '').trim();
+          if (v) { _liveSendDanmu(v); input.value = ''; }
+        }
+      };
+    }
+
+    // 启动动态播放
+    _liveRoomStartPlay(room, displayName);
+
+    // 已有 NPC 主播：没自定义头像时，异步抓 NPC 头像回填（不标 dirty，用户后续可在设置里改）
+    if (!(w.streamerAvatar || '').trim() && realName) {
+      _liveFetchNpcAvatar(realName).then(url => {
+        if (!url) return;
+        // 期间用户可能已在设置里换过头像 → 不覆盖
+        if ((w.streamerAvatar || '').trim()) return;
+        w.streamerAvatar = url;
+        if (_liveRoomOverlay) {
+          const ava = _liveRoomOverlay.querySelector('.phone-liveroom-ava');
+          if (ava) ava.innerHTML = `<img src="${esc(url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+        }
+      }).catch(() => {});
+    }
+  }
+
+  // 按主播本名/网名抓 NPC 头像（复用论坛 NPC 头像表），查不到返回 ''
+  async function _liveFetchNpcAvatar(name) {
+    const nm = String(name || '').trim();
+    if (!nm) return '';
+    try {
+      await _ensureForumNpcAvatarMap();
+      if (_forumNpcAvatarMap) {
+        if (_forumNpcAvatarMap[nm]) return _forumNpcAvatarMap[nm];
+        // 用网名再查一次
+        const dn = _ltGetDisplayName(nm);
+        if (dn && _forumNpcAvatarMap[dn]) return _forumNpcAvatarMap[dn];
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  // 关闭直播间：停定时器 + 移除 overlay（改过设定且没关注 → 提醒一句）
+  function _liveCloseRoom() {
+    const ctx = _liveRoomCtx;
+    // 本场记录快照 + 是否值得存档（刷新过才算一场）
+    const histSnap = Array.isArray(_liveRoomHistory) ? _liveRoomHistory.slice() : [];
+    const roomId = ctx && ctx.w ? ctx.w.id : null;
+    const refreshed = !!(ctx && ctx.refreshed);
+    const doClose = () => {
+      if (_liveRoomTimer) { clearInterval(_liveRoomTimer); _liveRoomTimer = null; }
+      if (_liveRoomOverlay) { try { _liveRoomOverlay.remove(); } catch (_) {} _liveRoomOverlay = null; }
+      _liveRoomCtx = null; _liveRoomHistory = [];
+    };
+    // 存开播记录：已关注 + 本场刷新过（异步，不阻塞关闭）
+    const archive = async () => {
+      if (refreshed && roomId) { try { await _liveArchiveSession(roomId, histSnap); } catch (_) {} }
+    };
+    if (ctx && ctx.dirty && !ctx.followed) {
+      UI.showConfirm('退出直播间', '你对这个直播间的修改还没保存。关注主播才能保留这些改动，否则退出后会丢失。要关注吗？')
+        .then(async (ok) => {
+          if (ok) {
+            await _liveFollowRoom(ctx.w);
+            ctx.followed = true;
+            UI.showToast('已关注，可在「我的」里找到 ta', 1500);
+          }
+          await archive();
+          doClose();
+        });
+    } else {
+      archive();
+      doClose();
+    }
+  }
+
+  // 逐条播放主播实况（中间偏上，每次一条，叙述卡片/台词带名，淡入淡出），
+  // 弹幕按播放进度从底部往上冒。
+  function _liveRoomStartPlay(room, streamerName) {
+    const esc = Utils.escapeHtml;
+    const acts = Array.isArray(room.acts) ? room.acts : [];
+    const danmu = Array.isArray(room.danmu) ? room.danmu : [];
+    _liveRoomActIdx = 0;
+    _liveRoomDanmuIdx = 0;
+    const total = acts.length || 1;
+
+    const actEl = _liveRoomOverlay && _liveRoomOverlay.querySelector('#liveroom-act');
+    const danmuEl = _liveRoomOverlay && _liveRoomOverlay.querySelector('#liveroom-danmu');
+
+    const showAct = (idx) => {
+      if (!actEl) return;
+      const a = acts[idx];
+      if (!a) return;
+      let inner;
+      if (a.type === 'line') {
+        inner = `<div class="phone-liveroom-line">
+            <span class="phone-liveroom-line-name">${esc(streamerName)}</span>
+            <span class="phone-liveroom-line-text">${esc(a.text || '')}</span>
+          </div>`;
+      } else {
+        inner = `<div class="phone-liveroom-narr">${esc(a.text || '')}</div>`;
+      }
+      actEl.classList.remove('show');
+      // 触发重排后淡入
+      setTimeout(() => { actEl.innerHTML = inner; actEl.classList.add('show'); }, 180);
+    };
+
+    const pushDanmu = (progress) => {
+      if (!danmuEl) return;
+      while (_liveRoomDanmuIdx < danmu.length && (danmu[_liveRoomDanmuIdx].at || 0) <= progress) {
+        const d = danmu[_liveRoomDanmuIdx];
+        _liveRoomDanmuIdx++;
+        const name = esc(_ltGetDisplayName(d.name) || d.name || '观众');
+        const row = document.createElement('div');
+        row.className = 'phone-liveroom-dm' + (d.highlight ? ' hl' : '');
+        row.innerHTML = d.highlight
+          ? `<span class="phone-liveroom-dm-hl-tag">高亮</span><span class="phone-liveroom-dm-name">${name}</span><span class="phone-liveroom-dm-text">${esc(d.text || '')}</span>`
+          : `<span class="phone-liveroom-dm-name">${name}：</span><span class="phone-liveroom-dm-text">${esc(d.text || '')}</span>`;
+        danmuEl.appendChild(row);
+        // 触发入场动画
+        requestAnimationFrame(() => row.classList.add('in'));
+        // 控制最大条数，旧的删掉
+        while (danmuEl.children.length > 40) danmuEl.removeChild(danmuEl.firstChild);
+        if (_liveRoomDanmuSticky) danmuEl.scrollTop = danmuEl.scrollHeight;
+      }
+    };
+
+    // 首条立即出
+    showAct(0);
+    pushDanmu(0.001);
+
+    _liveRoomTimer = setInterval(() => {
+      _liveRoomActIdx++;
+      if (_liveRoomActIdx >= acts.length) {
+        // 播完最后一条，补完剩余弹幕后停（保留画面，等 A4 互动续写）
+        pushDanmu(1.01);
+        clearInterval(_liveRoomTimer);
+        _liveRoomTimer = null;
+        return;
+      }
+      showAct(_liveRoomActIdx);
+      pushDanmu(_liveRoomActIdx / total);
+    }, 3200);
+  }
+
+  // 直播间操作条小图标
+  function _liveRoomIcon(name) {
+    if (name === 'gift') return '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>';
+    if (name === 'star') return '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+    return '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>';
+  }
+
+  // ===== 直播间设置（全屏黑底页）=====
+  // 三块：① 核心设定 concept 可改  ② 历史发言（主播+弹幕混排）  ③ 换头像/壁纸（真能换）
+  // 改动当场生效写进内存 w（即时流刷走即焚），退出时若 dirty 且未关注则提醒。
+  function _liveOpenRoomSettings() {
+    const ctx = _liveRoomCtx;
+    if (!ctx || !ctx.w) { UI.showToast('直播间已关闭', 1400); return; }
+    const w = ctx.w;
+    const esc = Utils.escapeHtml;
+
+    const ava = (w.streamerAvatar || '').trim();
+    const avaInner = ava
+      ? `<img src="${esc(ava)}" style="width:100%;height:100%;object-fit:cover">`
+      : `<span>${esc((ctx.displayName || '主')[0] || '主')}</span>`;
+    const wall = (w.cover || '').trim();
+    const wallStyle = wall
+      ? `background-image:url('${esc(wall)}');background-size:cover;background-position:center`
+      : `background:${_liveTagGrad(w.tags)}`;
+
+    const ov = document.createElement('div');
+    ov.className = 'phone-liveset';
+    ov.style.cssText = 'position:absolute;inset:0;z-index:80;background:#15151a;color:#fff;display:flex;flex-direction:column;overflow:hidden';
+    ov.innerHTML = `
+      <div class="phone-liveset-top">
+        <button class="phone-liveset-back">${_uiIcon('back', 18)}</button>
+        <div class="phone-liveset-title">直播间设置</div>
+      </div>
+      <div class="phone-liveset-body">
+
+        <div class="phone-liveset-sec">
+          <div class="phone-liveset-sec-t">主播 / 直播间外观</div>
+          <div class="phone-liveset-face">
+            <div class="phone-liveset-ava" id="liveset-ava">${avaInner}</div>
+            <button class="phone-liveset-btn" id="liveset-ava-btn">换头像</button>
+            <div class="phone-liveset-wall" id="liveset-wall" style="${wallStyle}"></div>
+            <button class="phone-liveset-btn" id="liveset-wall-btn">换壁纸</button>
+          </div>
+        </div>
+
+        <div class="phone-liveset-sec">
+          <div class="phone-liveset-sec-t">直播间核心设定</div>
+          <div class="phone-liveset-hint">这是这个直播间的内容内核。改了立即生效，影响接下来主播播什么。</div>
+          <textarea class="phone-liveset-concept" id="liveset-concept" rows="6" placeholder="这个直播间是关于什么的…">${esc(w.concept || '')}</textarea>
+          <button class="phone-liveset-save" id="liveset-concept-save">保存设定</button>
+        </div>
+
+        <div class="phone-liveset-sec">
+          <div class="phone-liveset-sec-t">观看设置</div>
+          <label class="phone-liveset-switch">
+            <span class="phone-liveset-switch-text">告诉主播我是谁<br><span class="phone-liveset-switch-sub">开启后把你的角色身份发给主播，弹幕/连麦里可能认出你</span></span>
+            <span style="position:relative;display:inline-flex;flex-shrink:0">
+              <input type="checkbox" id="liveset-tellid" class="circle-check" ${_liveTellIdentity() ? 'checked' : ''}>
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+        </div>
+
+        <div class="phone-liveset-sec">
+          <div class="phone-liveset-sec-t">历史发言</div>
+          <div class="phone-liveset-entry" id="liveset-hist-entry">
+            <span>查看本场主播发言 + 全部弹幕</span>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </div>
+        </div>
+
+        <div class="phone-liveset-sec">
+          <div class="phone-liveset-sec-t">开播记录</div>
+          <div class="phone-liveset-entry" id="liveset-sess-entry">
+            <span>翻看 ta 之前都播了什么（关注后留存）</span>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </div>
+        </div>
+
+      </div>`;
+
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(ov);
+
+    ov.querySelector('.phone-liveset-back').onclick = () => { try { ov.remove(); } catch (_) {} };
+
+    // 换头像
+    ov.querySelector('#liveset-ava-btn').onclick = () => _livePickImage('avatar', (dataUrl) => {
+      w.streamerAvatar = dataUrl;
+      ctx.dirty = true;
+      const box = ov.querySelector('#liveset-ava');
+      if (box) box.innerHTML = `<img src="${esc(dataUrl)}" style="width:100%;height:100%;object-fit:cover">`;
+      // 同步直播间画面顶部头像
+      _liveSyncRoomFace();
+      UI.showToast('头像已更换', 1200);
+    });
+
+    // 换壁纸
+    ov.querySelector('#liveset-wall-btn').onclick = () => _livePickImage('wall', (dataUrl) => {
+      w.cover = dataUrl;
+      ctx.dirty = true;
+      const box = ov.querySelector('#liveset-wall');
+      if (box) { box.style.backgroundImage = `url('${dataUrl}')`; box.style.backgroundSize = 'cover'; box.style.backgroundPosition = 'center'; }
+      _liveSyncRoomFace();
+      UI.showToast('壁纸已更换', 1200);
+    });
+
+    // 保存核心设定
+    ov.querySelector('#liveset-concept-save').onclick = () => {
+      const ta = ov.querySelector('#liveset-concept');
+      const val = (ta && ta.value || '').trim();
+      if (val !== (w.concept || '')) { w.concept = val; ctx.dirty = true; }
+      UI.showToast('设定已保存（本次生效）', 1400);
+    };
+
+    // 历史发言入口 → 单开全屏页
+    const histEntry = ov.querySelector('#liveset-hist-entry');
+    if (histEntry) histEntry.onclick = () => _liveOpenHistory();
+
+    // 开播记录入口 → 列历次开播
+    const sessEntry = ov.querySelector('#liveset-sess-entry');
+    if (sessEntry) sessEntry.onclick = () => _liveOpenSessions();
+
+    // 告诉主播我是谁开关（持久化到 pd.liveTellIdentity，默认开）
+    const tellId = ov.querySelector('#liveset-tellid');
+    if (tellId) tellId.onchange = () => { _liveSetTellIdentity(tellId.checked); };
+  }
+
+  // 读「告诉主播我是谁」开关（默认开）
+  function _liveTellIdentity() {
+    try {
+      const pd = _getPhoneDataSync();
+      return !(pd && pd.liveTellIdentity === false);
+    } catch (_) { return true; }
+  }
+  // 写「告诉主播我是谁」开关
+  async function _liveSetTellIdentity(on) {
+    try {
+      const pd = await _getPhoneData();
+      if (pd) { pd.liveTellIdentity = !!on; await _savePhoneData(); }
+    } catch (_) {}
+  }
+
+  // 历史发言全屏页（本场主播发言 + 全部弹幕，混排）
+  function _liveOpenHistory() {
+    const ov = document.createElement('div');
+    ov.className = 'phone-liveset';
+    ov.style.cssText = 'position:absolute;inset:0;z-index:82;background:#15151a;color:#fff;display:flex;flex-direction:column;overflow:hidden';
+    ov.innerHTML = `
+      <div class="phone-liveset-top">
+        <button class="phone-liveset-back">${_uiIcon('back', 18)}</button>
+        <div class="phone-liveset-title">历史发言</div>
+      </div>
+      <div class="phone-liveset-body">
+        <div class="phone-liveset-hist">${_liveRoomHistoryHtml()}</div>
+      </div>`;
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(ov);
+    ov.querySelector('.phone-liveset-back').onclick = () => { try { ov.remove(); } catch (_) {} };
+  }
+
+  // 把一整轮 room 数据（acts + danmu）按时序混排成历史发言列表
+  function _liveBuildHistory(room, streamerName) {
+    const acts = Array.isArray(room && room.acts) ? room.acts : [];
+    const danmu = Array.isArray(room && room.danmu) ? room.danmu : [];
+    const total = acts.length || 1;
+    const seq = [];
+    acts.forEach((a, i) => {
+      seq.push({
+        _t: i / total,
+        kind: a.type === 'line' ? 'host_line' : 'host_narr',
+        name: streamerName,
+        text: a.text || ''
+      });
+    });
+    danmu.forEach(d => {
+      seq.push({
+        _t: (typeof d.at === 'number' ? d.at : 0),
+        kind: 'danmu',
+        name: _ltGetDisplayName(d.name) || d.name || '观众',
+        text: d.text || '',
+        highlight: !!d.highlight
+      });
+    });
+    // 按时序排，同刻主播在前（让"主播说→观众接"更自然）
+    seq.sort((x, y) => (x._t - y._t) || ((x.kind === 'danmu' ? 1 : 0) - (y.kind === 'danmu' ? 1 : 0)));
+    return seq;
+  }
+
+  // 历史发言渲染（主播实况 + 弹幕，混排，按出现顺序）。传 records 渲染指定记录，否则渲染本场。
+  function _liveRoomHistoryHtml(records) {
+    const esc = Utils.escapeHtml;
+    const hist = Array.isArray(records) ? records : (Array.isArray(_liveRoomHistory) ? _liveRoomHistory : []);
+    if (!hist.length) return `<div class="phone-liveset-hist-empty">还没有发言记录，主播刚开播。</div>`;
+    return hist.map(h => {
+      if (h.kind === 'host_line') {
+        return `<div class="phone-liveset-h host">
+            <span class="phone-liveset-h-name">${esc(h.name || '主播')}</span>
+            <span class="phone-liveset-h-text">${esc(h.text || '')}</span>
+          </div>`;
+      }
+      if (h.kind === 'host_narr') {
+        return `<div class="phone-liveset-h narr">${esc(h.text || '')}</div>`;
+      }
+      // danmu
+      return `<div class="phone-liveset-h dm${h.highlight ? ' hl' : ''}">
+          <span class="phone-liveset-h-dmname">${esc(h.name || '观众')}</span>
+          <span class="phone-liveset-h-text">${esc(h.text || '')}</span>
+        </div>`;
+    }).join('');
+  }
+
+  // 开播记录列表页（关注后才有，列出历次开播，点进看单场）
+  function _liveOpenSessions() {
+    const ctx = _liveRoomCtx;
+    const roomId = ctx && ctx.w ? ctx.w.id : null;
+    let sessions = [];
+    try {
+      const pd = _getPhoneDataSync();
+      const fl = (pd && Array.isArray(pd.liveFollowed)) ? pd.liveFollowed : [];
+      const ft = fl.find(x => x && x.id === roomId);
+      sessions = (ft && Array.isArray(ft.sessions)) ? ft.sessions : [];
+    } catch (_) {}
+    const esc = Utils.escapeHtml;
+    const fmt = (s) => {
+      if (s.gameTime) return esc(s.gameTime);
+      try { return esc(new Date(s.at).toLocaleString()); } catch (_) { return ''; }
+    };
+    const listHtml = sessions.length
+      ? sessions.map((s, i) => {
+          const n = (s.records || []).length;
+          return `<div class="phone-liveset-entry phone-live-sess-item" data-sess="${esc(s.id)}">
+              <span>第 ${sessions.length - i} 场 · ${fmt(s)}<br><span class="phone-liveset-switch-sub">${n} 条记录</span></span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </div>`;
+        }).join('')
+      : `<div class="phone-liveset-hist-empty">还没有开播记录。关注后，看过的直播会在退出时存下来。</div>`;
+    const ov = document.createElement('div');
+    ov.className = 'phone-liveset';
+    ov.style.cssText = 'position:absolute;inset:0;z-index:82;background:#15151a;color:#fff;display:flex;flex-direction:column;overflow:hidden';
+    ov.innerHTML = `
+      <div class="phone-liveset-top">
+        <button class="phone-liveset-back">${_uiIcon('back', 18)}</button>
+        <div class="phone-liveset-title">开播记录</div>
+      </div>
+      <div class="phone-liveset-body">
+        <div class="phone-liveset-sec">${listHtml}</div>
+      </div>`;
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(ov);
+    ov.querySelector('.phone-liveset-back').onclick = () => { try { ov.remove(); } catch (_) {} };
+    ov.querySelectorAll('.phone-live-sess-item').forEach(el => {
+      el.onclick = () => {
+        const sid = el.getAttribute('data-sess');
+        const s = sessions.find(x => x && x.id === sid);
+        if (s) _liveOpenSessionDetail(s);
+      };
+    });
+  }
+
+  // 单场开播记录详情页
+  function _liveOpenSessionDetail(session) {
+    const esc = Utils.escapeHtml;
+    const title = session.gameTime ? esc(session.gameTime) : '开播记录';
+    const ov = document.createElement('div');
+    ov.className = 'phone-liveset';
+    ov.style.cssText = 'position:absolute;inset:0;z-index:83;background:#15151a;color:#fff;display:flex;flex-direction:column;overflow:hidden';
+    ov.innerHTML = `
+      <div class="phone-liveset-top">
+        <button class="phone-liveset-back">${_uiIcon('back', 18)}</button>
+        <div class="phone-liveset-title">${title}</div>
+      </div>
+      <div class="phone-liveset-body">
+        <div class="phone-liveset-hist">${_liveRoomHistoryHtml(session.records)}</div>
+      </div>`;
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(ov);
+    ov.querySelector('.phone-liveset-back').onclick = () => { try { ov.remove(); } catch (_) {} };
+  }
+
+  // 选图片 → DataURL（壁纸走压缩，头像走压缩成小图），回调拿到 dataUrl
+  function _livePickImage(kind, cb) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.style.display = 'none';
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      if (!file) { input.remove(); return; }
+      try {
+        const opts = (kind === 'avatar') ? { maxW: 200, maxH: 200, quality: 0.85 } : { maxW: 900, maxH: 1600, quality: 0.82 };
+        const dataUrl = await _compressWallpaper(file, opts);
+        cb(dataUrl);
+      } catch (e) {
+        UI.showToast('图片处理失败', 1500);
+      }
+      input.remove();
+    };
+    document.body.appendChild(input);
+    input.click();
+  }
+
+  // 设置页改了头像/壁纸后，同步刷新直播间画面（背景 + 顶部头像）
+  function _liveSyncRoomFace() {
+    const ctx = _liveRoomCtx;
+    if (!ctx || !ctx.w || !_liveRoomOverlay) return;
+    const w = ctx.w;
+    const esc = Utils.escapeHtml;
+    // 背景：优先壁纸 cover，其次 NPC/自定义头像（模糊铺底），都没有则纯渐变
+    const bg = _liveRoomOverlay.querySelector('.phone-liveroom-bg');
+    if (bg) {
+      if ((w.cover || '').trim()) {
+        bg.style.background = '';
+        bg.innerHTML = `<img src="${esc(w.cover)}" style="width:100%;height:100%;object-fit:cover">`;
+      } else if ((w.streamerAvatar || '').trim()) {
+        bg.style.background = _liveTagGrad(w.tags);
+        bg.innerHTML = `<img src="${esc(w.streamerAvatar)}" style="width:100%;height:100%;object-fit:cover">`;
+      } else {
+        bg.innerHTML = '';
+        bg.style.background = _liveTagGrad(w.tags);
+      }
+    }
+    // 顶部头像
+    const ava = _liveRoomOverlay.querySelector('.phone-liveroom-ava');
+    if (ava) {
+      if ((w.streamerAvatar || '').trim()) {
+        ava.innerHTML = `<img src="${esc(w.streamerAvatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+      } else {
+        ava.textContent = (ctx.displayName || '主')[0] || '主';
+      }
+    }
+  }
+
+  // 构建剧本阶段的「已定演职人员资料」块：列表已把演职人员定死，这里只把 work 里
+  // 已出现的导演/编剧/主演名字去角色库匹配出资料，喂给剧本生成，让创作贴合这些真人——
+  // 但严格遵守「创作者/演员 ≠ 作品角色」的分离原则。
+  async function _videoBuildCastProfiles(work) {
+    if (!work) return '';
+    const isAnime = work.kind === 'anime';
+    const names = [];
+    const add = (n, roleLabel) => {
+      const nm = String(n || '').trim();
+      if (nm) names.push({ name: nm, role: roleLabel });
+    };
+    if (isAnime) {
+      add(work.director, '监督');
+      add(work.screenwriter, '系列构成');
+      add(work.artDirector, '作画');
+      (Array.isArray(work.cast) ? work.cast : []).forEach(n => add(n, '配音演员'));
+    } else {
+      add(work.director, '导演');
+      add(work.screenwriter, '编剧');
+      (Array.isArray(work.cast) ? work.cast : []).forEach(n => add(n, '主演'));
+    }
+    if (!names.length) return '';
+
+    let candidates = [];
+    try { candidates = await _collectChatCandidates(); } catch (_) { candidates = []; }
+    // 只保留命中真实角色（有资料）的人；纯虚构的名字不发资料
+    const lines = [];
+    const seen = new Set();
+    names.forEach(item => {
+      if (seen.has(item.name + '|' + item.role)) return;
+      seen.add(item.name + '|' + item.role);
+      const c = candidates.find(x => x.name && x.name.trim() === item.name);
+      if (!c) return;
+      let s = `- ${item.name}（本片${item.role}）`;
+      if (c.aliases) s += `（别名：${c.aliases}）`;
+      if (c.detail) s += `\n  ${c.detail.replace(/\n+/g, ' ').slice(0, 180)}`;
+      lines.push(s);
+    });
+    if (!lines.length) return '';
+
+    const roleNoun = isAnime ? '监督/系列构成/作画/配音演员' : '导演/编剧/主演';
+    const creatorLine = isAnime
+      ? '- 剧情与角色人设跟着本片的题材、简介走，不要照搬 staff 本人的身份、经历、能力、专业领域。监督/系列构成创作的内容，不会和他们本人高度重合——要思考这样气质的人会做出怎样的作品，而非把他本人投射进剧情。\n- 对配音演员：他配音的角色人设由剧情决定，不得与配音演员本人高度重合。'
+      : '- 剧情与角色人设跟着本片的题材、简介走，不要照搬演职人员本人的身份、经历、能力、专业领域。导演/编剧创作的剧本，不会和他们本人高度重合——要思考这样气质的人会拍/写出怎样的作品，而非把他本人投射进剧情。\n- 对演员：他所饰演的角色人设由剧情决定，表演风格优先贴合「剧本里的角色设定」；只有角色的外貌可以适当贴近该演员本人的长相气质（若资料里有外貌描述）。角色的性格、身份、经历仍以剧本为准，不得与演员本人高度重合。';
+
+    return `\n\n【本片真实演职人员的人物资料】本片的${roleNoun}中，有以下几位是这个世界里真实存在的人物，附上他们的人设资料：\n${lines.join('\n')}\n
+【重要·创作者与作品的分离原则，必须严格遵守】
+- 上面这些资料描述的是「真人本身」，不是他们在本片里创作或饰演的内容。请把"人"和"作品/角色"分开。
+${creatorLine}`;
+  }
+
+  // 生成剧本（第一步）：来龙去脉 + 气质风格 + 角色人设。结果缓存进 work.script。
+  async function _videoGenScript(work) {
+    if (!work || work._scriptLoading) return false;
+    work._scriptLoading = true;
+    // 标记后立即把当前 tab 刷成 loading 态（否则进详情页时 tab 已渲染成"暂无"错误态）
+    if (_videoDetailOverlay && _videoDetailWork === work) _videoRenderTab(_videoDetailTab);
+    try {
+      const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+      const mainConfig = await API.getConfig();
+      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const key = funcConfig.apiKey || mainConfig.apiKey;
+      const model = funcConfig.model || mainConfig.model;
+      if (!url || !key || !model) {
+        work._scriptLoading = false;
+        const bodyEl = _videoDetailOverlay && _videoDetailOverlay.querySelector('#video-detail-tabbody');
+        if (bodyEl && ['script','scenes','reviews','danmaku'].includes(_videoDetailTab)) bodyEl.innerHTML = _videoTabError('请先配置功能模型');
+        _videoBindTabRetry();
+        return false;
+      }
+
+      const castList = Array.isArray(work.cast) ? work.cast.filter(Boolean) : [];
+      const castLine = castList.length
+        ? `本片演员名单（请把这些演员分配到主要角色的 actor 字段，主角配角优先用名单里的人；特邀/小角色不够用时可自行补充像真人的演员名）：${castList.join('、')}`
+        : '本片暂无指定演员名单，请为每个角色自行创作像真人的演员姓名。';
+      const genre = work.genre || '剧情';
+      const cats = (Array.isArray(work.category) ? work.category : []).join('、');
+      // 该主类型的文风示范（作者填写，空则不拼）
+      const styleRef = (_VIDEO_GENRE_STYLE[genre] || '').trim();
+      const styleBlock = styleRef
+        ? `\n\n【「${genre}」类型文风要求】下面是这个类型该有的文字风格示范，请在写 synopsis、style、名场面叙述与台词时贴合这种笔法（学的是怎么写——句式、节奏、用词、氛围，不是照抄内容）：\n${styleRef}`
+        : '';
+      let realCastBlock = '';
+      try { realCastBlock = await _videoBuildCastProfiles(work); } catch (_) {}
+
+      // 世界观 + 最近十轮主线：自制电影读 work 上的开关；其余受发现页全局开关门控
+      const _useWv = work.selfMake ? !!work.makeUseWv : _videoUseWvRef;
+      const _useMl = work.selfMake ? !!work.makeUseMainline : _videoUseMainlineRef;
+      let wvBlock = '';
+      if (_useWv) {
+        let wv = '';
+        try { wv = await _buildFullContext({ npcBrief: false, lite: true, castFilter: { mode: 'disabled' } }); } catch (_) {}
+        if (wv) wvBlock = `\n\n【世界观背景】这部电影诞生于下面这个世界，剧情、设定、时代背景可与之呼应（但不强求生硬套用）：\n${wv}`;
+      }
+      let mainlineBlock = '';
+      if (_useMl) {
+        let ml = '';
+        try { ml = _readingMainlineBlock(true); } catch (_) {}
+        if (ml) mainlineBlock = `\n\n【最近主线动态】（可作为题材灵感，不强求关联）：\n${ml}`;
+      }
+      // 改编原著蓝图（仅当本片是改编作品时）
+      let adaptBlock = '';
+      try { adaptBlock = await _videoBuildAdaptBlock(work, '电影'); } catch (_) {}
+      // 自制电影：用户填的创作方向（剧本必须遵循）
+      const makeGuideBlock = (work.selfMake && (work.makeGuide || '').trim())
+        ? `\n\n【创作方向·必须遵循】这部电影由用户主导制作，剧本要按下面的方向来写——剧情走向、基调、人物倾向都要贴合：\n${work.makeGuide.trim()}`
+        : '';
+
+      const sysPrompt = `你是影视剧本设定生成系统。下面给你一部电影的基本信息，请你为它创作一份完整的「剧本设定档」——这是这部电影的真相源，后续的名场面、影评都会以它为准，所以剧情要完整、人物要具体。
+
+【影片信息】
+片名：${work.title || '未命名'}
+主类型：${genre}${cats ? '\n氛围标签：' + cats : ''}
+${work.year ? '上映年份：' + work.year : ''}
+导演：${work.director || '（自定）'}
+编剧：${work.screenwriter || '（自定）'}
+${castLine}
+${(work.intro || '').trim() ? '已有简介（仅供参考，剧本要比它详细完整）：' + work.intro.trim() : ''}
+${realCastBlock}${styleBlock}${wvBlock}${mainlineBlock}${adaptBlock}${makeGuideBlock}
+
+请输出以下字段，严格使用 JSON 对象格式，不能返回 Markdown，不能返回代码块，不能解释，必须以 { 开头、以 } 结尾：
+{
+  "synopsis": "剧情梗概（约 400 字）。完整讲清这部电影的来龙去脉：开端、发展、高潮、结局——必须写出结局，不要藏着，电影就是看个完整。客观叙述剧情本身，不要主观评价。",
+  "style": "气质风格（约 100 字）。这部电影的整体基调、节奏、视听气质、类型质感（如冷峻写实/浪漫唯美/荒诞黑色等）。",
+  "characters": [
+    {
+      "position": "定位（只能填：主角、配角、特邀 三者之一）",
+      "name": "角色名",
+      "actor": "饰演该角色的演员名",
+      "gender": "性别",
+      "identity": "身份（在故事里的职业/角色身份）",
+      "personality": "性格（四组四字词语，如：慵懒随性、理性聪慧、外冷内热、恃才傲物）",
+      "goal": "这个角色在本片中的核心目标/动机",
+      "relation": "与另一个角色的关系（写成一句话，如：林夏的姐姐、陈默的宿敌、徐医生的徒弟）"
+    }
+  ],
+  "scene": [
+    { "type": "narration", "text": "叙述（场景描写、人物动向、镜头感的旁白）", "fx": "可选特效，没有就省略" },
+    { "type": "line", "speaker": "角色名", "text": "台词" }
+  ]
+}
+
+要求：
+- 角色 3-6 个，按重要性排序（主角在前）。主角 1-2 个，其余为配角或特邀。
+- 每个字段都要填满、写具体，不要留空、不要含糊。
+- personality 统一用四组四字词语。
+- relation 要指向片中另一个真实存在的角色，让人物关系成网。
+- scene 是本片最精彩的一个名场面，做成一段按时间顺序的演出脚本（叙述与台词交错的条目数组，10-16 条）：
+  · 只选一段：全片最有记忆点、最有张力的那一幕（高潮对峙、关键反转、情感爆发皆可），不要拍流水账，不要概括整部电影。
+  · 第一条 narration 要先用一两句简单交代前置剧情：观众是直接进入这一幕的，需要知道在此之前发生了什么、人物处于什么处境，把这一幕的来由垫一句，再进入场景。
+  · narration（叙述）要细腻华丽、有画面感：交代场景环境、人物动向与神态、镜头氛围，把这一幕的气氛渲染到位；不必讲复杂逻辑，重在文字质感与情绪铺陈。单条不超 100 字。
+  · line（台词）的 speaker 必须是上面 characters 里真实存在的角色名，不能出现新名字；台词像真人说话、是短暂的情绪爆发或锋利的交锋，单条不超 30 字。
+  · 叙述与台词的节奏要自然，像真实电影一样：不必一条叙述就接一条台词，可以连续几条叙述铺陈氛围，也可以连续几条台词来回交锋；该铺垫时多铺垫、该爆发时连珠炮，张弛有致即可，不要机械地叙述台词交替。
+  · fx（可选画面特效）：只在情绪/动作确实需要强调的 beat 上加，宁缺毋滥，多数 beat 不要加。可选值仅限：blood（血溅，受伤/死亡瞬间）、fire（火光，火场/燃烧/爆燃，可持续）、rain（下雨，可持续）、snow（下雪，可持续）、bokeh（柔光光斑，温情/回忆，可持续）、sparkle（星光微闪，梦境/浪漫/星空/魔法时刻，可持续）、firefly（萤火虫，绿色小光点飞舞，夏夜/静谧/治愈/田野，可持续）、memory（回忆滤镜，旧照片暖黄调+暗角+游动颗粒，闪回/往事/追忆，可持续）、glitch（故障花屏，RGB错位+撕裂条，信号损坏/数据故障/赛博入侵，可持续）、scan（科技扫描，扫描线+青蓝HUD网格，未来/赛博/全息/机械界面，可持续）、petal（花瓣飘落，整片花瓣缓缓飘过画面，浪漫/告别/春日/唯美，可持续）、bubble（气泡浮动，水下/梦幻/童趣，可持续）、smoke（烟雾弥漫，若隐若现地飘，悬疑/战场/迷雾/缥缈，可持续）、glass（玻璃破碎，啪一下裂开，碎裂/打斗/破镜/决裂瞬间）、hearts（粉红爱心漂浮，甜蜜/告白/心动/少女漫，可持续）、spotlight（聚焦追光，光打中心四周压暗，舞台/独白/高光时刻，可持续）、firework（烟花绽放，庆典/高潮/浪漫告白瞬间）、ripple（水波涟漪，悲伤/泪眼/水面荡开瞬间）、lightning（闪电强光，惊雷/震撼瞬间）、flash（白光一闪，打击/冲击瞬间）、shake（画面抖动，爆炸/重击/地动）。
+· 持续型（fire/rain/snow/bokeh/sparkle/firefly）只要在氛围开始的那条 beat 标一次，效果就会自动延续下去（台词行不必重复标）；想换成别的环境，就在转折那条标上新的持续型 fx 覆盖。瞬时型（blood/lightning/flash/shake）只在那一条标，演完即逝，不影响正在延续的环境特效。
+  · 不需要特效的 beat 直接省略 fx 字段，不要填空字符串或"无"。`;
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model,
+          temperature: 1,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: `请为《${work.title || '未命名'}》生成剧本设定档。` }
+          ]
+        })
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      let content = data?.choices?.[0]?.message?.content || '';
+      content = content.replace(/```json|```/g, '').trim();
+      const s = content.indexOf('{'); const e = content.lastIndexOf('}');
+      if (s >= 0 && e > s) content = content.slice(s, e + 1);
+      const obj = JSON.parse(content);
+
+      // 规范化
+      const POS = ['主角', '配角', '特邀'];
+      const chars = (Array.isArray(obj.characters) ? obj.characters : []).filter(c => c && c.name).map(c => {
+        let pos = String(c.position || '').trim();
+        if (!POS.includes(pos)) { pos = POS.find(p => pos.includes(p)) || '配角'; }
+        return {
+          position: pos,
+          name: String(c.name || '').trim().slice(0, 24),
+          actor: String(c.actor || '').trim().slice(0, 24),
+          gender: String(c.gender || '').trim().slice(0, 8),
+          identity: String(c.identity || '').trim().slice(0, 40),
+          personality: String(c.personality || '').trim().slice(0, 40),
+          goal: String(c.goal || '').trim().slice(0, 80),
+          relation: String(c.relation || '').trim().slice(0, 60)
+        };
+      }).slice(0, 8);
+
+      // 名场面：叙述/台词交错的演出脚本。台词 speaker 须落在角色名单内（容错放宽，不强校验）。
+      const charNames = chars.map(c => c.name).filter(Boolean);
+      const _FX_OK = ['blood','fire','rain','snow','bokeh','sparkle','firefly','memory','glitch','scan','petal','bubble','smoke','glass','hearts','spotlight','firework','ripple','lightning','shake','flash'];
+      const scene = (Array.isArray(obj.scene) ? obj.scene : []).map(b => {
+        if (!b || typeof b !== 'object') return null;
+        const type = String(b.type || '').trim() === 'line' ? 'line' : 'narration';
+        const text = String(b.text || '').trim();
+        if (!text) return null;
+        const fxRaw = String(b.fx || '').trim().toLowerCase();
+        const fx = _FX_OK.includes(fxRaw) ? fxRaw : '';
+        if (type === 'line') {
+          let sp = String(b.speaker || '').trim().slice(0, 24);
+          // speaker 缺失或不在名单时，尽量匹配名单里被包含的名字，否则保留原值
+          if (sp && !charNames.includes(sp)) {
+            const hit = charNames.find(n => sp.includes(n) || n.includes(sp));
+            if (hit) sp = hit;
+          }
+          const o = { type: 'line', speaker: sp, text: text.slice(0, 40) };
+          if (fx) o.fx = fx;
+          return o;
+        }
+        const o = { type: 'narration', text: text.slice(0, 120) };
+        if (fx) o.fx = fx;
+        return o;
+      }).filter(Boolean).slice(0, 20);
+
+      const script = {
+        synopsis: String(obj.synopsis || '').trim().slice(0, 700),
+        style: String(obj.style || '').trim().slice(0, 200),
+        characters: chars,
+        scene: scene
+      };
+      if (!script.synopsis && chars.length === 0) throw new Error('内容为空');
+
+      work.script = script;
+      work.watched = true;
+      work.watchedAt = Date.now();
+      delete work._scriptLoading;
+      // 改编作品：用户真正生成了剧本，此刻才把原著标记为「已被改编」并快照影视信息
+      try { await _videoMarkBookAdapted(work); } catch (_) {}
+      await _savePhoneData();
+      // 仍在该作品的详情页就按当前 tab 刷新
+      if (_videoDetailOverlay && _videoDetailWork === work) {
+        _videoRenderTab(_videoDetailTab);
+        _videoUpdatePlayBtn(work);
+      }
+      return true;
+    } catch (err) {
+      console.error('[视频剧本]', err);
+      work._scriptLoading = false;
+      if (_videoDetailOverlay && _videoDetailWork === work && ['script','scenes','reviews','danmaku'].includes(_videoDetailTab)) {
+        const bodyEl = _videoDetailOverlay.querySelector('#video-detail-tabbody');
+        if (bodyEl) bodyEl.innerHTML = _videoTabError('生成失败，请重试');
+        _videoBindTabRetry();
+      }
+      return false;
+    }
+  }
+
+  // 生成影评 + 弹幕（第二组，独立于剧本一次请求）：基于已生成的剧本剧情来评/来吐槽。
+  // 结果存 work.reviews / work.danmu，与 work.script 解耦，互不冲掉。
+  async function _videoGenReviews(work) {
+    if (!work || work._reviewsLoading) return;
+    if (!work.script || typeof work.script !== 'object') return;  // 必须先有剧本
+    work._reviewsLoading = true;
+    // 标记后立即把当前 tab 刷成 loading 态（影评/弹幕 tab 才需要）
+    if (_videoDetailOverlay && _videoDetailWork === work && ['reviews','danmaku'].includes(_videoDetailTab)) _videoRenderTab(_videoDetailTab);
+    try {
+      const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+      const mainConfig = await API.getConfig();
+      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const key = funcConfig.apiKey || mainConfig.apiKey;
+      const model = funcConfig.model || mainConfig.model;
+      if (!url || !key || !model) {
+        work._reviewsLoading = false;
+        if (_videoDetailOverlay && _videoDetailWork === work && ['reviews','danmaku'].includes(_videoDetailTab)) {
+          const bodyEl = _videoDetailOverlay.querySelector('#video-detail-tabbody');
+          if (bodyEl) bodyEl.innerHTML = _videoTabError('请先配置功能模型');
+          _videoBindTabRetry();
+        }
+        return;
+      }
+
+      const sc = work.script;
+      const charLines = (Array.isArray(sc.characters) ? sc.characters : [])
+        .map(c => `- ${c.name}（${c.position || '配角'}，演员 ${c.actor || '未知'}）：${c.identity || ''}`).join('\n');
+      const sceneText = (Array.isArray(sc.scene) ? sc.scene : [])
+        .map(b => b.type === 'line' ? `${b.speaker || ''}：${b.text || ''}` : `（${b.text || ''}）`).join('\n');
+
+      // 影评弹幕必喂世界观 + 最近主线（网友活在这个世界里，要能联动吐槽），不受开关控制。
+      // 用全量上下文（与「本章说」一致）：带详细 NPC 人设，这样 NPC 书友/网友才有名有姓有人设可用。
+      let wvBlock = '';
+      try {
+        const wv = await _buildFullContext();
+        if (wv) wvBlock = `\n\n【这个世界的背景】发评论和弹幕的都是生活在下面这个世界里的网友，了解这些设定，可以自然地结合世界观、时事来评论玩梗（但别硬蹭）：\n${wv}`;
+      } catch (_) {}
+      let mainlineBlock = '';
+      try {
+        const ml = _readingMainlineBlock(true);
+        if (ml) mainlineBlock = `\n\n【最近发生的事】（网友评论可自然联动近期动态、借题发挥，少量即可）：\n${ml}`;
+      } catch (_) {}
+      // 本片真实演职人员人设：这部里有真实角色（导演/编剧/主演命中角色库）就把人设喂进去
+      let realCastBlock = '';
+      try { realCastBlock = await _videoBuildCastProfiles(work); } catch (_) {}
+
+      // 改编作品：告诉评论区这是改编自原著的作品，喂原著信息+作者人设+评论生态引导
+      let adaptReviewBlock = '';
+      try { adaptReviewBlock = await _videoBuildAdaptReviewBlock(work, '电影'); } catch (_) {}
+
+      // 主题曲：绑定了就喂给评论区让网友自然聊到（含描述/歌词，有就塞），不强行刷
+      const themeBlock = _videoThemeSongPromptBlock(work.themeSong, '片', false);
+
+      // 禁止冒充玩家本人（与论坛/本章说同款强约束）
+      let _plName = '', _plOnline = '';
+      try { const mk = await Character.get(); _plName = mk?.name || ''; _plOnline = (mk?.onlineName || '').trim(); } catch (_) {}
+      const _banNames = [_plName, _plOnline].filter(Boolean);
+      const playerBanBlock = _banNames.length
+        ? `\n\n【禁止冒充玩家本人】玩家本人是「${_banNames.join('」/「')}」。绝对不能生成任何以「${_banNames.join('」或「')}」为 username 的评论或回复，也不能让任何网友用"我"（指代玩家本人）的口吻替玩家发言。玩家自己的评论由 ta 本人手动发布，不在你的生成范围内。`
+        : `\n\n【禁止冒充玩家本人】不要生成代表"玩家本人"的评论，也不要让任何网友冒充玩家本人发言。`;
+
+      const sysPrompt = `你是影视社区的影评与弹幕生成系统。下面给你一部电影的剧情设定与名场面，请你为它生成「影评区」和「弹幕池」两部分内容。
+
+整个评论区要像豆瓣、B站、各大视频平台里真实的影视评论那样鱼龙混杂、众声喧哗：有真情实感的自来水粉丝，有随手打分的路人（有人夸有人嫌），有专程来找茬的黑粉，有踩这捧那的拉踩党，有偏学术的专业拉片分析，也有为自家爱豆控评、跟人对线的粉圈骂战……真假声部各异，别太干净太整齐。
+
+【影片信息】
+片名：${work.title || '未命名'}
+主类型：${work.genre || '剧情'}
+导演：${work.director || '（自定）'}　编剧：${work.screenwriter || '（自定）'}
+剧情梗概：${sc.synopsis || ''}
+气质风格：${sc.style || ''}
+主要角色：
+${charLines}
+名场面演出（弹幕要围绕这一段）：
+${sceneText}
+${realCastBlock}${wvBlock}${mainlineBlock}${adaptReviewBlock}${themeBlock}
+
+请输出以下字段，严格使用 JSON 对象格式，不能返回 Markdown，不能返回代码块，不能解释，必须以 { 开头、以 } 结尾：
+{
+  "reviews": [
+    { "persona": "声部（只能填：认真派、拉踩、黑泥、追捧、控评、路人、安利 之一）", "username": "网名（路人自拟像真实影迷的网名，可带数字/符号/中二感；若是世界观里的 NPC 则填该 NPC 的本名/代号）", "isNpc": false, "rating": 4, "dimension": "侧重维度（只能填：导演、编剧、演员、服化道、演技、剧情、特效、奖项、内涵、综合 之一）", "likes": 128, "text": "影评正文", "replies": [ { "username": "回复者网名（NPC 填本名）", "isNpc": false, "text": "楼中楼回复正文", "likes": 5, "replyToName": "" } ] }
+  ],
+  "danmu": [
+    { "at": 0.1, "type": "弹幕类型（自由发挥，围绕名场面剧情）", "text": "弹幕内容" }
+  ]
+}
+
+要求：
+- reviews 是这部电影的影评区，14 条左右，要像真实影迷站的评论区那样鱼龙混杂、声部各异。
+- 【发评论的人的身份】影评区里最多只能有两条评论出自上面世界观里提到的具体人物（NPC，isNpc:true），其余全部都是这个世界里虚构的普通路人网友（isNpc:false，自拟网名，与世界观人物无关）。绝大多数评论都该是查无此人的路人，别让认识的人占满评论区。NPC 评论时 username 必须填该 NPC 的【本名或代号】（世界观资料里给出的名字），绝对不要为 NPC 现编网名/马甲——系统会自动把本名渲染成 ta 的网名和头像，你只管输出本名。
+- 每条按 persona 写出对应的语气：
+  · 认真派：理性中肯、有理有据，结合剧情/人物分析，可褒可贬，rating 看法而定（2-5 星）。这一派应占多数。
+  · 路人：随手短评，就一两句口语感受（如"还行""有点闷""女主好看"），rating 随意。也应占一定比例。
+  · 安利：自来水真情安利，热情但不极端，劝人来看，rating 4-5 星。
+  · 追捧：狂热吹捧、用词夸张（"封神""年度最佳""哭死"），rating 5 星。少数。
+  · 拉踩：踩这部捧另一部，或拿来跟别的片子比较贬低，rating 2-3 星。少数。
+  · 黑泥：恶意差评、阴阳怪气、找茬挑刺甚至人身攻击主创，rating 1-2 星。少数，但点赞可高（争议帖热度高）。
+  · 控评：粉丝给自己偶像（某位主演/导演）刷好评、彩虹屁、护短，rating 5 星，常提某位演员名字。少数，点赞可高。
+  · dimension 是这条影评的侧重维度：认真派/拉踩/黑泥常聚焦某个具体维度（导演、编剧、演员、服化道、演技、剧情、特效、奖项、内涵），路人/感叹型多为"综合"。让多个维度都有人评到，不要全挤在剧情上。
+  · likes 是点赞数，符合该条的热度（中肯长评、争议黑泥、控评可较高；路人短评偏低），范围 0-9999。
+  · 单条不超 80 字，口语化，像真人打字（可有错别字、网络用语、标点随意），不要每条都工整。
+- 【楼中楼（replies）】只给其中 3-5 条「有讨论度」的主楼挂 replies，其余主楼不要写 replies 字段（或留空数组）。哪些值得盖楼：
+  · 黑泥、拉踩、控评这类有争议的——底下容易有人反驳、对线、附和、挂人；
+  · 高赞的认真派长评——底下有人补充、追问、抬杠；
+  · 追捧/安利——底下有同好接龙或泼冷水的。
+  · 每条带 replies 的主楼配 2-5 条楼中楼，模拟真实盖楼：反驳楼主、附和点头、歪楼跑题、挂人对线、追问细节、阴阳怪气都行，可以你来我往吵起来。
+  · replyToName：留空表示直接回复楼主；若是回复楼中楼里前面某条回复（接话/对线），填那个人的网名，让同一楼里两三个人来回对线。
+  · replies 里同样最多一两条出自世界观 NPC（isNpc:true，填本名），其余都是路人（isNpc:false，自拟网名）。
+  · 楼中楼单条不超 60 字，比主楼更口语更随意，像即兴接话。只需要 username/isNpc/text/likes/replyToName，不要 rating/dimension。
+- danmu 是名场面演出时飘过的弹幕池，40-60 条，围绕上面这段名场面的剧情、台词、人物来发，按出现的先后用 at（0 到 1 的小数）标时间顺序（0 是名场面开头、1 是结尾），允许多条 at 相近形成刷屏。内容什么都可以，越杂越真实：
+  · 吐槽、玩梗、刷屏（如 www、2333、哈哈哈哈哈、前方高能、名场面）、应援（哥哥好帅、姐姐杀我、awsl）、跟读/接台词、感叹（啊啊啊、泪目了、好感动、爷青回、破防了、补药啊）、纯无意义重复、正经科普（解释剧情/历史/拍摄背景）、评价服化道与演技、剧透与拦剧透、催更、弹幕吵架对线、空耳、数关键帧、报时打卡等等，自由发挥，别拘泥这些。
+  · 单条不超 30 字，要短、口语、像真人即兴打字，可以有错别字和颜文字。
+  · type 简单标个分类词即可（如 吐槽/玩梗/应援/科普/吵架/感叹/跟读），不强求规范。${playerBanBlock}`;
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model,
+          temperature: 1,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: `请为《${work.title || '未命名'}》生成影评区与弹幕池。` }
+          ]
+        })
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      let content = data?.choices?.[0]?.message?.content || '';
+      content = content.replace(/```json|```/g, '').trim();
+      const s = content.indexOf('{'); const e = content.lastIndexOf('}');
+      if (s >= 0 && e > s) content = content.slice(s, e + 1);
+      const obj = JSON.parse(content);
+
+      // 影评：规范化 persona/dimension/rating/likes
+      const _REV_PERSONA = ['认真派','拉踩','黑泥','追捧','控评','路人','安利'];
+      const _REV_DIM = ['导演','编剧','演员','服化道','演技','剧情','特效','奖项','内涵','综合'];
+      const reviews = (Array.isArray(obj.reviews) ? obj.reviews : []).map(r => {
+        if (!r || typeof r !== 'object') return null;
+        const text = String(r.text || '').trim();
+        if (!text) return null;
+        let persona = String(r.persona || '').trim();
+        if (!_REV_PERSONA.includes(persona)) persona = _REV_PERSONA.find(p => persona.includes(p)) || '路人';
+        let dim = String(r.dimension || '').trim();
+        if (!_REV_DIM.includes(dim)) dim = _REV_DIM.find(d => dim.includes(d)) || '综合';
+        let rating = parseInt(r.rating, 10);
+        if (!(rating >= 1 && rating <= 5)) rating = 4;
+        let likes = parseInt(r.likes, 10);
+        if (!(likes >= 0)) likes = 0;
+        likes = Math.min(likes, 99999);
+        // 楼中楼回复（最多 8 条/楼）
+        const replies = (Array.isArray(r.replies) ? r.replies : []).map(rp => {
+          if (!rp || typeof rp !== 'object') return null;
+          const rtext = String(rp.text || '').trim();
+          if (!rtext) return null;
+          let rlikes = parseInt(rp.likes, 10);
+          if (!(rlikes >= 0)) rlikes = 0;
+          rlikes = Math.min(rlikes, 99999);
+          return {
+            id: _videoNewCommentId(),
+            username: String(rp.username || '').trim().slice(0, 24) || '匿名影迷',
+            isNpc: !!rp.isNpc,
+            text: rtext.slice(0, 90),
+            likes: rlikes,
+            replyToName: String(rp.replyToName || '').trim().slice(0, 24)
+          };
+        }).filter(Boolean).slice(0, 8);
+        return {
+          id: _videoNewCommentId(),
+          persona, dimension: dim, rating, likes,
+          username: String(r.username || '').trim().slice(0, 24) || '匿名影迷',
+          isNpc: !!r.isNpc,
+          text: text.slice(0, 120),
+          replies
+        };
+      }).filter(Boolean).slice(0, 20);
+
+      // NPC 头像 + 真名转网名（与论坛/本章说一致）：NPC 评论的 username 是本名/代号，
+      // _matchForumAvatar 会把真名存进 realName、抓 NPC 头像存进 avatar、再把 username 替换成网名显示。
+      try {
+        await _ensureForumNpcAvatarMap();
+        await _ensureForumDisplayNameMap();
+        reviews.forEach(r => {
+          _matchForumAvatar(r);
+          (r.replies || []).forEach(rp => _matchForumAvatar(rp));
+        });
+      } catch (_) {}
+
+      // 弹幕：规范化 at（0-1）/type/text，按 at 升序
+      const danmu = (Array.isArray(obj.danmu) ? obj.danmu : []).map(d => {
+        if (!d || typeof d !== 'object') return null;
+        const text = String(d.text || '').trim();
+        if (!text) return null;
+        let at = parseFloat(d.at);
+        if (!(at >= 0 && at <= 1)) at = Math.random();
+        return { at, type: String(d.type || '').trim().slice(0, 12), text: text.slice(0, 40) };
+      }).filter(Boolean).sort((a, b) => a.at - b.at).slice(0, 80);
+
+      if (!reviews.length && !danmu.length) throw new Error('内容为空');
+
+      work.reviews = reviews;
+      work.danmu = danmu;
+      delete work._reviewsLoading;
+      await _savePhoneData();
+      if (_videoDetailOverlay && _videoDetailWork === work) {
+        if (['reviews','danmaku'].includes(_videoDetailTab)) _videoRenderTab(_videoDetailTab);
+        _videoUpdatePlayBtn(work);
+      }
+    } catch (err) {
+      console.error('[视频影评弹幕]', err);
+      work._reviewsLoading = false;
+      if (_videoDetailOverlay && _videoDetailWork === work && ['reviews','danmaku'].includes(_videoDetailTab)) {
+        const bodyEl = _videoDetailOverlay.querySelector('#video-detail-tabbody');
+        if (bodyEl) bodyEl.innerHTML = _videoTabError('生成失败，请重试');
+        _videoBindTabRetry();
+      }
+    }
+  }
+
+  // 刷新出更多影评（追加生成）：把已有评论区带 id 摘要喂回去，让 AI 产出新主楼 + 盖到旧楼的楼中楼。
+  // 重点照顾有争议的楼和玩家发的楼。新内容合并进 work.reviews，不冲掉已有。
+  async function _videoGenMoreReviews(work) {
+    if (!work || work._reviewsLoading) return;
+    if (!work.script || typeof work.script !== 'object') { UI.showToast('请先生成剧本', 1600); return; }
+    if (!Array.isArray(work.reviews) || !work.reviews.length) { return _videoGenReviews(work); }
+    work._reviewsLoading = true;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:absolute;inset:0;z-index:80;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(0,0,0,0.5)';
+    mask.innerHTML = `<div class="phone-generation-spinner"></div><div style="font-size:13px;color:#fff">正在刷新评论…</div>`;
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(mask);
+    try {
+      const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+      const mainConfig = await API.getConfig();
+      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const key = funcConfig.apiKey || mainConfig.apiKey;
+      const model = funcConfig.model || mainConfig.model;
+      if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+      const sc = work.script;
+      const sceneText = (Array.isArray(sc.scene) ? sc.scene : [])
+        .map(b => b.type === 'line' ? `${b.speaker || ''}：${b.text || ''}` : `（${b.text || ''}）`).join('\n');
+
+      // 玩家显示名
+      let playerName = '我', playerOnlineName = '';
+      try {
+        const mk = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+        playerName = (mk?.name || '我');
+        playerOnlineName = (mk?.onlineName || '').trim();
+      } catch (_) {}
+      const playerDisplayName = playerOnlineName || playerName;
+
+      // 已有评论区带 id 摘要（含楼中楼，标注玩家楼）
+      const digest = work.reviews.map(r => {
+        const me = r.isMe ? '【楼主是玩家】' : '';
+        const head = `[${r.id}] ${me}(${r.persona || '路人'}/${r.rating ? r.rating + '星' : '无评分'}/赞${r.likes || 0}) ${r.username}：${r.text}`;
+        const reps = (r.replies || []).map(rp => {
+          const rme = rp.isMe ? '【玩家】' : '';
+          const to = (rp.replyToName || '').trim() ? `回复@${rp.replyToName} ` : '';
+          return `   └ ${rme}${rp.username}：${to}${rp.text}`;
+        }).join('\n');
+        return reps ? `${head}\n${reps}` : head;
+      }).join('\n');
+
+      let wvBlock = '';
+      try {
+        const wv = await _buildFullContext();
+        if (wv) wvBlock = `\n\n【这个世界的背景】发评论的都是生活在下面这个世界里的网友：\n${wv}`;
+      } catch (_) {}
+
+      // 改编作品：评论区改编生态引导
+      let adaptReviewBlock = '';
+      try { adaptReviewBlock = await _videoBuildAdaptReviewBlock(work, '电影'); } catch (_) {}
+      // 改编作品追评：0.5 概率附上原著最新连载进度（背景，供书粉对比）
+      let adaptChapterBlock = '';
+      try { if (Math.random() < 0.5) adaptChapterBlock = await _videoBuildAdaptChapterBlock(work); } catch (_) {}
+
+      // 主题曲：追评也带上（含描述/歌词，有就塞），跟首轮影评一致，避免网友突然"不知道有主题曲"
+      const themeBlock = _videoThemeSongPromptBlock(work.themeSong, '片', false);
+
+      // 禁止冒充玩家本人（与论坛/本章说同款强约束）
+      const _banNames = [playerName, playerOnlineName].filter(Boolean);
+      const playerBanBlock = _banNames.length
+        ? `\n【禁止冒充玩家本人】玩家本人是「${_banNames.join('」/「')}」。绝对不能生成任何以「${_banNames.join('」或「')}」为 username 的评论或回复，也不能让任何网友用"我"（指代玩家本人）的口吻替玩家发言。玩家自己的评论由 ta 本人手动发布，不在你的生成范围内。`
+        : `\n【禁止冒充玩家本人】不要生成代表"玩家本人"的评论，也不要让任何网友冒充玩家本人发言。`;
+
+      const sysPrompt = `你是影视社区评论区的「追评生成器」。下面给你这部电影的信息、名场面，以及【当前已有的评论区现状（含楼层 id）】。请生成一批新的追加内容，模拟评论区随时间继续发酵：既有新冒出来的主楼短评，也有人翻到旧楼下面接着盖楼、对线。
+
+整个评论区像豆瓣、B站那样鱼龙混杂：粉丝、路人、黑粉、拉踩党、专业拉片、粉圈骂战都有。
+
+【影片信息】
+片名：${work.title || '未命名'}　主类型：${work.genre || '剧情'}
+剧情梗概：${sc.synopsis || ''}
+名场面：
+${sceneText}${wvBlock}${adaptReviewBlock}${adaptChapterBlock}${themeBlock}
+
+【当前已有评论区现状（每条主楼带 id，└ 是楼中楼）】
+${digest}
+
+请输出 JSON（以 { 开头、} 结尾，不要 Markdown、不要解释）：
+{
+  "newReviews": [
+    { "persona": "认真派/拉踩/黑泥/追捧/控评/路人/安利 之一", "username": "网名（NPC 填本名）", "isNpc": false, "rating": 4, "dimension": "导演/编剧/演员/服化道/演技/剧情/特效/奖项/内涵/综合 之一", "likes": 12, "text": "新主楼短评", "replies": [ { "username": "...", "isNpc": false, "text": "...", "likes": 2, "replyToName": "" } ] }
+  ],
+  "newReplies": [
+    { "targetId": "要盖的那层主楼的 id（必须来自上面现状里真实存在的 id）", "username": "...", "isNpc": false, "text": "盖楼回复正文", "likes": 3, "replyToName": "回复楼里某人就填其网名，回复楼主留空" }
+  ]
+}
+
+要求：
+- newReviews：3-6 条新主楼，声部规则、字数限制同正常影评（单条不超 80 字）；有讨论度的新主楼也可以自带 replies（楼中楼），不是每条都要带。
+- newReplies：5-10 条，targetId 必须是上面现状里真实存在的楼层 id（形如 ${work.reviews[0] ? work.reviews[0].id : 'cxxx'}）。重点照顾【有争议的楼】（黑泥/控评/高赞认真派）和【玩家发的楼】——
+  · 如果现状里有标【楼主是玩家】的评论，生成 2-3 条 targetId 指向玩家那层的回复，有附和也有抬杠，让玩家有被回应的感觉；
+  · 其余自由盖在争议楼下，可以接着已有楼中楼对线（replyToName 填楼里前面的人）。
+- 楼中楼单条不超 60 字，更口语随意。
+- 新内容要参考已有评论，避免和已有内容重复，可接续讨论也可开新话题。整个评论区最多一两条出自世界观 NPC（isNpc:true 填本名），其余路人（isNpc:false 自拟网名，与世界观人物无关）。
+- 只输出"新增"的部分，不要重复已有评论。${playerBanBlock}`;
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model, temperature: 1,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: `请为《${work.title || '未命名'}》追加生成新评论与盖楼回复。注意：评论者绝对不能是玩家本人（玩家显示名：${playerDisplayName}）。` }
+          ]
+        })
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      let content = data?.choices?.[0]?.message?.content || '';
+      content = content.replace(/```json|```/g, '').trim();
+      const st = content.indexOf('{'); const en = content.lastIndexOf('}');
+      if (st >= 0 && en > st) content = content.slice(st, en + 1);
+      const obj = JSON.parse(content);
+
+      const _REV_PERSONA = ['认真派','拉踩','黑泥','追捧','控评','路人','安利'];
+      const _REV_DIM = ['导演','编剧','演员','服化道','演技','剧情','特效','奖项','内涵','综合'];
+      const normReply = (rp) => {
+        if (!rp || typeof rp !== 'object') return null;
+        const rtext = String(rp.text || '').trim();
+        if (!rtext) return null;
+        let rlikes = parseInt(rp.likes, 10);
+        if (!(rlikes >= 0)) rlikes = 0;
+        return {
+          id: _videoNewCommentId(),
+          username: String(rp.username || '').trim().slice(0, 24) || '匿名影迷',
+          isNpc: !!rp.isNpc,
+          text: rtext.slice(0, 90),
+          likes: Math.min(rlikes, 99999),
+          replyToName: String(rp.replyToName || '').trim().slice(0, 24)
+        };
+      };
+
+      // 新主楼
+      const newReviews = (Array.isArray(obj.newReviews) ? obj.newReviews : []).map(r => {
+        if (!r || typeof r !== 'object') return null;
+        const text = String(r.text || '').trim();
+        if (!text) return null;
+        let persona = String(r.persona || '').trim();
+        if (!_REV_PERSONA.includes(persona)) persona = _REV_PERSONA.find(p => persona.includes(p)) || '路人';
+        let dim = String(r.dimension || '').trim();
+        if (!_REV_DIM.includes(dim)) dim = _REV_DIM.find(d => dim.includes(d)) || '综合';
+        let rating = parseInt(r.rating, 10);
+        if (!(rating >= 1 && rating <= 5)) rating = 4;
+        let likes = parseInt(r.likes, 10);
+        if (!(likes >= 0)) likes = 0;
+        const replies = (Array.isArray(r.replies) ? r.replies : []).map(normReply).filter(Boolean).slice(0, 8);
+        return {
+          id: _videoNewCommentId(),
+          persona, dimension: dim, rating, likes: Math.min(likes, 99999),
+          username: String(r.username || '').trim().slice(0, 24) || '匿名影迷',
+          isNpc: !!r.isNpc, text: text.slice(0, 120), replies
+        };
+      }).filter(Boolean).slice(0, 8);
+
+      // 盖楼回复：按 targetId 归位，找不到则降级成新主楼（容错不丢）
+      const idMap = {};
+      work.reviews.forEach(r => { idMap[r.id] = r; });
+      const orphans = [];
+      (Array.isArray(obj.newReplies) ? obj.newReplies : []).forEach(rp => {
+        const target = idMap[String(rp.targetId || '').trim()];
+        const nr = normReply(rp);
+        if (!nr) return;
+        if (target) {
+          if (!Array.isArray(target.replies)) target.replies = [];
+          target.replies.push(nr);
+          target._expanded = true;
+        } else {
+          orphans.push({
+            id: _videoNewCommentId(), persona: '路人', dimension: '综合',
+            rating: 0, likes: nr.likes, username: nr.username, isNpc: nr.isNpc,
+            text: nr.text, replies: []
+          });
+        }
+      });
+
+      // NPC 头像/网名映射
+      try {
+        await _ensureForumNpcAvatarMap();
+        await _ensureForumDisplayNameMap();
+        const all = newReviews.concat(orphans);
+        all.forEach(r => { _matchForumAvatar(r); (r.replies || []).forEach(rp => _matchForumAvatar(rp)); });
+        work.reviews.forEach(r => (r.replies || []).forEach(rp => { if (!rp.avatar) _matchForumAvatar(rp); }));
+      } catch (_) {}
+
+      // 新主楼追加到末尾（旧楼在前，新冒出来的在后，更像时间流）
+      work.reviews = work.reviews.concat(newReviews).concat(orphans);
+      delete work._reviewsLoading;
+      await _savePhoneData();
+      UI.showToast('评论区更新了', 1200);
+      if (_videoDetailOverlay && _videoDetailWork === work && _videoDetailTab === 'reviews') _videoRenderTab('reviews');
+    } catch (err) {
+      console.error('[视频追评]', err);
+      work._reviewsLoading = false;
+      UI.showToast('刷新失败，请重试', 1600);
+    } finally {
+      mask.remove();
+    }
+  }
+
+  // 刷新详情页播放按钮状态：电影需要内容全就绪才显示播放键；电视剧/动漫直接显示"查看剧集"。
+  function _videoUpdatePlayBtn(work) {
+    if (!_videoDetailOverlay || _videoDetailWork !== work) return;
+    const btn = _videoDetailOverlay.querySelector('#video-detail-playbtn');
+    if (!btn) return;
+    // 电视剧/动漫：按钮始终可见（查看剧集），不需要门控
+    if (work.kind === 'tv' || work.kind === 'anime') {
+      const icPlay = btn.querySelectorAll('.ic-play');
+      const icLoad = btn.querySelector('.ic-loading');
+      icPlay.forEach(el => el.style.display = '');
+      if (icLoad) icLoad.style.display = 'none';
+      return;
+    }
+    // 电影：剧本+影评弹幕全就绪才显示播放键
+    const ready = work && work.script && typeof work.script === 'object'
+      && Array.isArray(work.reviews) && work.reviews.length
+      && Array.isArray(work.danmu) && work.danmu.length;
+    const icPlay = btn.querySelector('.ic-play');
+    const icLoad = btn.querySelector('.ic-loading');
+    if (icPlay) icPlay.style.display = ready ? '' : 'none';
+    if (icLoad) icLoad.style.display = ready ? 'none' : '';
+  }
+// 进详情页时的串行预生成编排（方案 A）：
+  // 电影：先备齐剧本+名场面，成功后再备齐影评+弹幕；剧本失败则不碰影评，影评失败可单独重试。
+  // 电视剧/动漫：不在此处自动生成（按集生成，由剧集列表页触发）。
+  // 内容全部就绪前，播放按钮显示转圈、不可播放。
+  async function _videoEnsureContent(work) {
+    if (!work) return;
+    _videoUpdatePlayBtn(work);
+    // 电视剧/动漫：不自动生成整部剧本，由剧集页按集处理
+    if (work.kind === 'tv' || work.kind === 'anime') return;
+    // 自制电影：还没生成剧本时不自动生成，等用户在「编辑剧本」里填方向手动生成；
+    // 一旦有了剧本（用户已生成），后续影评/弹幕仍按下方流程自动补齐。
+    if (work.selfMake && (!work.script || typeof work.script !== 'object')) return;
+    // 第一步：剧本+名场面（已有则跳过；正在生成则交给那次）
+    if (!work.script || typeof work.script !== 'object') {
+      if (work._scriptLoading) return;  // 已在生成，交给那次完成
+      const ok = await _videoGenScript(work);
+      if (!ok) { _videoUpdatePlayBtn(work); return; }  // 剧本失败，不生成影评弹幕
+    }
+    // 第二步：影评+弹幕（已有则跳过）
+    // 自制/改编作品：上映前不生成影评弹幕（影评是"上映后观众的反响"，要等申请上映后才有）。
+    if (work.selfMake && !work.released) { _videoUpdatePlayBtn(work); return; }
+    if ((!Array.isArray(work.reviews) || !work.reviews.length) &&
+        (!Array.isArray(work.danmu) || !work.danmu.length)) {
+      if (work._reviewsLoading) return;
+      await _videoGenReviews(work);
+    }
+    _videoUpdatePlayBtn(work);
+  }
+  // ===== 电视剧/动漫：蓝图生成 + 剧集列表页 =====
+
+  // 构建「原著最新进度章节」块（仅追评刷新时按概率喂）：取原著 toc 里已写正文（content 非空）的最后一章，
+  // 把它的章号+概述作为背景喂入，让书粉评论能对比原著进度。仅长篇、原著有正文进度时返回内容，否则空串。
+  // 明确标注：这是原著的连载进度，与影视进度可能不同，仅供书粉对比口吻，不能据此推断影视演到哪。
+  async function _videoBuildAdaptChapterBlock(work) {
+    if (!work || !work.adaptedFrom || !work.adaptedFrom.bookId) return '';
+    let pd = null;
+    try { pd = await _getPhoneData(); } catch (_) {}
+    const books = (pd && Array.isArray(pd.readingBooks)) ? pd.readingBooks : [];
+    const book = books.find(b => b && b.id === work.adaptedFrom.bookId);
+    if (!book) return '';
+    if (book.type === 'short') return '';                 // 短篇无连载进度概念
+    const toc = Array.isArray(book.toc) ? book.toc : [];
+    // 取已写正文的最后一章（content 非空的最大 idx）
+    let latest = null;
+    for (const c of toc) {
+      if (c && (c.content || '').trim()) {
+        if (!latest || (c.idx || 0) > (latest.idx || 0)) latest = c;
+      }
+    }
+    if (!latest) return '';                                // 一章正文都没写 → 无进度可喂
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const sm = esc(latest.summary);
+    if (!sm) return '';
+    return `\n\n【原著最新连载进度】原著《${esc(book.title)}》目前更新到第 ${latest.idx} 章${esc(latest.title) ? '《' + esc(latest.title) + '》' : ''}，该章概述：${sm}\n（这是原著小说的连载进度，仅供看过原著的书粉在评论里对比、聊原著近况用。注意：原著进度和影视改编的播出进度往往不同，这一章的内容不代表影视已经演到这里，绝不能据此推断或编造影视剧情。）`;
+  }
+
+  // 构建「改编作品评论区」块：告诉评论/弹幕生成这是改编作品，喂原著书名/作者/简介 + 作者人设，
+  // 并给出评论区分层引导（原著粉、作者粉、只爱改编不关心原著、两边都爱的）。非改编作品返回空串。
+  async function _videoBuildAdaptReviewBlock(work, catNoun) {
+    if (!work || !work.adaptedFrom || !work.adaptedFrom.bookId) return '';
+    let pd = null;
+    try { pd = await _getPhoneData(); } catch (_) {}
+    const books = (pd && Array.isArray(pd.readingBooks)) ? pd.readingBooks : [];
+    const book = books.find(b => b && b.id === work.adaptedFrom.bookId);
+    if (!book) return '';
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const author = esc(book.author) || '佚名';
+    const parts = [];
+    parts.push(`\n\n【本作是改编作品】这部${catNoun || '作品'}改编自小说《${esc(book.title)}》（作者：${author}）。${esc(book.intro) ? '原著简介：' + esc(book.intro) : ''}`);
+    // 作者人设（命中真实角色才有）
+    let persona = null;
+    try { persona = await _readingGetAuthorPersona(book); } catch (_) {}
+    if (persona && persona.detail) {
+      parts.push(`原著作者「${author}」是这个世界里真实存在的人，人设资料：\n${esc(persona.detail)}\n评论区里可能有 ta 本人的粉丝（书粉/作者粉），了解作者是个怎样的人，他们的发言才真实。`);
+    }
+    parts.push(`【改编评论区生态】因为这是改编作品，评论区除了普通观众，还会有这几路人，请让他们都自然出现、声部各异：
+- 原著党/书粉：看过原著，最在意还原度，会对比原著夸或骂——还原到位就感动落泪、魔改就破防开骂，常引用原著情节人物。
+- 作者粉：冲着原著作者来的，关心作者的态度、有没有参与、改编有没有糟蹋作者的东西。
+- 只爱改编的：没看过原著也不感兴趣，只就影视成品本身评价，甚至觉得"不用看原著也很好看"。
+- 两边都爱的：原著和改编都喜欢，乐见其成，安利大家原著影视一起入，心情很好。
+- 还有从改编入坑反向去补原著的、嫌弃改编劝人只看原著的等等，自由发挥。
+注意：评论可以提到"改编/原著/书粉/还原"这类话题，但不要剧透原著里被删改的具体情节，点到为止。`);
+    return parts.join('\n');
+  }
+
+  // 标记原著「已被改编」：仅当用户真正生成了改编作品的剧本/蓝图后才调用（改编视为用户驱动的真实事件）。
+// 往原著书打 adaptedKinds（去重，同分类最多一次）+ adaptedWorks 快照（影视名/导演编剧/CV/简介/热评，
+// 供阅读「本章说」读取）。同分类已锁定则不重复追加。该标记独立持久，不随视频观看历史删除而撤销。
+async function _videoMarkBookAdapted(work) {
+  if (!work || !work.adaptedFrom || !work.adaptedFrom.bookId) return false;
+  const cat = work.kind;
+  if (cat !== 'movie' && cat !== 'tv' && cat !== 'anime') return false;
+  let pd = null;
+  try { pd = await _getPhoneData(); } catch (_) { return false; }
+  const books = (pd && Array.isArray(pd.readingBooks)) ? pd.readingBooks : [];
+  const book = books.find(b => b && b.id === work.adaptedFrom.bookId);
+  if (!book) return false;
+  if (!Array.isArray(book.adaptedKinds)) book.adaptedKinds = [];
+  if (!Array.isArray(book.adaptedWorks)) book.adaptedWorks = [];
+  // 去重：同一部作品（kind+title）已有快照则不重复推。注意不能用 adaptedKinds 判重——
+  // 建壳/版权授权时就已 push adaptedKinds，会导致快照永远写不进去（本章说读的是 adaptedWorks）。
+  const _t = String(work.title || '').trim();
+  const dup = book.adaptedWorks.some(a => a && a.kind === cat && String(a.title || '').trim() === _t);
+  if (dup) return false;
+  if (!book.adaptedKinds.includes(cat)) book.adaptedKinds.push(cat);
+  book.adaptedWorks.push({
+    kind: cat,
+    title: String(work.title || '').trim(),
+    director: String(work.director || '').trim(),
+    screenwriter: String(work.screenwriter || '').trim(),
+    cast: Array.isArray(work.cast) ? work.cast.slice(0, 6) : [],
+    studio: String(work.studio || '').trim(),
+    year: work.year || '',
+    intro: String(work.intro || '').trim().slice(0, 260),
+    hotComment: (work.hotComment && (work.hotComment.text || '').trim())
+      ? { user: String(work.hotComment.user || '').trim(), text: String(work.hotComment.text).trim() }
+      : null,
+    markedAt: Date.now()
+  });
+  return true;
+}
+
+// 构建「改编源原著蓝图」块：若 work.adaptedFrom 存在，取原著书的蓝图（明暗线/结构/人物），
+// 拼成提示词块 + 改编铁律（保留内核、允许大幅影视化改动）。非改编作品返回空串。
+async function _videoBuildAdaptBlock(work, catNoun) {
+    if (!work || !work.adaptedFrom || !work.adaptedFrom.bookId) return '';
+    let pd = null;
+    try { pd = await _getPhoneData(); } catch (_) {}
+    const books = (pd && Array.isArray(pd.readingBooks)) ? pd.readingBooks : [];
+    const book = books.find(b => b && b.id === work.adaptedFrom.bookId);
+    if (!book) return '';
+    const bp = book.blueprint && typeof book.blueprint === 'object' ? book.blueprint : null;
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const parts = [];
+    parts.push(`\n\n【改编原著】这是一部根据小说《${esc(book.title)}》${esc(book.author) ? '（作者：' + esc(book.author) + '）' : ''}改编的${catNoun || '作品'}。`);
+    if (esc(book.intro)) parts.push(`原著简介：${esc(book.intro)}`);
+    if (bp) {
+      if (esc(bp.mainline)) parts.push(`原著明线：${esc(bp.mainline)}`);
+      if (bp.darkline && typeof bp.darkline === 'object') {
+        if (esc(bp.darkline.truth)) parts.push(`原著暗线：${esc(bp.darkline.truth)}`);
+      }
+      if (Array.isArray(bp.structure) && bp.structure.length) {
+        const st = bp.structure.map(s => `${esc(s.phase)}（${esc(s.chapterRange || s.episodeRange || '')}）：${esc(s.summary)}`).filter(Boolean).join('\n');
+        if (st) parts.push(`原著故事结构：\n${st}`);
+      }
+      const chars = bp.characters && typeof bp.characters === 'object' ? bp.characters : null;
+      if (chars) {
+        const fmt = (arr) => (Array.isArray(arr) ? arr : []).map(c => `${esc(c.name)}：${esc(c.identity)}｜${esc(c.personality)}｜${esc(c.desire || c.goal || '')}`).filter(s => s.replace(/[：｜]/g, '').trim()).join('\n');
+        const pro = fmt(chars.protagonist);
+        const sup = fmt(chars.supporting);
+        if (pro) parts.push(`原著主角：\n${pro}`);
+        if (sup) parts.push(`原著重要角色：\n${sup}`);
+      }
+    }
+    parts.push(`\n【改编铁律】请基于上面的原著进行影视化改编：保留原著的核心故事、精神内核与主要人物关系；但这是再创作，允许大幅改动——可调整剧情结构与节奏、增删次要角色、改写或加强某些桥段、甚至调整结局走向，让它更适合${catNoun || '影视'}的呈现。不要逐字照搬原著，要做出一部「改编自原著、又有自己面貌」的作品。`);
+    // 改编卡的高赞热评：网友可能已对改编下了判断（如「加了原创角色」「魔改了结局」），正片必须与之一致，
+    // 把热评里提到的改编点当成既定事实在正片中兑现，别让评论与成品穿帮。
+    const hc = work.hotComment;
+    if (hc && (hc.text || '').trim()) {
+      parts.push(`\n【已有的观众热评】这部改编作品已经有一条高赞热评在流传：「${esc(hc.text)}」。这条评论代表观众对本次改编已经形成的认知，请让你生成的正片内容与它一致——如果它提到了某些改编上的判断（例如新增了原创角色、删改了某段剧情、调整了结局、某个选角等），就把这些当成确实发生的事实，在正片中落实到位，不要出现「热评说有、正片却没有」的矛盾。`);
+    }
+    return parts.join('\n');
+  }
+
+  // 生成电视剧蓝图（故事总纲 + 每集概述）。存进 work.blueprint。返回 true/false。
+  async function _videoGenBlueprint(work) {
+    if (!work || work._blueprintLoading) return false;
+    work._blueprintLoading = true;
+    try {
+      const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+      const mainConfig = await API.getConfig();
+      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const key = funcConfig.apiKey || mainConfig.apiKey;
+      const model = funcConfig.model || mainConfig.model;
+      if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return false; }
+
+      const esc = (s) => String(s == null ? '' : s).trim();
+      const cats = Array.isArray(work.category) ? work.category.filter(Boolean).join('、') : '';
+      const castLine = Array.isArray(work.cast) ? work.cast.join(' / ') : '';
+      const isAnime = work.kind === 'anime';
+      const J = isAnime ? '话' : '集';
+
+      // 真实演职人员人设
+      let realCastBlock = '';
+      try { realCastBlock = await _videoBuildCastProfiles(work); } catch (_) {}
+
+      // 世界观（跟随发现页开关）
+      let wvBlock = '';
+      if (_videoUseWvRef) {
+        try {
+          const wv = await _buildFullContext({ lite: true, castFilter: 'disabled' });
+          if (wv) wvBlock = `\n\n【参考世界观背景】\n请让故事背景贴合下面的世界观设定（但别硬蹭）：\n${wv}`;
+        } catch (_) {}
+      }
+      // 最近十轮主线（跟随发现页开关）
+      let mainlineBlock = '';
+      if (_videoUseMainlineRef) {
+        try {
+          const ml = _readingMainlineBlock(true);
+          if (ml) mainlineBlock = `\n\n【最近发生的事】（可作为背景参考）：\n${ml}`;
+        } catch (_) {}
+      }
+      // 改编原著蓝图（仅当本作是改编作品时）
+      let adaptBlock = '';
+      try { adaptBlock = await _videoBuildAdaptBlock(work, isAnime ? '动画' : '电视剧'); } catch (_) {}
+
+      const sysPrompt = `你是${isAnime ? '动画' : '电视剧'}的故事架构师。请为下面这部${isAnime ? '动画' : '剧'}设计完整的故事蓝图（不是正文，而是供后续逐集创作使用的总纲）。
+
+【${isAnime ? '作品' : '剧集'}信息】
+${isAnime ? '作品名' : '剧名'}：${esc(work.title)}
+${isAnime ? '监督' : '导演'}：${esc(work.director)}
+${isAnime ? '系列构成' : '编剧'}：${esc(work.screenwriter)}
+${isAnime ? 'CV' : '主演'}：${castLine}${isAnime && work.artDirector ? '\n作画：' + esc(work.artDirector) : ''}${isAnime && work.studio ? '\n制作公司：' + esc(work.studio) : ''}
+类型：${esc(work.genre)}${cats ? '\n标签：' + cats : ''}
+集数：${work.episodes} ${J}
+简介：${esc(work.intro)}
+${realCastBlock}${wvBlock}${mainlineBlock}${adaptBlock}
+
+本${isAnime ? '作' : '剧'}共 ${work.episodes} ${J}。请输出故事蓝图。严格使用 JSON 对象格式，不能返回 Markdown、代码块或解释，必须以 { 开头、以 } 结尾：
+
+{
+  "style": "${isAnime ? '美术风格（约 100 字）。整部动画的整体基调、节奏、美术风格、作画质感（如清新治愈/暗黑硬核/水彩唯美/赛璐璐厚涂等）。' : '气质风格（约 100 字）。整部剧的整体基调、节奏、视听气质、类型质感（如冷峻写实/浪漫唯美/荒诞黑色等）。'}",
+  "structure": [
+    { "phase": "阶段名", "episodeRange": "起-止集", "summary": "这一阶段发生什么（2-4句）" }
+  ],
+  "mainline": "明线：主角的核心动力、目标、出发点，他想做什么或被迫做什么（要具体）",
+  "darkline": {
+    "truth": "暗线：隐藏的真相、幕后推手、各方势力的博弈",
+    "revealPace": "暗线如何随剧情逐步揭示：何时埋线、何时露出线索、何时揭晓"
+  },
+  "characters": {
+    "protagonist": [
+      { "name": "角色名", "actor": "${isAnime ? 'CV' : '饰演者'}", "gender": "性别", "age": "年龄", "identity": "身份", "appearance": "外貌（简写）", "personality": "性格（四组四字词语）", "desire": "核心目标/欲望", "arc": "成长弧光" }
+    ],
+    "supporting": [
+      { "name": "角色名", "actor": "${isAnime ? 'CV或留空' : '饰演者或留空'}", "gender": "性别", "age": "年龄", "identity": "身份", "appearance": "外貌（简写）", "personality": "性格（四组四字词语）", "position": "定位（主角的什么人）", "desire": "核心目标/欲望", "debut": "出场${J}数" }
+    ]
+  },
+  "episodes": [
+    { "idx": 1, "title": "本${J}标题", "summary": "本${J}详述（150字左右）" }
+  ]
+}
+
+要求：
+- structure 覆盖完整故事弧（开端→发展→转折→高潮→结局），episodeRange 连续衔接，最后一阶段结束${J} = 总${J}数（${work.episodes}）。
+- protagonist 列 1-2 个主角，supporting 列 4-6 个重要角色（含反派）。
+- actor 字段：${isAnime ? 'CV' : '主演'}里的人按 cast 填入对应角色；配角如果 cast 里没有对应的人则留空字符串。${isAnime ? '分配 CV 时请考虑声线与角色的契合——温柔系角色配温柔声线、热血角色配高亢声线、冷面角色配低沉声线等，让 CV 和角色气质相称，而不是随机分配。' : '分配主演时请考虑外形气质与角色的契合，让演员和角色相称，而不是随机分配。'}
+- episodes 数组长度必须等于总${J}数（${work.episodes}），idx 从 1 连续递增。
+- 每${J} summary 150 字左右，具体到能作为单${J}剧本创作的依据：本${J}从什么开始、推进什么、在什么地方收尾。
+- ${J}与${J}之间衔接流畅、节奏递进，严格符合 structure 的阶段划分。
+- 明暗线形成"表里"：明线是观众表面看到的推进，暗线是背后真正起作用的东西。
+- 角色人设每个字段都要填满写具体，后续逐集创作只看这里的人设。
+- 所有角色名、剧情全部原创，不套用现实已存在的作品。`;
+
+      // 加载弹窗已在 _videoOpenEpisodes 展示，这里不再 toast
+      const bp = await _phoneJsonObjectWithRetry({
+        label: '剧集蓝图', url, key, model,
+        temperature: 0.9, max_tokens: 16384,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: `请为《${esc(work.title)}》设计故事蓝图。` }
+        ]
+      });
+      if (!bp || typeof bp !== 'object') return false;
+
+      // 规范化
+      const episodes = (Array.isArray(bp.episodes) ? bp.episodes : [])
+        .filter(e => e && e.title)
+        .map((e, i) => ({
+          idx: i + 1,
+          title: String(e.title).replace(/^[《<「『\s]+|[》>」』\s]+$/g, '').replace(/^第?\s*[0-9一二三四五六七八九十百]+\s*[集话]\s*[:：]?\s*/, '').slice(0, 40),
+          summary: String(e.summary || '').slice(0, 500)
+        }));
+      if (!episodes.length) return false;
+
+      work.blueprint = {
+        style: typeof bp.style === 'string' ? bp.style.trim().slice(0, 200) : '',
+        structure: Array.isArray(bp.structure) ? bp.structure : [],
+        mainline: typeof bp.mainline === 'string' ? bp.mainline : '',
+        darkline: (bp.darkline && typeof bp.darkline === 'object') ? bp.darkline : {},
+        characters: (bp.characters && typeof bp.characters === 'object') ? bp.characters : {},
+        episodes: episodes
+      };
+      work.watched = true;
+      work.watchedAt = Date.now();
+      // 改编作品：用户真正生成了蓝图，此刻才把原著标记为「已被改编」并快照影视信息
+      try { await _videoMarkBookAdapted(work); } catch (_) {}
+      await _savePhoneData();
+      return true;
+    } catch (err) {
+      console.error('[剧集蓝图]', err);
+      UI.showToast('蓝图生成失败，请重试', 1800);
+      return false;
+    } finally {
+      work._blueprintLoading = false;
+    }
+  }
+
+  // 打开剧集列表页（电视剧/动漫）：若无蓝图先生成（带加载弹窗），然后渲染集数列表
+  async function _videoOpenEpisodes(work) {
+    if (!work) return;
+    // 自制剧集无蓝图：不自动生成，引导去编辑蓝图工作台
+    if (work.selfMake && !work.blueprint) { _videoEditBlueprint(work); return; }
+    // 若还没有蓝图，先生成（带加载弹窗）
+    if (!work.blueprint) {
+      // 创建加载弹窗
+      const mask = document.createElement('div');
+      mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px';
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:300px;width:100%;padding:36px 24px;display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--text)">
+          <div style="width:34px;height:34px;border:3px solid color-mix(in srgb, var(--accent) 22%, transparent);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite"></div>
+          <div style="font-size:13px;color:var(--text-secondary);text-align:center;line-height:1.6">正在加载剧集…</div>
+        </div>`;
+      document.body.appendChild(mask);
+      const ok = await _videoGenBlueprint(work);
+      try { document.body.removeChild(mask); } catch (_) {}
+      if (!ok) return;
+    }
+    const bp = work.blueprint;
+    const episodes = Array.isArray(bp.episodes) ? bp.episodes : [];
+    if (!episodes.length) { UI.showToast('剧集数据为空', 1600); return; }
+
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const isAnime = work.kind === 'anime';
+
+    // 顺序解锁：已生成的集 + 第一个未生成的集（下一个待看）可点；再往后锁定，禁止跳集生成
+    const _epGen = (n) => { const u = work._epScripts && work._epScripts[n]; return !!(u && u.script && (u.script.synopsis || (Array.isArray(u.script.scene) && u.script.scene.length))); };
+    const firstUngen = episodes.map(e => e.idx).sort((a, b) => a - b).find(n => !_epGen(n));
+    const firstUngenIdx = (firstUngen == null) ? Infinity : firstUngen;
+    const overlay = document.createElement('div');
+    overlay.className = 'phone-video-episodes';
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:65;background:var(--bg);display:flex;flex-direction:column';
+
+    const headerHtml = `
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;flex-shrink:0">
+        <button id="video-ep-back" style="width:32px;height:32px;border:none;border-radius:50%;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+        </button>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:15px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(work.title)}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${isAnime ? '动画' : '电视剧'} · ${episodes.length}集</div>
+        </div>
+        <button id="video-ep-more" style="width:32px;height:32px;border:none;border-radius:50%;background:none;color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer">
+          ${_uiIcon('more', 18)}
+        </button>
+      </div>`;
+
+    const listHtml = episodes.map(ep => {
+      const epUnit = work._epScripts && work._epScripts[ep.idx];
+      const hasContent = !!(epUnit && epUnit.script && (epUnit.script.synopsis || (Array.isArray(epUnit.script.scene) && epUnit.script.scene.length)));
+      const locked = !hasContent && ep.idx > firstUngenIdx;
+      const epCover = (work.cover || '').trim();
+      const epCoverHtml = epCover
+        ? `<img src="${esc(epCover)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px${locked ? ';opacity:.45' : ''}">`
+        : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--bg-tertiary);border-radius:8px;color:var(--text-secondary);opacity:0.4"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></div>`;
+      const lockBadge = locked
+        ? `<span style="margin-left:6px;flex-shrink:0;color:var(--text-secondary);opacity:.6;display:inline-flex;align-items:center"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>`
+        : '';
+      return `
+      <div class="phone-video-ep-item${locked ? ' locked' : ''}" data-epidx="${ep.idx}"${locked ? ' data-locked="1" title="请先按顺序观看前面的剧集"' : ''} style="display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:${locked ? 'not-allowed' : 'pointer'};border-radius:12px;margin:4px 12px;transition:background .15s${locked ? ';opacity:.7' : ''}${hasContent ? ';background:color-mix(in srgb, var(--accent) 8%, transparent)' : ''}">
+        <div style="width:120px;height:68px;flex-shrink:0;border-radius:8px;overflow:hidden;position:relative">
+          ${epCoverHtml}
+          <div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;padding:1px 5px;border-radius:4px;font-weight:600">${ep.idx}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center"><span style="font-size:14px;font-weight:600;color:var(--text);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(ep.title)}</span>${lockBadge}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${esc(work.title)} · 第${ep.idx}${isAnime ? '话' : '集'}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(ep.summary)}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    overlay.innerHTML = `${_phoneStatusBarHtml()}${headerHtml}<div style="flex:1;overflow-y:auto">${listHtml}</div>`;
+
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+
+    // 返回按钮
+    overlay.querySelector('#video-ep-back').onclick = () => {
+      overlay.remove();
+      // 返回后刷新视频主页（新建/改编作品才能立刻出现在「我的」）
+      try { const _pd = _getPhoneDataSync(); if (_pd) _renderVideo(_pd); } catch(_) {}
+    };
+
+    // 更多设置按钮
+    overlay.querySelector('#video-ep-more').onclick = () => { _videoEpSettings(work, overlay); };
+
+    // 集数点击：锁定的集不可点（顺序解锁），可点的进入单集详情
+    overlay.querySelectorAll('.phone-video-ep-item').forEach(el => {
+      el.onclick = () => {
+        if (el.getAttribute('data-locked') === '1') { UI.showToast('请先按顺序观看前面的剧集', 1800); return; }
+        const idx = parseInt(el.getAttribute('data-epidx'), 10);
+        if (!idx) return;
+        // 自制剧集：该集还没剧本 → 进编辑工作台（手动生成+逐块编辑）
+        if (work.selfMake) {
+          const unit = work._epScripts && work._epScripts[idx];
+          const has = !!(unit && unit.script && (unit.script.synopsis || (Array.isArray(unit.script.scene) && unit.script.scene.length)));
+          if (!has) { _videoEditEpisode(work, idx); return; }
+        }
+        _videoOpenEpDetail(work, idx);
+      };
+    });
+  }
+
+  // 剧集设置页（全屏，复用阅读那边的设置页样式）
+  function _videoEpSettings(work, epOverlay) {
+    if (!work) return;
+    const isAnime = work.kind === 'anime';
+
+    // 创建全屏 overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:70;background:var(--bg);display:flex;flex-direction:column';
+
+    const row = (label, desc, btnHtml) => `
+      <div class="phone-reading-set-row">
+        <div class="phone-reading-set-rowmain">
+          <div class="phone-reading-set-rowlabel">${label}</div>
+          ${desc ? `<div class="phone-reading-set-rowdesc">${desc}</div>` : ''}
+        </div>
+        ${btnHtml}
+      </div>`;
+
+    // 主题曲行 HTML（清除/绑定后只局部刷新这一行，不重建整页，避免动到顶栏）
+    const themeRowHtml = () => {
+      const has = work.themeSong && (work.themeSong.title || '').trim();
+      const desc = has
+        ? ('当前：' + (work.themeSong.title || '') + ((work.themeSong.artist || '').trim() ? ' — ' + work.themeSong.artist : ''))
+        : ('绑定整部' + (isAnime ? '动画' : '剧') + '的主题曲，影评区网友会聊到它（仅资料，不播放）');
+      return row('主题曲', desc, `<button class="phone-reading-set-btn" id="video-epset-theme">${has ? '更换' : '绑定'}</button>`);
+    };
+
+    overlay.innerHTML = `
+    ${_phoneStatusBarHtml()}
+    <div style="display:flex;align-items:center;padding:4px 16px 8px;flex-shrink:0;color:var(--text)">
+      <button id="video-epset-back" class="phone-nav-btn">${_uiIcon('back', 18)}</button>
+      <span style="font-weight:750;font-size:15px;flex:1;text-align:center;letter-spacing:.03em">${isAnime ? '动画' : '剧集'}设置</span>
+      <div style="width:36px;flex-shrink:0"></div>
+    </div>
+      <div class="phone-reading-set-page" style="flex:1;overflow-y:auto">
+        ${row('更换封面', '为这部' + (isAnime ? '动画' : '剧') + '更换封面图', `<button class="phone-reading-set-btn" id="video-epset-cover">上传</button>${(work.cover || '').trim() ? `<button class="phone-reading-set-btn phone-set-btn-ghost" id="video-epset-clearcover">清除</button>` : ''}`)}
+        ${work.selfMake ? row('编辑蓝图', '改' + (isAnime ? '美术风格' : '气质风格') + '/明暗线/结构/人物/分' + (isAnime ? '话' : '集') + '大纲', `<button class="phone-reading-set-btn" id="video-epset-editbp">编辑</button>`) : ''}
+        ${work.blueprint ? row('查看剧本', '明线/暗线/故事结构/角色设定', `<button class="phone-reading-set-btn" id="video-epset-blueprint">查看</button>`) : ''}
+        <div id="video-epset-theme-row">${themeRowHtml()}</div>
+        ${row(isAnime ? '重制最新一话' : '重拍最新一集', (isAnime ? '重制第 ' : '重拍第 ') + (() => { const s = work._epScripts || {}; const isG = (n) => { const u = s[n]; return !!(u && u.script && (u.script.synopsis || (Array.isArray(u.script.scene) && u.script.scene.length))); }; const eps = (work.blueprint && Array.isArray(work.blueprint.episodes)) ? work.blueprint.episodes : []; let last = 0; eps.map(e => e.idx).sort((a, b) => a - b).forEach(n => { if (isG(n)) last = n; }); return last || 1; })() + (isAnime ? ' 话' : ' 集'), `<button class="phone-reading-set-btn" id="video-epset-rewrite">${isAnime ? '重制' : '重拍'}</button>`)}
+        ${work.selfMake ? (function(){
+          const s = work._epScripts || {};
+          const isG = (n) => { const u = s[n]; return !!(u && u.script && (u.script.synopsis || (Array.isArray(u.script.scene) && u.script.scene.length))); };
+          const hasAnyEp = Object.keys(s).some(k => isG(parseInt(k, 10)));
+          // 没正片分集时通常不显示开播/奖项区块；但拍摄链未杀青是拍摄期的事，
+          // 跟有没有做正片无关，必须放行，否则玩家走完拍摄链却找不到杀青入口。
+          const _hasShootPending = !!(work.shootChainId && !work.shootDone);
+          if (!hasAnyEp && !_hasShootPending) return '';
+          const kw = isAnime ? '动漫' : '电视剧';
+if (work.pendingRelease) return row('开播流程', '剧情正在演绎' + kw + '播出与口碑反响…', `<button class="phone-reading-set-btn" disabled style="opacity:.5;cursor:default">进行中</button>`);
+                if (work.shootChainId && !work.shootDone) {
+                  const sw = isAnime ? '制作' : '拍摄'; const swDone = isAnime ? '制作完成' : '杀青';
+                  const prog = _videoShootChainProgress(work.shootChainId);
+                  const progDesc = prog.total > 0 ? `已完成 ${prog.done}/${prog.total} 个剧情节点，` : '';
+                  if (prog.allDone) {
+                    return row(swDone, progDesc + '全部节点已完成，可以确认' + swDone + '，开放申请开播', `<button class="phone-reading-set-btn" id="video-epset-confirmwrap">确认${swDone}</button>`);
+                  }
+                  return row(sw + '进行中', progDesc + '走到' + swDone + '后才能申请开播', `<button class="phone-reading-set-btn" disabled style="opacity:.5;cursor:default">${sw}中</button>`);
+                }
+                if (!work.released) return row('申请开播', '让这部' + kw + '在剧情里正式播出，由主线演绎口碑与评分', `<button class="phone-reading-set-btn" id="video-epset-release">申请</button>`);
+          const rd = work.rating ? ('已播出 · 口碑 ' + work.rating + ' 分') : '已播出';
+          if (work.pendingAward) return row('奖项评选', rd + ' · 评选进行中…', `<button class="phone-reading-set-btn" disabled style="opacity:.5;cursor:default">进行中</button>`);
+          return row('报名奖项', rd + ' · 报名一次奖项评选，结果由主线揭晓', `<button class="phone-reading-set-btn" id="video-epset-award">报名</button>`);
+        })() : ''}
+      </div>`;
+
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+
+    overlay.querySelector('#video-epset-back').onclick = () => { overlay.remove(); };
+    overlay.querySelector('#video-epset-cover').onclick = async () => {
+      const ok = await _videoSetCover(work, epOverlay);
+      // 上传成功且刚从无到有，重渲染设置页让清除按钮出现
+      if (ok) { overlay.remove(); _videoEpSettings(work, epOverlay); }
+    };
+    const clearBtn = overlay.querySelector('#video-epset-clearcover');
+    if (clearBtn) clearBtn.onclick = async () => {
+      work.cover = '';
+      await _savePhoneData();
+      UI.showToast('封面已清除', 1200);
+      // 重建剧集列表页让封面恢复成占位图
+      if (epOverlay) { epOverlay.remove(); await _videoOpenEpisodes(work); }
+      const newEpOverlay = document.querySelector('.phone-video-episodes');
+      overlay.remove();
+      _videoEpSettings(work, newEpOverlay || epOverlay);
+    };
+    const bpBtn = overlay.querySelector('#video-epset-blueprint');
+    if (bpBtn) bpBtn.onclick = () => {
+      _videoShowBlueprint(work);
+    };
+    const editBpBtn = overlay.querySelector('#video-epset-editbp');
+    if (editBpBtn) editBpBtn.onclick = () => {
+      overlay.remove();
+      _videoEditBlueprint(work);
+    };
+    // 主题曲：弹窗选/写，保存后只局部刷新主题曲那一行（不重建整页，避免动到顶栏）
+    const bindEpThemeBtn = () => {
+      const btn = overlay.querySelector('#video-epset-theme');
+      if (!btn) return;
+      btn.onclick = () => {
+        _videoPickThemeSong(work, () => {
+          const rowEl = overlay.querySelector('#video-epset-theme-row');
+          if (rowEl) rowEl.innerHTML = themeRowHtml();
+          bindEpThemeBtn();
+        });
+      };
+    };
+    bindEpThemeBtn();
+    overlay.querySelector('#video-epset-rewrite').onclick = () => {
+      _videoRewriteLastEpisode(work, epOverlay);
+    };
+    // 自制剧集：确认杀青/制作完成
+    const epWrapBtn = overlay.querySelector('#video-epset-confirmwrap');
+    if (epWrapBtn) epWrapBtn.onclick = async () => {
+      const okWrap = await _videoConfirmShootDone(work, null);
+      if (okWrap) { overlay.remove(); _videoEpSettings(work, epOverlay); }
+    };
+    // 自制剧集：申请开播
+    const epReleaseBtn = overlay.querySelector('#video-epset-release');
+    if (epReleaseBtn) epReleaseBtn.onclick = async () => {
+      const kw = isAnime ? '动漫' : '电视剧';
+      const ok = await UI.showConfirm('申请开播', `让《${work.title || '本剧'}》这部${kw}在剧情里正式播出。接下来的主线剧情会自然推向它的播出与口碑反响，并给出评分。确定吗？`);
+      if (!ok) return;
+      work.pendingRelease = true;
+      await _savePhoneData();
+      UI.showToast('已申请开播，接下来的剧情会演到', 2200);
+      overlay.remove();
+      _videoEpSettings(work, epOverlay);
+    };
+    // 自制剧集：报名奖项
+    const epAwardBtn = overlay.querySelector('#video-epset-award');
+    if (epAwardBtn) epAwardBtn.onclick = async () => {
+      const ok = await UI.showConfirm('报名奖项', `把已播出的《${work.title || '本剧'}》报名奖项评选。结果由主线剧情揭晓——可能获奖、可能只入围提名，也可能落选。确定吗？`);
+      if (!ok) return;
+      work.pendingAward = true;
+      await _savePhoneData();
+      UI.showToast('已报名，结果会在剧情里揭晓', 2200);
+      overlay.remove();
+      _videoEpSettings(work, epOverlay);
+    };
+  }
+
+  // 重拍最新一集：找到已生成的最大集号，弹建议框 → 清掉该集剧本/评论/弹幕 → 带建议重生成。
+  // 只允许重拍最新一集，避免重拍中间集导致后续集衔接断裂。
+  async function _videoRewriteLastEpisode(work, epOverlay) {
+    if (!work || !work.blueprint) { UI.showToast('还没有蓝图', 1600); return; }
+    const isAnime = work.kind === 'anime';
+    const scripts = work._epScripts || {};
+    const isGen = (n) => { const u = scripts[n]; return !!(u && u.script && (u.script.synopsis || (Array.isArray(u.script.scene) && u.script.scene.length))); };
+    // 已生成的最大连续集号
+    let lastGen = 0;
+    const eps = Array.isArray(work.blueprint.episodes) ? work.blueprint.episodes : [];
+    eps.map(e => e.idx).sort((a, b) => a - b).forEach(n => { if (isGen(n)) lastGen = n; });
+    if (!lastGen) { UI.showToast(isAnime ? '还没有生成任何一话' : '还没有生成任何一集', 1600); return; }
+
+    const hint = await _readingPromptRewriteHint(isAnime ? `重制第 ${lastGen} 话` : `重拍第 ${lastGen} 集`);
+    if (hint === null) return; // 取消
+
+    // 清掉该集（含简介/名场面/评论/弹幕），强制重生成
+    delete scripts[lastGen];
+    await _savePhoneData();
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:absolute;inset:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px';
+    mask.innerHTML = `<div class="phone-generation-spinner"></div><div style="font-size:13px;color:#fff">${isAnime ? `正在重制第 ${lastGen} 话…` : `正在重拍第 ${lastGen} 集…`}</div>`;
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(mask);
+    try {
+      const fresh = await _videoGenEpisode(work, lastGen, (t) => {
+        const el = mask.querySelector('div:last-child');
+        if (el) el.textContent = t;
+      }, hint || '');
+      if (!fresh) { UI.showToast(isAnime ? '重制失败，请重试' : '重拍失败，请重试', 1800); return; }
+      _videoDecorateEpWork(fresh, work);
+      await _videoGenEpReviews(work, lastGen);
+      UI.showToast(isAnime ? `第 ${lastGen} 话已重制` : `第 ${lastGen} 集已重拍`, 1400);
+    } catch (e) {
+      console.error('[重拍单集]', e);
+      UI.showToast(isAnime ? '重制失败，请重试' : '重拍失败，请重试', 1800);
+    } finally {
+      mask.remove();
+    }
+  }
+
+  // 电影设置页（全屏 overlay，复用剧集设置页样式）：更换封面 / 重拍本片。
+  // 「重拍」= 保留片名/导演/简介等身份字段，清掉剧本/名场面/影评/弹幕，重新发起一次详情页生成。
+  function _videoMovieSettings(work, detailOverlay) {
+    if (!work) return;
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:70;background:var(--bg);display:flex;flex-direction:column';
+
+    const row = (label, desc, btnHtml) => `
+      <div class="phone-reading-set-row">
+        <div class="phone-reading-set-rowmain">
+          <div class="phone-reading-set-rowlabel">${label}</div>
+          ${desc ? `<div class="phone-reading-set-rowdesc">${desc}</div>` : ''}
+        </div>
+        ${btnHtml}
+      </div>`;
+
+    // 主题曲行 HTML（清除/绑定后只局部刷新这一行，不重建整个设置页，避免动到顶栏）
+    const themeRowHtml = () => {
+      const has = work.themeSong && (work.themeSong.title || '').trim();
+      const desc = has
+        ? ('当前：' + (work.themeSong.title || '') + ((work.themeSong.artist || '').trim() ? ' — ' + work.themeSong.artist : ''))
+        : '绑定一首主题曲，影评区网友会聊到它（仅资料，不播放）';
+      return row('主题曲', desc, `<button class="phone-reading-set-btn" id="video-mvset-theme">${has ? '更换' : '绑定'}</button>`);
+    };
+
+    overlay.innerHTML = `
+      ${_phoneStatusBarHtml()}
+      <div style="display:flex;align-items:center;padding:4px 16px 8px;flex-shrink:0;color:var(--text)">
+        <button id="video-mvset-back" class="phone-nav-btn">${_uiIcon('back', 18)}</button>
+        <span style="font-weight:750;font-size:15px;flex:1;text-align:center;letter-spacing:.03em">电影设置</span>
+        <div style="width:36px;flex-shrink:0"></div>
+      </div>
+      <div class="phone-reading-set-page" style="flex:1;overflow-y:auto">
+        ${row('更换封面', '为这部电影更换封面图', `<button class="phone-reading-set-btn" id="video-mvset-cover">上传</button>${(work.cover || '').trim() ? `<button class="phone-reading-set-btn phone-set-btn-ghost" id="video-mvset-clearcover">清除</button>` : ''}`)}
+        <div id="video-mvset-theme-row">${themeRowHtml()}</div>
+        ${work.selfMake ? row('编辑剧本', '填创作方向、生成剧本，逐条编辑梗概/人物/名场面', `<button class="phone-reading-set-btn" id="video-mvset-editscript">编辑</button>`) : ''}
+        ${work.selfMake ? (function(){
+          const hasScript = work.script && typeof work.script === 'object' && work.script.synopsis;
+          if (!hasScript) return '';
+if (work.pendingRelease) return row('上映流程', '剧情正在演绎影片上映与口碑反响…', `<button class="phone-reading-set-btn" disabled style="opacity:.5;cursor:default">进行中</button>`);
+                if (work.shootChainId && !work.shootDone) {
+                  const prog = _videoShootChainProgress(work.shootChainId);
+                  const progDesc = prog.total > 0 ? `已完成 ${prog.done}/${prog.total} 个剧情节点，` : '';
+                  if (prog.allDone) {
+                    return row('杀青', progDesc + '全部节点已完成，可以确认杀青，开放申请上映', `<button class="phone-reading-set-btn" id="video-mvset-confirmwrap">确认杀青</button>`);
+                  }
+                  return row('拍摄进行中', progDesc + '走到杀青后才能申请上映', `<button class="phone-reading-set-btn" disabled style="opacity:.5;cursor:default">拍摄中</button>`);
+                }
+                if (!work.released) return row('申请上映', '让这部电影在剧情里正式上映，由主线演绎口碑与评分', `<button class="phone-reading-set-btn" id="video-mvset-release">申请</button>`);
+          const rd = work.rating ? ('已上映 · 口碑 ' + work.rating + ' 分') : '已上映';
+          if (work.pendingAward) return row('奖项评选', rd + ' · 评选进行中…', `<button class="phone-reading-set-btn" disabled style="opacity:.5;cursor:default">进行中</button>`);
+          return row('报名奖项', rd + ' · 报名一次奖项评选，结果由主线揭晓', `<button class="phone-reading-set-btn" id="video-mvset-award">报名</button>`);
+        })() : ''}
+        ${row(work.selfMake ? '重做本片' : '重拍本片', work.selfMake ? '按当前创作方向重新生成剧本、名场面、影评、弹幕' : '保留片名/导演/简介，据已有简介重新生成剧本、名场面、影评、弹幕', `<button class="phone-reading-set-btn" id="video-mvset-remake">${work.selfMake ? '重做' : '重拍'}</button>`)}
+      </div>`;
+
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+
+    // 关掉旧详情页并重开（用于封面/重拍后刷新）
+    const reopenDetail = () => {
+      overlay.remove();
+      if (detailOverlay) { try { detailOverlay.remove(); } catch(_) {} _videoDetailOverlay = null; }
+      _videoOpenDetail(work);
+    };
+
+    overlay.querySelector('#video-mvset-back').onclick = () => { overlay.remove(); };
+
+    // 更换封面：复用 _videoSetCover（不传 epOverlay），成功后重开详情页刷新封面
+    overlay.querySelector('#video-mvset-cover').onclick = async () => {
+      const ok = await _videoSetCover(work);
+      if (ok) reopenDetail();
+    };
+    const clearBtn = overlay.querySelector('#video-mvset-clearcover');
+    if (clearBtn) clearBtn.onclick = async () => {
+      work.cover = '';
+      await _savePhoneData();
+      UI.showToast('封面已清除', 1200);
+      reopenDetail();
+    };
+
+    // 主题曲：弹窗选/写，保存后只局部刷新主题曲那一行（不重建整页，避免动到顶栏）
+    const bindMvThemeBtn = () => {
+      const btn = overlay.querySelector('#video-mvset-theme');
+      if (!btn) return;
+      btn.onclick = () => {
+        _videoPickThemeSong(work, () => {
+          const rowEl = overlay.querySelector('#video-mvset-theme-row');
+          if (rowEl) rowEl.innerHTML = themeRowHtml();
+          bindMvThemeBtn();
+        });
+      };
+    };
+    bindMvThemeBtn();
+
+    // 自制电影：编辑剧本（关掉设置页，打开剧本工作台）
+    const editScriptBtn = overlay.querySelector('#video-mvset-editscript');
+    if (editScriptBtn) editScriptBtn.onclick = () => {
+      overlay.remove();
+      _videoEditScript(work);
+    };
+
+    // 自制电影：确认杀青
+    const mvWrapBtn = overlay.querySelector('#video-mvset-confirmwrap');
+    if (mvWrapBtn) mvWrapBtn.onclick = async () => {
+      const okWrap = await _videoConfirmShootDone(work, null);
+      if (okWrap) reopenDetail();
+    };
+
+    // 自制电影：申请上映（标记 pendingRelease，下段剧情由主线演绎上映+评分）
+    const releaseBtn = overlay.querySelector('#video-mvset-release');
+    if (releaseBtn) releaseBtn.onclick = async () => {
+      const ok = await UI.showConfirm('申请上映', `让《${work.title || '本片'}》在剧情里正式上映。接下来的主线剧情会自然推向这部电影的上映与口碑反响，并给出评分。确定吗？`);
+      if (!ok) return;
+      work.pendingRelease = true;
+      await _savePhoneData();
+      UI.showToast('已申请上映，接下来的剧情会演到', 2200);
+      reopenDetail();
+    };
+
+    // 自制电影：报名奖项（标记 pendingAward，由主线揭晓评选结果）
+    const awardBtn = overlay.querySelector('#video-mvset-award');
+    if (awardBtn) awardBtn.onclick = async () => {
+      const ok = await UI.showConfirm('报名奖项', `把已上映的《${work.title || '本片'}》报名奖项评选。结果由主线剧情揭晓——可能获奖、可能只入围提名，也可能落选。确定吗？`);
+      if (!ok) return;
+      work.pendingAward = true;
+      await _savePhoneData();
+      UI.showToast('已报名，结果会在剧情里揭晓', 2200);
+      reopenDetail();
+    };
+
+
+    // 重拍本片：清掉正片内容（保留身份字段），重开详情页触发 _videoEnsureContent 重新生成
+    overlay.querySelector('#video-mvset-remake').onclick = async () => {
+      const _isMake = !!work.selfMake;
+      const ok = await UI.showConfirm(_isMake ? '重做本片' : '重拍本片',
+        _isMake
+          ? `将清除《${work.title || '本片'}》已生成的剧本、名场面、影评、弹幕，按当前创作方向重新生成。片名/导演/简介/创作方向保持不变。确定继续吗？`
+          : `将清除《${work.title || '本片'}》已生成的剧本、名场面、影评、弹幕，根据已有简介重新生成。片名、导演、简介等保持不变。确定继续吗？`);
+      if (!ok) return;
+      delete work.script;
+      delete work.reviews;
+      delete work.danmu;
+      delete work._scriptLoading;
+      delete work._reviewsLoading;
+      await _savePhoneData();
+      if (_isMake) {
+        // 自制电影：_videoEnsureContent 对无 script 的自制片会跳过，这里手动发起一次生成
+        overlay.remove();
+        if (detailOverlay) { try { detailOverlay.remove(); } catch(_) {} _videoDetailOverlay = null; }
+        _videoOpenDetail(work);
+        UI.showToast('开始重做…', 1200);
+        const okGen = await _videoGenScript(work);
+        if (okGen) _videoEnsureContent(work);
+        return;
+      }
+      UI.showToast('开始重拍…', 1200);
+      reopenDetail();
+    };
+  }
+
+  // ===== 自制电影·上映/报奖事件（常驻注入主线 + 结束标记回写）=====
+  // 构建待注入主线的事件提示词：扫所有自制片，pendingRelease → 上映提示，pendingAward → 报奖提示。
+  // 常驻注入（每轮拼），直到 AI 输出对应结束标记被 applyVideoEventMarkers 回写并清掉 pending。
+  async function buildVideoEventPrompt() {
+    let pd;
+    try { pd = await _getPhoneData(); } catch (_) { return ''; }
+    if (!pd) return '';
+    const works = _videoAllWorks(pd).filter(w => w && w.selfMake && (w.pendingRelease || w.pendingAward));
+    if (!works.length) return '';
+
+    const esc = (s) => String(s == null ? '' : s).trim();
+    // 把剧本梗概+人物压成一段供 AI 评价（费 token 控制：梗概+人物，省名场面）
+    const scriptBrief = (w) => {
+      const sc = (w.script && typeof w.script === 'object') ? w.script : {};
+      const bits = [];
+      if (esc(sc.synopsis)) bits.push('剧情梗概：' + esc(sc.synopsis));
+      else if (esc(w.intro)) bits.push('简介：' + esc(w.intro));
+      if (esc(sc.style)) bits.push('气质风格：' + esc(sc.style));
+      const chars = Array.isArray(sc.characters) ? sc.characters : [];
+      if (chars.length) {
+        const cs = chars.slice(0, 8).map(c => {
+          const nm = esc(c.name); if (!nm) return '';
+          const role = esc(c.position) || '配角';
+          const idt = esc(c.identity);
+          return `${role}·${nm}${idt ? '（' + idt + '）' : ''}`;
+        }).filter(Boolean);
+        if (cs.length) bits.push('主要人物：' + cs.join('、'));
+      }
+      return bits.join('\n');
+    };
+    const metaLine = (w) => {
+      const m = [];
+      if (esc(w.genre)) m.push(esc(w.genre));
+      const cats = Array.isArray(w.category) ? w.category.filter(Boolean) : [];
+      if (cats.length) m.push(cats.join('、'));
+      return m.join(' / ');
+    };
+    // 主创署名：导演 / 编剧 / 主演（留空的不列）
+    const staffLine = (w) => {
+      const parts = [];
+      if (esc(w.director)) parts.push('导演：' + esc(w.director));
+      if (esc(w.screenwriter)) parts.push('编剧：' + esc(w.screenwriter));
+      const cast = Array.isArray(w.cast) ? w.cast.filter(Boolean).map(esc).filter(Boolean) : [];
+      if (cast.length) parts.push('主演：' + cast.join('、'));
+      return parts.length ? '主创：' + parts.join('｜') : '';
+    };
+
+    const blocks = [];
+    works.forEach(w => {
+      const title = esc(w.title) || '未命名';
+      const kw = w.kind === 'tv' ? '电视剧' : (w.kind === 'anime' ? '动漫' : '电影');
+      const kwShort = w.kind === 'tv' ? '剧' : (w.kind === 'anime' ? '作品' : '影片');
+      const awardSys = w.kind === 'anime' ? '动画奖项' : (w.kind === 'tv' ? '电视剧奖项' : '电影奖项');
+      // 主题曲（绑定了就带上，让 AI 在上映/开播口碑里自然提到）
+      const themeBlock = _videoThemeSongPromptBlock(w.themeSong, kwShort, w.kind === 'anime');
+      if (w.pendingRelease) {
+        blocks.push(
+`【作品${w.kind === 'movie' ? '上映' : '开播'}·进行中】
+{{user}} 亲手制作的${kw}《${title}》正式${w.kind === 'movie' ? '上映' : '开播'}了。请让接下来的剧情自然地推向${kwShort}的${w.kind === 'movie' ? '上映' : '播出'}，以及在播出后的反响，不要生硬转折。播出后的情况——观众与身边角色的讨论、口碑的发酵、它在这个世界激起的反响（可大可小，取决于${kwShort}本身）。
+
+请结合下面的${kwShort}信息、剧本质量与这个世界观众的口味，给出真实可信的评价。不要因为是 {{user}} 做的就一味吹捧；好${kwShort}该有好口碑，平庸或粗糙的也该有相应的冷遇。
+
+【${kwShort}信息】
+片名：《${title}》　类型：${metaLine(w) || '剧情'}${staffLine(w) ? '\n' + staffLine(w) : ''}
+${scriptBrief(w) || '（暂无更多剧本信息）'}${themeBlock}
+
+【评分与收尾】
+当剧情演绎到口碑明朗时，在本轮回复末尾输出一个评分标记（系统记录用，不要展示给玩家，用 HTML 注释包裹）：
+<!-- [上映|${title}|评分|一句话总体口碑] -->
+- 评分为 10 分制，保留一位小数（如 8.4 / 5.7）；口碑是一句对大众评价的概括。
+- 标记里的片名必须原样写《${title}》对应的「${title}」（不带书名号），方便系统对应。
+- 正文里可以自然描述口碑发酵（如角色之间的讨论、热度），但具体分数只放在注释标记里。
+- 输出该标记即视为这部${kwShort}的${w.kind === 'movie' ? '上映' : '开播'}事件结束，系统会据此记录评分。`);
+      } else if (w.pendingAward) {
+        const rd = w.rating ? `（${w.kind === 'movie' ? '上映' : '播出'}口碑评分 ${w.rating}）` : '';
+        const prevAwards = Array.isArray(w.awards) ? w.awards.filter(a => a && a.name) : [];
+        const prevLine = prevAwards.length
+          ? `\n这部${kwShort}此前已有的评奖记录（不要重复同一奖项）：${prevAwards.map(a => `${a.name}·${a.result}`).join('；')}。`
+          : '';
+        blocks.push(
+`【作品报奖·进行中】
+{{user}} 把自己制作、已${w.kind === 'movie' ? '上映' : '播出'}的${kw}《${title}》${rd}报名了奖项评选。请让剧情自然演绎报名评选开始，以及这次评奖的过程与结果。${prevLine}${staffLine(w) ? '\n' + staffLine(w) : ''}${themeBlock}
+
+结果要贴合${kwShort}的口碑与质量，且带不确定性——它可能最终获奖、可能只入围提名、也可能落选颗粒无收。口碑平庸的很难拿大奖，但也许能摸到提名或拿个小奖项。请据这个世界的${awardSys}体系演绎（若世界观里已有奖项/电影节/颁奖礼设定则沿用，否则自拟一个合理的奖项名）。
+
+【结果与收尾】
+评奖结果揭晓时，在本轮回复末尾输出结果标记（HTML 注释包裹，不展示给玩家）：
+<!-- [报奖|${title}|奖项名称|结果] -->
+- 结果只填：获奖 / 提名 / 落选 三者之一。
+- 片名原样写「${title}」（不带书名号）；奖项名称写具体（如「金羽奖·最佳${w.kind === 'movie' ? '原创剧本' : '剧集'}」）。
+- 若同时角逐多个奖项，可输出多条标记。
+- 输出标记即视为本次报奖事件结束。`);
+      }
+    });
+    if (!blocks.length) return '';
+    return '\n\n' + blocks.join('\n\n');
+  }
+
+  // 扫描 AI 回复，解析上映/报奖结束标记并回写到对应自制片。返回是否有变更。
+  // 标记格式（可被 HTML 注释包裹，也可裸写）：
+  //   [上映|片名|评分|口碑]      → rating / releaseReaction / released，清 pendingRelease
+  //   [报奖|片名|奖项名|结果]    → awards[].push({name,result})，清 pendingAward（落选也记，防重复报同一奖）
+  async function applyVideoEventMarkers(fullContent) {
+    if (!fullContent || typeof fullContent !== 'string') return false;
+    if (fullContent.indexOf('[上映|') < 0 && fullContent.indexOf('[报奖|') < 0) return false;
+    let pd;
+    try { pd = await _getPhoneData(); } catch (_) { return false; }
+    if (!pd) return false;
+    const works = _videoAllWorks(pd).filter(w => w && w.selfMake);
+    if (!works.length) return false;
+
+    const norm = (s) => String(s == null ? '' : s).replace(/[《》「」『』\s]/g, '').trim();
+    const findWork = (name) => {
+      const n = norm(name);
+      if (!n) return null;
+      return works.find(w => norm(w.title) === n)
+        || works.find(w => norm(w.title) && (norm(w.title).includes(n) || n.includes(norm(w.title))));
+    };
+
+    let changed = false;
+
+    // 上映：[上映|片名|评分|口碑]
+    const relRe = /\[上映\|([^|\]]+)\|([^|\]]*)\|([^\]]*)\]/g;
+    let m;
+    while ((m = relRe.exec(fullContent)) !== null) {
+      const w = findWork(m[1]);
+      if (!w || !w.pendingRelease) continue;
+      const ratingRaw = (m[2] || '').trim();
+      const rm = ratingRaw.match(/\d+(\.\d+)?/);
+      if (rm) {
+        let r = parseFloat(rm[0]);
+        if (isFinite(r)) { if (r > 10) r = 10; if (r < 0) r = 0; w.rating = (Math.round(r * 10) / 10).toFixed(1); }
+      }
+      const reaction = (m[3] || '').trim().slice(0, 120);
+      if (reaction) w.releaseReaction = reaction;
+      w.released = true;
+      delete w.pendingRelease;
+      changed = true;
+      try { GameLog.log('info', `[自制电影] 《${w.title}》上映标记命中，评分=${w.rating || '-'}`); } catch (_) {}
+    }
+
+    // 报奖：[报奖|片名|奖项名|结果]（可多条）
+    const awRe = /\[报奖\|([^|\]]+)\|([^|\]]+)\|([^\]]*)\]/g;
+    while ((m = awRe.exec(fullContent)) !== null) {
+      const w = findWork(m[1]);
+      if (!w || !w.pendingAward) continue;
+      const awName = (m[2] || '').trim().slice(0, 40);
+      let result = (m[3] || '').trim();
+      if (/获奖|得奖|获得|拿下|斩获/.test(result)) result = '获奖';
+      else if (/提名|入围/.test(result)) result = '提名';
+      else result = '落选';
+      if (!awName) continue;
+      if (!Array.isArray(w.awards)) w.awards = [];
+      // 防重复：同名奖项已记录则跳过
+      if (!w.awards.some(a => a && a.name === awName)) {
+        w.awards.push({ name: awName, result, at: Date.now() });
+        changed = true;
+        try { GameLog.log('info', `[自制电影] 《${w.title}》报奖：${awName} → ${result}`); } catch (_) {}
+      }
+    }
+    // 报奖标记出现即视为本次评选结束，清 pendingAward（无论命中几条）
+    if (fullContent.indexOf('[报奖|') >= 0) {
+      works.forEach(w => {
+        if (w.pendingAward && fullContent.includes(norm(w.title)) === false) {
+          // 标题没在任何报奖标记里出现的，保留 pending（说明这部还没出结果）
+        }
+      });
+      // 简化：凡 pendingAward 且有对应标记命中过的，上面已 push；这里统一清掉出现在报奖标记中的片
+      let awScan; const awRe2 = /\[报奖\|([^|\]]+)\|/g;
+      const namedSet = new Set();
+      while ((awScan = awRe2.exec(fullContent)) !== null) namedSet.add(norm(awScan[1]));
+      works.forEach(w => { if (w.pendingAward && namedSet.has(norm(w.title))) { delete w.pendingAward; changed = true; } });
+    }
+
+    if (changed) { try { await _savePhoneData(pd); } catch (_) {} }
+    return changed;
+  }
+
+  // ===== 自制书：影视版权授权事件系统 =====
+  // 常驻注入：扫所有 selfWrite 书的 licenseOpen（开放方向数组），拼事件提示词。
+  // 全部方向卖完或用户关闭 → 不注入。
+  async function buildLicenseEventPrompt() {
+    let pd;
+    try { pd = await _getPhoneData(); } catch (_) { return ''; }
+    if (!pd) return '';
+    const books = (Array.isArray(pd.readingBooks) ? pd.readingBooks : [])
+      .filter(b => b && b.selfWrite && Array.isArray(b.licenseOpen) && b.licenseOpen.length);
+    if (!books.length) return '';
+
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const KIND_LABEL = { movie: '电影', tv: '电视剧', anime: '动漫' };
+    const blocks = [];
+
+    books.forEach(b => {
+      // 过滤已售方向
+      const sold = Array.isArray(b.licenses) ? b.licenses.map(l => l && l.kind).filter(Boolean) : [];
+      const open = b.licenseOpen.filter(k => KIND_LABEL[k] && !sold.includes(k));
+      if (!open.length) return;
+
+      const title = esc(b.title) || '未命名';
+      const author = esc(b.author) || '佚名';
+      const cats = Array.isArray(b.category) ? b.category.filter(Boolean).join('、') : '';
+      const intro = esc(b.intro) || esc(b.writeHint) || '';
+      const dirLabel = open.map(k => KIND_LABEL[k]).join('、');
+
+      blocks.push(
+`【影视版权授权·进行中】
+{{user}} 已将自己的小说《${title}》的「${dirLabel}」方向影视改编权公开挂牌。请让接下来的剧情自然地演绎有制作方/影视公司前来洽谈版权购买的过程。
+
+注意事项：
+- 价格综合考虑作者（{{user}}）的名气、年龄、能力与这本书的质量和口碑，贴合这个世界影视行业的版权交易行情。
+- 可以有拉扯、还价、谈判的过程，不要一句话就直接成交。
+- 不要给出离谱的天价或白菜价。
+- 买家应是具体的影视公司/制片方/导演工作室名称（若世界观已有相关设定则沿用，否则自拟）。
+- 【收款】每当版权款实际到账（成交付定金、开拍或上映付尾款等），就在本轮通过 {{user}} 金钱属性的增量把到账金额加进去。可以贴合现实分定金/尾款，跟着剧情节点走，分几次到账就分几次加。
+
+【作品信息】
+书名：《${title}》　作者：${author}
+${cats ? '题材：' + cats + '\n' : ''}${intro ? '简介：' + intro.slice(0, 300) : ''}
+
+【结束标记】
+版权交易确定（双方谈定、签约成交）时，在本轮回复末尾输出标记（HTML 注释包裹，不展示给玩家）：
+<!-- [版权|${title}|方向|买家] -->
+- 方向只填：电影 / 电视剧 / 动漫 三者之一。
+- 买家写具体公司/工作室名。
+- 片名原样写「${title}」（不带书名号），方便系统对应。
+- 若一次谈成多个方向，可输出多条标记。
+- 该标记仅用于标记成交、解锁后续自制改编，款项不写在标记里，按上面【收款】规则用属性变化收。`);
+    });
+
+    if (!blocks.length) return '';
+    return '\n\n' + blocks.join('\n\n');
+  }
+
+  // 扫描 AI 回复，解析版权交易标记并回写。格式：[版权|书名|方向|金额|买家]
+  async function applyLicenseMarkers(fullContent) {
+    if (!fullContent || typeof fullContent !== 'string') return false;
+    if (fullContent.indexOf('[版权|') < 0) return false;
+    let pd;
+    try { pd = await _getPhoneData(); } catch (_) { return false; }
+    if (!pd) return false;
+    const books = (Array.isArray(pd.readingBooks) ? pd.readingBooks : [])
+      .filter(b => b && b.selfWrite && Array.isArray(b.licenseOpen) && b.licenseOpen.length);
+    if (!books.length) return false;
+
+    const norm = (s) => String(s == null ? '' : s).replace(/[《》「」『』\s]/g, '').trim();
+    const findBook = (name) => {
+      const n = norm(name);
+      if (!n) return null;
+      return books.find(b => norm(b.title) === n)
+        || books.find(b => norm(b.title) && (norm(b.title).includes(n) || n.includes(norm(b.title))));
+    };
+    const KIND_MAP = { '电影': 'movie', '电视剧': 'tv', '动漫': 'anime' };
+
+    let changed = false;
+    // 新格式：[版权|书名|方向|买家]。兼容偶发旧格式 [版权|书名|方向|金额|买家]：
+    // 第三组捕获「方向之后的全部」，若含 | 则取最后一段当买家（旧格式的金额段直接丢弃，钱走属性变化）。
+    const re = /\[版权\|([^|\]]+)\|([^|\]]+)\|([^\]]+)\]/g;
+    let m;
+    while ((m = re.exec(fullContent)) !== null) {
+      const book = findBook(m[1]);
+      if (!book) continue;
+      const kindStr = (m[2] || '').trim();
+      const kind = KIND_MAP[kindStr];
+      if (!kind) continue;
+      // 已售方向不重复
+      if (!Array.isArray(book.licenses)) book.licenses = [];
+      if (book.licenses.some(l => l && l.kind === kind)) continue;
+      // 还在开放列表里才算
+      if (!book.licenseOpen.includes(kind)) continue;
+
+      const tail = (m[3] || '').split('|');
+      const buyer = (tail[tail.length - 1] || '').trim().slice(0, 60);
+
+      // 写入 license 记录（不含金额——版权款由 AI 通过金钱属性变化收取，不在此入账）
+      book.licenses.push({ kind, buyer, at: Date.now() });
+      // 从 licenseOpen 移除
+      book.licenseOpen = book.licenseOpen.filter(k => k !== kind);
+      // 标记 adaptedKinds（让视频 App 改编机制生效）
+      if (!Array.isArray(book.adaptedKinds)) book.adaptedKinds = [];
+      if (!book.adaptedKinds.includes(kind)) book.adaptedKinds.push(kind);
+
+      changed = true;
+      try { GameLog.log('info', `[版权授权] 《${book.title}》${kindStr}版权售出 → ${buyer}`); } catch (_) {}
+    }
+
+    if (changed) { try { await _savePhoneData(pd); } catch (_) {} }
+    return changed;
+  }
+
+  // ===== 自制书：影视授权管理弹窗 =====
+  async function _readingLicenseSetup(bookId) {
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book || !book.selfWrite) return;
+
+    const KL = { movie: '电影', tv: '电视剧', anime: '动漫' };
+    const KINDS = ['movie', 'tv', 'anime'];
+    const soldKinds = (Array.isArray(book.licenses) ? book.licenses : []).map(l => l && l.kind).filter(Boolean);
+    const curOpen = Array.isArray(book.licenseOpen) ? [...book.licenseOpen] : [];
+
+    // 钱包货币列表
+    const walletInfos = _getWalletCurrencyInfos();
+    const curCurrency = book.licenseCurrency || '';
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px';
+    _maskCloseOnBg(mask, () => mask.remove());
+
+    const renderInner = () => {
+      const checksHtml = KINDS.map(k => {
+        const sold = soldKinds.includes(k);
+        const checked = sold || curOpen.includes(k);
+        return `<label style="display:flex;align-items:center;gap:10px;padding:10px 0;${sold ? 'opacity:0.5' : ''}">
+          <input type="checkbox" data-kind="${k}" ${checked ? 'checked' : ''} ${sold ? 'disabled' : ''} style="width:18px;height:18px;accent-color:var(--accent)">
+          <span style="font-size:14px;color:var(--text)">${KL[k]}</span>
+          ${sold ? `<span style="font-size:11px;color:var(--accent);margin-left:auto">已售出</span>` : ''}
+        </label>`;
+      }).join('');
+
+      const currencyHtml = walletInfos.length
+        ? `<select id="lic-currency" style="width:100%;border:1px solid var(--border);border-radius:9px;padding:9px 12px;font-size:13px;color:var(--text);background:var(--bg-secondary)">
+            <option value="">不绑定（版权费不入账）</option>
+            ${walletInfos.map(c => `<option value="${Utils.escapeHtml(c.id)}" ${c.id === curCurrency ? 'selected' : ''}>${Utils.escapeHtml(c.name)}（余额 ${c.balance}）</option>`).join('')}
+          </select>`
+        : `<div style="font-size:12px;color:var(--text-secondary);padding:8px 0;line-height:1.6">⚠️ 钱包还没有绑定货币，版权费无法入账。<br>请先去钱包 App 绑定一种货币。</div>`;
+
+      // 已售记录
+      const soldHtml = (Array.isArray(book.licenses) && book.licenses.length)
+        ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+            <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">已售记录</div>
+            ${book.licenses.map(l => `<div style="font-size:12px;color:var(--text);line-height:1.8">${KL[l.kind] || l.kind}：${Utils.escapeHtml(l.buyer || '未知')}</div>`).join('')}
+          </div>`
+        : '';
+
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:340px;width:100%;max-height:80%;display:flex;flex-direction:column;overflow:hidden;color:var(--text)">
+          <div style="padding:20px 20px 0;overflow-y:auto">
+            <div style="font-size:16px;font-weight:700;margin-bottom:4px">影视授权管理</div>
+            <div style="font-size:12px;color:var(--text-tertiary,#888);margin-bottom:14px;line-height:1.5">勾选要开放的改编方向，挂牌后主线剧情中可能有片方前来洽谈版权购买。</div>
+            <div style="margin-bottom:14px">${checksHtml}</div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:6px">结算货币</div>
+            <div style="font-size:11px;color:var(--text-tertiary,#888);margin-bottom:8px">版权费入账到哪个货币</div>
+            ${currencyHtml}
+            ${soldHtml}
+          </div>
+          <div style="display:flex;gap:8px;padding:14px 20px 18px">
+            <button id="lic-cancel" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">取消</button>
+            <button id="lic-save" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+          </div>
+        </div>`;
+
+      mask.querySelector('#lic-cancel').onclick = () => mask.remove();
+      mask.querySelector('#lic-save').onclick = async () => {
+        // 读取勾选状态
+        const newOpen = [];
+        mask.querySelectorAll('input[data-kind]').forEach(cb => {
+          if (cb.checked && !cb.disabled) newOpen.push(cb.getAttribute('data-kind'));
+        });
+        const selCur = mask.querySelector('#lic-currency');
+        const newCurrency = selCur ? selCur.value : '';
+
+        // 写回 book
+        const pd2 = await _getPhoneData();
+        const bk = (pd2.readingBooks || []).find(b => b && b.id === bookId);
+        if (bk) {
+          bk.licenseOpen = newOpen;
+          bk.licenseCurrency = newCurrency;
+          await _savePhoneData(pd2);
+        }
+        mask.remove();
+        UI.showToast(newOpen.length ? '授权已开放' : '授权已关闭', 1200);
+        _renderReadingBookSettings(bookId);
+      };
+    };
+
+    document.body.appendChild(mask);
+    renderInner();
+  }
+
+  // 更换剧集封面（复用阅读模块的图片选择器）。成功返回 true。
+  async function _videoSetCover(work, epOverlay) {
+    try {
+      const dataUrl = await Utils.promptImageInput({ maxSize: 800, quality: 0.82 });
+      if (!dataUrl) return false;
+      if (typeof dataUrl === 'string' && dataUrl.length > 2600000) {
+        UI.showToast('图片过大，请选择更小的图片', 2500); return false;
+      }
+      work.cover = dataUrl;
+      await _savePhoneData();
+      UI.showToast('封面已更新', 1200);
+      // 刷新剧集列表页里的封面图（不离开当前页）
+      if (epOverlay) {
+        epOverlay.querySelectorAll('.phone-video-ep-item img').forEach(img => { img.src = dataUrl; });
+      }
+      return true;
+    } catch (e) { console.warn('[Video] cover pick failed', e); UI.showToast('图片设置失败', 1600); return false; }
+  }
+
+  // 绑定主题曲弹窗：从音乐库选一首，或现写一首（虚构）。纯资料，不播放，会喂给影评区让网友讨论。
+  // 结果写 work.themeSong = { trackId, title, artist }；trackId 空表示虚构曲。onDone() 在保存/清除成功后回调。
+  function _videoPickThemeSong(work, onDone) {
+    if (!work) return;
+    const tracks = (typeof Music !== 'undefined') ? (Music.getTracks() || []) : [];
+    const cur = (work.themeSong && typeof work.themeSong === 'object') ? work.themeSong : null;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px';
+
+    // 歌库列表（库空则不渲染这块）
+    let libHtml = '';
+    if (tracks.length) {
+      const items = tracks.map(t =>
+        `<div class="vts-song-item" data-tid="${Utils.escapeHtml(t.id)}" style="padding:9px 12px;border:1px solid ${(cur && cur.trackId === t.id) ? 'var(--accent)' : 'var(--border)'};border-radius:10px;margin-bottom:8px;cursor:pointer;background:${(cur && cur.trackId === t.id) ? 'rgba(0,0,0,0.04)' : 'var(--bg-tertiary)'}">
+          <div style="font-size:14px;color:var(--text);font-weight:500">${Utils.escapeHtml(t.title || '未命名')}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(t.artist || '未知歌手')}</div>
+        </div>`
+      ).join('');
+      libHtml = `
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">从音乐库选一首</label>
+        <div id="vts-lib" style="max-height:180px;overflow-y:auto;margin-bottom:12px">${items}</div>`;
+    }
+
+    // 现写输入预填：已绑的是虚构曲（无 trackId）才回填到输入框
+    const preTitle = (cur && !cur.trackId) ? (cur.title || '') : '';
+    const preArtist = (cur && !cur.trackId) ? (cur.artist || '') : '';
+    const preDesc = (cur && !cur.trackId) ? (cur.desc || '') : '';
+
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">绑定主题曲</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px">作为这部作品的主题曲信息，影评区的网友会讨论它。仅作资料，不会真的播放。</div>
+
+        ${libHtml}
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">或者现写一首（库里没有的虚构曲）</label>
+        <input id="vts-title" type="text" maxlength="40" value="${Utils.escapeHtml(preTitle)}" placeholder="歌名" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:8px">
+        <input id="vts-artist" type="text" maxlength="30" value="${Utils.escapeHtml(preArtist)}" placeholder="演唱者（可选）" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:8px">
+        <textarea id="vts-desc" maxlength="200" rows="3" placeholder="歌曲描述（可选，例如曲风、歌词意境、与剧情的关系，影评区会据此讨论）" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:none;margin-bottom:16px">${Utils.escapeHtml(preDesc)}</textarea>
+
+        <div style="display:flex;gap:10px">
+          ${cur ? `<button id="vts-clear" style="flex:1;padding:10px;font-size:14px;background:var(--bg-tertiary);color:var(--text-secondary);border:1px solid var(--border);border-radius:10px;cursor:pointer">清除</button>` : ''}
+          <button id="vts-cancel" style="flex:1;padding:10px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer">取消</button>
+          <button id="vts-save" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+
+    let selectedTid = (cur && cur.trackId) ? cur.trackId : '';
+    const close = () => { try { mask.remove(); } catch (_) {} };
+    mask.querySelector('#vts-cancel').onclick = close;
+    let _downOnSelf = false;
+    mask.addEventListener('mousedown', (e) => { _downOnSelf = (e.target === mask); });
+    mask.addEventListener('click', (e) => { if (e.target === mask && _downOnSelf) close(); _downOnSelf = false; });
+
+    const titleInput = mask.querySelector('#vts-title');
+    const artistInput = mask.querySelector('#vts-artist');
+    const descInput = mask.querySelector('#vts-desc');
+    const lib = mask.querySelector('#vts-lib');
+    if (lib) {
+      lib.addEventListener('click', (e) => {
+        const item = e.target.closest('.vts-song-item');
+        if (!item) return;
+        const tid = item.getAttribute('data-tid');
+        if (selectedTid === tid) {
+          selectedTid = '';
+          item.style.borderColor = 'var(--border)';
+          item.style.background = 'var(--bg-tertiary)';
+        } else {
+          selectedTid = tid;
+          lib.querySelectorAll('.vts-song-item').forEach(el => { el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg-tertiary)'; });
+          item.style.borderColor = 'var(--accent)';
+          item.style.background = 'rgba(0,0,0,0.04)';
+          // 选了库歌，清空现写
+          titleInput.value = '';
+          artistInput.value = '';
+          if (descInput) descInput.value = '';
+        }
+      });
+    }
+    titleInput.addEventListener('input', () => {
+      if (titleInput.value.trim() && selectedTid) {
+        selectedTid = '';
+        if (lib) lib.querySelectorAll('.vts-song-item').forEach(el => { el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg-tertiary)'; });
+      }
+    });
+
+    const clearBtn = mask.querySelector('#vts-clear');
+    if (clearBtn) clearBtn.onclick = async () => {
+      delete work.themeSong;
+      await _savePhoneData();
+      UI.showToast('已清除主题曲', 1200);
+      close();
+      if (typeof onDone === 'function') onDone();
+    };
+
+    mask.querySelector('#vts-save').onclick = async () => {
+      let song = null;
+      if (selectedTid) {
+        const t = tracks.find(x => x.id === selectedTid);
+        if (!t) { UI.showToast('歌曲不存在', 1500); return; }
+        // 库歌：连描述一起快照（歌词不冗余存，需要时凭 trackId 反查曲库）
+        song = { trackId: t.id, title: t.title || '未命名', artist: t.artist || '', desc: (t.desc || '').trim() };
+      } else {
+        const title = (titleInput.value || '').trim();
+        if (!title) { UI.showToast('选一首库里的歌，或写下歌名', 1800); return; }
+        song = { trackId: '', title, artist: (artistInput.value || '').trim(), desc: (descInput && descInput.value || '').trim() };
+      }
+      work.themeSong = song;
+      await _savePhoneData();
+      UI.showToast('主题曲已绑定', 1200);
+      close();
+      if (typeof onDone === 'function') onDone();
+    };
+  }
+
+  // 构建主题曲喂给影评区的资料块：歌名/演唱者 + 描述(有就塞) + 歌词(库歌凭 trackId 反查 lrc，有就塞)。
+  // ts = work.themeSong；kindWord 用于措辞（番/剧/片）；isAnime 决定 OP/ED 还是片头/片尾曲。
+  function _videoThemeSongPromptBlock(ts, kindWord, isAnime) {
+    if (!ts || !(ts.title || '').trim()) return '';
+    const artist = (ts.artist || '').trim();
+    let lrc = '';
+    if (ts.trackId && typeof Music !== 'undefined') {
+      try {
+        const t = (Music.getTracks() || []).find(x => x.id === ts.trackId);
+        if (t && (t.lrc || '').trim()) lrc = t.lrc.trim().slice(0, 1200);
+      } catch (_) {}
+    }
+    const desc = (ts.desc || '').trim();
+    let block = `\n\n【本${kindWord}主题曲】《${ts.title}》${artist ? ' —— ' + artist + ' 演唱' : ''}。`;
+    if (desc) block += `\n主题曲简介：${desc}`;
+    if (lrc) block += `\n歌词：\n${lrc}`;
+    block += `\n评论区/弹幕可以自然提到这首主题曲（${isAnime ? 'OP/ED、' : '片头/片尾曲、'}BGM、旋律${desc || lrc ? '、歌词意境与剧情的呼应' : ''}等），有人爱有人无感都行，但别每条都刷、别硬蹭。`;
+    return block;
+  }
+
+  // 查看剧本蓝图（全屏 overlay，复用阅读大纲的样式类）
+  function _videoShowBlueprint(work) {
+    if (!work || !work.blueprint) { UI.showToast('还没有蓝图数据', 1600); return; }
+    const bp = work.blueprint;
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const isAnime = work.kind === 'anime';
+
+    // 结构
+    const structHtml = (Array.isArray(bp.structure) ? bp.structure : []).map(s =>
+      `<div class="phone-reading-ol-item"><b>${esc(s.phase || '')}</b>（${esc(s.episodeRange || '?')}）<br>${esc(s.summary || '')}</div>`
+    ).join('');
+
+    // 人物
+    const chars = bp.characters || {};
+    const proArr = Array.isArray(chars.protagonist) ? chars.protagonist : [];
+    const proHtml = proArr.filter(p => p && p.name).map(p =>
+      `<div class="phone-reading-ol-item"><b>${esc(p.name)}</b>${p.actor ? `（${esc(p.actor)}）` : ''}｜${esc(p.gender || '')}/${esc(p.age || '')}｜${esc(p.identity || '')}<br>外貌：${esc(p.appearance || '')}<br>性格：${esc(p.personality || '')}<br>目标：${esc(p.desire || '')}<br>成长：${esc(p.arc || '')}</div>`).join('');
+    const supArr = Array.isArray(chars.supporting) ? chars.supporting : [];
+    const supHtml = supArr.filter(c => c && c.name).map(c =>
+      `<div class="phone-reading-ol-item"><b>${esc(c.name)}</b>${c.actor ? `（${esc(c.actor)}）` : ''}｜${esc(c.gender || '')}/${esc(c.age || '')}｜${esc(c.identity || '')}｜定位：${esc(c.position || '')}｜登场：第${esc(c.debut || '?')}集<br>外貌：${esc(c.appearance || '')}<br>性格：${esc(c.personality || '')}<br>目标：${esc(c.desire || '')}</div>`).join('');
+
+    // 每集概述
+    const episodes = Array.isArray(bp.episodes) ? bp.episodes : [];
+    const epHtml = episodes.length
+      ? episodes.map(e => `<div class="phone-reading-ol-item"><b>第${e.idx}${isAnime ? '话' : '集'} ${esc(e.title || '')}</b><br>${esc(e.summary || '（无概述）')}</div>`).join('')
+      : '<div class="phone-reading-ol-text">无</div>';
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:75;background:var(--bg);display:flex;flex-direction:column';
+    overlay.innerHTML = `
+      ${_phoneStatusBarHtml()}
+      <div style="display:flex;align-items:center;padding:4px 16px 8px;flex-shrink:0;color:var(--text)">
+        <button id="video-bp-back" class="phone-nav-btn">${_uiIcon('back', 18)}</button>
+        <span style="font-weight:750;font-size:15px;flex:1;text-align:center;letter-spacing:.03em">${isAnime ? '动画' : '剧集'}剧本</span>
+        <div style="width:36px;flex-shrink:0"></div>
+      </div>
+      <div class="phone-reading-ol-page" style="flex:1;overflow-y:auto">
+        <div class="phone-reading-ol-warn">⚠ 以下内容含完整剧透</div>
+        <div class="phone-reading-ol-sec">${isAnime ? '作品名' : '剧名'}</div><div class="phone-reading-ol-text">${esc(work.title || '未命名')}</div>
+        <div class="phone-reading-ol-sec">${isAnime ? '监督' : '导演'}</div><div class="phone-reading-ol-text">${esc(work.director || '—')}</div>
+        <div class="phone-reading-ol-sec">${isAnime ? '系列构成' : '编剧'}</div><div class="phone-reading-ol-text">${esc(work.screenwriter || '—')}</div>
+        ${bp.style ? `<div class="phone-reading-ol-sec">${isAnime ? '美术风格' : '气质风格'}</div><div class="phone-reading-ol-text">${esc(bp.style)}</div>` : ''}
+        <div class="phone-reading-ol-sec">明线</div><div class="phone-reading-ol-text">${esc(bp.mainline || '—')}</div>
+        <div class="phone-reading-ol-sec">暗线</div><div class="phone-reading-ol-text">真相：${esc(bp.darkline?.truth || '—')}<br>揭示节奏：${esc(bp.darkline?.revealPace || '—')}</div>
+        <div class="phone-reading-ol-sec">故事结构</div>${structHtml || '<div class="phone-reading-ol-text">—</div>'}
+        <div class="phone-reading-ol-sec">主角</div>${proHtml || '<div class="phone-reading-ol-text">—</div>'}
+        ${supHtml ? `<div class="phone-reading-ol-sec">重要角色</div>${supHtml}` : ''}
+        <div class="phone-reading-ol-sec">${isAnime ? '每话概述' : '每集概述'}</div>${epHtml}
+      </div>`;
+
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+    overlay.querySelector('#video-bp-back').onclick = () => { overlay.remove(); };
+  }
+
+  // ===== 单集详情：简介 + 名场面 + 评论 + 弹幕（电视剧/动漫逐集生成）=====
+
+  // 蓝图角色定稿 → 文本（单集不再生成角色，只引用蓝图定稿；台词 speaker 须落在这些角色名里）
+  function _videoBpCharsText(bp) {
+    const chars = (bp && bp.characters) || {};
+    const lines = [];
+    (Array.isArray(chars.protagonist) ? chars.protagonist : []).forEach(p => {
+      if (p && p.name) lines.push(`- ${p.name}${p.actor ? '（' + p.actor + '）' : ''}｜主角｜${p.identity || ''}｜性格：${p.personality || ''}｜目标：${p.desire || ''}`);
+    });
+    (Array.isArray(chars.supporting) ? chars.supporting : []).forEach(c => {
+      if (c && c.name) lines.push(`- ${c.name}${c.actor ? '（' + c.actor + '）' : ''}｜${c.position || '配角'}｜${c.identity || ''}｜性格：${c.personality || ''}｜目标：${c.desire || ''}`);
+    });
+    return lines.join('\n');
+  }
+
+  // 蓝图角色名清单（名场面 speaker 容错匹配用）
+  function _videoBpCharNames(bp) {
+    const chars = (bp && bp.characters) || {};
+    const names = [];
+    (Array.isArray(chars.protagonist) ? chars.protagonist : []).forEach(p => p && p.name && names.push(p.name));
+    (Array.isArray(chars.supporting) ? chars.supporting : []).forEach(c => c && c.name && names.push(c.name));
+    return names;
+  }
+
+  // 上一话/集摘要（简介 + 名场面文本），用于承上启下衔接 / 评论追更感
+  function _videoPrevEpDigest(parentWork, idx, label) {
+    const prev = (parentWork._epScripts || {})[idx - 1];
+    if (!prev || !prev.script) return '';
+    const J = parentWork.kind === 'anime' ? '话' : '集';
+    const syn = (prev.script.synopsis || '').trim();
+    const sceneText = (Array.isArray(prev.script.scene) ? prev.script.scene : [])
+      .map(b => b.type === 'line' ? `${b.speaker || ''}：${b.text || ''}` : `（${b.text || ''}）`).join('\n');
+    let s = `\n\n【上一${J}（第${idx - 1}${J}《${prev.epTitle || ''}》）${label || '回顾'}】\n`;
+    if (syn) s += `剧情：${syn}\n`;
+    if (sceneText) s += `名场面：\n${sceneText}\n`;
+    return s;
+  }
+
+  // 给 epWork 补上运行时字段（继承父级显示信息，让其能复用电影那套渲染/追评函数）
+  function _videoDecorateEpWork(epWork, parentWork) {
+    if (!epWork) return epWork;
+    epWork._isEpisode = true;
+    epWork._parent = parentWork;
+    epWork.kind = parentWork.kind;
+    epWork.genre = parentWork.genre;
+    epWork.director = parentWork.director;
+    epWork.screenwriter = parentWork.screenwriter;
+    epWork.title = parentWork.title;            // 追评/评论函数把它当片名（剧名）
+    epWork.cover = (parentWork.cover || '');     // 单集复用整部封面
+    epWork.rating = parentWork.rating;           // 单集无独立评分，用整部评分
+    return epWork;
+  }
+
+  // 生成单集「简介 + 名场面」：严格按蓝图本集大纲扩展、承上启下。存进 parentWork._epScripts[idx]。返回 epWork 或 null。
+  // rewriteHint：重拍建议（可空），传入时把建议注入提示词。
+  async function _videoGenEpisode(parentWork, idx, onProgress, rewriteHint) {
+    if (!parentWork || !parentWork.blueprint) return null;
+    const bp = parentWork.blueprint;
+    const eps = Array.isArray(bp.episodes) ? bp.episodes : [];
+    const ep = eps.find(e => e && e.idx === idx);
+    if (!ep) { UI.showToast('该集蓝图缺失', 1600); return null; }
+
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return null; }
+
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const isAnime = parentWork.kind === 'anime';
+    const J = isAnime ? '话' : '集';  // 单位量词：动画用「话」，电视剧用「集」
+    const charsText = _videoBpCharsText(bp);
+    const structText = (Array.isArray(bp.structure) ? bp.structure : [])
+      .map(s => `- ${s.phase}（${s.episodeRange || '?'}）：${s.summary || ''}`).join('\n');
+    const darkText = bp.darkline ? `真相：${bp.darkline.truth || ''}\n揭示节奏：${bp.darkline.revealPace || ''}` : '';
+    const prevDigest = _videoPrevEpDigest(parentWork, idx, '本集需从这里的结尾自然接上');
+    const total = eps.length;
+
+    // 该主类型文风示范（与电影对齐，复用 _VIDEO_GENRE_STYLE，作者填、空则不拼）
+    const styleRef = (_VIDEO_GENRE_STYLE[parentWork.genre] || '').trim();
+    const styleBlock = styleRef
+      ? `\n\n【「${parentWork.genre}」类型文风要求】写简介、名场面叙述与台词时贴合这种笔法（学的是句式、节奏、用词、氛围，不是照抄内容）：\n${styleRef}`
+      : '';
+
+    const sysPrompt = `你是${isAnime ? '动画' : '电视剧'}的单${J}编剧。这部${isAnime ? '动画' : '剧'}的故事蓝图已经定稿，你要为【第 ${idx} ${J}】创作内容。务必严格按蓝图的本${J}大纲扩展，不得跑偏、不得提前演后续${J}的剧情、不得与蓝图设定矛盾。
+
+【${isAnime ? '作品' : '剧集'}信息】
+${isAnime ? '作品名' : '剧名'}：${esc(parentWork.title)}（共 ${total} ${J}，当前第 ${idx} ${J}）
+类型：${esc(parentWork.genre)}
+${bp.style ? `【${isAnime ? '美术风格' : '气质风格'}（整部统一基调，本${J}创作须贴合）】${bp.style}\n` : ''}【明线】${bp.mainline || ''}
+【暗线】${darkText}
+【故事结构】
+${structText}
+【主要角色（蓝图定稿，台词只能用这里的角色名）】
+${charsText}
+${prevDigest}
+【本${J}大纲（必须严格围绕它扩展，不能超纲也不能缺）】
+第${idx}${J}《${esc(ep.title)}》：${ep.summary || ''}
+${styleBlock}${(rewriteHint || '').trim() ? `\n\n【重${isAnime ? '制' : '拍'}要求】用户对本${J}上一稿不满意，要求重${isAnime ? '制' : '拍'}。本次请按下面的方向调整，其余创作要求与蓝图设定不变：\n${(rewriteHint || '').trim()}\n` : ''}
+
+请输出 JSON 对象（不要 Markdown、代码块或解释，必须以 { 开头、} 结尾）：
+{
+  "synopsis": "本${J}简介（约 250 字）。把这一${J}的来龙去脉讲清楚：本${J}从什么情节开始、中途推进了什么、在什么地方收尾。客观叙述本${J}剧情，不要主观评价，不要剧透后续${J}的内容。",
+  "scene": [
+    { "type": "narration", "text": "叙述（场景/人物动向/镜头感）", "fx": "可选特效，没有就省略" },
+    { "type": "line", "speaker": "角色名", "text": "台词" }
+  ]
+}
+
+要求：
+- synopsis 严格落在本${J}大纲范围内，并符合故事结构当前阶段、明暗线走向，不能脱离蓝图自由发挥。${idx > 1 ? `【承上】开头必须自然承接上一${J}结尾的情节，从上一${J}停下的地方往下写，不要无视上一${J}另起炉灶，也不要重复复述上一${J}已经演过的内容；` : `【开篇】这是第一${J}，负责把人物、处境、核心悬念立起来；`}【启下】结尾要收在一个有钩子的点上，自然引向后续，但绝对不要把后面几${J}的剧情提前写掉。
+- scene 是本${J}最精彩的一个名场面，做成按时间顺序的演出脚本（叙述与台词交错的条目数组，10-16 条）：
+  · 只选一段：本${J}最有记忆点、最有张力的那一幕（高潮对峙、关键反转、情感爆发皆可），不要拍流水账、不要概括整${J}。
+  · 第一条 narration 先用一两句简单交代这一幕的前置处境，再进入场景。
+  · narration（叙述）要细腻有画面感：交代场景环境、人物动向神态、镜头氛围，重文字质感与情绪。单条不超 100 字。
+  · line（台词）的 speaker 必须是上面角色名单里真实存在的角色名，不能出现新名字；台词像真人说话、是短促的情绪爆发或锋利交锋，单条不超 30 字。
+  · 叙述与台词节奏自然，张弛有度，不要机械地一条叙述接一条台词。
+  · fx（可选画面特效）：只在情绪/动作确实需要强调的 beat 上加，宁缺毋滥，多数 beat 不要加。可选值仅限：blood（血溅）、fire（火光，可持续）、rain（下雨，可持续）、snow（下雪，可持续）、bokeh（柔光光斑，可持续）、sparkle（星光微闪，梦境/浪漫/星空，可持续）、firefly（萤火虫，绿色小光点飞舞，夏夜/静谧/治愈，可持续）、memory（回忆滤镜，旧照片暖黄调+暗角+颗粒，闪回/往事，可持续）、glitch（故障花屏，RGB错位+撕裂，信号故障/赛博，可持续）、scan（科技扫描，扫描线+青蓝网格，未来/全息界面，可持续）、petal（花瓣飘落，浪漫/告别/唯美，可持续）、bubble（气泡，水下/梦幻，可持续）、smoke（烟雾，若隐若现，悬疑/迷雾，可持续）、glass（玻璃破碎，碎裂瞬间）、hearts（粉红爱心漂浮，甜蜜/告白，可持续）、spotlight（聚焦追光，舞台/独白/高光，可持续）、firework（烟花绽放，庆典/高潮瞬间）、ripple（水波涟漪，悲伤/泪眼瞬间）、lightning（闪电强光）、flash（白光一闪）、shake（画面抖动）。持续型只要在氛围开始那条标一次就会自动延续（台词行不必重复标），想换环境就在转折那条标上新的持续型覆盖；瞬时型只在那一条标。不需要就省略 fx 字段，不要填空字符串或"无"。`;
+
+    if (typeof onProgress === 'function') onProgress('正在生成本集剧情…');
+    let obj;
+    try {
+      obj = await _phoneJsonObjectWithRetry({
+        label: '单集剧本', url, key, model,
+        temperature: 0.95, max_tokens: 8192,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: `请为《${esc(parentWork.title)}》第 ${idx} ${J}《${esc(ep.title)}》生成简介与名场面。` }
+        ]
+      });
+    } catch (e) { console.error('[单集剧本]', e); return null; }
+    if (!obj || typeof obj !== 'object') return null;
+
+    // 名场面规范化（与电影一致）
+const charNames = _videoBpCharNames(bp);
+      const _FX_OK = ['blood','fire','rain','snow','bokeh','sparkle','firefly','memory','glitch','scan','petal','bubble','smoke','glass','hearts','spotlight','firework','ripple','lightning','shake','flash'];
+    const scene = (Array.isArray(obj.scene) ? obj.scene : []).map(b => {
+      if (!b || typeof b !== 'object') return null;
+      const type = String(b.type || '').trim() === 'line' ? 'line' : 'narration';
+      const text = String(b.text || '').trim();
+      if (!text) return null;
+      const fxRaw = String(b.fx || '').trim().toLowerCase();
+      const fx = _FX_OK.includes(fxRaw) ? fxRaw : '';
+      if (type === 'line') {
+        let sp = String(b.speaker || '').trim().slice(0, 24);
+        if (sp && !charNames.includes(sp)) { const hit = charNames.find(n => sp.includes(n) || n.includes(sp)); if (hit) sp = hit; }
+        const o = { type: 'line', speaker: sp, text: text.slice(0, 40) };
+        if (fx) o.fx = fx;
+        return o;
+      }
+      const o = { type: 'narration', text: text.slice(0, 120) };
+      if (fx) o.fx = fx;
+      return o;
+    }).filter(Boolean).slice(0, 20);
+
+    const synopsis = String(obj.synopsis || '').trim().slice(0, 700);
+    if (!synopsis && !scene.length) return null;
+
+    // 存进父 work（父 work 即 videoDiscover 引用，存盘统一）
+    if (!parentWork._epScripts || typeof parentWork._epScripts !== 'object') parentWork._epScripts = {};
+    const prevUnit = parentWork._epScripts[idx];
+    const epWork = {
+      idx,
+      epTitle: ep.title || ('第' + idx + J),
+      script: { synopsis, scene },
+      reviews: (prevUnit && Array.isArray(prevUnit.reviews)) ? prevUnit.reviews : [],
+      danmu: (prevUnit && Array.isArray(prevUnit.danmu)) ? prevUnit.danmu : [],
+      generatedAt: Date.now()
+    };
+    parentWork._epScripts[idx] = epWork;
+    await _savePhoneData();
+    _videoUnlockNextEpItem(idx);
+    return epWork;
+  }
+
+  // 单集生成成功后，把剧集列表里第 idx+1 项的锁解开（若列表页还开着），不整页重渲染
+  function _videoUnlockNextEpItem(idx) {
+    const listOverlay = document.querySelector('.phone-video-episodes');
+    if (!listOverlay) return;
+    const nextEl = listOverlay.querySelector(`.phone-video-ep-item[data-epidx="${idx + 1}"]`);
+    if (nextEl && nextEl.getAttribute('data-locked') === '1') {
+      nextEl.removeAttribute('data-locked');
+      nextEl.classList.remove('locked');
+      nextEl.style.cursor = 'pointer';
+      nextEl.style.opacity = '';
+      nextEl.removeAttribute('title');
+      const img = nextEl.querySelector('img');
+      if (img) img.style.opacity = '';
+      const badge = nextEl.querySelector('span > svg');
+      if (badge && badge.closest('span')) badge.closest('span').remove();
+    }
+  }
+
+  // 生成单集「评论 + 弹幕」：评论只针对本集，弹幕只针对本集名场面。喂基础信息+本集剧本+上一集剧本（追更感），不喂故事蓝图。
+  async function _videoGenEpReviews(parentWork, idx) {
+    const epWork = (parentWork._epScripts || {})[idx];
+    if (!epWork || !epWork.script) return;
+    // 自制/改编作品：开播前不生成评论弹幕（要等申请开播后才有观众反响）。
+    if (parentWork.selfMake && !parentWork.released) return;
+    if (epWork._reviewsLoading) return;
+    epWork._reviewsLoading = true;
+    if (_videoDetailOverlay && _videoDetailWork === epWork && ['reviews','danmaku'].includes(_videoDetailTab)) _videoRenderTab(_videoDetailTab);
+    try {
+      const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+      const mainConfig = await API.getConfig();
+      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const key = funcConfig.apiKey || mainConfig.apiKey;
+      const model = funcConfig.model || mainConfig.model;
+      if (!url || !key || !model) {
+        epWork._reviewsLoading = false;
+        if (_videoDetailOverlay && _videoDetailWork === epWork && ['reviews','danmaku'].includes(_videoDetailTab)) {
+          const bodyEl = _videoDetailOverlay.querySelector('#video-detail-tabbody');
+          if (bodyEl) bodyEl.innerHTML = _videoTabError('请先配置功能模型');
+          _videoBindTabRetry();
+        }
+        return;
+      }
+
+      const isAnime = parentWork.kind === 'anime';
+      const J = isAnime ? '话' : '集';
+      const sc = epWork.script;
+      const charLines = _videoBpCharsText(parentWork.blueprint);
+      const sceneText = (Array.isArray(sc.scene) ? sc.scene : [])
+        .map(b => b.type === 'line' ? `${b.speaker || ''}：${b.text || ''}` : `（${b.text || ''}）`).join('\n');
+      const prevDigest = _videoPrevEpDigest(parentWork, idx, '观众看过、可借此对比/接梗，有追更感');
+
+      let wvBlock = '';
+      try {
+        const wv = await _buildFullContext();
+        if (wv) wvBlock = `\n\n【这个世界的背景】发评论和弹幕的都是生活在下面这个世界里的网友，可自然结合世界观、时事玩梗（但别硬蹭）：\n${wv}`;
+      } catch (_) {}
+      let mainlineBlock = '';
+      try {
+        const ml = _readingMainlineBlock(true);
+        if (ml) mainlineBlock = `\n\n【最近发生的事】（评论可少量自然联动近期动态）：\n${ml}`;
+      } catch (_) {}
+      let realCastBlock = '';
+      try { realCastBlock = await _videoBuildCastProfiles(parentWork); } catch (_) {}
+
+      // 改编作品：评论区改编生态引导（改编标记在 parentWork 上）
+      let adaptReviewBlock = '';
+      try { adaptReviewBlock = await _videoBuildAdaptReviewBlock(parentWork, isAnime ? '动画' : '电视剧'); } catch (_) {}
+
+      // 主题曲：绑定在 parentWork 上（整部一首），喂给评论区让网友自然聊到（含描述/歌词，有就塞），不强行刷
+      const themeBlock = _videoThemeSongPromptBlock(parentWork.themeSong, isAnime ? '番' : '剧', isAnime);
+
+      // 禁止冒充玩家本人（与论坛/本章说同款强约束）
+      let _plName = '', _plOnline = '';
+      try { const mk = await Character.get(); _plName = mk?.name || ''; _plOnline = (mk?.onlineName || '').trim(); } catch (_) {}
+      const _banNames = [_plName, _plOnline].filter(Boolean);
+      const playerBanBlock = _banNames.length
+        ? `\n\n【禁止冒充玩家本人】玩家本人是「${_banNames.join('」/「')}」。绝对不能生成任何以「${_banNames.join('」或「')}」为 username 的评论或回复，也不能让任何网友用"我"（指代玩家本人）的口吻替玩家发言。玩家自己的评论由 ta 本人手动发布，不在你的生成范围内。`
+        : `\n\n【禁止冒充玩家本人】不要生成代表"玩家本人"的评论，也不要让任何网友冒充玩家本人发言。`;
+
+      const sysPrompt = `你是影视社区的评论与弹幕生成系统。下面给你一部正在追更的${isAnime ? '动画' : '电视剧'}【第 ${idx} ${J}】的剧情与名场面，请你为这一${J}生成「评论区」和「弹幕池」。
+
+${isAnime
+  ? `评论区要像追番时弹幕站/番剧讨论区那样鱼龙混杂、众声喧哗：有真情实感的自来水安利，有随手打分的路人，有专程找茬的黑子，有原作党对动画化的挑剔，有吹爆/吐槽作画作监的，有磕CP磕到上头的，有讨论OP/ED和声优演技的……真假声部各异，别太干净。注意：评论是针对【这一${J}】的，会聊本${J}剧情走向、本${J}名场面/名作画、追番心情（催更、等下${J}、猜后续、蹲后续伏笔），带 ACG 圈层用语（如 作画、经费、燃、致郁、刀、神回、声优、CP、本命 等），但别堆砌到出戏。`
+  : `评论区要像追剧时各大平台那样鱼龙混杂、众声喧哗：有真情实感的自来水，有随手打分的路人（有人夸有人嫌），有专程找茬的黑粉，有踩这捧那的拉踩党，有偏学术的拉片分析，也有为自家爱豆控评对线的……真假声部各异，别太干净。注意：评论是针对【这一${J}】的，会聊本${J}剧情走向、本${J}名场面、追更心情（催更、等下${J}、猜后续），不是泛泛评论整部剧。`}
+
+【${isAnime ? '作品' : '剧集'}信息】
+${isAnime ? '作品名' : '剧名'}：${parentWork.title || '未命名'}（第 ${idx} ${J}《${epWork.epTitle || ''}》）
+主类型：${parentWork.genre || '剧情'}
+${isAnime ? `监督：${parentWork.director || '（自定）'}　系列构成：${parentWork.screenwriter || '（自定）'}${parentWork.artDirector ? '　作画：' + parentWork.artDirector : ''}${parentWork.studio ? '　制作：' + parentWork.studio : ''}` : `导演：${parentWork.director || '（自定）'}　编剧：${parentWork.screenwriter || '（自定）'}`}
+本${J}剧情：${sc.synopsis || ''}
+主要角色：
+${charLines}
+本${J}名场面（弹幕要围绕这一段）：
+${sceneText}
+${prevDigest}${realCastBlock}${wvBlock}${mainlineBlock}${adaptReviewBlock}${themeBlock}
+
+请输出以下字段，严格使用 JSON 对象格式，不能返回 Markdown、代码块或解释，必须以 { 开头、} 结尾：${playerBanBlock}
+{
+  "reviews": [
+    { "persona": "声部（只能填：认真派、拉踩、黑泥、追捧、控评、路人、安利 之一）", "username": "网名（路人自拟像真实${isAnime ? '番友' : '剧迷'}的网名，可带数字/符号/中二感；若是世界观里的 NPC 则填该 NPC 的本名/代号）", "isNpc": false, "rating": 4, "dimension": "侧重维度（只能填：${isAnime ? '监督、脚本、声优、作画、剧情、演出、音乐、内涵、综合' : '导演、编剧、演员、服化道、演技、剧情、特效、奖项、内涵、综合'} 之一）", "likes": 128, "text": "评论正文", "replies": [ { "username": "回复者网名（NPC 填本名）", "isNpc": false, "text": "楼中楼回复正文", "likes": 5, "replyToName": "" } ] }
+  ],
+  "danmu": [
+    { "at": 0.1, "type": "弹幕类型（自由发挥，围绕名场面剧情）", "text": "弹幕内容" }
+  ]
+}
+
+要求：
+- reviews 是这一${J}的评论区，14 条左右，像真实${isAnime ? '追番讨论区' : '追剧评论区'}那样鱼龙混杂、声部各异，紧扣本${J}剧情与名场面，可带追更情绪（催更、蹲下${J}、猜剧情）。
+- 【发评论的人的身份】评论区里最多只能有两条评论出自上面世界观里提到的具体人物（NPC，isNpc:true），其余全部是这个世界里虚构的普通路人网友（isNpc:false，自拟网名，与世界观人物无关）。绝大多数评论都该是查无此人的路人。NPC 评论时 username 必须填该 NPC 的【本名或代号】，绝对不要为 NPC 现编网名——系统会自动渲染成 ta 的网名和头像。
+- 每条按 persona 写出对应语气：认真派理性中肯（占多数，2-5 星）；路人随手短评一两句（占一定比例，rating 随意）；安利真情安利劝人${isAnime ? '入坑' : '追'}（4-5 星）；追捧狂热吹捧用词夸张（5 星，少数）；拉踩踩这捧那（2-3 星，少数）；黑泥恶意差评阴阳怪气找茬（1-2 星，少数但点赞可高）；控评粉丝给${isAnime ? '本命角色/声优' : '偶像'}刷好评护短（5 星，常提某${isAnime ? '角色/声优' : '演员'}名，少数，点赞可高）。
+- dimension 让多个维度都有人评到，不要全挤在剧情上${isAnime ? '——作画、声优这些动画特有维度要有人专门评' : ''}。likes 符合该条热度（0-9999）。单条不超 80 字，口语化，像真人打字（可有错别字、网络用语），不要每条都工整。
+- 【楼中楼（replies）】只给其中 3-5 条「有讨论度」的主楼挂 replies（黑泥/拉踩/控评等争议楼、高赞认真派长评、追捧/安利下的接龙或泼冷水），其余主楼不写 replies 或留空数组。每条带 replies 的主楼配 2-5 条楼中楼，模拟真实盖楼（反驳、附和、歪楼、挂人、追问、阴阳都行，可来回对线）。replyToName 留空=回复楼主，填某人网名=回复楼里那个人。楼中楼里同样最多一两条出自 NPC（填本名），其余路人。楼中楼单条不超 60 字，比主楼更口语随意，只需 username/isNpc/text/likes/replyToName。
+- danmu 是本${J}名场面演出时飘过的弹幕池，40-60 条，围绕这段名场面的剧情、台词、人物来发，按出现先后用 at（0 到 1 的小数）标时间顺序，允许多条 at 相近形成刷屏。内容越杂越真实：吐槽、玩梗刷屏（${isAnime ? 'www、2333、草、前方高能、名场面、这作画我吹爆、经费燃烧' : 'www、2333、哈哈哈、前方高能、名场面'}）、应援（${isAnime ? '老婆/老公、awsl、xswl、好A、姨母笑' : '哥哥好帅、姐姐杀我、awsl'}）、跟读接台词、感叹（啊啊啊、泪目、爷青回、破防了${isAnime ? '、刀死我了' : ''}）、科普、评${isAnime ? '作画演出声优' : '服化道演技'}、剧透与拦剧透、催更、弹幕对线、空耳、报时打卡等，自由发挥。单条不超 30 字，要短、口语、像真人即兴打字，可有错别字和颜文字。type 简单标个分类词即可。`;
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model, temperature: 1,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: `请为《${parentWork.title || '未命名'}》第 ${idx} ${J}生成评论区与弹幕池。` }
+          ]
+        })
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      let content = data?.choices?.[0]?.message?.content || '';
+      content = content.replace(/```json|```/g, '').trim();
+      const s = content.indexOf('{'); const e = content.lastIndexOf('}');
+      if (s >= 0 && e > s) content = content.slice(s, e + 1);
+      const obj = JSON.parse(content);
+
+      const _REV_PERSONA = ['认真派','拉踩','黑泥','追捧','控评','路人','安利'];
+      const _REV_DIM = isAnime
+        ? ['监督','脚本','声优','作画','剧情','演出','音乐','内涵','综合']
+        : ['导演','编剧','演员','服化道','演技','剧情','特效','奖项','内涵','综合'];
+      const reviews = (Array.isArray(obj.reviews) ? obj.reviews : []).map(r => {
+        if (!r || typeof r !== 'object') return null;
+        const text = String(r.text || '').trim();
+        if (!text) return null;
+        let persona = String(r.persona || '').trim();
+        if (!_REV_PERSONA.includes(persona)) persona = _REV_PERSONA.find(p => persona.includes(p)) || '路人';
+        let dim = String(r.dimension || '').trim();
+        if (!_REV_DIM.includes(dim)) dim = _REV_DIM.find(d => dim.includes(d)) || '综合';
+        let rating = parseInt(r.rating, 10);
+        if (!(rating >= 1 && rating <= 5)) rating = 4;
+        let likes = parseInt(r.likes, 10);
+        if (!(likes >= 0)) likes = 0;
+        likes = Math.min(likes, 99999);
+        const replies = (Array.isArray(r.replies) ? r.replies : []).map(rp => {
+          if (!rp || typeof rp !== 'object') return null;
+          const rtext = String(rp.text || '').trim();
+          if (!rtext) return null;
+          let rlikes = parseInt(rp.likes, 10);
+          if (!(rlikes >= 0)) rlikes = 0;
+          return {
+            id: _videoNewCommentId(),
+            username: String(rp.username || '').trim().slice(0, 24) || '匿名剧迷',
+            isNpc: !!rp.isNpc,
+            text: rtext.slice(0, 90),
+            likes: Math.min(rlikes, 99999),
+            replyToName: String(rp.replyToName || '').trim().slice(0, 24)
+          };
+        }).filter(Boolean).slice(0, 8);
+        return {
+          id: _videoNewCommentId(),
+          persona, dimension: dim, rating, likes,
+          username: String(r.username || '').trim().slice(0, 24) || '匿名剧迷',
+          isNpc: !!r.isNpc,
+          text: text.slice(0, 120),
+          replies
+        };
+      }).filter(Boolean).slice(0, 20);
+
+      try {
+        await _ensureForumNpcAvatarMap();
+        await _ensureForumDisplayNameMap();
+        reviews.forEach(r => { _matchForumAvatar(r); (r.replies || []).forEach(rp => _matchForumAvatar(rp)); });
+      } catch (_) {}
+
+      const danmu = (Array.isArray(obj.danmu) ? obj.danmu : []).map(d => {
+        if (!d || typeof d !== 'object') return null;
+        const text = String(d.text || '').trim();
+        if (!text) return null;
+        let at = parseFloat(d.at);
+        if (!(at >= 0 && at <= 1)) at = Math.random();
+        return { at, type: String(d.type || '').trim().slice(0, 12), text: text.slice(0, 40) };
+      }).filter(Boolean).sort((a, b) => a.at - b.at).slice(0, 80);
+
+      if (!reviews.length && !danmu.length) throw new Error('内容为空');
+
+      epWork.reviews = reviews;
+      epWork.danmu = danmu;
+      delete epWork._reviewsLoading;
+      await _savePhoneData();
+      if (_videoDetailOverlay && _videoDetailWork === epWork && ['reviews','danmaku'].includes(_videoDetailTab)) _videoRenderTab(_videoDetailTab);
+    } catch (err) {
+      console.error('[单集评论弹幕]', err);
+      epWork._reviewsLoading = false;
+      if (_videoDetailOverlay && _videoDetailWork === epWork && ['reviews','danmaku'].includes(_videoDetailTab)) {
+        const bodyEl = _videoDetailOverlay.querySelector('#video-detail-tabbody');
+        if (bodyEl) bodyEl.innerHTML = _videoTabError('生成失败，请重试');
+        _videoBindTabRetry();
+      }
+    }
+  }
+
+  // 单集内容串行编排：先备齐简介+名场面，成功后再备齐评论+弹幕。生成完成后把详情页指向最新 epWork 并刷新。
+  async function _videoEnsureEpContent(parentWork, idx) {
+    let epWork = (parentWork._epScripts || {})[idx];
+    if (!epWork || !epWork.script || !epWork.script.synopsis) {
+      const fresh = await _videoGenEpisode(parentWork, idx);
+      if (!fresh) {
+        // 简介生成失败：若详情页还在本集，置错误态
+        if (_videoDetailOverlay && _videoDetailWork && _videoDetailWork._isEpisode && _videoDetailWork.idx === idx) {
+          delete _videoDetailWork._scriptLoading;
+          _videoRenderTab(_videoDetailTab);
+        }
+        return;
+      }
+      _videoDecorateEpWork(fresh, parentWork);
+      // 详情页若仍在本集，切换引用并刷新
+      if (_videoDetailOverlay && _videoDetailWork && _videoDetailWork._isEpisode && _videoDetailWork.idx === idx) {
+        _videoDetailWork = fresh;
+        _videoRenderTab(_videoDetailTab);
+      }
+      epWork = fresh;
+    }
+    if ((!Array.isArray(epWork.reviews) || !epWork.reviews.length) &&
+        (!Array.isArray(epWork.danmu) || !epWork.danmu.length)) {
+      if (epWork._reviewsLoading) return;
+      await _videoGenEpReviews(parentWork, idx);
+    }
+  }
+
+  // 打开单集详情页（电视剧/动漫）：四 tab「简介/名场面/评论/弹幕」，复用电影那套渲染。带顺序锁。
+  async function _videoOpenEpDetail(parentWork, idx) {
+    if (!parentWork || !parentWork.blueprint) return;
+    const bp = parentWork.blueprint;
+    const eps = Array.isArray(bp.episodes) ? bp.episodes : [];
+    const ep = eps.find(e => e && e.idx === idx);
+    if (!ep) { UI.showToast('该集蓝图缺失', 1600); return; }
+    const isAnime = parentWork.kind === 'anime';
+    const J = isAnime ? '话' : '集';
+
+    // 顺序锁：本集之前若有未生成（无简介）的集，先去看那一集
+    const scripts = parentWork._epScripts || {};
+    const isGen = (n) => { const u = scripts[n]; return !!(u && u.script && (u.script.synopsis || (Array.isArray(u.script.scene) && u.script.scene.length))); };
+    if (idx > 1) {
+      for (let n = 1; n < idx; n++) {
+        if (!isGen(n)) {
+          UI.showToast(`请先按顺序观看，先看第 ${n} ${J}`, 2200);
+          return _videoOpenEpDetail(parentWork, n);
+        }
+      }
+    }
+
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+
+    // 取出或建占位 epWork
+    let epWork = scripts[idx];
+    const needGen = !epWork || !epWork.script || !epWork.script.synopsis;
+    if (!epWork) epWork = { idx, epTitle: ep.title || ('第' + idx + J), script: null, reviews: [], danmu: [] };
+    _videoDecorateEpWork(epWork, parentWork);
+    if (needGen) epWork._scriptLoading = true;
+
+    _videoDetailTab = 'script';
+    const cover = (parentWork.cover || '').trim();
+    const coverHtml = cover
+      ? `<img src="${esc(cover)}" style="width:100%;height:100%;object-fit:cover">`
+      : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);opacity:0.4">${_phoneIcon('video')}</div>`;
+
+    const TABS = [
+      { id: 'script', name: '简介' },
+      { id: 'scenes', name: '名场面' },
+      { id: 'reviews', name: '评论' },
+      { id: 'danmaku', name: '弹幕' },
+    ];
+    const tabsHtml = TABS.map(t =>
+      `<div class="phone-video-detail-tab${t.id === _videoDetailTab ? ' active' : ''}" data-vtab="${t.id}">${esc(t.name)}</div>`
+    ).join('');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'phone-video-detail';
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:66;background:var(--bg);display:flex;flex-direction:column';
+    overlay.innerHTML = `
+      <div style="position:relative;width:100%;aspect-ratio:16/9;background:#000;flex-shrink:0;overflow:hidden">
+        ${coverHtml}
+        <button id="video-ep-detail-back" style="position:absolute;top:12px;left:12px;width:34px;height:34px;border:none;border-radius:50%;background:rgba(0,0,0,0.45);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+        </button>
+        ${parentWork.selfMake ? `<button id="video-ep-detail-edit" style="position:absolute;top:12px;right:12px;width:34px;height:34px;border:none;border-radius:50%;background:rgba(0,0,0,0.45);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer" title="编辑本${J}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>` : ''}
+        <button id="video-ep-detail-playbtn" class="phone-video-detail-playbtn" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:56px;height:56px;border-radius:50%;border:none;background:rgba(0,0,0,0.5);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer">
+          <svg class="ic-play" viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+          <span class="ic-loading" style="display:none;width:24px;height:24px;border:3px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:phoneSpin .8s linear infinite"></span>
+        </button>
+      </div>
+      <div style="padding:8px 16px 4px;flex-shrink:0">
+        <div style="font-size:16px;font-weight:700;color:var(--text);line-height:1.3">${esc(ep.title || ('第' + idx + J))}</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:3px">${esc(parentWork.title || '')} · ${isAnime ? '动画' : '电视剧'} · 第${idx}${J}</div>
+      </div>
+      <div class="phone-video-detail-tabs">
+        ${tabsHtml}
+      </div>
+      <div id="video-detail-tabbody" class="phone-video-detail-body">
+        ${_videoTabLoading('视频加载中…')}
+      </div>`;
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+    _videoDetailWork = epWork;
+    _videoDetailOverlay = overlay;
+
+    const back = overlay.querySelector('#video-ep-detail-back');
+    if (back) back.onclick = () => { try { overlay.remove(); } catch(_) {} _videoDetailOverlay = null; _videoDetailWork = null; };
+    const editEpBtn = overlay.querySelector('#video-ep-detail-edit');
+    if (editEpBtn) editEpBtn.onclick = () => { try { overlay.remove(); } catch(_) {} _videoDetailOverlay = null; _videoDetailWork = null; _videoEditEpisode(parentWork, idx); };
+    const playBtn = overlay.querySelector('#video-ep-detail-playbtn');
+    if (playBtn) playBtn.onclick = () => {
+      const w = _videoDetailWork;
+      if (!w || !w._isEpisode) return;
+      if (!w.script || !Array.isArray(w.script.scene) || !w.script.scene.length) {
+        UI.showToast(w._scriptLoading ? ((w._parent && w._parent.kind === 'anime') ? '本话加载中，请稍候' : '本集加载中，请稍候') : '名场面还没生成', 1600);
+        return;
+      }
+      if (!Array.isArray(w.danmu) || !w.danmu.length) {
+        UI.showToast(w._reviewsLoading ? '弹幕装填中，请稍候' : '弹幕还没生成', 1600);
+        return;
+      }
+      _videoOpenWatch(w);
+    };
+    overlay.querySelectorAll('.phone-video-detail-tab').forEach(el => {
+      el.onclick = () => {
+        const tab = el.getAttribute('data-vtab');
+        if (!tab || tab === _videoDetailTab) return;
+        _videoDetailTab = tab;
+        overlay.querySelectorAll('.phone-video-detail-tab').forEach(x => x.classList.toggle('active', x.getAttribute('data-vtab') === tab));
+        _videoRenderTab(tab);
+      };
+    });
+    _videoRenderTab(_videoDetailTab);
+    // 串行预生成（已就绪则各步跳过）
+    _videoEnsureEpContent(parentWork, idx);
+  }
+
+  // 渲染单集简介 tab：剧情梗概（本集 synopsis）+ 角色（取自蓝图定稿，整部共用）+ 重新生成入口
+function _videoEpSynopsisHtml(script, bp, isAnime, themeSong) {
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const POS_COLOR = { '主角': 'var(--accent)', '配角': 'var(--text-secondary)', '特邀': 'var(--text-secondary)' };
+    let html = '';
+    html += _videoThemeSongHtml(themeSong);
+    if (script && script.synopsis) {
+      html += `<div style="margin-bottom:20px">
+        <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px">${isAnime ? '本话简介' : '本集简介'}</div>
+        <div style="font-size:13px;line-height:1.7;color:var(--text)">${esc(script.synopsis)}</div>
+      </div>`;
+    }
+
+    // 整部气质/美术风格（取自蓝图，整部共用）
+    if (bp && (bp.style || '').trim()) {
+      html += `<div style="margin-bottom:20px">
+        <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px">${isAnime ? '美术风格' : '气质风格'}</div>
+        <div style="font-size:13px;line-height:1.7;color:var(--text-secondary)">${esc(bp.style)}</div>
+      </div>`;
+    }
+
+    // 角色卡（蓝图 protagonist + supporting → 与电影一致的卡片样式）
+    const chars = (bp && bp.characters) || {};
+    const cardList = [];
+    (Array.isArray(chars.protagonist) ? chars.protagonist : []).forEach(c => { if (c && c.name) cardList.push({ ...c, _pos: '主角' }); });
+    (Array.isArray(chars.supporting) ? chars.supporting : []).forEach(c => { if (c && c.name) cardList.push({ ...c, _pos: (c.position || '配角') }); });
+    if (cardList.length) {
+      const cards = cardList.map(c => {
+        const pos = ['主角','配角','特邀'].includes(c._pos) ? c._pos : '配角';
+        const posColor = POS_COLOR[pos] || 'var(--text-secondary)';
+        const persona = (c.personality || '').split(/[，,、\s]+/).filter(Boolean);
+        const tags = persona.length
+          ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">${persona.map(p => `<span style="font-size:11px;color:var(--text-secondary);background:var(--bg-tertiary);border-radius:6px;padding:2px 8px">${esc(p)}</span>`).join('')}</div>`
+          : '';
+        const row = (label, val) => val ? `<div style="font-size:12px;line-height:1.6;color:var(--text-secondary);margin-top:4px"><span style="color:var(--text)">${esc(label)}</span> ${esc(val)}</div>` : '';
+        const ga = [c.gender, c.age].filter(Boolean).join(' · ');
+        return `<div style="background:var(--bg-secondary,rgba(128,128,128,0.08));border-radius:10px;padding:12px 14px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px;font-weight:700;color:#fff;background:${posColor};border-radius:5px;padding:1px 7px;flex-shrink:0">${esc(pos)}</span>
+            <span style="font-size:15px;font-weight:700;color:var(--text)">${esc(c.name)}</span>
+            ${ga ? `<span style="font-size:11px;color:var(--text-secondary)">${esc(ga)}</span>` : ''}
+          </div>
+          ${c.actor ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:5px">演员：${esc(c.actor)}</div>` : ''}
+          ${row('身份', c.identity)}
+          ${tags}
+          ${row('目标', c.desire)}
+        </div>`;
+      }).join('');
+      html += `<div style="margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">角色</div>
+        ${cards}
+      </div>`;
+    }
+
+    return html;
+  }
+
+  // 强制重新生成本集简介+名场面（重试入口用）：_videoGenEpisode 返回全新对象，旧评论弹幕随之清空，
+  // 故重生成剧本后会判空补生成评论弹幕（评论弹幕本就依附剧本，剧本变了不应留旧的）。完成后刷新详情页。
+  async function _videoRegenEpisode(parentWork, idx) {
+    if (_videoDetailOverlay && _videoDetailWork && _videoDetailWork._isEpisode && _videoDetailWork.idx === idx) {
+      _videoDetailWork._scriptLoading = true;
+      _videoRenderTab(_videoDetailTab);
+    }
+    const fresh = await _videoGenEpisode(parentWork, idx);
+    if (!fresh) {
+      if (_videoDetailOverlay && _videoDetailWork && _videoDetailWork._isEpisode && _videoDetailWork.idx === idx) {
+        delete _videoDetailWork._scriptLoading;
+        const bodyEl = _videoDetailOverlay.querySelector('#video-detail-tabbody');
+        if (bodyEl) bodyEl.innerHTML = _videoTabError('生成失败，请重试');
+        _videoBindTabRetry();
+      }
+      return;
+    }
+    _videoDecorateEpWork(fresh, parentWork);
+    if (_videoDetailOverlay && _videoDetailWork && _videoDetailWork._isEpisode && _videoDetailWork.idx === idx) {
+      _videoDetailWork = fresh;
+      _videoRenderTab(_videoDetailTab);
+    }
+    // 没有评论弹幕则顺带补上
+    if ((!Array.isArray(fresh.reviews) || !fresh.reviews.length) &&
+        (!Array.isArray(fresh.danmu) || !fresh.danmu.length)) {
+      _videoGenEpReviews(parentWork, idx);
+    }
+  }
+
+  // 单集「刷新出更多评论」（追评盖楼），仿电影 _videoGenMoreReviews：喂本集剧情/名场面 + 现有评论区，产出新主楼 + 盖到旧楼的楼中楼。
+  async function _videoGenMoreEpReviews(parentWork, idx) {
+    const epWork = (parentWork._epScripts || {})[idx];
+    if (!epWork || !epWork.script) { UI.showToast(parentWork.kind === 'anime' ? '请先生成本话' : '请先生成本集', 1600); return; }
+    if (epWork._reviewsLoading) return;
+    if (!Array.isArray(epWork.reviews) || !epWork.reviews.length) { return _videoGenEpReviews(parentWork, idx); }
+    epWork._reviewsLoading = true;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:absolute;inset:0;z-index:80;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(0,0,0,0.5)';
+    mask.innerHTML = `<div class="phone-generation-spinner"></div><div style="font-size:13px;color:#fff">正在刷新评论…</div>`;
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(mask);
+    try {
+      const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+      const mainConfig = await API.getConfig();
+      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const key = funcConfig.apiKey || mainConfig.apiKey;
+      const model = funcConfig.model || mainConfig.model;
+      if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+      const sc = epWork.script;
+      const sceneText = (Array.isArray(sc.scene) ? sc.scene : [])
+        .map(b => b.type === 'line' ? `${b.speaker || ''}：${b.text || ''}` : `（${b.text || ''}）`).join('\n');
+
+      let playerName = '我', playerOnlineName = '';
+      try {
+        const mk = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+        playerName = (mk?.name || '我');
+        playerOnlineName = (mk?.onlineName || '').trim();
+      } catch (_) {}
+      const playerDisplayName = playerOnlineName || playerName;
+
+      const digest = epWork.reviews.map(r => {
+        const me = r.isMe ? '【楼主是玩家】' : '';
+        const head = `[${r.id}] ${me}(${r.persona || '路人'}/${r.rating ? r.rating + '星' : '无评分'}/赞${r.likes || 0}) ${r.username}：${r.text}`;
+        const reps = (r.replies || []).map(rp => {
+          const rme = rp.isMe ? '【玩家】' : '';
+          const to = (rp.replyToName || '').trim() ? `回复@${rp.replyToName} ` : '';
+          return `   └ ${rme}${rp.username}：${to}${rp.text}`;
+        }).join('\n');
+        return reps ? `${head}\n${reps}` : head;
+      }).join('\n');
+
+      let wvBlock = '';
+      try {
+        const wv = await _buildFullContext();
+        if (wv) wvBlock = `\n\n【这个世界的背景】发评论的都是生活在下面这个世界里的网友：\n${wv}`;
+      } catch (_) {}
+
+      const isAnime = parentWork.kind === 'anime';
+      const J = isAnime ? '话' : '集';
+      // 改编作品：评论区改编生态引导（改编标记在 parentWork 上）
+      let adaptReviewBlock = '';
+      try { adaptReviewBlock = await _videoBuildAdaptReviewBlock(parentWork, isAnime ? '动画' : '电视剧'); } catch (_) {}
+      // 改编作品追评：0.5 概率附上原著最新连载进度（背景，供书粉对比）
+      let adaptChapterBlock = '';
+      try { if (Math.random() < 0.5) adaptChapterBlock = await _videoBuildAdaptChapterBlock(parentWork); } catch (_) {}
+      // 主题曲：追评也带上（含描述/歌词，有就塞），跟首轮评论一致
+      const themeBlock = _videoThemeSongPromptBlock(parentWork.themeSong, isAnime ? '番' : '剧', isAnime);
+      // 禁止冒充玩家本人（与论坛/本章说同款强约束）
+      const _banNames = [playerName, playerOnlineName].filter(Boolean);
+      const playerBanBlock = _banNames.length
+        ? `\n【禁止冒充玩家本人】玩家本人是「${_banNames.join('」/「')}」。绝对不能生成任何以「${_banNames.join('」或「')}」为 username 的评论或回复，也不能让任何网友用"我"（指代玩家本人）的口吻替玩家发言。玩家自己的评论由 ta 本人手动发布，不在你的生成范围内。`
+        : `\n【禁止冒充玩家本人】不要生成代表"玩家本人"的评论，也不要让任何网友冒充玩家本人发言。`;
+      const sysPrompt = `你是影视社区评论区的「追评生成器」。下面给你一部正在追更的${isAnime ? '动画' : '电视剧'}【第 ${idx} ${J}】的信息、本${J}名场面，以及【当前已有的评论区现状（含楼层 id）】。请生成一批新的追加内容，模拟评论区随时间继续发酵：既有新冒出来的主楼短评，也有人翻到旧楼下面接着盖楼、对线。评论都针对【这一${J}】（本${J}剧情、名场面、追${isAnime ? '番' : '更'}心情）。
+
+${isAnime ? '评论区像弹幕站/番剧讨论区那样鱼龙混杂：自来水安利、路人、黑子、原作党、吹爆/吐槽作画的、磕CP的、讨论声优的都有，带 ACG 圈层用语（作画、经费、燃、刀、神回、声优、本命 等）但别堆砌。' : '评论区像各大平台那样鱼龙混杂：粉丝、路人、黑粉、拉踩党、专业拉片、粉圈骂战都有。'}
+
+【${isAnime ? '作品' : '剧集'}信息】
+${isAnime ? '作品名' : '剧名'}：${parentWork.title || '未命名'}（第 ${idx} ${J}《${epWork.epTitle || ''}》）　主类型：${parentWork.genre || '剧情'}
+本${J}剧情：${sc.synopsis || ''}
+本${J}名场面：
+${sceneText}${wvBlock}${adaptReviewBlock}${adaptChapterBlock}${themeBlock}
+
+【当前已有评论区现状（每条主楼带 id，└ 是楼中楼）】
+${digest}
+
+请输出 JSON（以 { 开头、} 结尾，不要 Markdown、不要解释）：
+{
+  "newReviews": [
+    { "persona": "认真派/拉踩/黑泥/追捧/控评/路人/安利 之一", "username": "网名（NPC 填本名）", "isNpc": false, "rating": 4, "dimension": "${isAnime ? '监督/脚本/声优/作画/剧情/演出/音乐/内涵/综合' : '导演/编剧/演员/服化道/演技/剧情/特效/奖项/内涵/综合'} 之一", "likes": 12, "text": "新主楼短评", "replies": [ { "username": "...", "isNpc": false, "text": "...", "likes": 2, "replyToName": "" } ] }
+  ],
+  "newReplies": [
+    { "targetId": "要盖的那层主楼的 id（必须来自上面现状里真实存在的 id）", "username": "...", "isNpc": false, "text": "盖楼回复正文", "likes": 3, "replyToName": "回复楼里某人就填其网名，回复楼主留空" }
+  ]
+}
+
+要求：
+- newReviews：3-6 条新主楼，紧扣本${J}剧情/名场面，声部规则、字数限制同正常评论（单条不超 80 字）；有讨论度的新主楼也可自带 replies，不是每条都要带。
+- newReplies：5-10 条，targetId 必须是上面现状里真实存在的楼层 id（形如 ${epWork.reviews[0] ? epWork.reviews[0].id : 'cxxx'}）。重点照顾【有争议的楼】（黑泥/控评/高赞认真派）和【玩家发的楼】——如果现状里有标【楼主是玩家】的评论，生成 2-3 条 targetId 指向玩家那层的回复，有附和也有抬杠；其余自由盖在争议楼下，可接着已有楼中楼对线（replyToName 填楼里前面的人）。
+- 楼中楼单条不超 60 字，更口语随意。新内容要参考已有评论，避免重复，可接续讨论也可开新话题。整个评论区最多一两条出自世界观 NPC（isNpc:true 填本名），其余路人（isNpc:false 自拟网名）。只输出"新增"的部分。${playerBanBlock}`;
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model, temperature: 1,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: `请为《${parentWork.title || '未命名'}》第 ${idx} ${J}追加生成新评论与盖楼回复。注意：评论者绝对不能是玩家本人（玩家显示名：${playerDisplayName}）。` }
+          ]
+        })
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      let content = data?.choices?.[0]?.message?.content || '';
+      content = content.replace(/```json|```/g, '').trim();
+      const st = content.indexOf('{'); const en = content.lastIndexOf('}');
+      if (st >= 0 && en > st) content = content.slice(st, en + 1);
+      const obj = JSON.parse(content);
+
+      const _REV_PERSONA = ['认真派','拉踩','黑泥','追捧','控评','路人','安利'];
+      const _REV_DIM = isAnime
+        ? ['监督','脚本','声优','作画','剧情','演出','音乐','内涵','综合']
+        : ['导演','编剧','演员','服化道','演技','剧情','特效','奖项','内涵','综合'];
+      const normReply = (rp) => {
+        if (!rp || typeof rp !== 'object') return null;
+        const rtext = String(rp.text || '').trim();
+        if (!rtext) return null;
+        let rlikes = parseInt(rp.likes, 10);
+        if (!(rlikes >= 0)) rlikes = 0;
+        return {
+          id: _videoNewCommentId(),
+          username: String(rp.username || '').trim().slice(0, 24) || '匿名剧迷',
+          isNpc: !!rp.isNpc,
+          text: rtext.slice(0, 90),
+          likes: Math.min(rlikes, 99999),
+          replyToName: String(rp.replyToName || '').trim().slice(0, 24)
+        };
+      };
+
+      const newReviews = (Array.isArray(obj.newReviews) ? obj.newReviews : []).map(r => {
+        if (!r || typeof r !== 'object') return null;
+        const text = String(r.text || '').trim();
+        if (!text) return null;
+        let persona = String(r.persona || '').trim();
+        if (!_REV_PERSONA.includes(persona)) persona = _REV_PERSONA.find(p => persona.includes(p)) || '路人';
+        let dim = String(r.dimension || '').trim();
+        if (!_REV_DIM.includes(dim)) dim = _REV_DIM.find(d => dim.includes(d)) || '综合';
+        let rating = parseInt(r.rating, 10);
+        if (!(rating >= 1 && rating <= 5)) rating = 4;
+        let likes = parseInt(r.likes, 10);
+        if (!(likes >= 0)) likes = 0;
+        const replies = (Array.isArray(r.replies) ? r.replies : []).map(normReply).filter(Boolean).slice(0, 8);
+        return {
+          id: _videoNewCommentId(),
+          persona, dimension: dim, rating, likes: Math.min(likes, 99999),
+          username: String(r.username || '').trim().slice(0, 24) || '匿名剧迷',
+          isNpc: !!r.isNpc, text: text.slice(0, 120), replies
+        };
+      }).filter(Boolean).slice(0, 8);
+
+      const idMap = {};
+      epWork.reviews.forEach(r => { idMap[r.id] = r; });
+      const orphans = [];
+      (Array.isArray(obj.newReplies) ? obj.newReplies : []).forEach(rp => {
+        const target = idMap[String(rp.targetId || '').trim()];
+        const nr = normReply(rp);
+        if (!nr) return;
+        if (target) {
+          if (!Array.isArray(target.replies)) target.replies = [];
+          target.replies.push(nr);
+          target._expanded = true;
+        } else {
+          orphans.push({
+            id: _videoNewCommentId(), persona: '路人', dimension: '综合',
+            rating: 0, likes: nr.likes, username: nr.username, isNpc: nr.isNpc,
+            text: nr.text, replies: []
+          });
+        }
+      });
+
+      try {
+        await _ensureForumNpcAvatarMap();
+        await _ensureForumDisplayNameMap();
+        const all = newReviews.concat(orphans);
+        all.forEach(r => { _matchForumAvatar(r); (r.replies || []).forEach(rp => _matchForumAvatar(rp)); });
+        epWork.reviews.forEach(r => (r.replies || []).forEach(rp => { if (!rp.avatar) _matchForumAvatar(rp); }));
+      } catch (_) {}
+
+      epWork.reviews = epWork.reviews.concat(newReviews).concat(orphans);
+      delete epWork._reviewsLoading;
+      await _savePhoneData();
+      UI.showToast('评论区更新了', 1200);
+      if (_videoDetailOverlay && _videoDetailWork === epWork && _videoDetailTab === 'reviews') _videoRenderTab('reviews');
+    } catch (err) {
+      console.error('[单集追评]', err);
+      epWork._reviewsLoading = false;
+      UI.showToast('刷新失败，请重试', 1600);
+    } finally {
+      mask.remove();
+    }
+  }
+
+
+  function _videoBindTabRetry() {
+    if (!_videoDetailOverlay) return;
+    const btn = _videoDetailOverlay.querySelector('.phone-video-tab-retry');
+    if (!btn) return;
+    btn.onclick = () => {
+      const work = _videoDetailWork;
+      if (!work) return;
+      const bodyEl = _videoDetailOverlay.querySelector('#video-detail-tabbody');
+      // 单集（电视剧/动漫）：走单集生成路径，引用父 work + idx
+      if (work._isEpisode) {
+        const parent = work._parent;
+        const idx = work.idx;
+        if (!parent || !idx) return;
+        if (_videoDetailTab === 'reviews' || _videoDetailTab === 'danmaku') {
+          delete work.reviews;
+          delete work.danmu;
+          delete work._reviewsLoading;
+          if (work.script && work.script.synopsis) {
+            if (bodyEl) bodyEl.innerHTML = _videoTabLoading('弹幕装填中…');
+            _videoGenEpReviews(parent, idx);
+          } else {
+            if (bodyEl) bodyEl.innerHTML = _videoTabLoading('视频加载中…');
+            _videoRegenEpisode(parent, idx);
+          }
+        } else {
+          // 简介/名场面：重生成本集
+          if (bodyEl) bodyEl.innerHTML = _videoTabLoading('视频加载中…');
+          _videoRegenEpisode(parent, idx);
+        }
+        return;
+      }
+      if (_videoDetailTab === 'reviews' || _videoDetailTab === 'danmaku') {
+        // 影评/弹幕是独立的一组，只重生成它们，不动剧本
+        delete work.reviews;
+        delete work.danmu;
+        delete work._reviewsLoading;
+        if (work.script) {
+          if (bodyEl) bodyEl.innerHTML = _videoTabLoading('弹幕装填中…');
+          _videoGenReviews(work);
+        } else {
+          // 没剧本先补剧本，完成后会自动续影评弹幕
+          if (bodyEl) bodyEl.innerHTML = _videoTabLoading('视频加载中…');
+          _videoGenScript(work);
+        }
+      } else if (_videoDetailTab === 'script' || _videoDetailTab === 'scenes') {
+        // 剧本/名场面是同一组，重生成整份剧本
+        delete work.script;
+        delete work._scriptLoading;
+        if (bodyEl) bodyEl.innerHTML = _videoTabLoading('视频加载中…');
+        _videoGenScript(work);
+      }
+    };
+  }
+
+  // 绑定影评区交互：写短评、回复、展开楼中楼、刷新追加
+  function _videoBindReviewActions() {
+    if (!_videoDetailOverlay) return;
+    const work = _videoDetailWork;
+    if (!work) return;
+    const root = _videoDetailOverlay;
+
+    // 写主楼短评
+    const writeBtn = root.querySelector('.phone-video-cmt-write');
+    if (writeBtn) writeBtn.onclick = () => _videoWriteReview(work);
+
+    // 展开楼中楼
+    root.querySelectorAll('.phone-video-cmt-expand').forEach(el => {
+      el.onclick = () => {
+        const rid = el.getAttribute('data-rid');
+        const r = (work.reviews || []).find(x => x && x.id === rid);
+        if (r) { r._expanded = true; _videoRenderTab('reviews'); }
+      };
+    });
+
+    // 回复（主楼或楼中楼）
+    root.querySelectorAll('.phone-video-cmt-replybtn').forEach(el => {
+      el.onclick = () => {
+        const rid = el.getAttribute('data-rid');
+        const toName = el.getAttribute('data-toname') || '';
+        _videoWriteReply(work, rid, toName);
+      };
+    });
+
+    // 刷新出更多评论（追加生成）
+    const moreBtn = root.querySelector('.phone-video-cmt-more');
+    if (moreBtn) moreBtn.onclick = () => {
+      if (work._isEpisode && work._parent && work.idx) _videoGenMoreEpReviews(work._parent, work.idx);
+      else _videoGenMoreReviews(work);
+    };
+  }
+
+  // 玩家写主楼短评（可选打分：星级点选 + 文本）
+  async function _videoWriteReview(work) {
+    const mi = await _getMaskInfo();
+    const me = mi.username || '我';
+
+    const result = await new Promise((resolve) => {
+      let rating = 0;
+      const mask = document.createElement('div');
+      mask.style.cssText = 'position:absolute;inset:0;z-index:90;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center';
+      mask.innerHTML = `
+        <div style="width:100%;background:var(--bg);border-radius:16px 16px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));box-sizing:border-box" onclick="event.stopPropagation()">
+          <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px">写短评</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <span style="font-size:13px;color:var(--text-secondary)">评分</span>
+            <div id="vrev-stars" style="display:flex;gap:4px;font-size:26px;color:#e8b73a;cursor:pointer;user-select:none">
+              ${[1,2,3,4,5].map(i => `<span data-star="${i}">☆</span>`).join('')}
+            </div>
+            <span id="vrev-ratetip" style="font-size:12px;color:var(--text-secondary)">未评分</span>
+          </div>
+          <textarea id="vrev-text" rows="4" placeholder="说说你的看法…" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:12px;padding:11px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6"></textarea>
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <button id="vrev-cancel" style="flex:1;border:1px solid var(--border);background:transparent;color:var(--text-secondary);border-radius:12px;padding:11px 0;font-size:14px;cursor:pointer">取消</button>
+            <button id="vrev-send" style="flex:2;border:none;background:var(--accent);color:#fff;border-radius:12px;padding:11px 0;font-size:14px;font-weight:700;cursor:pointer">发布</button>
+          </div>
+        </div>`;
+      const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+      shell.appendChild(mask);
+      const close = (val) => { mask.remove(); resolve(val); };
+      _maskCloseOnBg(mask, () => close(null));
+
+      const starsWrap = mask.querySelector('#vrev-stars');
+      const tip = mask.querySelector('#vrev-ratetip');
+      const paint = () => {
+        starsWrap.querySelectorAll('span').forEach(s => {
+          s.textContent = (parseInt(s.getAttribute('data-star'), 10) <= rating) ? '★' : '☆';
+        });
+        tip.textContent = rating ? `${rating} 星` : '未评分';
+      };
+      starsWrap.querySelectorAll('span').forEach(s => {
+        s.onclick = () => {
+          const v = parseInt(s.getAttribute('data-star'), 10);
+          rating = (rating === v) ? v - 1 : v; // 再点当前星可取消最后一颗
+          paint();
+        };
+      });
+      mask.querySelector('#vrev-cancel').onclick = () => close(null);
+      mask.querySelector('#vrev-send').onclick = () => {
+        const t = (mask.querySelector('#vrev-text').value || '').trim();
+        if (!t) { UI.showToast('说点什么吧', 1000); return; }
+        close({ text: t, rating });
+      };
+    });
+
+    if (!result) return;
+    if (!Array.isArray(work.reviews)) work.reviews = [];
+    work.reviews.unshift({
+      id: _videoNewCommentId(),
+      persona: '路人', dimension: '综合', rating: result.rating || 0, likes: 0,
+      username: me, avatar: mi.avatar || '', isNpc: false, isMe: true,
+      text: result.text.slice(0, 120), replies: []
+    });
+    await _savePhoneData();
+    _videoRenderTab('reviews');
+  }
+
+  // 玩家回复某主楼（toName 非空表示回复楼里某人）
+  async function _videoWriteReply(work, mainId, toName) {
+    const r = (work.reviews || []).find(x => x && x.id === mainId);
+    if (!r) return;
+    const text = await UI.showSimpleInput(toName ? `回复 @${toName}` : '回复楼主', '', { multiline: true, rows: 3, allowEmpty: false });
+    if (text === null) return;
+    const t = (text || '').trim();
+    if (!t) return;
+    const mi = await _getMaskInfo();
+    const me = mi.username || '我';
+    if (!Array.isArray(r.replies)) r.replies = [];
+    r.replies.push({
+      id: _videoNewCommentId(),
+      username: me, avatar: mi.avatar || '', isNpc: false, isMe: true,
+      text: t.slice(0, 90), likes: 0,
+      replyToName: (toName || '').trim()
+    });
+    r._expanded = true;
+    await _savePhoneData();
+    _videoRenderTab('reviews');
+  }
+
+
+  // 主题曲信息卡片（纯展示，不可播放）。themeSong = { trackId, title, artist }
+  function _videoThemeSongHtml(themeSong) {
+    if (!themeSong || !(themeSong.title || '').trim()) return '';
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const desc = (themeSong.desc || '').trim();
+    return `<div style="margin-bottom:20px;background:var(--bg-secondary,rgba(128,128,128,0.08));border-radius:10px;padding:11px 13px">
+      <div style="display:flex;align-items:center;gap:11px">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:2px">主题曲</div>
+          <div style="font-size:14px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(themeSong.title)}</div>
+          ${(themeSong.artist || '').trim() ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:1px">${esc(themeSong.artist)}</div>` : ''}
+        </div>
+      </div>
+      ${desc ? `<div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin-top:9px;white-space:pre-wrap">${esc(desc)}</div>` : ''}
+    </div>`;
+  }
+
+  // 渲染剧本：剧情梗概 + 气质风格 + 角色人设卡片
+  function _videoScriptHtml(script, themeSong, work) {
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const POS_COLOR = { '主角': 'var(--accent)', '配角': 'var(--text-secondary)', '特邀': 'var(--text-secondary)' };
+    const sec = (title, body) => `
+      <div style="margin-bottom:20px">
+        <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px">${esc(title)}</div>
+        <div style="font-size:13px;line-height:1.7;color:var(--text)">${esc(body)}</div>
+      </div>`;
+    let html = '';
+    html += _videoThemeSongHtml(themeSong);
+    // 自制电影：上映反响 + 荣誉（评分/口碑/奖项）
+    if (work && work.selfMake && (work.releaseReaction || (Array.isArray(work.awards) && work.awards.length))) {
+      const RES_STYLE = {
+        '获奖': 'color:#fff;background:var(--accent)',
+        '提名': 'color:var(--accent);background:color-mix(in srgb, var(--accent) 14%, transparent);border:1px solid var(--accent)',
+        '落选': 'color:var(--text-secondary);background:var(--bg-tertiary)'
+      };
+      let inner = '';
+      if (work.rating || work.releaseReaction) {
+        inner += `<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:${work.releaseReaction ? '7px' : '0'}">
+          ${work.rating ? `<span style="font-size:22px;font-weight:800;color:var(--accent);line-height:1">${esc(work.rating)}</span><span style="font-size:11px;color:var(--text-secondary)">分</span>` : ''}
+        </div>`;
+        if (work.releaseReaction) inner += `<div style="font-size:13px;line-height:1.7;color:var(--text)">${esc(work.releaseReaction)}</div>`;
+      }
+      const awards = Array.isArray(work.awards) ? work.awards.filter(a => a && a.name) : [];
+      if (awards.length) {
+        inner += `<div style="margin-top:${(work.rating || work.releaseReaction) ? '12px' : '0'};display:flex;flex-direction:column;gap:7px">${awards.map(a => `
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px">
+            <span style="font-size:10px;font-weight:700;border-radius:5px;padding:2px 8px;flex-shrink:0;${RES_STYLE[a.result] || RES_STYLE['落选']}">${esc(a.result || '落选')}</span>
+            <span style="color:var(--text);min-width:0">${esc(a.name)}</span>
+          </div>`).join('')}</div>`;
+      }
+      html += `<div style="margin-bottom:20px;padding:14px;border-radius:12px;background:var(--bg-secondary,rgba(128,128,128,0.08));border:1px solid color-mix(in srgb, var(--accent) 22%, transparent)">
+        <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">反响与荣誉</div>
+        ${inner}
+      </div>`;
+    }
+    if (script.synopsis) html += sec('剧情梗概', script.synopsis);
+    if (script.style) html += sec('气质风格', script.style);
+
+    const chars = Array.isArray(script.characters) ? script.characters : [];
+    if (chars.length) {
+      const cards = chars.map(c => {
+        const posColor = POS_COLOR[c.position] || 'var(--text-secondary)';
+        const persona = (c.personality || '').split(/[，,、\s]+/).filter(Boolean);
+        const tags = persona.length
+          ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">${persona.map(p => `<span style="font-size:11px;color:var(--text-secondary);background:var(--bg-tertiary);border-radius:6px;padding:2px 8px">${esc(p)}</span>`).join('')}</div>`
+          : '';
+        const row = (label, val) => val ? `<div style="font-size:12px;line-height:1.6;color:var(--text-secondary);margin-top:4px"><span style="color:var(--text)">${esc(label)}</span> ${esc(val)}</div>` : '';
+        return `<div style="background:var(--bg-secondary,rgba(128,128,128,0.08));border-radius:10px;padding:12px 14px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px;font-weight:700;color:#fff;background:${posColor};border-radius:5px;padding:1px 7px;flex-shrink:0">${esc(c.position || '配角')}</span>
+            <span style="font-size:15px;font-weight:700;color:var(--text)">${esc(c.name)}</span>
+            ${c.gender ? `<span style="font-size:11px;color:var(--text-secondary)">${esc(c.gender)}</span>` : ''}
+          </div>
+          ${c.actor ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:5px">演员：${esc(c.actor)}</div>` : ''}
+          ${row('身份', c.identity)}
+          ${tags}
+          ${row('目标', c.goal)}
+          ${row('关系', c.relation)}
+        </div>`;
+      }).join('');
+      html += `<div style="margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">角色</div>
+        ${cards}
+      </div>`;
+    }
+
+    // 底部重新生成入口
+    html += `<div style="text-align:center;padding:10px 0 4px">
+      <button class="phone-video-tab-retry" style="border:none;background:none;color:var(--text-secondary);font-size:12px;cursor:pointer;opacity:0.7">重新生成剧本</button>
+    </div>`;
+    // 异步绑定（innerHTML 后）
+    setTimeout(_videoBindTabRetry, 0);
+    return html;
+  }
+
+  // 渲染名场面 tab：叙述/台词交错的脚本通读 + 顶部「播放本场」入口
+  function _videoSceneHtml(scene) {
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const beats = (Array.isArray(scene) ? scene : []).map(b => {
+      if (!b) return '';
+      if (b.type === 'line') {
+        return `<div style="margin:11px 0">
+          <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:3px">${esc(b.speaker || '')}</div>
+          <div style="font-size:14px;line-height:1.6;color:var(--text)">${esc(b.text || '')}</div>
+        </div>`;
+      }
+      return `<div style="margin:13px 0;font-size:13px;line-height:1.8;color:var(--text-secondary)">${esc(b.text || '')}</div>`;
+    }).join('');
+    return `<div>${beats}</div>`;
+  }
+
+  // 把名场面 scene 条目转纯文本（叙述/台词交错），用于分享内容
+  function _videoSceneToText(scene) {
+    const beats = (Array.isArray(scene) ? scene : []).map(b => {
+      if (!b) return '';
+      if (b.type === 'line') return `${(b.speaker || '').trim()}：${(b.text || '').trim()}`;
+      return (b.text || '').trim();
+    }).filter(Boolean);
+    return beats.join('\n');
+  }
+
+  // 构建视频作品的分享文本：简介卡（导演/演员/简介）+ 名场面（单集带集号）
+  function _videoBuildShareContent(work) {
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const isEp = !!work._isEpisode;
+    const parent = work._parent || null;
+    const isAnime = (isEp ? (parent && parent.kind === 'anime') : work.kind === 'anime');
+    const J = isAnime ? '话' : '集';
+    const lines = [];
+    // 标题（单集带集号）
+    let titleLine = `《${esc(work.title) || '未命名'}》`;
+    if (isEp && work.idx) titleLine += ` 第${work.idx}${J}`;
+    lines.push(titleLine);
+    // 导演/编剧（影视身份卡）
+    if (esc(work.director)) lines.push(`导演：${esc(work.director)}`);
+    if (esc(work.screenwriter)) lines.push(`编剧：${esc(work.screenwriter)}`);
+    if (esc(work.studio)) lines.push(`${isAnime ? '制作' : '出品'}：${esc(work.studio)}`);
+    if (work.rating) lines.push(`评分：${esc(work.rating)} 分`);
+    // 演员（取剧本角色卡里带 actor 的）
+    const script = work.script && typeof work.script === 'object' ? work.script : null;
+    const chars = script && Array.isArray(script.characters) ? script.characters : [];
+    const cast = chars.filter(c => c && c.actor).map(c => `${esc(c.actor)} 饰 ${esc(c.name)}`);
+    if (cast.length) lines.push(`主演：${cast.slice(0, 6).join('、')}`);
+    // 简介
+    const synopsis = script ? esc(script.synopsis) : esc(work.intro);
+    if (synopsis) lines.push(`\n剧情简介：\n${synopsis}`);
+    // 名场面
+    const sceneText = script ? _videoSceneToText(script.scene) : '';
+    if (sceneText) lines.push(`\n名场面${isEp && work.idx ? `（第${work.idx}${J}）` : ''}：\n${sceneText}`);
+    return lines.join('\n');
+  }
+
+  // 视频详情页分享：弹论坛同款菜单（分享到主线 / 分享到聊天）
+  async function _videoShareWork(work) {
+    if (!work) return;
+    const isEp = !!work._isEpisode;
+    const hasContent = work.script && typeof work.script === 'object' && (work.script.synopsis || (Array.isArray(work.script.scene) && work.script.scene.length));
+    if (!hasContent) { UI.showToast(isEp ? '本集内容还没生成，无法分享' : '内容还没生成，无法分享', 1800); return; }
+
+    const choice = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.45)';
+      overlay.innerHTML = `
+        <div style="width:100%;max-width:420px;background:var(--bg);border-radius:20px 20px 0 0;padding:20px 20px 32px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <span style="font-size:16px;font-weight:600;color:var(--text)">分享</span>
+            <button id="share-video-cancel" style="background:none;border:none;color:var(--text-secondary);font-size:22px;cursor:pointer;line-height:1">×</button>
+          </div>
+          <button id="share-video-main" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+            分享到主线
+          </button>
+          <button id="share-video-chat" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            分享到聊天
+          </button>
+        </div>
+      `;
+      const close = val => { try { document.body.removeChild(overlay); } catch(_) {} resolve(val); };
+      overlay.querySelector('#share-video-cancel').onclick = () => close(null);
+      overlay.querySelector('#share-video-main').onclick = () => close('main');
+      overlay.querySelector('#share-video-chat').onclick = () => close('chat');
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+      document.body.appendChild(overlay);
+    });
+
+    if (choice === 'main') {
+      const content = _videoBuildShareContent(work);
+      const isEp = !!work._isEpisode;
+      const J = (isEp && work._parent && work._parent.kind === 'anime') ? '话' : '集';
+      const title = `${work.title || '影视作品'}${isEp && work.idx ? ` 第${work.idx}${J}` : ''}`;
+      _shareToMain('video', title, content);
+    } else if (choice === 'chat') {
+      await _videoShareToChat(work);
+    }
+  }
+
+  // 视频作品分享到聊天：选会话 → 发一张视频卡片消息
+  async function _videoShareToChat(work) {
+    const pd = await _getPhoneData();
+    const targetId = await _shareTargetPicker(pd, '分享到');
+    if (!targetId) return;
+    const isGroup = _isGroupId(pd, targetId);
+    const isEp = !!work._isEpisode;
+    const J = (isEp && work._parent && work._parent.kind === 'anime') ? '话' : '集';
+    const epLabel = (isEp && work.idx) ? `第${work.idx}${J}` : '';
+
+    let gameTime = '';
+    try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+    if (!pd.chatThreads) pd.chatThreads = {};
+    if (!pd.chatThreads[targetId]) pd.chatThreads[targetId] = [];
+
+    const kindLabel = (isEp ? (work._parent && work._parent.kind === 'anime' ? '动漫' : '剧集') : (work.kind === 'movie' ? '电影' : work.kind === 'anime' ? '动漫' : '剧集'));
+    const msg = {
+      id: 'video_' + Date.now(),
+      role: 'me',
+      type: 'video_card',
+      videoTitle: work.title || '未命名',
+      videoEp: epLabel,
+      videoKind: kindLabel,
+      videoCover: work.cover || '',
+      videoIntro: (work.script && work.script.synopsis) ? String(work.script.synopsis).slice(0, 80) : String(work.intro || '').slice(0, 80),
+      videoRating: work.rating || '',
+      videoShareText: _videoBuildShareContent(work),
+      text: `[${kindLabel}分享]${work.title || ''}${epLabel ? ' ' + epLabel : ''}`,
+      time: gameTime,
+      createdAt: Date.now()
+    };
+    pd.chatThreads[targetId].push(msg);
+    await _savePhoneData();
+    if (!isGroup) {
+      const _ctName = (pd.chatContacts || []).find(c => c.id === targetId)?.name || targetId;
+      _addChatMessageToRoundLog(targetId, 'me', `分享了${kindLabel}（${work.title || '未命名'}${epLabel ? ' ' + epLabel : ''}）`, gameTime, _ctName);
+    }
+    UI.showToast('已发送', 1200);
+  }
+
+  // 影评声部分类（persona）仅用于约束生成语气，不在 UI 暴露
+
+  // 渲染影评 tab：评分概览 + 评论列表（多声部、多维度、楼中楼）
+  function _videoReviewsHtml(reviews, workRating) {
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const list = (Array.isArray(reviews) ? reviews : []).filter(Boolean);
+
+    // 顶部评分：用作品自身的预览评分（10 分制），星级按半数换算
+    const score10 = Number(workRating) || 0;
+    const avgStr = score10 ? score10.toFixed(1) : '—';
+    const starsFull = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
+    const headStars = starsFull(Math.max(0, Math.min(5, Math.round(score10 / 2))));
+    const colorPalette = ['#d36b6b','#d3956b','#c9b04a','#6bb36b','#5aa0c0','#7a6bd3','#c06bb0'];
+    const totalCount = list.reduce((n, r) => n + 1 + ((r.replies || []).length), 0);
+
+    const head = `<div style="display:flex;align-items:center;gap:14px;background:var(--bg-secondary,rgba(128,128,128,0.08));border-radius:10px;padding:14px 16px;margin-bottom:6px">
+      <div style="font-size:30px;font-weight:800;color:var(--accent);line-height:1">${avgStr}</div>
+      <div style="flex:1">
+        <div style="font-size:14px;color:#e8b73a;letter-spacing:1px">${headStars}</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${totalCount} 条评论</div>
+      </div>
+      <button class="phone-video-cmt-more" title="刷新出更多评论" style="border:none;background:none;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;padding:4px">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      </button>
+    </div>`;
+
+    // 写短评入口（底部带分割线，与评论区隔开）
+    const writeBar = `<div class="phone-video-cmt-write" style="display:flex;align-items:center;gap:8px;padding:9px 12px 13px;margin-bottom:4px;border-bottom:1px solid var(--border,rgba(128,128,128,0.14));cursor:pointer">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      <span style="font-size:13px;color:var(--text-secondary)">说说你的看法…</span>
+    </div>`;
+
+    // 单条楼中楼
+    const replyRow = (rp, ridMain) => {
+      const initial = (rp.username || '?').trim().charAt(0);
+      const avColor = colorPalette[Math.abs(_strHash(rp.username || '')) % colorPalette.length];
+      const av = rp.avatar
+        ? `<div style="width:22px;height:22px;border-radius:50%;background-image:url('${esc(rp.avatar)}');background-size:cover;background-position:center;flex-shrink:0"></div>`
+        : `<div style="width:22px;height:22px;border-radius:50%;background:${avColor};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${esc(initial)}</div>`;
+      const replyToDisp = (rp.replyToName || '').trim();
+      const replyTo = replyToDisp
+        ? `<span style="color:var(--text-secondary)">回复 </span><span style="color:#5a8fc0">@${esc((typeof _forumDisplayNameMap !== 'undefined' && _forumDisplayNameMap && _forumDisplayNameMap[replyToDisp]) || replyToDisp)}</span><span style="color:var(--text-secondary)">：</span>`
+        : '';
+      return `<div style="display:flex;gap:8px;padding:7px 0">
+        ${av}
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:12px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(rp.username)}${rp.isMe ? '<span style="color:var(--accent);font-weight:400;margin-left:3px">（我）</span>' : ''}</span>
+            <span style="margin-left:auto;flex-shrink:0;font-size:10px;color:var(--text-secondary);display:flex;align-items:center;gap:3px">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+              ${_videoFmtCount(rp.likes || 0)}
+            </span>
+          </div>
+          <div style="font-size:12.5px;line-height:1.6;color:var(--text);margin-top:3px;word-break:break-word">${replyTo}${esc(rp.text)}</div>
+          <div class="phone-video-cmt-replybtn" data-rid="${esc(ridMain)}" data-toname="${esc(rp.username)}" style="font-size:11px;color:var(--text-secondary);margin-top:4px;cursor:pointer;display:inline-block">回复</div>
+        </div>
+      </div>`;
+    };
+
+    const rows = list.map(r => {
+      const initial = (r.username || '?').trim().charAt(0);
+      const avColor = colorPalette[Math.abs(_strHash(r.username || '')) % colorPalette.length];
+      const avatarHtml = r.avatar
+        ? `<div style="width:28px;height:28px;border-radius:50%;background-image:url('${esc(r.avatar)}');background-size:cover;background-position:center;flex-shrink:0"></div>`
+        : `<div style="width:28px;height:28px;border-radius:50%;background:${avColor};color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${esc(initial)}</div>`;
+
+      const replies = Array.isArray(r.replies) ? r.replies : [];
+      let repliesHtml = '';
+      if (replies.length) {
+        const shown = r._expanded ? replies : replies.slice(0, 2);
+        const inner = shown.map(rp => replyRow(rp, r.id)).join('');
+        const more = (!r._expanded && replies.length > 2)
+          ? `<div class="phone-video-cmt-expand" data-rid="${esc(r.id)}" style="font-size:12px;color:#5a8fc0;cursor:pointer;padding:5px 0 2px">展开 ${replies.length - 2} 条回复 ▾</div>`
+          : '';
+        repliesHtml = `<div style="margin-top:2px">${inner}${more}</div>`;
+      }
+
+      return `<div style="display:flex;gap:10px;padding:12px 0">
+        ${avatarHtml}
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span style="font-size:13px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.username)}${r.isMe ? '<span style="color:var(--accent);font-weight:400;margin-left:3px">（我）</span>' : ''}</span>
+            <span style="margin-left:auto;flex-shrink:0;font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:4px">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+              ${_videoFmtCount(r.likes || 0)}
+            </span>
+          </div>
+          ${r.rating ? `<div style="font-size:12px;color:#e8b73a;letter-spacing:1px;margin-top:3px">${starsFull(r.rating || 0)}</div>` : ''}
+          <div style="font-size:13px;line-height:1.65;color:var(--text);margin-top:5px;word-break:break-word">${esc(r.text)}</div>
+          <div class="phone-video-cmt-replybtn" data-rid="${esc(r.id)}" data-toname="" style="font-size:11px;color:var(--text-secondary);margin-top:5px;cursor:pointer;display:inline-block">回复</div>
+          ${repliesHtml}
+        </div>
+      </div>`;
+    }).join('');
+
+    const listHtml = list.length ? rows : `<div style="text-align:center;color:var(--text-secondary);opacity:0.6;font-size:13px;padding:32px 16px">还没有评论，来写第一条吧</div>`;
+
+    let html = head + writeBar + listHtml;
+    html += `<div style="height:20px"></div>`;
+    setTimeout(() => { _videoBindReviewActions(); }, 0);
+    return html;
+  }
+
+  // 渲染弹幕 tab：按时间顺序列出弹幕池（观影时会在顶部飘过）
+  function _videoDanmuHtml(danmu) {
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const list = (Array.isArray(danmu) ? danmu : []).filter(Boolean);
+    if (!list.length) return _videoTabError('暂无弹幕');
+
+    const rows = list.map(d => {
+      return `<div style="padding:7px 0;font-size:13px;line-height:1.5;color:var(--text);word-break:break-word">${esc(d.text)}</div>`;
+    }).join('');
+
+    let html = `<div>${rows}</div>`;
+    html += `<div style="text-align:center;padding:14px 0 4px">
+      <button class="phone-video-tab-retry" style="border:none;background:none;color:var(--text-secondary);font-size:12px;cursor:pointer;opacity:0.7">重新生成</button>
+    </div>`;
+    setTimeout(_videoBindTabRetry, 0);
+    return html;
+  }
+
+  // 简单字符串哈希（用于头像配色稳定取色）
+  function _strHash(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; }
+    return h;
+  }
+
+  // 评论 / 楼中楼的稳定唯一 id（刷新追加时用于按 targetId 精确盖楼）
+  let _videoCommentSeq = 0;
+  function _videoNewCommentId() {
+    _videoCommentSeq++;
+    return 'c' + Date.now().toString(36) + (_videoCommentSeq).toString(36);
+  }
+
+  // 数字简写：1234 → 1234；12345 → 1.2万
+  function _videoFmtCount(n) {
+    n = Number(n) || 0;
+    if (n >= 10000) return (n / 10000).toFixed(1).replace(/\.0$/, '') + '万';
+    return String(n);
+  }
+
+
+  // 详情页各 tab 的占位内容（暂不接生成逻辑）
+  function _videoDetailTabBody(tab) {
+    const ph = (text) => `<div style="text-align:center;color:var(--text-secondary);opacity:0.6;font-size:13px;padding:48px 16px">${text}</div>`;
+    switch (tab) {
+      case 'script': return ph('剧本内容（待接入）');
+      case 'scenes': return ph('名场面（待接入）');
+      case 'reviews': return ph('影评（待接入）');
+      case 'danmaku': return ph('弹幕列表（待接入）');
+      default: return ph('待接入');
+    }
+  }
+
+  // 伪横屏观影页（壳子内全屏 overlay）：把横向舞台 rotate(90deg) 填满竖矩形，
+  // 用户把物理手机转过来看到的就是正的横向画面。逐条播放名场面 beats（叙述居中、台词底部黑条字幕）。
+  function _videoOpenWatch(work) {
+    if (!work) return;
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const cover = (work.cover || '').trim();
+    const stageBg = cover
+      ? `background-image:url('${esc(cover)}');background-size:cover;background-position:center`
+      : 'background:#0a0a0a';
+    const beats = (work.script && Array.isArray(work.script.scene)) ? work.script.scene.filter(Boolean) : [];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'phone-video-watch';
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:70;background:#000;overflow:hidden';
+    overlay.innerHTML = `
+      <div class="phone-video-watch-stage" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(90deg);transform-origin:center center;${stageBg};display:flex;flex-direction:column;color:#fff">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.4) 0%,transparent 20%,transparent 55%,rgba(0,0,0,0.78) 100%);pointer-events:none"></div>
+        <div class="phone-video-watch-fx" style="position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1"></div>
+        <div class="phone-video-watch-danmu" style="position:absolute;left:0;right:0;top:54px;height:33%;pointer-events:none;overflow:hidden;z-index:3"></div>
+
+        <div style="position:relative;display:flex;align-items:center;gap:10px;padding:14px 18px;flex-shrink:0">
+          <button class="phone-video-watch-back" style="width:32px;height:32px;border:none;border-radius:50%;background:rgba(0,0,0,0.4);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+          </button>
+          <div style="font-size:15px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,0.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(work.title || '未命名')}</div>
+          <button class="phone-video-watch-danmu-btn" style="width:32px;height:32px;border:none;border-radius:50%;background:rgba(0,0,0,0.4);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0" title="弹幕">
+            <svg class="ic-danmu-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M6 10h6"/><path d="M6 14h3"/><path d="M16 10h2"/></svg>
+            <svg class="ic-danmu-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><rect x="2" y="5" width="20" height="14" rx="3"/><line x1="3" y1="4" x2="21" y2="20"/></svg>
+          </button>
+          <button class="phone-video-watch-sound" style="width:32px;height:32px;border:none;border-radius:50%;background:rgba(0,0,0,0.4);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0" title="声音">
+            <svg class="ic-sound-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+            <svg class="ic-sound-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+          </button>
+        </div>
+
+        <div class="phone-video-watch-narration" style="position:relative;flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 56px;font-size:15px;line-height:1.7;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,0.9);transition:opacity .9s ease"></div>
+
+        <div class="phone-video-watch-subtitle" style="position:relative;min-height:48px;display:flex;align-items:center;justify-content:center;padding:0 30px 6px;flex-shrink:0;transition:opacity .9s ease"></div>
+
+        <div style="position:relative;display:flex;align-items:center;gap:12px;padding:8px 20px 16px;flex-shrink:0">
+          <button class="phone-video-watch-toggle" style="width:38px;height:38px;border:none;border-radius:50%;background:rgba(255,255,255,0.92);color:#111;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
+            <svg class="ic-play" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+            <svg class="ic-pause" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          </button>
+          <span class="phone-video-watch-cur" style="font-size:11px;flex-shrink:0;text-shadow:0 1px 3px rgba(0,0,0,0.6)">0 / ${beats.length}</span>
+          <div style="flex:1;height:3px;background:rgba(255,255,255,0.25);border-radius:2px;overflow:hidden"><div class="phone-video-watch-bar" style="width:0%;height:100%;background:var(--accent);transition:width .3s ease"></div></div>
+        </div>
+      </div>`;
+
+    const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
+    shell.appendChild(overlay);
+
+    const _sizeStage = () => {
+      const stage = overlay.querySelector('.phone-video-watch-stage');
+      if (!stage) return;
+      stage.style.width = overlay.clientHeight + 'px';
+      stage.style.height = overlay.clientWidth + 'px';
+    };
+    _sizeStage();
+    const onResize = () => _sizeStage();
+    window.addEventListener('resize', onResize);
+
+    // 演出驱动：逐条推进 beats，叙述铺在中区、台词压底部黑条字幕
+    const narrEl = overlay.querySelector('.phone-video-watch-narration');
+    const subEl = overlay.querySelector('.phone-video-watch-subtitle');
+    const curEl = overlay.querySelector('.phone-video-watch-cur');
+    const barEl = overlay.querySelector('.phone-video-watch-bar');
+    const toggleBtn = overlay.querySelector('.phone-video-watch-toggle');
+    const icPlay = toggleBtn && toggleBtn.querySelector('.ic-play');
+    const icPause = toggleBtn && toggleBtn.querySelector('.ic-pause');
+
+    let idx = -1;
+    let playing = false;
+    let timer = null;
+    // 每条停留时长：按字数估算（读完的时间），最少 1.8s
+    const _dur = (b) => Math.max(1800, (String(b.text || '').length) * 130);
+
+    // ===== 名场面特效引擎 =====
+    // 每条 beat 可带 fx（blood/fire/rain/snow/bokeh/lightning/shake/flash）。
+    // 持续型效果靠连续标记延续：相邻 beat fx 相同则保留不重建，不同/无则平滑切换。
+    const fxLayer = overlay.querySelector('.phone-video-watch-fx');
+    const stageEl = overlay.querySelector('.phone-video-watch-stage');
+    const _FX_SET = ['blood','fire','rain','snow','bokeh','sparkle','firefly','memory','glitch','scan','petal','bubble','smoke','glass','hearts','spotlight','firework','ripple','lightning','shake','flash'];
+    // 持续型（连续标记可延续）：rain/snow/bokeh/sparkle/firefly/fire；瞬时型：blood/lightning/flash；shake 作用于舞台
+    const _FX_PERSIST = ['rain','snow','bokeh','sparkle','firefly','memory','glitch','scan','petal','bubble','smoke','hearts','spotlight','fire'];
+    let _curFx = '';        // 当前持续层的 fx 名
+    let _curFxEl = null;    // 当前持续层 DOM
+
+    const _fxImg = (name, fadeIn, extraStyle) => {
+      const url = name === 'fire' ? 'img/fx/fire.png' : (name === 'glass' ? 'img/fx/glass.png' : 'img/fx/blood.png');
+      const el = document.createElement('div');
+      el.style.cssText = `position:absolute;inset:0;background-image:url('${url}');background-size:cover;background-position:center;opacity:0;transition:opacity ${fadeIn}ms ease;${extraStyle||''}`;
+      fxLayer.appendChild(el);
+      requestAnimationFrame(() => { el.style.opacity = '1'; });
+      return el;
+    };
+    const _fxFadeRemove = (el, fadeOut) => {
+      if (!el) return;
+      el.style.transition = `opacity ${fadeOut}ms ease`;
+      el.style.opacity = '0';
+      setTimeout(() => { try { el.remove(); } catch(_){} }, fadeOut + 60);
+    };
+    // 瞬时叠加（不进持续槽）：血迹快进慢出、贴住不动
+    const _fxBloodFlash = () => {
+      const el = _fxImg('blood', 120, 'mix-blend-mode:normal');
+      setTimeout(() => _fxFadeRemove(el, 900), 1100);
+    };
+    // 瞬时叠加：玻璃破碎，啪一下裂开后贴住，再慢慢淡掉
+    const _fxGlassBreak = () => {
+      const el = _fxImg('glass', 80, 'mix-blend-mode:screen');
+      setTimeout(() => _fxFadeRemove(el, 700), 1400);
+    };
+    // 全屏一闪（闪电/打击白光）
+    const _fxFlash = (strong) => {
+      const el = document.createElement('div');
+      el.style.cssText = `position:absolute;inset:0;background:${strong?'rgba(210,225,255,0.9)':'rgba(255,255,255,0.7)'};opacity:0;transition:opacity 60ms ease`;
+      fxLayer.appendChild(el);
+      requestAnimationFrame(() => { el.style.opacity = '1'; });
+      setTimeout(() => { el.style.transition = 'opacity 320ms ease'; el.style.opacity = '0'; }, 90);
+      if (strong) { // 闪电再补一道余闪
+        setTimeout(() => { el.style.transition='opacity 50ms'; el.style.opacity='0.6'; }, 150);
+        setTimeout(() => { el.style.transition='opacity 280ms'; el.style.opacity='0'; }, 230);
+      }
+      setTimeout(() => { try { el.remove(); } catch(_){} }, 650);
+    };
+    // 舞台抖动
+    const _fxShake = () => {
+      if (!stageEl) return;
+      stageEl.classList.remove('phone-video-fx-shake');
+      void stageEl.offsetWidth; // reflow 重启动画
+      stageEl.classList.add('phone-video-fx-shake');
+      setTimeout(() => stageEl.classList.remove('phone-video-fx-shake'), 650);
+    };
+    // 瞬时型：烟花绽放（在随机位置炸开一朵，向四周迸射彩色粒子，可连炸）
+    const _fxFirework = () => {
+      if (!fxLayer) return;
+      const COLORS = ['#ff5a7a','#ffd24a','#5ad1ff','#9b7bff','#7bff9b','#ff944a','#ffffff'];
+      const burst = (cx, cy, color) => {
+        const count = 22 + Math.floor(Math.random() * 10);
+        const wrap = document.createElement('div');
+        wrap.style.cssText = `position:absolute;left:${cx}%;top:${cy}%;width:0;height:0;z-index:2`;
+        fxLayer.appendChild(wrap);
+        for (let i = 0; i < count; i++) {
+          const ang = (Math.PI * 2 * i) / count + Math.random() * 0.3;
+          const dist = 60 + Math.random() * 80;
+          const dx = Math.cos(ang) * dist;
+          const dy = Math.sin(ang) * dist;
+          const p = document.createElement('div');
+          p.style.cssText = `position:absolute;width:4px;height:4px;border-radius:50%;background:${color};box-shadow:0 0 6px ${color};opacity:1;transform:translate(0,0);transition:transform 900ms cubic-bezier(.15,.6,.4,1),opacity 900ms ease`;
+          wrap.appendChild(p);
+          requestAnimationFrame(() => {
+            p.style.transform = `translate(${dx}px,${dy + 24}px)`;
+            p.style.opacity = '0';
+          });
+        }
+        setTimeout(() => { try { wrap.remove(); } catch(_){} }, 1000);
+      };
+      // 主炸一朵 + 随机再补 1-2 朵，错开时间和位置
+      // 延迟约 0.6s 再炸，对齐音效里"咻"声升空到顶端炸开的时机
+      const LAUNCH = 600;
+      setTimeout(() => burst(30 + Math.random() * 40, 25 + Math.random() * 25, COLORS[Math.floor(Math.random() * COLORS.length)]), LAUNCH);
+      const extra = Math.floor(Math.random() * 2) + 1;
+      for (let k = 0; k < extra; k++) {
+        setTimeout(() => burst(15 + Math.random() * 70, 20 + Math.random() * 30, COLORS[Math.floor(Math.random() * COLORS.length)]), LAUNCH + 280 + k * 320);
+      }
+    };
+    // 瞬时型：水波涟漪（中心荡开一圈圈，悲伤/泪眼/水面）
+    const _fxRipple = () => {
+      if (!fxLayer) return;
+      for (let i = 0; i < 3; i++) {
+        const ring = document.createElement('div');
+        ring.style.cssText = 'position:absolute;left:50%;top:50%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;border:2px solid rgba(180,220,255,0.55);opacity:0;transform:scale(0.2);transition:transform 1600ms ease-out,opacity 1600ms ease-out;z-index:2';
+        fxLayer.appendChild(ring);
+        const delay = i * 320;
+        setTimeout(() => {
+          requestAnimationFrame(() => { ring.style.transform = 'scale(7)'; ring.style.opacity = '0.5'; });
+          setTimeout(() => { ring.style.opacity = '0'; }, 600);
+          setTimeout(() => { try { ring.remove(); } catch(_){} }, 1700);
+        }, delay);
+      }
+    };
+    // 持续型 CSS 粒子层（雨/雪/光斑）
+    const _fxPersistEl = (name) => {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:absolute;inset:0;opacity:0;transition:opacity 700ms ease;overflow:hidden';
+      if (name === 'rain') el.className = 'phone-video-fx-rain';
+      else if (name === 'snow') el.className = 'phone-video-fx-snow';
+      else if (name === 'bokeh') el.className = 'phone-video-fx-bokeh';
+      else if (name === 'sparkle') el.className = 'phone-video-fx-sparkle';
+      else if (name === 'firefly') el.className = 'phone-video-fx-firefly';
+      else if (name === 'memory') el.className = 'phone-video-fx-memory';
+      else if (name === 'glitch') el.className = 'phone-video-fx-glitch';
+      else if (name === 'scan') el.className = 'phone-video-fx-scan';
+      else if (name === 'petal') el.className = 'phone-video-fx-petal';
+      else if (name === 'bubble') el.className = 'phone-video-fx-bubble';
+      else if (name === 'smoke') el.className = 'phone-video-fx-smoke';
+      else if (name === 'spotlight') el.className = 'phone-video-fx-spotlight';
+      else if (name === 'hearts') {
+        el.className = 'phone-video-fx-hearts';
+        // 注入多颗爱心，各自不同位置/延迟/时长，从底部飘起
+        const n = 9;
+        for (let i = 0; i < n; i++) {
+          const h = document.createElement('span');
+          h.className = 'pv-heart';
+          h.textContent = '\u2665';
+          h.style.left = (5 + Math.random() * 90) + '%';
+          h.style.fontSize = (14 + Math.random() * 20) + 'px';
+          h.style.animationDuration = (5 + Math.random() * 4) + 's';
+          h.style.animationDelay = (Math.random() * 5) + 's';
+          el.appendChild(h);
+        }
+      }
+      else if (name === 'fire') {
+        el.className = 'phone-video-fx-fire';
+        el.style.backgroundImage = "url('img/fx/fire.png')";
+        el.style.backgroundSize = 'cover';
+        el.style.backgroundPosition = 'center';
+      }
+      fxLayer.appendChild(el);
+      requestAnimationFrame(() => { el.style.opacity = '1'; });
+      return el;
+    };
+    // 切换持续层：相同保留，不同则旧的慢淡出、新的淡入
+    const _setPersist = (name) => {
+      if (name === _curFx) return;        // 延续，不动
+      if (_curFxEl) {                     // 切走旧的
+        const fadeOut = _curFx === 'fire' ? 1000 : 700;
+        _fxFadeRemove(_curFxEl, fadeOut);
+        _curFxEl = null;
+      }
+      _curFx = name || '';
+      if (name) _curFxEl = _fxPersistEl(name);
+    };
+    // beat 入口：按 fx 类型分派
+    const _applyFx = (fx) => {
+      const name = _FX_SET.includes(fx) ? fx : '';
+      // 声音：开启时按 fx 播对应音效（持续型切换 / 瞬时型触发）
+      // 空 fx（多数台词行）不动持续音轨，让氛围音延续，不会一到台词就静音
+      if (_soundOn && window.WatchSfx && name) {
+        if (name === 'rain') WatchSfx.setPersist('rain');
+        else if (name === 'fire') WatchSfx.setPersist('fire');
+        else if (name === 'blood' || name === 'shake' || name === 'lightning' || name === 'glass' || name === 'firework') WatchSfx.trigger(name);
+        else if (!_FX_PERSIST.includes(name)) { /* 瞬时：不动持续音轨 */ }
+        else WatchSfx.setPersist('');  // 切到无音持续型（snow/bokeh/sparkle/firefly）则关掉持续音
+      }
+      // 瞬时型不占持续槽，但出现瞬时型时不打断已有的持续层
+      if (name === 'blood') { _fxBloodFlash(); return; }
+      if (name === 'glass') { _fxGlassBreak(); return; }
+      if (name === 'lightning') { _fxFlash(true); return; }
+      if (name === 'flash') { _fxFlash(false); return; }
+      if (name === 'shake') { _fxShake(); return; }
+      if (name === 'firework') { _fxFirework(); return; }
+      if (name === 'ripple') { _fxRipple(); return; }
+      // 空 fx：粘滞延续，不关闭已有的持续层（台词行通常不标 fx，保留叙述行起的氛围）
+      if (!name) return;
+      // 持续型：切换持续层（相同则保留）
+      _setPersist(name);
+    };
+    const _clearAllFx = () => {
+      _curFx = ''; _curFxEl = null;
+      if (fxLayer) fxLayer.innerHTML = '';
+      if (stageEl) stageEl.classList.remove('phone-video-fx-shake');
+      if (window.WatchSfx) { try { WatchSfx.setPersist(''); } catch(_){} }
+    };
+
+    // ===== 声音开关：开声音→暂停音乐/环境音 + 启用特效音；关声音→停特效音 + 恢复 =====
+    let _soundOn = true;       // 默认开
+    let _soundInited = false;  // 首次用户手势后才真正激活（绕过自动播放限制）
+    let _musicWasPlaying = false;
+    const _soundBtn = overlay.querySelector('.phone-video-watch-sound');
+    const _icSoundOn = _soundBtn && _soundBtn.querySelector('.ic-sound-on');
+    const _icSoundOff = _soundBtn && _soundBtn.querySelector('.ic-sound-off');
+    const _muteOthers = () => {
+      try {
+        if (window.Music && Music.isPlaying && Music.isPlaying()) { _musicWasPlaying = true; Music.pause(); }
+      } catch(_){}
+      try { if (window.Ambient) Ambient.disable(); } catch(_){}
+    };
+    const _restoreOthers = () => {
+      try { if (_musicWasPlaying && window.Music && Music.getCurrentId) { Music.play(Music.getCurrentId()); _musicWasPlaying = false; } } catch(_){}
+      // Ambient 由其设置自行管理，这里不强行恢复，避免覆盖用户的环境音开关状态
+    };
+    const _setSound = (on) => {
+      _soundOn = on;
+      if (_icSoundOn) _icSoundOn.style.display = on ? 'block' : 'none';
+      if (_icSoundOff) _icSoundOff.style.display = on ? 'none' : 'block';
+      if (on) {
+        _muteOthers();
+        try { window.WatchSfx && WatchSfx.resume(); } catch(_){}
+      } else {
+        try { window.WatchSfx && WatchSfx.stopAll(); } catch(_){}
+        _restoreOthers();
+      }
+    };
+    if (_soundBtn) _soundBtn.onclick = () => _setSound(!_soundOn);
+
+    // ===== 弹幕飘幕引擎：顶部带状区域，按演出进度撒出对应区间的弹幕，从右往左飘 =====
+    const danmuPool = (work && Array.isArray(work.danmu)) ? work.danmu.filter(d => d && d.text) : [];
+    const danmuLayer = overlay.querySelector('.phone-video-watch-danmu');
+    let _danmuOn = true;
+    const _danmuBtn = overlay.querySelector('.phone-video-watch-danmu-btn');
+    const _icDanmuOn = _danmuBtn && _danmuBtn.querySelector('.ic-danmu-on');
+    const _icDanmuOff = _danmuBtn && _danmuBtn.querySelector('.ic-danmu-off');
+    let _danmuFired = 0;       // 已撒出到弹幕池的指针（按 at 升序）
+    const _DANMU_LANES = 4;    // 顶部带状区域的轨道数
+    let _laneFreeAt = new Array(_DANMU_LANES).fill(0);  // 各轨道下次可用时间戳
+
+    const _spawnDanmu = (text) => {
+      if (!_danmuOn || !danmuLayer || !text) return;
+      const now = Date.now();
+      // 找一条空闲轨道（避免重叠）；都忙就挑最早空出的
+      let lane = _laneFreeAt.findIndex(t => t <= now);
+      if (lane < 0) lane = _laneFreeAt.indexOf(Math.min(..._laneFreeAt));
+      const laneH = danmuLayer.clientHeight / _DANMU_LANES;
+      const el = document.createElement('div');
+      el.textContent = text;
+      el.style.cssText = `position:absolute;top:${lane * laneH + 2}px;left:100%;white-space:nowrap;font-size:14px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.9),0 0 2px rgba(0,0,0,0.7);will-change:transform`;
+      danmuLayer.appendChild(el);
+      const dur = 6500 + Math.random() * 2500;  // 飘过时长
+      const dist = (danmuLayer.clientWidth || 600) + 200;
+      // 该轨道在弹幕头部离开右边缘后才可复用（约前 1/4 行程）
+      _laneFreeAt[lane] = now + dur * 0.28;
+      requestAnimationFrame(() => {
+        el.style.transition = `transform ${dur}ms linear`;
+        el.style.transform = `translateX(-${dist}px)`;
+      });
+      setTimeout(() => { try { el.remove(); } catch(_){} }, dur + 100);
+    };
+
+    // 推进到第 idx 条 beat 时，把 at 落在 [上一条进度, 当前进度] 区间的弹幕撒出来
+    const _fireDanmuUpTo = (progress) => {
+      if (!danmuPool.length) return;
+      while (_danmuFired < danmuPool.length && (danmuPool[_danmuFired].at || 0) <= progress) {
+        const d = danmuPool[_danmuFired];
+        // 同一时刻多条时错开一点点，形成刷屏但不全叠在一帧
+        const delay = (_danmuFired % 4) * 220;
+        setTimeout(() => _spawnDanmu(d.text), delay);
+        _danmuFired++;
+      }
+    };
+    const _clearDanmu = () => {
+      if (danmuLayer) danmuLayer.innerHTML = '';
+      _danmuFired = 0;
+      _laneFreeAt = new Array(_DANMU_LANES).fill(0);
+    };
+    const _setDanmu = (on) => {
+      _danmuOn = on;
+      if (_icDanmuOn) _icDanmuOn.style.display = on ? 'block' : 'none';
+      if (_icDanmuOff) _icDanmuOff.style.display = on ? 'none' : 'block';
+      if (!on && danmuLayer) danmuLayer.innerHTML = '';
+    };
+    if (_danmuBtn) _danmuBtn.onclick = () => _setDanmu(!_danmuOn);
+
+    const _renderBeat = (b) => {
+      if (!b) return;
+      _applyFx(String(b.fx || '').trim());
+      if (b.type === 'line') {
+        // 台词：底部黑条字幕（角色名 + 台词），淡出旧的再淡入新的；叙述保持不动
+        subEl.style.opacity = '0';
+        setTimeout(() => {
+          subEl.innerHTML = `<div style="display:inline-block;background:rgba(0,0,0,0.62);border-radius:8px;padding:6px 16px;max-width:100%">
+            <span style="color:var(--accent);font-weight:700;font-size:13px;margin-right:8px">${esc(b.speaker || '')}</span>
+            <span style="color:#fff;font-size:15px;text-shadow:0 1px 4px rgba(0,0,0,0.8)">${esc(b.text || '')}</span>
+          </div>`;
+          subEl.style.opacity = '1';
+        }, 450);
+      } else {
+        // 叙述：中区淡入，同时淡出底部字幕
+        subEl.style.opacity = '0';
+        narrEl.style.opacity = '0';
+        setTimeout(() => {
+          subEl.innerHTML = '';
+          subEl.style.opacity = '1';
+          narrEl.textContent = b.text || '';
+          narrEl.style.opacity = '1';
+        }, 450);
+      }
+    };
+
+    const _setPlaying = (v) => {
+      playing = v;
+      if (icPlay) icPlay.style.display = v ? 'none' : 'block';
+      if (icPause) icPause.style.display = v ? 'block' : 'none';
+    };
+
+    const _step = () => {
+      idx++;
+      if (idx >= beats.length) {
+        _setPlaying(false);
+        idx = beats.length - 1;
+        if (barEl) barEl.style.width = '100%';
+        if (curEl) curEl.textContent = `${beats.length} / ${beats.length}`;
+        return;
+      }
+      const b = beats[idx];
+      _renderBeat(b);
+      if (curEl) curEl.textContent = `${idx + 1} / ${beats.length}`;
+      const progress = (idx + 1) / beats.length;
+      if (barEl) barEl.style.width = (progress * 100) + '%';
+      // 最后一条把剩余弹幕全撒出，避免结尾弹幕漏放
+      _fireDanmuUpTo(idx >= beats.length - 1 ? 1 : progress);
+      if (playing) {
+        timer = setTimeout(_step, _dur(b));
+      }
+    };
+
+    const _play = () => {
+      if (!beats.length) { UI.showToast('暂无名场面内容', 1400); return; }
+      // 首次播放（用户手势）激活声音：若开着则暂停他者音源并恢复音频上下文
+      if (!_soundInited) { _soundInited = true; if (_soundOn) _setSound(true); }
+      _setPlaying(true);
+      if (idx >= beats.length - 1) { idx = -1; } // 播完再点从头来
+      // 开场（从头播）多留一段黑屏酝酿，再出第一条
+      if (idx < 0) {
+        _clearAllFx();
+        _clearDanmu();
+        narrEl.style.opacity = '0';
+        subEl.style.opacity = '0';
+        timer = setTimeout(() => { if (playing) _step(); }, 1600);
+      } else {
+        _step();
+      }
+    };
+    const _pause = () => {
+      _setPlaying(false);
+      if (timer) { clearTimeout(timer); timer = null; }
+    };
+
+    if (toggleBtn) toggleBtn.onclick = () => { playing ? _pause() : _play(); };
+
+    const close = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      try { if (window.WatchSfx) WatchSfx.stopAll(); } catch(_) {}
+      try { _restoreOthers(); } catch(_) {}
+      try { window.removeEventListener('resize', onResize); } catch(_) {}
+      try { overlay.remove(); } catch(_) {}
+    };
+    const backBtn = overlay.querySelector('.phone-video-watch-back');
+    if (backBtn) backBtn.onclick = close;
+
+    // 进入即提示首条（不自动播，等用户点播放）
+    if (beats.length) {
+      narrEl.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center"><div style="font-size:16px;line-height:1.6">点击播放，把手机横过来观看</div><div style="font-size:12px;opacity:0.65;margin-top:14px;line-height:1.7">演出可能伴随音效，点击右上角按钮可关闭声音</div></div>`;
+    } else {
+      narrEl.textContent = '暂无名场面内容';
+    }
   }
 
   // 阅读首页：书架（默认）/ 发现 两个 tab
@@ -10911,6 +19650,11 @@ ${kwLine}
           <div style="font-size:12px;color:var(--text-tertiary,#888);margin:6px 0 16px">建一本由你主导的书。先填基本信息，蓝图和正文进书后再一步步生成、编辑。</div>
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">书名</label>
           <input id="rd-w-title" type="text" maxlength="60" placeholder="给这本书起个名字" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);margin-bottom:14px">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">作品类型</label>
+          <div id="rd-w-type" style="display:flex;gap:8px;margin-bottom:14px">
+            <button type="button" data-type="long" class="rd-w-typebtn" style="flex:1;padding:9px 0;border-radius:9px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer">长篇连载</button>
+            <button type="button" data-type="short" class="rd-w-typebtn" style="flex:1;padding:9px 0;border-radius:9px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px;cursor:pointer">短篇小说</button>
+          </div>
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">作者署名</label>
           <input id="rd-w-author" type="text" maxlength="40" placeholder="作者名（留空则为佚名）" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);margin-bottom:14px">
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">题材标签</label>
@@ -10970,6 +19714,20 @@ ${kwLine}
       }
     };
 
+    // 作品类型切换（长篇 / 短篇），高亮选中态
+    let selfWriteType = 'long';
+    mask.querySelectorAll('.rd-w-typebtn').forEach(b => {
+      b.onclick = () => {
+        selfWriteType = b.getAttribute('data-type') === 'short' ? 'short' : 'long';
+        mask.querySelectorAll('.rd-w-typebtn').forEach(x => {
+          const on = x.getAttribute('data-type') === selfWriteType;
+          x.style.background = on ? 'var(--accent)' : 'var(--bg-secondary)';
+          x.style.color = on ? '#fff' : 'var(--text)';
+          x.style.borderColor = on ? 'var(--accent)' : 'var(--border)';
+        });
+      };
+    });
+
     mask.querySelector('#rd-w-cancel').onclick = () => mask.remove();
     mask.querySelector('#rd-w-ok').onclick = async () => {
       const title = (mask.querySelector('#rd-w-title').value || '').trim();
@@ -10978,6 +19736,7 @@ ${kwLine}
       const intro = (introEl.value || '').trim();
       if (!title) { UI.showToast('请先填书名', 1500); return; }
       const category = catsRaw ? catsRaw.split(/[、,，\s]+/).filter(Boolean).slice(0, 8) : [];
+      const isShort = selfWriteType === 'short';
       const bookId = 'self_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
       const book = {
         id: bookId,
@@ -10986,7 +19745,7 @@ ${kwLine}
         intro: intro,
         category,
         cover: '',
-        type: 'long',
+        type: isShort ? 'short' : 'long',
         selfWrite: true,          // 标记：用户主导的自写书，走分步生成流程
         toc: [],
         lastReadChapter: -1,
@@ -10997,8 +19756,14 @@ ${kwLine}
       pd.readingBooks.unshift(book);
       await _savePhoneData(pd);
       mask.remove();
-      UI.showToast(`已建《${book.title}》，去设置里生成蓝图`, 2200);
-      _readingOpenToc(bookId);
+      if (isShort) {
+        // 短篇无蓝图/目录，直接进生成设置（选世界观/映射后一次成文）
+        UI.showToast(`已建《${book.title}》，去生成正文`, 2000);
+        _readingShowGenSetup(bookId);
+      } else {
+        UI.showToast(`已建《${book.title}》，去设置里生成蓝图`, 2200);
+        _readingOpenToc(bookId);
+      }
     };
   }
 
@@ -11212,6 +19977,22 @@ ${kwLine}
       </div>`;
   }
 
+  // 阅读发现页「生成中」骨架占位（仿 phone-reading-shelf-card 横向卡：左封面块 + 右标题/作者/简介线）。
+  // 复用通用 wv-skeleton 样式，自动继承壁纸/壁纸遮罩两种模式的适配。
+  function _renderReadingLoadingHtml(count) {
+    const n = count || 6;
+    return `<div class="phone-reading-shelf">${Array.from({ length: n }).map(() => `
+      <div class="wv-skeleton-card phone-reading-skeleton-card">
+        <div class="wv-skeleton-line phone-reading-skeleton-cover"></div>
+        <div class="phone-reading-skeleton-info">
+          <div class="wv-skeleton-line title" style="width:58%"></div>
+          <div class="wv-skeleton-line" style="width:32%;height:9px;margin-bottom:8px"></div>
+          <div class="wv-skeleton-line summary-1"></div>
+          <div class="wv-skeleton-line summary-2"></div>
+        </div>
+      </div>`).join('')}</div>`;
+  }
+
   // 发现：长篇连载 / 短篇小说 两个类型 tab，各自刷新推荐 / 搜索新书（生成式）。本版先占位结构，生成逻辑后续接。
   function _renderReadingDiscover(pd) {
     const type = (_readingDiscoverType === 'short') ? 'short' : 'long';
@@ -11225,11 +20006,11 @@ ${kwLine}
         <div class="phone-reading-type-tab ${type === 'short' ? 'active' : ''}" onclick="Phone._switchReadingDiscoverType('short')">短篇小说</div>
       </div>`;
     const ph = (type === 'short') ? '搜短篇题材，如「悬疑」「治愈」「脑洞」' : '搜想追的长篇，如「修仙」「悬疑推理」';
-    const searchBar = `
-      <div class="phone-reading-discover-bar">
-        <input id="phone-reading-search" class="phone-reading-search" type="text" placeholder="${ph}">
-        <button class="phone-reading-search-btn" onclick="Phone._readingSearch()">搜索</button>
-      </div>
+const searchBar = `
+        <div class="phone-reading-discover-bar">
+          <input id="phone-reading-search" class="phone-reading-search" type="text" placeholder="${ph}" oninput="Phone._syncSearchBtn('phone-reading-search','phone-reading-action-btn')" onkeydown="if(event.key==='Enter')Phone._readingSearch()">
+          <button id="phone-reading-action-btn" class="phone-reading-search-btn" onclick="Phone._readingSearch()">${_uiIcon('refresh', 13)} 刷新</button>
+        </div>
       <div class="phone-genrow">
         <label class="circle-check-label">
           <span class="circle-check-text">参考世界观</span>
@@ -11300,6 +20081,12 @@ ${kwLine}
     const catsHtml = cats.length
       ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 0">${cats.map(c => `<span style="font-size:11px;color:var(--text-secondary);background:var(--bg-tertiary);padding:3px 8px;border-radius:5px">${Utils.escapeHtml(c)}</span>`).join('')}</div>`
       : '';
+    // 已被改编标记：book.adaptedKinds 记录改编过的影视分类（movie/tv/anime）
+    const _ADAPT_LABEL = { movie: '电影', tv: '电视剧', anime: '动画' };
+    const adaptedKinds = Array.isArray(book.adaptedKinds) ? book.adaptedKinds.filter(k => _ADAPT_LABEL[k]) : [];
+    const adaptedHtml = adaptedKinds.length
+      ? `<div style="display:flex;align-items:center;gap:6px;margin:12px 0 0;font-size:11px;color:var(--accent)"><span style="background:var(--accent-dim,rgba(100,100,200,0.15));border-radius:5px;padding:3px 8px">已改编为${adaptedKinds.map(k => _ADAPT_LABEL[k]).join(' / ')}</span></div>`
+      : '';
 
     const mask = document.createElement('div');
     mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px';
@@ -11327,6 +20114,7 @@ ${kwLine}
             </div>
           </div>
           ${catsHtml}
+          ${adaptedHtml}
           <div style="font-size:13px;line-height:1.7;color:var(--text-secondary);margin:14px 0 20px;white-space:pre-wrap;word-break:break-word">${Utils.escapeHtml((book.intro || '').trim() || '暂无简介')}</div>
         </div>
         <div style="display:flex;gap:10px;padding:12px 20px 18px">${btnsHtml}</div>
@@ -11359,8 +20147,10 @@ ${kwLine}
       }
       mask.remove();
       // 已生成过大纲/正文的，直接进入；否则先弹生成设置
-      // 自写书：始终进目录页，由目录页处理「无蓝图→去设置生成」引导，不走常规一键生成
-      const already = book.selfWrite ? true : ((book.type === 'short') ? !!book.content : (Array.isArray(book.toc) && book.toc.length > 0));
+      // 自写书：长篇始终进目录页（由目录页引导生成蓝图）；短篇看有没有正文，没正文就进生成设置
+      const already = book.selfWrite
+        ? (book.type === 'short' ? !!(book.content && book.content.trim()) : true)
+        : ((book.type === 'short') ? !!book.content : (Array.isArray(book.toc) && book.toc.length > 0));
       if (already) {
         if (book.type === 'short') { _readingOpenShort(book.id); }
         else { _readingOpenToc(book.id); }
@@ -11973,6 +20763,21 @@ ${cand.detail}
     // 自写书的「创作方向」：用户在生成蓝图前填的剧情走向、人物设定倾向等硬性要求
     const guide = (book.writeGuide || '').trim();
     const guideBlock = guide ? `\n【作者的创作方向·必须遵循】\n这是作者对本书的明确要求（剧情走向、人物设定倾向、想要的风格基调等），请务必据此设计蓝图，不得偏离：\n${guide}\n` : '';
+    // 同人文：本书是某部影视作品的同人（fanficOf）。全量喂原作素材，但要求蓝图必须有创新/深挖，不得照搬原作。
+    let fanficBlock = '';
+    if (book.fanficOf && book.fanficOf.workId) {
+      try {
+        const works = Array.isArray(pd.videoWorks) ? pd.videoWorks : [];
+        const srcWork = works.find(w => w && w.id === book.fanficOf.workId);
+        if (srcWork) {
+          const src = _readingBuildFanficSource(srcWork);
+          if (src) {
+            fanficBlock = `\n【这是一部同人作品·原作资料】\n本书是粉丝基于下面这部原作创作的同人，不是原作本身、也不是官方续集：\n${src}\n
+【同人蓝图铁律】\n- 这是同人再创作：可以借用原作的角色、世界观与设定，但绝不能照搬原作剧情走向、复述原作故事。\n- 必须有自己鲜明的侧重与创新——要么深挖原作角色（CP/个人向/关系重塑/补完），要么借世界观写全新的人物与故事（AU/支线/背景填补），要么两者综合。请据本书简介确定的方向去设计一条原作没有的、独立成立的故事线。\n- 沿用原作角色时保留其核心性格与关系底色，但允许同人式的合理再诠释；新原创角色 basis 写"原创"。\n`;
+          }
+        }
+      } catch (_) {}
+    }
     const sysPromptHead = `你是长篇小说的故事架构师。请为下面这本书设计完整的故事蓝图（不是正文，而是供后续分章创作使用的总纲）。
 
 【书籍信息】
@@ -11980,7 +20785,7 @@ ${cand.detail}
 作者：${book.author || '佚名'}
 题材标签：${cats || '（未指定）'}
 简介：${(book.intro || '').trim() || '（无）'}
-${guideBlock}${wvBlock ? '\n' + wvBlock + '\n' : ''}${mainlineBlock ? '\n' + mainlineBlock + '\n' : ''}${authorStyleBlock}
+${guideBlock}${fanficBlock}${wvBlock ? '\n' + wvBlock + '\n' : ''}${mainlineBlock ? '\n' + mainlineBlock + '\n' : ''}${authorStyleBlock}
 请先确定这本书的总章数（在 40-120 章之间，按题材和故事体量自定一个确切数字），然后输出故事蓝图。严格使用 JSON 对象格式，不能返回 Markdown、代码块或解释，必须以 { 开头、以 } 结尾：
 
 {
@@ -12249,7 +21054,7 @@ ${progressHint}
           <div class="phone-reading-toc-author">${Utils.escapeHtml(_readingAuthorDisplay(book.author))} · 长篇连载${total ? ` · 共 ${total} 章` : ''}</div>
           ${catsHtml}
         </div>
-        <div class="phone-reading-toc-gear" onclick="Phone._readingOpenBookSettings('${Utils.escapeHtml(book.id)}')" title="书籍设置">⚙</div>
+        <div class="phone-reading-toc-gear" onclick="Phone._readingOpenBookSettings('${Utils.escapeHtml(book.id)}')" title="书籍设置">${_uiIcon('more', 20)}</div>
       </div>`;
 
     // 顺序解锁：已生成正文的章 + 第一个未生成的章（下一个待读）可点；再往后的锁定，禁止跳章生成
@@ -12338,14 +21143,26 @@ ${progressHint}
 
     body.innerHTML = `
       <div class="phone-reading-set-page">
-        ${row('设置封面', '为这本书更换封面图', `<button class="phone-reading-set-btn" onclick="Phone._readingSetCover('${id}')">上传</button>`)}
-        ${book.selfWrite ? row('故事蓝图', book.blueprint ? '编辑明线/暗线/人物/结构，并据此生成章节目录' : '先生成故事蓝图，再编辑、排目录', `<button class="phone-reading-set-btn" onclick="Phone._readingEditOutline('${id}')">${book.blueprint ? '编辑' : '生成'}</button>`) : ''}
+        ${row('设置封面', '为这本书更换封面图', `<button class="phone-reading-set-btn" onclick="Phone._readingSetCover('${id}')">上传</button>${(book.cover || '').trim() ? `<button class="phone-reading-set-btn phone-set-btn-ghost" onclick="Phone._readingClearCover('${id}')">清除</button>` : ''}`)}
+        ${(book.selfWrite && !isShort) ? row('故事蓝图', book.blueprint ? '编辑明线/暗线/人物/结构，并据此生成章节目录' : '先生成故事蓝图，再编辑、排目录', `<button class="phone-reading-set-btn" onclick="Phone._readingEditOutline('${id}')">${book.blueprint ? '编辑' : '生成'}</button>`) : ''}
+        ${(book.selfWrite && isShort) ? row('创作方向 / 参考素材', '编辑简介与世界观、人物映射等参考设置（影响重写）', `<button class="phone-reading-set-btn" onclick="Phone._readingShowGenSetup('${id}', true)">设置</button>`) : ''}
         ${(book.imported || book.selfWrite) ? '' : row('作者文风', '署名作者「' + Utils.escapeHtml((book.author || '佚名').trim()) + '」的叙事笔法，只影响怎么写、不决定题材人物', `<button class="phone-reading-set-btn" onclick="Phone._readingEditAuthorStyle('${id}')">编辑</button>`)}
         ${row('共读模式', (book.coRead && book.coRead.enabled && (book.coRead.realName || book.coRead.name)) ? ('正在和「' + Utils.escapeHtml(book.coRead.realName || book.coRead.name) + '」一起读，可在正文段落写想法') : '邀请一位角色一起读，ta 会在段落留下想法、回应你的评论', `<button class="phone-reading-set-btn" onclick="Phone._readingCoReadSetup('${id}')">设置</button>`)}
-        ${(book.imported || book.selfWrite) ? '' : (isShort
+        ${book.imported ? '' : (isShort
           ? row('重写本篇', book.content && book.content.trim() ? '按新的方向重写整篇短篇正文' : '还没有已生成的正文', book.content && book.content.trim() ? `<button class="phone-reading-set-btn danger" onclick="Phone._readingRewriteShort('${id}')">重写</button>` : `<button class="phone-reading-set-btn" disabled style="opacity:.4">重写</button>`)
-          : row('重写最新一章', lastWritten ? `重写第 ${lastWritten} 章正文，会回滚本章的伏笔记录` : '还没有已生成的正文', lastWritten ? `<button class="phone-reading-set-btn danger" onclick="Phone._readingRewriteLast('${id}')">重写</button>` : `<button class="phone-reading-set-btn" disabled style="opacity:.4">重写</button>`))}
+          : (book.selfWrite ? '' : row('重写最新一章', lastWritten ? `重写第 ${lastWritten} 章正文，会回滚本章的伏笔记录` : '还没有已生成的正文', lastWritten ? `<button class="phone-reading-set-btn danger" onclick="Phone._readingRewriteLast('${id}')">重写</button>` : `<button class="phone-reading-set-btn" disabled style="opacity:.4">重写</button>`)))}
         ${(book.imported || book.selfWrite || isShort) ? '' : row('查看大纲', '书名/作者/蓝图/每章概述/伏笔池（含剧透）', `<button class="phone-reading-set-btn" onclick="Phone._readingViewOutline('${id}')">查看</button>`)}
+        ${book.selfWrite ? (() => {
+          const lOpen = Array.isArray(book.licenseOpen) ? book.licenseOpen : [];
+          const lSold = Array.isArray(book.licenses) ? book.licenses : [];
+          const soldKinds = lSold.map(l => l && l.kind).filter(Boolean);
+          const KL = { movie: '电影', tv: '电视剧', anime: '动漫' };
+          let desc = '';
+          if (soldKinds.length) desc += '已售：' + soldKinds.map(k => KL[k] || k).join('、');
+          if (lOpen.filter(k => !soldKinds.includes(k)).length) desc += (desc ? '；' : '') + '挂牌中：' + lOpen.filter(k => !soldKinds.includes(k)).map(k => KL[k] || k).join('、');
+          if (!desc) desc = '将影视改编权公开挂牌，可能有片方前来洽谈购买';
+          return row('影视授权', desc, `<button class="phone-reading-set-btn" onclick="Phone._readingLicenseSetup('${id}')">管理</button>`);
+        })() : ''}
       </div>`;
   }
 
@@ -12424,6 +21241,17 @@ ${progressHint}
       }
       await doSave(dataUrl);
     } catch (e) { console.warn('[Reading] cover pick failed', e); UI.showToast('图片设置失败', 1600); }
+  }
+
+  // 清除封面：回到默认占位
+  async function _readingClearCover(bookId) {
+    const pd = await _getPhoneData();
+    const bk = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!bk) return;
+    bk.cover = '';
+    await _savePhoneData(pd);
+    UI.showToast('封面已清除', 1200);
+    _renderReadingBookSettings(bookId);
   }
 
   // 重写最新一章：回滚该章伏笔，弹建议框（可空）→ 带建议重生成
@@ -12573,6 +21401,11 @@ ${progressHint}
 
     const back = () => {
       overlay.remove();
+      // 恢复设置页的全局 header：生成蓝图/目录过程中可能有子流程污染了 title / home-mode / 返回键，
+      // 这里强制还原成「书籍设置」的状态，再重渲染 body。
+      document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-home-mode');
+      document.getElementById('phone-back-btn')?.classList.remove('hidden');
+      const _t = document.getElementById('phone-title'); if (_t) _t.textContent = '书籍设置';
       // 返回设置页并刷新（目录页若打开也会在下次进入时更新）
       _renderReadingBookSettings(bookId);
     };
@@ -12655,7 +21488,7 @@ ${progressHint}
           ${styleRows}
           <div class="rd-ol-sec rd-ol-sec-top">故事蓝图</div>
           <div class="rd-ol-field"><label>创作方向</label><div class="rd-ol-fieldhint">规定剧情走向、人物设定倾向、风格基调，生成蓝图时必须遵循</div><textarea data-path="writeGuide" rows="4" placeholder="比如：男主前期隐忍后期黑化；女主不是恋爱脑，有独立主线；中段要有一次重大背叛；整体偏冷硬克制，不要甜宠……">${esc(draft.writeGuide || '')}</textarea></div>
-          <button class="rd-ol-addbtn" data-action="ref-setup" style="margin:0 0 16px">⚙ 参考素材设置（世界观 / 人物映射 / 主线）</button>
+          <button class="rd-ol-addbtn" data-action="ref-setup" style="margin:0 0 16px">${_uiIcon('settings', 14)} 参考素材设置（世界观 / 人物映射 / 主线）</button>
           ${bpSection}
           <div class="rd-ol-sec rd-ol-sec-top">章节目录</div>
           ${tocSection}
@@ -12879,13 +21712,29 @@ ${progressHint}
     const hint = (rewriteHint || '').trim();
     const rewriteBlock = hint ? `\n【重写要求】用户对上一稿不满意，要求重写。本次请按下面的方向调整，其余写作要求不变：\n${hint}\n` : '';
 
+    // 同人短篇：本篇是某部影视作品的同人（fanficOf）。喂精简版原作素材（lite），并要求有创新、不照搬原作。
+    let fanficBlock = '';
+    if (book.fanficOf && book.fanficOf.workId) {
+      try {
+        const works = Array.isArray(pd.videoWorks) ? pd.videoWorks : [];
+        const srcWork = works.find(w => w && w.id === book.fanficOf.workId);
+        if (srcWork) {
+          const src = _readingBuildFanficSource(srcWork, true);
+          if (src) {
+            fanficBlock = `\n【这是一篇同人短篇·原作资料】\n本篇是粉丝基于下面这部原作创作的同人，不是原作本身、也不是官方续集：\n${src}\n
+【同人写作铁律】\n- 这是同人再创作：可以借用原作的角色、世界观与设定，但绝不能照搬原作剧情、复述原作故事。\n- 必须有自己鲜明的侧重与创新——要么深挖原作角色（CP/个人向/关系重塑/补完一段原作没写的情境），要么借世界观写一个全新的小故事（AU/支线/背景）。请据本篇简介确定的方向，写一个原作里没有、又能独立成立的完整短篇。\n- 沿用原作角色时保留其核心性格与关系底色，但允许同人式的合理再诠释；其余角色自由原创。\n`;
+          }
+        }
+      } catch (_) {}
+    }
+
     const sysPrompt = `你是文学功底深厚的短篇小说作者，正在写一篇可以一口气读完的独立短篇。请写出完整正文。
 
 【篇名】${book.title || '未命名'}
 【作者】${book.author || '佚名'}
 【题材标签】${cats || '（未指定）'}
 【简介/内核】${(book.intro || '').trim() || '（无，请自行立意）'}
-${wvBlock}${mappingBlockTx}${mainlineBlockTx}${authorStyleBlock}${rewriteBlock}
+${wvBlock}${fanficBlock}${mappingBlockTx}${mainlineBlockTx}${authorStyleBlock}${rewriteBlock}
 这是一篇【短篇小说】，不是长篇的开头、不是梗概。写作要求：
 
 一、故事完整性与结构
@@ -13740,7 +22589,7 @@ ${myNotesBlock}${oldBlock}
     if (!book) { body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-secondary)">未找到该书</div>'; return; }
     const author = _readingAuthorDisplay(book.author);  // 读者可见：显示笔名
     // 右上角设置入口（封面/作者文风/共读/重写本篇）
-    { const _hr = document.getElementById('phone-header-right'); if (_hr) _hr.innerHTML = `<button class="phone-nav-btn" title="设置" onclick="Phone._readingOpenBookSettings('${Utils.escapeHtml(book.id)}')">${_uiIcon('settings', 18)}</button>`; }
+    { const _hr = document.getElementById('phone-header-right'); if (_hr) _hr.innerHTML = `<button class="phone-nav-btn" title="设置" onclick="Phone._readingOpenBookSettings('${Utils.escapeHtml(book.id)}')">${_uiIcon('more', 18)}</button>`; }
     let cleaned = (book.content || '').replace(/<\/?[a-zA-Z][^>]*>/g, '');
     cleaned = await _readingApplyRegexRules(cleaned);
     const paras = cleaned.split(/\n+/).map(p => p.trim()).filter(Boolean);
@@ -13868,7 +22717,7 @@ ${myNotesBlock}${oldBlock}
       if (bk && bk.selfWrite) { _readingCollectGift(bookId, idx); return; }
       _readingShowRewardSheet(bookId, idx); return;
     }
-    if (key === 'share') { _readingShareChapter(bookId, idx); return; }
+    if (key === 'share') { _readingShareMenu(bookId, idx); return; }
   }
 
   // 自建书「收礼」：前端随机塞 2-3 个礼物，合计金额作为稿费收入进钱包（记账 + 写 rewards 小卡片）
@@ -13940,6 +22789,117 @@ ${myNotesBlock}${oldBlock}
       if (isShort) { _renderReadingShort(bookId); }
       else { _renderReadingChapter(bookId, idx); }
     } catch (_) {}
+  }
+
+  // 阅读分享菜单：生成共读笔记长图 / 分享到主线 / 分享到聊天
+  async function _readingShareMenu(bookId, idx) {
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) { UI.showToast('书籍不存在', 1500); return; }
+
+    const choice = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.45)';
+      overlay.innerHTML = `
+        <div style="width:100%;max-width:420px;background:var(--bg);border-radius:20px 20px 0 0;padding:20px 20px 32px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <span style="font-size:16px;font-weight:600;color:var(--text)">分享</span>
+            <button id="share-rd-cancel" style="background:none;border:none;color:var(--text-secondary);font-size:22px;cursor:pointer;line-height:1">×</button>
+          </div>
+          <button id="share-rd-note" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            生成共读笔记
+          </button>
+          <button id="share-rd-main" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+            分享到主线
+          </button>
+          <button id="share-rd-chat" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            分享到聊天
+          </button>
+        </div>
+      `;
+      const close = val => { try { document.body.removeChild(overlay); } catch(_) {} resolve(val); };
+      overlay.querySelector('#share-rd-cancel').onclick = () => close(null);
+      overlay.querySelector('#share-rd-note').onclick = () => close('note');
+      overlay.querySelector('#share-rd-main').onclick = () => close('main');
+      overlay.querySelector('#share-rd-chat').onclick = () => close('chat');
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+      document.body.appendChild(overlay);
+    });
+
+    if (choice === 'note') {
+      _readingShareChapter(bookId, idx);
+    } else if (choice === 'main') {
+      const content = _readingBuildShareContent(book, idx);
+      _shareToMain('reading', book.title || '书籍', content);
+    } else if (choice === 'chat') {
+      await _readingShareToChat(book, idx);
+    }
+  }
+
+  // 构建书的分享文本：书简介卡（书名/作者/简介）+ 本章目录+概述（短篇无概述）
+  function _readingBuildShareContent(book, idx) {
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const isShort = (book.type === 'short' || idx === 0);
+    const lines = [];
+    lines.push(`《${esc(book.title) || '未命名'}》`);
+    if (esc(book.author)) lines.push(`作者：${esc(book.author)}`);
+    const cats = Array.isArray(book.category) ? book.category.filter(Boolean) : (book.category ? [String(book.category)] : []);
+    if (cats.length) lines.push(`分类：${cats.join('、')}`);
+    lines.push(`类型：${isShort ? '短篇小说' : '长篇连载'}`);
+    if (esc(book.intro)) lines.push(`\n简介：\n${esc(book.intro)}`);
+    // 长篇：附本章目录条目（标题 + 概述）
+    if (!isShort) {
+      const toc = Array.isArray(book.toc) ? book.toc : [];
+      const ch = toc.find(c => c && c.idx === idx);
+      if (ch) {
+        lines.push(`\n本章：第${ch.idx}章 ${esc(ch.title)}`);
+        if (esc(ch.summary)) lines.push(`概述：${esc(ch.summary)}`);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  // 书籍分享到聊天：选会话 → 发一张书卡片消息
+  async function _readingShareToChat(book, idx) {
+    const pd = await _getPhoneData();
+    const targetId = await _shareTargetPicker(pd, '分享到');
+    if (!targetId) return;
+    const isGroup = _isGroupId(pd, targetId);
+    const isShort = (book.type === 'short' || idx === 0);
+    const toc = Array.isArray(book.toc) ? book.toc : [];
+    const ch = (!isShort) ? toc.find(c => c && c.idx === idx) : null;
+    const chapterLabel = ch ? `第${ch.idx}章 ${ch.title || ''}` : '';
+
+    let gameTime = '';
+    try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+    if (!pd.chatThreads) pd.chatThreads = {};
+    if (!pd.chatThreads[targetId]) pd.chatThreads[targetId] = [];
+
+    const msg = {
+      id: 'book_' + Date.now(),
+      role: 'me',
+      type: 'book_card',
+      bookTitle: book.title || '未命名',
+      bookAuthor: book.author || '佚名',
+      bookKind: isShort ? '短篇小说' : '长篇连载',
+      bookCover: book.cover || '',
+      bookIntro: String(book.intro || '').slice(0, 80),
+      bookChapter: chapterLabel,
+      bookShareText: _readingBuildShareContent(book, idx),
+      text: `[书籍分享]${book.title || ''}${chapterLabel ? ' ' + chapterLabel : ''}`,
+      time: gameTime,
+      createdAt: Date.now()
+    };
+    pd.chatThreads[targetId].push(msg);
+    await _savePhoneData();
+    if (!isGroup) {
+      const _ctName = (pd.chatContacts || []).find(c => c.id === targetId)?.name || targetId;
+      _addChatMessageToRoundLog(targetId, 'me', `分享了书籍（${book.title || '未命名'}${chapterLabel ? ' ' + chapterLabel : ''}）`, gameTime, _ctName);
+    }
+    UI.showToast('已发送', 1200);
   }
 
   // 章节分享：二次确认 → 生成长图卡
@@ -14233,6 +23193,41 @@ ${myNotesBlock}${oldBlock}
     return { comments: ch.comments, rewards: ch.rewards, notes: ch.notes, getNote: () => ch.authorNote || '', setNote: (v) => { ch.authorNote = v; } };
   }
 
+  // 构建「本书已被影视化改编」块（喂给本章说）：读 book.adaptedWorks 快照（视频那边生成剧本/蓝图时落地）。
+  // 只喂改编事实（影视名/分类/导演编剧CV/热评态度），不喂影视详细简介——影视基于全书改编可能含后续，
+  // 喂简介易借影视梗概剧透本章之后的原著。并给出改编相关的评论生态引导。无改编返回空串。
+  function _readingBuildAdaptedBlock(book) {
+    if (!book || !Array.isArray(book.adaptedWorks) || !book.adaptedWorks.length) return '';
+    const KIND = { movie: '电影', tv: '电视剧', anime: '动画' };
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const lines = [];
+    book.adaptedWorks.forEach(a => {
+      if (!a) return;
+      const kindName = KIND[a.kind] || '影视作品';
+      const bits = [`《${esc(a.title) || '（未命名）'}》（${kindName}）`];
+      if (a.kind === 'anime') {
+        if (esc(a.director)) bits.push(`监督：${esc(a.director)}`);
+        if (esc(a.studio)) bits.push(`制作：${esc(a.studio)}`);
+        if (Array.isArray(a.cast) && a.cast.length) bits.push(`CV：${a.cast.join('、')}`);
+      } else {
+        if (esc(a.director)) bits.push(`导演：${esc(a.director)}`);
+        if (esc(a.screenwriter)) bits.push(`编剧：${esc(a.screenwriter)}`);
+        if (Array.isArray(a.cast) && a.cast.length) bits.push(`主演：${a.cast.join('、')}`);
+      }
+      let line = '· ' + bits.join('，');
+      if (a.hotComment && esc(a.hotComment.text)) {
+        line += `\n  （观众热评「${esc(a.hotComment.user) || '网友'}」：${esc(a.hotComment.text)}）`;
+      }
+      lines.push(line);
+    });
+    if (!lines.length) return '';
+    return `
+【本书已被影视化改编】这本书已经被改编成以下影视作品（这是已发生的事实，可让书友自然聊起）：
+${lines.join('\n')}
+- 评论里可以有「看了影视/预告来补原著」的剧粉，也有原著党盘点还原度、关心选角是否贴脸、担心魔改删戏、磕原著CP怕被改的，少量即可、别喧宾夺主。
+- 【铁律】可以聊"这书影视化了/选角/还原度期待/原著党态度"，但绝对不能借影视作品的信息剧透本章之后的原著剧情——影视基于全书改编、可能含后续情节，你只知道读到本章为止的内容，严禁据此推断或透露后文。`;
+  }
+
   // 生成「本章说 + 作者的话」（一次生成，作者说允许为空）。
   // 信息边界：世界观、NPC名单、本章正文、前两章概述、作者人设、10轮主线 + 随机联动素材；
   // 不喂后续章节/蓝图，作者说靠提示词约束禁止剧透。返回 true/false。
@@ -14424,7 +23419,7 @@ ${existing}
 ${prevSummary ? `\n## 前两章概述\n${prevSummary}\n` : ''}
 ## 本章正文
 ${chapterText}
-${linkBlock}${rewardBlock}
+${linkBlock}${_readingBuildAdaptedBlock(book)}${rewardBlock}
 ## 已有评论
 ${existing}
 
@@ -14794,11 +23789,201 @@ ${t === 'short' ? shortSpec : longSpec}${authorBlock ? '\n\n' + authorBlock : ''
     _renderReading(pd);
   }
 
+  // 从一部影视作品提取「原作素材」文本，供生成同人时全量喂给 AI。
+  // 电影读 script（剧情梗概/气质/角色/）；电视剧/动画读 blueprint（明线/暗线/结构/角色）。
+  // lite=true：短篇精简模式——仅对剧集/动画砍掉「故事结构」与「官方简介」（明暗线梗概更准），其余全留；电影不受影响、始终全量。
+  function _readingBuildFanficSource(work, lite) {
+    if (!work) return '';
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const KIND = { movie: '电影', tv: '电视剧', anime: '动画' };
+    const kindName = KIND[work.kind] || '影视作品';
+    const isSeries = (work.kind === 'tv' || work.kind === 'anime');
+    const parts = [];
+    parts.push(`原作：《${esc(work.title)}》（${kindName}）`);
+    if (esc(work.director)) parts.push(`${work.kind === 'anime' ? '监督' : '导演'}：${esc(work.director)}`);
+    const cats = Array.isArray(work.category) ? work.category.filter(Boolean).join('、') : '';
+    if (esc(work.genre) || cats) parts.push(`类型：${[esc(work.genre), cats].filter(Boolean).join(' / ')}`);
+    // 官方简介：剧集 lite 模式省略（明暗线梗概更准）；电影始终保留
+    if (esc(work.intro) && !(lite && isSeries)) parts.push(`官方简介：${esc(work.intro)}`);
+    // 电影：剧本设定（电影信息本就少，始终全量）
+    if (work.kind === 'movie' && work.script && typeof work.script === 'object') {
+      const sc = work.script;
+      if (esc(sc.synopsis)) parts.push(`剧情梗概：${esc(sc.synopsis)}`);
+      if (esc(sc.style)) parts.push(`气质风格：${esc(sc.style)}`);
+      const chars = Array.isArray(sc.characters) ? sc.characters : [];
+      if (chars.length) {
+        const lines = chars.map(c => {
+          if (!c || !c.name) return '';
+          const bits = [`- ${esc(c.name)}`];
+          if (esc(c.identity)) bits.push(esc(c.identity));
+          if (esc(c.personality)) bits.push('性格：' + esc(c.personality));
+          if (esc(c.relation)) bits.push('关系：' + esc(c.relation));
+          return bits.join('｜');
+        }).filter(Boolean).join('\n');
+        if (lines) parts.push(`主要角色：\n${lines}`);
+      }
+    }
+    // 电视剧/动画：故事蓝图
+    if (isSeries && work.blueprint && typeof work.blueprint === 'object') {
+      const bp = work.blueprint;
+      if (esc(bp.mainline)) parts.push(`明线：${esc(bp.mainline)}`);
+      if (bp.darkline && esc(bp.darkline.truth)) parts.push(`暗线：${esc(bp.darkline.truth)}`);
+      let charsText = '';
+      try { charsText = _videoBpCharsText(bp); } catch (_) {}
+      if (charsText) parts.push(`主要角色：\n${charsText}`);
+      // 故事结构：剧集 lite 模式省略（短篇用不上分阶段章节规划）
+      if (!lite && Array.isArray(bp.structure) && bp.structure.length) {
+        const st = bp.structure.map(s => s && (esc(s.phase) || esc(s.summary)) ? `${esc(s.phase)}：${esc(s.summary)}` : '').filter(Boolean).join('\n');
+        if (st) parts.push(`故事结构：\n${st}`);
+      }
+    }
+    return parts.join('\n');
+  }
+
+  // 「影视同人搜索」：阅读搜索框精确命中观看历史里某部影视作品名时，一次性生成一批它的同人小说列表。
+  // 全量喂原作素材，让 AI 自行决定每篇写角色向 / 世界观向 / 综合，并把侧重自然写进简介。
+  // 生成的书强制 genFanfic（不再被反向影视化）+ fanficOf 引用。生成后落盘并渲染。
+  async function _readingGenFanficList(work, type, ctx, pd) {
+    const { url, key, model } = ctx;
+    const t = (type === 'short') ? 'short' : 'long';
+    const esc = (s) => String(s == null ? '' : s).trim();
+    const KIND = { movie: '电影', tv: '电视剧', anime: '动画' };
+    const kindName = KIND[work.kind] || '影视作品';
+    const unit = (t === 'short') ? '篇' : '本';
+    const srcBlock = _readingBuildFanficSource(work);
+
+    const spec = t === 'short' ? `每篇输出以下字段，严格使用 JSON 数组格式，不能返回 Markdown、代码块或解释，必须以 [ 开头、以 ] 结尾：
+[
+  {
+    "title": "同人篇名（原创，不要直接沿用原作名）",
+    "author": "作者笔名（一个像真人的同人作者网名，自行创作）",
+    "category": ["题材标签（你为这篇自拟，1-3 个，简短，可含 CP向/世界观向/AU/续写 之类）"],
+    "intro": "简介（150 字左右，写清这篇同人的故事内核与切入点。不必在开头声明'这是同人'，系统会自动标注。用户可见）"
+  }
+]
+
+要求：
+- 这是【同人短篇】：一篇能一口气读完（约 2000-5000 字）的完整故事，有清晰内核和收束，不要写成长篇开头。` : `每本输出以下字段，严格使用 JSON 数组格式，不能返回 Markdown、代码块或解释，必须以 [ 开头、以 ] 结尾：
+[
+  {
+    "title": "同人书名（原创，不要直接沿用原作名）",
+    "author": "作者笔名（一个像真人的同人作者网名，自行创作）",
+    "category": ["题材标签（你为这本自拟，1-3 个，简短，可含 CP向/世界观向/AU/续写 之类）"],
+    "intro": "简介（150 字左右，写出这本长篇同人的主线钩子、追更感与切入点。不必在开头声明'这是同人'，系统会自动标注。用户可见）"
+  }
+]
+
+要求：
+- 这是【同人长篇连载】：能长期展开、有主线、有持续悬念的大故事。`;
+
+    const sysPrompt = `你是同人小说推荐生成系统。在这个世界里，${kindName}《${esc(work.title)}》很受欢迎，粉丝们为它创作了大量同人小说。请生成 8-10 ${unit}基于它的同人${t === 'short' ? '短篇' : '长篇连载'}的列表卡片。
+
+【原作资料】
+${srcBlock}
+
+【同人创作方向】这些都是粉丝写的同人，不是原作本身、也不是官方续集。同人主要有两个方向，请让这 8-10 ${unit}混合覆盖、各有侧重（由你为每${unit}自行把握）：
+- 角色向：核心是写原作里的人物——CP、个人向、续写、补完、关系重塑、把这些人放进 AU 等。
+- 世界观向：借用原作的世界观与设定，写全新的人物和故事、扩写支线、填补背景空白。
+- 也可以是两者综合。
+请让不同篇目的侧重彼此拉开，像真实同人区那样百花齐放，别都写成一个路子。
+
+${spec}
+- category 为 1-3 个题材标签，由你为每${unit}自拟。
+- title 只写作品名本身，不要加书名号或引号，且不要直接沿用原作名。
+- 每${unit}要有自己鲜明的切入点和创新，绝不简单复述原作剧情。
+- title/author/category/intro 全部原创。
+- 只输出 JSON，不要多余解释。`;
+
+    let raw;
+    try {
+      raw = await _phoneJsonArrayWithRetry({
+        label: '同人列表', url, key, model,
+        temperature: 0.95, max_tokens: 4096,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: `请生成一批《${esc(work.title)}》的同人${t === 'short' ? '短篇' : '长篇连载'}。` }
+        ]
+      });
+    } catch (e) {
+      console.error('[同人列表]', e);
+      UI.showToast('生成失败，请重试', 1800);
+      return;
+    }
+
+    const list = (Array.isArray(raw) ? raw : []).filter(b => b && b.title).map(b => {
+      let cats = [];
+      if (Array.isArray(b.category)) cats = b.category.map(c => String(c || '').trim()).filter(Boolean);
+      else if (typeof b.category === 'string') cats = b.category.split(/[,，、\s]+/).map(c => c.trim()).filter(Boolean);
+      // 同人简介前缀：统一标明同人身份，AI 简介专注写故事
+      const aiIntro = String(b.intro || '').slice(0, 300);
+      const intro = (`本作是《${esc(work.title)}》的同人文。\n` + aiIntro).slice(0, 340);
+      return {
+        id: 'bk_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        title: String(b.title).replace(/^[《<「『\s]+|[》>」』\s]+$/g, '').slice(0, 40),
+        author: String(b.author || '佚名').slice(0, 20),
+        category: cats.slice(0, 3),
+        intro: intro,
+        type: t,
+        cover: '',
+        genFanfic: true,
+        fanficOf: { workId: work.id, workTitle: work.title || '', kind: work.kind }
+      };
+    });
+    if (list.length === 0) {
+      UI.showToast('生成结果为空，请重试', 1800);
+      return;
+    }
+
+    if (!pd.readingDiscover || typeof pd.readingDiscover !== 'object' || Array.isArray(pd.readingDiscover)) {
+      pd.readingDiscover = { long: [], short: [] };
+    }
+    pd.readingDiscover[t] = list;
+    await _savePhoneData();
+    _renderReading(pd);
+    UI.showToast('找到《' + (work.title || '') + '》的同人 ' + list.length + (t === 'short' ? ' 篇' : ' 本'), 1600);
+  }
+
   // 搜索/刷新：按当前类型 tab 生成一批（题材可为空，空则随机推荐）
   async function _readingSearch() {
     const input = document.getElementById('phone-reading-search');
     const kw = input ? input.value.trim() : '';
     const type = (_readingDiscoverType === 'short') ? 'short' : 'long';
+
+    // 先铺骨架屏：搜索 / 刷新 / 同人 三条路统一入口，一处覆盖。生成完走 _renderReading 整页重渲染。
+    try {
+      const homeEl = document.querySelector('.phone-reading-discover');
+      const listEl = homeEl ? (homeEl.querySelector('.phone-reading-shelf') || homeEl.querySelector('.phone-reading-empty')) : null;
+      if (listEl) listEl.outerHTML = _renderReadingLoadingHtml(6);
+    } catch (_) {}
+
+    // 影视同人搜索：搜索词精确命中观看历史里某部影视作品名（去书名号比对）且该作真生成过内容
+    // （电影有 script、剧集/动画有 blueprint）→ 走同人分支，生成它的同人小说列表。没素材的作品不触发。
+    if (kw) {
+      const _strip = (s) => String(s || '').replace(/^[《<「『\s]+|[》>」』\s]+$/g, '').trim();
+      const kwBare = _strip(kw);
+      if (kwBare) {
+        const pd0 = await _getPhoneData();
+        const works = Array.isArray(pd0 && pd0.videoWorks) ? pd0.videoWorks : [];
+        const hitWork = works.find(w => {
+          if (!w || !w.title || _strip(w.title) !== kwBare) return false;
+          if (w.kind === 'movie') return !!(w.script && typeof w.script === 'object' && (w.script.synopsis || (Array.isArray(w.script.characters) && w.script.characters.length)));
+          if (w.kind === 'tv' || w.kind === 'anime') return !!(w.blueprint && typeof w.blueprint === 'object' && (w.blueprint.mainline || (w.blueprint.characters && typeof w.blueprint.characters === 'object')));
+          return false;
+        });
+        if (hitWork) {
+          const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+          const mainConfig = await API.getConfig();
+          const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+          const key = funcConfig.apiKey || mainConfig.apiKey;
+          const model = funcConfig.model || mainConfig.model;
+          if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+          UI.showToast('正在生成《' + (hitWork.title || '') + '》的同人…', 1600);
+          await _readingGenFanficList(hitWork, type, { url, key, model }, pd0);
+          return;
+        }
+      }
+    }
+
     UI.showToast(type === 'short' ? '正在生成短篇…' : '正在生成连载…', 1500);
     await _readingGenList(type, kw);
   }
@@ -21033,6 +30218,24 @@ function _renderSettings(pd) {
   <div id="phone-lorebook-list" style="margin-top:4px"><div style="font-size:12px;color:var(--text-secondary)">加载中…</div></div>
   <button class="phone-settings-btn secondary" style="margin-top:10px" onclick="Phone._phoneLorebookAdd()">+ 添加世界书</button>
   </div>
+  <div class="phone-settings-card">
+  <div class="phone-settings-title">回溯设置</div>
+  <div class="phone-settings-desc">剧情回溯时，默认连同小屋、衣橱一起回退。开启下面的开关后，回溯不会影响你布置好的小屋 / 搭配好的衣橱（含仓库、套装），但物流订单仍按剧情回退。</div>
+  <label class="circle-check-label" style="margin-top:0;padding:0">
+    <span class="circle-check-text" style="font-size:13px">回溯时保留小屋数据<br><span style="font-size:11px;color:var(--text-secondary)">住所布置 + 家具仓库不随回溯改变</span></span>
+    <span style="position:relative;display:inline-flex">
+      <input type="checkbox" id="phone-keep-cottage" class="circle-check" ${pd?.rollbackKeepCottage ? 'checked' : ''} onchange="Phone._toggleRollbackKeep('rollbackKeepCottage', this.checked)">
+      <span class="circle-check-ui"></span>
+    </span>
+  </label>
+  <label class="circle-check-label" style="margin-top:10px;padding:0">
+    <span class="circle-check-text" style="font-size:13px">回溯时保留衣橱数据<br><span style="font-size:11px;color:var(--text-secondary)">当前穿搭 + 立绘 + 已存套装不随回溯改变</span></span>
+    <span style="position:relative;display:inline-flex">
+      <input type="checkbox" id="phone-keep-wardrobe" class="circle-check" ${pd?.rollbackKeepWardrobe ? 'checked' : ''} onchange="Phone._toggleRollbackKeep('rollbackKeepWardrobe', this.checked)">
+      <span class="circle-check-ui"></span>
+    </span>
+  </label>
+  </div>
   </div>
   `;
   _renderPhoneLorebookList(pd);
@@ -21074,12 +30277,12 @@ function _renderSettings(pd) {
            <div style="flex:1;min-width:0">
              <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(lb.name || '未命名')}${isPhoneAdd ? ' <span style="font-size:10px;color:var(--accent)">手机添加</span>' : ''}</div>
            </div>
-           ${isPhoneAdd ? `<button onclick="Phone._phoneLorebookRemove('${id}')" style="background:none;border:1px solid var(--border);color:var(--text-secondary);padding:3px 8px;border-radius:6px;cursor:pointer;font-size:11px">移除</button>` : ''}
-           <span style="position:relative;display:inline-flex">
-             <input type="checkbox" class="circle-check" ${on ? 'checked' : ''} onchange="Phone._phoneLorebookToggle('${id}', this.checked)">
-             <span class="circle-check-ui"></span>
-           </span>
-         </div>`);
+            ${isPhoneAdd ? `<button onclick="Phone._phoneLorebookRemove('${id}')" style="background:none;border:1px solid var(--border);color:var(--text-secondary);padding:3px 8px;border-radius:6px;cursor:pointer;font-size:11px">移除</button>` : ''}
+            <label class="circle-check-label" style="flex:0 0 auto;width:auto;gap:0;padding:0;position:relative;display:inline-flex">
+              <input type="checkbox" class="circle-check" ${on ? 'checked' : ''} onchange="Phone._phoneLorebookToggle('${id}', this.checked)">
+              <span class="circle-check-ui"></span>
+            </label>
+          </div>`);
      }
      wrap.innerHTML = rows.join('') || '<div style="font-size:12px;color:var(--text-secondary)">当前没有可用的世界书。</div>';
    } catch(e) {
@@ -21284,6 +30487,15 @@ async function _toggleSendActionLog(checked) {
 
   // 世界观设定注入开关（key: injectFestival / injectCustom / injectKnowledge）
   async function _toggleInject(key, checked) {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    pd[key] = !!checked;
+    await _savePhoneData();
+  }
+
+  // 回溯保留开关（key: rollbackKeepCottage / rollbackKeepWardrobe）
+  // 开关本身存在 phoneData，但在 restoreFromSnapshot 里会从当前值回填，免疫回溯
+  async function _toggleRollbackKeep(key, checked) {
     const pd = await _getPhoneData();
     if (!pd) return;
     pd[key] = !!checked;
@@ -21497,6 +30709,9 @@ async function _clearMomentsCover() {
     await _ensureForumNpcAvatarMap();
     await _ensureForumDisplayNameMap();
 
+    // 「我的」页头部：面具头像/网名（仿阅读/电台）
+    const forumMineMaskInfo = (_forumTab === 'myposts') ? await _getMaskInfo() : null;
+
     // 统一以 phoneData 缓存为准（WorldVoice 仅作为生成器）
     const posts = pd.cachedForumPosts || [];
     // 给帖子和评论匹配NPC头像
@@ -21521,13 +30736,9 @@ async function _clearMomentsCover() {
     body.innerHTML = `
       <div class="phone-forum-app" style="display:flex;flex-direction:column;height:100%">
         <div id="phone-forum-posts-panel" style="flex:1;overflow-y:auto;padding:10px 12px;display:${_forumTab === 'posts' ? 'block' : 'none'}">
-          <div style="display:flex;gap:6px;margin-bottom:8px">
-            <input id="phone-forum-search" type="text" placeholder="搜索…" style="flex:1;border:1px solid var(--border);border-radius:6px;padding:6px 10px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
-            <button onclick="Phone._forumSearch()" class="phone-forum-search-btn" style="background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;white-space:nowrap">搜索</button>
-          </div>
           <div style="display:flex;gap:6px;margin-bottom:10px">
-            <button onclick="Phone._forumRefresh()" class="phone-forum-refresh-btn" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;color:var(--text)">${_uiIcon('refresh', 13)} 刷新</button>
-            <button onclick="Phone._addForumPost()" class="phone-forum-post-btn" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;font-weight:600">+ 发帖</button>
+            <input id="phone-forum-search" type="text" placeholder="搜索…" oninput="Phone._forumSyncActionBtn()" onkeydown="if(event.key==='Enter')Phone._forumSearchOrRefresh()" style="flex:1;border:1px solid var(--border);border-radius:6px;padding:6px 10px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
+            <button id="phone-forum-action-btn" onclick="Phone._forumSearchOrRefresh()" class="phone-forum-search-btn" style="background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
           </div>
           <div id="phone-forum-posts" style="margin-top:4px">
             ${posts.length === 0 ? '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">点击刷新按钮获取推荐</p>' :
@@ -21542,6 +30753,7 @@ async function _clearMomentsCover() {
           ${historyHtml}
         </div>
         <div id="phone-forum-myposts-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_forumTab === 'myposts' ? 'block' : 'none'}">
+          ${_forumMineHeader(forumMineMaskInfo, (pd.myForumPosts || []).length)}
           ${_renderMyForumPosts(pd.myForumPosts || [])}
         </div>
         <div class="phone-tabbar">
@@ -21632,6 +30844,225 @@ async function _clearMomentsCover() {
       avatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
     } catch(_) {}
     return { username, avatar };
+  }
+
+  // ===== 论坛评论楼中楼（与影评区同一套逻辑）=====
+  // 评论 / 楼中楼的稳定唯一 id（刷新追加时按 targetId 精确盖楼）
+  let _forumCommentSeq = 0;
+  function _forumNewCommentId() {
+    _forumCommentSeq++;
+    return 'fc' + Date.now().toString(36) + (_forumCommentSeq).toString(36);
+  }
+
+  // 规范化评论：给主楼和每条 replies 分配稳定 id，确保 replies 是数组
+  function _forumNormalizeComments(comments) {
+    if (!Array.isArray(comments)) return;
+    comments.forEach(c => {
+      if (!c) return;
+      if (!c.id) c.id = _forumNewCommentId();
+      if (!Array.isArray(c.replies)) c.replies = [];
+      c.replies.forEach(rp => { if (rp && !rp.id) rp.id = _forumNewCommentId(); });
+    });
+  }
+
+  // 取当前详情页对应的帖子对象。kind='my' 取玩家帖，否则取 AI 帖（cached 优先，回退 WorldVoice）
+  async function _forumGetPost(kind, index) {
+    const pd = await _getPhoneData();
+    if (kind === 'my') return (pd && pd.myForumPosts && pd.myForumPosts[index]) || null;
+    let posts = (pd && pd.cachedForumPosts) || [];
+    if (!posts.length) posts = (window.WorldVoice && WorldVoice.getPosts()) || [];
+    return posts[index] || null;
+  }
+
+  // 重渲染当前论坛详情页（弹掉旧的渲染再重新压入执行）。保留评论区滚动位置，避免飞回顶部
+  function _forumRerenderDetail(kind, index) {
+    const oldScroll = document.querySelector('#phone-body .phone-forum-detail-scroll');
+    const top = oldScroll ? oldScroll.scrollTop : 0;
+    _navStack.pop();
+    if (kind === 'my') _viewMyForumPost(index); else _forumViewDetail(index);
+    // 重建是异步的：轮询直到出现的滚动容器不再是旧的那个（说明新 DOM 已就位），设一次滚动位置即停
+    const start = Date.now();
+    const tick = () => {
+      const sc = document.querySelector('#phone-body .phone-forum-detail-scroll');
+      if (sc && sc !== oldScroll) { sc.scrollTop = top; return; }
+      if (Date.now() - start < 1500) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  // 展开某主楼下折叠的楼中楼
+  async function _forumToggleReplies(kind, index, cid) {
+    const post = await _forumGetPost(kind, index);
+    if (!post) return;
+    const c = (post._comments || []).find(x => x && x.id === cid);
+    if (c) { c._expanded = true; await _savePhoneData(); _forumRerenderDetail(kind, index); }
+  }
+
+  // 玩家回复某主楼（toName 非空=回复楼里某人，空=回复楼主）
+  async function _forumReplyTo(kind, index, mainId, toName) {
+    const post = await _forumGetPost(kind, index);
+    if (!post) return;
+    const c = (post._comments || []).find(x => x && x.id === mainId);
+    if (!c) return;
+    const text = await UI.showSimpleInput(toName ? `回复 @${toName}` : '回复评论', '', { multiline: true, rows: 3, allowEmpty: false });
+    if (text === null) return;
+    const t = (text || '').trim();
+    if (!t) return;
+    const mi = await _getMaskInfo();
+    if (!Array.isArray(c.replies)) c.replies = [];
+    c.replies.push({
+      id: _forumNewCommentId(),
+      username: mi.username || '我',
+      avatar: mi.avatar || '',
+      isNpc: false, isPlayer: true,
+      content: t,
+      time: _formatPhoneTime(Conversations.getStatusBar()?.time || new Date().toISOString()),
+      likes: 0,
+      replyToName: (toName || '').trim()
+    });
+    c._expanded = true;
+    await _savePhoneData();
+    _log(`在${_getForumName() || '论坛'}回复了评论：${t}`);
+    _forumRerenderDetail(kind, index);
+  }
+
+  // 渲染论坛评论区（含楼中楼）：默认展开 2 条，超出折叠。kind/index 用于事件回调定位
+  function _forumCommentsHtml(comments, kind, index) {
+    const list = (Array.isArray(comments) ? comments : []).filter(Boolean);
+    if (!list.length) return '';
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const md = (s) => window.Markdown ? Markdown.render(s || '') : esc(s || '');
+    const meTag = '<span style="color:var(--accent);font-weight:400;margin-left:3px">（我）</span>';
+
+    // 单条楼中楼
+    const replyRow = (rp, mainId) => {
+      const replyToDisp = (rp.replyToName || '').trim();
+      const replyTo = replyToDisp
+        ? `<span style="color:var(--text-secondary)">回复 </span><span style="color:#5a8fc0">@${esc((_forumDisplayNameMap && _forumDisplayNameMap[replyToDisp]) || replyToDisp)}</span><span style="color:var(--text-secondary)">：</span>`
+        : '';
+      return `<div style="display:flex;gap:8px;padding:7px 0">
+        ${_forumAvatar(rp, 22)}
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:12px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(rp.username || '匿名')}${rp.isPlayer ? meTag : ''}</span>
+            <span style="margin-left:auto;flex-shrink:0;font-size:10px;color:var(--text-secondary)">${esc(_formatPhoneTime(rp.time || ''))}</span>
+          </div>
+          <div class="md-content" style="font-size:12.5px;line-height:1.6;color:var(--text);margin-top:3px;word-break:break-word">${replyTo}${md(rp.content)}</div>
+          <div onclick="Phone._forumReplyTo('${kind}',${index},'${esc(mainId)}','${esc(rp.username || '')}')" style="font-size:11px;color:var(--text-secondary);margin-top:4px;cursor:pointer;display:inline-block">回复</div>
+        </div>
+      </div>`;
+    };
+
+    const rows = list.map(c => {
+      const replies = Array.isArray(c.replies) ? c.replies : [];
+      let repliesHtml = '';
+      if (replies.length) {
+        const shown = c._expanded ? replies : replies.slice(0, 2);
+        const inner = shown.map(rp => replyRow(rp, c.id)).join('');
+        const more = (!c._expanded && replies.length > 2)
+          ? `<div onclick="Phone._forumToggleReplies('${kind}',${index},'${esc(c.id)}')" style="font-size:12px;color:#5a8fc0;cursor:pointer;padding:5px 0 2px">展开 ${replies.length - 2} 条回复 ▾</div>`
+          : '';
+        repliesHtml = `<div style="margin-top:2px">${inner}${more}</div>`;
+      }
+      return `<div style="display:flex;gap:8px;padding:12px 0">
+        ${_forumAvatar(c, 28)}
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span style="font-size:12px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.username || '匿名')}${c.isPlayer ? meTag : ''}</span>
+            <span style="margin-left:auto;flex-shrink:0;font-size:10px;color:var(--text-secondary)">${esc(_formatPhoneTime(c.time || ''))}</span>
+          </div>
+          <div class="md-content" style="font-size:12.5px;line-height:1.6;color:var(--text);margin-top:4px;word-break:break-word">${md(c.content)}</div>
+          <div onclick="Phone._forumReplyTo('${kind}',${index},'${esc(c.id)}','')" style="font-size:11px;color:var(--text-secondary);margin-top:5px;cursor:pointer;display:inline-block">回复</div>
+          ${repliesHtml}
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div style="font-size:12px;font-weight:600;margin-bottom:4px">评论区</div>${rows}`;
+  }
+
+  // 刷新追加：把已有评论区整理成带 id 的摘要（含楼中楼，标注玩家楼），喂回给 AI
+  function _forumBuildDigest(comments) {
+    const list = (Array.isArray(comments) ? comments : []).filter(Boolean);
+    if (!list.length) return '暂无';
+    return list.map(c => {
+      const me = c.isPlayer ? '【楼主是玩家】' : '';
+      const head = `[${c.id}] ${me}(${c.isNpc ? 'NPC' : '路人'}/赞${c.likes || 0}/${c.time || ''}) ${c.username || '匿名'}：${c.content || ''}`;
+      const reps = (c.replies || []).map(rp => {
+        const rme = rp.isPlayer ? '【玩家】' : '';
+        const to = (rp.replyToName || '').trim() ? `回复@${rp.replyToName} ` : '';
+        return `  └ [${rp.id}] ${rme}${rp.username || '匿名'}：${to}${rp.content || ''}`;
+      }).join('\n');
+      return head + (reps ? '\n' + reps : '');
+    }).join('\n');
+  }
+
+  // 刷新追加：把 AI 返回的 newComments(可带replies) + newReplies(按targetId盖楼) 合并进 post._comments
+  // targetId 找不到的 newReplies 降级成新主楼，不丢内容。返回新增条数。
+  function _forumMergeRefresh(post, result) {
+    let added = 0;
+    const byId = {};
+    (post._comments || []).forEach(c => { if (c && c.id) byId[c.id] = c; });
+
+    // 1) 新主楼（可自带 replies）
+    const newComments = Array.isArray(result.newComments) ? result.newComments
+      : (Array.isArray(result.comments) ? result.comments : []);
+    const orphans = [];
+
+    // 2) 盖到旧楼的楼中楼
+    const newReplies = Array.isArray(result.newReplies) ? result.newReplies : [];
+    newReplies.forEach(rp => {
+      if (!rp || !rp.content) return;
+      const tgt = byId[rp.targetId];
+      if (tgt) {
+        if (!Array.isArray(tgt.replies)) tgt.replies = [];
+        const obj = { username: rp.username || '匿名', isNpc: !!rp.isNpc, content: rp.content, time: rp.time || '', likes: parseInt(rp.likes, 10) || 0, replyToName: (rp.replyToName || '').trim() };
+        tgt.replies.push(obj);
+        added++;
+      } else {
+        // targetId 不存在 → 降级成新主楼
+        orphans.push({ username: rp.username || '匿名', isNpc: !!rp.isNpc, content: rp.content, time: rp.time || '', likes: parseInt(rp.likes, 10) || 0, replies: [] });
+      }
+    });
+
+    const merged = newComments.concat(orphans).filter(c => c && c.content);
+    merged.forEach(c => {
+      c.likes = parseInt(c.likes, 10) || 0;
+      if (!Array.isArray(c.replies)) c.replies = [];
+    });
+    post._comments = (post._comments || []).concat(merged);
+    added += merged.length;
+    return added;
+  }
+
+  // 论坛「我的」页顶部：个人资料头部（头像 + 网名 + 已发帖数），与阅读/电台同款样式
+  function _forumMineHeader(maskInfo, count) {
+    const userName = (maskInfo && maskInfo.username) || '我';
+    const userAvatar = (maskInfo && maskInfo.avatar) || '';
+    const n = Number(count) || 0;
+    const avaHtml = userAvatar
+      ? `<img class="phone-radio-mine-ava" src="${Utils.escapeHtml(userAvatar)}" alt="">`
+      : `<div class="phone-radio-mine-ava phone-radio-mine-ava-fallback">${Utils.escapeHtml((userName || '我')[0])}</div>`;
+    return `
+      <div class="phone-radio-mine-header">
+        ${avaHtml}
+        <div class="phone-radio-mine-header-info">
+          <div class="phone-radio-mine-header-name">${Utils.escapeHtml(userName)}</div>
+          <div class="phone-radio-mine-header-sub">网友 · 已发 ${n} 篇贴</div>
+        </div>
+        <button class="phone-reading-add-btn" onclick="Phone._forumOpenAddMenu(event)" title="添加">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>`;
+  }
+
+  // 论坛「我的」页右上角「+」菜单：复用音乐库同款底部弹窗（_musicSheet）
+  async function _forumOpenAddMenu(ev) {
+    try { ev && ev.stopPropagation(); } catch (_) {}
+    const choice = await _musicSheet('添加', [
+      { label: '我要发帖', value: 'post' }
+    ]);
+    if (choice === 'post') _addForumPost();
   }
 
   function _renderMyForumPosts(posts) {
@@ -21727,7 +31158,7 @@ async function _clearMomentsCover() {
     const imageDesc = document.getElementById('phone-forum-post-imgdesc')?.value.trim() || '';
     const tags = tagsStr ? tagsStr.split(/[、,，]/).map(t => t.trim()).filter(Boolean) : [];
 
-    if (!title && !content) {
+    if (!title && !content && !imageDesc) {
       pd.myForumPosts.splice(index, 1);
       await _savePhoneData();
       UI.showToast('空帖子已自动删除', 1000);
@@ -21816,20 +31247,9 @@ async function _clearMomentsCover() {
     html += '<span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> ' + formatNum(p.likes || 0) + '</span>';
     html += '<span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> ' + formatNum(p._comments?.length || 0) + '</span>';
     html += '</div>';
-    // 评论区（预留）
+    // 评论区（楼中楼）
     if (p._comments?.length) {
-      html += '<div style="font-size:12px;font-weight:600;margin-bottom:8px">评论区</div>';
-      p._comments.forEach(c => {
-        html += '<div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px">';
-        html += _forumAvatar(c, 24);
-        html += '<div style="flex:1">';
-        html += '<div style="display:flex;justify-content:space-between;margin-bottom:3px">';
-        html += '<span style="font-size:12px;font-weight:600">' + Utils.escapeHtml(c.username || '匿名') + '</span>';
-        html += '<span style="font-size:10px;color:var(--text-secondary)">' + Utils.escapeHtml(_formatPhoneTime(c.time || '')) + '</span>';
-        html += '</div>';
-        html += '<div class="md-content" style="font-size:12px;line-height:1.6">' + (window.Markdown ? Markdown.render(c.content || '') : Utils.escapeHtml(c.content || '')) + '</div>';
-        html += '</div></div>';
-      });
+      html += _forumCommentsHtml(p._comments, 'my', index);
     }
     // 关闭滚动区
     html += '</div>';
@@ -21925,12 +31345,15 @@ async function _clearMomentsCover() {
     } catch(_) {}
 
     const comment = {
+      id: _forumNewCommentId(),
       username,
       avatar,
       isNpc: false,
+      isPlayer: true,
       content,
       time: _formatPhoneTime(Conversations.getStatusBar()?.time || new Date().toISOString()),
-      likes: 0
+      likes: 0,
+      replies: []
     };
     
     post._comments = post._comments || [];
@@ -21967,12 +31390,15 @@ async function _clearMomentsCover() {
     } catch(_) {}
 
     const comment = {
+      id: _forumNewCommentId(),
       username,
       avatar,
       isNpc: false,
+      isPlayer: true,
       content,
       time: _formatPhoneTime(Conversations.getStatusBar()?.time || new Date().toISOString()),
-      likes: 0
+      likes: 0,
+      replies: []
     };
 
     post._comments = post._comments || [];
@@ -22012,45 +31438,38 @@ async function _clearMomentsCover() {
       const mt = _getForumName() || '论坛';
       const md = _getForumDesc();
 
-      const sysPrompt = `你是一个"${mt}"评论/回复区生成器。用户给你一条由玩家角色发布的帖子/动态，以及当前已经存在的评论列表。请根据世界观、帖子内容、已有评论，生成一批新的追加评论。
+      const sysPrompt = `你是一个"${mt}"评论/回复区生成器。用户给你一条由玩家角色发布的帖子/动态，以及当前已经存在的评论列表（每条主楼带唯一 id，楼中楼用 └ 标注）。请根据世界观、帖子内容、已有评论，生成一批新的追加内容。
 
 ${md ? `载体说明：${md}\n\n` : ''}要求：
 1. 只生成评论/回复区，不要改写帖子正文，不要生成新的帖子标题。
-2. 本次生成 8-12 条"新增评论"，用于追加到已有评论后面。
-3. 绝大多数评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与回复（0-3条）。
-4. 如果评论者是 NPC，username 直接填该 NPC 的网名（如有）或本名（不要加括号或注释），并标记 "isNpc": true；不确定是否为 NPC 则作为路人处理并标记 "isNpc": false。
-5. 评论内容要自然多样：有赞同、反对、追问、吐槽、跑题、阴阳怪气等，长度错落有致。可以加入适量的"@某人"或引用前排回复的互动感，但不要每条都@。如果已有评论中存在玩家的评论，请生成3-4条@玩家并回复玩家评论内容的评论。
-6. 新评论应当参考已有评论，避免重复已有内容；可以接续已有讨论，也可以产生新分歧。
-7. 评论时间必须依次晚于该帖子的发帖时间和已有的最新评论。请根据"当前游戏时间"智能安排回复节奏：
-   - 若当前时间距离发帖/上一条评论很近，允许将新评论时间自然向后顺延（可合理超过当前游戏时间几分钟到几十分钟），模拟网友陆陆续续打字回复的过程。
-   - 若当前时间比发帖/上一条评论晚了几个小时或几天，请将新评论散布在这段过去的空窗期内，并让最新几条紧贴当前游戏时间。
-   - 严禁跳跃到不合逻辑的遥远未来。
-8. 所有 time 都必须使用 "YYYY.MM.DD 星期X HH:mm" 格式，不要写成别的时间样式。
-9. 【严禁】发帖人"${post.username}"是玩家本人。绝对不能让"${post.username}"出现在评论区——不能以楼主身份回复、不能以路人身份出现、不能以任何形式代替玩家发言。评论者只能是其他人。
-10. 返回纯 JSON 对象，不要包含任何解释、Markdown 代码块或多余文字。
+2. 本次产出两部分：
+   - newComments：6-10 条"新增主楼评论"，追加到已有评论后面；有讨论度的新主楼也可以自带 replies（楼中楼），不是每条都带。
+   - newReplies：3-8 条"盖到已有楼层的楼中楼"，每条必须带 targetId，指向上面现状里真实存在的某个 id（主楼或楼中楼的 id 都行）。
+3. 绝大多数评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与（0-3条）。如果评论者是 NPC，username 直接填该 NPC 的网名或本名（不要加括号或注释），并标记 "isNpc": true；否则 "isNpc": false。
+   - 如果【最近主线剧情】里出现过某些有名有姓的路人/配角（路边摊老板、同事、邻居、出租司机等非核心角色），允许让 ta 们以路人评论者身份自然出现在评论区，标记 "isNpc": false 即可，能增强"这个世界是连贯的"的真实感。但不要硬塞，只在贴合时用。
+4. 【重点照顾玩家】如果现状里有标【楼主是玩家】或【玩家】的评论，请生成 2-3 条 newReplies，targetId 指向玩家那层，有附和也有抬杠，让玩家有被回应的感觉。
+5. 内容自然多样：赞同、反对、追问、吐槽、跑题、阴阳怪气都行；长度错落有致。楼中楼里 replyToName 留空=回复楼主，填某人网名=回复楼里那个人（可接续已有对线）。
+6. 新内容要参考已有评论，避免重复；可接续讨论，也可开新分歧。
+7. 时间安排：所有 time 必须晚于被回复对象（主楼晚于发帖、楼中楼晚于其所在楼层），并根据"当前游戏时间"合理顺延，最新几条紧贴当前游戏时间，严禁跳到不合逻辑的遥远未来。
+8. 所有 time 都必须使用 "YYYY.MM.DD 星期X HH:mm" 格式。
+9. 【严禁】发帖人"${post.username}"是玩家本人，绝对不能作为评论者或回复者出现。
+10. 返回纯 JSON 对象，不要任何解释、Markdown 代码块或多余文字。
 
 JSON格式：
 {
-  "comments": [
-    {
-      "username": "评论者用户名或NPC姓名",
-      "isNpc": false,
-      "avatar_color": "#颜色",
-      "content": "评论内容",
-      "time": "YYYY.MM.DD 星期X HH:mm",
-      "likes": 12
-    }
+  "newComments": [
+    { "username": "网名或NPC名", "isNpc": false, "avatar_color": "#颜色", "content": "评论内容", "time": "YYYY.MM.DD 星期X HH:mm", "likes": 12, "replies": [ { "username": "回复者", "isNpc": false, "content": "楼中楼", "time": "YYYY.MM.DD 星期X HH:mm", "likes": 3, "replyToName": "" } ] }
+  ],
+  "newReplies": [
+    { "targetId": "上面现状里的某个id", "username": "回复者", "isNpc": false, "content": "盖楼内容", "time": "YYYY.MM.DD 星期X HH:mm", "likes": 5, "replyToName": "" }
   ]
 }
 
 ${wvPrompt}`;
 
-      let existingCommentsStr = '暂无';
-      if (post._comments && post._comments.length > 0) {
-        existingCommentsStr = post._comments.map(c => `用户名：${c.username} (${c.isNpc ? 'NPC' : '路人'})\n时间：${c.time}\n点赞：${c.likes}\n内容：${c.content}`).join('\n\n');
-      }
+      const existingCommentsStr = _forumBuildDigest(post._comments);
       const gameTime = _getGameTime() || '';
-      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 玩家发帖信息\n标题：${post.title || '无标题'}\n发帖人（玩家本人）：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。注意：发帖人"${post.username}"是玩家本人，绝对不能出现在评论区中。`;
+      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 玩家发帖信息\n标题：${post.title || '无标题'}\n发帖人（玩家本人）：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.content || '无正文'}\n\n## 当前已有评论区现状（每条主楼带 id，└ 是楼中楼）\n${existingCommentsStr}\n\n请按要求产出 newComments + newReplies，只返回 JSON。注意：发帖人"${post.username}"是玩家本人，绝对不能出现在评论区中。`;
 
       const resp = await fetch(url, {
         method: 'POST',
@@ -22072,15 +31491,19 @@ ${wvPrompt}`;
         throw new Error('解析AI数据失败');
       }
 
-      if (result.comments && result.comments.length > 0) {
+      const hasNew = (Array.isArray(result.newComments) && result.newComments.length)
+        || (Array.isArray(result.newReplies) && result.newReplies.length)
+        || (Array.isArray(result.comments) && result.comments.length);
+      if (hasNew) {
         post._comments = post._comments || [];
-        // 使用统一的论坛头像+显示名匹配
+        const added = _forumMergeRefresh(post, result);
+        // 统一的论坛头像+显示名匹配 + 给新内容补 id
         await _ensureForumNpcAvatarMap();
         await _ensureForumDisplayNameMap();
-        result.comments.forEach(c => _matchForumAvatar(c));
-        post._comments.push(...result.comments);
+        _forumNormalizeComments(post._comments);
+        (post._comments || []).forEach(c => { _matchForumAvatar(c); (c.replies || []).forEach(rp => { if (!rp.avatar) _matchForumAvatar(rp); }); });
         await _savePhoneData();
-        _log(`刷新了${mt}帖子「${post.title}」的评论，追加了 ${result.comments.length} 条`);
+        _log(`刷新了${mt}帖子「${post.title}」的评论，追加了 ${added} 条`);
         UI.showToast('评论已刷新', 1000);
         // 如果还在当前详情页，触发重渲染
         const titleEl = document.getElementById('phone-title');
@@ -22132,45 +31555,37 @@ ${wvPrompt}`;
       const mt = _getForumName() || '论坛';
       const md = _getForumDesc();
 
-      const sysPrompt = `你是一个"${mt}"评论/回复区生成器。用户给你一条帖子/动态，以及当前已经存在的评论列表。请根据世界观、帖子内容、已有评论，生成一批新的追加评论。
+      const sysPrompt = `你是一个"${mt}"评论/回复区生成器。用户给你一条帖子/动态，以及当前已经存在的评论列表（每条主楼带唯一 id，楼中楼用 └ 标注）。请根据世界观、帖子内容、已有评论，生成一批新的追加内容。
 
 ${md ? `载体说明：${md}\n\n` : ''}要求：
 1. 只生成评论/回复区，不要改写帖子正文，不要生成新的帖子标题。
-2. 本次生成 8-12 条"新增评论"，用于追加到已有评论后面。
-3. 绝大多数评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与回复（0-3条）。
-4. 如果评论者是 NPC，username 直接填该 NPC 的网名（如有）或本名（不要加括号或注释），并标记 "isNpc": true；不确定是否为 NPC 则作为路人处理并标记 "isNpc": false。
-5. 如果楼主（发帖人）出现在评论区，必须是以作者/楼主身份回复读者（如答疑、补充），而不是以路人视角评论自己。
-6. 评论内容要自然多样：可以有赞同、反对、追问、吐槽、跑题、补充信息、阴阳怪气、认真分析等；长度不要整齐划一，有人一句话，有人写一小段。如果已有评论中存在玩家的评论，请生成3-4条@玩家并回复玩家评论内容的评论。
-7. 新评论应当参考已有评论，避免重复已有内容；可以接续已有讨论，也可以产生新分歧。
-8. 评论时间必须依次晚于该帖子的发帖时间和已有的最新评论。请根据"当前游戏时间"智能安排回复节奏：
-   - 若当前时间距离发帖/上一条评论很近，允许将新评论时间自然向后顺延（可合理超过当前游戏时间几分钟到几十分钟），模拟网友陆陆续续打字回复的过程。
-   - 若当前时间比发帖/上一条评论晚了几个小时或几天，请将新评论散布在这段过去的空窗期内，并让最新几条紧贴当前游戏时间。
-   - 严禁跳跃到不合逻辑的遥远未来。
-9. 所有 time 都必须使用 "YYYY.MM.DD 星期X HH:mm" 格式，不要写成别的时间样式。
-10. 返回纯 JSON 对象，不要包含任何解释、Markdown 代码块或多余文字。
+2. 本次产出两部分：
+   - newComments：6-10 条"新增主楼评论"，追加到已有评论后面；有讨论度的新主楼也可以自带 replies（楼中楼），不是每条都带。
+   - newReplies：3-8 条"盖到已有楼层的楼中楼"，每条必须带 targetId，指向上面现状里真实存在的某个 id（主楼或楼中楼的 id 都行）。
+3. 绝大多数评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与（0-3条）。如果评论者是 NPC，username 直接填该 NPC 的网名或本名（不要加括号或注释），并标记 "isNpc": true；否则 "isNpc": false。
+4. 如果楼主（发帖人）出现在评论区，必须是以作者/楼主身份回复读者（如答疑、补充），而不是以路人视角评论自己。
+5. 【重点照顾玩家】如果现状里有标【楼主是玩家】或【玩家】的评论，请生成 2-3 条 newReplies，targetId 指向玩家那层，有附和也有抬杠。
+6. 内容自然多样：赞同、反对、追问、吐槽、跑题、补充、阴阳怪气、认真分析都行；长度错落有致。楼中楼里 replyToName 留空=回复楼主，填某人网名=回复楼里那个人（可接续已有对线）。
+7. 新内容要参考已有评论，避免重复；可接续讨论，也可开新分歧。
+8. 时间安排：所有 time 必须晚于被回复对象（主楼晚于发帖、楼中楼晚于其所在楼层），并根据"当前游戏时间"合理顺延，最新几条紧贴当前游戏时间，严禁跳到不合逻辑的遥远未来。
+9. 所有 time 都必须使用 "YYYY.MM.DD 星期X HH:mm" 格式。
+10. 评论者绝对不能是玩家本人。返回纯 JSON 对象，不要任何解释、Markdown 代码块或多余文字。
 
 JSON格式：
 {
-  "comments": [
-    {
-      "username": "评论者用户名或NPC姓名",
-      "isNpc": false,
-      "avatar_color": "#颜色",
-      "content": "评论内容",
-      "time": "YYYY.MM.DD 星期X HH:mm",
-      "likes": 12
-    }
+  "newComments": [
+    { "username": "网名或NPC名", "isNpc": false, "avatar_color": "#颜色", "content": "评论内容", "time": "YYYY.MM.DD 星期X HH:mm", "likes": 12, "replies": [ { "username": "回复者", "isNpc": false, "content": "楼中楼", "time": "YYYY.MM.DD 星期X HH:mm", "likes": 3, "replyToName": "" } ] }
+  ],
+  "newReplies": [
+    { "targetId": "上面现状里的某个id", "username": "回复者", "isNpc": false, "content": "盖楼内容", "time": "YYYY.MM.DD 星期X HH:mm", "likes": 5, "replyToName": "" }
   ]
 }
 
 ${wvPrompt}`;
 
-      let existingCommentsStr = '暂无';
-      if (post._comments && post._comments.length > 0) {
-        existingCommentsStr = post._comments.map(c => `用户名：${c.username} (${c.isNpc ? 'NPC' : '路人'})\n时间：${c.time}\n点赞：${c.likes}\n内容：${c.content}`).join('\n\n');
-      }
+      const existingCommentsStr = _forumBuildDigest(post._comments);
       const gameTime = _getGameTime() || '';
-      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子信息\n标题：${post.title || '无标题'}\n发帖人（楼主）：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.fullContent || post.content || '无正文'}\n\n## 已有评论\n${existingCommentsStr}\n\n请生成 8-12 条新的追加评论，只返回 JSON。注意：楼主如果出现在评论区，要以作者身份回复读者。评论者绝对不能是玩家本人。`;
+      const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子信息\n标题：${post.title || '无标题'}\n发帖人（楼主）：${post.username || '匿名'}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags || []).join('、')}\n\n## 帖子完整内容\n${post.fullContent || post.content || '无正文'}\n\n## 当前已有评论区现状（每条主楼带 id，└ 是楼中楼）\n${existingCommentsStr}\n\n请按要求产出 newComments + newReplies，只返回 JSON。注意：楼主如果出现在评论区，要以作者身份回复读者。评论者绝对不能是玩家本人。`;
 
       const resp = await fetch(url, {
         method: 'POST',
@@ -22192,18 +31607,22 @@ ${wvPrompt}`;
         throw new Error('解析AI数据失败');
       }
 
-      if (result.comments && result.comments.length > 0) {
+      const hasNew = (Array.isArray(result.newComments) && result.newComments.length)
+        || (Array.isArray(result.newReplies) && result.newReplies.length)
+        || (Array.isArray(result.comments) && result.comments.length);
+      if (hasNew) {
         post._comments = post._comments || [];
-        // 使用统一的论坛头像+显示名匹配
+        const added = _forumMergeRefresh(post, result);
+        // 统一的论坛头像+显示名匹配 + 给新内容补 id
         await _ensureForumNpcAvatarMap();
         await _ensureForumDisplayNameMap();
-        result.comments.forEach(c => _matchForumAvatar(c));
-        post._comments.push(...result.comments);
+        _forumNormalizeComments(post._comments);
+        (post._comments || []).forEach(c => { _matchForumAvatar(c); (c.replies || []).forEach(rp => { if (!rp.avatar) _matchForumAvatar(rp); }); });
         // 如果是 cachedForumPosts，保存回 phoneData
         if (pd && pd.cachedForumPosts && pd.cachedForumPosts[index] === post) {
           await _savePhoneData();
         }
-        _log(`刷新了${mt}帖子「${post.title}」的评论，追加了 ${result.comments.length} 条`);
+        _log(`刷新了${mt}帖子「${post.title}」的评论，追加了 ${added} 条`);
         UI.showToast('评论已刷新', 1000);
         // 重渲染详情页
         const titleEl = document.getElementById('phone-title');
@@ -22262,6 +31681,23 @@ ${wvPrompt}`;
     posts.forEach(p => _matchForumAvatar(p));
     const cont = document.getElementById('phone-forum-posts');
     if (cont) cont.innerHTML = posts.length > 0 ? _renderForumPosts(posts) : '<p style="text-align:center;color:var(--text-secondary);font-size:12px">生成失败，请重试</p>';
+  }
+
+  // 动态按钮：输入框为空 → 显示「刷新」，有内容 → 显示「搜索」
+  function _forumSyncActionBtn() {
+    const input = document.getElementById('phone-forum-search');
+    const btn = document.getElementById('phone-forum-action-btn');
+    if (!btn) return;
+    const hasQuery = !!(input && input.value.trim());
+    btn.innerHTML = hasQuery ? `${_uiIcon('search', 13)} 搜索` : `${_uiIcon('refresh', 13)} 刷新`;
+  }
+
+  // 动态按钮点击入口：有关键词走搜索，无关键词走刷新
+  function _forumSearchOrRefresh() {
+    const input = document.getElementById('phone-forum-search');
+    const hasQuery = !!(input && input.value.trim());
+    if (hasQuery) _forumSearch();
+    else _forumRefresh();
   }
 
   async function _forumSearch() {
@@ -22373,7 +31809,9 @@ ${wvPrompt}` },
     }
     const post = posts[index];
     if (!post) { UI.showToast('帖子不存在', 1000); return; }
-    _log(`在${_getForumName()}查看了帖子：${post.title || '无标题'}`);
+    // 本轮去重：同一帖子反复查看只记一条（基于待发送日志内容，跨刷新/切对话恢复后也生效）
+    const _viewLog = `在${_getForumName()}查看了帖子：${post.title || '无标题'}`;
+    if (!_actionLog.includes(_viewLog)) _log(_viewLog);
 
     // 记录详情浏览历史（标题+摘要+正文）
     try {
@@ -22398,7 +31836,8 @@ ${wvPrompt}` },
     await _ensureForumNpcAvatarMap();
     await _ensureForumDisplayNameMap();
     _matchForumAvatar(post);
-    (post._comments || []).forEach(c => _matchForumAvatar(c));
+    _forumNormalizeComments(post._comments);
+    (post._comments || []).forEach(c => { _matchForumAvatar(c); (c.replies || []).forEach(rp => _matchForumAvatar(rp)); });
     // push 详情页到导航栈
     _pushNav(() => _forumViewDetail(index));
 
@@ -22421,21 +31860,9 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
         <span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> ${formatNum(p.likes)}</span>
         <span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> ${formatNum(p._comments?.length||0)}</span>
       </div>`;
-        // 评论区（在滚动区内）
+        // 评论区（楼中楼，在滚动区内）
         if (p._comments?.length) {
-          html += `<div style="font-size:12px;font-weight:600;margin-bottom:8px">评论区</div>`;
-          p._comments.forEach(c => {
-            html += `<div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px">
-              ${_forumAvatar(c, 24)}
-              <div style="flex:1">
-                <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-                  <span style="font-size:12px;font-weight:600">${Utils.escapeHtml(c.username||'匿名')}</span>
-                  <span style="font-size:10px;color:var(--text-secondary)">${Utils.escapeHtml(_formatPhoneTime(c.time||''))}</span>
-                </div>
-                <div class="md-content" style="font-size:12px;line-height:1.6">${window.Markdown ? Markdown.render(c.content||'') : Utils.escapeHtml(c.content||'')}</div>
-              </div>
-            </div>`;
-          });
+          html += _forumCommentsHtml(p._comments, 'ai', index);
         }
         // 关闭内容滚动区域
         html += `</div>`;
@@ -22493,7 +31920,8 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
           } catch(_) {}
           // 加载完后对新评论匹配NPC头像
           _matchForumAvatar(post);
-          (post._comments || []).forEach(c => _matchForumAvatar(c));
+          _forumNormalizeComments(post._comments);
+          (post._comments || []).forEach(c => { _matchForumAvatar(c); (c.replies || []).forEach(rp => _matchForumAvatar(rp)); });
           if (_isAppStillActive('forum')) _renderDetailInPhone(post);
         } else {
           if (_isAppStillActive('forum')) body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger);font-size:12px">加载失败，请重试</div>`;
@@ -22587,7 +32015,7 @@ async function _likeForumPost(index) {
       const thread = (pd.chatThreads && pd.chatThreads[id]) || [];
       const lastMsg = thread.length ? thread[thread.length - 1] : null;
       if (!lastMsg) return '暂无消息';
-      const tmap = { location:'[位置]', voice:'[语音]', photo:'[图片]', real_image:'[图片]', product:'[商品链接]', shop_listing:'[商品]', forum_card:'[帖子摘要]', forum_detail:'[帖子详情]', music_card:'[音乐分享]', map_place:'[地点链接]', listen_invite:'[一起听邀请]', listen_end:'[已结束一起听]' };
+      const tmap = { location:'[位置]', voice:'[语音]', photo:'[图片]', real_image:'[图片]', product:'[商品链接]', shop_listing:'[商品]', forum_card:'[帖子摘要]', forum_detail:'[帖子详情]', video_card:'[影视分享]', book_card:'[书籍分享]', music_card:'[音乐分享]', map_place:'[地点链接]', listen_invite:'[一起听邀请]', listen_end:'[已结束一起听]' };
       return tmap[lastMsg.type] || (lastMsg.text || '');
     };
     return await new Promise(resolve => {
@@ -23611,6 +33039,8 @@ ${wvPrompt}` },
       : type === 'shop' ? '商品链接'
     : type === 'music' ? '歌曲分享'
     : type === 'camera' ? '相机照片'
+    : type === 'video' ? '影视作品'
+    : type === 'reading' ? '书籍'
     : '手机内容';
     const hasPending = (typeof Chat !== 'undefined' && Chat.hasPendingWorldVoice) ? Chat.hasPendingWorldVoice() : false;
     const confirmMsg = hasPending
@@ -23638,8 +33068,10 @@ ${wvPrompt}` },
 
   async function _submitMoment() {
     try {
-      const text = document.getElementById('phone-moment-text')?.value.trim();
-      if (!text) { UI.showToast('请输入内容', 1000); return; }
+      const text = document.getElementById('phone-moment-text')?.value.trim() || '';
+      const imageDesc = document.getElementById('phone-moment-imgdesc')?.value.trim() || '';
+      // 正文和配图描述至少一个有内容即可发（支持纯图片描述发圈）
+      if (!text && !imageDesc) { UI.showToast('请输入内容或配图描述', 1500); return; }
       const time = document.getElementById('phone-moment-time')?.value.trim() || '';
       const visibleNpcs = (_momentVisibleSelected.has('__all__') || _momentVisibleSelected.size === 0) ? [] : Array.from(_momentVisibleSelected);
 
@@ -23650,7 +33082,7 @@ ${wvPrompt}` },
         id: 'mom_' + Utils.uuid().slice(0, 8),
         text,
         // image 字段已废弃（不再支持上传真图，节省内存）；旧档遗留的 image 仍能渲染
-        imageDesc: document.getElementById('phone-moment-imgdesc')?.value.trim() || null,
+        imageDesc: imageDesc || null,
         visibleNpcs,
         time,
         comments: [],
@@ -23742,9 +33174,14 @@ ${wvPrompt}` },
     const userBan = banNames.length > 0
       ? `\n【严格约束】评论者姓名绝对不能是"${banNames.join('"或"')}"（那是玩家本人），也不允许任何评论以"我"（指代玩家）的口吻发言。这条动态是玩家自己发的，不需要玩家自评。`
       : '\n【严格约束】评论者不能是玩家本人。';
+    // 仅"全部可见"的动态才放路人进来；指定可见的动态路人看不到，只允许可见 NPC 评论
+    const _momPublic = !(Array.isArray(m.visibleNpcs) && m.visibleNpcs.length > 0);
+    const passerbyHint = _momPublic
+      ? '\n另外：如果【最近主线剧情】里出现过有名有姓的路人/配角（同事、邻居、店主、朋友等非核心角色），也允许让 ta 作为路人评论者自然出现，名字沿用主线里出现过的称呼，增强世界连贯感。不要硬凑。'
+      : '\n注意：这条动态设了指定可见范围，只有可见名单内的角色能看到，评论者只能是可见名单内的角色，不要出现名单外的路人或其他人。';
     const prompt = `用户发了一条动态："${m.text}"${imgInfo}（对 ${visibleStr} 可见）。
-请根据NPC列表中角色的性格和当前剧情，让可见的NPC评论这条动态。每个NPC最多评论一条，总评论数不超过15条。部分NPC可以选择不评论。${userBan}
-返回纯JSON数组：[{"name":"NPC名","text":"评论内容"}]`;
+请根据NPC列表中角色的性格和当前剧情，让可见的NPC评论这条动态。每个NPC最多评论一条，总评论数不超过15条。部分NPC可以选择不评论。${passerbyHint}${userBan}
+返回纯JSON数组：[{"name":"NPC名或主线路人名","text":"评论内容"}]`;
 
     const comments = await _phoneJsonArrayWithRetry({
         label: '好友圈评论', url, key, model,
@@ -23883,7 +33320,7 @@ ${wvPrompt}` },
         : '';
 
       const nameConstraint = npcNames.length > 0
-      ? `\n\n【严格约束】动态发布者必须从以下NPC列表中选：${npcNames.join('、')}。评论者可以是列表中的NPC，也可以是虚构的路人账号（但路人名字要符合世界观风格）。禁止编造列表外的NPC。`
+      ? `\n\n【发布者约束】动态发布者主要从以下NPC列表中选：${npcNames.join('、')}。但如果【最近主线剧情】里出现过有名有姓的路人/配角（同事、邻居、店主、老同学等非核心角色），也允许让 ta 发一两条动态，名字沿用主线里出现过的称呼，增强世界连贯感。除此之外不要凭空编造列表外的陌生NPC当发布者。评论者可以是列表中的NPC、主线出现过的路人，也可以是虚构的路人账号（路人名字要符合世界观风格）。`
       : '';
     // v617：禁止冒充玩家
     const _momBanNames = [userName, userOnlineName].filter(Boolean);
@@ -24102,7 +33539,7 @@ ${fullCtx}`;
       ? `\n\n【最近的历史动态（仅供参考，避免重复同样的主题/场景/心情）】\n${recentHist.map(m => `- ${m.npc || '?'}（${m.time || '?'}）：${(m.text || '').slice(0, 50)}`).join('\n')}\n请生成不同的话题/场景/角度，避免和上面这些重复。`
       : '';
 
-    const nameConstraint = `\n\n【严格约束】动态发布者必须从以下NPC列表中选：${npcNames.join('、')}。评论者可以是列表中的NPC，也可以是虚构的路人账号（但路人名字要符合世界观风格）。禁止编造列表外的NPC。`;
+    const nameConstraint = `\n\n【发布者约束】动态发布者主要从以下NPC列表中选：${npcNames.join('、')}。但如果【最近主线剧情】里出现过有名有姓的路人/配角（同事、邻居、店主、老同学等非核心角色），也允许让 ta 发一两条动态，名字沿用主线里出现过的称呼，增强世界连贯感。除此之外不要凭空编造列表外的陌生NPC当发布者。评论者可以是列表中的NPC、主线出现过的路人，也可以是虚构的路人账号（路人名字要符合世界观风格）。`;
     const _autoBanNames = [userName, userOnlineName].filter(Boolean);
     const userBan = _autoBanNames.length > 0
       ? `\n\n【禁止冒充玩家】玩家角色"${_autoBanNames.join('"和"')}"绝对不能作为动态发布者出现，也不能作为任何评论者出现。`
@@ -24751,8 +34188,10 @@ function _msgQuotePreview(m) {
     case 'photo': case 'real_image': return '[图片]' + (m.photoDesc ? ' ' + m.photoDesc : '');
     case 'location': return '[位置] ' + (m.location || '');
     case 'map_place': return '[地点] ' + (m.placeName || '');
-    case 'product': return '[商品] ' + (m.productName || '');
-    case 'forum_card': case 'forum_detail': return '[帖子] ' + (m.forumTitle || '');
+case 'product': return '[商品] ' + (m.productName || '');
+      case 'video_card': return '[影视] ' + (m.videoTitle || '') + (m.videoEp ? ' ' + m.videoEp : '');
+      case 'book_card': return '[书籍] ' + (m.bookTitle || '') + (m.bookChapter ? ' ' + m.bookChapter : '');
+      case 'forum_card': case 'forum_detail': return '[帖子] ' + (m.forumTitle || '');
     default: return (m.text || '').replace(/^\[语音\]/, '');
   }
 }
@@ -24950,6 +34389,49 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
           <div style="padding:2px 14px 10px;display:flex;align-items:center;justify-content:space-between">
             <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(m.productPlatform || '')}</span>
             ${m.productShop ? `<span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${Utils.escapeHtml(m.productShop)}</span>` : ''}
+          </div>
+        </div>
+        ${footTag}
+      </div>
+    </div>`;
+  }
+
+  // 视频/影视分享气泡
+  if (m.type === 'video_card') {
+    return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+        <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+          ${m.videoCover ? `<div style="width:100%;aspect-ratio:16/9;background:#000 center/cover no-repeat;background-image:url('${Utils.escapeHtml(m.videoCover)}')"></div>` : ''}
+          <div style="padding:12px 14px 10px">
+            <div style="font-size:11px;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:4px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+              ${Utils.escapeHtml(m.videoKind || '影视')}${m.videoEp ? ' · ' + Utils.escapeHtml(m.videoEp) : ''}
+            </div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.videoTitle || '影视作品')}</div>
+            ${m.videoIntro ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.videoIntro)}</div>` : ''}
+          </div>
+          ${m.videoRating ? `<div style="padding:2px 14px 10px"><span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(String(m.videoRating))} 分</span></div>` : ''}
+        </div>
+        ${footTag}
+      </div>
+    </div>`;
+  }
+
+  if (m.type === 'book_card') {
+    return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+        <div style="width:240px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;padding:12px;gap:10px;box-sizing:border-box">
+          <div style="width:52px;height:72px;border-radius:6px;flex-shrink:0;background:var(--bg-secondary) center/cover no-repeat${m.bookCover ? `;background-image:url('${Utils.escapeHtml(m.bookCover)}')` : ''}"></div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+            <div style="font-size:11px;color:var(--accent);margin-bottom:4px;display:flex;align-items:center;gap:4px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              ${Utils.escapeHtml(m.bookKind || '书籍')}
+            </div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.bookTitle || '书籍')}</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.bookAuthor || '')}${m.bookChapter ? ' · ' + Utils.escapeHtml(m.bookChapter) : ''}</div>
+            ${m.bookIntro ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.bookIntro)}</div>` : ''}
           </div>
         </div>
         ${footTag}
@@ -25660,7 +35142,9 @@ async function _groupRequestReply(groupId) {
       if (m.type === 'photo' || m.type === 'real_image') return `${who}：${t}${q}发送了一张图片${m.photoDesc ? '：' + m.photoDesc : '（内容待识别）'}`;
       if (m.type === 'product') return `${who}：${t}${q}发送了一条商品链接：${m.productName || ''}${m.productPrice ? '（¥' + m.productPrice + '）' : ''}${m.productPlatform ? ' · ' + m.productPlatform : ''}`;
       if (m.type === 'forum_card') return `${who}：${t}${q}发送了一条帖子摘要截图：${m.forumTitle || ''}`;
-      if (m.type === 'forum_detail') return `${who}：${t}${q}发送了一条帖子详情链接：${m.forumTitle || ''}`;
+    if (m.type === 'forum_detail') return `${who}：${t}${q}发送了一条帖子详情链接：${m.forumTitle || ''}`;
+    if (m.type === 'video_card') return `${who}：${t}${q}分享了一${m.videoKind === '电影' ? '部电影' : '部' + (m.videoKind || '影视剧')}：${m.videoTitle || ''}${m.videoEp ? ' ' + m.videoEp : ''}${m.videoShareText ? '\n' + m.videoShareText : ''}`;
+    if (m.type === 'book_card') return `${who}：${t}${q}分享了一本${m.bookKind || '书'}：${m.bookTitle || ''}${m.bookAuthor ? '（' + m.bookAuthor + '）' : ''}${m.bookChapter ? ' ' + m.bookChapter : ''}${m.bookShareText ? '\n' + m.bookShareText : ''}`;
       if (m.type === 'map_place') return `${who}：${t}${q}发送了一条地点链接：${m.placeName || ''}${m.placeAddress ? '（' + m.placeAddress + '）' : ''}`;
       if (m.type === 'red_packet') {
         const kindStr = m.rpKind === 'exclusive' ? `专属红包（只有${m.rpExclusiveTo || '指定的人'}能领）` : `拼手气红包（共${m.rpCount || 1}个）`;
@@ -26745,6 +36229,49 @@ function _renderChatThread(pd, contactId) {
           </div>`;
         }
 
+        // 视频/影视分享气泡
+        if (m.type === 'video_card') {
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+              <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+                ${m.videoCover ? `<div style="width:100%;aspect-ratio:16/9;background:#000 center/cover no-repeat;background-image:url('${Utils.escapeHtml(m.videoCover)}')"></div>` : ''}
+                <div style="padding:12px 14px 10px">
+                  <div style="font-size:11px;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:4px">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+                    ${Utils.escapeHtml(m.videoKind || '影视')}${m.videoEp ? ' · ' + Utils.escapeHtml(m.videoEp) : ''}
+                  </div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.videoTitle || '影视作品')}</div>
+                  ${m.videoIntro ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.videoIntro)}</div>` : ''}
+                </div>
+                ${m.videoRating ? `<div style="padding:2px 14px 10px"><span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(String(m.videoRating))} 分</span></div>` : ''}
+              </div>
+              ${time}
+            </div>
+          </div>`;
+        }
+
+        if (m.type === 'book_card') {
+          return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+              <div style="width:240px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;padding:12px;gap:10px;box-sizing:border-box">
+                <div style="width:52px;height:72px;border-radius:6px;flex-shrink:0;background:var(--bg-secondary) center/cover no-repeat${m.bookCover ? `;background-image:url('${Utils.escapeHtml(m.bookCover)}')` : ''}"></div>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+                  <div style="font-size:11px;color:var(--accent);margin-bottom:4px;display:flex;align-items:center;gap:4px">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    ${Utils.escapeHtml(m.bookKind || '书籍')}
+                  </div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.bookTitle || '书籍')}</div>
+                  <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.bookAuthor || '')}${m.bookChapter ? ' · ' + Utils.escapeHtml(m.bookChapter) : ''}</div>
+                  ${m.bookIntro ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.bookIntro)}</div>` : ''}
+                </div>
+              </div>
+              ${time}
+            </div>
+          </div>`;
+        }
+
         // 图片气泡（相册照片 / 本地真图）
         if (m.type === 'photo' || m.type === 'real_image') {
           const isAiImage = m.mode === 'ai_image' && m.imageId;
@@ -27301,6 +36828,49 @@ function _renderChatThreadWithSystem(pd, contactId) {
             </div>
             <div style="padding:2px 14px 10px">
               <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(m.forumAuthor || '匿名')}</span>
+            </div>
+          </div>
+          ${time}
+        </div>
+      </div>`;
+    }
+
+    // 视频/影视分享气泡
+    if (m.type === 'video_card') {
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+          <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+            ${m.videoCover ? `<div style="width:100%;aspect-ratio:16/9;background:#000 center/cover no-repeat;background-image:url('${Utils.escapeHtml(m.videoCover)}')"></div>` : ''}
+            <div style="padding:12px 14px 10px">
+              <div style="font-size:11px;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:4px">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+                ${Utils.escapeHtml(m.videoKind || '影视')}${m.videoEp ? ' · ' + Utils.escapeHtml(m.videoEp) : ''}
+              </div>
+              <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.videoTitle || '影视作品')}</div>
+              ${m.videoIntro ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.videoIntro)}</div>` : ''}
+            </div>
+            ${m.videoRating ? `<div style="padding:2px 14px 10px"><span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(String(m.videoRating))} 分</span></div>` : ''}
+          </div>
+          ${time}
+        </div>
+      </div>`;
+    }
+
+    if (m.type === 'book_card') {
+      return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+          <div style="width:240px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;padding:12px;gap:10px;box-sizing:border-box">
+            <div style="width:52px;height:72px;border-radius:6px;flex-shrink:0;background:var(--bg-secondary) center/cover no-repeat${m.bookCover ? `;background-image:url('${Utils.escapeHtml(m.bookCover)}')` : ''}"></div>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+              <div style="font-size:11px;color:var(--accent);margin-bottom:4px;display:flex;align-items:center;gap:4px">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                ${Utils.escapeHtml(m.bookKind || '书籍')}
+              </div>
+              <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.bookTitle || '书籍')}</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.bookAuthor || '')}${m.bookChapter ? ' · ' + Utils.escapeHtml(m.bookChapter) : ''}</div>
+              ${m.bookIntro ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(m.bookIntro)}</div>` : ''}
             </div>
           </div>
           ${time}
@@ -28141,7 +37711,9 @@ async function _chatRequestReply(contactId) {
       if (m.type === 'photo') return `${who}：${t}[发送了一张照片]`;
       if (m.type === 'product') return `${who}：${t}发送了一条商品链接：${m.productName || ''}${m.productPrice ? '（¥' + m.productPrice + '）' : ''}${m.productPlatform ? ' · ' + m.productPlatform : ''}`;
       if (m.type === 'forum_card') return `${who}：${t}发送了一条帖子摘要截图：${m.forumTitle || ''}`;
-      if (m.type === 'forum_detail') return `${who}：${t}发送了一条帖子详情链接：${m.forumTitle || ''}`;
+    if (m.type === 'forum_detail') return `${who}：${t}发送了一条帖子详情链接：${m.forumTitle || ''}`;
+    if (m.type === 'video_card') return `${who}：${t}分享了一${m.videoKind === '电影' ? '部电影' : '部' + (m.videoKind || '影视剧')}：${m.videoTitle || ''}${m.videoEp ? ' ' + m.videoEp : ''}${m.videoShareText ? '\n' + m.videoShareText : ''}`;
+    if (m.type === 'book_card') return `${who}：${t}分享了一本${m.bookKind || '书'}：${m.bookTitle || ''}${m.bookAuthor ? '（' + m.bookAuthor + '）' : ''}${m.bookChapter ? ' ' + m.bookChapter : ''}${m.bookShareText ? '\n' + m.bookShareText : ''}`;
       if (m.type === 'map_place') return `${who}：${t}发送了一条地点链接：${m.placeName || ''}${m.placeAddress ? '（' + m.placeAddress + '）' : ''}`;
       if (m.type === 'shop_listing') return `${who}：${t}发送了一条商品链接：${m.listingName || ''}（${m.listingPrice || 0} ${m.listingCurName || ''}）`;
       if (m.type === 'order') return `${who}：${t}发送了一条订单信息（${who}已购）：${m.orderName || ''}${m.orderPrice ? '（¥' + m.orderPrice + '）' : ''}${m.orderPlatform ? ' · ' + m.orderPlatform : ''}`;
@@ -35677,6 +45249,20 @@ async function buildHeartsimServiceChatForBackstage() {
       if (currentPd.momentsCover) restored.momentsCover = currentPd.momentsCover;
       if (currentPd.wallpaper) restored.wallpaper = currentPd.wallpaper;
       // moments 和 hsAppTargets 的图片不回填——因为回滚后可能那些 moment 还没发过
+      // 回溯保留开关本身免疫回溯（用当前值，不被快照覆盖）
+      restored.rollbackKeepCottage = !!currentPd.rollbackKeepCottage;
+      restored.rollbackKeepWardrobe = !!currentPd.rollbackKeepWardrobe;
+      // 开了「保留小屋」：住所布置 + 家具仓库不随回溯改变（物流订单不在此列，照常回退）
+      if (currentPd.rollbackKeepCottage) {
+        restored.houses = currentPd.houses || [];
+        restored.furnitureInventory = currentPd.furnitureInventory || [];
+      }
+      // 开了「保留衣橱」：当前穿搭 + 立绘 + 已存套装不随回溯改变
+      if (currentPd.rollbackKeepWardrobe) {
+        restored.wardrobeOutfit = currentPd.wardrobeOutfit || { top:[], bottom:[], onesuit:[], outer:[], shoes:[], hat:[], accessory:[] };
+        restored.wardrobePortrait = currentPd.wardrobePortrait || '';
+        restored.wardrobeSuits = currentPd.wardrobeSuits || [];
+      }
       conv.phoneData = restored;
       // v687.35：回溯后如果返航动画尚未触发，重置整个返航流程的 flag
       // 让通关提醒 → 客服回家指令 → AI输出marker → 动画 可以完整重走
@@ -35702,9 +45288,12 @@ buildHeartsimAppFavorForBackstage,
       buildHeartsimServiceChatForBackstage,
       buildNowPlayingForBackstage,
     flushActionLog, peekActionLog, pushLog, reloadActionLog, reloadChatRoundLog, ensureInitialHouse, reloadShopMeta,
+    buildVideoEventPrompt, applyVideoEventMarkers,
+    getShootChainGenContext, getShootChainBriefForRuntime,
+    buildLicenseEventPrompt, applyLicenseMarkers, _readingLicenseSetup,
     flushActionLogForBackstage,
     getSnapshotForRollback, restoreFromSnapshot,
-    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _onThemePick, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
+    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _toggleRollbackKeep, _onThemePick, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
     // 个人资料卡
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
     // 主屏分页
@@ -35719,8 +45308,8 @@ _onPagesScroll,
 _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioHomeTab, _radioOpenSubscribed, _radioDeleteSubscribed, _radioTogglePrefsExpand, _radioOnGlobalPref,
     // 阅读 App
     _renderReading, _switchReadingHomeTab, _switchReadingDiscoverType, _readingToggleWvRef, _readingToggleMainlineRef, _readingOpenBook, _readingImportEbook, _readingOpenAddMenu, _readingShowWriteSetup, _readingEditOutline, _readingSearch, _readingTogglePref, _readingSetMapping, _readingTogglePrefsExpand,
-    _renderVideo, _switchVideoCat, _switchVideoHomeTab, _videoSearch, _videoGenList, _videoToggleWvRef, _videoToggleMainlineRef, _videoOpenWork,
-    _readingGenToc, _readingGenMoreToc, _readingOpenToc, _readingReadChapter, _readingContinueAfterChapter, _readingOpenBookSettings, _readingSetCover, _readingRewriteLast, _readingRewriteChapter, _readingEditChapterText, _readingViewOutline, _readingEditAuthorStyle, _readingDeleteBook, _readingRewriteShort, _readingActionTap, _readingCollectGift, _readingRefreshComments, _readingSendComment, _readingEditAuthorNote, _readingTapPara, _readingCoReadSetup,
+    _renderVideo, _switchVideoCat, _switchVideoHomeTab, _videoSearch, _syncSearchBtn, _videoGenList, _videoToggleWvRef, _videoToggleMainlineRef, _videoOpenWork, _videoOpenAddMenu, _videoDeleteWork, _videoShareWork, _liveGenPreview, _liveEnterRoom, _liveUnfollowFromMine,
+    _readingGenToc, _readingGenMoreToc, _readingOpenToc, _readingReadChapter, _readingContinueAfterChapter, _readingOpenBookSettings, _readingSetCover, _readingClearCover, _readingRewriteLast, _readingRewriteChapter, _readingEditChapterText, _readingViewOutline, _readingEditAuthorStyle, _readingDeleteBook, _readingRewriteShort, _readingActionTap, _readingCollectGift, _readingRefreshComments, _readingSendComment, _readingEditAuthorNote, _readingTapPara, _readingCoReadSetup,
   // 小屋 App
   _renderCottage, _cottageAddHouse, _cottageOpenHouse, _cottageEditHouse, _cottageSetCurrent, _switchCottageHomeTab, _cottageDataMenu, getCottageLayoutForLocation, _cottageOpenMall, _cottageOpenInventory, _cottageMallSettings, _cottageMallToggleTag, _cottageMallRefresh, _cottageMallBuy, _cottageInvToggleTag, _cottageInvSearch, _cottageInvDelete, _cottageInvEdit, _cottageInvEditTag, _cottageInvPick, _cottageShowOrders,
   _cottageToggleFloorMenu, _cottageSelectFloor, _cottageAddFloor, _cottageRenameFloor, _cottageDeleteFloor, _cottageAddRoom, _cottageOpenRoom,
@@ -35750,9 +45339,10 @@ _chatPickCallPortrait, _chatClearCallPortrait, _showCallRecord,
  _feiniaoAddRecipient, _feiniaoRecipToggle, _feiniaoRecipConfirm, _feiniaoRecipRemove,
  _feiniaoShowOrderDetail, _feiniaoDeleteOrder, _switchFeiniaoTab,
  _renderYouyu, _switchYouyuTab, _youyuAddListing, _youyuPickSource, _youyuPickFromInventory, _youyuPickInvItem, _youyuOpenListModal, _youyuRenderListModal, _youyuDraftSet, _youyuSetDelivery, _youyuConfirmListing, _youyuRemoveListing, _youyuShareListing, _youyuSendToChat, _youyuHandleBuy, _youyuDeleteOrder, _youyuShowOrderDetail,
-    _forumRefresh, _forumSearch, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,
+    _forumRefresh, _forumSearch, _forumSyncActionBtn, _forumSearchOrRefresh, _forumOpenAddMenu, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,
     _switchForumTab, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
     _addForumPost, _editForumPost, _saveForumPost, _deleteForumPost, _viewMyForumPost, _collectMyForumPost, _likeMyForumPost, _sendMyForumComment, _sendForumComment, _refreshForumComment, _shareMyForumPost, _refreshMyForumPost,
+_forumReplyTo, _forumToggleReplies,
     _forumShareToChat,
     _postMoment, _onMomentImagePicked, _toggleImageDesc, _submitMoment, _shareMoment, _collectMyMoment, _editMyMoment, _deleteMyMoment, _shareNpcMoment, _refreshMomentComments, _refreshNpcMoments, _editNpcMoment, _deleteNpcMoment,
 _openMomentVisibleModal, _closeMomentVisibleModal, _filterMomentVisibleOptions, _toggleMomentVisibleOption, _setMomentVisibleAll,

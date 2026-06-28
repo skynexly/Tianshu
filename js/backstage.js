@@ -1268,7 +1268,15 @@ aiMsg.content = baseContent + fullContent;
     if (idx < 0) return;
     const msg = messages[idx];
     const afterCount = messages.length - idx - 1;
-    if (afterCount > 0 && !await UI.showConfirm('确认回溯', `将删除此消息之后的 ${afterCount} 条消息并回溯，确定？`)) return;
+    if (afterCount > 0) {
+      let skip = false;
+      try { skip = localStorage.getItem('skynex_rollbackConfirmSkip') === '1'; } catch(_) {}
+      if (!skip) {
+        const res = await UI.showConfirm('时光倒流准备中', `将删除此消息之后的 ${afterCount} 条消息，并同时回溯状态栏和手机数据。是否继续？`, { checkbox: '下次不再提醒' });
+        if (!res.ok) return;
+        if (res.checked) { try { localStorage.setItem('skynex_rollbackConfirmSkip', '1'); } catch(_) {} }
+      }
+    }
     // 内容回输入框
     const input = document.getElementById('backstage-input');
     if (input) {

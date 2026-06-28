@@ -320,22 +320,33 @@ const ConvGameplay = (() => {
         if (!groups[id]) groups[id] = { name: ev.chainName || '未命名事件链', events: [] };
         groups[id].events.push(ev);
       });
-      container.innerHTML = Object.keys(groups).map(chainId => {
+container.innerHTML = Object.keys(groups).map(chainId => {
         const g = groups[chainId];
         g.events.sort((a, b) => Number(a.chainIndex || 0) - Number(b.chainIndex || 0));
+        // 拍摄链识别：组内任一事件带 shootWorkId，即为某部作品的「拍摄/制作期专属事件链」
+        const _isShootChain = g.events.some(e => e && e.shootWorkId);
         const cards = g.events.map(ev => {
           const idx = _eventsData.indexOf(ev);
           const extra = `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">事件链：${_esc(g.name)} · 第 ${Number(ev.chainIndex || 0) + 1} 节</div>`;
           return _eventCardHtml(ev, idx, extra);
         }).join('');
+        const _shootBadge = _isShootChain
+          ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:6px;background:var(--accent);color:#fff;font-size:10px;font-weight:600;vertical-align:middle">🎬 拍摄期专属</span>`
+          : '';
+        const _shootTip = _isShootChain
+          ? `<div style="margin-bottom:10px;padding:9px 11px;border-radius:8px;background:color-mix(in srgb, var(--accent) 10%, transparent);border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);font-size:11px;color:var(--text-secondary);line-height:1.7">
+              这是某部作品的<b style="color:var(--accent)">拍摄/制作期专属事件链</b>，由视频 App 生成。续写这条链时会<b>自动带上该作品的剧本资料</b>，保持剧组剧情。<br>这条链的所有节点都完成后，去<b>视频 App 打开这部作品 → 设置</b>里手动确认杀青/制作完成，即可申请上映/开播。
+            </div>`
+          : '';
         return `<div style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:14px;background:var(--bg-secondary)">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
             <div>
-              <div style="font-size:15px;font-weight:700;color:var(--accent)">${_esc(g.name)}</div>
+              <div style="font-size:15px;font-weight:700;color:var(--accent)">${_esc(g.name)}${_shootBadge}</div>
               <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${g.events.length} 个事件 · 通过上一事件结束词触发下一事件</div>
             </div>
             <button onclick="event.stopPropagation();ConvGameplay.openAiGenerate('appendChain','${_esc(chainId)}')" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap">续写</button>
           </div>
+          ${_shootTip}
           ${cards}
           <button onclick="ConvGameplay.addChainNode('${_esc(chainId)}')" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px dashed var(--border);background:none;color:var(--text-secondary);font-size:12px;cursor:pointer">+ 添加节点</button>
         </div>`;
@@ -717,7 +728,28 @@ function _renderAttrConditions() {
         return;
       }
       sysPrompt = appendSys;
-      userMsg = `请为以下对话级事件链继续追加 ${count} 个事件。\n\n${baseUser}## 原事件链名称\n${appendChainName}\n\n## 原事件链已有事件\n${appendEvents.map((e, i) => `${i + 1}. ${e.name}\nkeys: ${e.keys}\ncompleteKey: ${e.completeKey}\nfinishRule: ${e.finishRule}\ncontent: ${e.content}`).join('\n\n')}\n\n## 链尾事件 completeKey\n${lastEvent.completeKey}`;
+      // 分层发送历史事件，避免链很长时 token 滚雪球：
+      // 最近 10 个事件发全字段（衔接需要细节）；更早的只发"名字 + content 截断50字"当脉络回顾。
+      const FULL_TAIL = 10;
+      const _histText = appendEvents.map((e, i) => {
+        const no = i + 1;
+        if (i >= appendEvents.length - FULL_TAIL) {
+          return `${no}. ${e.name}\nkeys: ${e.keys}\ncompleteKey: ${e.completeKey}\nfinishRule: ${e.finishRule}\ncontent: ${e.content}`;
+        }
+        const _brief = String(e.content || '').replace(/\s+/g, ' ').trim().slice(0, 50);
+        return `${no}. ${e.name}${_brief ? '（' + _brief + '…）' : ''}`;
+      }).join('\n\n');
+      userMsg = `请为以下对话级事件链继续追加 ${count} 个事件。\n\n${baseUser}## 原事件链名称\n${appendChainName}\n\n## 原事件链已有事件（较早的事件只列脉络，最近 ${Math.min(FULL_TAIL, appendEvents.length)} 个为完整内容）\n${_histText}\n\n## 链尾事件 completeKey\n${lastEvent.completeKey}`;
+      // 拍摄链续写：若链尾事件带 shootWorkId 标记，喂剧本资料 + 切换为拍摄链舞台说明（无标记则走原逻辑，零影响普通链）
+      const _shootWorkId = lastEvent.shootWorkId || appendEvents.find(e => e && e.shootWorkId)?.shootWorkId || '';
+      if (_shootWorkId && typeof Phone !== 'undefined' && Phone.getShootChainGenContext) {
+        try {
+          const _ctx = Phone.getShootChainGenContext(_shootWorkId);
+          if (_ctx && _ctx.sysPromptExtra) {
+            sysPrompt = appendSys + _ctx.sysPromptExtra;
+          }
+        } catch (_) {}
+      }
     }
 
     try {
@@ -732,16 +764,22 @@ function _renderAttrConditions() {
       const chainId = genMode === 'newChain' ? ('chain_' + Utils.uuid().slice(0, 8)) : (genMode === 'appendChain' ? appendChainId : '');
       const chainName = genMode === 'newChain' ? (parsed.chainName || arr[0]?.chainName || '未命名事件链') : (genMode === 'appendChain' ? appendChainName : '');
       const startIndex = genMode === 'appendChain' ? appendEvents.length : 0;
+      // 拍摄链续写：把链上的 shootWorkId 标记延续到新事件，否则下次续写识别不到
+      const _inheritShootWorkId = genMode === 'appendChain'
+        ? (lastEvent?.shootWorkId || appendEvents.find(e => e && e.shootWorkId)?.shootWorkId || '')
+        : '';
       let added = 0;
       for (const item of arr) {
         if (!item.name) continue;
-        _eventsData.push({
+        const _evt = {
           id: 'evt_' + Utils.uuid().slice(0, 8),
           name: item.name || '', keys: item.keys || '', triggerType: 'keyword',
           attrConditions: [], completeKey: item.completeKey || '',
           finishRule: item.finishRule || '', content: item.content || '', triggerMode: 'event',
           chainId: chainId || '', chainName: chainName || '', chainIndex: chainId ? startIndex + added : 0
-        });
+        };
+        if (_inheritShootWorkId) _evt.shootWorkId = _inheritShootWorkId;
+        _eventsData.push(_evt);
         added++;
       }
       await _saveConvEvents(_eventsData);

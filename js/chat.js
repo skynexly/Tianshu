@@ -18,26 +18,42 @@ const Chat = (() => {
       const wvId = conv?.worldviewId || conv?.singleWorldviewId || conv?.singleCharSourceWvId || (document.body.getAttribute('data-worldview') === '心动模拟' ? 'wv_heartsim' : '');
       if (!wvId) { _onlineNpcAvatarMap = {}; return; }
       const wv = await DB.get('worldviews', wvId);
-      const wvs = wv ? [wv] : [];
-      // 兜底：当前对话世界观未命中/数据旧时，遍历全部世界观找同名 NPC
+      const curWvs = wv ? [wv] : [];
+      // 兜底：当前对话世界观未命中/数据旧时，遍历全部世界观找同名 NPC（仅当当前世界观查不到该名字时才补，
+      // 不能让其他世界观的同名 NPC 覆盖当前世界观的头像，否则跨世界观同名会串）
+      const otherWvs = [];
       try {
         const all = await DB.getAll('worldviews');
-        all.forEach(x => { if (x && x.id !== wvId) wvs.push(x); });
+        all.forEach(x => { if (x && x.id !== wvId) otherWvs.push(x); });
       } catch(_) {}
-      if (wvs.length === 0) { _onlineNpcAvatarMap = {}; return; }
+      if (curWvs.length === 0 && otherWvs.length === 0) { _onlineNpcAvatarMap = {}; return; }
       const avatarRows = await DB.getAll('npcAvatars');
       const avatarById = {};
       avatarRows.forEach(a => { if (a && a.id) avatarById[a.id] = a.avatar || ''; });
-      const addNpc = (n) => {
+      // 当前世界观：有 url 就更新（同世界观内新头像覆盖旧的）
+      const addNpcCur = (n) => {
         if (!n) return;
         const url = avatarById[n.id] || n.avatar || '';
         const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))].map(s => String(s || '').trim()).filter(Boolean);
         names.forEach(name => { if (url || !map[name]) map[name] = url; });
       };
-      wvs.forEach(wvItem => {
+      // 其他世界观：仅当 map 里还没有该名字时才补，绝不覆盖当前世界观的头像
+      const addNpcOther = (n) => {
+        if (!n) return;
+        const url = avatarById[n.id] || n.avatar || '';
+        if (!url) return;
+        const names = [n.name, ...(String(n.aliases || '').split(/[,，、\s]+/)), ...(String(n.onlineName || '').split(/[,，、\s]+/))].map(s => String(s || '').trim()).filter(Boolean);
+        names.forEach(name => { if (!map[name]) map[name] = url; });
+      };
+      curWvs.forEach(wvItem => {
         if (wvItem.iconImage && !map['心动模拟客服']) map['心动模拟客服'] = wvItem.iconImage;
-        (wvItem.globalNpcs || []).forEach(addNpc);
-        (wvItem.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
+        (wvItem.globalNpcs || []).forEach(addNpcCur);
+        (wvItem.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpcCur)));
+      });
+      otherWvs.forEach(wvItem => {
+        if (wvItem.iconImage && !map['心动模拟客服']) map['心动模拟客服'] = wvItem.iconImage;
+        (wvItem.globalNpcs || []).forEach(addNpcOther);
+        (wvItem.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpcOther)));
       });
     } catch(_) {}
     _onlineNpcAvatarMap = map;
@@ -1547,6 +1563,24 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
           }
         }
       }
+      // ===== 拍摄期作品背景卡（让跑主线的 AI 知道在拍哪部作品）=====
+      // 当前对话存在 active 的拍摄链事件（带 shootWorkId）时，注入一段精简作品背景。
+      // 杀青后接口返回 null，自动停止注入。
+      try {
+        if (convSettings.eventsEnabled !== false && _convForEvt && Array.isArray(_convForEvt.convEvents) && typeof Phone !== 'undefined' && Phone.getShootChainBriefForRuntime) {
+          const _states = _convForEvt.eventStates || {};
+          const _activeShoot = _convForEvt.convEvents.find(e => e && e.shootWorkId && _states[e.id] === 'active');
+          if (_activeShoot) {
+            const _brief = Phone.getShootChainBriefForRuntime(_activeShoot.shootWorkId);
+            if (_brief) {
+              let firstNonSys = 0;
+              while (firstNonSys < apiMessages.length && apiMessages[firstNonSys].role === 'system') firstNonSys++;
+              apiMessages.splice(firstNonSys, 0, { role: 'system', content: _brief });
+              try { GameLog.log('info', `[拍摄链] 已注入作品背景卡`); } catch(_) {}
+            }
+          }
+        }
+      } catch(e) { console.warn('[Chat] 拍摄链背景卡注入失败', e); }
       // ===== 日历日程提醒（用户自建事项） =====
       // 生日/节日：提前一天提醒一次 + 当天每轮都提醒；其他类型：当天首次提醒一次
       try {
@@ -1723,6 +1757,38 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
           apiMessages.splice(insertIdx, 0, { role: 'system', content: _phoneLogContent });
         } else {
           apiMessages.push({ role: 'system', content: _phoneLogContent });
+        }
+      }
+    } catch(_) {}
+
+    // 自制电影·上映/报奖事件提示词注入（常驻，直到 AI 输出结束标记被回写清掉 pending）
+    // 临时 system 消息，只对当轮生效，不进消息历史（避免每轮重复堆积）
+    try {
+      if (typeof Phone !== 'undefined' && Phone.buildVideoEventPrompt) {
+        const vEvtPrompt = await Phone.buildVideoEventPrompt();
+        if (vEvtPrompt) {
+          const insertIdx = apiMessages.length - 1;
+          if (insertIdx >= 0) {
+            apiMessages.splice(insertIdx, 0, { role: 'system', content: vEvtPrompt });
+          } else {
+            apiMessages.push({ role: 'system', content: vEvtPrompt });
+          }
+        }
+      }
+    } catch(_) {}
+
+    // 自制书·影视版权授权事件提示词注入（常驻，直到版权卖出标记被回写清掉 licenseOpen）
+    // 临时 system 消息，只对当轮生效，不进消息历史
+    try {
+      if (typeof Phone !== 'undefined' && Phone.buildLicenseEventPrompt) {
+        const licPrompt = await Phone.buildLicenseEventPrompt();
+        if (licPrompt) {
+          const insertIdx = apiMessages.length - 1;
+          if (insertIdx >= 0) {
+            apiMessages.splice(insertIdx, 0, { role: 'system', content: licPrompt });
+          } else {
+            apiMessages.push({ role: 'system', content: licPrompt });
+          }
         }
       }
     } catch(_) {}
@@ -2070,6 +2136,10 @@ try {
       }
     } catch(_) {}
 
+    // 注：自制电影上映/报奖、自制书版权授权这两段「常驻事件提示词」
+    // 不再在此拼进 userContentForAPI（会被持久化进消息历史导致每轮重复堆积），
+    // 改为在 _buildApiContext 里以临时 system 消息注入，只对当轮生效。
+
     // 如果有图片，构建multimodal content
     if (pendingImages.length > 0) {
       userContentForAPI = [
@@ -2305,6 +2375,9 @@ const msgEl = appendMessage(aiMsg, true, true);
         const _onDone = async (fullContent) => {
           // v687.11：onDone 时也拼接历史内容
           fullContent = _priorContent ? (_priorContent + fullContent) : fullContent;
+          // 事件结束关键词扫描要用「正则/OOC 清理之前」的原始内容——
+          // 否则用户若配了剥离 HTML 注释的正则，会把 <!-- completeKey --> 删掉导致事件永远标记不了 done。
+          const _rawForEventScan = fullContent;
           try {
             // 正则替换规则
             const regexRules = await Settings.getRegexRules();
@@ -2336,13 +2409,22 @@ const msgEl = appendMessage(aiMsg, true, true);
             try {
               const _evtConv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
               if (_evtConv && _evtConv.eventStates && isGameMode && convSettings.eventsEnabled !== false) {
-                const _evtWv = isSingleConv ? singleWv : await Worldview.getCurrent();
-                const _evtList = _evtConv?.convEvents || _evtWv?.events || [];
+                // _evtList 优先用 convEvents（拍摄链/对话级事件都在这）。_evtWv 仅作 convEvents 为空时的 fallback。
+                // 注意：singleWv 是 _buildApiContext 的局部变量，本闭包拿不到，单人卡场景直接置 null（单人卡隐藏事件由下方单独扫）。
+                let _evtWv = null;
+                if (!isSingleConv) {
+                  try { _evtWv = await Worldview.getCurrent(); } catch(_) {}
+                }
+                const _evtList = (_evtConv && Array.isArray(_evtConv.convEvents) && _evtConv.convEvents.length) ? _evtConv.convEvents : (_evtWv?.events || []);
+                try {
+                  const _act = _evtList.filter(e => e && _evtConv.eventStates[e.id] === 'active').map(e => `${e.name}[${e.completeKey}]`);
+                  GameLog.log('info', `[Event诊断] active事件: ${_act.join(' | ') || '无'}；原始回复含结束词: ${_act.map(a => { const m = a.match(/\[(.+)\]$/); return m ? _rawForEventScan.includes(m[1]) : false; }).join(',')}`);
+                } catch(_) {}
                 let _evtChanged = false;
                 for (const ev of _evtList) {
                   if (!ev || !ev.id || !ev.completeKey) continue;
                   if (_evtConv.eventStates[ev.id] !== 'active') continue;
-                  if (fullContent.includes(ev.completeKey)) {
+                  if (_rawForEventScan.includes(ev.completeKey)) {
                     _evtConv.eventStates[ev.id] = 'done';
                     _evtChanged = true;
                     try { GameLog.log('info', `[Event] 事件「${ev.name}」检测到结束关键词，已标记完成`); } catch(_) {}
@@ -2369,7 +2451,7 @@ const msgEl = appendMessage(aiMsg, true, true);
                 for (const ev of _evtHiddenList) {
                   if (!ev || !ev.id || !ev.completeKey) continue;
                   if (_evtConv.eventStates[ev.id] !== 'active') continue;
-                  if (fullContent.includes(ev.completeKey)) {
+                  if (_rawForEventScan.includes(ev.completeKey)) {
                     _evtConv.eventStates[ev.id] = 'done';
                     _evtHiddenChanged = true;
                     try { GameLog.log('info', `[Event] 单人卡事件「${ev.name}」检测到结束关键词，已标记完成`); } catch(_) {}
@@ -2386,6 +2468,41 @@ const msgEl = appendMessage(aiMsg, true, true);
                 if (_evtHiddenChanged) {
                   try { await Conversations.saveList(); } catch(_) {}
                 }
+              }
+
+              // 运行时自愈：清掉 eventStates 里「既不在 convEvents、也不在隐藏 wv events」的幽灵状态。
+              // 历史上反复重新生成拍摄链会残留旧链的 active 标记，导致幽灵事件永远清不掉。
+              try {
+                if (_evtConv && _evtConv.eventStates && isGameMode && convSettings.eventsEnabled !== false) {
+                  const _liveIds = new Set();
+                  (Array.isArray(_evtConv.convEvents) ? _evtConv.convEvents : []).forEach(e => { if (e && e.id) _liveIds.add(e.id); });
+                  try {
+                    const _hw = await _getMergedLorebooksForConv(_evtConv);
+                    (_hw?.events || []).forEach(e => { if (e && e.id) _liveIds.add(e.id); });
+                  } catch(_) {}
+                  let _ghostCleaned = 0;
+                  Object.keys(_evtConv.eventStates).forEach(id => {
+                    if (!_liveIds.has(id)) { delete _evtConv.eventStates[id]; _ghostCleaned++; }
+                  });
+                  if (_ghostCleaned > 0) {
+                    try { GameLog.log('info', `[Event] 清理幽灵事件状态 ${_ghostCleaned} 条（已不在事件列表中）`); } catch(_) {}
+                    try { await Conversations.saveList(); } catch(_) {}
+                  }
+                }
+              } catch(_) {}
+            } catch(_) {}
+
+            // 自制电影·上映/报奖结束标记回写
+            try {
+              if (typeof Phone !== 'undefined' && Phone.applyVideoEventMarkers) {
+                await Phone.applyVideoEventMarkers(fullContent);
+              }
+            } catch(_) {}
+
+            // 自制书·影视版权授权结束标记回写
+            try {
+              if (typeof Phone !== 'undefined' && Phone.applyLicenseMarkers) {
+                await Phone.applyLicenseMarkers(fullContent);
               }
             } catch(_) {}
 
@@ -3838,7 +3955,16 @@ exitMultiSelect();
   async function rollbackTo(msgId) {
     const idx = messages.findIndex(m => m.id === msgId);
     if (idx < 0) return;
-    if (!await UI.showConfirm('确认回溯', `将删除此消息之后的所有 ${messages.length - idx - 1} 条消息，确定回溯？`)) return;
+    const afterCount = messages.length - idx - 1;
+    if (afterCount > 0) {
+      let skip = false;
+      try { skip = localStorage.getItem('skynex_rollbackConfirmSkip') === '1'; } catch(_) {}
+      if (!skip) {
+        const res = await UI.showConfirm('时光倒流准备中', `将删除此消息之后的 ${afterCount} 条消息，并同时回溯状态栏和手机数据。是否继续？`, { checkbox: '下次不再提醒' });
+        if (!res.ok) return;
+        if (res.checked) { try { localStorage.setItem('skynex_rollbackConfirmSkip', '1'); } catch(_) {} }
+      }
+    }
 
     // 删除此消息之后的所有消息
     const toDelete = messages.slice(idx + 1);
@@ -3859,7 +3985,15 @@ exitMultiSelect();
     if (idx < 0) return;
     const msg = messages[idx];
     const afterCount = messages.length - idx - 1;
-    if (afterCount > 0 && !await UI.showConfirm('确认回溯', `将删除此消息之后的 ${afterCount} 条消息并回溯，确定？`)) return;
+    if (afterCount > 0) {
+      let skip = false;
+      try { skip = localStorage.getItem('skynex_rollbackConfirmSkip') === '1'; } catch(_) {}
+      if (!skip) {
+        const res = await UI.showConfirm('时光倒流准备中', `将删除此消息之后的 ${afterCount} 条消息，并同时回溯状态栏和手机数据。是否继续？`, { checkbox: '下次不再提醒' });
+        if (!res.ok) return;
+        if (res.checked) { try { localStorage.setItem('skynex_rollbackConfirmSkip', '1'); } catch(_) {} }
+      }
+    }
 
     // 把该消息内容放回发送框（用 content 而非 contentForAPI，避免系统注入内容暴露）
     const input = document.getElementById('chat-input');
@@ -5257,8 +5391,8 @@ if (!gp) return null;
     const completeKey = ev?.completeKey || '__EVENT_DONE__';
     const finishRule = (ev?.finishRule || '').trim() || '当事件内容中的核心冲突、目标或场景已经自然完成时，视为事件结束。';
     const title = phase === 'trigger' ? '【世界观·事件触发】' : '【世界观·事件进行中】';
-    const startRule = phase === 'trigger' ? '- 本事件从本轮开始生效。\n- 不要在刚触发时立刻输出结束关键词，除非用户输入和当前剧情已经明确满足“结束判断”。' : '- 本事件仍在进行中。';
-    return `${title}\n事件名称：${name}\n\n事件内容：\n${content}\n\n结束判断：\n${finishRule}\n\n事件持续规则：\n${startRule}\n- 只要本事件尚未满足“结束判断”，你就应该持续遵循事件内容推进剧情。\n- 不要因为一次轻微提及、场景短暂转移或数值条件回落，就自行结束事件。\n- 当你根据用户行为、剧情进展与“结束判断”确认事件已经自然结束时，请在本轮回复中输出结束关键词。\n- 结束关键词用于系统关闭事件，不应展示给玩家。默认请用 HTML 注释包裹：<!-- ${completeKey} -->\n- 若剧情文本中自然适合明示该关键词，也可以自然包含它；否则优先使用 HTML 注释。`;
+    const startRule = phase === 'trigger' ? '- 本事件从本轮开始生效。\n- 不要在刚触发时立刻输出结束关键词，除非用户输入和当前剧情已经明确满足“结束判断”。\n- 事件刚触发时，先用自然的剧情过渡引入本事件，不要急着推进核心情节；可以用几轮对话铺垫氛围、让玩家适应，再逐步进入重头戏。' : '- 本事件仍在进行中。';
+    return `${title}\n事件名称：${name}\n\n事件内容：\n${content}\n\n结束判断：\n${finishRule}\n\n事件持续规则：\n${startRule}\n- 一个事件通常需要多轮对话才能自然完成，不必、也不应在单轮回复里就把整个事件演完。请配合玩家的节奏推进，把核心情节充分铺展开。\n- 只要本事件尚未满足“结束判断”，就应持续遵循事件内容推进剧情。\n- 不要因为一次轻微提及、场景短暂转移或数值条件回落，就自行结束事件。\n- 当根据玩家行为、剧情进展与“结束判断”确认事件已经自然结束时，再在该轮回复中输出结束关键词。\n- 结束关键词用于系统关闭事件，不应展示给玩家。默认请用 HTML 注释包裹：<!-- ${completeKey} -->\n- 若剧情文本中自然适合明示该关键词，也可以自然包含它；否则优先使用 HTML 注释。`;
   }
   function _buildExtendedInjections(knowledges, messages, events, convEventStates, options = {}) {
     const out = { systemTop: [], systemBottom: [], depths: {} };

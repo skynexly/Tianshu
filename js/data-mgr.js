@@ -444,7 +444,48 @@ const DataMgr = (() => {
     { key: 'hsTargets', label: '心动目标头像',
       scan: pd => (Array.isArray(pd.hsAppTargets) ? pd.hsAppTargets : []).reduce((s, t) => s + _strBytes(t && t.avatar), 0),
       clear: pd => { let c = false; (Array.isArray(pd.hsAppTargets) ? pd.hsAppTargets : []).forEach(t => { if (t && _isDataUrl(t.avatar)) { t.avatar = ''; c = true; } }); return c; } },
+    // 视频封面：用户手动换的封面才是内联 base64（AI 列表默认封面是资源文件名，不计）。
+    // 同一作品可能同时在 videoDiscover 各分类与 videoWorks 里，按对象引用去重避免重复计数/漏清。
+    { key: 'videoCover', label: '影视封面',
+      scan: pd => { let s = 0; _videoCoverEach(pd, w => { s += _strBytes(w && w.cover); }); return s; },
+      clear: pd => { let c = false; _videoCoverEach(pd, w => { if (w && _isDataUrl(w.cover)) { w.cover = ''; c = true; } }); return c; } },
+    // 阅读封面：书架 + 发现页两类缓存，同样只算内联 base64。
+    { key: 'readingCover', label: '书籍封面',
+      scan: pd => { let s = 0; _readingCoverEach(pd, b => { s += _strBytes(b && b.cover); }); return s; },
+      clear: pd => { let c = false; _readingCoverEach(pd, b => { if (b && _isDataUrl(b.cover)) { b.cover = ''; c = true; } }); return c; } },
+    // 电台封面：radioPrograms 各频道（含 __mine__）的 program.cover，部分是 Unsplash URL，靠 _isDataUrl 只挑 base64。
+    { key: 'radioCover', label: '电台封面',
+      scan: pd => { let s = 0; _radioCoverEach(pd, p => { s += _strBytes(p && p.cover); }); return s; },
+      clear: pd => { let c = false; _radioCoverEach(pd, p => { if (p && _isDataUrl(p.cover)) { p.cover = ''; c = true; } }); return c; } },
   ];
+
+  // 遍历一个 phoneData 里所有视频作品对象（videoDiscover 各分类 + videoWorks，按引用去重），对每个调 fn。
+  function _videoCoverEach(pd, fn) {
+    const seen = new Set();
+    const visit = (w) => { if (w && typeof w === 'object' && !seen.has(w)) { seen.add(w); fn(w); } };
+    const disc = (pd && pd.videoDiscover && typeof pd.videoDiscover === 'object' && !Array.isArray(pd.videoDiscover)) ? pd.videoDiscover : {};
+    Object.keys(disc).forEach(k => { (Array.isArray(disc[k]) ? disc[k] : []).forEach(visit); });
+    (Array.isArray(pd && pd.videoWorks) ? pd.videoWorks : []).forEach(visit);
+  }
+
+  // 遍历一个 phoneData 里所有书对象（readingBooks + readingDiscover.long/short，按引用去重），对每个调 fn。
+  function _readingCoverEach(pd, fn) {
+    const seen = new Set();
+    const visit = (b) => { if (b && typeof b === 'object' && !seen.has(b)) { seen.add(b); fn(b); } };
+    (Array.isArray(pd && pd.readingBooks) ? pd.readingBooks : []).forEach(visit);
+    const disc = pd && pd.readingDiscover;
+    if (Array.isArray(disc)) { disc.forEach(visit); }
+    else if (disc && typeof disc === 'object') {
+      (Array.isArray(disc.long) ? disc.long : []).forEach(visit);
+      (Array.isArray(disc.short) ? disc.short : []).forEach(visit);
+    }
+  }
+
+  // 遍历一个 phoneData 里所有电台节目对象（radioPrograms 各频道数组，含 __mine__），对每个调 fn。
+  function _radioCoverEach(pd, fn) {
+    const progs = (pd && pd.radioPrograms && typeof pd.radioPrograms === 'object' && !Array.isArray(pd.radioPrograms)) ? pd.radioPrograms : {};
+    Object.keys(progs).forEach(k => { (Array.isArray(progs[k]) ? progs[k] : []).forEach(p => fn(p)); });
+  }
 
   // 取 conversations 数组（真实来源在 gameState 的 conversations 项）
   async function _getConversations() {
