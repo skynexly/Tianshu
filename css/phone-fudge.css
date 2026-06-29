@@ -1002,3 +1002,16 @@
 .phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-reading-cmt-inputbar input {
   color: var(--bg) !important;
 }
+/* 周程：启用文字在奶油软糖深底上改背景色（浅字） */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-week-enable {
+  color: var(--bg);
+}
+/* 周几切换条：未选中那天默认落在深页底上糊成一团，铺浅底+深字（active 态保留 accent 高亮不动） */
+.phone-shell.phone-theme-fudge .phone-week-daytab {
+  background: var(--bg-secondary);
+  color: var(--text);
+}
+/* 时段卡：铺浅底（对齐日历事项卡），内部 title/note/time 的变量色落浅底上即可读 */
+.phone-shell.phone-theme-fudge .phone-week-slot-card {
+  background: var(--bg-secondary);
+}

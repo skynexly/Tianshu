@@ -175,8 +175,8 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v704.7';
- const CHANGELOG = `【v704.7 更新内容】
+const APP_VERSION = 'v704.8';
+ const CHANGELOG = `【v704.8 更新内容】
 
 ✨ 新增：AI 生成面具
 ○ 面具编辑页新增「AI生成」，按你的要求一键生成姓名/网名/设定/技能/物品

@@ -2811,6 +2811,9 @@ background: transparent !important;
   background: #111;
 }
 .phone-week-slot-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
