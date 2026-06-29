@@ -513,6 +513,47 @@ const Calendar = (() => {
     return { timeStr: aiTimeValue, timeObj: null, season: null, weekDay: '', timePeriod: null, isDeltaFormat: false, parseError: true };
   }
 
+  // ===== 时间差计算 =====
+
+  /**
+   * 计算两个时间对象相差多少分钟（to - from）。可为负。
+   */
+  function diffMinutes(fromTime, toTime, rules) {
+    if (!fromTime || !toTime) return null;
+    rules = getRules(rules);
+    const mph = rules.minutesPerHour;
+    const hpd = rules.hoursPerDay;
+    const fromTotal = _daysSinceEpoch(fromTime, rules) * hpd * mph + (fromTime.hour || 0) * mph + (fromTime.minute || 0);
+    const toTotal = _daysSinceEpoch(toTime, rules) * hpd * mph + (toTime.hour || 0) * mph + (toTime.minute || 0);
+    return toTotal - fromTotal;
+  }
+
+  /**
+   * 把分钟数转成人类可读的间隔描述（基于自定义历法的每日小时数）。
+   * 返回如 "约 3 小时"、"约 2 天"、"40 分钟左右"。
+   */
+  function humanizeMinutes(mins, rules) {
+    rules = getRules(rules);
+    const mph = rules.minutesPerHour;
+    const hpd = rules.hoursPerDay;
+    const sign = mins < 0 ? '-' : '';
+    let m = Math.abs(Math.round(mins));
+    if (m < mph) return `${sign}${m} 分钟左右`;
+    const totalHours = m / mph;
+    if (totalHours < hpd) {
+      const h = Math.floor(totalHours);
+      const rem = Math.round(m - h * mph);
+      return rem >= 5 ? `${sign}约 ${h} 小时 ${rem} 分钟` : `${sign}约 ${h} 小时`;
+    }
+    const totalDays = totalHours / hpd;
+    if (totalDays < 30) {
+      const d = Math.floor(totalDays);
+      const remH = Math.round(totalHours - d * hpd);
+      return remH >= 1 ? `${sign}约 ${d} 天 ${remH} 小时` : `${sign}约 ${d} 天`;
+    }
+    return `${sign}约 ${Math.round(totalDays)} 天`;
+  }
+
   // ===== 暴露接口 =====
   return {
     DEFAULT_RULES,
@@ -526,6 +567,8 @@ const Calendar = (() => {
     getTimePeriod,
     format,
     processTimeField,
+    diffMinutes,
+    humanizeMinutes,
     _getDaysInMonth,
     _getDaysInYear,
     _daysSinceEpoch

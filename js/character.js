@@ -382,6 +382,7 @@ async function _getMasksForCurrentWv() {
         });
         data.abilities = abilitiesData;
         data.inventory = inventoryData;
+        data.birthday = _readBirthdayFromForm();
         data.memoryScope = targetId;
         data.avatar = currentAvatar || null;
         if (editingMaskId !== targetId) return; // 中间切面具了→放弃
@@ -461,6 +462,8 @@ async function _getMasksForCurrentWv() {
       // hidden input 的 value 改了不会自动 dispatch，手动触发让自动保存生效
       hidden.dispatchEvent(new Event('change'));
     }
+    // 世界观变了→历法可能变，按当前生日值重渲染下拉（越界会自动落回未设置）
+    try { _renderBirthdaySelects(_readBirthdayFromForm()); } catch (_) {}
     if (label) label.textContent = name;
     if (dropdown) {
       // 更新 active 高亮
@@ -555,6 +558,7 @@ async function _getMasksForCurrentWv() {
     try { Utils.refreshAutoResizeTextareas(document.getElementById('panel-mask-edit') || document); } catch(e) {}
     renderAbilities(data?.abilities || []);
     renderInventory(data?.inventory || []);
+    _renderBirthdaySelects(data?.birthday || null);
     currentAvatar = data?.avatar || null;
     updateAvatarPreview();
     UI.showPanel('mask-edit');
@@ -636,6 +640,7 @@ if (placeholder) placeholder.style.display = '';
     });
     data.abilities = abilitiesData;
     data.inventory = inventoryData;
+    data.birthday = _readBirthdayFromForm();
     data.memoryScope = editingMaskId;
     data.avatar = currentAvatar || null;
     await DB.put('characters', data);
@@ -1070,6 +1075,11 @@ async function deleteItem() {
     if (char.appearance) text += `外貌: ${char.appearance}\n`;
     if (char.personality) text += `性格: ${char.personality}\n`;
     if (char.background) text += `背景: ${char.background}\n`;
+    if (char.birthday && char.birthday.month && char.birthday.day) {
+      const b = char.birthday;
+      const mLabel = b.monthName ? b.monthName : `${b.month}月`;
+      text += `生日: ${mLabel}${b.day}日\n`;
+    }
     if (char.other) text += `其他: ${char.other}\n`;
     if (char.abilities?.length > 0) {
       text += '\n【异能/技能】\n';
@@ -1469,10 +1479,332 @@ async function deleteItem() {
   }
 
   function getAvatar() { return activeAvatar; }
-
   function searchMasks(query) {
     renderMaskList(query);
   }
+
+  // ===== 生日（按绑定世界观历法约束） =====
+
+  // 取当前编辑面具"正在编辑中"的世界观 id：优先表单 hidden（实时），回退 maskList 快照
+  function _getEditingWvId() {
+    const hidden = document.getElementById('char-worldview');
+    if (hidden && typeof hidden.value === 'string') return hidden.value || '';
+    return '';
+  }
+
+  // 取当前编辑面具绑定世界观的历法规则（无则默认 12 月）
+  async function _getBirthRules() {
+    let wvId = _getEditingWvId();
+    // hidden 不存在时（理论上不会）回退 maskList
+    if (wvId === '' && !document.getElementById('char-worldview')) {
+      try {
+        const list = await getMaskList();
+        const entry = list.find(m => m.id === editingMaskId);
+        wvId = entry?.worldviewId || '';
+      } catch (_) {}
+    }
+    let calSys = null;
+    if (wvId) {
+      try {
+        const wv = await DB.get('worldviews', wvId);
+        calSys = wv?.gameplay?.calendarSystem || null;
+      } catch (_) {}
+    }
+    return (typeof Calendar !== 'undefined') ? Calendar.getRules(calSys) : { monthsPerYear: 12, daysPerMonth: [31,28,31,30,31,30,31,31,30,31,30,31] };
+  }
+
+  // 渲染生日两个下拉（自定义下拉）。birthday: {month, day} | null
+  async function _renderBirthdaySelects(birthday) {
+    const monthHidden = document.getElementById('char-birth-month');
+    const dayHidden = document.getElementById('char-birth-day');
+    if (!monthHidden || !dayHidden) return;
+    const rules = await _getBirthRules();
+    const mpy = rules?.monthsPerYear || 12;
+    const curMonth = (birthday && birthday.month && birthday.month <= mpy) ? birthday.month : 0;
+    // 月
+    monthHidden.value = curMonth ? String(curMonth) : '';
+    _setBirthLabel('month', curMonth ? `${curMonth}月` : '月份');
+    // 日（依当前月）
+    const curDay = (birthday && birthday.day) ? birthday.day : 0;
+    _renderBirthDayState(rules, curMonth, curDay);
+  }
+
+  // 根据月份刷新"日"的可选范围与当前值
+  function _renderBirthDayState(rules, month, curDay) {
+    const dayHidden = document.getElementById('char-birth-day');
+    if (!dayHidden) return;
+    if (!month) {
+      dayHidden.value = '';
+      _setBirthLabel('day', '日期');
+      return;
+    }
+    const dpm = rules?.daysPerMonth || [];
+    const days = dpm.length ? (dpm[(month - 1) % dpm.length] || 30) : 30;
+    const valid = (curDay && curDay <= days) ? curDay : 0;
+    dayHidden.value = valid ? String(valid) : '';
+    _setBirthLabel('day', valid ? `${valid}日` : '日期');
+  }
+
+  function _setBirthLabel(which, text) {
+    const label = document.getElementById(`char-birth-${which}-label`);
+    if (label) label.textContent = text;
+  }
+
+  // 展开/收起生日下拉，并填充选项
+  async function _toggleBirthDropdown(which) {
+    const dropdown = document.getElementById(`char-birth-${which}-dropdown`);
+    if (!dropdown) return;
+    // 关掉另一个
+    const other = which === 'month' ? 'day' : 'month';
+    const otherDd = document.getElementById(`char-birth-${other}-dropdown`);
+    if (otherDd) otherDd.classList.add('hidden');
+
+    if (!dropdown.classList.contains('hidden')) {
+      dropdown.classList.add('hidden');
+      return;
+    }
+    const rules = await _getBirthRules();
+    let items = '';
+    if (which === 'month') {
+      const mpy = rules?.monthsPerYear || 12;
+      const cur = parseInt(document.getElementById('char-birth-month')?.value, 10) || 0;
+      for (let m = 1; m <= mpy; m++) {
+        items += `<div class="custom-dropdown-item${m === cur ? ' active' : ''}" onclick="Character._selectBirth('month', ${m})">${m}月</div>`;
+      }
+    } else {
+      const month = parseInt(document.getElementById('char-birth-month')?.value, 10) || 0;
+      if (!month) { UI.showToast('请先选月份', 1400); return; }
+      const dpm = rules?.daysPerMonth || [];
+      const days = dpm.length ? (dpm[(month - 1) % dpm.length] || 30) : 30;
+      const cur = parseInt(document.getElementById('char-birth-day')?.value, 10) || 0;
+      for (let d = 1; d <= days; d++) {
+        items += `<div class="custom-dropdown-item${d === cur ? ' active' : ''}" onclick="Character._selectBirth('day', ${d})">${d}日</div>`;
+      }
+    }
+    dropdown.innerHTML = items;
+    dropdown.classList.remove('hidden');
+  }
+
+  async function _selectBirth(which, val) {
+    const dropdown = document.getElementById(`char-birth-${which}-dropdown`);
+    if (dropdown) dropdown.classList.add('hidden');
+    if (which === 'month') {
+      const monthHidden = document.getElementById('char-birth-month');
+      if (monthHidden) monthHidden.value = String(val);
+      _setBirthLabel('month', `${val}月`);
+      // 换月后，校验已选的日是否还合法
+      const rules = await _getBirthRules();
+      const curDay = parseInt(document.getElementById('char-birth-day')?.value, 10) || 0;
+      _renderBirthDayState(rules, val, curDay);
+    } else {
+      const dayHidden = document.getElementById('char-birth-day');
+      if (dayHidden) dayHidden.value = String(val);
+      _setBirthLabel('day', `${val}日`);
+    }
+  }
+
+  function clearBirthday() {
+    const monthHidden = document.getElementById('char-birth-month');
+    const dayHidden = document.getElementById('char-birth-day');
+    if (monthHidden) monthHidden.value = '';
+    if (dayHidden) dayHidden.value = '';
+    _setBirthLabel('month', '月份');
+    _setBirthLabel('day', '日期');
+    ['month', 'day'].forEach(w => {
+      const dd = document.getElementById(`char-birth-${w}-dropdown`);
+      if (dd) dd.classList.add('hidden');
+    });
+  }
+
+  // 从表单读出生日对象（无效返回 null）
+  function _readBirthdayFromForm() {
+    const monthSel = document.getElementById('char-birth-month');
+    const daySel = document.getElementById('char-birth-day');
+    const m = parseInt(monthSel?.value, 10);
+    const d = parseInt(daySel?.value, 10);
+    if (!isFinite(m) || !isFinite(d) || m <= 0 || d <= 0) return null;
+    return { month: m, day: d };
+  }
+
+  // ===== AI 生成面具 =====
+
+  // 解析 AI 输出的 JSON（去 markdown 包裹 + 抓第一个对象）
+  function _aiParseJSON(text) {
+    let cleaned = (text || '').trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/```\s*$/, '').trim();
+    }
+    try { return JSON.parse(cleaned); } catch (_) {}
+    const s = cleaned.indexOf('{');
+    const e = cleaned.lastIndexOf('}');
+    if (s === -1 || e <= s) throw new Error('AI未返回有效JSON');
+    return JSON.parse(cleaned.substring(s, e + 1));
+  }
+
+  // 直接从 DB 取某个世界观对象，组装资料块（不依赖 phone.js / 全局激活态）
+  async function _aiBuildWvBlock(wvId) {
+    if (!wvId) return '';
+    let wv = null;
+    try { wv = await DB.get('worldviews', wvId); } catch (_) {}
+    if (!wv) return '';
+    const parts = [];
+    // 基础设定
+    const base = (wv.setting || wv.description || '').trim();
+    if (base) parts.push('【世界观基础设定】\n' + base);
+    // 地区 + 势力速查
+    if (Array.isArray(wv.regions) && wv.regions.length) {
+      const regBlocks = wv.regions.map(r => {
+        if (!r || !r.name) return '';
+        let s = `● ${r.name}`;
+        const rd = r.summary || r.detail || r.description || '';
+        if (rd) s += `：${rd}`;
+        const facs = Array.isArray(r.factions) ? r.factions : [];
+        const facStr = facs.map(f => {
+          if (!f || !f.name) return '';
+          const fd = f.summary || f.detail || f.description || '';
+          return `  - 势力·${f.name}${fd ? `：${fd}` : ''}`;
+        }).filter(Boolean).join('\n');
+        if (facStr) s += '\n' + facStr;
+        return s;
+      }).filter(Boolean).join('\n');
+      if (regBlocks) parts.push('【地区与势力速查】\n' + regBlocks);
+    }
+    // 节日
+    if (Array.isArray(wv.festivals) && wv.festivals.length) {
+      const festStr = wv.festivals.filter(f => f && f.enabled !== false)
+        .map(f => `${f.name || ''}（${f.date || ''}）：${f.content || ''}`).join('\n');
+      if (festStr) parts.push('【节日设定】\n' + festStr);
+    }
+    // 知识
+    const ks = (wv.knowledges || wv.customs || []).filter(c => c && c.enabled !== false);
+    if (ks.length) parts.push('【知识设定】\n' + ks.map(c => `${c.name || ''}：${c.content || ''}`).join('\n'));
+    // 开场设定
+    const startParts = [];
+    if (wv.startTime) startParts.push('开场时间：' + wv.startTime);
+    if (wv.startPlot) startParts.push('开场剧情：' + wv.startPlot);
+    if (wv.startMessage) startParts.push('开场旁白：' + wv.startMessage);
+    if (startParts.length) parts.push('【开场设定】\n' + startParts.join('\n'));
+    return parts.length ? parts.join('\n\n') : '';
+  }
+
+  function openAiGen() {
+    if (!editingMaskId) { UI.showToast('请先打开一个面具', 1600); return; }
+    const reqEl = document.getElementById('mask-aigen-req');
+    const wordsEl = document.getElementById('mask-aigen-words');
+    if (reqEl) reqEl.value = '';
+    if (wordsEl) wordsEl.value = '';
+    // 提示当前面具绑定的世界观
+    (async () => {
+      const hint = document.getElementById('mask-aigen-wv-hint');
+      if (!hint) return;
+      try {
+        const list = await getMaskList();
+        const entry = list.find(m => m.id === editingMaskId);
+        const wvId = entry?.worldviewId || '';
+        if (!wvId) { hint.textContent = '当前面具未绑定世界观，将生成一个通用角色。'; return; }
+        const wv = await DB.get('worldviews', wvId).catch(() => null);
+        hint.textContent = wv ? `将参考世界观「${wv.name || '未命名'}」的设定生成角色。` : '绑定的世界观已失效，将生成通用角色。';
+      } catch (_) { hint.textContent = ''; }
+    })();
+    const modal = document.getElementById('mask-aigen-modal');
+    if (modal) modal.classList.remove('hidden');
+  }
+
+  function closeAiGen() {
+    const modal = document.getElementById('mask-aigen-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  async function runAiGen() {
+    if (!editingMaskId) { UI.showToast('请先打开一个面具', 1600); return; }
+    const reqEl = document.getElementById('mask-aigen-req');
+    const wordsEl = document.getElementById('mask-aigen-words');
+    const goBtn = document.getElementById('mask-aigen-go');
+    const requirement = (reqEl?.value || '').trim();
+    let wordCount = parseInt(wordsEl?.value, 10);
+    if (!isFinite(wordCount) || wordCount <= 0) wordCount = 0;
+
+    // 取当前面具绑定的世界观（优先表单实时值，未保存也能跟随）
+    const wvId = _getEditingWvId();
+    const wvBlock = await _aiBuildWvBlock(wvId);
+
+    if (goBtn) { goBtn.disabled = true; goBtn.textContent = '生成中…'; }
+    try {
+      const wordLine = wordCount
+        ? `设定（background）正文控制在 ${wordCount} 字左右。`
+        : '设定（background）正文长度适中（约 200-400 字）。';
+      const sysPrompt = [
+        '你是一个角色设定生成器。根据用户要求，生成一个可直接用于角色扮演的"用户面具"（玩家扮演的角色）。',
+        wvBlock ? '请让角色贴合下面的世界观设定，姓名、身份、技能、物品都要符合这个世界观的风格与设定，不要出现与世界观冲突的现代/现实专有名词。\n\n' + wvBlock : '世界观未绑定，生成一个设定自洽的通用角色即可。',
+        '',
+        '## 输出要求',
+        '严格只输出一个 JSON 对象，不要任何解释或 markdown 代码块包裹。结构如下：',
+        '{',
+        '  "name": "角色本名",',
+        '  "onlineName": "网名/社交媒体显示名，可与本名相同",',
+        '  "background": "角色设定正文。用分行的方式依次写：性别、年龄、身份、外貌（发色发型长度/瞳色/身高/气质/特征）、背景故事。把这些都写进这一段文本里。",',
+        `  "birthday": { "month": 整数(1-${(await _getBirthRules()).monthsPerYear || 12}), "day": 整数(该月的合法日期，没有合适就省略整个birthday字段) },`,
+        '  "abilities": [ { "name": "技能名", "type": "类型(如元素/精神/辅助/战斗)", "level": "等级(如S级/A级，没有体系就留空)", "description": "效果描述" } ],',
+        '  "inventory": [ { "name": "物品名", "effect": "作用/说明", "count": 1 } ]',
+        '}',
+        wordLine,
+        'abilities 0-4 个，inventory 0-6 个，按角色合理性来，没有就给空数组。'
+      ].join('\n');
+
+      const userMsg = requirement
+        ? '用户要求：' + requirement
+        : '用户没有特别要求，请自由设计一个有记忆点的角色。';
+
+      const raw = await API.generate(sysPrompt, userMsg, {});
+      const obj = _aiParseJSON(raw);
+
+      // 回填到当前编辑表单
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+      if (obj.name) setVal('char-name', String(obj.name).trim());
+      if (obj.onlineName) setVal('char-onlineName', String(obj.onlineName).trim());
+      if (obj.background) {
+        setVal('char-background', String(obj.background).trim());
+        // 触发设定框自适应高度（与 openEdit 同口径：超高时开滚动）
+        const ta = document.getElementById('char-background');
+        if (ta) {
+          ta.style.height = 'auto';
+          ta.style.height = Math.min(ta.scrollHeight, 220) + 'px';
+          ta.style.overflowY = ta.scrollHeight > 220 ? 'auto' : 'hidden';
+        }
+      }
+      // 技能
+      const abis = Array.isArray(obj.abilities) ? obj.abilities.map(a => ({
+        name: String(a?.name || '').trim(),
+        type: String(a?.type || '').trim(),
+        level: String(a?.level || '').trim(),
+        description: String(a?.description || '').trim()
+      })).filter(a => a.name) : [];
+      renderAbilities(abis);
+      // 物品
+      const invs = Array.isArray(obj.inventory) ? obj.inventory.map(it => ({
+        name: String(it?.name || '').trim(),
+        effect: String(it?.effect || '').trim(),
+        count: (() => { const n = parseInt(it?.count, 10); return isFinite(n) && n > 0 ? n : 1; })()
+      })).filter(it => it.name) : [];
+      renderInventory(invs);
+
+      // 生日（按当前历法校验）
+      if (obj.birthday && typeof obj.birthday === 'object') {
+        const bm = parseInt(obj.birthday.month, 10);
+        const bd = parseInt(obj.birthday.day, 10);
+        const bday = (isFinite(bm) && isFinite(bd) && bm > 0 && bd > 0) ? { month: bm, day: bd } : null;
+        await _renderBirthdaySelects(bday);
+      }
+
+      closeAiGen();
+      UI.showToast('已生成，记得检查后保存', 2200);
+    } catch (e) {
+      UI.showToast('生成失败：' + (e?.message || e), 3000);
+    } finally {
+      if (goBtn) { goBtn.disabled = false; goBtn.textContent = '生成'; }
+    }
+  }
+
 
 return {
     init, load, save, get, getCurrentId, formatForPrompt, getAvatar,
@@ -1481,6 +1813,8 @@ return {
   addAbility, removeAbility, editAbility, saveAbility, deleteAbility, closeAbilityEdit, closeAbilityModal,
   addItem, removeItem, editItem, saveItem, deleteItem, closeItemEdit, closeItemModal, moveItemToStorage, addItemDirect, removeItemByName, cloneMask, cloneMaskFrom, isolateMaskForConv, maskHasContent,
   onAvatarPicked, pickAvatar, removeAvatar, searchMasks,
+    openAiGen, closeAiGen, runAiGen,
+    clearBirthday, _toggleBirthDropdown, _selectBirth,
   toggleManageMode, toggleSelectAll, batchClone, batchDelete, _onCardClick, exitManageMode,
   // v616
   toggleMenu, exportSelected, importMask,

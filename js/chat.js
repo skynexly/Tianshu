@@ -718,6 +718,14 @@ const _skipNpcInjection = _hsHomecoming && (_hsPostHomeMode === 'continue' || _h
       systemParts.push(singleWv.setting);
     }
 
+    // 1b. 周程作息表（启用时每轮发整张表，作为叙事背景；私人日程+防瞎编约束）
+    if (isGameMode && typeof Phone !== 'undefined' && Phone._weekBuildScheduleBlock) {
+      try {
+        const _wsBlock = await Phone._weekBuildScheduleBlock();
+        if (_wsBlock) systemParts.push(_wsBlock);
+      } catch(e) { console.warn('[Chat] 周程表注入失败', e); }
+    }
+
     // 1c. 单人模式：主角资料（仅文游模式发送）
     // v687.33：返航"继续日常"/epilogue 模式下跳过（单人卡主角不属于返航后的现实世界）
 if (isSingleConv && isGameMode && !_skipNpcInjection) {
@@ -837,6 +845,14 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
           }
 
           _recentStatusParts.push(timePrompt);
+
+          // 周程·当前时段定位（启用时跟着时间一起发，高时效）
+          try {
+            if (typeof Phone !== 'undefined' && Phone._weekBuildNowBlock) {
+              const _wsNow = await Phone._weekBuildNowBlock();
+              if (_wsNow) _recentStatusParts.push(_wsNow);
+            }
+          } catch(_) {}
         }
       } catch(e) {}
     }

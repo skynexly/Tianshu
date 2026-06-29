@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=142">
-<link rel="stylesheet" href="css/phone.css?v1=353">
+<link rel="stylesheet" href="css/phone.css?v1=355">
 <link rel="stylesheet" href="css/phone-fudge.css?v=16">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
@@ -568,7 +568,10 @@
       </button>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <h2 id="mask-edit-title" style="margin:0;font-size:24px;color:var(--text)">编辑面具</h2>
-        <button onclick="Character.save()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+        <div style="display:flex;gap:8px">
+          <button onclick="Character.openAiGen()" style="padding:6px 14px;font-size:13px;background:none;color:var(--accent);border:1px solid var(--accent);border-radius:6px;cursor:pointer">AI生成</button>
+          <button onclick="Character.save()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+        </div>
       </div>
     </div>
     <div style="overflow-y:auto;max-height:calc(100vh - 120px);padding-right:4px">
@@ -599,6 +602,25 @@
                     </div>
                   </label>
         <label>设定<div style="position:relative;width:100%"><textarea id="char-background" class="auto-resize-textarea" rows="8" placeholder="外貌、性格、背景等角色设定" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('char-background','角色设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
+        <label>生日<div style="display:flex;gap:8px;align-items:flex-start">
+          <div style="position:relative;flex:1">
+            <input type="hidden" id="char-birth-month" value="">
+            <button type="button" class="custom-select-btn" onclick="Character._toggleBirthDropdown('month')">
+              <span id="char-birth-month-label" style="overflow:hidden;text-overflow:ellipsis;flex:1;text-align:left">月份</span>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+            </button>
+            <div id="char-birth-month-dropdown" class="custom-dropdown hidden" style="max-height:240px;overflow-y:auto"></div>
+          </div>
+          <div style="position:relative;flex:1">
+            <input type="hidden" id="char-birth-day" value="">
+            <button type="button" class="custom-select-btn" onclick="Character._toggleBirthDropdown('day')">
+              <span id="char-birth-day-label" style="overflow:hidden;text-overflow:ellipsis;flex:1;text-align:left">日期</span>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+            </button>
+            <div id="char-birth-day-dropdown" class="custom-dropdown hidden" style="max-height:240px;overflow-y:auto"></div>
+          </div>
+          <button type="button" onclick="Character.clearBirthday()" style="background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;padding:8px 10px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">清除</button>
+        </div></label>
         <fieldset>
           <legend>异能/技能</legend>
           <div id="abilities-list"></div>
@@ -613,6 +635,25 @@
     </div>
   </div>
 </section>
+
+ <!-- AI生成面具弹窗 -->
+ <div id="mask-aigen-modal" class="modal hidden">
+ <div class="modal-content">
+ <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+ <h3>AI 生成面具</h3>
+ <button class="btn-icon" onclick="Character.closeAiGen()" style="width:32px;height:32px;padding:4px">
+ <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+ </button>
+ </div>
+ <div id="mask-aigen-wv-hint" style="font-size:12px;color:var(--text-secondary);margin-bottom:12px"></div>
+ <div class="form-group"><span class="form-label">想要的角色（要求/方向，可空）</span><textarea id="mask-aigen-req" rows="4" placeholder="例如：一个在边境城镇长大的女佣兵，沉默寡言但重情义，擅长用双刀。可留空让AI自由发挥"></textarea></div>
+ <div class="form-group"><span class="form-label">设定字数（大致）</span><input type="number" id="mask-aigen-words" placeholder="如 300，留空则适中" min="50" max="2000"></div>
+ <div class="modal-actions" style="flex-shrink:0;margin-top:12px;padding-top:12px">
+ <button onclick="Character.closeAiGen()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
+ <button id="mask-aigen-go" onclick="Character.runAiGen()" style="flex:1">生成</button>
+ </div>
+ </div>
+ </div>
 
  <!-- 异能编辑弹窗 -->
  <div id="ability-edit-modal" class="modal hidden">
@@ -4012,11 +4053,11 @@ const GameLog = (() => {
 <script src="js/single_card.js?v=9"></script>
 <script src="js/attached-chars.js"></script>
 <script src="js/single_mode.js?v=3"></script>
-<script src="js/character.js?v=5"></script>
+<script src="js/character.js?v=7"></script>
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=6"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=72"></script>
+<script src="js/chat.js?v=73"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4026,7 +4067,7 @@ const GameLog = (() => {
 <script src="js/gaiden.js"></script>
 <script src="js/backstage.js?v=6"></script>
 <script src="js/dice.js"></script>
-<script src="js/calendar.js?v=7"></script>
+<script src="js/calendar.js?v=8"></script>
 <script src="js/status_bar.js?v=27"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/watch-sfx.js?v=4"></script>
@@ -4034,7 +4075,7 @@ const GameLog = (() => {
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/phone.js?v1=939"></script>
+<script src="js/phone.js?v1=943"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -4053,7 +4094,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=7"></script>
-<script src="js/app.js?v=113"></script>
+<script src="js/app.js?v=114"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
