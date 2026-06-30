@@ -542,12 +542,13 @@
   border: none !important;
   background: var(--bg) !important;
 }
-/* 添加货币按钮：大圆角 + 去虚线边框 */
-.phone-shell.phone-theme-fudge .phone-wallet-add-btn {
-  border-radius: 18px !important;
-  border: none !important;
-  background: var(--bg-tertiary) !important;
-}
+/* 添加货币按钮：大圆角 + 去虚线边框 + 文字改深主色（行内写死了 text-secondary，需 !important 盖过） */
+  .phone-shell.phone-theme-fudge .phone-wallet-add-btn {
+    border-radius: 18px !important;
+    border: none !important;
+    background: var(--bg-tertiary) !important;
+    color: var(--text) !important;
+  }
 
 /* ============================================================
    记账 App：各卡片去边框 + 大圆角 + 背景色实色
@@ -652,14 +653,15 @@
 .phone-shell.phone-theme-fudge .cottage-info-card-img {
   border-radius: 18px;
 }
-/* 小屋：按钮去边框（含虚线）+ 胶囊形 */
-.phone-shell.phone-theme-fudge .cottage-add-btn,
-.phone-shell.phone-theme-fudge .cottage-set-cur-btn,
-.phone-shell.phone-theme-fudge .cottage-item-add {
-  border: none !important;
-  border-radius: 999px;
-  background: var(--bg-secondary) !important;
-}
+/* 小屋：按钮去边框（含虚线）+ 胶囊形 + 文字深主色（落在浅 bg-secondary 块上） */
+  .phone-shell.phone-theme-fudge .cottage-add-btn,
+  .phone-shell.phone-theme-fudge .cottage-set-cur-btn,
+  .phone-shell.phone-theme-fudge .cottage-item-add {
+    border: none !important;
+    border-radius: 999px;
+    background: var(--bg-secondary) !important;
+    color: var(--text) !important;
+  }
 /* 小屋：楼层下拉框去边框 + 大圆角 */
 .phone-shell.phone-theme-fudge .cottage-floor-select {
   border: none !important;
@@ -786,13 +788,14 @@
   background: var(--bg) !important;
   padding: 14px;
 }
-/* 添加寄件 / 上架商品 按钮：大圆角 + 去虚线边框 */
-.phone-shell.phone-theme-fudge .phone-feiniao-add-btn,
-.phone-shell.phone-theme-fudge .phone-youyu-add-btn {
-  border-radius: 18px !important;
-  border: none !important;
-  background: var(--bg-tertiary) !important;
-}
+/* 添加寄件 / 上架商品 按钮：大圆角 + 去虚线边框 + 文字深主色（行内写死 text-secondary，需 !important） */
+  .phone-shell.phone-theme-fudge .phone-feiniao-add-btn,
+  .phone-shell.phone-theme-fudge .phone-youyu-add-btn {
+    border-radius: 18px !important;
+    border: none !important;
+    background: var(--bg-tertiary) !important;
+    color: var(--text) !important;
+  }
 /* 底部 tabbar 去边框 */
 .phone-shell.phone-theme-fudge .phone-feiniao-app .phone-tabbar,
 .phone-shell.phone-theme-fudge .phone-youyu-app .phone-tabbar {

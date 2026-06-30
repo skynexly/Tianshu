@@ -30,9 +30,18 @@ const Memory = (() => {
   }
 
   // 兼容旧数据：如果有 cause/process/result 但没有 content，合成一份
+  // 强制返回字符串：防止 content 被存成对象/数组/数字（提取掉格式时可能发生）导致 .substring 崩溃
   function _getContent(m) {
-    if (m.content) return m.content;
-    return _mergeEventContent(m);
+    let c = m && m.content;
+    if (c != null && c !== '') {
+      if (typeof c === 'string') return c;
+      if (typeof c === 'object') {
+        // content 误存成对象/数组：尽量取出可读文本
+        try { return JSON.stringify(c); } catch (_) { return String(c); }
+      }
+      return String(c);
+    }
+    return _mergeEventContent(m) || '';
   }
 
   async function add(type, data) {
@@ -40,7 +49,12 @@ const Memory = (() => {
       return upsertRelation(data);
     }
     const scope = data.scope || Character.getCurrentId();
-    const content = data.content || _mergeEventContent(data);
+    // content 强制转字符串：防止 AI 提取掉格式把 content 传成对象/数组，存进去后导致列表渲染崩溃
+    let content = data.content;
+    if (content != null && typeof content !== 'string') {
+      try { content = (typeof content === 'object') ? JSON.stringify(content) : String(content); } catch (_) { content = String(content); }
+    }
+    content = content || _mergeEventContent(data);
     const title = data.title || '';
     // 自动提取事件去重：同面具 + 标题相似视为同一事件，避免重复提取
     try {
@@ -957,6 +971,7 @@ ${dialogue}
     container.innerHTML = filtered.length === 0 ?
       '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无记忆</p>' :
       filtered.map(m => {
+        try {
         const isSelected = selectedIds.has(m.id);
         // 小纸条独立渲染
         if (m.type === 'note') {
@@ -982,11 +997,11 @@ ${dialogue}
         // 关系记忆的摘要显示
         let preview = '';
         if (m.type === 'relation') {
-          if (m.relationship) preview = `关系: ${m.relationship}`;
-          else if (m.content) preview = m.content.substring(0, 80);
+          if (m.relationship) preview = `关系: ${String(m.relationship)}`;
+          else if (m.content) preview = String(m.content).substring(0, 80);
         } else {
 // 优先显示结构化字段
-            const raw = _getContent(m);
+            const raw = String(_getContent(m) || '');
             preview = raw.substring(0, 100) + (raw.length > 100 ? '…' : '');
         }
         return `
@@ -1003,7 +1018,20 @@ ${m.type !== 'relation' && m.participants?.length ? `<p style="margin:2px 0 0 0;
             ${viewScope === 'all' ? `<p style="margin:2px 0 0 0;font-size:11px;color:var(--accent-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🎭 ${Utils.escapeHtml(maskName(m.scope))}</p>` : ''}
           </div>
         </div>
-      `}).join('');
+      `;
+        } catch (err) {
+          // 单条记忆数据异常（如 content 掉格式）：降级显示，不拖垮整个列表
+          console.warn('[Memory] 渲染记忆卡片失败，降级显示:', m && m.id, err);
+          const safeTitle = Utils.escapeHtml(String((m && m.title) || '(损坏的记忆)'));
+          return `
+          <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px;cursor:${manageMode ? 'default' : 'pointer'}" class="card" data-id="${m && m.id}" onclick="${manageMode ? `Memory.toggleSelect('${m && m.id}')` : `Memory.edit('${m && m.id}')`}">
+            <div style="flex:1;overflow:hidden">
+              <h3 style="margin:0 0 4px 0;font-size:14px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safeTitle}</h3>
+              <p style="margin:0;font-size:12px;color:var(--text-secondary)">这条记忆数据格式异常，点击可编辑修复</p>
+            </div>
+          </div>`;
+        }
+      }).join('');
 
     // 更新全选按钮状态
     updateSelectAllIcon();
@@ -1463,6 +1491,12 @@ document.getElementById('mem-edit-content').value =
       if (m.relationship) text += `关系：${m.relationship}\n`;
       if (m.impression) text += `印象：${m.impression}\n`;
       if (m.emotions?.length) m.emotions.forEach(e => { text += `情感：${e}\n`; });
+    } else if (m.type === 'note') {
+      text = `【纸条】${m.tag || '有趣'}\n`;
+      if (m.detail) text += `内容：${m.detail}\n`;
+      if (m.priority && m.priority !== 'normal') text += `优先级：${m.priority === 'pinned' ? '永久' : '重要'}\n`;
+      if (m.time) text += `时间：${m.time}\n`;
+      if (m.characters?.length) text += `关联角色：${m.characters.join(', ')}\n`;
     } else {
       text = `【事件】${m.title}\n`;
       if (m.time) text += `时间：${m.time}\n`;
@@ -1475,20 +1509,33 @@ document.getElementById('mem-edit-content').value =
   }
 
   function _parseMemoryText(text) {
-    // 按 【事件】 或 【人物】 分割为多条
-    const blocks = text.split(/(?=【(?:事件|人物)】)/).filter(b => b.trim());
+    // 按 【事件】 或 【人物】 或 【纸条】 分割为多条
+    const blocks = text.split(/(?=【(?:事件|人物|纸条)】)/).filter(b => b.trim());
     const results = [];
     for (const block of blocks) {
       const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
       if (lines.length === 0) continue;
 
-      const headerMatch = lines[0].match(/^【(事件|人物)】(.*)$/);
+      const headerMatch = lines[0].match(/^【(事件|人物|纸条)】(.*)$/);
       if (!headerMatch) continue;
 
-      const isRelation = headerMatch[1] === '人物';
+      const typeLabel = headerMatch[1];
       const title = headerMatch[2].trim();
 
-      if (isRelation) {
+      if (typeLabel === '纸条') {
+        const m = { type: 'note', tag: title || '有趣', detail: '', priority: 'normal', time: '', characters: [] };
+        for (let i = 1; i < lines.length; i++) {
+          const l = lines[i];
+          if (l.startsWith('内容：') || l.startsWith('内容:')) m.detail = l.replace(/^内容[：:]/, '').trim();
+          else if (l.startsWith('优先级：') || l.startsWith('优先级:')) {
+            const pv = l.replace(/^优先级[：:]/, '').trim();
+            m.priority = pv === '永久' ? 'pinned' : pv === '重要' ? 'important' : 'normal';
+          }
+          else if (l.startsWith('时间：') || l.startsWith('时间:')) m.time = l.replace(/^时间[：:]/, '').trim();
+          else if (l.startsWith('关联角色：') || l.startsWith('关联角色:')) m.characters = l.replace(/^关联角色[：:]/, '').trim().split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+        }
+        results.push(m);
+      } else if (typeLabel === '人物') {
         const m = { type: 'relation', title, relationship: '', impression: '', emotions: [] };
         for (let i = 1; i < lines.length; i++) {
           const l = lines[i];
@@ -1570,7 +1617,7 @@ participants: document.getElementById('mem-edit-participants-input').value.split
     const text = items.map(m => _formatMemoryText(m)).join('\n\n');
 
     // 下载为 txt 文件
-    const tabName = currentTab === 'events' ? '事件' : '人际关系';
+    const tabName = currentTab === 'events' ? '事件' : currentTab === 'notes' ? '小纸条' : '人际关系';
     const dateStr = new Date().toISOString().slice(0, 10);
     const filename = `记忆导出_${tabName}_${dateStr}.txt`;
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
@@ -1613,7 +1660,7 @@ participants: document.getElementById('mem-edit-participants-input').value.split
 
     const parsed = _parseMemoryText(text);
     if (parsed.length === 0) {
-      await UI.showAlert('提示', '无法识别格式。请使用【事件】或【人物】开头的格式。');
+      await UI.showAlert('提示', '无法识别格式。请使用【事件】、【人物】或【纸条】开头的格式。');
       return;
     }
 
@@ -1653,6 +1700,11 @@ participants: document.getElementById('mem-edit-participants-input').value.split
 
     const scope = Character.getCurrentId();
     for (const m of parsed) {
+      if (m.type === 'note') {
+        // 纸条走 addNote（自带去重+FIFO）
+        await addNote({ tag: m.tag, detail: m.detail, priority: m.priority, time: m.time, characters: m.characters, scope });
+        continue;
+      }
       const memory = {
         id: Utils.uuid(),
         type: m.type,
