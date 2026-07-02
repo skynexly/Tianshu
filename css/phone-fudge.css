@@ -18,6 +18,32 @@
   box-shadow: 0 18px 60px rgba(0,0,0,0.36);
 }
 .phone-shell.phone-theme-fudge::before { display: none; }
+/* ---- fudge + 有壁纸 + 桌面态：复活遮罩 + app 名字染白加阴影 ---- */
+/* 壁纸底色不可控，浅字压亮壁纸看不清。只作用于桌面态（.phone-home-mode），
+   app 内部不受影响（fudge 进 app 已铺纯底）。绝不改 --text，避免污染图标/卡片配色。 */
+.phone-shell.phone-theme-fudge.fudge-has-wallpaper.phone-home-mode::before {
+  display: block;
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0,0,0,0.22), rgba(0,0,0,0.10) 30%, rgba(0,0,0,0.30));
+  z-index: 0;
+}
+/* app 名字：纯白 + 阴影（覆盖上面的 text-shadow:none） */
+.phone-shell.phone-theme-fudge.fudge-has-wallpaper.phone-home-mode .phone-app-icon-label {
+  color: #fff !important;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.55), 0 0 8px rgba(0,0,0,0.30) !important;
+}
+/* 个人资料卡文字 / 桌面寄语：也染白加阴影 */
+.phone-shell.phone-theme-fudge.fudge-has-wallpaper.phone-home-mode .phone-profile-name,
+.phone-shell.phone-theme-fudge.fudge-has-wallpaper.phone-home-mode .phone-profile-bio,
+.phone-shell.phone-theme-fudge.fudge-has-wallpaper.phone-home-mode .phone-home-note,
+.phone-shell.phone-theme-fudge.fudge-has-wallpaper.phone-home-mode .phone-widget,
+.phone-shell.phone-theme-fudge.fudge-has-wallpaper.phone-home-mode .phone-statusbar {
+  color: #fff !important;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5) !important;
+}
 /* 进入 App 后（非桌面态）：内容区铺主文字色纯底，与实色卡片拉开对比 */
 .phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-body {
   background: var(--text);
@@ -503,6 +529,20 @@
 }
 .phone-shell.phone-theme-fudge .phone-moment-image-desc {
   border-radius: 14px;
+}
+/* 分享卡片（分享的帖子/影视/音乐/直播等）：去边框 + 大圆角 + 半透明柔和底 */
+.phone-shell.phone-theme-fudge .phone-moment-share-card {
+  border: none !important;
+  border-radius: 16px !important;
+  background: color-mix(in srgb, var(--bg) 14%, transparent) !important;
+  padding: 11px 13px !important;
+}
+/* 分享卡里的类型标签：去边框，改成柔和胶囊 */
+.phone-shell.phone-theme-fudge .phone-moment-share-kind {
+  border: none !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--accent) 18%, transparent) !important;
+  padding: 2px 9px !important;
 }
 
 /* ============================================================
@@ -1065,4 +1105,32 @@
 }
 .phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-video-set-overlay .phone-nav-btn {
   color: var(--bg) !important;
+}
+/* 视频发现页搜索框 + 按钮：奶油软糖大圆角 + 去边框（与论坛/阅读同款） */
+.phone-shell.phone-theme-fudge .phone-video-search {
+  border-radius: 18px !important;
+  border: none !important;
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
+}
+.phone-shell.phone-theme-fudge .phone-video-search-btn {
+  border-radius: 999px !important;
+  border: none !important;
+}
+/* 顶部分类 tab（视频：直播/电影/剧集/动漫；阅读：长篇/短篇）：
+   默认是半透明灰胶囊底，压在实色/壁纸上显脏。fudge 下换实色底 + 实色选中块，
+   延续奶油软糖的实色圆润风。 */
+.phone-shell.phone-theme-fudge .phone-video-cat-tabs,
+.phone-shell.phone-theme-fudge .phone-reading-type-tabs {
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
+  border-radius: 999px !important;
+  padding: 4px !important;
+}
+.phone-shell.phone-theme-fudge .phone-video-cat-tab,
+.phone-shell.phone-theme-fudge .phone-reading-type-tab {
+  border-radius: 999px !important;
+}
+.phone-shell.phone-theme-fudge .phone-video-cat-tab.active,
+.phone-shell.phone-theme-fudge .phone-reading-type-tab.active {
+  background: var(--accent) !important;
+  color: #fff !important;
 }

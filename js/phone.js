@@ -1172,6 +1172,9 @@ function _applyWallpaper(pd) {
     // 壁纸存在 class：只要有壁纸就加（让底栏半透明）。
     // fudge（奶油软糖）是实色风格，卡片/栏实色到底，不加此 class —— 壁纸只从卡片缝隙透出。
     shell.classList.toggle('has-wallpaper', !!wallpaper && !isFudge);
+    // fudge + 壁纸专用钩子：只用于桌面态（.phone-home-mode）复活遮罩 + 把 app 名字染白加阴影，
+    // 绝不改 --text（避免污染 app 内图标/卡片配色，这是老遮罩逻辑的坑）。app 内部 fudge 已铺纯底，不受壁纸影响。
+    shell.classList.toggle('fudge-has-wallpaper', !!wallpaper && isFudge);
   }
 
   // ===== 个人资料卡：渲染 + inline 编辑 + 头像 =====
@@ -35218,8 +35221,8 @@ async function _clearMomentsCover() {
       <div class="phone-forum-app" style="display:flex;flex-direction:column;height:100%">
         <div id="phone-forum-posts-panel" style="flex:1;overflow-y:auto;padding:10px 12px;display:${_forumTab === 'posts' ? 'block' : 'none'}">
           <div style="display:flex;gap:6px;margin-bottom:10px">
-            <input id="phone-forum-search" type="text" placeholder="搜索…" oninput="Phone._forumSyncActionBtn()" onkeydown="if(event.key==='Enter')Phone._forumSearchOrRefresh()" style="flex:1;border:1px solid var(--border);border-radius:6px;padding:6px 10px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
-            <button id="phone-forum-action-btn" onclick="Phone._forumSearchOrRefresh()" class="phone-forum-search-btn" style="background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
+            <input id="phone-forum-search" type="text" placeholder="搜索…" oninput="Phone._forumSyncActionBtn()" onkeydown="if(event.key==='Enter')Phone._forumSearchOrRefresh()" style="flex:1;min-width:0;border:1px solid var(--border);border-radius:6px;padding:6px 10px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
+            <button id="phone-forum-action-btn" onclick="Phone._forumSearchOrRefresh()" class="phone-forum-search-btn" style="flex-shrink:0;background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
           </div>
           <div id="phone-forum-posts" style="margin-top:4px">
             ${posts.length === 0 ? '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">点击刷新按钮获取推荐</p>' :
@@ -37139,8 +37142,8 @@ ${wvPrompt}` },
               <div class="phone-moment-time">${Utils.escapeHtml(_formatPhoneTime(m.time || ''))}</div>
             </div>
             <div class="phone-moment-text">${Utils.escapeHtml(m.text || '')}</div>
-            ${m.shareCard ? `<div style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;background:var(--bg-tertiary);display:flex;align-items:center;gap:8px;margin-top:8px">
-              <div style="flex-shrink:0;font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:1px 6px">${Utils.escapeHtml(m.shareCard.kind || '分享')}</div>
+${m.shareCard ? `<div class="phone-moment-share-card" style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;background:var(--bg-tertiary);display:flex;align-items:center;gap:8px;margin-top:8px">
+                <div class="phone-moment-share-kind" style="flex-shrink:0;font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:1px 6px">${Utils.escapeHtml(m.shareCard.kind || '分享')}</div>
               <div style="flex:1;min-width:0">
                 <div style="font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(m.shareCard.title || '')}</div>
                 ${m.shareCard.summary ? `<div style="font-size:11px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${Utils.escapeHtml(m.shareCard.summary)}</div>` : ''}
@@ -37166,7 +37169,7 @@ ${wvPrompt}` },
 
     const friendsHtml = npcMoments.length > 0
       ? npcMoments.map((m, i) => `
-        <div class="phone-moment-card">
+        <div class="phone-moment-card" id="phone-npc-moment-card-${i}">
           <div class="phone-moment-layout">
             ${avatarHtml(_dispName(m.npc), npcAvatarMap[String(m.npc || '').trim()] || '', 'npc')}
             <div class="phone-moment-main">
@@ -37181,6 +37184,7 @@ ${wvPrompt}` },
           <div class="phone-moment-actions">
             <button type="button" onclick="Phone._likeNpcMoment(${i})" class="phone-moment-action-btn ${m.likedByUser ? 'active-collect' : ''}" title="${m.likedByUser ? '已赞' : '点赞'}">${_uiIcon('heart', 13)}${m.userLikeCount ? `<span class="phone-moment-action-count">${m.userLikeCount}</span>` : ''}</button>
             <button type="button" onclick="Phone._commentNpcMoment(${i})" class="phone-moment-action-btn" title="评论">${_uiIcon('comment', 13)}</button>
+            <button type="button" onclick="Phone._refreshOneNpcMomentComments(${i})" class="phone-moment-action-btn" title="刷新评论（让好友回应）">${_uiIcon('refresh', 13)}</button>
             <button type="button" onclick="Phone._editNpcMoment(${i})" class="phone-moment-action-btn" title="编辑">${_uiIcon('pen', 13)}</button>
             ${m.image ? `<button type="button" onclick="Phone._saveMomentImageToAlbum('npc', ${i})" class="phone-moment-action-btn" title="存入相册">${_uiIcon('download', 13)}</button>` : ''}
             <button type="button" onclick="Phone._collectNpcMoment(${i})" class="phone-moment-action-btn" title="收藏">${_uiIcon('star', 13)}</button>
@@ -37396,6 +37400,114 @@ ${wvPrompt}` },
     _log(_formatNpcMomentFullLog(m, `评论（${comment.text}）`));
     UI.showToast('评论已发布', 900);
     _renderMoments(pd);
+  }
+
+  // 单条追评：针对某条 NPC 动态，让发布者本人 + 其他 NPC/路人在已有评论区基础上追加回应（尤其回应玩家的评论）。不覆盖、不重刷整批。
+  async function _refreshOneNpcMomentComments(index) {
+    const pd = await _getPhoneData();
+    const m = pd?.npcMoments?.[index];
+    if (!m) return;
+    UI.showToast('正在生成回应…', 1200);
+
+    const card = document.getElementById(`phone-npc-moment-card-${index}`);
+    const oldLoading = card?.querySelector('.phone-moment-comment-loading');
+    if (oldLoading) oldLoading.remove();
+    if (card) {
+      card.insertAdjacentHTML('beforeend', `
+        <div class="phone-moment-comments phone-moment-comment-loading">
+          <div class="phone-moment-comments-title">评论区生成中</div>
+          ${Array.from({ length: 3 }).map(() => `
+            <div class="wv-skeleton-card phone-comment-skeleton-card">
+              <div class="wv-skeleton-row"><div class="wv-skeleton-avatar"></div><div class="wv-skeleton-line user"></div></div>
+              <div class="wv-skeleton-line summary-1"></div>
+            </div>`).join('')}
+        </div>`);
+    }
+
+    try {
+      const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+      const mainConfig = await API.getConfig();
+      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const key = funcConfig.apiKey || mainConfig.apiKey;
+      const model = funcConfig.model || mainConfig.model;
+      if (!url || !key || !model) {
+        UI.showToast('请先配置功能模型');
+        card?.querySelector('.phone-moment-comment-loading')?.remove();
+        return;
+      }
+
+      const wvPrompt = await _buildFullContext();
+      const poster = m.npc || '某人';
+      const imgInfo = m.imageDesc ? `（配图描述：${m.imageDesc}）` : (m.image ? '（附带了一张图片）' : '');
+      const shareInfo = (m.shareCard && (m.shareCard.title || m.shareCard.content))
+        ? `\n【这条动态还分享了一个${m.shareCard.kind || '内容'}卡片】标题：「${m.shareCard.title || ''}」${m.shareCard.summary ? `\n摘要：${m.shareCard.summary}` : ''}${m.shareCard.content ? `\n完整内容：${String(m.shareCard.content).slice(0, 1200)}` : ''}`
+        : '';
+      // v617：禁止冒充玩家（作为发布者/评论者），但玩家本人评论要被 NPC 看到并回应
+      let _userName = '';
+      let _userOnlineName = '';
+      try { const mask = await Character.get(); _userName = mask?.name || ''; _userOnlineName = (mask?.onlineName || '').trim(); } catch(_) {}
+      const banNames = [_userName, _userOnlineName].filter(Boolean);
+      const userBan = banNames.length > 0
+        ? `\n【严格约束】新增评论者姓名绝对不能是"${banNames.join('"或"')}"（那是玩家本人），也不允许任何评论以"我"（指代玩家）的口吻发言。玩家会自己评论，不需要 AI 代劳。`
+        : '\n【严格约束】新增评论者不能是玩家本人。';
+      // 已有评论现状（追加模式：把已有评论喂回去让 AI 承接，尤其照顾玩家评论）
+      const existing = Array.isArray(m.comments) ? m.comments : [];
+      const existingStr = existing.length
+        ? existing.map(c => `${c.byUser ? '【玩家本人】' : ''}${c.name || '?'}：${c.text || ''}`).join('\n')
+        : '（还没有评论）';
+      // 玩家最新一条评论（若有）——重点让 NPC 回应它
+      const lastUserComment = [...existing].reverse().find(c => c && c.byUser);
+      const playerReplyHint = lastUserComment
+        ? `\n【重点·回应玩家】玩家本人（${banNames[0] || '玩家'}）刚在评论区说了：「${lastUserComment.text}」。请生成 2-3 条回应 ta 这句话的评论（用"@${banNames[0] || '玩家'} "开头），发布者"${poster}"本人可以回应，其他相关 NPC/好友也可以接话，贴合各自人设，让玩家感觉自己的评论被看到了。`
+        : `\n请让相关 NPC/好友在已有评论区基础上继续互动，发布者"${poster}"本人也可以回应评论区里的人。`;
+
+      const prompt = `这是【${poster}】发布的一条好友圈动态："${m.text}"${imgInfo}${shareInfo}
+
+【当前评论区现状（追加模式，不要重复已有评论，在此基础上续写）】
+${existingStr}
+${playerReplyHint}
+根据NPC列表中角色的性格和当前剧情，让相关角色（包括发布者"${poster}"本人、其他 NPC、以及主线里出现过的路人）在这条动态下追加评论互动。每人这一批最多新增一两条，总新增数不超过10条。评论可以互相 @ 回复、接续已有讨论。如果【最近主线剧情】里出现过有名有姓的路人/配角，也允许让 ta 作为路人评论者自然出现，名字沿用主线里的称呼。不要硬凑。${userBan}
+返回纯JSON数组（只返回本批【新增】的评论，不要包含已有评论）：[{"name":"NPC名或主线路人名","text":"评论内容"}]`;
+
+      const comments = await _phoneJsonArrayWithRetry({
+        label: '好友圈追评', url, key, model,
+        temperature: 0.9,
+        max_tokens: 2048,
+        messages: [
+          { role: 'system', content: wvPrompt },
+          { role: 'user', content: prompt }
+        ]
+      });
+      // 追加：新评论接到已有评论后面（过滤掉冒充玩家的），总量上限 30，超了从最早的非 byUser 评论裁起
+      const banSet = new Set(banNames);
+      const fresh = (Array.isArray(comments) ? comments : [])
+        .filter(c => c && c.text && !banSet.has((c.name || '').trim()))
+        .map(c => ({ name: (c.name || '').trim(), text: String(c.text || '').trim() }));
+      if (!Array.isArray(m.comments)) m.comments = [];
+      m.comments = m.comments.concat(fresh);
+      if (m.comments.length > 30) {
+        const overflow = m.comments.length - 30;
+        let removed = 0;
+        m.comments = m.comments.filter(c => {
+          if (removed >= overflow) return true;
+          if (c.byUser) return true;
+          removed++;
+          return false;
+        });
+      }
+      await _savePhoneData();
+      _log(`刷新了「${poster}」好友圈动态的评论；动态摘要：「${_clipLogText(m.text, 36)}」；评论摘要：${_summarizeListForLog(m.comments, c => `${_clipLogText(c.name || '未知', 12)}：${_clipLogText(c.text, 36)}`, 5)}`);
+      // 角色记事本：这条 NPC 动态本身 + 评论里命中 NPC 的落库（poster 是 NPC 记 important，评论 NPC 记 minor，玩家评论自动跳过；ref 去重不会重复记）
+      try { await _npcNoteFromMoments([m]); } catch (_) {}
+      if (_isAppStillActive('moments')) _renderMoments(pd);
+      UI.showToast(_isAppStillActive('moments') ? '评论已生成' : '评论已生成，可回好友圈查看', 1200);
+    } catch (e) {
+      card?.querySelector('.phone-moment-comment-loading')?.remove();
+      if (card) {
+        card.insertAdjacentHTML('beforeend', `<div class="phone-generation-error phone-moment-comment-error"><div>评论生成失败：${Utils.escapeHtml(e.message || '未知错误')}</div><div>已重试3次，可稍后再试</div></div>`);
+      }
+      UI.showToast('评论生成失败: ' + e.message, 2500);
+    }
   }
 
   // 玩家评论自己的动态（甲版·平铺 @回复）：push 一条 byUser 评论，再刷新时 NPC 会看到并回应
@@ -49095,6 +49207,10 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
       name: ((pa.reading?.name) || '').trim(),
       desc: ((pa.reading?.desc) || '').trim()
     },
+    video: {
+      name: ((pa.video?.name) || '').trim(),
+      desc: ((pa.video?.desc) || '').trim()
+    },
     cottage: {
       name: ((pa.cottage?.name) || '').trim(),
       deliveryMin: pa.cottage?.deliveryMin || 2,
@@ -49110,7 +49226,7 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
     }
   };
 } catch(_) {
-    _shopMeta = { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' }, radio: { name: '', desc: '' }, reading: { name: '', desc: '' }, cottage: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day', initialHouse: null }, wardrobe: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day' } };
+    _shopMeta = { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' }, radio: { name: '', desc: '' }, reading: { name: '', desc: '' }, video: { name: '', desc: '' }, cottage: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day', initialHouse: null }, wardrobe: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day' } };
   }
   }
   // 信息载体（默认"论坛"，留空回落）
@@ -50636,7 +50752,7 @@ _forumReplyTo, _forumToggleReplies,
 _openMomentVisibleModal, _closeMomentVisibleModal, _filterMomentVisibleOptions, _toggleMomentVisibleOption, _setMomentVisibleAll,
 _onMomentsConfigCountChange, _onMomentsConfigImgChange, _onMomentsConfigStorageChange,
 _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
-    _switchMomentsTab, _collectNpcMoment, _likeNpcMoment, _commentNpcMoment, _saveMomentImageToAlbum,
+    _switchMomentsTab, _collectNpcMoment, _likeNpcMoment, _commentNpcMoment, _refreshOneNpcMomentComments, _saveMomentImageToAlbum,
     _mapSearch, _shareMapResult, _collectMapResult, _switchMapTab, _renderMapResultsHtml,
     _shareMapSearch, _shareAllMapSearches, _deleteMapSearch, _deleteLocationHistory,
     _mapShareToChat,

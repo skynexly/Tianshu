@@ -175,8 +175,8 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v705.0';
- const CHANGELOG = `【v705.0 更新内容】
+const APP_VERSION = 'v705.1';
+    const CHANGELOG = `【v705.1 更新内容】
 🎬 全新「视频」App 上线
 ○ 收看直播 / 电影 / 电视剧 / 动漫，可在世界观白名单里让角色出任 staff 或主播
 ○ 可自制影视作品：原创或改编自「已售版权的自制书」，建项目、走拍摄事件链、上映、报奖

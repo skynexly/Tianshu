@@ -603,6 +603,7 @@
 }
 .phone-map-search-btn {
   min-height: 32px;
+  flex-shrink: 0;
   padding: 0 10px;
   border: none;
   border-radius: 6px;
@@ -4891,7 +4892,7 @@ white-space: nowrap;
   display: flex; align-items: center; gap: 6px; margin-bottom: 12px;
 }
 .phone-reading-discover-bar input {
-  flex: 1; outline: none;
+  flex: 1; min-width: 0; outline: none;
   border: 1px solid var(--border, rgba(255,255,255,0.1));
   border-radius: 6px; padding: 6px 10px;
   background: var(--bg-tertiary, rgba(255,255,255,0.06));
@@ -4899,6 +4900,7 @@ white-space: nowrap;
 }
 .phone-reading-discover-bar input::placeholder { color: var(--text-tertiary, #666); }
 .phone-reading-search-btn {
+  flex-shrink: 0;
   background: var(--accent, #f60); color: #111; border: none;
   border-radius: 6px; padding: 6px 12px; font-size: 12px;
   cursor: pointer; white-space: nowrap;
@@ -7939,7 +7941,7 @@ white-space: nowrap;
   display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
 }
 .phone-video-search {
-  flex: 1; outline: none;
+  flex: 1; min-width: 0; outline: none;
   border: 1px solid var(--border, rgba(255,255,255,0.1));
   border-radius: 6px; padding: 6px 10px;
   background: var(--bg-tertiary, rgba(255,255,255,0.06));
@@ -7947,6 +7949,7 @@ white-space: nowrap;
 }
 .phone-video-search::placeholder { color: var(--text-tertiary, #666); }
 .phone-video-search-btn {
+  flex-shrink: 0;
   background: var(--accent, #f60); color: #fff; border: none;
   border-radius: 6px; padding: 6px 12px; font-size: 12px;
   cursor: pointer; white-space: nowrap;
