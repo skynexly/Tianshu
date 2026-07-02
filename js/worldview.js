@@ -5911,6 +5911,9 @@ async function openPhoneAppsEditor() {
     const vg = pa.video || {};
     setVal('pa-video-name', vg.name);
     setVal('pa-video-desc', vg.desc);
+    // 启用预设主播：默认勾选，只有显式存 false 才不勾
+    const presetChk = document.getElementById('pa-video-preset-enabled');
+    if (presetChk) presetChk.checked = vg.presetEnabled !== false;
 
   // 小屋
   const ct = pa.cottage || {};
@@ -6178,6 +6181,17 @@ function _buildPhoneAppsEditorHTML(w) {
       <button type="button" onclick="Worldview.openVideoCastEditor('streamer')" style="width:100%;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">主播名单</button>
       <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以作为主播开直播（默认空=全部虚构主播）</div>
     </div>
+    <div style="margin-top:10px">
+      <button type="button" onclick="Worldview.openLiveCategoriesEditor()" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">直播分类管理</button>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">隐藏预设品类、新建自定义品类（默认：10个预设品类）</div>
+    </div>
+    <label style="margin-top:10px;display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 4px">
+      <input type="checkbox" id="pa-video-preset-enabled" style="width:16px;height:16px;flex-shrink:0;accent-color:var(--accent);cursor:pointer">
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:14px;font-weight:600;color:var(--text)">启用预设主播</span>
+        <span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px">开启后首页随机刷到内置的一批主播（开箱即食，进间才现场生成、烧token）；关掉就只刷 AI 生成的</span>
+      </span>
+    </label>
   </div>
 
   <!-- 小屋 -->
@@ -6269,6 +6283,8 @@ async function closePhoneAppsEditor() {
     w.phoneApps.video = w.phoneApps.video || {};
     w.phoneApps.video.name = getVal('pa-video-name');
     w.phoneApps.video.desc = getVal('pa-video-desc');
+    // 启用预设主播开关（默认开，存布尔）
+    { const el = document.getElementById('pa-video-preset-enabled'); if (el) w.phoneApps.video.presetEnabled = !!el.checked; }
     // 小屋
     w.phoneApps.cottage = w.phoneApps.cottage || {};
     w.phoneApps.cottage.name = getVal('pa-cottage-name');
@@ -6794,12 +6810,197 @@ function _radioCastSearch(query) {
     const q = (document.getElementById('video-cast-search') || {}).value || '';
     if (overlay) _renderVideoCastEditor(overlay, w, q);
   }
-
-  function _videoCastSearch(query) {
+function _videoCastSearch(query) {
     const overlay = document.getElementById('video-cast-editor-overlay');
     if (!overlay) return;
     _getEditingWV().then(w => { if (w) _renderVideoCastEditor(overlay, w, query); });
   }
+
+  // ===== 直播品类编辑器（phoneApps.video.liveCats）=====
+  // 结构：{ hiddenPresets:[预设品类名], categories:[{name, desc, plays:['call'|'pk'|'cart']}] }
+  // 预设品类靠 name 隐藏；自建品类填 名称+调性+可用玩法（三选，可不选）。
+  const _LIVE_PRESET_TAG_NAMES = ['游戏直播', '单人唱歌', '唱歌团播', '单人舞蹈', '舞蹈团播', '带货卖货', '颜值聊天', '兴趣陪伴', 'ASMR', '答疑咨询'];
+  const _LIVE_PLAY_OPTIONS = [
+    { id: 'call', label: '连麦连线', hint: '观众付费上麦和主播一对一聊' },
+    { id: 'pk', label: '礼物 PK', hint: '和别的主播连麦battle刷礼物冲榜' },
+    { id: 'cart', label: '购物车带货', hint: '挂商品，观众下单购买' },
+  ];
+
+  async function openLiveCategoriesEditor() {
+    const w = await _getEditingWV();
+    if (!w) { UI.showToast('请先选择世界观', 1200); return; }
+    w.phoneApps = w.phoneApps || {};
+    w.phoneApps.video = w.phoneApps.video || {};
+    w.phoneApps.video.liveCats = w.phoneApps.video.liveCats || {};
+    if (!Array.isArray(w.phoneApps.video.liveCats.hiddenPresets)) w.phoneApps.video.liveCats.hiddenPresets = [];
+    if (!Array.isArray(w.phoneApps.video.liveCats.categories)) w.phoneApps.video.liveCats.categories = [];
+
+    let overlay = document.getElementById('live-cats-editor-overlay');
+    if (overlay) overlay.remove();
+    overlay = document.createElement('div');
+    overlay.id = 'live-cats-editor-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;animation:sbFadeIn .2s ease-out';
+    document.body.appendChild(overlay);
+    _renderLiveCatsEditor(overlay, w);
+  }
+
+  function _renderLiveCatsEditor(overlay, w) {
+    const cfg = w.phoneApps.video.liveCats;
+    const hidden = new Set(cfg.hiddenPresets || []);
+    const customs = cfg.categories || [];
+
+    const presetsHtml = _LIVE_PRESET_TAG_NAMES.map(name => {
+      const isHidden = hidden.has(name);
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-tertiary);border-radius:8px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:14px;color:var(--text)">${name}</span>
+          <span style="font-size:11px;color:var(--text-secondary)">预设</span>
+        </div>
+        <button type="button" onclick="Worldview._liveTogglePreset('${name.replace(/'/g, "\\'")}')" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:${isHidden ? 'var(--accent)' : 'var(--bg-secondary)'};color:${isHidden ? '#fff' : 'var(--text)'};font-size:12px;cursor:pointer">${isHidden ? '恢复' : '隐藏'}</button>
+      </div>`;
+    }).join('');
+
+    const customsHtml = customs.map((c, i) => {
+      const playLabels = (c.plays || []).map(pid => (_LIVE_PLAY_OPTIONS.find(o => o.id === pid) || {}).label).filter(Boolean);
+      const playStr = playLabels.length ? playLabels.join(' · ') : '无附加玩法';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-tertiary);border-radius:8px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+          <span style="font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name || '未命名'}</span>
+          <span style="font-size:11px;color:var(--text-secondary);white-space:nowrap">${playStr}</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button type="button" onclick="Worldview._liveEditCat(${i})" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:12px;cursor:pointer">编辑</button>
+          <button type="button" onclick="Worldview._liveDeleteCat(${i})" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--danger);font-size:12px;cursor:pointer">删除</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    overlay.innerHTML = `
+    <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 12px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:8px">
+        <button type="button" onclick="Worldview.closeLiveCatsEditor()" style="border:none;background:none;color:var(--text);cursor:pointer;padding:4px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span style="font-size:16px;font-weight:600;color:var(--text)">直播品类管理</span>
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:0 16px 24px">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">预设品类</div>
+      ${presetsHtml}
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:8px">自建品类</div>
+      ${customsHtml || '<div style="font-size:12px;color:var(--text-secondary);padding:12px;text-align:center">还没有自建品类</div>'}
+      <button type="button" onclick="Worldview._liveAddCat()" style="width:100%;margin-top:12px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">+ 新建品类</button>
+    </div>`;
+  }
+
+  async function closeLiveCatsEditor() {
+    const overlay = document.getElementById('live-cats-editor-overlay');
+    if (overlay) overlay.remove();
+  }
+
+  async function _liveTogglePreset(name) {
+    const w = await _getEditingWV(); if (!w) return;
+    w.phoneApps = w.phoneApps || {}; w.phoneApps.video = w.phoneApps.video || {};
+    w.phoneApps.video.liveCats = w.phoneApps.video.liveCats || {};
+    if (!Array.isArray(w.phoneApps.video.liveCats.hiddenPresets)) w.phoneApps.video.liveCats.hiddenPresets = [];
+    const arr = w.phoneApps.video.liveCats.hiddenPresets;
+    const idx = arr.indexOf(name);
+    if (idx >= 0) arr.splice(idx, 1); else arr.push(name);
+    await _saveEditingWV(w);
+    const overlay = document.getElementById('live-cats-editor-overlay');
+    if (overlay) _renderLiveCatsEditor(overlay, w);
+  }
+
+  async function _liveAddCat() {
+    const w = await _getEditingWV(); if (!w) return;
+    w.phoneApps = w.phoneApps || {}; w.phoneApps.video = w.phoneApps.video || {};
+    w.phoneApps.video.liveCats = w.phoneApps.video.liveCats || {};
+    if (!Array.isArray(w.phoneApps.video.liveCats.categories)) w.phoneApps.video.liveCats.categories = [];
+    w.phoneApps.video.liveCats.categories.push({ name: '', desc: '', plays: [] });
+    await _saveEditingWV(w);
+    _liveOpenCatEditor(w, w.phoneApps.video.liveCats.categories.length - 1);
+  }
+
+  async function _liveEditCat(idx) {
+    const w = await _getEditingWV(); if (!w) return;
+    _liveOpenCatEditor(w, idx);
+  }
+
+  async function _liveDeleteCat(idx) {
+    const w = await _getEditingWV(); if (!w) return;
+    const cats = w.phoneApps?.video?.liveCats?.categories;
+    if (!cats || !cats[idx]) return;
+    if (!await UI.showConfirm('删除品类', `确定删除自建品类「${cats[idx].name || '未命名'}」？`)) return;
+    cats.splice(idx, 1);
+    await _saveEditingWV(w);
+    const overlay = document.getElementById('live-cats-editor-overlay');
+    if (overlay) _renderLiveCatsEditor(overlay, w);
+  }
+
+  function _liveOpenCatEditor(w, catIdx) {
+    const cats = w.phoneApps?.video?.liveCats?.categories;
+    if (!cats || !cats[catIdx]) return;
+    const overlay = document.getElementById('live-cats-editor-overlay');
+    if (!overlay) return;
+    const cat = cats[catIdx];
+    const plays = new Set(cat.plays || []);
+
+    const playBtns = _LIVE_PLAY_OPTIONS.map(o => {
+      const on = plays.has(o.id);
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-secondary);border-radius:8px;margin-bottom:6px">
+        <div style="flex:1;min-width:0;margin-right:10px">
+          <div style="font-size:14px;color:var(--text)">${o.label}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${o.hint}</div>
+        </div>
+        <button type="button" onclick="Worldview._liveToggleCatPlay(${catIdx},'${o.id}')" style="padding:6px 14px;border-radius:6px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${on ? '#fff' : 'var(--text)'};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">${on ? '已开启' : '开启'}</button>
+      </div>`;
+    }).join('');
+
+    overlay.innerHTML = `
+    <div style="padding:max(16px, env(safe-area-inset-top, 16px)) 16px 12px;display:flex;align-items:center;gap:8px">
+      <button type="button" onclick="Worldview._liveBackToCatsList()" style="border:none;background:none;color:var(--text);cursor:pointer;padding:4px">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span style="font-size:16px;font-weight:600;color:var(--text)">编辑品类</span>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:0 16px 24px">
+      <label style="display:block;margin-bottom:12px">
+        <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">品类名称</span>
+        <input type="text" id="lc-cat-name" value="${(cat.name || '').replace(/"/g, '"')}" placeholder="例如：钓鱼陪聊 / 学习自习室" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px" onchange="Worldview._liveSaveCatField(${catIdx},'name',this.value)">
+      </label>
+      <label style="display:block;margin-bottom:16px">
+        <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">品类调性 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这是什么样的直播间）</span></span>
+        <textarea id="lc-cat-desc" rows="3" placeholder="例如：主播在野外钓鱼，一边等鱼一边和观众闲聊，氛围松弛安静，观众围观催更、聊钓技、刷礼物应援。可以是真人，也可以是虚拟主播。" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:70px" onchange="Worldview._liveSaveCatField(${catIdx},'desc',this.value)">${(cat.desc || '').replace(/</g, '&lt;')}</textarea>
+      </label>
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">可用玩法</div>
+      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">按需开启，不开则这个品类只有基础的弹幕/打赏互动</div>
+      ${playBtns}
+    </div>`;
+  }
+
+  async function _liveBackToCatsList() {
+    const w = await _getEditingWV(); if (!w) return;
+    const overlay = document.getElementById('live-cats-editor-overlay');
+    if (overlay) _renderLiveCatsEditor(overlay, w);
+  }
+
+  async function _liveSaveCatField(catIdx, field, value) {
+    const w = await _getEditingWV(); if (!w) return;
+    const cat = w.phoneApps?.video?.liveCats?.categories?.[catIdx]; if (!cat) return;
+    cat[field] = (value || '').trim();
+    await _saveEditingWV(w);
+  }
+
+  async function _liveToggleCatPlay(catIdx, playId) {
+    const w = await _getEditingWV(); if (!w) return;
+    const cat = w.phoneApps?.video?.liveCats?.categories?.[catIdx]; if (!cat) return;
+    if (!Array.isArray(cat.plays)) cat.plays = [];
+    const idx = cat.plays.indexOf(playId);
+    if (idx >= 0) cat.plays.splice(idx, 1); else cat.plays.push(playId);
+    await _saveEditingWV(w);
+    _liveOpenCatEditor(w, catIdx);
+  }
+
 
 
 
@@ -7289,6 +7490,8 @@ openRadioCategoriesEditor, closeRadioCatsEditor, _radioTogglePreset, _radioAddCa
     openRadioCastEditor, closeRadioCastEditor, _radioSetCastMode, _radioToggleCastNpc, _radioToggleCastLorebook, _radioCastSearch,
     openReadingCastEditor, closeReadingCastEditor, _readingToggleCastNpc, _readingToggleCastLorebook, _readingCastSearch,
     openVideoCastEditor, closeVideoCastEditor, _videoToggleCastNpc, _videoCastSearch,
+    openLiveCategoriesEditor, closeLiveCatsEditor, _liveTogglePreset, _liveAddCat, _liveEditCat, _liveDeleteCat,
+    _liveOpenCatEditor, _liveBackToCatsList, _liveSaveCatField, _liveToggleCatPlay,
 _radioOpenCatEditor, _radioBackToCatsList, _radioSetCatIcon, _radioSaveCatField,
 _radioAddTag, _radioEditTag, _radioDeleteTag, _radioOpenTagEditor, _radioBackToCatEditor, _radioSaveTagField, _radioToggleTagPlay, _radioSetTagRenewMode,
     _onCalWeekDayChange, _calAddWeekDay, _calRemoveWeekDay, _calToggleDayType, _calSetMonthMode, _calSetUniformDays, _calSetMonthDays, _calAddMonth, _calRemoveMonth,

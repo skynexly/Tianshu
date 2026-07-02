@@ -8,3 +8,14 @@ node_modules/
 # 邀请码发放资源, 不入库(本地保留)
 docs/邀请码-*.txt
 docs/邀请码生成流程.md
+# 设计稿与内部文档, 不公开(本地保留)
+docs/电台设计.md
+docs/直播设计.md
+docs/角色记事本设计.md
+docs/邮箱App设计.md
+docs/阅读App设计.md
+docs/已知问题与修复.md
+docs/待办.md
+docs/disclaimer-draft.md
+.operit/
+data/tutorial_basic_draft.md

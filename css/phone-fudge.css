@@ -1018,3 +1018,51 @@
 .phone-shell.phone-theme-fudge .phone-week-slot-card {
   background: var(--bg-secondary);
 }
+
+/* ============================================================
+   视频 App（发现页 / 我的页）—— 卡片文字与设置项直接落在深页底上，需反转为浅字
+   ============================================================ */
+/* 卡片标题：深底上改浅字 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-video-card-title {
+  color: var(--bg);
+}
+/* 卡片副信息（类型·主演/主播）：深底上用半透明浅字 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-video-card-by {
+  color: color-mix(in srgb, var(--bg) 64%, transparent);
+}
+/* 分区标题（关注的直播/最近观看/其他）：深底上改浅字 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-video-mine-section {
+  color: var(--bg);
+}
+/* 空状态提示文字：深底上用半透明浅字 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-video-empty-text {
+  color: color-mix(in srgb, var(--bg) 64%, transparent);
+}
+/* 管理态提示条：深底上用半透明浅字 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-video-mine-edittip {
+  color: color-mix(in srgb, var(--bg) 64%, transparent);
+}
+/* 直播关注头像名字：深底上改浅字 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-live-follow-name {
+  color: var(--bg);
+}
+/* 生成设置项（参考世界观/参考近期主线）：勾选文字落在深页底上，改浅字 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-genrow .circle-check-text {
+  color: var(--bg);
+}
+/* 视频设置页 overlay（电影设置/剧集设置）：内联 background:var(--bg) 是白底，
+   但复用了阅读设置页的浅字规则 → 白底白字看不见。fudge 下改深底，与阅读设置页一致 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-video-set-overlay {
+  background: var(--text) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-video-set-overlay .phone-header,
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-video-set-overlay .phone-statusbar {
+  background: var(--text) !important;
+}
+/* overlay 顶栏（返回按钮 + 标题）：容器内联 color:var(--text) 在深底上是深字，反成浅字 */
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-video-set-overlay .phone-video-set-topbar {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge:not(.phone-home-mode) .phone-video-set-overlay .phone-nav-btn {
+  color: var(--bg) !important;
+}

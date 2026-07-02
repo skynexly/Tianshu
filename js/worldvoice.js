@@ -298,10 +298,26 @@ try { radioEcho = (typeof Phone !== 'undefined' && Phone._radioEchoBlockForForum
 // 论坛呼应阅读：随机抽 0-1 本书架上的书（AI/自建，排除导入），给 AI 当可选的呼应素材
 let readingEcho = '';
 try { readingEcho = (typeof Phone !== 'undefined' && Phone._readingEchoBlockForForum) ? await Phone._readingEchoBlockForForum() : ''; } catch (_) {}
-// 两个都抽中时只保留一个（随机），避免两条呼应帖同时挤占帖子名额、互相竞争注意力
-if (radioEcho && readingEcho) {
-  if (Math.random() < 0.5) readingEcho = '';
-  else radioEcho = '';
+      // 论坛呼应影视：随机抽 0-1 部看过的影视作品（电影/剧/番），给 AI 当可选的呼应素材
+      let videoEcho = '';
+      try { videoEcho = (typeof Phone !== 'undefined' && Phone._videoEchoBlockForForum) ? await Phone._videoEchoBlockForForum() : ''; } catch (_) {}
+      // 论坛呼应直播：随机抽 0-1 个关注的直播间，给 AI 当可选的呼应素材
+      let liveEcho = '';
+      try { liveEcho = (typeof Phone !== 'undefined' && Phone._liveEchoBlockForForum) ? await Phone._liveEchoBlockForForum() : ''; } catch (_) {}
+      // 多个都抽中时只随机保留一个，避免多条呼应帖同时挤占帖子名额、互相竞争注意力
+{
+        const _echoes = [];
+        if (radioEcho) _echoes.push('radio');
+        if (readingEcho) _echoes.push('reading');
+        if (videoEcho) _echoes.push('video');
+        if (liveEcho) _echoes.push('live');
+        if (_echoes.length > 1) {
+          const _keep = _echoes[Math.floor(Math.random() * _echoes.length)];
+          if (_keep !== 'radio') radioEcho = '';
+          if (_keep !== 'reading') readingEcho = '';
+          if (_keep !== 'video') videoEcho = '';
+          if (_keep !== 'live') liveEcho = '';
+        }
 }
     const chatMessages = Chat.getMessages();
     const summaryText = await Summary.formatForPrompt(Conversations.getCurrent());
@@ -336,7 +352,7 @@ JSON格式（严格遵循）：
 
 所有 time 都必须使用"YYYY.MM.DD 星期X HH:mm"格式，必须和当前游戏时间同一套写法，不要自己发明别的时间样式。
 
-${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}${readingEcho ? '\n\n' + readingEcho : ''}`;
+${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}${readingEcho ? '\n\n' + readingEcho : ''}${videoEcho ? '\n\n' + videoEcho : ''}${liveEcho ? '\n\n' + liveEcho : ''}`;
 
     let userPrompt = '';
     if (summaryText) userPrompt += `## 剧情总结\n${summaryText}\n\n`;
@@ -873,7 +889,50 @@ JSON格式：
 
 ${wvPrompt}`;
     const npcListStr3 = await _getNpcListForForum();
-    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人（楼主）：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags||[]).join('、')}${npcListStr3}\n\n请生成完整内容和评论区。注意：正文是以楼主"${post.username}"的口吻写的，语气和内容要符合这个角色的性格。评论区中如果楼主出现，必须是以作者身份回复读者（如答疑、补充），而不是以路人视角评论自己。`;
+    // 若这条帖子来自「书架命中」搜索，注入这本书的信息，让正文/评论都围绕这本书展开
+    let _bookBlock = '';
+    if (post._bookRef && post._bookRef.title) {
+      const _br = post._bookRef;
+      const _brCats = Array.isArray(_br.category) ? _br.category.filter(Boolean).join('、') : '';
+      _bookBlock = `\n\n## 这条帖子讨论的书\n本帖是关于小说《${_br.title}》的讨论。正文和评论都要紧扣这本书的真实内容来写，符合真实书友讨论的氛围（书评/考据/磕CP/吐槽/安利/对线等），不要跑题到别的作品。\n书名：${_br.title}\n作者：${_br.author || '佚名'}${_brCats ? '\n题材：' + _brCats : ''}\n简介：${_br.intro || '（无）'}`;
+      // 用户读到的最新进度 + 末尾正文（让讨论能聊到真实读到的地方：催更/剧情进展/名场面）
+      const rc = _br.readChapter;
+      if (rc) {
+        const _chTitle = rc.title ? `《${rc.title}》` : '';
+        const _progress = (typeof rc.idx === 'number')
+          ? `读者目前追到第 ${rc.idx} 章${_chTitle}${rc.total ? `（全书共 ${rc.total} 章）` : ''}`
+          : `读者已读完${_chTitle}`;
+        let _rcBlock = `\n\n## 读者当前进度（重要）\n${_progress}。书友们的讨论可以聊到这个进度（催更、追连载、剧情进展、最新一章的名场面/转折），但【绝不能剧透或编造这个进度之后还没发生的剧情】。`;
+        if (rc.summary) _rcBlock += `\n最新一章概述：${rc.summary}`;
+        if (rc.tail) _rcBlock += `\n最新一章末尾原文（节选，供讨论贴合真实内容）：\n「${rc.tail}」`;
+        _bookBlock += _rcBlock;
+      }
+    }
+    // 若这条帖子来自「电台命中」搜索，注入这档电台的资料 + 那期实际播出内容，让正文/评论贴合真实节目
+    if (post._stationRef && post._stationRef.name) {
+      const _sr = post._stationRef;
+      _bookBlock += `\n\n## 这条帖子讨论的电台\n本帖是关于电台节目「${_sr.name}」的讨论。正文和评论都要紧扣这档电台的真实内容来写，符合真实电台听众讨论的氛围（听后感/安利/吐槽主播/讨论某段来电或话题/催更求重播等），不要跑题到别的节目。\n电台名：${_sr.name}${_sr.fm ? '\nFM 频率：' + _sr.fm : ''}${_sr.concept ? '\n频道核心概念：' + _sr.concept : ''}${_sr.showName ? '\n最近一期节目：' + _sr.showName : ''}`;
+      if (_sr.digest) {
+        _bookBlock += `\n这期实际播出的内容：${_sr.digest}\n讨论可以聊到这期内容，但【涉及节目情节时要贴合上面的真实内容，绝不能编造没播过的情节】。`;
+      } else if (_sr.intro) {
+        _bookBlock += `\n这期节目预告：${_sr.intro}\n（听众可能还没听到具体内容，讨论以预告和期待为主，不要编造具体播出情节。）`;
+      }
+    }
+    // 若这条帖子来自「影视命中」搜索，注入这部作品的资料 + 实际剧情，让正文/评论贴合真实作品
+    if (post._workRef && post._workRef.title) {
+      const _wr = post._workRef;
+      const _wkKind = _wr.kind === 'tv' ? '电视剧' : _wr.kind === 'anime' ? '动漫' : '电影';
+      const _wkCast = Array.isArray(_wr.cast) ? _wr.cast.filter(Boolean).join('、') : '';
+      const _wkStaff = [
+        _wr.director ? '导演/监督：' + _wr.director : '',
+        _wr.screenwriter ? '编剧/脚本：' + _wr.screenwriter : ''
+      ].filter(Boolean).join('，');
+      _bookBlock += `\n\n## 这条帖子讨论的影视作品\n本帖是关于${_wkKind}《${_wr.title}》的讨论。正文和评论都要紧扣这部作品的真实内容来写，符合真实观众讨论的氛围（剧评/影评/磕CP/夸演技或作画/吐槽编剧或结局/讨论某段剧情等），不要跑题到别的作品。\n片名：${_wr.title}${_wr.genre ? '\n类型：' + _wr.genre : ''}${_wkStaff ? '\n' + _wkStaff : ''}${_wkCast ? '\n主演/CV：' + _wkCast : ''}\n简介：${_wr.intro || '（无）'}`;
+      if (_wr.synopsis) {
+        _bookBlock += `\n剧情梗概：${_wr.synopsis}\n讨论可以聊到这些剧情，但【涉及具体情节时要贴合上面的真实内容，绝不能编造作品里没有的情节或乱给结局】。`;
+      }
+    }
+    const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人（楼主）：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags||[]).join('、')}${_bookBlock}${npcListStr3}\n\n请生成完整内容和评论区。注意：正文是以楼主"${post.username}"的口吻写的，语气和内容要符合这个角色的性格。评论区中如果楼主出现，必须是以作者身份回复读者（如答疑、补充），而不是以路人视角评论自己。`;
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },

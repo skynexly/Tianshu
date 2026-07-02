@@ -1183,11 +1183,22 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
       _normalNoteCount = _noteCount - _importantNoteCount;
     } catch(_) {}
 
+    // 5c. 角色记事本（NPC 网络行为档案）：命中在场/被提及的 NPC → 注入其行为记录
+    let _npcNoteHitCount = 0;
+    try {
+      if (Phone && Phone._npcNotesRetrieve) {
+        const npcHits = Phone._npcNotesRetrieve(presentNPCs, recentText);
+        const npcNotePrompt = Phone._npcNotesFormatForPrompt(npcHits);
+        if (npcNotePrompt) systemParts.push(npcNotePrompt);
+        _npcNoteHitCount = npcHits ? npcHits.length : 0;
+      }
+    } catch(_) {}
+
     // 记忆注入日志
     const _eventCount = relatedMemories.filter(m => m.type === 'event').length;
     const _relCount = relatedMemories.filter(m => m.type === 'relation').length;
     const _memPinnedCount = relatedMemories.filter(m => m.pinned).length;
-    GameLog.log('info', `[记忆注入] 事件=${_eventCount}, 关系=${_relCount}, 固定=${_memPinnedCount}, 永久纸条=${_pinnedCount}, 重要纸条=${_importantNoteCount}, 普通纸条=${_normalNoteCount}, 共${relatedMemories.length + _pinnedCount + _noteCount}条`);
+    GameLog.log('info', `[记忆注入] 事件=${_eventCount}, 关系=${_relCount}, 固定=${_memPinnedCount}, 永久纸条=${_pinnedCount}, 重要纸条=${_importantNoteCount}, 普通纸条=${_normalNoteCount}, 角色记事本=${_npcNoteHitCount}, 共${relatedMemories.length + _pinnedCount + _noteCount}条`);
 }
 
     // 6. 自定义提示词注入（system_top和system_bottom）
@@ -1267,6 +1278,20 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
         ? '\n\n【打电话倾向：积极】只要情境说得过去，就更倾向于让剧情里的角色主动打电话给玩家——想到玩家、有点小事、想分享、单纯想听听声音、关心一句，都可以成为来电的理由，不必等到有要紧事。但要符合该角色此刻的处境（在忙/不方便时除外），也不要在短时间内反复来电造成骚扰。'
         : '\n\n【打电话倾向：正常】当剧情里某个角色出现这些情况时，可以自然地让 ta 打电话给玩家：有要紧或急的事、情绪比较强烈（想念、担心、兴奋、生气）、有些话当面或打字说不清、很久没联系想听听玩家声音。是否来电由该角色当下的处境和心情决定，合适就打，不合适就不打。';
       systemParts.push('[来电能力]\n当剧情中某个角色主动给玩家打语音或视频电话时，你可以在回复末尾输出一个 ```call 代码块来触发来电界面。玩家会在手机上看到来电响铃，可以选择接听或拒接。\n\n格式：\n```call\n{"mode":"voice 或 video","name":"角色名","firstLine":"接通后的第一段内容。格式要求：台词行以 > 开头，描述行不加前缀；台词行尾标时间 [HH:MM]；可以描述+台词组合，如：电话那头传来低沉的笑声。\\n> 怎么这个点才回来？ [12:50]"}\n```\n\n语音还是视频，按角色此刻的动机选：\n- voice（语音）：日常联系、交代事情、随口说两句、报平安、不方便露脸或所在环境不适合开视频时。多数情况用语音。\n- video（视频）：很想见到玩家、思念、想亲眼确认玩家的状态/安全/情绪、需要面对面把话说清楚、或想让玩家看到自己这边的画面时。视频更亲密、更郑重，别滥用。\n\n规则：\n- 【仅限打给{{user}}】这个 ```call 能力只用于"某个角色主动给{{user}}（玩家）打电话"这一种情况。剧情里其他角色之间互相打电话（NPC 打给另一个 NPC、{{user}}不在场的通话）绝对不要输出 ```call 块——那种通话只在正文叙述里描写即可，不触发来电界面；来电界面只为{{user}}接听而存在。\n- 只有剧情中角色确实有打电话给{{user}}的动机时才使用，不要无理由触发\n- mode 只能是 "voice" 或 "video"，并与上面的动机相符\n- name 必须是角色的确切名字\n- firstLine 是对方接起后立刻说的话，用叙述流格式（描述行不加前缀，台词行以 > 开头并在行尾标 [HH:MM]），至少包含一句台词（> 开头），且要体现这通电话的来意\n- 代码块放在回复末尾，不要在正文中穿插\n- 一条回复里最多一个 ```call 块' + _callFreqLine);
+    }
+
+    // 7c. 主线群聊能力：触发已有群聊 / AI 建新群（开关控制，默认关）
+    if (convSettings.groupChatEnabled && typeof Phone !== 'undefined' && Phone.buildGroupListBlock) {
+      let groupListStr = '';
+      try { groupListStr = await Phone.buildGroupListBlock(); } catch(_) {}
+      const hasGroups = !!(groupListStr && groupListStr.trim());
+      const groupListSection = hasGroups
+        ? '\n\n【玩家当前已有的群】\n' + groupListStr + '\n\n——以上是玩家手机里现有的群。你只知道群名、群简介和成员名，不需要操心每个成员的具体性格——群消息的实际内容会由系统单独生成，你只负责"判断此刻哪个群该活跃、大概聊什么话题"。'
+        : '\n\n（玩家手机里目前还没有任何群。）';
+      const triggerSection = hasGroups
+        ? '\n\n【触发已有群聊】当剧情里出现某个已有群会自然冒消息的契机（到饭点了、放假了、群里有人会就某件事开聊、发生了和这个群相关的事），可以输出一个 ```groupchat 块给出信号：\n```groupchat\n{"group":"群名（必须是上面列出的群之一）","topic":"此刻这个群大概会聊什么的简短描述"}\n```\n- group 必须精确匹配上面已有的群名之一，不要写不存在的群。\n- topic 只是给系统的软提示，描述这一刻群里大概的话题或氛围即可（如"周五下班，群里在约周末爬山"），不用写具体台词，系统会据此生成群消息。\n- 没有合适契机就不要输出，不必每轮都有。一条回复最多一个 ```groupchat 块。'
+        : '';
+      systemParts.push('[群聊能力]\n玩家手机里有微信式的群聊。当剧情发展到"某个群此刻该热闹起来"，或"玩家被拉进一个新群"时，你可以输出对应的代码块来让群聊在手机里发生。' + groupListSection + triggerSection + '\n\n【创建新群】当剧情出现"玩家被拉进一个新群"的情节（刚入职被拉进部门群、加入某个兴趣小组、亲友建了个家庭群等），可以输出一个 ```groupcreate 块来建群：\n```groupcreate\n{\n  "name":"群名",\n  "desc":"一句话群简介",\n  "members":["已知角色名"],\n  "extras":[{"name":"新成员名","persona":"这个新成员的简短人设，一两句"}],\n  "firstTopic":"建群后群里第一波消息大概聊什么（可选）"\n}\n```\n- members 填**剧情/资料里已经存在的角色**（玩家认识的真人），系统会把他们作为正式成员拉进群。\n- extras 填**这个群里新出现、之前没登场过的路人成员**（比如新同事、没见过的组长），给个名字和一两句人设即可，系统会把他们作为群内路人。一个新群通常有几个到十几个成员，按场景合理设定，别太多。\n- firstTopic 可选，填了的话建群后群里会立刻冒出第一波消息（比如欢迎新人）；不需要立刻热闹就留空。\n- 只在剧情确实发生"进新群"时才用，不要凭空建群。一条回复最多一个 ```groupcreate 块。\n\n以上群聊代码块都放在回复末尾，不在正文中穿插。');
     }
 
       // 8. 心动模拟：累计状态注入
@@ -2382,6 +2407,10 @@ const msgEl = appendMessage(aiMsg, true, true);
         renderContent = renderContent.replace(/```homecoming[\s\S]*$/i, '');
         renderContent = renderContent.replace(/```call\s*[\s\S]*?```/gi, '');
         renderContent = renderContent.replace(/```call[\s\S]*$/i, '');
+        renderContent = renderContent.replace(/```groupchat\s*[\s\S]*?```/gi, '');
+        renderContent = renderContent.replace(/```groupchat[\s\S]*$/i, '');
+        renderContent = renderContent.replace(/```groupcreate\s*[\s\S]*?```/gi, '');
+        renderContent = renderContent.replace(/```groupcreate[\s\S]*$/i, '');
           renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
           contentEl.innerHTML = Markdown.render(renderContent);
           if (convSettings.stream) contentEl.classList.add('streaming-cursor');
@@ -2761,6 +2790,34 @@ const msgEl = appendMessage(aiMsg, true, true);
         }, 3000);
       }
     } catch(e) { console.warn('[Chat] 来电标记处理失败', e); }
+
+            // 主线群聊：检测 ```groupchat / ```groupcreate 块，后台触发群聊（受开关控制）
+    try {
+      if (convSettings.groupChatEnabled && typeof Phone !== 'undefined') {
+        if (Phone.handleMainlineGroupCreateTag && /```groupcreate[\s\S]*?```/.test(fullContent)) {
+          setTimeout(() => { try { Phone.handleMainlineGroupCreateTag(fullContent); } catch(_) {} }, 3000);
+        }
+        if (Phone.handleMainlineGroupChatTag && /```groupchat[\s\S]*?```/.test(fullContent)) {
+          setTimeout(() => { try { Phone.handleMainlineGroupChatTag(fullContent); } catch(_) {} }, 3000);
+        }
+      }
+    } catch(e) { console.warn('[Chat] 群聊标记处理失败', e); }
+
+    // 群聊自动发消息：主线每走一轮 +1，到随机阈值随机挑一个开了 autoChat 的群触发
+    // （独立于群聊触发开关，由各群自己的 autoChat 控制；延迟错开避免和上面的触发撞一起）
+    try {
+      if (typeof Phone !== 'undefined' && Phone._groupAutoChatTick) {
+        setTimeout(() => { try { Phone._groupAutoChatTick(); } catch(_) {} }, 4500);
+      }
+    } catch(e) { console.warn('[Chat] 群聊自动发消息 tick 失败', e); }
+
+    // 用户自播：主线每走一轮，若正在直播则生成一波观众反应（弹幕/打赏/热度/涨粉）
+    // 延迟错开，避免和群聊 tick / 群聊触发挤在一起
+    try {
+      if (typeof Phone !== 'undefined' && Phone._userLiveGenWave) {
+        setTimeout(() => { try { Phone._userLiveGenWave(); } catch(_) {} }, 6000);
+      }
+    } catch(e) { console.warn('[Chat] 用户自播 tick 失败', e); }
 
             resolve();
           } catch(e) {
@@ -5809,6 +5866,7 @@ bgImage: conv?.convBgImage || '',
         imgGen: !!conv?.convImgGen,                  // 默认关（生图模式）
     callEnabled: conv?.convCallEnabled !== false, // 默认开（来电能力）
       callFreq: conv?.convCallFreq || 'normal',     // 来电频率：'normal'(正常,默认) | 'active'(积极)
+      groupChatEnabled: !!conv?.convGroupChatEnabled, // 默认关（主线群聊：触发已有群+AI建群）
       narrPerson: conv?.convNarrPerson || 'second', // 叙述人称：'first' | 'second'(默认) | 'third'
       suggestEnabled: conv?.convSuggestEnabled !== false, // 默认开（回复建议灵感灯泡）
     toolsMemory: !!conv?.convToolsMemory,          // 默认关（记忆类工具）
@@ -6278,6 +6336,9 @@ document.getElementById('cs-format').checked = s.format;
     const callEl = document.getElementById('cs-call-enabled');
     if (callEl) callEl.checked = s.callEnabled;
     _syncCallFreqUI(s.callFreq || 'normal');
+    // 主线群聊
+    const gcEl = document.getElementById('cs-groupchat-enabled');
+    if (gcEl) gcEl.checked = s.groupChatEnabled;
   _syncNarrPersonUI(s.narrPerson || 'second');
     // 工具调用
     const toolsMemEl = document.getElementById('cs-tools-memory');
@@ -6361,6 +6422,8 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     if (callSaveEl) conv.convCallEnabled = callSaveEl.checked;
     const callFreqSaveEl = document.getElementById('cs-call-freq-btn');
     if (callFreqSaveEl) conv.convCallFreq = callFreqSaveEl.dataset.value || 'normal';
+    const gcSaveEl = document.getElementById('cs-groupchat-enabled');
+    if (gcSaveEl) conv.convGroupChatEnabled = gcSaveEl.checked;
   const narrPersonSaveEl = document.getElementById('cs-narr-person-btn');
   if (narrPersonSaveEl) conv.convNarrPerson = narrPersonSaveEl.dataset.value || 'second';
     const toolsMemSaveEl = document.getElementById('cs-tools-memory');

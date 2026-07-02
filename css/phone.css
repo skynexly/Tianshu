@@ -1392,6 +1392,36 @@ background: transparent !important;
  transition: transform .15s;
 }
 #phone-fab:active { transform: scale(.9); }
+/* 看直播最小化悬浮球：主播头像 + LIVE 红标，可拖动 */
+.phone-live-float-ball {
+  position: fixed;
+  top: calc(50% - 60px);
+  right: 12px;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  overflow: visible;
+  background: #15151a;
+  border: 2px solid var(--accent, #f60);
+  box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+  cursor: pointer; z-index: 100001;
+  -webkit-tap-highlight-color: transparent;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .15s;
+}
+.phone-live-float-ball img {
+  width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+}
+.phone-live-ball-char {
+  font-size: 18px; font-weight: 700; color: #fff;
+}
+.phone-live-ball-tag {
+  position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+  background: var(--accent, #f60); color: #fff;
+  font-size: 8px; font-weight: 700; letter-spacing: 0.5px;
+  padding: 1px 5px; border-radius: 6px; line-height: 1.3;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.phone-live-float-ball:active { transform: scale(.92); }
 /* v687.27：FAB 拖动模式视觉反馈 */
 .floating-fab.fab-dragging {
   transform: scale(1.18) !important;
@@ -4082,6 +4112,13 @@ align-self: start;
 }
 .phone-mdetail-artist {
   font-size: 13px; color: var(--text-secondary); margin-top: 3px;
+}
+.phone-mdetail-theme-badge {
+  display: inline-block; margin-top: 6px; padding: 2px 9px;
+  font-size: 11px; color: var(--accent);
+  background: var(--accent-soft, rgba(255,138,76,0.12));
+  border: 1px solid var(--accent); border-radius: 999px;
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .phone-mdetail-menu {
   background: none; border: none; color: var(--text-secondary); cursor: pointer;
@@ -8357,6 +8394,12 @@ white-space: nowrap;
   font-size: 12px; font-weight: 600; padding: 5px 14px; cursor: pointer;
 }
 .phone-liveroom-follow.followed { background: rgba(255,255,255,0.25); }
+/* 用户自播：下播按钮钉在右上角（脱离顶部信息流，避免长热度/粉丝把它挤走） */
+.phone-userlive .phone-userlive-stop {
+  position: absolute; top: 10px; right: 12px; z-index: 6;
+}
+/* 给顶部信息行右侧留出下播按钮的空间，避免主播信息条延伸到按钮下方 */
+.phone-userlive .phone-liveroom-top { padding-right: 70px; }
 /* 刷新按钮（顶部关注旁，让主播回应你的互动） */
 .phone-liveroom-refresh {
   flex-shrink: 0; margin-left: auto;
@@ -8615,28 +8658,27 @@ white-space: nowrap;
 }
 
 /* ===== 连线气泡（绿色电话图标+水友名+内容，区分主播气泡） ===== */
+/* 结构对齐主播台词气泡：inline-block 一整块，名字/图标作行内前缀，正文接着流排，只用绿色系区分 */
 .phone-liveroom-callline {
-  display: inline-flex; align-items: flex-start; gap: 5px;
+  display: inline-block;
   max-width: 100%;
   background: rgba(40,167,69,0.22);
   border: 1px solid rgba(76,218,106,0.3);
   border-radius: 20px;
-  padding: 7px 14px;
+  padding: 8px 16px;
   font-size: 12.5px; line-height: 1.7;
   color: #fff;
-  text-align: left;
+  text-align: center;
   backdrop-filter: blur(3px);
 }
 .phone-liveroom-callline-icon {
-  flex-shrink: 0;
   font-size: 11px; color: #4cda6a;
-  margin-top: 2px;
+  margin-right: 3px;
 }
 .phone-liveroom-callline-name {
-  flex-shrink: 0;
-  font-size: 11px; font-weight: 700;
+  font-size: 12.5px; font-weight: 700;
   color: #4cda6a;
-  margin-right: 3px;
+  margin-right: 6px;
 }
 .phone-liveroom-callline-text {
   color: #dafce5;
@@ -8710,6 +8752,39 @@ white-space: nowrap;
   vertical-align: middle;
 }
 .phone-liveroom-dm.hl .phone-liveroom-dm-name { color: #fff; font-weight: 600; }
+/* 红字弹幕（水友自己改色，强调重要发言）：暖色字 + 微底 */
+.phone-liveroom-dm.color { background: rgba(255,80,80,0.16); border: 1px solid rgba(255,120,120,0.34); }
+.phone-liveroom-dm.color .phone-liveroom-dm-name { color: #ff8d6e; font-weight: 600; }
+.phone-liveroom-dm.color .phone-liveroom-dm-text { color: #ffd0b8; }
+/* 用户自播：系统小结行（淡淡的、居中、无气泡感） */
+.phone-liveroom-dm.phone-userlive-sys {
+  align-self: center; max-width: 94%;
+  background: rgba(255,255,255,0.06); border: none;
+  text-align: center; font-size: 11.5px;
+}
+.phone-liveroom-dm.phone-userlive-sys .phone-liveroom-dm-text { color: rgba(255,255,255,0.62); font-style: italic; }
+/* 用户自播：打赏行 */
+.phone-liveroom-dm.phone-userlive-gift { background: linear-gradient(90deg, rgba(255,170,40,0.34), rgba(255,120,30,0.2)); border: 1px solid rgba(255,200,120,0.5); }
+.phone-userlive-gift-tag { display: inline-block; background: #ffae28; color: #5a3700; font-size: 9px; font-weight: 700; border-radius: 5px; padding: 0 4px; margin-right: 5px; vertical-align: middle; }
+.phone-userlive-gift .phone-liveroom-dm-name { color: #ffe0a8; font-weight: 600; }
+/* 用户自播：历史回放列表 */
+.phone-live-sess-list { display: flex; flex-direction: column; gap: 8px; }
+.phone-live-sess-item { background: rgba(255,255,255,0.06); border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: background 0.18s; }
+.phone-live-sess-item:active { background: rgba(255,255,255,0.12); }
+.phone-live-sess-title { font-size: 14px; font-weight: 600; color: #fff; }
+.phone-live-sess-meta { font-size: 11.5px; color: rgba(255,255,255,0.55); margin-top: 4px; }
+/* 用户自播：回放详情时间轴 */
+.phone-live-replay { display: flex; flex-direction: column; gap: 14px; }
+.phone-live-replay-block { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px 14px; }
+.phone-live-replay-time { font-size: 11px; color: rgba(255,255,255,0.5); margin-bottom: 6px; }
+.phone-live-replay-sum { font-size: 13px; color: #ffd9b0; line-height: 1.5; margin-bottom: 8px; font-style: italic; }
+.phone-live-replay-dm { font-size: 12.5px; color: rgba(255,255,255,0.9); line-height: 1.6; }
+.phone-live-replay-dm b { color: #8fd0ff; font-weight: 600; }
+.phone-live-replay-dm.color b { color: #ff8d6e; }
+.phone-live-replay-dm.color { color: #ffd0b8; }
+.phone-live-replay-dm.hl { color: #ffe0a8; }
+.phone-live-replay-gift { font-size: 12.5px; color: #ffe0a8; line-height: 1.6; }
+.phone-live-replay-gift b { font-weight: 600; }
 /* 「我」发的弹幕：右侧、主色调 */
 .phone-liveroom-dm.me { align-self: flex-end; background: rgba(255,102,0,0.34); border: 1px solid rgba(255,170,90,0.5); }
 .phone-liveroom-dm.me .phone-liveroom-dm-name { color: #ffd9b0; font-weight: 600; }
@@ -8837,7 +8912,10 @@ white-space: nowrap;
   background: rgba(255,255,255,0.05); color: #fff;
   font-size: 13px; padding: 8px 10px; font-family: inherit;
   appearance: none; -webkit-appearance: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
+.phone-liveset-select-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone-liveset-select-arrow { flex-shrink: 0; opacity: 0.6; }
 .phone-liveset-select option { background: #15151a; color: #fff; }
 /* 运营设定一句话输入 */
 .phone-liveset-scalenote {
@@ -8847,6 +8925,65 @@ white-space: nowrap;
   font-size: 13px; padding: 8px 12px; font-family: inherit;
 }
 .phone-liveset-scalenote::placeholder { color: rgba(255,255,255,0.3); }
+/* 收款货币卡片选择（同钱包转账卡片风格，深色适配） */
+.phone-liveset-field.phone-ul-cur-field {
+  flex-direction: column; align-items: stretch; gap: 6px;
+}
+.phone-liveset-field.phone-ul-cur-field .phone-liveset-field-label { width: auto; }
+.phone-ul-cur-list {
+  display: flex; flex-direction: column; gap: 6px; width: 100%;
+}
+.phone-ul-cur-card {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border-radius: 10px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  transition: border-color .15s, background .15s;
+}
+.phone-ul-cur-card input[type="radio"] { accent-color: var(--accent, #f60); flex-shrink: 0; }
+.phone-ul-cur-card .phone-ul-cur-name { flex: 1; font-size: 13px; color: #fff; }
+.phone-ul-cur-card .phone-ul-cur-bal { font-size: 12px; color: rgba(255,255,255,0.55); }
+.phone-ul-cur-card.on {
+  border-color: var(--accent, #f60);
+  background: color-mix(in srgb, var(--accent, #f60) 16%, transparent);
+}
+/* 累计打赏统计行 */
+.phone-ul-stat-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 12px; margin-bottom: 8px; border-radius: 10px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+}
+.phone-ul-stat-label { font-size: 13px; color: rgba(255,255,255,0.75); }
+.phone-ul-stat-val { font-size: 15px; font-weight: 700; color: var(--accent, #f60); }
+/* 用户自播舞台：加载态（观众正在涌入）+ 失败态 */
+.phone-userlive-loading {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  color: rgba(255,255,255,0.92);
+}
+.phone-ul-load-dots { display: inline-flex; gap: 6px; }
+.phone-ul-load-dots i {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent, #f60); display: inline-block;
+  animation: phone-ul-load-bounce 1.2s ease-in-out infinite;
+}
+.phone-ul-load-dots i:nth-child(2) { animation-delay: 0.18s; }
+.phone-ul-load-dots i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes phone-ul-load-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-7px); opacity: 1; }
+}
+.phone-ul-load-txt { font-size: 13px; opacity: 0.85; letter-spacing: 0.5px; }
+.phone-userlive-loadfail {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  color: rgba(255,255,255,0.85);
+}
+.phone-ul-fail-txt { font-size: 13px; opacity: 0.8; }
+.phone-ul-fail-retry {
+  border: 1px solid rgba(255,255,255,0.3); border-radius: 16px;
+  background: rgba(255,255,255,0.1); color: #fff;
+  font-size: 12px; font-weight: 600; padding: 5px 20px; cursor: pointer;
+}
+.phone-ul-fail-retry:active { opacity: 0.8; }
 .phone-liveset-save {
   margin-top: 8px;
   border: none; border-radius: 16px;

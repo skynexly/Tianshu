@@ -1040,6 +1040,8 @@ ${m.type !== 'relation' && m.participants?.length ? `<p style="margin:2px 0 0 0;
   // ===== 管理模式 =====
 
   function toggleManageMode() {
+    // 后台视图下的管理模式由 _toggleBackstageManage 处理（退出后仍留在后台视图）
+    if (_backstageViewActive) { _toggleBackstageManage(); return; }
     if (sortMode) exitSortMode();
     manageMode = !manageMode;
     selectedIds.clear();
@@ -1333,7 +1335,13 @@ ${m.type !== 'relation' && m.participants?.length ? `<p style="margin:2px 0 0 0;
     } else {
       selectedIds.add(id);
     }
-    renderList();
+    _reRenderManageView();
+  }
+
+  // 管理模式下重渲当前视图：后台视图走 _renderBackstageNotes，普通三 tab 走 renderList
+  function _reRenderManageView() {
+    if (_backstageViewActive) { _renderBackstageNotes(); }
+    else { renderList(); }
   }
 
   function toggleSelectAll() {
@@ -1344,7 +1352,7 @@ ${m.type !== 'relation' && m.participants?.length ? `<p style="margin:2px 0 0 0;
     } else {
       selectedIds = new Set(allIds);
     }
-    renderList();
+    _reRenderManageView();
   }
 
   function updateSelectAllIcon() {
@@ -1368,6 +1376,7 @@ ${m.type !== 'relation' && m.participants?.length ? `<p style="margin:2px 0 0 0;
   }
 
   async function batchClone() {
+    if (_backstageViewActive) { await UI.showAlert('提示', '后台记忆不支持复制，只能导出或删除'); return; }
     if (selectedIds.size === 0) {
       await UI.showAlert('提示', '请先选择要复制的记忆');
       return;
@@ -1395,12 +1404,13 @@ ${m.type !== 'relation' && m.participants?.length ? `<p style="margin:2px 0 0 0;
     }
     selectedIds.clear();
     updateSelectAllIcon();
-    renderList();
+    _reRenderManageView();
   }
 
   // ===== 合并功能 =====
 
   async function batchMerge() {
+    if (_backstageViewActive) { await UI.showAlert('提示', '后台记忆不支持合并，只能导出或删除'); return; }
     if (selectedIds.size < 2) {
       await UI.showAlert('提示', '请选择至少2条记忆进行合并');
       return;
@@ -1497,6 +1507,13 @@ document.getElementById('mem-edit-content').value =
       if (m.priority && m.priority !== 'normal') text += `优先级：${m.priority === 'pinned' ? '永久' : '重要'}\n`;
       if (m.time) text += `时间：${m.time}\n`;
       if (m.characters?.length) text += `关联角色：${m.characters.join(', ')}\n`;
+    } else if (m.type === 'backstage_note') {
+      text = `【后台纸条】${m.tag || ''}\n`;
+      if (m.detail) text += `内容：${m.detail}\n`;
+      if (m.priority && m.priority !== 'normal') text += `优先级：${m.priority === 'pinned' ? '永久' : '重要'}\n`;
+      if (m.convName) text += `来源对话：${m.convName}\n`;
+      if (m.worldviewName) text += `世界观：${m.worldviewName}\n`;
+      if (m.time) text += `时间：${m.time}\n`;
     } else {
       text = `【事件】${m.title}\n`;
       if (m.time) text += `时间：${m.time}\n`;
@@ -1616,8 +1633,9 @@ participants: document.getElementById('mem-edit-participants-input').value.split
     items.sort((a, b) => (a.sortOrder ?? a.timestamp) - (b.sortOrder ?? b.timestamp));
     const text = items.map(m => _formatMemoryText(m)).join('\n\n');
 
-    // 下载为 txt 文件
-    const tabName = currentTab === 'events' ? '事件' : currentTab === 'notes' ? '小纸条' : '人际关系';
+    // 下载为 txt 文件（选中项含后台纸条时用「后台小纸条」命名）
+    const hasBackstage = items.some(m => m.type === 'backstage_note');
+    const tabName = hasBackstage ? '后台小纸条' : (currentTab === 'events' ? '事件' : currentTab === 'notes' ? '小纸条' : '人际关系');
     const dateStr = new Date().toISOString().slice(0, 10);
     const filename = `记忆导出_${tabName}_${dateStr}.txt`;
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
@@ -2497,6 +2515,8 @@ function _collectEmotionsForEdit() {
       _backstageFilter = 'current';
       await _renderBackstageNotes();
     } else {
+      // 退出后台前先收起可能残留的批量管理栏
+      if (manageMode) { manageMode = false; selectedIds.clear(); const bar = document.getElementById('memory-manage-bar'); if (bar) { bar.classList.add('hidden'); bar.style.display = ''; } const c = document.getElementById('memory-list'); if (c) c.style.paddingBottom = ''; }
       renderList();
       // 恢复 tab 显示
       document.querySelectorAll('.memory-tabs .tab-btn').forEach(b => b.style.display = '');
@@ -2537,6 +2557,7 @@ function _collectEmotionsForEdit() {
     const header = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:8px 12px;background:color-mix(in srgb, var(--accent) 8%, transparent);border-radius:var(--radius)">
       <span style="font-size:13px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> 后台记忆库（${notes.length}条）</span>
       <span style="display:flex;gap:10px;align-items:center">
+        <span style="font-size:11px;color:${manageMode ? 'var(--accent)' : 'var(--text-secondary)'};cursor:pointer" onclick="Memory._toggleBackstageManage()" title="批量选中、导出、删除">${manageMode ? '完成' : '管理'}</span>
         <span style="font-size:11px;color:var(--text-secondary);cursor:pointer" onclick="Memory.changeBackstagePwd()" title="修改进入后台需要输入的口令">改口令</span>
         <span style="font-size:11px;color:var(--text-secondary);cursor:pointer" onclick="Memory.search('')">退出</span>
       </span>
@@ -2562,8 +2583,14 @@ function _collectEmotionsForEdit() {
         sourceLabel = n.convName || '未知对话';
       }
       const wvLabel = n.worldviewName ? `《${Utils.escapeHtml(n.worldviewName)}》` : '';
+      const isSelected = selectedIds.has(n.id);
+      const checkbox = manageMode
+        ? `<span class="memory-select-checkbox" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);border-color:var(--accent);' : ''}" onclick="event.stopPropagation();Memory.toggleSelect('${n.id}')">${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>`
+        : '';
+      const onClick = manageMode ? `Memory.toggleSelect('${n.id}')` : `Memory.editBackstageNote('${n.id}')`;
       return `
-      <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;cursor:pointer" class="card" onclick="Memory.editBackstageNote('${n.id}')">
+      <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;cursor:pointer" class="card" data-id="${n.id}" onclick="${onClick}">
+        ${checkbox}
         <div style="flex:1;overflow:hidden">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
             <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);font-weight:700;flex-shrink:0">${Utils.escapeHtml(n.tag)}</span>
@@ -2572,9 +2599,26 @@ function _collectEmotionsForEdit() {
           </div>
           <p style="margin:0;font-size:13px;color:var(--text);line-height:1.4">${Utils.escapeHtml(n.detail || '')}</p>
         </div>
-        <span style="font-size:11px;color:var(--text-secondary);cursor:pointer;flex-shrink:0;padding:4px 6px" onclick="event.stopPropagation();Memory._deleteBackstageNote('${n.id}')">×</span>
+        ${manageMode ? '' : `<span style="font-size:11px;color:var(--text-secondary);cursor:pointer;flex-shrink:0;padding:4px 6px" onclick="event.stopPropagation();Memory._deleteBackstageNote('${n.id}')">×</span>`}
       </div>
     `}).join('');
+  }
+
+  // 后台视图进/出批量管理：复用普通管理栏（memory-manage-bar）+ selectedIds，但重渲走后台视图
+  function _toggleBackstageManage() {
+    if (sortMode) exitSortMode();
+    manageMode = !manageMode;
+    selectedIds.clear();
+    const bar = document.getElementById('memory-manage-bar');
+    const container = document.getElementById('memory-list');
+    if (manageMode) {
+      if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
+      if (container) container.style.paddingBottom = '72px';
+    } else {
+      if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
+      if (container) container.style.paddingBottom = '';
+    }
+    _renderBackstageNotes();
   }
 
   async function _deleteBackstageNote(id) {
@@ -2863,7 +2907,7 @@ function _toggleEditScopeDropdown() { _toggleDropdown('mem-edit-scope-dropdown')
     addBackstageNote, queryBackstageNotes, retrieveBackstageNotes, formatBackstageNotesForPrompt,
     buildExtractionPrompt, buildNotesPrompt: _buildNotesPrompt, formatForPrompt,
     showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove, deleteNoteConfirm, _deleteBackstageNote,
-    _switchBackstageFilter, editBackstageNote, closeBsEdit, saveBsEdit, deleteBsFromEdit,
+    _switchBackstageFilter, editBackstageNote, closeBsEdit, saveBsEdit, deleteBsFromEdit, _toggleBackstageManage,
     changeBackstagePwd, getBackstagePwd,
     editNote, closeNoteEdit, saveNoteEdit, deleteNoteFromEdit, addNoteManual, _selectPriority, _togglePriorityDropdown, _selectTag, _toggleTagDropdown, _selectNoteScope, _toggleNoteScopeDropdown,
     copyMemory, filterByScope, renderScopeSelector, onPanelShow,

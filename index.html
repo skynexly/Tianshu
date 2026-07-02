@@ -10,9 +10,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=142">
-<link rel="stylesheet" href="css/phone.css?v1=359">
-<link rel="stylesheet" href="css/phone-fudge.css?v=18">
+<link rel="stylesheet" href="css/style.css?v=143">
+<link rel="stylesheet" href="css/phone.css?v1=367">
+<link rel="stylesheet" href="css/phone-fudge.css?v=20">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
 </head>
@@ -160,6 +160,7 @@
         <div id="top-dropdown-menu" class="hidden" style="position:absolute;top:100%;right:0;margin-top:8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px 0;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:100;min-width:170px;white-space:nowrap;display:flex;flex-direction:column;">
           <button onclick="Chat.showContext(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg> 上下文&日志</button>
           <button onclick="UI.toggleChatSummary(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg> 剧情总结</button>
+          <button onclick="Phone.showNpcNotesPanel(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg> 角色记事本</button>
           <button onclick="Summary.showArchiveListModal(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg> 归档记录</button>
           <button id="gaiden-settings-menu-btn" onclick="Gaiden.openSettingsModal(); UI.toggleTopMenu()" style="display:none;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M14 11a2 2 0 1 1-4 0 4 4 0 0 1 8 0 6 6 0 0 1-12 0 8 8 0 0 1 16 0 10 10 0 1 1-20 0 11.93 11.93 0 0 1 12 12.6"/><path d="M2 12h1"/></svg> 番外设定</button>
           <button id="single-settings-menu-btn" onclick="SingleMode.openCreateModal(Conversations.getCurrent()); UI.toggleTopMenu()" style="display:none;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg> 单人模式设置</button>
@@ -1575,9 +1576,17 @@
 <span id="cs-call-freq-label" style="flex:1;text-align:left">正常</span>
 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.7"><polyline points="6 9 12 15 18 9"/></svg>
 </button>
-<div id="cs-call-freq-dropdown" class="custom-dropdown hidden" style="max-height:160px;overflow-y:auto;right:0;left:auto;min-width:120px"></div>
-</div>
+            <div id="cs-call-freq-dropdown" class="custom-dropdown hidden" style="max-height:160px;overflow-y:auto;right:0;left:auto;min-width:120px"></div>
+            </div>
           </div>
+          <label class="circle-check-label">
+            <span class="circle-check-text">主线群聊</span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-groupchat-enabled" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">允许主线根据剧情触发手机群聊、或把玩家拉进新群（群消息由系统单独生成）</span>
           <div id="cs-voice-options" style="display:none;flex-direction:column;gap:10px;margin-top:-4px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
             <div>
               <div style="font-size:13px;color:var(--text);margin-bottom:6px">音色名（voice_id）</div>
@@ -3617,6 +3626,28 @@ NPC
   </div>
   <div id="global-search-results" class="gs-results-body"></div>
 </div>
+
+<!-- 角色记事本全屏页 -->
+<div id="npcnote-page" class="global-search-page hidden" style="flex-direction:column">
+  <div class="gs-topbar" style="border-bottom:1px solid var(--border);box-shadow:none;gap:8px">
+    <button onclick="Phone.closeNpcNotesPage()" class="btn-icon" style="flex-shrink:0">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><path d="m15 18-6-6 6-6"/></svg>
+    </button>
+    <div style="flex:1;display:flex;align-items:center;gap:8px;min-width:0">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex-shrink:0"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      <span style="font-size:16px;font-weight:600;color:var(--text)">角色记事本</span>
+      <span id="npcnote-count" style="font-size:11px;color:var(--text-secondary)"></span>
+    </div>
+  </div>
+  <div style="padding:10px 16px 8px;flex-shrink:0">
+    <div style="position:relative">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text-secondary);pointer-events:none"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+      <input type="text" id="npcnote-search" placeholder="按角色名搜索…" oninput="Phone._npcNotesSearch(this.value)" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;color:var(--text);padding:9px 16px 9px 40px;font-size:13px;box-sizing:border-box;outline:none">
+    </div>
+    <div style="font-size:11px;color:var(--text-secondary);line-height:1.6;margin-top:8px">角色在天枢城各 App 里留下的网络行为，会在 ta 出场或被提到时自动带给 AI。自动记录，也可手动编辑或删除。</div>
+  </div>
+  <div id="npcnote-page-body" style="flex:1;overflow-y:auto;padding:4px 16px 24px"></div>
+</div>
   <div id="branch-modal" class="modal hidden">
   <div class="modal-content" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:320px">
     <h3 style="margin:0 0 16px 0;color:var(--text);font-size:16px">分支管理</h3>
@@ -4036,18 +4067,18 @@ const GameLog = (() => {
 })();
 </script>
 <script src="js/db.js?v=12"></script>
-<script src="js/utils.js?v=2"></script>
+<script src="js/utils.js?v=3"></script>
 <script src="js/markdown.js?v=7"></script>
 <script src="js/api.js"></script>
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
 <script src="js/mcp-client.js"></script>
 <script src="js/fab-drag.js"></script>
-<script src="js/memory.js?v=3"></script>
+<script src="js/memory.js?v=4"></script>
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=56"></script>
-<script src="js/worldview.js?v=64"></script>
+<script src="js/worldview.js?v=66"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js"></script>
@@ -4060,7 +4091,7 @@ const GameLog = (() => {
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=6"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=73"></script>
+<script src="js/chat.js?v=76"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4074,11 +4105,11 @@ const GameLog = (() => {
 <script src="js/status_bar.js?v=27"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/watch-sfx.js?v=4"></script>
-<script src="js/worldvoice.js?v=14"></script>
+<script src="js/worldvoice.js?v=20"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/phone.js?v1=953"></script>
+<script src="js/phone.js?v1=1021"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -4097,7 +4128,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=7"></script>
-<script src="js/app.js?v=116"></script>
+<script src="js/app.js?v=117"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

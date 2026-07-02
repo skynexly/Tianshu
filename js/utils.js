@@ -259,6 +259,16 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
     raw = raw.replace(callBlockMatch[0], '').trim();
   }
 
+  // 群聊标记：```groupchat / ```groupcreate 块从正文剥离（前端单独检测并后台处理）
+  const groupChatBlockMatch = raw.match(/```groupchat\s*\n?([\s\S]*?)```/i);
+  if (groupChatBlockMatch) {
+    raw = raw.replace(groupChatBlockMatch[0], '').trim();
+  }
+  const groupCreateBlockMatch = raw.match(/```groupcreate\s*\n?([\s\S]*?)```/i);
+  if (groupCreateBlockMatch) {
+    raw = raw.replace(groupCreateBlockMatch[0], '').trim();
+  }
+
   // 一起听：接受/拒绝邀请 marker
   // 形如 ```listen_together\n{"accept":true}``` 或 ```listen_together\n{"accept":false,"reason":"..."}```
   const listenAcceptMatch = raw.match(/```listen_together\s*([\s\S]*?)```/i);
