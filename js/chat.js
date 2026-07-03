@@ -1294,6 +1294,15 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
       systemParts.push('[群聊能力]\n玩家手机里有微信式的群聊。当剧情发展到"某个群此刻该热闹起来"，或"玩家被拉进一个新群"时，你可以输出对应的代码块来让群聊在手机里发生。' + groupListSection + triggerSection + '\n\n【创建新群】当剧情出现"玩家被拉进一个新群"的情节（刚入职被拉进部门群、加入某个兴趣小组、亲友建了个家庭群等），可以输出一个 ```groupcreate 块来建群：\n```groupcreate\n{\n  "name":"群名",\n  "desc":"一句话群简介",\n  "members":["已知角色名"],\n  "extras":[{"name":"新成员名","persona":"这个新成员的简短人设，一两句"}],\n  "firstTopic":"建群后群里第一波消息大概聊什么（可选）"\n}\n```\n- members 填**剧情/资料里已经存在的角色**（玩家认识的真人），系统会把他们作为正式成员拉进群。\n- extras 填**这个群里新出现、之前没登场过的路人成员**（比如新同事、没见过的组长），给个名字和一两句人设即可，系统会把他们作为群内路人。一个新群通常有几个到十几个成员，按场景合理设定，别太多。\n- firstTopic 可选，填了的话建群后群里会立刻冒出第一波消息（比如欢迎新人）；不需要立刻热闹就留空。\n- 只在剧情确实发生"进新群"时才用，不要凭空建群。一条回复最多一个 ```groupcreate 块。\n\n以上群聊代码块都放在回复末尾，不在正文中穿插。');
     }
 
+    // 7d. 邮件·待回复：玩家寄出的信在等回音，由主线判断"何时回、谁回"
+    if (typeof Phone !== 'undefined' && Phone.buildPendingMailForAI) {
+      let pendingMailStr = '';
+      try { pendingMailStr = await Phone.buildPendingMailForAI(); } catch(_) {}
+      if (pendingMailStr && pendingMailStr.trim()) {
+        systemParts.push('[邮件·待回复]\n{{user}} 通过邮箱寄出了下面这些信，正在等待回音。邮件不是即时消息——对方要先有空看邮箱、看到了还要斟酌怎么回，所以回信通常是滞后的，不会秒回。\n\n待回复的信：\n' + pendingMailStr.trim() + '\n\n【你要做的判断】\n逐封判断此刻这封信是否到了"对方会回"的时机，考虑：\n- 这个角色现在有没有空、有没有心情看邮箱？（在忙、在剧情紧张的当口，多半没空）\n- 这个角色多久看一次邮箱？公务往来可能一天看几次，私人信件可能好几天才想起来看。正式的信件，回复本身也需要时间组织措辞，更慢。\n- 这个角色和 {{user}} 的关系亲疏，也影响回得快不快、上不上心。\n- 从寄出到现在过了多久？刚寄出就回是不真实的；隔了合理的时间才回才对味。\n- 这个角色是否愿意回、会不会回？（有些信对方可能根本不想回，那就别回。）\n\n【触发回信】\n当你判断某封信此刻到了对方该回的时机，在回复末尾输出信号（可以同时回好几封，一封一行）：\n```mail_reply\n{"from":"回信人名"}\n```\n- from 必须是上面列出的收信人名之一，精确匹配。\n- 只输出信号，不要写回信正文——正文由系统另行生成（你看不到原信正文，也不需要替对方写）。\n- 没到时机就不要输出，不必每轮都回。宁可让信多等一会儿，也不要不真实地秒回。\n- 这个信号是给系统的，不要在剧情正文里复述或提及。');
+      }
+    }
+
       // 8. 心动模拟：累计状态注入
       // 已返航后，停止注入心动模拟的状态/任务/好感数据，改为注入"已回家"提示
       // v687.33：_hsHomecoming 和 _hsPostHomeMode 已在函数开头提前检测
@@ -2410,7 +2419,9 @@ const msgEl = appendMessage(aiMsg, true, true);
         renderContent = renderContent.replace(/```groupchat\s*[\s\S]*?```/gi, '');
         renderContent = renderContent.replace(/```groupchat[\s\S]*$/i, '');
         renderContent = renderContent.replace(/```groupcreate\s*[\s\S]*?```/gi, '');
-        renderContent = renderContent.replace(/```groupcreate[\s\S]*$/i, '');
+renderContent = renderContent.replace(/```groupcreate[\s\S]*$/i, '');
+renderContent = renderContent.replace(/```mail_reply\s*[\s\S]*?```/gi, '');
+renderContent = renderContent.replace(/```mail_reply[\s\S]*$/i, '');
           renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
           contentEl.innerHTML = Markdown.render(renderContent);
           if (convSettings.stream) contentEl.classList.add('streaming-cursor');
@@ -2803,6 +2814,14 @@ const msgEl = appendMessage(aiMsg, true, true);
       }
     } catch(e) { console.warn('[Chat] 群聊标记处理失败', e); }
 
+    // 主线邮件：检测 ```mail_reply 块，后台生成对方回信（无需开关，有待回信+信号即触发）
+    try {
+      if (typeof Phone !== 'undefined' && Phone.handleMainlineMailTag
+        && /```mail_reply[\s\S]*?```/.test(fullContent)) {
+        setTimeout(() => { try { Phone.handleMainlineMailTag(fullContent); } catch(_) {} }, 3000);
+      }
+    } catch(e) { console.warn('[Chat] 邮件标记处理失败', e); }
+
     // 群聊自动发消息：主线每走一轮 +1，到随机阈值随机挑一个开了 autoChat 的群触发
     // （独立于群聊触发开关，由各群自己的 autoChat 控制；延迟错开避免和上面的触发撞一起）
     try {
@@ -2810,7 +2829,6 @@ const msgEl = appendMessage(aiMsg, true, true);
         setTimeout(() => { try { Phone._groupAutoChatTick(); } catch(_) {} }, 4500);
       }
     } catch(e) { console.warn('[Chat] 群聊自动发消息 tick 失败', e); }
-
     // 用户自播：主线每走一轮，若正在直播则生成一波观众反应（弹幕/打赏/热度/涨粉）
     // 延迟错开，避免和群聊 tick / 群聊触发挤在一起
     try {
@@ -2818,6 +2836,31 @@ const msgEl = appendMessage(aiMsg, true, true);
         setTimeout(() => { try { Phone._userLiveGenWave(); } catch(_) {} }, 6000);
       }
     } catch(e) { console.warn('[Chat] 用户自播 tick 失败', e); }
+
+    // 故人来信：主线每走一轮 +1，到随机阈值（10~20）且邮箱生态开关开启时，
+    // 挑一个久未互动但有羁绊的角色，翻旧记忆写一封主动来信。延迟错开避免撞车。
+    try {
+      if (typeof Phone !== 'undefined' && Phone._forgottenMailTick) {
+        setTimeout(() => { try { Phone._forgottenMailTick(); } catch(_) {} }, 7500);
+      }
+    } catch(e) { console.warn('[Chat] 故人来信 tick 失败', e); }
+
+// 节日来信：主线每走一轮检查一次"今天是否世界观节日"，命中且未发过则触发。
+      // 前端粗匹配日期，仅在邮箱生态开关开启时生效。延迟错开避免撞车。
+      try {
+        if (typeof Phone !== 'undefined' && Phone._festivalMailTick) {
+          setTimeout(() => { try { Phone._festivalMailTick(); } catch(_) {} }, 9000);
+        }
+      } catch(e) { console.warn('[Chat] 节日来信 tick 失败', e); }
+
+      // 生日庆祝信：主线每走一轮检查一次"今天是否 {{user}} 生日"，命中且今年未发过则触发。
+      // 前端粗匹配日期，仅在邮箱生态开关开启时生效。延迟错开避免撞车。
+      try {
+        if (typeof Phone !== 'undefined' && Phone._birthdayMailTick) {
+          setTimeout(() => { try { Phone._birthdayMailTick(); } catch(_) {} }, 10500);
+        }
+      } catch(e) { console.warn('[Chat] 生日庆祝信 tick 失败', e); }
+
 
             resolve();
           } catch(e) {

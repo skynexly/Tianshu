@@ -269,6 +269,14 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
     raw = raw.replace(groupCreateBlockMatch[0], '').trim();
   }
 
+  // 邮件回信信号：```mail_reply 块从正文剥离（前端单独检测并后台生成回信）
+  let mailReplyMatch;
+  const mailReplyRe = /```mail_reply\s*\n?([\s\S]*?)```/gi;
+  while ((mailReplyMatch = mailReplyRe.exec(raw)) !== null) {
+    raw = raw.replace(mailReplyMatch[0], '').trim();
+    mailReplyRe.lastIndex = 0;
+  }
+
   // 一起听：接受/拒绝邀请 marker
   // 形如 ```listen_together\n{"accept":true}``` 或 ```listen_together\n{"accept":false,"reason":"..."}```
   const listenAcceptMatch = raw.match(/```listen_together\s*([\s\S]*?)```/i);

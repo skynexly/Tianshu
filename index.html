@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=143">
-<link rel="stylesheet" href="css/phone.css?v1=368">
+<link rel="stylesheet" href="css/phone.css?v1=389">
 <link rel="stylesheet" href="css/phone-fudge.css?v=25">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260530">
@@ -3008,15 +3008,31 @@
                   <button type="button" class="th-font-btn" data-font="song" onclick="Theme.setFontMode('song')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">小薇</button>
                   <button type="button" class="th-font-btn" data-font="rounded" onclick="Theme.setFontMode('rounded')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">圆体</button>
                   <button type="button" class="th-font-btn" data-font="mono" onclick="Theme.setFontMode('mono')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">思源</button>
-                  <button type="button" class="th-font-btn" data-font="custom" onclick="Theme.setFontMode('custom')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">自定义</button>
+<button type="button" class="th-font-btn" data-font="custom" onclick="Theme.openFontPanel()" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">自定义</button>
                 </div>
-                <div id="th-font-upload-area" style="display:none;align-items:center;gap:8px">
-                  <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:13px;color:var(--text)">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-                    上传字体
-                    <input type="file" accept=".ttf,.otf,.woff,.woff2" onchange="Theme.handleFontUpload(this)" style="display:none">
-                  </label>
-                  <span id="th-font-filename" style="font-size:11px;color:var(--text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">未选择文件</span>
+                <div id="th-font-upload-area" style="display:none;flex-direction:column;gap:8px">
+                  <div style="font-size:11px;color:var(--text-secondary)">可存 3 个自定义字体（单个 ≤ 15MB），点「使用」切换</div>
+                  <div id="th-font-slot-1" style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:6px">
+                    <span style="font-size:11px;color:var(--text-secondary);flex-shrink:0">槽1</span>
+                    <span id="th-font-slotname-1" style="font-size:11px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">未上传</span>
+                    <label style="flex-shrink:0;padding:5px 9px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:5px;cursor:pointer;font-size:11px;color:var(--text)">上传<input type="file" accept=".ttf,.otf,.woff,.woff2" onchange="Theme.handleFontUpload(this, 1)" style="display:none"></label>
+                    <button type="button" id="th-font-slotuse-1" onclick="Theme.useFontSlot(1)" style="flex-shrink:0;padding:5px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:11px">—</button>
+                    <button type="button" onclick="Theme.clearFontSlot(1)" title="清空" style="flex-shrink:0;padding:5px 7px;border:1px solid var(--border);border-radius:5px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:11px">✕</button>
+                  </div>
+                  <div id="th-font-slot-2" style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:6px">
+                    <span style="font-size:11px;color:var(--text-secondary);flex-shrink:0">槽2</span>
+                    <span id="th-font-slotname-2" style="font-size:11px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">未上传</span>
+                    <label style="flex-shrink:0;padding:5px 9px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:5px;cursor:pointer;font-size:11px;color:var(--text)">上传<input type="file" accept=".ttf,.otf,.woff,.woff2" onchange="Theme.handleFontUpload(this, 2)" style="display:none"></label>
+                    <button type="button" id="th-font-slotuse-2" onclick="Theme.useFontSlot(2)" style="flex-shrink:0;padding:5px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:11px">—</button>
+                    <button type="button" onclick="Theme.clearFontSlot(2)" title="清空" style="flex-shrink:0;padding:5px 7px;border:1px solid var(--border);border-radius:5px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:11px">✕</button>
+                  </div>
+                  <div id="th-font-slot-3" style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:6px">
+                    <span style="font-size:11px;color:var(--text-secondary);flex-shrink:0">槽3</span>
+                    <span id="th-font-slotname-3" style="font-size:11px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">未上传</span>
+                    <label style="flex-shrink:0;padding:5px 9px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:5px;cursor:pointer;font-size:11px;color:var(--text)">上传<input type="file" accept=".ttf,.otf,.woff,.woff2" onchange="Theme.handleFontUpload(this, 3)" style="display:none"></label>
+                    <button type="button" id="th-font-slotuse-3" onclick="Theme.useFontSlot(3)" style="flex-shrink:0;padding:5px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:11px">—</button>
+                    <button type="button" onclick="Theme.clearFontSlot(3)" title="清空" style="flex-shrink:0;padding:5px 7px;border:1px solid var(--border);border-radius:5px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:11px">✕</button>
+                  </div>
                 </div>
                 <!-- 正文字号（v681.3） -->
                 <div style="display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px dashed var(--border)">
@@ -4067,7 +4083,7 @@ const GameLog = (() => {
 })();
 </script>
 <script src="js/db.js?v=12"></script>
-<script src="js/utils.js?v=3"></script>
+<script src="js/utils.js?v=4"></script>
 <script src="js/markdown.js?v=7"></script>
 <script src="js/api.js"></script>
 <script src="js/time-awareness.js"></script>
@@ -4091,7 +4107,7 @@ const GameLog = (() => {
 <script src="js/prompts.js"></script>
 <script src="js/conversations.js?v=6"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=76"></script>
+<script src="js/chat.js?v=79"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4109,7 +4125,7 @@ const GameLog = (() => {
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/phone.js?v1=1028"></script>
+<script src="js/phone.js?v1=1069"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -4120,7 +4136,7 @@ const GameLog = (() => {
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>
   <script src="data/tutorial-script.js"></script>
-  <script src="js/theme.js?v=3"></script>
+  <script src="js/theme.js?v=4"></script>
   <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js"></script>
 <script src="data/builtin-heartsim.js"></script>
@@ -4128,7 +4144,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=7"></script>
-<script src="js/app.js?v=118"></script>
+<script src="js/app.js?v=119"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

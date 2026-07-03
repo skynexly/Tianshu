@@ -275,18 +275,26 @@ function apply(cfg) {
       link.href = url;
       document.head.appendChild(link);
     }
-    if (cfg.fontMode === 'custom') {
-      DB.get('settings', 'customFontData').then(rec => {
-        if (rec && rec.value) {
+    if (cfg.fontMode === 'custom' || /^custom[123]$/.test(cfg.fontMode)) {
+      // 兼容旧值 'custom' → 槽1；数据键 customFontData_N（旧的 customFontData 视作槽1）
+      const slot = cfg.fontMode === 'custom' ? 1 : parseInt(cfg.fontMode.slice(6), 10);
+      const dataKey = slot === 1 ? ['customFontData_1', 'customFontData'] : ['customFontData_' + slot];
+      const faceName = 'CustomThemeFont' + slot;
+      (async () => {
+        let val = null;
+        for (const k of dataKey) {
+          try { const rec = await DB.get('settings', k); if (rec && rec.value) { val = rec.value; break; } } catch(_) {}
+        }
+        if (val) {
           try {
-            const fontFace = new FontFace('CustomThemeFont', 'url("' + rec.value + '")');
+            const fontFace = new FontFace(faceName, 'url("' + val + '")');
             fontFace.load().then(f => {
               document.fonts.add(f);
-              s.setProperty('--font-family', '"CustomThemeFont", sans-serif');
+              s.setProperty('--font-family', '"' + faceName + '", sans-serif');
             }).catch(() => {});
           } catch(e) {}
         }
-      }).catch(() => {});
+      })();
     } else if (BUILTIN_FONTS[cfg.fontMode]) {
       const f = BUILTIN_FONTS[cfg.fontMode];
       _loadGoogleFont(f.url);
@@ -441,14 +449,32 @@ apply(cfg);
     UI.showToast('已恢复默认', 2000);
   }
 
-  // 字体设置
+// 字体设置
 function setFontMode(mode) {
-const cfg = load();
-cfg.fontMode = mode;
-save(cfg);
-apply(cfg);
-_syncFontUI(cfg);
-}
+    const cfg = load();
+    cfg.fontMode = mode;
+    save(cfg);
+    apply(cfg);
+    _syncFontUI(cfg);
+  }
+
+  // 点"自定义"按钮：展开 3 槽面板（不强制切字体，让用户在面板里上传/选择）
+  function openFontPanel() {
+    const area = document.getElementById('th-font-upload-area');
+    if (!area) return;
+    const cfg = load();
+    const isCustom = cfg.fontMode === 'custom' || /^custom[123]$/.test(cfg.fontMode);
+    // 展开面板（不改 fontMode，真正启用由槽里的「使用」或上传触发）
+    area.style.display = 'flex';
+    // 若面板已展开且当前就是自定义模式，再点则收起
+    if (isCustom && area.dataset.forceOpen === '1') {
+      area.style.display = 'none';
+      area.dataset.forceOpen = '0';
+      return;
+    }
+    area.dataset.forceOpen = '1';
+    _syncFontUI(cfg);
+  }
 
 // 正文字号设置（v681.3.1）
 function setMsgFontSize(px) {
@@ -469,12 +495,14 @@ const label = document.getElementById('th-msg-fontsize-val');
 if (label) label.textContent = (cfg.msgFontSize || 13.5) + 'px';
 }
 
-  function handleFontUpload(input) {
+  function handleFontUpload(input, slot) {
+    slot = parseInt(slot, 10) || 1;
+    if (slot < 1 || slot > 3) slot = 1;
     const file = input.files[0];
     if (!file) return;
-    // 限制 5MB
-    if (file.size > 5 * 1024 * 1024) {
-      UI.showToast('字体文件不能超过 5MB', 3000);
+    // 限制 15MB
+    if (file.size > 15 * 1024 * 1024) {
+      UI.showToast('字体文件不能超过 15MB', 3000);
       input.value = '';
       return;
     }
@@ -485,20 +513,19 @@ if (label) label.textContent = (cfg.msgFontSize || 13.5) + 'px';
     };
     reader.onload = e => {
       const dataUrl = e.target.result;
+      const faceName = 'CustomThemeFont' + slot;
       try {
-        const fontFace = new FontFace('CustomThemeFont', 'url("' + dataUrl + '")');
+        const fontFace = new FontFace(faceName, 'url("' + dataUrl + '")');
         fontFace.load().then(f => {
           document.fonts.add(f);
-          // 字体数据存 IndexedDB（不受 5MB 限制）
-          DB.put('settings', { key: 'customFontData', value: dataUrl }).then(() => {
+          // 字体数据存 IndexedDB（不受 localStorage 配额限制）
+          DB.put('settings', { key: 'customFontData_' + slot, value: dataUrl, fileName: file.name }).then(() => {
             const cfg = load();
-            cfg.fontMode = 'custom';
+            cfg.fontMode = 'custom' + slot;
             cfg.customFontData = null; // localStorage 不存字体数据
             save(cfg);
             apply(cfg);
             _syncFontUI(cfg);
-            const nameEl = document.getElementById('th-font-filename');
-            if (nameEl) nameEl.textContent = file.name;
             UI.showToast('字体已应用', 2000);
           }).catch(() => {
             UI.showToast('存储字体失败', 3000);
@@ -513,28 +540,78 @@ if (label) label.textContent = (cfg.msgFontSize || 13.5) + 'px';
     reader.readAsDataURL(file);
   }
 
+  // 选用某个自定义字体槽（该槽已有字体时才切换）
+  async function useFontSlot(slot) {
+    slot = parseInt(slot, 10) || 1;
+    const keys = slot === 1 ? ['customFontData_1', 'customFontData'] : ['customFontData_' + slot];
+    let has = false;
+    for (const k of keys) {
+      try { const rec = await DB.get('settings', k); if (rec && rec.value) { has = true; break; } } catch(_) {}
+    }
+    if (!has) { UI.showToast('该槽还没有上传字体', 2000); return; }
+    const cfg = load();
+    cfg.fontMode = 'custom' + slot;
+    save(cfg);
+    apply(cfg);
+    _syncFontUI(cfg);
+  }
+
+  // 清空某个自定义字体槽
+  async function clearFontSlot(slot) {
+    slot = parseInt(slot, 10) || 1;
+    try { await DB.del('settings', 'customFontData_' + slot); } catch(_) {}
+    if (slot === 1) { try { await DB.del('settings', 'customFontData'); } catch(_) {} }
+    const cfg = load();
+    // 若当前正用这个槽，退回默认字体
+    if (cfg.fontMode === 'custom' + slot || (slot === 1 && cfg.fontMode === 'custom')) {
+      cfg.fontMode = 'default';
+      save(cfg);
+      apply(cfg);
+    }
+    _syncFontUI(cfg);
+    UI.showToast('已清空该字体槽', 1800);
+  }
+
   function _syncFontUI(cfg) {
     cfg = cfg || load();
+    const mode = cfg.fontMode || 'default';
+    const isCustomMode = mode === 'custom' || /^custom[123]$/.test(mode);
     const btns = document.querySelectorAll('.th-font-btn');
     btns.forEach(btn => {
       const m = btn.dataset.font;
-      const isActive = m === (cfg.fontMode || 'default');
+      // "custom" 按钮在任何自定义槽激活时都高亮
+      const isActive = (m === 'custom') ? isCustomMode : (m === mode);
       btn.style.background = isActive ? 'var(--accent)' : 'var(--bg-tertiary)';
       btn.style.color = isActive ? '#111' : 'var(--text-secondary)';
       btn.style.fontWeight = isActive ? '600' : '';
       btn.style.borderColor = isActive ? 'var(--accent)' : 'var(--border)';
     });
     const uploadArea = document.getElementById('th-font-upload-area');
-    if (uploadArea) uploadArea.style.display = cfg.fontMode === 'custom' ? 'flex' : 'none';
-    const nameEl = document.getElementById('th-font-filename');
-    if (nameEl) {
-      if (cfg.fontMode === 'custom') {
-        DB.get('settings', 'customFontData').then(rec => {
-          nameEl.textContent = (rec && rec.value) ? '已加载自定义字体' : '未选择文件';
-        }).catch(() => { nameEl.textContent = '未选择文件'; });
-      } else {
-        nameEl.textContent = '未选择文件';
-      }
+    if (uploadArea) uploadArea.style.display = (isCustomMode || uploadArea.dataset.forceOpen === '1') ? 'flex' : 'none';
+    // 当前使用的槽号（旧 'custom' 视作 1）
+    const activeSlot = mode === 'custom' ? 1 : (/^custom[123]$/.test(mode) ? parseInt(mode.slice(6), 10) : 0);
+    // 逐槽刷新文件名 + 使用中高亮
+    for (let slot = 1; slot <= 3; slot++) {
+      const row = document.getElementById('th-font-slot-' + slot);
+      const nameEl = document.getElementById('th-font-slotname-' + slot);
+      const useBtn = document.getElementById('th-font-slotuse-' + slot);
+      const keys = slot === 1 ? ['customFontData_1', 'customFontData'] : ['customFontData_' + slot];
+      (async () => {
+        let rec = null;
+        for (const k of keys) {
+          try { const r = await DB.get('settings', k); if (r && r.value) { rec = r; break; } } catch(_) {}
+        }
+        if (nameEl) nameEl.textContent = rec ? (rec.fileName || '已加载字体') : '未上传';
+        const isUsing = (activeSlot === slot);
+        if (useBtn) {
+          useBtn.textContent = isUsing ? '使用中' : (rec ? '使用' : '—');
+          useBtn.style.background = isUsing ? 'var(--accent)' : 'var(--bg-tertiary)';
+          useBtn.style.color = isUsing ? '#111' : 'var(--text-secondary)';
+          useBtn.disabled = !rec;
+          useBtn.style.opacity = rec ? '1' : '.5';
+        }
+        if (row) row.style.borderColor = isUsing ? 'var(--accent)' : 'var(--border)';
+      })();
     }
   }
 
@@ -1087,7 +1164,7 @@ function toggleAiBubbleRender() {
     applyPreset, handleBgImageUpload, clearBgImage, syncLabel,
     openPicker, toggleGlass, toggleAiBubbleRender, isAiBubbleRenderEnabled,
 toggleLite, isLiteMode, applyLiteMode,
-    setFontMode, handleFontUpload,
+    setFontMode, handleFontUpload, useFontSlot, clearFontSlot, openFontPanel,
 setMsgFontSize,
     syncGlassPadding: () => _syncGlassPadding(load().glassEnabled),
     saveAsCustom, applyCustomPreset, activateCustomPreset, deleteCustomPreset, renderCustomList,
