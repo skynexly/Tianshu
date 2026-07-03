@@ -175,8 +175,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v705.2';
-    const CHANGELOG = `【v705.2 更新内容】
+const APP_VERSION = 'v705.3';
+    const CHANGELOG = `【v705.3 更新内容】
+🐛 修复若干界面按钮被输入框挤出屏幕的问题（主题、API Key、后台输入等）
+
+【v705.2 更新内容】
 📮 全新「邮箱」App 上线
 ○ 可以主动写信寄出，认识的角色也会主动来信（书友、作者、读者、剧组、电台、生日祝福等）
 ○ 每封往来都会留下摘要档案，方便回顾聊过什么
