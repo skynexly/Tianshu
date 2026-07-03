@@ -63,6 +63,7 @@ const Prompts = (() => {
     document.getElementById('pe-depth').value = data.depth || 0;
     document.getElementById('pe-content').value = data.content || '';
     // 设置自定义下拉菜单
+    _selectRole(data.role || 'system', false);
     _selectPosition(data.position || 'system_top', false);
     modal.classList.remove('hidden');
   }
@@ -101,6 +102,9 @@ const Prompts = (() => {
     // 深度行可见性
     const depthRow = document.getElementById('pe-depth-row');
     if (depthRow) depthRow.style.display = value === 'depth' ? '' : 'none';
+    // 注入角色行：仅 depth 位置可选 role（顶部/底部本质是 system 提示拼接）
+    const roleRow = document.getElementById('pe-role-row');
+    if (roleRow) roleRow.style.display = value === 'depth' ? '' : 'none';
     if (closeDropdown) {
       const dropdown = document.getElementById('pe-position-dropdown');
       if (dropdown && !dropdown.classList.contains('hidden') && !dropdown.classList.contains('closing')) {
@@ -113,14 +117,60 @@ const Prompts = (() => {
     }
   }
 
+  const _roleLabels = {
+    system: '系统 (system)',
+    user: '用户 (user)',
+    assistant: '助手 (assistant)'
+  };
+
+  function _toggleRoleDropdown() {
+    const dropdown = document.getElementById('pe-role-dropdown');
+    if (!dropdown) return;
+    if (dropdown.classList.contains('hidden')) {
+      dropdown.classList.remove('closing');
+      dropdown.classList.remove('hidden');
+    } else {
+      if (dropdown.classList.contains('closing')) return;
+      dropdown.classList.add('closing');
+      setTimeout(() => {
+        dropdown.classList.remove('closing');
+        dropdown.classList.add('hidden');
+      }, 120);
+    }
+  }
+
+  function _selectRole(value, closeDropdown = true) {
+    const val = (value === 'user' || value === 'assistant') ? value : 'system';
+    document.getElementById('pe-role').value = val;
+    const label = document.getElementById('pe-role-label');
+    if (label) label.textContent = _roleLabels[val];
+    document.querySelectorAll('#pe-role-dropdown .custom-dropdown-item').forEach(item => {
+      const isActive = item.getAttribute('onclick').includes(`'${val}'`);
+      item.classList.toggle('active', isActive);
+    });
+    if (closeDropdown) {
+      const dropdown = document.getElementById('pe-role-dropdown');
+      if (dropdown && !dropdown.classList.contains('hidden') && !dropdown.classList.contains('closing')) {
+        dropdown.classList.add('closing');
+        setTimeout(() => {
+          dropdown.classList.remove('closing');
+          dropdown.classList.add('hidden');
+        }, 120);
+      }
+    }
+  }
+
   async function saveEdit() {
     const list = await getAll();
+    const _pos = document.getElementById('pe-position').value;
     const data = {
       name: document.getElementById('pe-name').value.trim() || '未命名',
       group: document.getElementById('pe-group').value.trim() || '默认',
       enabled: true,
-      position: document.getElementById('pe-position').value,
+      position: _pos,
       depth: parseInt(document.getElementById('pe-depth').value) || 0,
+      // role 仅对 depth 位置有意义；顶部/底部本质是 system 提示拼接，强制 system
+      role: _pos === 'depth' ? (document.getElementById('pe-role').value || 'system') : 'system',
       content: document.getElementById('pe-content').value.trim()
     };
 
@@ -218,7 +268,9 @@ const Prompts = (() => {
       } else if (p.position === 'depth') {
         const d = parseInt(p.depth) || 0;
         if (!result.depths[d]) result.depths[d] = [];
-        result.depths[d].push(content);
+        // depth 注入支持 role（system/user/assistant），默认 system
+        const role = (p.role === 'user' || p.role === 'assistant') ? p.role : 'system';
+        result.depths[d].push({ content, role });
       }
     }
     return result;
@@ -478,7 +530,7 @@ const Prompts = (() => {
       // 通用预设兼容
       identifier: p.id,
       name: p.name,
-      role: 'system',
+      role: (p.position === 'depth' && (p.role === 'user' || p.role === 'assistant')) ? p.role : 'system',
       content: p.content,
       injection_position: p.position === 'depth' ? 1 : 0,
       injection_depth: p.depth || 0,
@@ -570,18 +622,29 @@ const Prompts = (() => {
       }
 
       const role = p.role || 'system'; // system / user / assistant
-      let finalContent = content;
-      if (role === 'user') finalContent = `[用户输入] ${content}`;
-      else if (role === 'assistant') finalContent = `[AI回复] ${content}`;
 
       // 注入位置
       let position = 'system_top';
       let depth = 0;
       if (p.injection_position === 1) {
         position = 'depth';
-        depth = parseInt(p.injection_depth) || 4;
+        // 注意 injection_depth 可能是 0（最新消息前，酒馆常用位置），不能用 `|| 4` 兜底
+        const _d = parseInt(p.injection_depth);
+        depth = Number.isFinite(_d) ? _d : 4;
       } else if (p.injection_position === 0 || p.injection_position === undefined) {
         position = 'system_top';
+      }
+
+      // 方向 A：depth 位置支持真实 role（不加前缀）；顶部/底部不支持 role，
+      // 遇到 user/assistant 内容退化为加前缀标记后按 system 处理。
+      let finalContent = content;
+      let finalRole = 'system';
+      if (position === 'depth' && (role === 'user' || role === 'assistant')) {
+        finalRole = role;
+      } else if (role === 'user') {
+        finalContent = `[用户输入] ${content}`;
+      } else if (role === 'assistant') {
+        finalContent = `[AI回复] ${content}`;
       }
 
       // 启用状态：优先用 prompt_order 的；其次看 enabled 字段；都没有默认 true
@@ -599,6 +662,7 @@ const Prompts = (() => {
         enabled: isEnabled,
         position: position,
         depth: depth,
+        role: finalRole,
         content: finalContent
       });
       imported++;
@@ -632,6 +696,6 @@ const Prompts = (() => {
 
   return { getAll, add, edit, saveEdit, closeEdit, remove, toggle, buildInjections, render, getGroups, switchGroup, search,
     togglePromptSelect, togglePromptManageMode, exitPromptManageMode, batchDeletePrompts,
-    _togglePositionDropdown, _selectPosition, importPreset, exportPreset, toggleMenu,
+    _togglePositionDropdown, _selectPosition, _toggleRoleDropdown, _selectRole, importPreset, exportPreset, toggleMenu,
     openConvOverrideModal, saveConvOverrides, resetConvOverrides, closeConvOverrideModal, _toggleOverride, _switchOverrideGroup, _editFromOverride };
 })();

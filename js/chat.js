@@ -1502,7 +1502,10 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
         const insertIdx = apiMessages.length - depth;
         if (insertIdx > 0 && insertIdx <= apiMessages.length) {
           for (const c of contents.reverse()) {
-            apiMessages.splice(insertIdx, 0, { role: 'system', content: c });
+            // c 是 {content, role} 对象；role 支持 system/user/assistant，默认 system
+            const _role = (c && (c.role === 'user' || c.role === 'assistant')) ? c.role : 'system';
+            const _content = (c && typeof c === 'object') ? c.content : c;
+            apiMessages.splice(insertIdx, 0, { role: _role, content: _content });
           }
         }
       }
@@ -6543,7 +6546,7 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
       }
     } catch(_) {}
     await Conversations.saveList();
-    closeConvSettingsModal();
+    // v705.4：保存后留在设置页，方便继续调整；不再自动退回聊天
     // 更新加号菜单里的生图按钮可见性
     _updateImgGenButtons();
     // 更新回复建议灯泡按钮可见性
@@ -6552,8 +6555,9 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     try { _refreshDiceUI(); } catch(_) {}
     // 更新后台悬浮按钮
     if (typeof Backstage !== 'undefined') Backstage.updateFab();
-    // 如果刚开启后台，弹出要求编辑面板
+    // 如果刚开启后台，退回聊天并弹出要求编辑面板（后台引导需要离开设置页）
     if (!wasBackstage && conv.backstageEnabled && typeof Backstage !== 'undefined') {
+      closeConvSettingsModal();
       Backstage.openPromptEdit();
     }
     UI.showToast('对话设置已保存');

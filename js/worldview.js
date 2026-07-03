@@ -225,7 +225,7 @@ function _defaultRegion() {
     if (moreBtn) moreBtn.style.display = isHidden ? 'none' : '';
     // v632.1：世界书显示"编辑描述"按钮（让用户能填写 AI 生成所需的设定背景）
     const lbDescBtn = document.getElementById('worldview-edit-lb-desc-btn');
-    if (lbDescBtn) lbDescBtn.style.display = isHidden ? '' : 'none';
+    if (lbDescBtn) lbDescBtn.style.display = isHidden ? 'flex' : 'none';
     // v632：世界书把"事件"子 tab 藏掉、显示"NPC"子 tab；世界观反之
 const eventSubBtn = document.querySelector('.wv-ext-subtab-btn[data-subtab="event"]');
 const npcSubBtn = document.getElementById('wv-ext-subtab-btn-npc');
@@ -713,15 +713,19 @@ function _renderStatusBarSkinOptions() {
   }
 }
 let _skinOptions = [];
+// 幽灵点击防护：选中项关闭下拉的瞬间，挡掉合成 click 穿透到触发按钮
+let _skinClickLock = 0;
 
-function _toggleSkinDropdown() {
+function _toggleSkinDropdown(ev) {
+  // 刚选完项的短时间窗内忽略触发，防止幽灵点击重新弹出
+  if (Date.now() < _skinClickLock) return;
   const dropdown = document.getElementById('wv-statusbar-skin-dropdown');
   if (!dropdown) return;
   const isHidden = dropdown.classList.contains('hidden');
   if (isHidden) {
     const curVal = document.getElementById('wv-statusbar-skin')?.value || 'neumorph';
     dropdown.innerHTML = _skinOptions.map(o =>
-      `<div class="custom-dropdown-item${o.value === curVal ? ' active' : ''}" onclick="Worldview._selectSkin('${Utils.escapeHtml(o.value)}')">${Utils.escapeHtml(o.label)}</div>`
+      `<div class="custom-dropdown-item${o.value === curVal ? ' active' : ''}" onclick="event.stopPropagation();Worldview._selectSkin('${Utils.escapeHtml(o.value)}', event)">${Utils.escapeHtml(o.label)}</div>`
     ).join('');
     dropdown.classList.remove('hidden');
     setTimeout(() => {
@@ -737,7 +741,10 @@ function _toggleSkinDropdown() {
   }
 }
 
-function _selectSkin(val) {
+function _selectSkin(val, ev) {
+  if (ev) { try { ev.stopPropagation(); ev.preventDefault(); } catch(_) {} }
+  // 上锁 350ms，挡掉这次 tap 的延迟合成 click
+  _skinClickLock = Date.now() + 350;
   const input = document.getElementById('wv-statusbar-skin');
   const label = document.getElementById('wv-statusbar-skin-label');
   const dropdown = document.getElementById('wv-statusbar-skin-dropdown');
@@ -1701,21 +1708,29 @@ await DB.put('worldviews', w);
 // 立刻同步到运行时（仅当编辑的是当前激活世界观）
 await _syncRuntime(w);
 }
-// v632.1：世界书状态下，弹窗编辑描述（AI 生成时作为 setting 兜底）
+// v632.1：世界书状态下，弹窗编辑名字 + 描述（描述在 AI 生成时作为 setting 兜底）
 async function editLorebookDescription() {
   if (!_isLorebookEditing(editingWorldviewId)) return;
   const lbId = _lbIdOf(editingWorldviewId);
   if (typeof Lorebook === 'undefined') return;
   const lb = await Lorebook.get(lbId);
   if (!lb) return;
-  const input = await UI.showSimpleInput('编辑描述', lb.description || '', {
-    placeholder: '描述这本世界书的背景设定。AI 生成 NPC 时会以此为背景。',
-    multiline: true,
+  const res = await UI.showNameDescInput('编辑世界书', {
+    name: lb.name || '',
+    description: lb.description || '',
+    namePlaceholder: '给世界书起个名字',
+    descPlaceholder: '描述这本世界书的背景设定。AI 生成 NPC 时会以此为背景。',
   });
-  if (input === null || input === undefined) return;
-  lb.description = String(input);
+  if (!res) return;
+  lb.name = res.name;
+  lb.description = res.description;
   await Lorebook.save(lb);
-  UI.showToast('描述已保存', 1500);
+  // 同步刷新编辑器顶部标题（改了名字要立即体现）
+  try {
+    const titleEl = document.getElementById('worldview-edit-title');
+    if (titleEl) titleEl.textContent = lb.name;
+  } catch(_) {}
+  UI.showToast('已保存', 1500);
 }
   
   // ---------- 详细设定Tab：地区卡片列表 ----------

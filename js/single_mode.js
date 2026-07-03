@@ -118,10 +118,7 @@ const SingleMode = (() => {
     const items = [{ id: '', name: '无', icon: '', iconImage: '' }].concat(wvList);
     dropdown.innerHTML = items.map(w => {
       const isActive = (currentId || '') === w.id;
-      const iconHtml = w.iconImage
-        ? `<span style="display:inline-block;width:22px;height:22px;border-radius:5px;background:url('${Utils.escapeHtml(w.iconImage)}') center/cover;flex-shrink:0;margin-right:8px;vertical-align:middle"></span>`
-        : (w.id === '' ? `<span style="display:inline-block;width:22px;margin-right:8px;flex-shrink:0"></span>` : `<svg class="wv-fallback-icon" style="margin-right:8px;vertical-align:middle" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/></svg>`);
-      return `<div class="custom-dropdown-item${isActive ? ' active' : ''}" style="display:flex;align-items:center" onclick="SingleMode._pickWorldview('${Utils.escapeHtml(w.id)}')">${iconHtml}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(w.name || '未命名')}</span></div>`;
+      return `<div class="custom-dropdown-item${isActive ? ' active' : ''}" style="display:flex;align-items:center" onclick="SingleMode._pickWorldview('${Utils.escapeHtml(w.id)}')"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(w.name || '未命名')}</span></div>`;
     }).join('');
 
     // 设置当前显示
@@ -136,18 +133,9 @@ const SingleMode = (() => {
     const emojiEl = document.getElementById('sm-wv-emoji');
     if (!label) return;
     label.textContent = w.name || '未命名';
-    if (w.iconImage) {
-      iconEl.style.display = 'inline-block';
-      iconEl.style.backgroundImage = `url('${w.iconImage}')`;
-      emojiEl.style.display = 'none';
-    } else if (w.icon) {
-      iconEl.style.display = 'none';
-      emojiEl.style.display = 'inline';
-      emojiEl.textContent = w.icon;
-    } else {
-      iconEl.style.display = 'none';
-      emojiEl.style.display = 'none';
-    }
+    // 纯文字显示，不显示世界观图标
+    if (iconEl) iconEl.style.display = 'none';
+    if (emojiEl) emojiEl.style.display = 'none';
   }
 
   function _toggleWorldviewDropdown() {

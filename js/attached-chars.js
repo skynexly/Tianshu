@@ -10,7 +10,9 @@ window.AttachedChars = (function() {
   }
 
   async function _saveConv(conv) {
-    await DB.put('conversations', conv);
+    // conv 是 Conversations 内存 list 里的引用，直接落库要走 saveList（gameState store），
+    // 而不是写 conversations store（那个 store 根本不是对话列表的持久化源）
+    await Conversations.saveList();
   }
 
   function getList() {
@@ -111,7 +113,7 @@ window.AttachedChars = (function() {
       modal.className = 'modal hidden';
       modal.innerHTML = `
         <div class="modal-content" style="max-width:560px;max-height:85vh;display:flex;flex-direction:column;padding:0">
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px 12px;flex-shrink:0">
             <h3 style="margin:0;font-size:16px">添加角色</h3>
             <button onclick="AttachedChars.closeModal()" class="btn-icon modal-corner-btn close-btn" title="关闭">×</button>
           </div>

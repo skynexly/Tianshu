@@ -17,16 +17,19 @@ const UI = (() => {
        await new Promise(r => setTimeout(r, 120));
        menu.classList.remove('closing');
        menu.classList.add('hidden');
-     } else {
-       // 打开
-       menu.classList.remove('closing', 'hidden');
-     }
-   }
- 
-   async function toggleTokenPopup() {
-     const popup = document.getElementById('token-popup');
-     if (!popup) return;
-     const wasHidden = popup.classList.contains('hidden');
+    } else {
+        // 打开
+        menu.classList.remove('closing', 'hidden');
+        // 打开时刷新条件显示的菜单项，避免状态不同步导致"若隐若现"
+        try { if (typeof SingleMode !== 'undefined' && SingleMode.updateMenuVisibility) SingleMode.updateMenuVisibility(); } catch(_) {}
+        try { if (typeof Gaiden !== 'undefined' && Gaiden.updateMenuVisibility) Gaiden.updateMenuVisibility(); } catch(_) {}
+      }
+    }
+  
+    async function toggleTokenPopup() {
+      const popup = document.getElementById('token-popup');
+      if (!popup) return;
+      const wasHidden = popup.classList.contains('hidden');
  
      if (!wasHidden) {
        // 关闭
@@ -896,6 +899,52 @@ if (contentArea) contentArea.style.display = 'none';
     modal.classList.add('hidden');
   }
 
+  // ===== 名字 + 描述 双字段弹窗（世界书编辑复用） =====
+  // 返回 { name, description } 或 null（取消）
+  function showNameDescInput(title, opts) {
+    opts = opts || {};
+    const initName = opts.name || '';
+    const initDesc = opts.description || '';
+    const namePlaceholder = opts.namePlaceholder || '名字';
+    const descPlaceholder = opts.descPlaceholder || '描述';
+    const allowEmptyDesc = opts.allowEmptyDesc !== false; // 描述默认可空
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal';
+      overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;z-index:100010';
+      overlay.innerHTML = `
+        <div class="modal-content" style="max-width:440px;width:calc(100% - 40px)">
+          <h3 style="margin:0 0 14px">${Utils.escapeHtml(title || '编辑')}</h3>
+          <input id="nd-name" type="text" placeholder="${Utils.escapeHtml(namePlaceholder)}" style="width:100%;box-sizing:border-box;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:9px 12px;outline:none;margin-bottom:10px">
+          <textarea id="nd-desc" placeholder="${Utils.escapeHtml(descPlaceholder)}" rows="5" style="width:100%;box-sizing:border-box;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 12px;outline:none;resize:vertical;min-height:110px;line-height:1.6"></textarea>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+            <button data-act="cancel" style="padding:8px 16px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text-secondary);font-size:13px;cursor:pointer;font-family:inherit">取消</button>
+            <button data-act="ok" style="padding:8px 16px;background:var(--accent);border:none;border-radius:8px;color:var(--bg);font-size:13px;cursor:pointer;font-family:inherit">保存</button>
+          </div>
+        </div>`;
+      const nameEl = overlay.querySelector('#nd-name');
+      const descEl = overlay.querySelector('#nd-desc');
+      nameEl.value = initName;
+      descEl.value = initDesc;
+      const close = (val) => { overlay.remove(); resolve(val); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { close(null); return; }
+        const b = e.target.closest('button[data-act]');
+        if (!b) return;
+        if (b.dataset.act === 'cancel') { close(null); return; }
+        if (b.dataset.act === 'ok') {
+          const name = nameEl.value.trim();
+          const description = descEl.value.trim();
+          if (!name) { showToast('名字不能为空', 1500); return; }
+          if (!allowEmptyDesc && !description) { showToast('描述不能为空', 1500); return; }
+          close({ name, description });
+        }
+      });
+      document.body.appendChild(overlay);
+      setTimeout(() => nameEl.focus(), 50);
+    });
+  }
+
   async function confirmSimpleInput() {
     const inputEl = document.getElementById('simple-input-field');
     const value = inputEl.value.trim();
@@ -1193,7 +1242,7 @@ function showToast(text, duration = 4500) {
     toggleChatSummary, openChatSummary,
     switchWorldviewTab, switchSettingsTab, showSettingsOverview, handleSettingsBack,
     switchDebugTab, showDebugLog,
-    showSimpleInput, closeSimpleInput, confirmSimpleInput,
+    showSimpleInput, closeSimpleInput, confirmSimpleInput, showNameDescInput,
     showConfirm, showAlert, showCopyText, showToast,
     openGlobalSearch, closeGlobalSearch, _globalSearchDebounced, _jumpToMessage,
     setMaskEditFrom, toggleLockBackGesture, initLockBackGestureToggle

@@ -1550,8 +1550,13 @@ async function deleteItem() {
     if (label) label.textContent = text;
   }
 
+  // 幽灵点击防护：选中项后关闭下拉的瞬间，挡掉合成 click 穿透到触发按钮
+  let _birthClickLock = 0;
+
   // 展开/收起生日下拉，并填充选项
-  async function _toggleBirthDropdown(which) {
+  async function _toggleBirthDropdown(which, ev) {
+    // 刚选完项的短时间窗内忽略触发，防止幽灵点击重新弹出
+    if (Date.now() < _birthClickLock) return;
     const dropdown = document.getElementById(`char-birth-${which}-dropdown`);
     if (!dropdown) return;
     // 关掉另一个
@@ -1569,7 +1574,7 @@ async function deleteItem() {
       const mpy = rules?.monthsPerYear || 12;
       const cur = parseInt(document.getElementById('char-birth-month')?.value, 10) || 0;
       for (let m = 1; m <= mpy; m++) {
-        items += `<div class="custom-dropdown-item${m === cur ? ' active' : ''}" onclick="Character._selectBirth('month', ${m})">${m}月</div>`;
+        items += `<div class="custom-dropdown-item${m === cur ? ' active' : ''}" onclick="event.stopPropagation();Character._selectBirth('month', ${m}, event)">${m}月</div>`;
       }
     } else {
       const month = parseInt(document.getElementById('char-birth-month')?.value, 10) || 0;
@@ -1578,14 +1583,17 @@ async function deleteItem() {
       const days = dpm.length ? (dpm[(month - 1) % dpm.length] || 30) : 30;
       const cur = parseInt(document.getElementById('char-birth-day')?.value, 10) || 0;
       for (let d = 1; d <= days; d++) {
-        items += `<div class="custom-dropdown-item${d === cur ? ' active' : ''}" onclick="Character._selectBirth('day', ${d})">${d}日</div>`;
+        items += `<div class="custom-dropdown-item${d === cur ? ' active' : ''}" onclick="event.stopPropagation();Character._selectBirth('day', ${d}, event)">${d}日</div>`;
       }
     }
     dropdown.innerHTML = items;
     dropdown.classList.remove('hidden');
   }
 
-  async function _selectBirth(which, val) {
+  async function _selectBirth(which, val, ev) {
+    if (ev) { try { ev.stopPropagation(); ev.preventDefault(); } catch(_) {} }
+    // 上锁 350ms，挡掉这次 tap 的延迟合成 click
+    _birthClickLock = Date.now() + 350;
     const dropdown = document.getElementById(`char-birth-${which}-dropdown`);
     if (dropdown) dropdown.classList.add('hidden');
     if (which === 'month') {

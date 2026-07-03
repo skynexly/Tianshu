@@ -609,7 +609,7 @@
         <label>生日<div style="display:flex;gap:8px;align-items:flex-start">
           <div style="position:relative;flex:1">
             <input type="hidden" id="char-birth-month" value="">
-            <button type="button" class="custom-select-btn" onclick="Character._toggleBirthDropdown('month')">
+            <button type="button" class="custom-select-btn" onclick="Character._toggleBirthDropdown('month', event)">
               <span id="char-birth-month-label" style="overflow:hidden;text-overflow:ellipsis;flex:1;text-align:left">月份</span>
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
             </button>
@@ -617,7 +617,7 @@
           </div>
           <div style="position:relative;flex:1">
             <input type="hidden" id="char-birth-day" value="">
-            <button type="button" class="custom-select-btn" onclick="Character._toggleBirthDropdown('day')">
+            <button type="button" class="custom-select-btn" onclick="Character._toggleBirthDropdown('day', event)">
               <span id="char-birth-day-label" style="overflow:hidden;text-overflow:ellipsis;flex:1;text-align:left">日期</span>
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
             </button>
@@ -1383,8 +1383,13 @@
         <button class="btn-icon" onclick="UI.showPanel('chat', 'back')" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;margin-bottom:8px">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
         </button>
-        <h2 style="margin:0 0 4px;font-size:24px;color:var(--text)">对话设置</h2>
-        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 16px">调整仅对当前对话生效。</p>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px">
+          <div style="min-width:0">
+            <h2 style="margin:0 0 4px;font-size:24px;color:var(--text)">对话设置</h2>
+            <p style="font-size:12px;color:var(--text-secondary);margin:0">调整仅对当前对话生效。</p>
+          </div>
+          <button onclick="Chat.saveConvSettings()" style="flex-shrink:0;background:var(--accent);color:#111;border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap">保存</button>
+        </div>
 
         <!-- Tab 栏（4 tab） -->
         <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid var(--border)">
@@ -1443,14 +1448,6 @@
               <span class="circle-check-ui"></span>
             </span>
           </label>
-          <label class="circle-check-label">
-            <span class="circle-check-text">线上消息气泡</span>
-            <span style="position:relative;display:inline-flex">
-              <input type="checkbox" id="cs-online-chat" class="circle-check">
-              <span class="circle-check-ui"></span>
-            </span>
-          </label>
-          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">允许 AI 插入 QQ/微信式线上消息气泡</span>
         <div style="display:flex;align-items:center;gap:10px;margin-top:-4px">
                 <span style="font-size:13px;color:var(--text);white-space:nowrap">正文字数</span>
                 <input type="number" id="cs-reply-wordcount" value="800" min="200" max="3000" step="100" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;text-align:center">
@@ -1543,8 +1540,8 @@
 
         <!-- ===== 玩法 Tab ===== -->
         <div id="cs-tab-gameplay" style="display:none;flex-direction:column;gap:16px">
-          <!-- 区域1：多媒体 -->
-          <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em">多媒体</div>
+          <!-- 区域1：互动增强 -->
+          <div style="font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.04em">互动增强</div>
           <label class="circle-check-label">
             <span class="circle-check-text">生图模式</span>
             <span style="position:relative;display:inline-flex">
@@ -1587,6 +1584,14 @@
             </span>
           </label>
           <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">允许主线根据剧情触发手机群聊、或把玩家拉进新群（群消息由系统单独生成）</span>
+          <label class="circle-check-label">
+            <span class="circle-check-text">线上消息气泡</span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-online-chat" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">允许 AI 插入 QQ/微信式线上消息气泡</span>
           <div id="cs-voice-options" style="display:none;flex-direction:column;gap:10px;margin-top:-4px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">
             <div>
               <div style="font-size:13px;color:var(--text);margin-bottom:6px">音色名（voice_id）</div>
@@ -1871,11 +1876,7 @@
           </div>
         </div>
 
-        <!-- 底部按钮 -->
-        <div style="display:flex;gap:8px;margin-top:20px;padding-top:12px;border-top:1px solid var(--border)">
-          <button onclick="UI.showPanel('chat', 'back')" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary);padding:10px;border-radius:6px;cursor:pointer;font-size:13px">取消</button>
-          <button onclick="Chat.saveConvSettings()" style="flex:1;background:var(--accent);color:#111;border:none;padding:10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">保存</button>
-        </div>
+        <!-- 底部按钮已移至标题栏（保存），取消由左上角返回替代 -->
       </div>
     </section>
 
@@ -3094,7 +3095,7 @@
 <h2 id="worldview-edit-title" style="margin:0;font-size:24px;color:var(--text)">编辑世界观</h2>
 <div style="display:flex;gap:8px;align-items:center;position:relative">
 <!-- v632：仅世界书显示，编辑描述（用作 AI 生成时的设定背景） -->
-<button id="worldview-edit-lb-desc-btn" onclick="Worldview.editLorebookDescription()" style="display:none;padding:7px 12px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:12px" title="编辑描述（AI 生成时作为背景）">编辑描述</button>
+<button id="worldview-edit-lb-desc-btn" onclick="Worldview.editLorebookDescription()" style="display:none;width:36px;height:36px;padding:0;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;align-items:center;justify-content:center" title="编辑名字和描述"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
 <button id="worldview-edit-more-btn" onclick="Worldview.toggleEditMoreMenu(event)" style="width:36px;height:36px;padding:0;font-size:18px;line-height:1;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer" title="更多操作">⋯</button>
             <div id="worldview-edit-more-menu" class="hidden" style="position:absolute;right:74px;top:42px;min-width:148px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:30;padding:6px;display:flex;flex-direction:column;gap:2px">
               <button onclick="Worldview.closeEditMoreMenu();Worldview.exportCurrent()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">导出世界观</button>
@@ -3179,7 +3180,7 @@
             <label style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;color:var(--text);font-size:13px">状态栏风格
               <div style="position:relative">
                 <input type="hidden" id="wv-statusbar-skin" value="neumorph">
-                <button type="button" id="wv-statusbar-skin-btn" class="custom-select-btn" style="font-size:13px;padding:9px 10px" onclick="Worldview._toggleSkinDropdown()">
+                <button type="button" id="wv-statusbar-skin-btn" class="custom-select-btn" style="font-size:13px;padding:9px 10px" onclick="Worldview._toggleSkinDropdown(event)">
                   <span id="wv-statusbar-skin-label" style="flex:1;text-align:left">拟态风格</span>
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.7"><polyline points="6 9 12 15 18 9"/></svg>
                 </button>
@@ -3645,7 +3646,7 @@ NPC
 
 <!-- 角色记事本全屏页 -->
 <div id="npcnote-page" class="global-search-page hidden" style="flex-direction:column">
-  <div class="gs-topbar" style="border-bottom:1px solid var(--border);box-shadow:none;gap:8px">
+  <div class="gs-topbar" style="border-bottom:none;box-shadow:none;gap:8px">
     <button onclick="Phone.closeNpcNotesPage()" class="btn-icon" style="flex-shrink:0">
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><path d="m15 18-6-6 6-6"/></svg>
     </button>
@@ -3801,6 +3802,20 @@ NPC
         </div>
       </div>
 <div class="form-group" id="pe-depth-row" style="display:none"><span class="form-label">深度（0=最新消息前）</span><input type="number" id="pe-depth" value="0" min="0"></div>
+      <div class="form-group" id="pe-role-row" style="display:none"><span class="form-label">注入角色</span>
+        <div style="position:relative">
+          <input type="hidden" id="pe-role" value="system">
+          <button type="button" class="custom-select-btn" onclick="Prompts._toggleRoleDropdown()">
+            <span id="pe-role-label" style="flex:1;text-align:left">系统 (system)</span>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+          </button>
+          <div id="pe-role-dropdown" class="custom-dropdown hidden">
+            <div class="custom-dropdown-item active" onclick="Prompts._selectRole('system')">系统 (system)</div>
+            <div class="custom-dropdown-item" onclick="Prompts._selectRole('user')">用户 (user)</div>
+            <div class="custom-dropdown-item" onclick="Prompts._selectRole('assistant')">助手 (assistant)</div>
+          </div>
+        </div>
+      </div>
       <div class="form-group"><span class="form-label">内容</span><textarea id="pe-content" rows="8" placeholder="提示词内容"></textarea></div>
       <div class="modal-actions" style="flex-shrink:0;margin-top:12px;padding-top:12px">
         <button onclick="Prompts.closeEdit()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
@@ -4094,20 +4109,20 @@ const GameLog = (() => {
 <script src="js/tools.js"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=56"></script>
-<script src="js/worldview.js?v=66"></script>
+<script src="js/worldview.js?v=67"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
-<script src="js/lorebook_ui.js"></script>
+<script src="js/lorebook_ui.js?v=1"></script>
 <script src="js/conv_gameplay.js?v=15"></script>
 <script src="js/wv-generator.js?v=10"></script>
 <script src="js/single_card.js?v=9"></script>
-<script src="js/attached-chars.js"></script>
-<script src="js/single_mode.js?v=3"></script>
-<script src="js/character.js?v=7"></script>
-<script src="js/prompts.js"></script>
+<script src="js/attached-chars.js?v=2"></script>
+<script src="js/single_mode.js?v=4"></script>
+<script src="js/character.js?v=8"></script>
+<script src="js/prompts.js?v=1"></script>
 <script src="js/conversations.js?v=6"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=79"></script>
+<script src="js/chat.js?v=81"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4131,7 +4146,7 @@ const GameLog = (() => {
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
-<script src="js/ui.js?v=8"></script>
+<script src="js/ui.js?v=10"></script>
 <script src="js/data-mgr.js?v=8"></script>
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>
@@ -4144,7 +4159,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=7"></script>
-<script src="js/app.js?v=120"></script>
+<script src="js/app.js?v=121"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

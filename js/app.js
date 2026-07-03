@@ -175,8 +175,8 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v705.3';
-    const CHANGELOG = `【v705.3 更新内容】
+const APP_VERSION = 'v705.4';
+    const CHANGELOG = `【v705.4 更新内容】
 🐛 修复若干界面按钮被输入框挤出屏幕的问题（主题、API Key、后台输入等）
 
 【v705.2 更新内容】
