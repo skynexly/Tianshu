@@ -300,7 +300,7 @@ const Tools = (() => {
     // --- 小纸条 ---
     { type:'function', function:{
       name:'query_notes',
-      description:'查询用户的小纸条（情绪记忆碎片）。当你隐约记得用户说过什么偏好/习惯/情绪但不确定细节时调用。',
+      description:'查询 {{user}}（你在主线里扮演的角色）的情绪记忆碎片（小纸条）。记的是这个角色的偏好/习惯/情绪。当你隐约记得该角色说过什么但不确定细节时调用。',
       parameters:{ type:'object', properties:{
         tag:{ type:'string', enum:NOTE_TAGS, description:'按标签筛选' },
         keyword:{ type:'string', description:'模糊搜索 detail' },
@@ -336,7 +336,7 @@ characters:{ type:'array', items:{type:'string'}, description:'在场角色' }
     // --- 事件记忆 ---
     { type:'function', function:{
       name:'query_events',
-      description:'查询事件记忆。可按关键词搜索标题/内容/参与者/地点。',
+      description:'查询 {{user}} 所在剧情中已记录的事件记忆（剧情里发生过的事，不是现实中的）。可按关键词搜索标题/内容/参与者/地点。',
       parameters:{ type:'object', properties:{
         keyword:{ type:'string', description:'搜索关键词' },
         participant:{ type:'string', description:'按参与者筛选' },
@@ -376,7 +376,7 @@ characters:{ type:'array', items:{type:'string'}, description:'在场角色' }
     // --- 人际关系 ---
     { type:'function', function:{
       name:'query_relations',
-      description:'查询人际关系记忆。可按角色名搜索。',
+      description:'查询 {{user}} 与剧情中角色的人际关系记忆（剧情里的关系，不是现实中的）。可按角色名搜索。',
       parameters:{ type:'object', properties:{
         name:{ type:'string', description:'角色名（精确或模糊）' },
         limit:{ type:'number', description:'返回条数上限，默认5' }
@@ -440,7 +440,7 @@ characters:{ type:'array', items:{type:'string'}, description:'在场角色' }
     ...editDefinitions,
     { type:'function', function:{
       name:'query_backstage_notes',
-      description:'查询 {{user}} 本人的记忆碎片（后台记忆库）。不是游戏角色的，是 {{user}} 本人的。',
+      description:'查询 {{user}} 本人（现实中和你聊天的这个人）的记忆碎片（后台专属记忆库）。记的是现实里 ta 的偏好/情绪/事件，与主线剧情无关。注意：这和主线里被扮演角色的小纸条（query_mainline_notes）是两回事——这个查的是真实用户本人。',
       parameters:{ type:'object', properties:{
         tag:{ type:'string', enum:NOTE_TAGS, description:'按标签筛选' },
         keyword:{ type:'string', description:'模糊搜索' },
@@ -471,6 +471,15 @@ priority:{ type:'string', enum:['important','normal'], description:'重要程度
       parameters:{ type:'object', properties:{
         id:{ type:'string', description:'记忆 id' }
       }, required:['id'] }
+    }},
+    { type:'function', function:{
+      name:'query_mainline_notes',
+      description:'查询主线剧情里 {{user}} 扮演的那个角色的情绪记忆碎片（小纸条）。记的是被扮演角色在剧情中的偏好/习惯/情绪，属于故事内容，不是现实用户本人的。想了解主线角色时用；想了解真实用户本人用 query_backstage_notes。',
+      parameters:{ type:'object', properties:{
+        tag:{ type:'string', enum:NOTE_TAGS, description:'按标签筛选' },
+        keyword:{ type:'string', description:'模糊搜索' },
+        limit:{ type:'number', description:'返回条数上限，默认5' }
+      }, required:[] }
     }},
     { type:'function', function:{
       name:'query_directive',
@@ -668,6 +677,17 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
     },
 
     // --- 后台 CRUD ---
+    // 后台查主线小纸条：复用 query_notes 的逻辑（按当前面具 scope 查 type='note'）
+    async query_mainline_notes(args) {
+      const all = await _allMem(); const scope = _scope();
+      let notes = all.filter(m => m.type === 'note' && m.scope === scope);
+      if (args.tag) notes = notes.filter(n => n.tag === args.tag);
+      if (args.keyword) { const kw = args.keyword.toLowerCase(); notes = notes.filter(n => (n.detail||'').toLowerCase().includes(kw)); }
+      notes.sort((a,b) => b.timestamp - a.timestamp);
+      notes = notes.slice(0, args.limit || 5);
+      if (!notes.length) return OK({ result:'没有找到相关的主线小纸条。' });
+      return OK({ result: notes.map(n => ({ id:n.id, tag:n.tag, detail:n.detail, characters:n.characters||[], time:n.time||'' })) });
+    },
     async query_backstage_notes(args) {
       const notes = await Memory.queryBackstageNotes({ tag:args.tag, keyword:args.keyword, limit:args.limit||5 });
       if (!notes.length) return OK({ result:'没有找到相关记忆。' });

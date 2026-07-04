@@ -733,8 +733,14 @@ async function copyFromDataset(btn) {
 
       function cleanup() { overlay.remove(); }
 
-      // 压缩图片 dataUrl
+      // 动图检测：gif/webp/apng 走 canvas 会被压成静态首帧，直接原样返回 dataUrl 保住动画
+      function isAnimDataUrl(dataUrl) {
+        return /^data:image\/(gif|webp|apng)/i.test(dataUrl || '');
+      }
+
+      // 压缩图片 dataUrl（动图直通不压）
       function compress(dataUrl) {
+        if (isAnimDataUrl(dataUrl)) return Promise.resolve(dataUrl);
         return new Promise(res => {
           const img = new Image();
           img.onload = () => {
