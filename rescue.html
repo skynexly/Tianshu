@@ -87,6 +87,18 @@
     <div id="scanStatus" class="muted" style="font-size:12px;margin-top:8px"></div>
   </div>
 
+  <div class="card" style="border-color:var(--accent)">
+    <h2>③ 先导出存档（清理前务必先做这步！）</h2>
+    <p class="muted" style="font-size:12px;margin-top:0">清理是不可逆的。先把全部数据导出成一个文件存好，之后无论清成什么样，都能靠这个文件在主程序「设置 → 数据管理 → 导入」里恢复。导出用的是逐条流式写入，抗大数据。</p>
+    <div class="row">
+      <button class="btn" id="btn-export-full">导出全部（含图片，最全）</button>
+      <button class="btn ghost" id="btn-export-light">导出轻量（含头像，跳过大图库）</button>
+      <button class="btn ghost" id="btn-export-text">导出纯文字（不含任何图片，最小最稳）</button>
+    </div>
+    <div id="exportStatus" class="muted" style="font-size:12px;margin-top:8px"></div>
+  </div>
+
+
   <div id="result" class="hide">
     <div class="card">
       <h2>各数据仓占用</h2>
@@ -550,9 +562,169 @@ async function clearSW(){
   }
 }
 
+// ============ 导出（对齐主程序 version:4 格式，可被主程序导入器读回）============
+// mode: 'full' 全量含图 | 'lite' 剥大图库留头像 | 'text' 剥所有 base64 图片
+// 全程游标逐条 stringify + Blob 流式拼接，不产生单一巨串，最抗 OOM。
+
+// 递归剥离对象里的 base64 图片/字体字段（返回处理后的新值）。
+// keepAvatar=true 时保留 avatar / iconImage 这类小头像字段。
+function stripDataUrls(val, keepAvatar){
+  const KEEP_KEYS = keepAvatar ? new Set(['avatar','iconImage']) : null;
+  function walk(v){
+    if (typeof v === 'string'){
+      if (/^data:(image|font)\//i.test(v)) return '';
+      return v;
+    }
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === 'object'){
+      const out = {};
+      for (const k in v){
+        if (KEEP_KEYS && KEEP_KEYS.has(k) && typeof v[k] === 'string' && /^data:/i.test(v[k])){
+          out[k] = v[k]; // 保留头像
+        } else {
+          out[k] = walk(v[k]);
+        }
+      }
+      return out;
+    }
+    return v;
+  }
+  return walk(val);
+}
+
+async function doExport(mode){
+  const btns = ['#btn-export-full','#btn-export-light','#btn-export-text'].map(s=>$(s));
+  btns.forEach(b => b.disabled = true);
+  const st = $('#exportStatus');
+  const label = mode==='full' ? '全部（含图片）' : mode==='lite' ? '轻量' : '纯文字';
+  st.innerHTML = '<span class="spin"></span> 正在导出'+label+'，数据大时要一会儿，别关页面…';
+  log('开始导出：'+label);
+  try {
+    if (!_db) _db = await openDB();
+
+    const parts = [];
+    let _first = true;
+    const emit = (key, value) => {
+      parts.push((_first ? '{' : ',') + JSON.stringify(key) + ':');
+      parts.push(JSON.stringify(value === undefined ? null : value));
+      _first = false;
+    };
+    // 整仓逐条流式写成 JSON 数组。transform 可对每条做处理（剥图）；skip=true 时写空数组。
+    const emitStoreArray = async (key, storeName, opts) => {
+      opts = opts || {};
+      parts.push((_first ? '{' : ',') + JSON.stringify(key) + ':[');
+      _first = false;
+      if (opts.skip){
+        parts.push(']');
+        log('  · '+key+'：跳过（写空数组）');
+        return;
+      }
+      let i = 0;
+      try {
+        await cursorEach(_db, storeName, (row) => {
+          const v = opts.transform ? opts.transform(row) : row;
+          parts.push((i ? ',' : '') + JSON.stringify(v === undefined ? null : v));
+          i++;
+        });
+      } catch(e){ log('  · '+key+' 读取失败，按空处理：'+e); }
+      parts.push(']');
+      log('  · '+key+'：'+i+' 条');
+    };
+    // 整仓读成普通数组（小表用，逐条收集）
+    const collectStore = async (storeName, transform) => {
+      const arr = [];
+      try {
+        await cursorEach(_db, storeName, (row) => {
+          arr.push(transform ? transform(row) : row);
+        });
+      } catch(e){ log('  · '+storeName+' 读取失败：'+e); }
+      return arr;
+    };
+
+    const stripArr = (arr, keepAvatar) => arr.map(x => stripDataUrls(x, keepAvatar));
+    const isText = mode==='text';
+    const isLite = mode==='lite';
+    const rowTransform = isText ? (r=>stripDataUrls(r,false))
+                       : isLite ? (r=>stripDataUrls(r,true))
+                       : null;
+
+    // ---- 头部标记（对齐主程序导入器识别逻辑）----
+    emit('version', 4);
+    if (isText) emit('textOnly', true);
+    if (isLite) emit('lite', true);
+    emit('exportTime', new Date().toISOString());
+
+    // ---- messages（可能很大，流式）----
+    await emitStoreArray('messages', 'messages', { transform: rowTransform || undefined });
+
+    // ---- 中小型表 ----
+    emit('memories', await collectStore('memories', rowTransform));
+    emit('settings', await collectStore('settings', rowTransform));
+    emit('characters', await collectStore('characters', rowTransform));
+
+    // ---- gameState（含 conversations，phoneData 大头就在这里）----
+    const gameState = await collectStore('gameState', rowTransform);
+    emit('gameState', gameState);
+    const conversations = (gameState.find(x => x && x.key === 'conversations')?.value) || [];
+    emit('conversations', conversations); // 冗余，兼容旧导入器
+
+    emit('worldviews', await collectStore('worldviews', rowTransform));
+    emit('archives', await collectStore('archives', rowTransform));
+    emit('summaries', await collectStore('summaries', rowTransform));
+    emit('singleCards', await collectStore('singleCards', rowTransform));
+
+    // ---- npcAvatars（头像表）：text 跳过；lite/full 保留 ----
+    await emitStoreArray('npcAvatars', 'npcAvatars', { skip: isText });
+
+    // ---- drawnImages（生成图库，最大头）：text/lite 都跳过，只有 full 保留 ----
+    await emitStoreArray('drawnImages', 'drawnImages', { skip: isText || isLite });
+
+    emit('lorebooks', await collectStore('lorebooks', rowTransform));
+
+    // ---- 主题配置（localStorage）----
+    let themeConfig = null, themePresets = null;
+    try {
+      themeConfig = localStorage.getItem('themeConfig') || null;
+      if (themeConfig && (isText || isLite)) themeConfig = JSON.stringify(stripDataUrls(JSON.parse(themeConfig), isLite));
+    } catch(_){}
+    try {
+      themePresets = localStorage.getItem('themeCustomPresets') || null;
+      if (themePresets && (isText || isLite)) themePresets = JSON.stringify(stripDataUrls(JSON.parse(themePresets), isLite));
+    } catch(_){}
+    emit('themeConfig', themeConfig);
+    emit('themeCustomPresets', themePresets);
+
+    parts.push('}');
+
+    // ---- 组 Blob 下载 ----
+    const blob = new Blob(parts, { type: 'application/json' });
+    const sizeStr = fmtSize(blob.size);
+    const suffix = mode==='full' ? 'full' : mode==='lite' ? 'lite' : 'text';
+    const fname = 'skynex-save-'+suffix+'-'+new Date().toISOString().slice(0,10)+'.json';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+
+    st.innerHTML = '✅ 已导出 '+fname+'（'+sizeStr+'）。请到下载目录确认文件存在！';
+    log('✅ 导出完成：'+fname+'，'+sizeStr);
+    alert('导出完成：\n'+fname+'\n大小 '+sizeStr+'\n\n请到手机「下载」目录确认这个文件在，存到安全的地方（发到微信/云盘），之后就能放心清理了。');
+  } catch(e){
+    st.textContent = '❌ 导出出错，见日志。';
+    log('❌ 导出出错：'+(e && e.message || e));
+    alert('导出出错：'+(e && e.message || e)+'\n\n如果是「全部」导出失败，试试「轻量」或「纯文字」，它们跳过大图更不容易失败。');
+  } finally {
+    btns.forEach(b => b.disabled = false);
+  }
+}
+
 $('#btn-scan').addEventListener('click', scan);
 $('#btn-clean').addEventListener('click', doClean);
 $('#btn-clearstores').addEventListener('click', doClearStores);
+$('#btn-export-full').addEventListener('click', () => doExport('full'));
+$('#btn-export-light').addEventListener('click', () => doExport('lite'));
+$('#btn-export-text').addEventListener('click', () => doExport('text'));
 $('#btn-clearsw').addEventListener('click', clearSW);
 
 log('急救页已就绪。点「开始扫描」查看数据占用。');
