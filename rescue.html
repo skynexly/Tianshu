@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>天枢城 · 数据急救</title>
+<style>
+  :root{
+    --bg:#12131a; --card:#1b1d27; --card2:#22242f; --border:#2e3140;
+    --text:#e8e9ef; --sub:#9aa0b0; --accent:#ff8c42; --danger:#ff5f6d;
+    --ok:#39d98a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:14px;line-height:1.6;-webkit-text-size-adjust:100%}
+  .wrap{max-width:560px;margin:0 auto;padding:18px 16px 60px}
+  h1{font-size:19px;margin:6px 0 2px}
+  .lead{color:var(--sub);font-size:12px;margin:0 0 16px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;
+    padding:14px;margin-bottom:14px}
+  .card h2{font-size:14px;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+  .btn{appearance:none;border:none;border-radius:9px;padding:10px 16px;font-size:13px;
+    font-weight:600;cursor:pointer;color:#111;background:var(--accent);
+    transition:opacity .15s}
+  .btn:active{opacity:.75}
+  .btn[disabled]{opacity:.45;cursor:not-allowed}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+  .btn.danger{background:var(--danger);color:#fff}
+  .btn.sm{padding:6px 12px;font-size:12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .muted{color:var(--sub)}
+  .total{font-size:26px;font-weight:700;letter-spacing:.5px}
+  .total small{font-size:12px;font-weight:400;color:var(--sub);margin-left:6px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--sub);font-weight:500;font-size:12px}
+  td.size{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .bar{height:5px;border-radius:3px;background:var(--accent);margin-top:3px;min-width:2px}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;
+    border:1px solid var(--border);color:var(--sub);margin-left:6px}
+  .conv-block{border:1px solid var(--border);border-radius:10px;margin:10px 0;overflow:hidden}
+  .conv-head{background:var(--card2);padding:9px 12px;display:flex;justify-content:space-between;
+    align-items:center;cursor:pointer;gap:8px}
+  .conv-head .nm{font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .conv-body{padding:4px 12px 10px;display:none}
+  .conv-body.open{display:block}
+  .field-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px dashed var(--border)}
+  .field-row:last-child{border-bottom:none}
+  .field-row .fn{flex:1;font-size:12px}
+  .field-row .fs{font-variant-numeric:tabular-nums;color:var(--sub);font-size:12px;white-space:nowrap}
+  input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+  .log{background:#0c0d12;border:1px solid var(--border);border-radius:9px;padding:10px;
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--sub);
+    max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+  .note{font-size:12px;color:var(--sub);background:var(--card2);border-left:3px solid var(--accent);
+    border-radius:0 8px 8px 0;padding:9px 11px;margin:10px 0}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border);
+    border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .hide{display:none}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>天枢城 · 数据急救</h1>
+  <p class="lead">主程序打不开、白屏，多半是本地数据太大撑爆了内存。这个页面独立运行，不会加载主程序，用来看清数据占用并按需清理。清完再回主程序就能进了。</p>
+
+  <div class="card">
+    <h2>① 缓存清理（先做这步）</h2>
+    <p class="muted" style="font-size:12px;margin-top:0">如果这个页面本身也怪怪的，或主程序刷新后还是老样子，先点这里注销后台缓存。这一步不删你的游戏数据。</p>
+    <div class="row">
+      <button class="btn ghost sm" id="btn-clearsw">注销 Service Worker + 清缓存</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>② 数据体检 <span class="tag" id="dbtag">TextGameEngine</span></h2>
+    <div class="row" style="justify-content:space-between">
+      <div>
+        <div class="total" id="totalSize">—</div>
+        <div class="muted" style="font-size:12px">本地数据总占用（估算）</div>
+      </div>
+      <button class="btn" id="btn-scan">开始扫描</button>
+    </div>
+    <div id="scanStatus" class="muted" style="font-size:12px;margin-top:8px"></div>
+  </div>
+
+  <div id="result" class="hide">
+    <div class="card">
+      <h2>各数据仓占用</h2>
+      <table id="storeTable"><tbody></tbody></table>
+      <div class="note">
+        <b>musicTracks</b>（音乐）、<b>importedBooks</b>（电子书）、<b>drawnImages</b>（AI生成图）、<b>ttsCache</b>（语音缓存）这些是独立仓，不影响主程序启动。若它们很大，可在下方「独立仓清理」里整仓清空。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>对话手机数据明细 <span class="tag">phoneData</span></h2>
+      <p class="muted" style="font-size:12px;margin-top:0">这里是主程序启动时要全量读进内存的部分，最可能是白屏元凶。展开每个对话，勾选要清理的项，再点下方清理。</p>
+      <div id="convList"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn danger" id="btn-clean" disabled>清理已勾选的项</button>
+        <span class="muted" style="font-size:12px" id="cleanHint"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>独立仓清理（整仓清空）</h2>
+      <p class="muted" style="font-size:12px;margin-top:0">这些是与手机数据分开存放的资源。整仓清空不会影响对话主体，但会清掉对应资源（音乐/电子书/生成图/语音）。谨慎勾选。</p>
+      <div id="storeClearList"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn danger" id="btn-clearstores" disabled>清空已勾选的仓</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>运行日志</h2>
+    <div class="log" id="log">等待操作…</div>
+  </div>
+
+  <p class="muted" style="font-size:12px;text-align:center">清理完成后，<a href="./index.html">返回主程序</a>。建议先在主程序里做一次存档备份，再清大数据。</p>
+</div>
+
+<script>
+const DB_NAME = 'TextGameEngine';
+const $ = s => document.querySelector(s);
+const logEl = $('#log');
+let _logLines = [];
+function log(msg){
+  const t = new Date().toTimeString().slice(0,8);
+  _logLines.push('['+t+'] '+msg);
+  if (_logLines.length > 200) _logLines = _logLines.slice(-200);
+  logEl.textContent = _logLines.join('\n');
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function fmtSize(bytes){
+  if (bytes == null) return '—';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  if (bytes < 1024*1024*1024) return (bytes/1024/1024).toFixed(2) + ' MB';
+  return (bytes/1024/1024/1024).toFixed(2) + ' GB';
+}
+
+// 估算一个 JS 值序列化后的字节数（UTF-8 近似）。
+// 对超大对象用 Blob 量字节，避免 JSON.stringify 产生巨串再 length（也会占内存，但比逐字符快）。
+function sizeOf(value){
+  try {
+    const s = JSON.stringify(value);
+    if (s == null) return 0;
+    // Blob 计算 UTF-8 字节数，且不额外保留超大字符串引用
+    return new Blob([s]).size;
+  } catch(e){
+    return 0;
+  }
+}
+
+let _db = null;
+function openDB(){
+  return new Promise((resolve, reject) => {
+    // 不带版本号打开：拿现有版本，避免触发 upgrade
+    const req = indexedDB.open(DB_NAME);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve(req.result);
+    req.onblocked = () => log('⚠️ 数据库被其它标签页占用，请关掉主程序的标签页再试');
+  });
+}
+
+function getAll(db, store){
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(store, 'readonly');
+      const req = tx.objectStore(store).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    } catch(e){ reject(e); }
+  });
+}
+function getOne(db, store, key){
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(store, 'readonly');
+      const req = tx.objectStore(store).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    } catch(e){ reject(e); }
+  });
+}
+function putOne(db, store, val){
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).put(val);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function clearStore(db, store){
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).clear();
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+function delOne(db, store, key){
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).delete(key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+// 游标逐条遍历一个仓，对每条调用 onRow(value, primaryKey)，算完即释放引用。
+// 避免 getAll 把整仓（可能含多条 GB 级记录）一次性读进内存导致 OOM。
+function cursorEach(db, store, onRow){
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(store, 'readonly');
+      const req = tx.objectStore(store).openCursor();
+      let count = 0;
+      req.onsuccess = (e) => {
+        const cur = e.target.result;
+        if (cur){
+          try { onRow(cur.value, cur.primaryKey); } catch(err){ /* 单条失败不中断 */ }
+          count++;
+          cur.continue();
+        } else {
+          resolve(count);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    } catch(e){ reject(e); }
+  });
+}
+// 游标逐条遍历（可写），onRow 返回 'delete' 则删除该条。
+function cursorEachRW(db, store, onRow){
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(store, 'readwrite');
+      const req = tx.objectStore(store).openCursor();
+      let count = 0;
+      req.onsuccess = (e) => {
+        const cur = e.target.result;
+        if (cur){
+          let action = null;
+          try { action = onRow(cur.value, cur.primaryKey); } catch(err){}
+          if (action === 'delete'){ cur.delete(); count++; }
+          cur.continue();
+        } else {
+          resolve(count);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    } catch(e){ reject(e); }
+  });
+}
+
+// 扫描结果缓存
+let _scan = null; // { total, stores:[{name,size,count}], convs:[{id,name,total,fields:[{key,size,clearable,type}]}] }
+
+// 每个 phoneData 字段的清理策略：
+//   'empty-array' 清成 []
+//   'empty-string' 清成 ''
+//   'empty-object' 清成 {}
+//   'null' 清成 null
+// 未列出的字段默认不提供清理（保留），避免误伤设置类小字段。
+const FIELD_CLEAN = {
+  moments:'empty-array', npcMoments:'empty-array',
+  cachedForumPosts:'empty-array', myForumPosts:'empty-array',
+  forumViewHistory:'empty-array', forumSearchHistory:'empty-array',
+  mapSearchHistory:'empty-array', mapLastResults:'empty-array',
+  locationHistory:'empty-array',
+  album:'empty-array',
+  wallpaper:'empty-string', momentsCover:'empty-string', wardrobePortrait:'empty-string',
+  takeoutCachedItems:'empty-array', takeoutSearchHistory:'empty-array', takeoutOrders:'empty-array',
+  shopCachedItems:'empty-array', shopSearchHistory:'empty-array', shopOrders:'empty-array',
+  ledger:'empty-array',
+  heartsimServiceMessages:'empty-array',
+  chatThreads:'empty-object',
+  chatGroups:'empty-array',
+  listenTogetherHistory:'empty-array',
+  radioPrograms:'empty-object',
+  radioSubscriptions:'empty-array',
+  readingBooks:'empty-array',
+  readingDiscover:'empty-object',
+  emails:'empty-object',
+  furnitureMallItems:'empty-array', furnitureOrders:'empty-array',
+  wardrobeSuits:'empty-array',
+  shopListings:'empty-array'
+};
+
+async function listStoreNames(db){
+  return Array.from(db.objectStoreNames);
+}
+
+async function scan(){
+  $('#btn-scan').disabled = true;
+  $('#scanStatus').innerHTML = '<span class="spin"></span> 正在扫描，数据大时可能要十几秒，别关页面…';
+  log('开始扫描数据库…');
+  try {
+    if (!_db) _db = await openDB();
+    const storeNames = await listStoreNames(_db);
+    log('发现数据仓：' + storeNames.join(', '));
+
+    const stores = [];
+    let total = 0;
+    let convsMeta = [];
+
+    for (const name of storeNames){
+      // 逐仓统计：用游标逐条遍历，算完即释放，避免 getAll 把整仓一次性读进内存 OOM
+      let size = 0, count = 0;
+      let convRecValue = null; // gameState 里的 conversations.value，单独留引用做深入
+      try {
+        await cursorEach(_db, name, (row, pk) => {
+          size += sizeOf(row);
+          count++;
+          // conversations 记录：留下引用，遍历完再深入拆 phoneData
+          if (name === 'gameState' && row && row.key === 'conversations' && Array.isArray(row.value)){
+            convRecValue = row.value;
+          }
+        });
+      } catch(e){
+        log('读取仓 '+name+' 失败：'+e);
+        stores.push({name, size:0, count:0, err:true});
+        continue;
+      }
+      stores.push({ name, size, count });
+      total += size;
+      log('  · '+name+'：'+count+' 条，'+fmtSize(size));
+
+      // conversations：深入每个对话的 phoneData 逐字段量化
+      if (name === 'gameState' && convRecValue){
+        for (const conv of convRecValue){
+          const pd = conv && conv.phoneData;
+          const convEntry = { id: conv.id, name: conv.name || conv.id, total:0, fields:[] };
+          if (pd && typeof pd === 'object'){
+            for (const key of Object.keys(pd)){
+              const fs = sizeOf(pd[key]);
+              convEntry.total += fs;
+              convEntry.fields.push({
+                key, size: fs,
+                clearable: !!FIELD_CLEAN[key],
+                strategy: FIELD_CLEAN[key] || null
+              });
+            }
+          }
+          convEntry.fields.sort((a,b)=>b.size-a.size);
+          convsMeta.push(convEntry);
+        }
+        convRecValue = null; // 释放
+      }
+    }
+
+    stores.sort((a,b)=>b.size-a.size);
+    convsMeta.sort((a,b)=>b.total-a.total);
+
+    _scan = { total, stores, convs: convsMeta };
+    renderScan();
+    $('#scanStatus').innerHTML = '扫描完成。';
+    log('扫描完成，总占用约 '+fmtSize(total));
+  } catch(e){
+    log('❌ 扫描出错：'+ (e && e.message || e));
+    $('#scanStatus').textContent = '扫描出错，见日志。';
+  } finally {
+    $('#btn-scan').disabled = false;
+  }
+}
+
+function renderScan(){
+  $('#result').classList.remove('hide');
+  $('#totalSize').innerHTML = fmtSize(_scan.total);
+  const maxStore = Math.max(1, ..._scan.stores.map(s=>s.size));
+
+  // 各仓表
+  const tb = $('#storeTable').querySelector('tbody');
+  tb.innerHTML = '<tr><th>数据仓</th><th>条数</th><th class="size">占用</th></tr>' +
+    _scan.stores.map(s => {
+      const w = Math.round(s.size / maxStore * 100);
+      return '<tr><td>'+s.name+(s.err?' <span class="muted">(读取失败)</span>':'')+
+        '<div class="bar" style="width:'+w+'%"></div></td>'+
+        '<td class="muted">'+s.count+'</td>'+
+        '<td class="size">'+fmtSize(s.size)+'</td></tr>';
+    }).join('');
+
+  // 对话明细
+  const cl = $('#convList');
+  cl.innerHTML = _scan.convs.map((c, ci) => {
+    const rows = c.fields.filter(f => f.size > 0).map(f => {
+      const cb = f.clearable
+        ? '<input type="checkbox" class="fchk" data-conv="'+ci+'" data-key="'+encodeURIComponent(f.key)+'">'
+        : '<span style="width:16px;display:inline-block"></span>';
+      const lock = f.clearable ? '' : ' <span class="muted" style="font-size:11px">(保留)</span>';
+      return '<div class="field-row">'+cb+
+        '<span class="fn">'+f.key+lock+'</span>'+
+        '<span class="fs">'+fmtSize(f.size)+'</span></div>';
+    }).join('') || '<div class="muted" style="font-size:12px;padding:6px 0">无数据</div>';
+    return '<div class="conv-block">'+
+      '<div class="conv-head" data-ci="'+ci+'">'+
+        '<span class="nm">'+escapeHtml(c.name)+'</span>'+
+        '<span class="muted" style="font-size:12px">'+fmtSize(c.total)+'</span>'+
+        '<span class="muted">▸</span>'+
+      '</div>'+
+      '<div class="conv-body" data-body="'+ci+'">'+rows+'</div>'+
+    '</div>';
+  }).join('') || '<div class="muted">没有找到对话数据。</div>';
+
+  // 展开/收起
+  cl.querySelectorAll('.conv-head').forEach(h => {
+    h.addEventListener('click', () => {
+      const ci = h.dataset.ci;
+      const body = cl.querySelector('.conv-body[data-body="'+ci+'"]');
+      body.classList.toggle('open');
+    });
+  });
+  // 勾选联动按钮
+  cl.querySelectorAll('.fchk').forEach(cb => cb.addEventListener('change', updateCleanBtn));
+  updateCleanBtn();
+
+  // 独立仓清空列表（排除 gameState / conversations 关键仓，给出可整仓清空的资源仓）
+  const clearable = _scan.stores.filter(s =>
+    ['musicTracks','importedBooks','drawnImages','ttsCache','npcAvatars'].includes(s.name) && s.count > 0);
+  const scl = $('#storeClearList');
+  scl.innerHTML = clearable.length
+    ? clearable.map(s => '<div class="field-row">'+
+        '<input type="checkbox" class="schk" data-store="'+s.name+'">'+
+        '<span class="fn">'+s.name+' <span class="muted" style="font-size:11px">('+s.count+' 条)</span></span>'+
+        '<span class="fs">'+fmtSize(s.size)+'</span></div>').join('')
+    : '<div class="muted" style="font-size:12px">没有可整仓清空的大资源仓。</div>';
+  scl.querySelectorAll('.schk').forEach(cb => cb.addEventListener('change', updateClearStoresBtn));
+  updateClearStoresBtn();
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'"',"'":'&#39;'}[c]));
+}
+
+function updateCleanBtn(){
+  const checked = document.querySelectorAll('.fchk:checked');
+  const btn = $('#btn-clean');
+  btn.disabled = checked.length === 0;
+  $('#cleanHint').textContent = checked.length ? ('已选 '+checked.length+' 项') : '';
+}
+function updateClearStoresBtn(){
+  const checked = document.querySelectorAll('.schk:checked');
+  $('#btn-clearstores').disabled = checked.length === 0;
+}
+
+async function doClean(){
+  const checked = Array.from(document.querySelectorAll('.fchk:checked'));
+  if (!checked.length) return;
+  if (!confirm('确认清理已勾选的 '+checked.length+' 项？此操作不可撤销，建议已做过存档。')) return;
+  $('#btn-clean').disabled = true;
+  log('开始清理 '+checked.length+' 项…');
+  try {
+    // 重新读一份 conversations 最新值，避免用扫描时的旧快照覆盖新数据
+    const convRec = await getOne(_db, 'gameState', 'conversations');
+    if (!convRec || !Array.isArray(convRec.value)) throw new Error('找不到 conversations 记录');
+    const convs = convRec.value;
+
+    // 按 convId 归组要清的字段
+    const byConv = {}; // { convId: [keys] }
+    for (const cb of checked){
+      const ci = +cb.dataset.conv;
+      const key = decodeURIComponent(cb.dataset.key);
+      const convId = _scan.convs[ci].id;
+      (byConv[convId] = byConv[convId] || []).push(key);
+    }
+
+    let freed = 0;
+    for (const conv of convs){
+      const keys = byConv[conv.id];
+      if (!keys || !conv.phoneData) continue;
+      for (const key of keys){
+        const before = sizeOf(conv.phoneData[key]);
+        const strat = FIELD_CLEAN[key];
+        if (strat === 'empty-array') conv.phoneData[key] = [];
+        else if (strat === 'empty-string') conv.phoneData[key] = '';
+        else if (strat === 'empty-object') conv.phoneData[key] = {};
+        else if (strat === 'null') conv.phoneData[key] = null;
+        else continue;
+        freed += before;
+        log('  · 对话「'+(conv.name||conv.id)+'」清理 '+key+'，释放 '+fmtSize(before));
+      }
+    }
+
+    await putOne(_db, 'gameState', convRec);
+    log('conversations 已写回。');
+
+    // 同步清理冗余的 phoneBackup_*（会随下次进主程序自动重建，且它是双份数据）
+    // 用游标逐条删，不 getAll 全量读（备份本身可能很大）
+    let bkFreed = 0, bkCount = 0;
+    await cursorEachRW(_db, 'gameState', (row, pk) => {
+      if (typeof pk === 'string' && pk.startsWith('phoneBackup_')){
+        bkFreed += sizeOf(row);
+        bkCount++;
+        return 'delete';
+      }
+    });
+    if (bkCount) log('清理冗余备份 phoneBackup_* '+bkCount+' 条，释放 '+fmtSize(bkFreed));
+
+    log('✅ 清理完成，本次共释放约 '+fmtSize(freed + bkFreed)+'。建议重新扫描确认。');
+    alert('清理完成，释放约 '+fmtSize(freed + bkFreed)+'。\n可以点「开始扫描」再看一次，然后返回主程序。');
+  } catch(e){
+    log('❌ 清理出错：'+(e && e.message || e));
+    alert('清理出错：'+(e && e.message || e));
+  } finally {
+    $('#btn-clean').disabled = false;
+  }
+}
+
+async function doClearStores(){
+  const checked = Array.from(document.querySelectorAll('.schk:checked'));
+  if (!checked.length) return;
+  const names = checked.map(cb => cb.dataset.store);
+  if (!confirm('确认整仓清空：'+names.join('、')+' ？此操作不可撤销。')) return;
+  $('#btn-clearstores').disabled = true;
+  try {
+    for (const name of names){
+      await clearStore(_db, name);
+      log('已清空仓：'+name);
+    }
+    log('✅ 独立仓清空完成，建议重新扫描确认。');
+    alert('已清空：'+names.join('、'));
+  } catch(e){
+    log('❌ 清空出错：'+(e && e.message || e));
+    alert('清空出错：'+(e && e.message || e));
+  } finally {
+    $('#btn-clearstores').disabled = false;
+  }
+}
+
+async function clearSW(){
+  log('开始注销 Service Worker 与缓存…');
+  try {
+    if ('serviceWorker' in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const r of regs){ await r.unregister(); log('已注销一个 Service Worker'); }
+    }
+    if (window.caches){
+      const keys = await caches.keys();
+      for (const k of keys){ await caches.delete(k); log('已删除缓存：'+k); }
+    }
+    log('✅ 缓存清理完成。返回主程序时会重新从网络加载最新文件。');
+    alert('缓存已清理。返回主程序后如仍白屏，请先用本页面做数据清理。');
+  } catch(e){
+    log('❌ 缓存清理出错：'+(e && e.message || e));
+  }
+}
+
+$('#btn-scan').addEventListener('click', scan);
+$('#btn-clean').addEventListener('click', doClean);
+$('#btn-clearstores').addEventListener('click', doClearStores);
+$('#btn-clearsw').addEventListener('click', clearSW);
+
+log('急救页已就绪。点「开始扫描」查看数据占用。');
+</script>
+</body>
+</html>

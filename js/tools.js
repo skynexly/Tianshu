@@ -428,7 +428,7 @@ characters:{ type:'array', items:{type:'string'}, description:'在场角色' }
   // --- 使用说明查询 ---
   { type:'function', function:{
     name:'query_guide',
-    description:'查询应用使用说明。不传 keyword 返回全文目录（各章节标题列表），传 keyword 返回包含该关键词的章节内容。用来回答用户关于"这个功能在哪""怎么用"等问题。',
+    description:'查询 skynex 应用使用说明的章节详情。功能目录已在上下文中提供，本工具用来查看某个具体章节的完整内容。传 keyword（章节名或功能关键词）返回匹配的章节内容（标题命中与正文命中都会返回）。用来回答用户关于"这个功能在哪""怎么用"等问题。',
     parameters:{ type:'object', properties:{
       keyword:{ type:'string', description:'搜索关键词，不传则返回目录' }
     }, required:[] }
@@ -528,7 +528,7 @@ priority:{ type:'string', enum:['important','normal'], description:'重要程度
   // --- 使用说明查询 ---
   { type:'function', function:{
     name:'query_guide',
-    description:'查询应用使用说明。不传 keyword 返回全文目录（各章节标题列表），传 keyword 返回包含该关键词的章节内容。用来回答用户关于"这个功能在哪""怎么用"等问题。',
+    description:'查询 skynex 应用使用说明的章节详情。功能目录已在上下文中提供，本工具用来查看某个具体章节的完整内容。传 keyword（章节名或功能关键词）返回匹配的章节内容（标题命中与正文命中都会返回）。用来回答用户关于"这个功能在哪""怎么用"等问题。',
     parameters:{ type:'object', properties:{
       keyword:{ type:'string', description:'搜索关键词，不传则返回目录' }
     }, required:[] }
@@ -1122,8 +1122,15 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
           bodyHits.push(s);
         }
       }
-      // 优先返回标题命中；没有才返回内容命中，最多3个
-      let matched = titleHits.length > 0 ? titleHits : bodyHits.slice(0, 3);
+      // 章节名 + 关键词搜索：标题命中在前，正文命中补后，去重，上限 5
+      let matched = [];
+      const seen = new Set();
+      for (const s of titleHits.concat(bodyHits)) {
+        if (seen.has(s)) continue;
+        seen.add(s);
+        matched.push(s);
+        if (matched.length >= 5) break;
+      }
       if (matched.length === 0) {
         return OK({ result: '使用说明中没有找到包含「' + keyword + '」的内容。' });
       }

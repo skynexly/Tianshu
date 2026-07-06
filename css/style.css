@@ -68,6 +68,16 @@ body.lite-mode .phone-shell::before { display: none !important; }
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; -webkit-user-drag: none; }
 input, textarea, [contenteditable="true"] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+/* 全局 placeholder：走次文字色变量（世界观/角色卡/世界书/记忆/主聊天等手机外输入框，不同主题不糊）。
+   .phone-shell / .auth-input 各自有更具体规则，优先级更高，不受影响。 */
+input::placeholder, textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+input::-webkit-input-placeholder, textarea::-webkit-input-placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
 img, a { -webkit-touch-callout: none; -webkit-user-drag: none; pointer-events: auto; }
 
 html, body {

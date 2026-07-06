@@ -845,9 +845,9 @@
 /* ============================================================
    番茄钟 App：实色背景 + 历史记录卡大圆角
    ============================================================ */
-/* App 页整体实色背景（专注播放器卡是毛玻璃，靠页面底色衬托） */
+/* App 页整体实色背景：奶油软糖走主文字色底（与深色底栏融合，浅色卡片撑层次） */
 .phone-shell.phone-theme-fudge .phone-tomato-app {
-  background: var(--bg);
+  background: var(--text);
 }
 /* 专注播放器卡：实色背景 + 去毛玻璃 */
 .phone-shell.phone-theme-fudge .phone-tomato-player {
@@ -864,9 +864,25 @@
 .phone-shell.phone-theme-fudge .phone-tomato-app .phone-tabbar {
   border: none;
 }
-/* 番茄钟全屏模式：状态栏也补实色背景（否则露出 shell 渐变显灰） */
-.phone-shell.phone-theme-fudge.phone-tomato-mode .phone-statusbar {
+/* 邀请陪伴卡：实色背景色底（深背景上半透明白底会看不清字） */
+.phone-shell.phone-theme-fudge .phone-tomato-companion {
   background: var(--bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ============================================================
+   邮箱 App：收件/往来列表卡片实色背景（奶油软糖浅底上半透明白卡看不清字，照论坛卡片处理）
+   ============================================================ */
+.phone-shell.phone-theme-fudge .phone-email-card,
+.phone-shell.phone-theme-fudge .phone-email-letter-card {
+  background: var(--bg) !important;
+  border: none !important;
+  border-radius: 14px !important;
+}
+/* 番茄钟全屏模式：状态栏也补主文字色底（与深背景/底栏统一，否则露出浅色横条） */
+.phone-shell.phone-theme-fudge.phone-tomato-mode .phone-statusbar {
+  background: var(--text);
 }
 
 /* 聊天输入框：奶油软糖用圆润无边框（玻璃冰糖保持方正带边框） */

@@ -22,6 +22,17 @@
  outline: none !important;
  box-shadow: none !important;
 }
+/* placeholder 统一走次文字色：跟主题变量走，不同主题/玩家自定义色都不糊。.has-custom-wallpaper 下各处白色规则更具体、优先级更高，照旧生效。 */
+.phone-shell input::placeholder,
+.phone-shell textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+.phone-shell input::-webkit-input-placeholder,
+.phone-shell textarea::-webkit-input-placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
 .phone-shell::before {
  content: '';
  position: absolute;

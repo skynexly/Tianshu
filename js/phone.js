@@ -6263,7 +6263,7 @@ function _refreshCalBanner() {
 3. 结尾：主播以亲切的家常话收束，片尾垫乐渐起。
    示例风格——
    > 主播名：今儿社区里的事就唠到这儿，街坊们有事招呼一声，咱们下回接着聊。
-   片尾垫乐轻快地流淌，小广播缓缓关上。`, dataSource: 'region', interactHint: '', plays: ['mail'], previewSpoken: false, fixedNext: { name: '邻里播报', desc: '说说咱社区里的家长里短、街坊新鲜事，听听街坊们发来的留言。' } },
+   片尾垫乐轻快地流淌，小广播缓缓关上。`, dataSource: 'region', interactHint: '', plays: ['mail'], contribute: true, previewSpoken: false, fixedNext: { name: '邻里播报', desc: '说说咱社区里的家长里短、街坊新鲜事，听听街坊们发来的留言。' } },
       { name: '领域专线', desc: '聚焦某一个垂直圈子的圈内电台（如学术学派/二次元/时尚潮流/数码科技/电竞游戏/手作收藏/汽车机车/钓鱼户外/健身运动/美食探店/桌游推理/古典乐器/玄学命理/某种手艺或行业等，按世界观选），主聊圈内资讯、技术门道、圈内八卦、派系论战', guide: `你正在主持「$1」类电台节目。这是一档面向特定垂直圈子的小众电台，像某个领域的播客、圈内电台、爱好者频道那样，只聊一个圈子里的事，自带门槛和黑话。
 主播口吻是这个圈子的资深玩家/老炮/行业观察者，熟稔门道、带点圈内人的优越感和热情，说话夹杂这个领域的术语和梗，像跟同好聊天，默认听众都是圈内人，不科普基础概念。
 
@@ -6351,7 +6351,7 @@ function _refreshCalBanner() {
 3. 结尾：主播热闹地收束，片尾垫乐渐起。
    示例风格——
    > 主播名：今天的瓜就先唠到这儿，明天还有新鲜的，记得来。
-     片尾轻快音乐渐弱，节目愉快地结束。`, dataSource: 'entworks', interactHint: '', plays: ['mail', 'vote', 'lottery'], npcDetail: true, fixedNext: { name: '娱乐快递', desc: '明星网红的新鲜瓜、影视新动态和粉圈大事，下期继续为您热闹播报。' } },
+     片尾轻快音乐渐弱，节目愉快地结束。`, dataSource: 'entworks', interactHint: '', plays: ['mail', 'vote', 'lottery'], contribute: true, npcDetail: true, fixedNext: { name: '娱乐快递', desc: '明星网红的新鲜瓜、影视新动态和粉圈大事，下期继续为您热闹播报。' } },
       { name: '趣味新闻', desc: '奇闻轶事、社会奇葩事、乌龙巧合、冷知识、网络热梗、动物趣闻等图一乐的轻松新闻', guide: `你正在主持「$1」类电台节目。这是一档专播奇闻轶事、轻松趣闻的电台，像那种"今日份沙雕新闻""世界真奇妙""图一乐播报"，只挑好玩的、离谱的、长见识的事来说，主打一个轻松解压、听个乐呵。
 主播口吻是个会讲段子的趣闻主播，语气轻快幽默、爱抖机灵、带点冷吐槽，把离谱的事讲得绘声绘色，时不时自己先笑场，带着听众一起看热闹、涨知识。
 
@@ -6393,7 +6393,7 @@ function _refreshCalBanner() {
 3. 结尾：主播轻松地收束，片尾垫乐渐起。
    示例风格（口吻自拟，别照抄）——
    > 主播名：今天的乐子就先到这儿，世界很大，怪事很多，咱们下回接着看。
-    片尾轻快的音乐渐弱，节目在笑声里结束。`, dataSource: '', interactHint: '', plays: ['mail', 'vote', 'lottery'], fixedNext: { name: '图一乐播报', desc: '再给您搜罗几件好玩的奇闻、冷知识和沙雕新鲜事，下期接着图一乐。' } },
+    片尾轻快的音乐渐弱，节目在笑声里结束。`, dataSource: '', interactHint: '', plays: ['mail', 'vote', 'lottery'], contribute: true, fixedNext: { name: '图一乐播报', desc: '再给您搜罗几件好玩的奇闻、冷知识和沙雕新鲜事，下期接着图一乐。' } },
     ],
     emotion: [
       { name: '深夜来信', desc: '读听众来信、倾诉心事，主播温柔回应陪伴；题材不限于爱情——亲情、友情、师徒、聚散别离、甚至怨恨与说不清的羁绊，都可入信', guide: `你正在主持「$1」类电台节目。这是一档深夜读信节目，主播读一封听众寄来的长信，把信里的故事娓娓道来，温柔陪伴。
@@ -6421,7 +6421,7 @@ function _refreshCalBanner() {
 节目结构（半固定，保持深夜来信的温柔调性）：
 1. 开场：舒缓的垫乐淡入，主播以温柔沉静的口吻开场，念出频率与节目名，报出当前日期，点明今晚收到了一封信。
 2. 正文：讲这封信里的故事。边读边讲，情节完整，细节丰富，情感充沛。
-3. 结尾：故事讲完，主播轻声收尾，再报一遍频率与节目名，留个余味，垫乐温柔地淡出。`, dataSource: '', interactHint: '' },
+3. 结尾：故事讲完，主播轻声收尾，再报一遍频率与节目名，留个余味，垫乐温柔地淡出。`, dataSource: '', interactHint: '', contribute: true },
       { name: '连线夜话', desc: '深夜情感热线：听众打进电话倾诉，主播接听、倾听、回应（永远是听众打进来连线主播，不是主播打给别人）；倾诉的关系不限于爱情，亲情、友情、恩怨、剪不断理还乱的羁绊皆可', guide: `你正在主持「$1」类电台节目。这是一档深夜情感连线热线，主播开通热线电话，一通通接听打进来的听众，听他们倾诉心事、情感困扰、生活里的难处，然后回应、陪伴、开解。像深夜电台的情感热线、午夜连线节目那样，安静、亲密、有温度。
 
 【主播·交给世界观】主播是这档热线的接线人，但具体是什么来路、什么性子、什么口吻，完全按世界观设定和主播本人来，自由发挥——可以是温柔沉静、很会倾听的人，可以是嘴硬心软、毒舌却戳心的人，可以是阅历深、三言两语点醒人的人，也可以是别的任何样子。这档节目只要求"他在认真接听、回应打进来的听众"。
@@ -6520,7 +6520,7 @@ function _refreshCalBanner() {
 节目结构（半固定，保持狗血剧场的戏剧调性）：
 1. 开场：戏剧化的垫乐渐起，主播用带着悬念和兴致的口吻开场，念出频率与节目名，报出当前日期，撂下一句足够吊胃口、勾人往下听的开场白，把听众的好奇心一下子拎起来。开场白的具体说法你自己想，要有钩子、有戏味，别平铺直叙地报幕。
 2. 正文：一个接一个讲狗血故事。每个故事讲得有起承转合、有反转高潮，故事之间用主播的串场和吐槽衔接，视节奏穿插玩法环节。
-3. 结尾：主播讲完最后一个故事，用幽默的吐槽夸张的感慨收尾，再报一遍频率与节目名，留个余味，片尾垫乐渐起。`, dataSource: '', interactHint: 'vote', plays: ['vote', 'mail', 'lottery'], connectMaterial: true, fixedNext: { name: '人间剧场', desc: '再给您讲几出比戏还离奇的人间大戏，那些爱恨纠葛、恩怨情仇，下期接着唠。' } },
+3. 结尾：主播讲完最后一个故事，用幽默的吐槽夸张的感慨收尾，再报一遍频率与节目名，留个余味，片尾垫乐渐起。`, dataSource: '', interactHint: 'vote', plays: ['vote', 'mail', 'lottery'], contribute: true, connectMaterial: true, fixedNext: { name: '人间剧场', desc: '再给您讲几出比戏还离奇的人间大戏，那些爱恨纠葛、恩怨情仇，下期接着唠。' } },
       { name: '吐槽之夜', desc: '黑色幽默与地狱笑话结合的脱口秀吐槽大会，集搞笑、讽刺、阴阳怪气于一体，把家庭、友情、爱情、职场等尖锐话题用幽默解构开来', guide: `你正在主持「$1」类电台节目。这是一档脱口秀式的吐槽大会——像《吐槽大会》的电台版，没有肢体动作，纯粹的语言节目。黑色幽默 + 地狱笑话 + 阴阳怪气，搞笑是壳，讽刺是核。
 
 【调性·最重要】黑色幽默与地狱笑话的结合体
@@ -6558,7 +6558,7 @@ function _refreshCalBanner() {
 节目结构（半固定，保持脱口秀的明快调性）：
 1. 开场：轻快的垫乐渐起，主播以热场的口吻开场，念出频率与节目名，报出当前日期，简单铺垫现场气氛先炒热。
 2. 正文：一段完整的脱口秀，铺垫加包袱、有炸点，素材之间用主播的串场或接梗衔接，视节奏穿插玩法环节。
-3. 结尾：主播讲完最后一个部分，用合理方式过渡到结尾，最后再报一遍频率与节目名，片尾垫乐渐起。`, dataSource: '', interactHint: 'vote', plays: ['vote', 'mail', 'lottery'], fixedNext: { name: '今夜吐槽', desc: '再开一场痛快的吐槽大会，那些离谱事、糟心人，下期接着唠。' } },
+3. 结尾：主播讲完最后一个部分，用合理方式过渡到结尾，最后再报一遍频率与节目名，片尾垫乐渐起。`, dataSource: '', interactHint: 'vote', plays: ['vote', 'mail', 'lottery'], contribute: true, fixedNext: { name: '今夜吐槽', desc: '再开一场痛快的吐槽大会，那些离谱事、糟心人，下期接着唠。' } },
       { name: '情感咨询', desc: '专业向答疑，给方法和建议；不限于爱情，亲子、朋友、同事、各种人际关系的难题都可咨询', guide: `你正在主持「$1」类电台节目。这是一档专业向的情感与关系答疑电台——听众带着具体的情感困惑、关系难题来求助，主播以专业咨询师的身份，条理清晰地帮 ta 分析问题、拆解症结、给出可操作的方法和建议。像那种情感专家坐镇的答疑热线、心理咨询科普节目，听众听完能真的"学到点什么、知道下一步怎么办"。
 
 主播口吻专业、理性、沉稳，是个有专业素养的情感/关系咨询师——共情但不滥情，温和但有判断，能一针见血地指出问题所在，又能给出落地的建议。不灌鸡汤、不和稀泥、不替听众做决定，而是帮 ta 把问题看清楚、把选项理明白，把决定权交还给 ta 自己。说话有逻辑、有层次，让人信服。
@@ -6618,7 +6618,7 @@ function _refreshCalBanner() {
 - 若有嘉宾，可作为另一个声音，偶尔追问、惊呼、补充细节，配合主播把故事讲得更有临场感，但别盖过主播的主线叙述。
 - 一期一个故事，不少于 2000 字。把诡异的氛围铺满，写出那种步步紧逼的寒意，绝不草草了事。
 
-【保密红线】这是公开播出的节目。世界观资料里那些隐秘内幕、机密真相、暗面设定等不可公开的内容，绝不能借怪谈故事讲出来。涉及主线相关角色的私事也不要点名——可以有"听起来像某地某事"的影子，但不指名、不揭底。故事主角原则上是新编的普通人，不要硬安成主线 NPC。`, dataSource: '', interactHint: '' },
+【保密红线】这是公开播出的节目。世界观资料里那些隐秘内幕、机密真相、暗面设定等不可公开的内容，绝不能借怪谈故事讲出来。涉及主线相关角色的私事也不要点名——可以有"听起来像某地某事"的影子，但不指名、不揭底。故事主角原则上是新编的普通人，不要硬安成主线 NPC。`, dataSource: '', interactHint: '', contribute: true },
       { name: '长夜连载', desc: '长篇怪谈连载，分集播出，留悬念', guide: `你正在主持「$1」类电台节目。这是一档深夜怪谈连载节目，主播把一个长篇怪谈故事拆成数集，每晚讲一集，集集留悬念，吊着听众等下一夜。
 
 【节目形式·核心】长篇连载，分集播出：
@@ -11716,7 +11716,7 @@ async function _renderVideo(pd) {
   async function _videoShowMakeForm(cat, opts) {
     const adaptBook = opts && opts.adaptFrom ? opts.adaptFrom : null;
     const GENRES_MOVIE = ['科幻','动作','爱情','悬疑','恐怖','喜剧','剧情','战争','历史','犯罪','奇幻','纪录','音乐'];
-    const GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','喜剧','青春'];
+    const GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','奇幻','喜剧','青春'];
     const GENRES_ANIME = ['热血','恋爱','日常','奇幻','异世界','科幻','悬疑','治愈','校园','战斗','搞笑','古风','魔法少女','运动','偶像'];
     const GENRES = cat === 'tv' ? GENRES_TV : (cat === 'anime' ? GENRES_ANIME : GENRES_MOVIE);
     let selGenre = '';
@@ -13836,7 +13836,7 @@ ${timeDeclare}${kwLine}
 
     // 规范化
     const GENRES_MOVIE = ['科幻','动作','爱情','悬疑','恐怖','喜剧','剧情','战争','历史','犯罪','奇幻','纪录','音乐'];
-    const GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','喜剧','青春'];
+    const GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','奇幻','喜剧','青春'];
     const GENRES_ANIME = ['热血','恋爱','日常','奇幻','异世界','科幻','悬疑','治愈','校园','战斗','搞笑','古风','魔法少女','运动','偶像'];
     const GENRES = cat === 'tv' ? GENRES_TV : cat === 'anime' ? GENRES_ANIME : GENRES_MOVIE;
     const genreDefault = cat === 'tv' ? '都市' : cat === 'anime' ? '日常' : '剧情';
@@ -14106,7 +14106,7 @@ ${fields}
     const isAnime = cat === 'anime';
     const catNoun = cat === 'tv' ? '电视剧' : isAnime ? '动画' : '电影';
     const GENRES_MOVIE = ['科幻','动作','爱情','悬疑','恐怖','喜剧','剧情','战争','历史','犯罪','奇幻','纪录','音乐'];
-    const GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','喜剧','青春'];
+    const GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','奇幻','喜剧','青春'];
     const GENRES_ANIME = ['热血','恋爱','日常','奇幻','异世界','科幻','悬疑','治愈','校园','战斗','搞笑','古风','魔法少女','运动','偶像'];
     const GENRES = cat === 'tv' ? GENRES_TV : isAnime ? GENRES_ANIME : GENRES_MOVIE;
     const genreDefault = cat === 'tv' ? '都市' : isAnime ? '日常' : '剧情';
@@ -14369,7 +14369,7 @@ ${itemFields}
   // 剧本主类型枚举（与 _videoGenList 的 GENRES 保持一致）
   const _VIDEO_GENRES = ['科幻','动作','爱情','悬疑','恐怖','喜剧','剧情','战争','历史','犯罪','奇幻','纪录','音乐'];
   // 剧集主类型枚举（占位，待剧集生成逻辑接入时启用）
-  const _VIDEO_GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','喜剧','青春'];
+  const _VIDEO_GENRES_TV = ['古偶','现偶','都市','古装','悬疑','犯罪','家庭','历史','战争','武侠','科幻','奇幻','喜剧','青春'];
   // 动漫主类型枚举（占位，待动漫生成逻辑接入时启用）
   const _VIDEO_GENRES_ANIME = ['热血','恋爱','日常','奇幻','异世界','科幻','悬疑','治愈','校园','战斗','搞笑','古风','魔法少女','运动','偶像'];
   // ===== 封面图池（编号 + 标签映射，一张图可挂多个标签跨分类复用）=====
@@ -23720,7 +23720,9 @@ ${digest}
       const subject = (mask.querySelector('#ewf-subject').value || '').trim();
       const sign = (mask.querySelector('#ewf-sign').value || '').trim();
       mask.remove();
-      if (isEdit) {
+      if (typeof opts.onSend === 'function') {
+        await opts.onSend({ party, subject, body, sign });
+      } else if (isEdit) {
         await _emailSaveEdit(opts.threadId, opts.letterId, subject, body, sign);
       } else if (isReply) {
         await _emailSendReply(opts.threadId, subject, body, sign);
@@ -30233,6 +30235,109 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
     }
     return false;
   }
+  // ===== 听众投稿玩法（contribute）=====
+  // 常驻通道（非 AI 锚点玩法）：接受投稿的台，正文尾部常驻"我要投稿"入口 → 跳邮箱写信、
+  // 收件人锁定为台名 → 寄出后除进邮箱线程外，另存进 pd.radioSubmissions[台名] 队列。
+  // 下一期该台生成正文时，取队列最早 1 条拼素材块注入 prompt（优先当本期素材），生成成功后消费删除。
+  const _RADIO_SUBMISSION_MAX = 5; // 每台队列上限，超挤最旧
+  // 本期是否接受投稿（任一标签标了 contribute:true）
+  function _radioAcceptContribute(prog) {
+    const tags = Array.isArray(prog.tags) ? prog.tags : [];
+    for (const catId of Object.keys(_RADIO_TAGS)) {
+      for (const t of _RADIO_TAGS[catId]) {
+        if (tags.includes(t.name) && t.contribute) return true;
+      }
+    }
+    return false;
+  }
+  // 存一条玩家投稿到某台队列（超上限挤最旧）
+  async function _radioAddSubmission(stationName, sub) {
+    const st = String(stationName || '').trim();
+    if (!st || !sub) return;
+    const pd = await _getPhoneData();
+    if (!pd.radioSubmissions || typeof pd.radioSubmissions !== 'object') pd.radioSubmissions = {};
+    const q = Array.isArray(pd.radioSubmissions[st]) ? pd.radioSubmissions[st] : [];
+    q.push({
+      subject: String(sub.subject || '').trim(),
+      body: String(sub.body || '').trim(),
+      sign: String(sub.sign || '').trim(),
+      gameTime: String(sub.gameTime || '').trim(),
+      createdAt: Date.now()
+    });
+    // 超上限：从头挤掉最旧
+    while (q.length > _RADIO_SUBMISSION_MAX) q.shift();
+    pd.radioSubmissions[st] = q;
+    await _savePhoneData();
+  }
+  // 取某台最早一条投稿（不删除，仅读；prog 命中的第一个台名用 prog.name/showName 兜底）
+  function _radioPeekSubmission(pd, stationName) {
+    try {
+      const st = String(stationName || '').trim();
+      if (!st) return null;
+      const q = (pd && pd.radioSubmissions && Array.isArray(pd.radioSubmissions[st])) ? pd.radioSubmissions[st] : [];
+      return q.length ? q[0] : null;
+    } catch (_) { return null; }
+  }
+  // 消费（删除）某台最早一条投稿
+  async function _radioConsumeSubmission(stationName) {
+    const st = String(stationName || '').trim();
+    if (!st) return;
+    const pd = await _getPhoneData();
+    if (!pd.radioSubmissions || !Array.isArray(pd.radioSubmissions[st]) || !pd.radioSubmissions[st].length) return;
+    pd.radioSubmissions[st].shift();
+    if (!pd.radioSubmissions[st].length) delete pd.radioSubmissions[st];
+    await _savePhoneData();
+  }
+  // 投稿素材块：接受投稿的台，若队列有玩家来稿，取最早 1 条拼成注入块（优先当本期素材）
+  async function _radioContributeBlock(prog) {
+    try {
+      if (!_radioAcceptContribute(prog)) return '';
+      const st = String((prog.stationName || prog.name || '') ).trim();
+      if (!st) return '';
+      const pd = await _getPhoneData();
+      const sub = _radioPeekSubmission(pd, st);
+      if (!sub || !sub.body) return '';
+      const subjLine = sub.subject ? ('主题：' + sub.subject + '\n') : '';
+      const signLine = sub.sign ? ('\n（落款：' + sub.sign + '）') : '';
+      return `【本期听众来稿（真实投稿，务必优先采用）】
+本台收到了一封听众通过邮箱寄来的真实投稿。请把它作为本期节目的核心素材——念读这封来稿、就它展开讲述/回应/点评，让投稿人听到自己的信被主播读了出来。这封投稿的优先级高于你自行虚构的内容：
+
+${subjLine}${sub.body}${signLine}
+
+【处理要求】
+- 把这封来稿作为本期的主素材自然融入节目（念信、复述、就其展开），贴合本档节目的调性与形式。
+- 保护隐私与保密红线：不泄露世界观暗面/机密，涉及主线角色私事不点名。
+- 若来稿内容与本档调性差距过大，可在保留其核心的前提下适度调整呈现方式，但不要完全抛开它另起炉灶。`;
+    } catch (_) { return ''; }
+  }
+  // 打开投稿写信：收件人锁定为本台名（不经收件人选择器），寄出后进邮箱线程 + 存投稿队列
+  async function _radioContributeCompose(prog) {
+    try {
+      const st = String((prog && (prog.name)) || '').trim();
+      if (!st) { UI.showToast('电台信息缺失', 1500); return; }
+      const party = { name: st, source: 'radio', avatar: (prog && prog.cover) || '' };
+      // 投稿默认主题 = 下期预告节目名（投稿供下一期采用，主题对齐避免用户跑题）
+      let _defSubj = '';
+      try { const nx = _radioNextPreviewOf(prog); if (nx && nx.name) _defSubj = nx.name; } catch (_) {}
+      _emailShowWriteForm({
+        party,
+        isReply: false,
+        defaultSubject: _defSubj,
+        onSend: async ({ subject, body, sign }) => {
+          // 1) 正常进邮箱线程（玩家能在邮箱看到自己投过的稿）
+          try { await _emailSendNew(party, subject, body, sign); } catch (_) {}
+          // 2) 存进该台投稿队列，供下期节目读取
+          let gameTime = '';
+          try { const sb = Conversations.getStatusBar(); gameTime = (sb && sb.time) ? String(sb.time) : ''; } catch (_) {}
+          await _radioAddSubmission(st, { subject, body, sign, gameTime });
+          UI.showToast('投稿已寄出，下一期节目主播可能会读到', 2200);
+        }
+      });
+    } catch (e) {
+      console.warn('[Phone] 电台投稿失败', e);
+      UI.showToast('投稿失败', 1500);
+    }
+  }
   // 本期是否需要"真名熟人点歌素材"（任一标签标了 songDedication:true，如随心点播）。
   // 跟 connectMaterial 不同：那个要匿名改写成路人，这个反过来——让 NPC 真名出场来点歌。
   function _radioNeedSongDedication(prog) {
@@ -31228,6 +31333,9 @@ ${parts.join('\n\n')}`;
     // 熟人点歌素材块：仅标了 songDedication 的标签（随心点播）注入，随机两个 NPC + 经历，供真名出场点歌
     let songDedicationBlock = '';
     try { songDedicationBlock = await _radioSongDedicationBlock(prog); } catch (_) {}
+    // 听众投稿素材块：接受投稿的台（contribute:true），若队列有玩家来稿，取最早 1 条注入（优先当本期素材）
+    let contributeBlock = '';
+    try { contributeBlock = await _radioContributeBlock(prog); } catch (_) {}
     const _hasShowName = !!(prog.showName || '').trim();
     const showName = _hasShowName ? prog.showName : (prog.name || '本期节目');
     const showDesc = (prog.intro || '').trim();
@@ -31343,6 +31451,7 @@ ${castBlock}
 ${guide || '请根据节目信息与世界观资料，生成一期风格契合、内容充实的电台节目正文。'}
 ${connectBlock ? '\n' + connectBlock + '\n' : ''}
 ${songDedicationBlock ? '\n' + songDedicationBlock + '\n' : ''}
+${contributeBlock ? '\n' + contributeBlock + '\n' : ''}
 ${renewBlock ? '\n' + renewBlock + '\n' : ''}
 ${nextBlock}
 ${playsBlock ? '\n' + playsBlock + '\n' : ''}
@@ -33200,6 +33309,12 @@ const hostLine = `主播 ${Utils.escapeHtml(_radioDisplayName(p.dj) || '匿名')
           <div class="phone-radio-detail-interact" id="phone-radio-detail-interact">
             <!-- 互动玩法占位：投票/点歌/抽奖/连线 -->
           </div>
+          <div class="phone-radio-detail-contribute" id="phone-radio-detail-contribute" style="${_radioAcceptContribute(p) && bodyRaw && !_radioHasPendingInteract(bodyRaw) ? '' : 'display:none'};padding:14px 16px 4px">
+            <button type="button" id="phone-radio-contribute-btn" style="width:100%;padding:12px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              我要投稿
+            </button>
+          </div>
           <div class="phone-radio-detail-sync" id="phone-radio-detail-sync" style="${_radioIsNewsTag(p) && bodyRaw && !_radioHasPendingInteract(bodyRaw) ? '' : 'display:none'};padding:14px 16px 24px">
             <button type="button" id="phone-radio-sync-btn" style="width:100%;padding:12px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
@@ -33252,6 +33367,9 @@ const hostLine = `主播 ${Utils.escapeHtml(_radioDisplayName(p.dj) || '匿名')
     // 同步至主线按钮：弹句子级勾选面板
     const syncBtn = overlay.querySelector('#phone-radio-sync-btn');
     if (syncBtn) syncBtn.onclick = () => _radioSyncToMainline(p);
+    // 我要投稿按钮：跳邮箱写信、收件人锁定为本台名
+    const contribBtn = overlay.querySelector('#phone-radio-contribute-btn');
+    if (contribBtn) contribBtn.onclick = () => _radioContributeCompose(p);
     // 跳过动画：停止逐句朗读/推进，一次性显示全部内容
     const skipBtn = overlay.querySelector('#phone-radio-skip');
     if (skipBtn) {
@@ -33384,6 +33502,8 @@ const hostLine = `主播 ${Utils.escapeHtml(_radioDisplayName(p.dj) || '匿名')
         if (p._updateBackup) delete p._updateBackup; // 续期成功：清掉回滚备份
         _radioArchiveEpisode(p); // 本期生成成功即归档进历史（去重），保证听过的每期都能在历史里回放
         try { await _radioPersistBody(catId, idx, -1, body); } catch (_) {}
+        // 本期已把队列最早 1 条投稿作为素材喂给 AI 生成，消费掉（下期不再重复读）
+        try { if (_radioAcceptContribute(p)) await _radioConsumeSubmission(p.name); } catch (_) {}
         // 生成了详情正文的台 → 加入「我的」订阅
         try { await _radioSubscribeStation(catId, p); } catch (_) {}
         if (stillOpen) {
@@ -33393,6 +33513,8 @@ const hostLine = `主播 ${Utils.escapeHtml(_radioDisplayName(p.dj) || '匿名')
           if (hintEl) hintEl.textContent = '点击播放按钮开始';
           const syncWrap = overlay.querySelector('#phone-radio-detail-sync');
           if (syncWrap) syncWrap.style.display = (_radioIsNewsTag(p) && !_radioHasPendingInteract(body)) ? '' : 'none';
+          const contribWrap = overlay.querySelector('#phone-radio-detail-contribute');
+          if (contribWrap) contribWrap.style.display = (_radioAcceptContribute(p) && !_radioHasPendingInteract(body)) ? '' : 'none';
           _radioRevealInit(overlay);
           if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = ''; playBtn.style.pointerEvents = ''; }
         }
