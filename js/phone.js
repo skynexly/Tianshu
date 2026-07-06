@@ -40241,14 +40241,15 @@ async function _showGroupPhotoDetail(groupId, msgId) {
   if (!msg) return;
   const old = document.getElementById('phone-photo-detail-overlay');
   if (old) old.remove();
-  // 真实图直接展示
-  if (msg.type === 'real_image' && msg.imageBase64) {
+  // 真实图直接展示（优先原图，焚后回落缩略图）
+  const _detailSrc = msg.imageBase64 || msg.imageThumb;
+  if (msg.type === 'real_image' && _detailSrc) {
     const overlay = document.createElement('div');
     overlay.id = 'phone-photo-detail-overlay';
     overlay.className = 'phone-inner-modal';
     overlay.innerHTML = `<div class="modal-content phone-photo-detail-card">
       <button class="phone-photo-detail-close" onclick="document.getElementById('phone-photo-detail-overlay').remove()" aria-label="关闭">×</button>
-      <div class="phone-photo-detail-image-wrap"><img class="phone-photo-detail-image" src="${Utils.escapeHtml(msg.imageBase64)}" alt="图片" /></div>
+      <div class="phone-photo-detail-image-wrap"><img class="phone-photo-detail-image" src="${Utils.escapeHtml(_detailSrc)}" alt="图片" /></div>
       ${msg.photoDesc ? `<div class="phone-photo-detail-img-caption">${Utils.escapeHtml(msg.photoDesc)}</div>` : ''}
     </div>`;
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
@@ -40481,9 +40482,11 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
   // 图片气泡（相册照片 / 本地真图 / AI虚拟图）
   if (m.type === 'photo' || m.type === 'real_image') {
     const isAiImage = m.mode === 'ai_image' && m.imageId;
-    const isRealImage = m.type === 'real_image' && m.imageBase64;
+    // 优先用缩略图 imageThumb（识图后原图被焚，只剩缩略图）；老数据没缩略图时回落 imageBase64
+    const _realSrc = m.imageThumb || m.imageBase64;
+    const isRealImage = m.type === 'real_image' && _realSrc;
     const innerHtml = isRealImage
-      ? `<img src="${Utils.escapeHtml(m.imageBase64)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px" />`
+      ? `<img src="${Utils.escapeHtml(_realSrc)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px" />`
       : isAiImage
         ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="生成的图片" />`
         : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div>`;
@@ -41091,7 +41094,10 @@ async function _groupRequestReply(groupId) {
       for (const m of visionPending) {
         try {
           const description = await API.describeImage(m.imageBase64, '请用中文详细描述这张图片的内容，包括画面主体、场景、颜色、氛围等。');
-          if (description) { m.photoDesc = description; m.text = `[图片]${description}`; m.needsVision = false; }
+          if (description) {
+            m.photoDesc = description; m.text = `[图片]${description}`; m.needsVision = false;
+            m.imageBase64 = ''; // 阅后即焚：识图成功后删原图，气泡回落到 imageThumb 缩略图
+          }
         } catch(e) { m.text = `[图片]（识图失败）`; m.needsVision = false; }
       }
       await _savePhoneData();
@@ -44890,9 +44896,11 @@ function _renderChatThread(pd, contactId) {
         // 图片气泡（相册照片 / 本地真图）
         if (m.type === 'photo' || m.type === 'real_image') {
           const isAiImage = m.mode === 'ai_image' && m.imageId;
-          const isRealImage = m.type === 'real_image' && m.imageBase64;
+          // 优先用缩略图 imageThumb（识图后原图被焚，只剩缩略图）；老数据没缩略图时回落 imageBase64
+          const _realSrc = m.imageThumb || m.imageBase64;
+          const isRealImage = m.type === 'real_image' && _realSrc;
           const innerHtml = isRealImage
-            ? `<img src="${Utils.escapeHtml(m.imageBase64)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px" />`
+            ? `<img src="${Utils.escapeHtml(_realSrc)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px" />`
             : isAiImage
               ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="生成的图片" />`
               : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div>`;
@@ -46293,6 +46301,7 @@ async function _chatRequestReply(contactId) {
             m.photoDesc = description;
             m.text = `{{user}}发送了一张图片，图片内容为：${description}`;
             m.needsVision = false;
+            m.imageBase64 = ''; // 阅后即焚：识图成功后删原图，气泡回落到 imageThumb 缩略图
           }
         } catch(e) {
           m.text = `{{user}}发送了一张图片（识图失败：${e.message || '未知'}）`;
@@ -49157,6 +49166,9 @@ async function _onChatImagePicked(contactId, input) {
 
     let gameTime = '';
     const pd = await _getPhoneData();
+    // 缩略图：气泡显示用（长边512/q0.7，几十KB）。原图 base64 仅暂存供识图一次，识图后焚。
+    let thumb = '';
+    try { thumb = await Utils.compressDataUrl(base64, { maxSize: 512, quality: 0.7 }); } catch(_) { thumb = ''; }
     // 群聊分流
     if (_isGroupId(pd, contactId)) {
       if (!pd.chatThreads) pd.chatThreads = {};
@@ -49168,6 +49180,7 @@ async function _onChatImagePicked(contactId, input) {
         text: '',
         type: 'real_image',
         imageBase64: base64,
+        imageThumb: thumb,
         photoDesc: '',
         needsVision: true,
         time: gameTime,
@@ -49189,6 +49202,7 @@ async function _onChatImagePicked(contactId, input) {
       text: '',          // 刷新时才填充
       type: 'real_image',
       imageBase64: base64,
+      imageThumb: thumb, // 气泡显示用缩略图；识图后 imageBase64 会被焚，气泡回落到 thumb
       photoDesc: '',     // 刷新时才填充
       needsVision: true, // 标记：还未识图
       time: gameTime

@@ -689,6 +689,36 @@ async function copyFromDataset(btn) {
   }
 
   /**
+   * 压缩图片 dataUrl（独立可复用）。动图（gif/webp/apng）直通不压，避免被压成静态首帧。
+   * @param {string} dataUrl - 源图 dataUrl
+   * @param {Object} opts - { maxSize=800, quality=0.8, outputFormat='jpeg' }
+   * @returns {Promise<string>} 压缩后的 dataUrl（失败则返回原图）
+   */
+  function compressDataUrl(dataUrl, opts = {}) {
+    const maxSize = opts.maxSize || 800;
+    const quality = opts.quality || 0.8;
+    const format = opts.outputFormat || 'jpeg';
+    const mimeType = `image/${format}`;
+    if (/^data:image\/(gif|webp|apng)/i.test(dataUrl || '')) return Promise.resolve(dataUrl);
+    return new Promise(res => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > maxSize || h > maxSize) {
+          if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+          else { w = Math.round(w * maxSize / h); h = maxSize; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        res(canvas.toDataURL(mimeType, quality));
+      };
+      img.onerror = () => res(dataUrl); // 压缩失败就用原图
+      img.src = dataUrl;
+    });
+  }
+
+  /**
    * 通用图片输入：弹出选择弹窗（本地文件 / 粘贴URL）
    * @param {Object} opts - 选项
    * @param {number} opts.maxSize - 压缩后最大尺寸(px)，默认800
@@ -733,30 +763,9 @@ async function copyFromDataset(btn) {
 
       function cleanup() { overlay.remove(); }
 
-      // 动图检测：gif/webp/apng 走 canvas 会被压成静态首帧，直接原样返回 dataUrl 保住动画
-      function isAnimDataUrl(dataUrl) {
-        return /^data:image\/(gif|webp|apng)/i.test(dataUrl || '');
-      }
-
-      // 压缩图片 dataUrl（动图直通不压）
+      // 压缩图片 dataUrl（动图直通不压）—— 复用公共 compressDataUrl
       function compress(dataUrl) {
-        if (isAnimDataUrl(dataUrl)) return Promise.resolve(dataUrl);
-        return new Promise(res => {
-          const img = new Image();
-          img.onload = () => {
-            let w = img.width, h = img.height;
-            if (w > maxSize || h > maxSize) {
-              if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
-              else { w = Math.round(w * maxSize / h); h = maxSize; }
-            }
-            const canvas = document.createElement('canvas');
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-            res(canvas.toDataURL(mimeType, quality));
-          };
-          img.onerror = () => res(dataUrl); // 压缩失败就用原图
-          img.src = dataUrl;
-        });
+        return compressDataUrl(dataUrl, { maxSize, quality, outputFormat: format });
       }
 
       // 本地文件
@@ -820,5 +829,5 @@ async function copyFromDataset(btn) {
     });
   }
 
-  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, promptImageInput };
+  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, promptImageInput, compressDataUrl };
 })();

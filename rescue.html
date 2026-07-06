@@ -118,6 +118,16 @@
       </div>
     </div>
 
+    <div class="card" style="border-color:var(--danger)">
+      <h2>🔥 深度清理·私聊/内联图片（1.7G 元凶多半在这）</h2>
+      <p class="muted" style="font-size:12px;margin-top:0">手机「私聊发图」把原图 base64 直接内联存进了聊天记录，主程序的图片管理器扫不到、也清不掉，最容易堆到 GB 级。这里深度遍历所有对话的 chatThreads 消息以及其它内联图片字段，把图片清成空串（<b>文字、聊天记录、结构全部保留，只删图</b>）。</p>
+      <div id="deepImgStat" class="muted" style="font-size:12px;margin:8px 0"></div>
+      <div class="row">
+        <button class="btn" id="btn-deepimg-scan">扫描内联图片占用</button>
+        <button class="btn danger" id="btn-deepimg-clean" disabled>清理全部内联图片</button>
+      </div>
+    </div>
+
     <div class="card">
       <h2>独立仓清理（整仓清空）</h2>
       <p class="muted" style="font-size:12px;margin-top:0">这些是与手机数据分开存放的资源。整仓清空不会影响对话主体，但会清掉对应资源（音乐/电子书/生成图/语音）。谨慎勾选。</p>
@@ -719,9 +729,104 @@ async function doExport(mode){
   }
 }
 
+// ============ 深度清理·内联图片（递归清所有 data:image） ============
+// 通用递归：遍历任意对象/数组，把值为 data:image|font 的字符串清空。
+// 返回 { freed, count }。scanOnly=true 时只统计不改。
+function deepStripImages(root, scanOnly){
+  let freed = 0, count = 0;
+  const seen = new WeakSet();
+  function walk(v, setter){
+    if (typeof v === 'string'){
+      if (/^data:(image|font|audio|video)\//i.test(v)){
+        freed += v.length; count++;
+        if (!scanOnly && setter) setter('');
+      }
+      return;
+    }
+    if (!v || typeof v !== 'object') return;
+    if (seen.has(v)) return;
+    seen.add(v);
+    if (Array.isArray(v)){
+      for (let i=0;i<v.length;i++) walk(v[i], nv => { v[i] = nv; });
+    } else {
+      for (const k in v) walk(v[k], nv => { v[k] = nv; });
+    }
+  }
+  walk(root, null);
+  return { freed, count };
+}
+
+async function deepImgScan(){
+  $('#btn-deepimg-scan').disabled = true;
+  $('#deepImgStat').innerHTML = '<span class="spin"></span> 扫描中…';
+  try {
+    if (!_db) _db = await openDB();
+    const convRec = await getOne(_db, 'gameState', 'conversations');
+    let freed = 0, count = 0;
+    if (convRec && Array.isArray(convRec.value)){
+      for (const conv of convRec.value){
+        if (!conv || !conv.phoneData) continue;
+        const r = deepStripImages(conv.phoneData, true);
+        freed += r.freed; count += r.count;
+      }
+    }
+    $('#deepImgStat').innerHTML = '发现内联图片 <b>'+count+'</b> 处，约 <b>'+fmtSize(freed)+'</b>（清理只删图，保留文字与结构）';
+    $('#btn-deepimg-clean').disabled = count === 0;
+    log('内联图片扫描：'+count+' 处，'+fmtSize(freed));
+  } catch(e){
+    $('#deepImgStat').textContent = '扫描出错，见日志。';
+    log('❌ 内联图片扫描出错：'+(e && e.message || e));
+  } finally {
+    $('#btn-deepimg-scan').disabled = false;
+  }
+}
+
+async function deepImgClean(){
+  if (!confirm('确认清理所有对话里的内联图片？只删图片，聊天记录/文字/结构全部保留。此操作不可撤销，建议已先导出存档。')) return;
+  $('#btn-deepimg-clean').disabled = true;
+  log('开始深度清理内联图片…');
+  try {
+    if (!_db) _db = await openDB();
+    const convRec = await getOne(_db, 'gameState', 'conversations');
+    if (!convRec || !Array.isArray(convRec.value)) throw new Error('找不到 conversations 记录');
+    let freed = 0, count = 0;
+    for (const conv of convRec.value){
+      if (!conv || !conv.phoneData) continue;
+      const r = deepStripImages(conv.phoneData, false);
+      if (r.count){
+        freed += r.freed; count += r.count;
+        log('  · 对话「'+(conv.name||conv.id)+'」清理图片 '+r.count+' 处，'+fmtSize(r.freed));
+      }
+    }
+    await putOne(_db, 'gameState', convRec);
+    log('conversations 已写回。');
+
+    // 顺带清冗余 phoneBackup_*（双份数据，进主程序会自动重建）
+    let bkFreed = 0, bkCount = 0;
+    await cursorEachRW(_db, 'gameState', (row, pk) => {
+      if (typeof pk === 'string' && pk.startsWith('phoneBackup_')){
+        bkFreed += sizeOf(row); bkCount++; return 'delete';
+      }
+    });
+    if (bkCount) log('清理冗余备份 '+bkCount+' 条，'+fmtSize(bkFreed));
+
+    const total = freed + bkFreed;
+    $('#deepImgStat').innerHTML = '✅ 已清理 '+count+' 处图片，释放约 '+fmtSize(total);
+    log('✅ 深度清理完成，释放约 '+fmtSize(total));
+    alert('清理完成！\n删除内联图片 '+count+' 处，释放约 '+fmtSize(total)+'。\n\n文字和聊天记录都在。现在可以返回主程序了。');
+    $('#btn-deepimg-clean').disabled = true;
+  } catch(e){
+    log('❌ 深度清理出错：'+(e && e.message || e));
+    alert('清理出错：'+(e && e.message || e));
+    $('#btn-deepimg-clean').disabled = false;
+  }
+}
+
 $('#btn-scan').addEventListener('click', scan);
 $('#btn-clean').addEventListener('click', doClean);
 $('#btn-clearstores').addEventListener('click', doClearStores);
+$('#btn-deepimg-scan').addEventListener('click', deepImgScan);
+$('#btn-deepimg-clean').addEventListener('click', deepImgClean);
 $('#btn-export-full').addEventListener('click', () => doExport('full'));
 $('#btn-export-light').addEventListener('click', () => doExport('lite'));
 $('#btn-export-text').addEventListener('click', () => doExport('text'));

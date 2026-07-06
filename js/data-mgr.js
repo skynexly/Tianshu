@@ -457,7 +457,21 @@ const DataMgr = (() => {
     { key: 'radioCover', label: '电台封面',
       scan: pd => { let s = 0; _radioCoverEach(pd, p => { s += _strBytes(p && p.cover); }); return s; },
       clear: pd => { let c = false; _radioCoverEach(pd, p => { if (p && _isDataUrl(p.cover)) { p.cover = ''; c = true; } }); return c; } },
+    // 私聊图片：chatThreads 各会话消息里的 real_image（imageBase64 原图 + imageThumb 缩略图）。
+    // 这是发图功能内联存的 base64，最容易堆到 GB 级。原图在识图后一般已被焚，这里主要清缩略图和未识图的原图。
+    { key: 'chatImages', label: '私聊图片',
+      scan: pd => { let s = 0; _chatImageEach(pd, m => { s += _strBytes(m && m.imageBase64) + _strBytes(m && m.imageThumb); }); return s; },
+      clear: pd => { let c = false; _chatImageEach(pd, m => {
+        if (m && _isDataUrl(m.imageBase64)) { m.imageBase64 = ''; c = true; }
+        if (m && _isDataUrl(m.imageThumb)) { m.imageThumb = ''; c = true; }
+      }); return c; } },
   ];
+
+  // 遍历一个 phoneData 里所有私聊/群聊消息对象（chatThreads 各会话数组），对每个调 fn。
+  function _chatImageEach(pd, fn) {
+    const threads = (pd && pd.chatThreads && typeof pd.chatThreads === 'object' && !Array.isArray(pd.chatThreads)) ? pd.chatThreads : {};
+    Object.keys(threads).forEach(k => { (Array.isArray(threads[k]) ? threads[k] : []).forEach(m => fn(m)); });
+  }
 
   // 遍历一个 phoneData 里所有视频作品对象（videoDiscover 各分类 + videoWorks，按引用去重），对每个调 fn。
   function _videoCoverEach(pd, fn) {
