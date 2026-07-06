@@ -54238,21 +54238,32 @@ async function buildHeartsimServiceChatForBackstage() {
 }
 
 // v687.33：手机快照（供回滚/分支用，剥离图片字段减小体积）
+  // 递归剥离 snap 里所有 data:image/font 字符串（快照只需文字状态，图片一律不进快照）。
+  // 之前只剥 5 个固定字段，漏掉了 chatThreads 里私聊发图的 imageBase64/imageThumb，
+  // 导致每条 AI 消息快照都固化一份大图，messages 仓雪球式膨胀到 GB 级。
+  function _stripSnapImages(root) {
+    const seen = new WeakSet();
+    function walk(v, setter) {
+      if (typeof v === 'string') {
+        if (/^data:(image|font|audio|video)\//i.test(v)) { if (setter) setter(''); }
+        return;
+      }
+      if (!v || typeof v !== 'object') return;
+      if (seen.has(v)) return;
+      seen.add(v);
+      if (Array.isArray(v)) { for (let i = 0; i < v.length; i++) walk(v[i], nv => { v[i] = nv; }); }
+      else { for (const k in v) walk(v[k], nv => { v[k] = nv; }); }
+    }
+    walk(root, null);
+    return root;
+  }
   async function getSnapshotForRollback() {
     try {
       const pd = await _getPhoneData();
       if (!pd) return null;
       const snap = JSON.parse(JSON.stringify(pd));
-      // 剥离图片 dataURL 字段（图片已进图库，不需要随快照存储）
-      if (snap.profile) snap.profile.avatar = '';
-      snap.momentsCover = '';
-      snap.wallpaper = '';
-      if (Array.isArray(snap.moments)) {
-        snap.moments.forEach(m => { if (m) m.image = ''; });
-      }
-      if (Array.isArray(snap.hsAppTargets)) {
-        snap.hsAppTargets.forEach(t => { if (t) t.avatar = ''; });
-      }
+      // 递归剥离所有内联图片 dataURL（图片已进图库/或本就不需随快照存储）
+      _stripSnapImages(snap);
       return snap;
     } catch(e) { console.warn('[Phone] getSnapshotForRollback failed', e); return null; }
   }

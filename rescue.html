@@ -128,6 +128,16 @@
       </div>
     </div>
 
+    <div class="card" style="border-color:var(--danger)">
+      <h2>🔥 深度清理·消息快照图片（messages 仓，GB 级元凶）</h2>
+      <p class="muted" style="font-size:12px;margin-top:0">每条 AI 回复都会存一份「手机数据快照」用于回滚，而旧版本快照没剥干净图片，把当时私聊里的原图一份份固化进了消息里，导致 <b>messages 仓膨胀到 GB 级</b>。这里逐条遍历所有消息，递归清掉快照及消息里的内联图片（<b>剧情正文、聊天记录全部保留，只删图</b>）。数据大时会跑较久，别关页面。</p>
+      <div id="msgImgStat" class="muted" style="font-size:12px;margin:8px 0"></div>
+      <div class="row">
+        <button class="btn" id="btn-msgimg-scan">扫描消息图片占用</button>
+        <button class="btn danger" id="btn-msgimg-clean" disabled>清理消息内联图片</button>
+      </div>
+    </div>
+
     <div class="card">
       <h2>独立仓清理（整仓清空）</h2>
       <p class="muted" style="font-size:12px;margin-top:0">这些是与手机数据分开存放的资源。整仓清空不会影响对话主体，但会清掉对应资源（音乐/电子书/生成图/语音）。谨慎勾选。</p>
@@ -257,7 +267,7 @@ function cursorEach(db, store, onRow){
     } catch(e){ reject(e); }
   });
 }
-// 游标逐条遍历（可写），onRow 返回 'delete' 则删除该条。
+// 游标逐条遍历（可写），onRow 返回 'delete' 则删除该条，返回 'update' 则用（可能被就地改过的）cur.value 更新该条。
 function cursorEachRW(db, store, onRow){
   return new Promise((resolve, reject) => {
     try {
@@ -270,6 +280,7 @@ function cursorEachRW(db, store, onRow){
           let action = null;
           try { action = onRow(cur.value, cur.primaryKey); } catch(err){}
           if (action === 'delete'){ cur.delete(); count++; }
+          else if (action === 'update'){ try { cur.update(cur.value); count++; } catch(_){} }
           cur.continue();
         } else {
           resolve(count);
@@ -822,11 +833,75 @@ async function deepImgClean(){
   }
 }
 
+// ============ 深度清理·messages 仓内联图片（快照大图元凶） ============
+// 逐条游标遍历 messages，递归剥掉每条消息里的 data:image（主要藏在 phoneSnapshot）。
+async function msgImgScan(){
+  $('#btn-msgimg-scan').disabled = true;
+  $('#msgImgStat').innerHTML = '<span class="spin"></span> 扫描中，消息多时较久…';
+  try {
+    if (!_db) _db = await openDB();
+    let freed = 0, count = 0, msgHit = 0, total = 0;
+    await cursorEach(_db, 'messages', (row) => {
+      total++;
+      const r = deepStripImages(row, true); // scanOnly
+      if (r.count){ freed += r.freed; count += r.count; msgHit++; }
+    });
+    $('#msgImgStat').innerHTML = '共 '+total+' 条消息，其中 <b>'+msgHit+'</b> 条含内联图片，图片 <b>'+count+'</b> 处，约 <b>'+fmtSize(freed)+'</b>';
+    $('#btn-msgimg-clean').disabled = count === 0;
+    log('消息图片扫描：'+total+' 条，'+msgHit+' 条含图，'+count+' 处，'+fmtSize(freed));
+  } catch(e){
+    $('#msgImgStat').textContent = '扫描出错，见日志。';
+    log('❌ 消息图片扫描出错：'+(e && e.message || e));
+  } finally {
+    $('#btn-msgimg-scan').disabled = false;
+  }
+}
+
+async function msgImgClean(){
+  if (!confirm('确认清理所有消息里的内联图片？只删图片（主要是回滚快照里的图），剧情正文和聊天记录全部保留。此操作不可撤销，建议已先导出存档。')) return;
+  $('#btn-msgimg-clean').disabled = true;
+  $('#msgImgStat').innerHTML = '<span class="spin"></span> 清理中，别关页面…';
+  log('开始清理 messages 仓内联图片…');
+  try {
+    if (!_db) _db = await openDB();
+    let freed = 0, count = 0, updated = 0;
+    // 可写游标逐条：就地剥图后返回 'update' 触发 cur.update
+    await cursorEachRW(_db, 'messages', (row) => {
+      const r = deepStripImages(row, false); // 就地清空
+      if (r.count){ freed += r.freed; count += r.count; updated++; return 'update'; }
+      return null;
+    });
+    log('已清理 '+updated+' 条消息，图片 '+count+' 处。');
+
+    // 顺带清冗余 phoneBackup_*
+    let bkFreed = 0, bkCount = 0;
+    await cursorEachRW(_db, 'gameState', (row, pk) => {
+      if (typeof pk === 'string' && pk.startsWith('phoneBackup_')){
+        bkFreed += sizeOf(row); bkCount++; return 'delete';
+      }
+    });
+    if (bkCount) log('清理冗余备份 '+bkCount+' 条，'+fmtSize(bkFreed));
+
+    const totalFreed = freed + bkFreed;
+    $('#msgImgStat').innerHTML = '✅ 已清理 '+updated+' 条消息共 '+count+' 处图片，释放约 '+fmtSize(totalFreed);
+    log('✅ 消息图片清理完成，释放约 '+fmtSize(totalFreed));
+    alert('清理完成！\n处理 '+updated+' 条消息，删除内联图片 '+count+' 处，释放约 '+fmtSize(totalFreed)+'。\n\n剧情正文、聊天记录全部保留。现在可以返回主程序了。');
+    $('#btn-msgimg-clean').disabled = true;
+  } catch(e){
+    $('#msgImgStat').textContent = '清理出错，见日志。';
+    log('❌ 消息图片清理出错：'+(e && e.message || e));
+    alert('清理出错：'+(e && e.message || e));
+    $('#btn-msgimg-clean').disabled = false;
+  }
+}
+
 $('#btn-scan').addEventListener('click', scan);
 $('#btn-clean').addEventListener('click', doClean);
 $('#btn-clearstores').addEventListener('click', doClearStores);
 $('#btn-deepimg-scan').addEventListener('click', deepImgScan);
 $('#btn-deepimg-clean').addEventListener('click', deepImgClean);
+$('#btn-msgimg-scan').addEventListener('click', msgImgScan);
+$('#btn-msgimg-clean').addEventListener('click', msgImgClean);
 $('#btn-export-full').addEventListener('click', () => doExport('full'));
 $('#btn-export-light').addEventListener('click', () => doExport('lite'));
 $('#btn-export-text').addEventListener('click', () => doExport('text'));
