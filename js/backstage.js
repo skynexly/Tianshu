@@ -148,6 +148,14 @@ const container = document.getElementById('backstage-messages');
     modal.classList.add('hidden');
   }, 220);
   isOpen = false;
+  // 最小化后显示悬浮球（仅当后台已启用，与 updateFab 条件一致）
+  try {
+    const fab = document.getElementById('backstage-fab');
+    if (fab && _getSettings().enabled) {
+      fab.classList.remove('hidden');
+      fab.classList.toggle('generating', !!isStreaming);
+    }
+  } catch(_) {}
 }
 
   // 更新发送按钮状态

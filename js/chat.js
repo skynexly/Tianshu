@@ -1440,6 +1440,33 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
  } catch(e) { console.warn('[Chat] 用户消息时间戳注入失败', e); }
  }
 
+    // 游戏模式：给最后一条 user 消息戳当前游戏时间（仿现实时间感知——时间贴用户消息最醒目，解决"问几点答错/凭氛围臆测"）
+    if (isGameMode) {
+      try {
+        const _gt = Conversations.getStatusBar()?.time || '';
+        if (_gt) {
+          let _period = '';
+          try {
+            if (typeof Calendar !== 'undefined' && Calendar.getTimePeriod && Calendar.parseAbsoluteTime) {
+              const _p = Calendar.parseAbsoluteTime(_gt);
+              if (_p) { const _pi = Calendar.getTimePeriod(_p.hour, null); if (_pi) _period = _pi.name; }
+            }
+          } catch(_) {}
+          const _tag = `[当前游戏时间：${_gt}${_period ? '（' + _period + '）' : ''}] `;
+          for (let i = historyForAPI.length - 1; i >= 0; i--) {
+            const _m = historyForAPI[i];
+            if (_m.role !== 'user') continue;
+            if (Array.isArray(_m.content)) {
+              historyForAPI[i] = { ..._m, content: _m.content.map((part, pi) => (pi === 0 && part.type === 'text') ? { ...part, text: _tag + (part.text || '') } : part) };
+            } else {
+              historyForAPI[i] = { ..._m, content: _tag + (_m.content || '') };
+            }
+            break;
+          }
+        }
+      } catch(e) { console.warn('[Chat] 游戏时间戳注入失败', e); }
+    }
+
  // 心动模拟：每轮贴近最新用户消息的数值规则提醒
  try {
  const conv = Conversations.getList()?.find(c => c.id === Conversations.getCurrent());
@@ -6282,6 +6309,11 @@ bgImage: conv?.convBgImage || '',
   }
 
   function openConvSettingsModal() {
+    // 无当前对话时不打开（否则进去也保存不了，会让人以为保存按钮坏了）
+    if (!Conversations.getCurrent()) {
+      UI.showToast('请先创建或选择一个对话');
+      return;
+    }
     // v687.17：从 modal 改为 panel 全屏
     UI.showPanel('conv-settings');
     _switchCsTab('output'); // 默认显示输出 tab

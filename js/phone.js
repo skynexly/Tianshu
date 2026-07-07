@@ -160,7 +160,7 @@ let _hasNewNotif = false;
       if (lines.length) blocks.push(`【${name}】\n${lines.join('\n')}`);
     }
     if (!blocks.length) return '';
-    return '【角色网络行为档案】以下是当前在场 / 被提及的角色在天枢城各 App 里留下的网络行为记录，供你了解 ta 们最近在网上做过什么。可自然体现，也可无视，不必强行复述。\n\n' + blocks.join('\n\n') + '\n';
+    return '【角色网络行为档案】以下是当前在场 / 被提及的角色在各 App 里留下的网络行为记录，供你了解 ta 们最近在网上做过什么。可自然体现，也可无视，不必强行复述。\n\n' + blocks.join('\n\n') + '\n';
   }
 
   // ---- 各 App 埋点抽取器：从详情数据里抽 NPC 行为写入记事本 ----
@@ -638,6 +638,25 @@ function _getGlobalAttrDefs() {
     if (!arr.length && _wvGameplayCache) arr = (_wvGameplayCache.globalAttrs || []);
     return arr.filter(a => a && a.id && (a.name || '').trim());
   } catch(_) { return []; }
+}
+
+// 统一读取货币余额：若状态栏尚未初始化该货币，用其定义的 initial 落地并返回
+// （根治「显示有钱、扣款说没钱」——显示处用 ?? initial 兜底，扣款/加钱基数从此也一致）
+function _ensureCurrencyBalance(sb, currencyId) {
+  sb.customAttrs = sb.customAttrs || {};
+  sb.customAttrs.global = sb.customAttrs.global || {};
+  const cur = sb.customAttrs.global[currencyId];
+  if (cur === undefined || cur === null || cur === '') {
+    let init = 0;
+    try {
+      const def = _getGlobalAttrDefs().find(a => a.id === currencyId);
+      if (def) init = (def.initial === '' || def.initial === undefined || def.initial === null) ? 0 : Number(def.initial);
+    } catch(_) {}
+    if (!Number.isFinite(init)) init = 0;
+    sb.customAttrs.global[currencyId] = init;
+    return init;
+  }
+  return Number(cur) || 0;
 }
 
 // 把内存 _actionLog 的当前快照持久化到当前对话的 phoneData
@@ -2017,6 +2036,23 @@ function _extractJsonArrayText(content) {
     if (dot) dot.style.display = _hasNewNotif && !_isOpen ? '' : 'none';
   }
 
+  // 对外：按当前条件同步手机悬浮球显隐（刷新/启动/切对话时调用，恢复常驻）
+  // 条件与 close() 一致：有世界观 + 未锁机 + 手机未打开 + 在聊天面板
+  function syncFab() {
+    const fab = document.getElementById('phone-fab');
+    if (!fab) return;
+    if (_isOpen) { fab.classList.add('hidden'); return; }
+    let _locked = false;
+    try { _locked = !!(typeof StatusBar !== 'undefined' && StatusBar.isPhoneLocked && StatusBar.isPhoneLocked()); } catch(_) {}
+    const chatActive = document.querySelector('#panel-chat.active');
+    if (_isAnyWorldview() && !_locked && chatActive) {
+      fab.classList.remove('hidden');
+      _updateFab();
+    } else {
+      fab.classList.add('hidden');
+    }
+  }
+
   function setNotification(flag) {
     _hasNewNotif = flag;
     _updateFab();
@@ -3167,7 +3203,7 @@ async function _doClaimTransfer(contactId, msgId, attrId, amount) {
     if (!sb) { throw new Error('状态栏不存在，请先初始化游戏属性'); }
     if (!sb.customAttrs) sb.customAttrs = {};
     if (!sb.customAttrs.global) sb.customAttrs.global = {};
-    const cur = parseFloat(sb.customAttrs.global[attrId] || 0);
+    const cur = _ensureCurrencyBalance(sb, attrId);
     const newVal = cur + amountNum;
     sb.customAttrs.global[attrId] = newVal;
     await Conversations.setStatusBar(sb);
@@ -3279,7 +3315,7 @@ async function _sellBuy(contactId, msgId) {
     const sb = Conversations.getStatusBar() || {};
     if (!sb.customAttrs) sb.customAttrs = {};
     if (!sb.customAttrs.global) sb.customAttrs.global = {};
-    const cur = parseFloat(sb.customAttrs.global[chosen.id] || 0);
+    const cur = _ensureCurrencyBalance(sb, chosen.id);
     sb.customAttrs.global[chosen.id] = cur - price;
     await Conversations.setStatusBar(sb);
     if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
@@ -7993,7 +8029,7 @@ ${shipSection}
           const sb = Conversations.getStatusBar() || {};
           sb.customAttrs = sb.customAttrs || {};
           sb.customAttrs.global = sb.customAttrs.global || {};
-          const balance = Number(sb.customAttrs.global[curId]) || 0;
+          const balance = _ensureCurrencyBalance(sb, curId);
           if (balance < priceNum) { UI.showToast(`${info.name}余额不足（需 ${priceNum}，当前 ${balance}）`, 2600); return; }
           sb.customAttrs.global[curId] = balance - priceNum;
           await Conversations.setStatusBar(sb);
@@ -9264,7 +9300,7 @@ ${shipSection}
           const sb = Conversations.getStatusBar() || {};
           sb.customAttrs = sb.customAttrs || {};
           sb.customAttrs.global = sb.customAttrs.global || {};
-          const balance = Number(sb.customAttrs.global[curId]) || 0;
+          const balance = _ensureCurrencyBalance(sb, curId);
           if (balance < priceNum) { UI.showToast(`${info.name}余额不足（需 ${priceNum}，当前 ${balance}）`, 2600); return; }
           sb.customAttrs.global[curId] = balance - priceNum;
           await Conversations.setStatusBar(sb);
@@ -15937,7 +15973,7 @@ ${lines}
       const sb = Conversations.getStatusBar() || {};
       sb.customAttrs = sb.customAttrs || {};
       sb.customAttrs.global = sb.customAttrs.global || {};
-      const balance = Number(sb.customAttrs.global[currency.id]) || 0;
+      const balance = _ensureCurrencyBalance(sb, currency.id);
       if (balance < total) { UI.showToast(`${currency.name}余额不足（需 ${total}，当前 ${balance}）`, 2600); return false; }
       sb.customAttrs.global[currency.id] = balance - total;
       await Conversations.setStatusBar(sb);
@@ -17257,7 +17293,7 @@ function _liveRankHtml(room, w) {
       if (!sb) return 0;
       if (!sb.customAttrs) sb.customAttrs = {};
       if (!sb.customAttrs.global) sb.customAttrs.global = {};
-      const cur = parseFloat(sb.customAttrs.global[attrId] || 0);
+      const cur = _ensureCurrencyBalance(sb, attrId);
       sb.customAttrs.global[attrId] = cur + amt;
       await Conversations.setStatusBar(sb);
       if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
@@ -27351,7 +27387,7 @@ ${myNotesBlock}${oldBlock}
       const sb = Conversations.getStatusBar() || {};
       sb.customAttrs = sb.customAttrs || {};
       sb.customAttrs.global = sb.customAttrs.global || {};
-      const balance = Number(sb.customAttrs.global[chosen.id]) || 0;
+      const balance = _ensureCurrencyBalance(sb, chosen.id);
       sb.customAttrs.global[chosen.id] = balance + total;
       await Conversations.setStatusBar(sb);
       if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
@@ -27747,7 +27783,7 @@ ${myNotesBlock}${oldBlock}
       const sb = Conversations.getStatusBar() || {};
       sb.customAttrs = sb.customAttrs || {};
       sb.customAttrs.global = sb.customAttrs.global || {};
-      const balance = Number(sb.customAttrs.global[chosen.id]) || 0;
+      const balance = _ensureCurrencyBalance(sb, chosen.id);
       if (balance < gift.amount) { UI.showToast(`${chosen.name}余额不足（需 ${gift.amount}，当前 ${balance}）`, 2600); return; }
       sb.customAttrs.global[chosen.id] = balance - gift.amount;
       await Conversations.setStatusBar(sb);
@@ -35513,7 +35549,7 @@ async function _openChatTransfer(contactId) {
       const sb = Conversations.getStatusBar() || {};
       sb.customAttrs = sb.customAttrs || {};
       sb.customAttrs.global = sb.customAttrs.global || {};
-      const balance = Number(sb.customAttrs.global[currencyId]) || 0;
+      const balance = _ensureCurrencyBalance(sb, currencyId);
       if (balance < amount) {
         UI.showToast(`${info.name}余额不足（需要 ${amount}，当前 ${balance}）`, 2500);
         return;
@@ -36449,8 +36485,15 @@ async function _clearMomentsCover() {
   // targetId 找不到的 newReplies 降级成新主楼，不丢内容。返回新增条数。
   function _forumMergeRefresh(post, result) {
     let added = 0;
+    // byId 同时纳入主楼和楼中楼：main -> {type:'main',main}；reply -> {type:'reply',main,reply}
+    // 这样 newReplies 的 targetId 指向某条楼中楼时，也能把新回复挂到它所属主楼下（平铺盖楼对线）
     const byId = {};
-    (post._comments || []).forEach(c => { if (c && c.id) byId[c.id] = c; });
+    (post._comments || []).forEach(c => {
+      if (c && c.id) byId[c.id] = { type: 'main', main: c };
+      (Array.isArray(c && c.replies) ? c.replies : []).forEach(rp => {
+        if (rp && rp.id) byId[rp.id] = { type: 'reply', main: c, reply: rp };
+      });
+    });
 
     // 1) 新主楼（可自带 replies）
     const newComments = Array.isArray(result.newComments) ? result.newComments
@@ -36461,11 +36504,15 @@ async function _clearMomentsCover() {
     const newReplies = Array.isArray(result.newReplies) ? result.newReplies : [];
     newReplies.forEach(rp => {
       if (!rp || !rp.content) return;
-      const tgt = byId[rp.targetId];
-      if (tgt) {
-        if (!Array.isArray(tgt.replies)) tgt.replies = [];
-        const obj = { username: rp.username || '匿名', isNpc: !!rp.isNpc, content: rp.content, time: rp.time || '', likes: parseInt(rp.likes, 10) || 0, replyToName: (rp.replyToName || '').trim() };
-        tgt.replies.push(obj);
+      const hit = byId[rp.targetId];
+      if (hit) {
+        const mainC = hit.main; // 命中楼中楼时也挂到它所属主楼的 replies（楼中楼平铺，不再向下嵌套）
+        if (!Array.isArray(mainC.replies)) mainC.replies = [];
+        // 命中的是楼中楼且 AI 没填 replyToName 时，自动填被回复者网名，体现"接话对线"
+        let toName = (rp.replyToName || '').trim();
+        if (hit.type === 'reply' && !toName) toName = (hit.reply.username || '').trim();
+        const obj = { id: _forumNewCommentId(), username: rp.username || '匿名', isNpc: !!rp.isNpc, content: rp.content, time: rp.time || '', likes: parseInt(rp.likes, 10) || 0, replyToName: toName };
+        mainC.replies.push(obj);
         added++;
       } else {
         // targetId 不存在 → 降级成新主楼
@@ -40866,7 +40913,7 @@ async function _openGroupRedPacketSend(groupId) {
       const sb = Conversations.getStatusBar() || {};
       sb.customAttrs = sb.customAttrs || {};
       sb.customAttrs.global = sb.customAttrs.global || {};
-      const balance = Number(sb.customAttrs.global[currencyId]) || 0;
+      const balance = _ensureCurrencyBalance(sb, currencyId);
       if (balance < amount) { UI.showToast(`${info.name}余额不足（需要 ${amount}，当前 ${balance}）`, 2500); return; }
       sb.customAttrs.global[currencyId] = balance - amount;
       await Conversations.setStatusBar(sb);
@@ -40951,7 +40998,7 @@ async function _openGroupRedPacket(groupId, msgId) {
       const sb = Conversations.getStatusBar() || {};
       sb.customAttrs = sb.customAttrs || {};
       sb.customAttrs.global = sb.customAttrs.global || {};
-      const cur = Number(sb.customAttrs.global[msg.rpCurrencyId]) || 0;
+      const cur = _ensureCurrencyBalance(sb, msg.rpCurrencyId);
       sb.customAttrs.global[msg.rpCurrencyId] = cur + amount;
       await Conversations.setStatusBar(sb);
       if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
@@ -51455,7 +51502,7 @@ async function _youyuHandleBuy(data) {
     const sb = Conversations.getStatusBar() || {};
     if (!sb.customAttrs) sb.customAttrs = {};
     if (!sb.customAttrs.global) sb.customAttrs.global = {};
-    const cur = parseFloat(sb.customAttrs.global[currencyId] || 0);
+    const cur = _ensureCurrencyBalance(sb, currencyId);
     sb.customAttrs.global[currencyId] = cur + price;
     await Conversations.setStatusBar(sb);
     if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
@@ -53464,7 +53511,7 @@ ${fullCtx}`;
           const sb = Conversations.getStatusBar() || {};
           sb.customAttrs = sb.customAttrs || {};
           sb.customAttrs.global = sb.customAttrs.global || {};
-          const balance = Number(sb.customAttrs.global[payResult.currencyId]) || 0;
+          const balance = _ensureCurrencyBalance(sb, payResult.currencyId);
           if (balance < priceNum) {
             UI.showToast(`${payResult.currencyName}余额不足（需要 ${priceNum}，当前 ${balance}）`, 2500);
             return;
@@ -54318,7 +54365,7 @@ async function buildHeartsimServiceChatForBackstage() {
 
 // ===== 对外接口 =====
   return {
-    open, close, minimize, goHome, goBack, openApp, isOpen,
+    open, close, minimize, goHome, goBack, openApp, isOpen, syncFab,
     setNotification, recordLocation,
     buildPhoneDataForAI, _buildFullContext, _parsePhoneJsonArray, _parsePhoneJsonObject, _phoneExtractContent, _radioEchoBlockForForum, _readingEchoBlockForForum, _videoEchoBlockForForum, _liveEchoBlockForForum, _radioDetailBlockForPost, _readingDetailBlockForPost,
 buildHeartsimAppFavorForBackstage,

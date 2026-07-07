@@ -184,9 +184,33 @@ window.FabDrag = (function() {
     });
   }
 
+  // ===== 全局显隐总开关（用户偏好，存 localStorage，跨对话）=====
+  // 用独立 class fab-force-hidden 叠加，不动各 fab 自身的 hidden 业务逻辑：
+  //   业务逻辑决定"逻辑上该不该显示"，本开关决定"用户允不允许显示"，两者与关系。
+  const VISIBLE_KEY = 'fab_visible';
+
+  function isVisible() {
+    // 默认显示（只有显式存了 '0' 才隐藏）
+    return localStorage.getItem(VISIBLE_KEY) !== '0';
+  }
+
+  // 按当前开关刷新三个 fab 的强制隐藏态
+  function apply() {
+    const hide = !isVisible();
+    document.querySelectorAll('.floating-fab').forEach(el => {
+      el.classList.toggle('fab-force-hidden', hide);
+    });
+  }
+
+  function setVisible(v) {
+    try { localStorage.setItem(VISIBLE_KEY, v ? '1' : '0'); } catch(_) {}
+    apply();
+  }
+
   // 初始化
   function init() {
     attachAll();
+    apply();
     window.addEventListener('resize', _onResize);
     window.addEventListener('orientationchange', _onResize);
   }
@@ -197,5 +221,5 @@ window.FabDrag = (function() {
     init();
   }
 
-  return { attach, attachAll, init };
+  return { attach, attachAll, init, isVisible, setVisible, apply };
 })();

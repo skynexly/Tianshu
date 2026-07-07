@@ -17,14 +17,33 @@ const UI = (() => {
        await new Promise(r => setTimeout(r, 120));
        menu.classList.remove('closing');
        menu.classList.add('hidden');
-    } else {
+      } else {
         // 打开
         menu.classList.remove('closing', 'hidden');
         // 打开时刷新条件显示的菜单项，避免状态不同步导致"若隐若现"
         try { if (typeof SingleMode !== 'undefined' && SingleMode.updateMenuVisibility) SingleMode.updateMenuVisibility(); } catch(_) {}
         try { if (typeof Gaiden !== 'undefined' && Gaiden.updateMenuVisibility) Gaiden.updateMenuVisibility(); } catch(_) {}
+        try { _syncFabMenuItem(); } catch(_) {}
       }
     }
+
+  // 悬浮球显隐总开关：切换 + 刷新菜单项文字
+  function toggleFabVisible() {
+    try {
+      if (typeof FabDrag === 'undefined') return;
+      FabDrag.setVisible(!FabDrag.isVisible());
+      _syncFabMenuItem();
+    } catch(_) {}
+  }
+
+  // 同步烤串菜单里悬浮球开关项的文字/图标（显示态 => "隐藏悬浮球"，隐藏态 => "显示悬浮球"）
+  function _syncFabMenuItem() {
+    const btn = document.getElementById('fab-visible-menu-btn');
+    if (!btn) return;
+    const visible = (typeof FabDrag !== 'undefined') ? FabDrag.isVisible() : true;
+    const label = btn.querySelector('.fab-menu-label');
+    if (label) label.textContent = visible ? '隐藏悬浮球' : '显示悬浮球';
+  }
   
     async function toggleTokenPopup() {
       const popup = document.getElementById('token-popup');
@@ -1245,6 +1264,7 @@ function showToast(text, duration = 4500) {
     showSimpleInput, closeSimpleInput, confirmSimpleInput, showNameDescInput,
     showConfirm, showAlert, showCopyText, showToast,
     openGlobalSearch, closeGlobalSearch, _globalSearchDebounced, _jumpToMessage,
-    setMaskEditFrom, toggleLockBackGesture, initLockBackGestureToggle
+    setMaskEditFrom, toggleLockBackGesture, initLockBackGestureToggle,
+    toggleFabVisible
   };
 })();

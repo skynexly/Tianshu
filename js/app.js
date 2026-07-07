@@ -75,6 +75,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
   // 总结convId初始化
   try { Summary.setConvId(Conversations.getCurrent()); } catch(e) { console.error('[Summary]', e); }
 
+  // 后台悬浮球：刷新/启动时按当前对话是否开启后台恢复显示（切对话时由 conversations 调，这里补启动一次）
+  try { if (typeof Backstage !== 'undefined' && Backstage.updateFab) Backstage.updateFab(); } catch(e) { console.error('[Backstage.updateFab]', e); }
+  // 手机悬浮球：刷新/启动时按当前条件恢复显示（有世界观+未锁机+聊天页），实现常驻
+  try { if (typeof Phone !== 'undefined' && Phone.syncFab) Phone.syncFab(); } catch(e) { console.error('[Phone.syncFab]', e); }
+
   // 长按菜单
   try { Chat.initLongPress(); } catch(e) { console.error('[LongPress]', e); }
 
@@ -175,17 +180,14 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v705.5';
-    const CHANGELOG = `【v705.5 更新内容】
-🖼️ 线上私聊支持发图换头像
-○ 在私聊里给角色发一张图片，并让 ta 换成这张头像，角色会自己判断并换上
-○ 一次发多张图时，可以指定用第几张
-○ 换的是角色本身的头像，聊天页、状态栏、侧边栏都会同步更新
-📞 视频通话立绘支持动图 / 网络链接
-○ 视频通话立绘现在可以用 GIF 等动图，也能直接贴图片 URL
-
-【v705.4 更新内容】
-🐛 修复若干界面按钮被输入框挤出屏幕的问题（主题、API Key、后台输入等）`;
+const APP_VERSION = 'v705.7';
+    const CHANGELOG = `【v705.7 更新内容】
+📖 世界书常驻条目支持导入 docx / txt 文档
+○ 用 --- 分隔线分段，一段导入一条常驻知识
+✨ 悬浮球可在右上角菜单选择显示 / 隐藏，刷新后保持
+○ 手机、番外、后台三个悬浮球现在都能常驻，刷新页面不再消失
+🐛 修复自定义历法开场时间保存后变成 0:00 的问题
+🔧 调整了部分提示词`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

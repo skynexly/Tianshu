@@ -503,7 +503,7 @@ const SingleCard = (() => {
 
   async function deleteCurrent() {
     if (!_editingId) return;
-    const ok = await UI.confirm('确定删除这个角色？相关对话不会被删除，但角色资料会丢失');
+    const ok = await UI.showConfirm('删除角色', '确定删除这个角色？相关对话不会被删除，但角色资料会丢失');
     if (!ok) return;
     await remove(_editingId);
     // 兼容新旧入口
@@ -579,7 +579,7 @@ const SingleCard = (() => {
   function importCard() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,.png,application/json,image/png';
+    input.accept = '.json,application/json';
     input.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -607,7 +607,8 @@ const SingleCard = (() => {
         }
         let parsed;
         if (file.name.toLowerCase().endsWith('.png') || file.type === 'image/png') {
-          parsed = await _parsePngCard(file);
+          UI.showToast('暂不支持导入 PNG 角色卡，请使用 JSON 格式', 3500);
+          return;
         } else {
           const text = await file.text();
           parsed = _parseJsonCard(text);

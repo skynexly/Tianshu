@@ -74,15 +74,18 @@ const Calendar = (() => {
   function parseAbsoluteTime(str) {
     if (!str || typeof str !== 'string') return null;
     str = str.trim();
+    // 入口归一化：兼容全角数字/全角冒号/全角句点（用户或 AI 可能输入中文标点，避免时间解析失败回落 00:00）
+    str = str.replace(/[\uFF10-\uFF19]/g, function(c){ return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }).replace(/\uFF1A/g, ':').replace(/\uFF0E/g, '.');
 
-    // 格式1: 2026.04.15 星期X 19:30
-    let m = str.match(/(\d{1,4})[.\-\/年](\d{1,2})[.\-\/月](\d{1,2})[日]?\s*(?:[\u4e00-\u9fa5]{1,4}[日曜]?)?\s*(\d{1,2}):(\d{1,2})/);
+    // 格式1: 日期 + 中间任意装饰(星期名等，可含中文/英文/数字外的任意非数字字符) + 时分
+    // 星期段用 [^\d]*? 非贪婪跳过：不精确匹配星期名，兼容自定义历法里中文/英文/混排/带空格的星期名
+    let m = str.match(/(\d{1,4})[.\-\/年](\d{1,2})[.\-\/月](\d{1,2})[日]?[^\d]*?(\d{1,2}):(\d{1,2})/);
     if (m) {
       return { year: +m[1], month: +m[2], day: +m[3], hour: +m[4], minute: +m[5] };
     }
 
     // 格式2: 只有日期没有时间
-    m = str.match(/(\d{1,4})[.\-\/年](\d{1,2})[.\-\/月](\d{1,2})[日]?\s*(?:[\u4e00-\u9fa5]{1,4}[日曜]?)?/);
+    m = str.match(/(\d{1,4})[.\-\/年](\d{1,2})[.\-\/月](\d{1,2})[日]?/);
     if (m) {
       return { year: +m[1], month: +m[2], day: +m[3], hour: 0, minute: 0 };
     }
