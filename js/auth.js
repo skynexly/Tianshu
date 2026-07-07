@@ -551,10 +551,16 @@ const Auth = (() => {
             <div class="auth-profile-item-value" id="auth-profile-image-stat">查看占用</div>
             <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
-        <div class="auth-profile-item" id="auth-profile-import">
-          <div class="auth-profile-item-label">导入存档</div>
-          <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          <div class="auth-profile-item" id="auth-profile-import">
+            <div class="auth-profile-item-label">导入存档</div>
+            <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          </div>
+          <div class="auth-profile-item" id="auth-profile-cloud">
+            <div class="auth-profile-item-label">云备份（Supabase）</div>
+          <div class="auth-profile-item-value" id="auth-profile-cloud-status">${SupabaseBackup.isConfigured() ? '已配置' : '未配置'}</div>
+          <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </div>
+      </div>
       </div>
 
       <div class="auth-profile-section-title">账号</div>
@@ -607,6 +613,7 @@ const Auth = (() => {
     _refreshImageStat();
     _refreshStorageEstimate();
     document.getElementById('auth-profile-import').addEventListener('click', () => DataMgr.importAll());
+    document.getElementById('auth-profile-cloud').addEventListener('click', () => openCloudBackup());
     root.querySelectorAll('[data-kick]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id = btn.dataset.kick;
@@ -685,6 +692,17 @@ const Auth = (() => {
             </div>
             <div id="img-mgr-phone">
               <p style="text-align:center;color:var(--text-secondary);padding:20px 0;font-size:13px">扫描中…</p>
+            </div>
+          </div>
+          <div style="border-top:1px solid var(--border);margin:16px 0 8px;padding-top:14px">
+            <div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:4px">消息快照图片</div>
+            <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:10px">
+              每条 AI 回复会存一份手机数据快照用于回滚，旧版本快照可能把私聊原图固化进了消息里，导致存储膨胀。清理会遍历所有消息删除内联图片，<b>剧情正文、聊天记录全部保留，只删图</b>。消息多时会跑一会儿，别关页面。无法恢复。
+            </div>
+            <div id="img-mgr-msg-stat" style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">未扫描</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" data-act="msg-scan" style="font-size:12px;padding:6px 12px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer">扫描快照图片</button>
+              <button type="button" data-act="msg-clean" disabled style="font-size:12px;padding:6px 12px;background:var(--danger);border:none;border-radius:6px;color:#fff;cursor:pointer;opacity:0.5">清理快照图片</button>
             </div>
           </div>
         </div>
@@ -866,6 +884,47 @@ const Auth = (() => {
       });
     };
 
+    // ---- 消息快照图片（messages 仓深度清理）----
+    const msgStatEl = modal.querySelector('#img-mgr-msg-stat');
+    const msgScanBtn = modal.querySelector('[data-act="msg-scan"]');
+    const msgCleanBtn = modal.querySelector('[data-act="msg-clean"]');
+    const setMsgClean = (on) => {
+      msgCleanBtn.disabled = !on;
+      msgCleanBtn.style.opacity = on ? '1' : '0.5';
+    };
+    msgScanBtn.addEventListener('click', async () => {
+      msgScanBtn.disabled = true;
+      const old = msgScanBtn.textContent;
+      msgScanBtn.textContent = '扫描中…';
+      msgStatEl.textContent = '扫描中，消息多时较久…';
+      try {
+        const r = await DataMgr.scanMessageImages();
+        msgStatEl.innerHTML = `共 ${r.total} 条消息，其中 <b>${r.msgHit}</b> 条含内联图片，图片 <b>${r.count}</b> 处，约 <b>${_fmtBytes(r.freed)}</b>`;
+        setMsgClean(r.count > 0);
+      } catch (e) {
+        msgStatEl.textContent = '扫描出错：' + (e.message || e);
+      } finally {
+        msgScanBtn.disabled = false;
+        msgScanBtn.textContent = old;
+      }
+    });
+    msgCleanBtn.addEventListener('click', async () => {
+      const ok = await _modal({ title: '清理消息快照图片', desc: '确定清理所有消息里的内联图片？只删图片（主要是回滚快照里的图），剧情正文和聊天记录全部保留。无法恢复，建议先做过存档/云备份。', danger: true, okText: '清理' });
+      if (!ok) return;
+      setMsgClean(false);
+      msgStatEl.textContent = '清理中，别关页面…';
+      try {
+        const r = await DataMgr.clearMessageImages();
+        msgStatEl.innerHTML = `✅ 已清理 ${r.updated} 条消息共 ${r.count} 处图片，释放约 <b>${_fmtBytes(r.freed)}</b>`;
+        await loadStats(); _refreshImageStat();
+        _imgMgrNeedReload = true;
+        if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(`已清理 ${r.count} 处`, 1800);
+      } catch (e) {
+        msgStatEl.textContent = '清理出错：' + (e.message || e);
+        setMsgClean(true);
+      }
+    });
+
     // 关闭面板时，如果清理过内联图，提示刷新（让 Conversations 内存 list 重新从 DB 加载，
     // 否则下次 saveList 会用内存里的旧数据覆盖，清理白做）
     const closeWithReload = () => {
@@ -916,6 +975,292 @@ const Auth = (() => {
   // opts = { title, desc, input, defaultValue, placeholder, maxLength, validate,
   //          okText, cancelText, danger }
   // 返回 Promise：confirm/alert → resolve(true/false)；prompt → resolve(string|null)
+  // ===== 云备份（Supabase）面板 =====
+  function openCloudBackup() {
+    const existing = document.getElementById('cloud-backup-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'cloud-backup-overlay';
+    overlay.className = 'modal';
+    overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;z-index:100000';
+
+    const cfg = SupabaseBackup.getConfig();
+
+    overlay.innerHTML = `
+      <div class="modal-content" style="max-width:440px;max-height:88vh;overflow-y:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <h3 style="margin:0">云备份（Supabase）</h3>
+          <button type="button" id="cb-close" style="background:none;border:none;color:var(--text-secondary);font-size:22px;line-height:1;cursor:pointer;padding:0 4px">×</button>
+        </div>
+        <p style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:0 0 14px">
+          用你自己的 Supabase 项目存/取存档。数据只保存在你自己的数据库里，skynex 不经手。
+          <a href="#" id="cb-guide" style="color:var(--accent);text-decoration:none">查看配置教程 ›</a>
+        </p>
+
+        <div class="auth-profile-section-title" style="margin-top:0">连接配置</div>
+        <div class="form-group" style="margin-bottom:8px">
+          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">Project URL</label>
+          <input type="text" id="cb-url" placeholder="https://xxxx.supabase.co" value="${_escape(cfg.url)}" style="width:100%" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px">
+          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">anon key（公开密钥）</label>
+          <input type="password" id="cb-key" placeholder="eyJhbGci..." value="${_escape(cfg.key)}" style="width:100%" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px">
+          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">备注（可选，标记这台设备/存档）</label>
+          <input type="text" id="cb-device" maxlength="40" placeholder="如：主力机" value="${_escape(cfg.device)}" style="width:100%" />
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:6px">
+          <button type="button" id="cb-test" style="flex:1;background:none;border:1px solid var(--border);color:var(--text);padding:9px;border-radius:8px;cursor:pointer;font-size:13px">测试连接</button>
+          <button type="button" id="cb-save" style="flex:1;background:var(--accent);color:#111;border:none;padding:9px;border-radius:8px;cursor:pointer;font-size:13px">保存配置</button>
+        </div>
+        <div id="cb-conn-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
+
+        <div class="auth-profile-section-title">备份到云端</div>
+        <p style="font-size:11px;color:var(--text-secondary);line-height:1.6;margin:0 0 8px">
+          单个备份压缩后需小于 50MB（Supabase 免费版限制），超出会上传失败。完整存档含生成图库，图片多时容易超限；可先用上方「图片存储管理」清理，或改用「轻量」（含头像）/「纯文字」。超大存档建议用页面底部的本地导出保存。
+        </p>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px">
+          <button type="button" class="cb-backup-btn" data-mode="lite" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·轻量（含头像，不含图库）<span style="float:right;color:var(--text-secondary)">推荐</span></button>
+          <button type="button" class="cb-backup-btn" data-mode="text" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·纯文字（不含任何图片）</button>
+          <button type="button" class="cb-backup-btn" data-mode="full" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·完整（含全部图片，可能很大）</button>
+        </div>
+        <div id="cb-backup-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
+
+        <div class="auth-profile-section-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>云端备份列表</span>
+          <button type="button" id="cb-refresh" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0">刷新</button>
+        </div>
+        <div id="cb-list" style="font-size:13px;color:var(--text-secondary);padding:6px 0">未加载</div>
+      </div>
+    `;
+
+    const host = (function(){
+      const po = document.getElementById('auth-profile-overlay');
+      return (po && po.classList.contains('visible')) ? po : document.body;
+    })();
+    host.appendChild(overlay);
+
+    const $ = (id) => overlay.querySelector(id);
+    const setMsg = (el, text, ok) => {
+      el.textContent = text || '';
+      el.style.color = ok === true ? 'var(--accent)' : (ok === false ? 'var(--danger)' : 'var(--text-secondary)');
+    };
+
+    const close = () => overlay.remove();
+    $('#cb-close').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    $('#cb-guide').addEventListener('click', (e) => { e.preventDefault(); _showSupabaseGuide(); });
+
+    $('#cb-test').addEventListener('click', async () => {
+      const url = $('#cb-url').value.trim();
+      const key = $('#cb-key').value.trim();
+      const msg = $('#cb-conn-msg');
+      setMsg(msg, '测试中…', null);
+      try {
+        await SupabaseBackup.testConnection(url, key);
+        setMsg(msg, '连接成功，表和权限都正常', true);
+      } catch (err) {
+        setMsg(msg, '失败：' + (err.message || err), false);
+      }
+    });
+
+    $('#cb-save').addEventListener('click', () => {
+      SupabaseBackup.setConfig($('#cb-url').value, $('#cb-key').value, $('#cb-device').value);
+      setMsg($('#cb-conn-msg'), '已保存配置', true);
+      const st = document.getElementById('auth-profile-cloud-status');
+      if (st) st.textContent = SupabaseBackup.isConfigured() ? '已配置' : '未配置';
+    });
+
+    overlay.querySelectorAll('.cb-backup-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const mode = btn.dataset.mode;
+        const msg = $('#cb-backup-msg');
+        // 备份前先把当前输入的配置存下来
+        SupabaseBackup.setConfig($('#cb-url').value, $('#cb-key').value, $('#cb-device').value);
+        if (!SupabaseBackup.isConfigured()) { setMsg(msg, '请先填写并保存配置', false); return; }
+        overlay.querySelectorAll('.cb-backup-btn').forEach(b => b.disabled = true);
+        setMsg(msg, '正在生成存档并上传…（完整存档可能较久）', null);
+        try {
+          const row = await SupabaseBackup.backup(mode, $('#cb-device').value.trim(), (stage) => setMsg(msg, stage, null));
+          setMsg(msg, '备份成功' + (row && row.id ? '（#' + row.id + '）' : ''), true);
+          _loadCloudList(overlay);
+        } catch (err) {
+          setMsg(msg, '备份失败：' + (err.message || err), false);
+        } finally {
+          overlay.querySelectorAll('.cb-backup-btn').forEach(b => b.disabled = false);
+        }
+      });
+    });
+
+    $('#cb-refresh').addEventListener('click', () => _loadCloudList(overlay));
+
+    // 已配置则自动拉一次列表
+    if (SupabaseBackup.isConfigured()) _loadCloudList(overlay);
+  }
+
+  async function _loadCloudList(overlay) {
+    const listEl = overlay.querySelector('#cb-list');
+    if (!listEl) return;
+    listEl.textContent = '加载中…';
+    let rows;
+    try {
+      rows = await SupabaseBackup.listBackups(20);
+    } catch (err) {
+      listEl.innerHTML = `<span style="color:var(--danger)">加载失败：${_escape(err.message || String(err))}</span>`;
+      return;
+    }
+    if (!rows || !rows.length) {
+      listEl.textContent = '还没有云端备份';
+      return;
+    }
+    const modeLabel = { full: '完整', lite: '轻量', text: '纯文字' };
+    listEl.innerHTML = rows.map(r => {
+      const t = r.created_at ? new Date(r.created_at).toLocaleString() : '';
+      const dev = r.device ? ('· ' + _escape(r.device)) : '';
+      const sz = (typeof r.size === 'number' && r.size > 0) ? (' · ' + _fmtBytes(r.size)) : '';
+      return `
+        <div class="auth-profile-item" style="align-items:center" data-row-id="${r.id}">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;color:var(--text)">${_escape(modeLabel[r.mode] || r.mode || '存档')}${_escape(sz)} ${dev}</div>
+            <div style="font-size:11px;color:var(--text-secondary)">${_escape(t)} · #${r.id}</div>
+          </div>
+          <button type="button" class="cb-restore" data-id="${r.id}" style="background:var(--accent);color:#111;border:none;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;margin-right:6px">恢复</button>
+          <button type="button" class="cb-del" data-id="${r.id}" style="background:none;border:1px solid var(--border);color:var(--text-secondary);padding:6px 10px;border-radius:7px;cursor:pointer;font-size:12px">删除</button>
+        </div>`;
+    }).join('');
+
+    listEl.querySelectorAll('.cb-restore').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const ok = await _modal({
+          title: '从云端恢复',
+          desc: '将用这份云端备份覆盖当前设备的数据（覆盖范围取决于备份类型）。此操作不可撤销，确定继续？',
+          okText: '恢复', danger: true
+        });
+        if (!ok) return;
+        btn.disabled = true; btn.textContent = '恢复中…';
+        try {
+          await SupabaseBackup.restoreBackup(id);
+          await _modal({ title: '恢复成功', desc: '数据已从云端恢复，页面将自动刷新。', okText: '好', cancelText: false });
+          location.reload();
+        } catch (err) {
+          btn.disabled = false; btn.textContent = '恢复';
+          await _modal({ title: '恢复失败', desc: err.message || String(err), okText: '好', cancelText: false });
+        }
+      });
+    });
+
+    listEl.querySelectorAll('.cb-del').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const ok = await _modal({ title: '删除备份', desc: '确定从云端删除这份备份吗？此操作不可撤销。', okText: '删除', danger: true });
+        if (!ok) return;
+        btn.disabled = true;
+        try {
+          await SupabaseBackup.deleteBackup(id);
+          _loadCloudList(overlay);
+        } catch (err) {
+          btn.disabled = false;
+          await _modal({ title: '删除失败', desc: err.message || String(err), okText: '好', cancelText: false });
+        }
+      });
+    });
+  }
+
+  function _showSupabaseGuide() {
+    const existing = document.getElementById('cb-guide-overlay');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'cb-guide-overlay';
+    overlay.className = 'modal';
+    overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;z-index:100001';
+    const sql = `-- 1) 备份索引表（只存元信息，存档本体放 Storage）
+create table if not exists tianshu_saves (
+  id bigint generated always as identity primary key,
+  created_at timestamptz default now(),
+  device text,
+  mode text,
+  path text,
+  size bigint
+);
+alter table tianshu_saves enable row level security;
+create policy "anon full access"
+  on tianshu_saves for all
+  to anon
+  using (true) with check (true);
+
+-- 2) 存档文件桶（私有，存放存档本体，支持大文件）
+insert into storage.buckets (id, name, public)
+values ('tianshu-saves', 'tianshu-saves', false)
+on conflict (id) do nothing;
+
+-- 3) 让持 key 的人能读写这个桶
+create policy "anon saves bucket"
+  on storage.objects for all
+  to anon
+  using (bucket_id = 'tianshu-saves')
+  with check (bucket_id = 'tianshu-saves');`;
+    overlay.innerHTML = `
+      <div class="modal-content" style="max-width:460px;max-height:88vh;overflow-y:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <h3 style="margin:0">Supabase 配置教程</h3>
+          <button type="button" id="cbg-close" style="background:none;border:none;color:var(--text-secondary);font-size:22px;line-height:1;cursor:pointer;padding:0 4px">×</button>
+        </div>
+        <div style="font-size:13px;color:var(--text);line-height:1.75">
+          <p style="margin:0 0 6px;color:var(--text-secondary);font-size:12px">Supabase 是免费的云数据库服务。下面每一步照做即可，全程约 5 分钟。</p>
+
+          <p style="margin:10px 0 4px"><b>第 1 步 · 注册并建项目</b></p>
+          <p style="margin:0 0 6px;font-size:12px">打开 <a href="https://supabase.com" target="_blank" style="color:var(--accent)">supabase.com</a>，用邮箱或 GitHub 注册登录。</p>
+          <p style="margin:0 0 6px;font-size:12px">① 首次会让你建一个「组织（Organization）」：名字随便填，Type 选 <b>Personal</b>，套餐选 <b>Free（免费）</b>，点 Create。</p>
+          <p style="margin:0 0 6px;font-size:12px">② 然后点 <b>New Project</b> 建项目：填项目名、设一个数据库密码（自己记着，后面用不到但别丢）、区域选离你近的（如 Southeast Asia / Northeast Asia）。</p>
+          <p style="margin:0 0 10px;font-size:12px;color:var(--text-secondary)">建项目要等 1-2 分钟。状态先显示 Unhealthy（初始化中）是正常的，等它变绿（Healthy）再往下。</p>
+
+          <p style="margin:10px 0 4px"><b>第 2 步 · 建表和存储桶</b></p>
+          <p style="margin:0 0 6px;font-size:12px">项目变绿后，点左侧的 <b>SQL Editor</b>（图标像 <code>&gt;_</code>）。把下面这段整个复制粘贴进去，点右下角 <b>Run</b> 运行：</p>
+          <pre id="cbg-sql" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;line-height:1.5;overflow-x:auto;white-space:pre;color:var(--text)">${_escape(sql)}</pre>
+          <button type="button" id="cbg-copy" style="background:none;border:1px solid var(--border);color:var(--accent);padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;margin-bottom:8px">复制 SQL</button>
+          <p style="margin:0 0 6px;font-size:12px">看到 <b>Success. No rows returned</b> 就成功了。</p>
+          <p style="margin:0 0 10px;font-size:12px;color:var(--text-secondary)">⚠ 手机上粘贴时，代码框有时会自动多补一个右括号 <code>)</code> 导致报错——若报错，检查末尾有没有多余的 <code>)</code> 删掉即可。若提示某项「already exists」，说明之前建过，忽略即可。</p>
+
+          <p style="margin:10px 0 4px"><b>第 3 步 · 复制 URL 和 key</b></p>
+          <p style="margin:0 0 6px;font-size:12px">点左下角 <b>Project Settings（齿轮）→ API Keys</b>。</p>
+          <p style="margin:0 0 6px;font-size:12px">① <b>Project URL</b>：形如 <code>https://xxxx.supabase.co</code>，复制它。</p>
+          <p style="margin:0 0 6px;font-size:12px">② <b>anon key</b>：新版界面若只看到 <code>sb_publishable_...</code>，请点页面上的 <b>「Legacy anon, service_role」</b>标签，复制里面 <b>anon</b> 那一长串（<code>eyJ...</code> 开头）。<b>不要</b>复制 service_role（那是超级权限，别外泄）。</p>
+          <p style="margin:0 0 10px;font-size:12px">把这两个填回上一页，点「测试连接」，变绿就成功了。</p>
+
+          <p style="margin:10px 0 4px;color:var(--danger)"><b>注意事项</b></p>
+          <p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary)">· 单个备份压缩后需小于 <b>50MB</b>（免费版限制）。带图存档容易超，可先清理图片、改用轻量/纯文字，或超大存档用本地导出。</p>
+          <p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary)">· 每个人的 URL 和 key 都不一样，各存各的，互相看不到。</p>
+          <p style="margin:0 0 4px;font-size:12px;color:var(--text-secondary)">· <b>关于安全：</b>anon key 设计成可公开，配合上面的策略，只有持 key 的人能读写你的备份——不把 key 发出去就只有你能访问。存档桶为私有，不会被公开。key 若泄露，去 Supabase 后台轮换即可。</p>
+          <p style="margin:0;font-size:12px;color:var(--text-secondary)">· <b>别误点删项目：</b>项目设置里的 Delete project 是删掉整个数据库，和这里的操作无关，不要点。</p>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#cbg-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('#cbg-copy').addEventListener('click', async () => {
+      const btn = overlay.querySelector('#cbg-copy');
+      try {
+        await navigator.clipboard.writeText(sql);
+        btn.textContent = '已复制';
+      } catch (_) {
+        // 剪贴板不可用时选中文本兜底
+        const pre = overlay.querySelector('#cbg-sql');
+        const range = document.createRange();
+        range.selectNodeContents(pre);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        btn.textContent = '已选中，请手动复制';
+      }
+      setTimeout(() => { btn.textContent = '复制 SQL'; }, 2000);
+    });
+  }
+
   function _modal(opts) {
     return new Promise(resolve => {
       const o = opts || {};
@@ -929,6 +1274,8 @@ const Auth = (() => {
       if (modal) modal.remove();
       modal = document.createElement('div');
       modal.className = 'modal auth-modal-temp';
+      // 确认弹窗要浮在云备份(100000)/教程(100001)等弹窗之上，否则会被盖住
+      modal.style.zIndex = '100010';
       modal.innerHTML = `
         <div class="modal-content" style="max-width:420px">
           ${o.title ? `<h3>${_escape(o.title)}</h3>` : ''}
@@ -948,11 +1295,16 @@ const Auth = (() => {
           </div>
         </div>
       `;
-      // 华为 webview 兼容：如果个人主页 overlay 可见，把 modal 挂到它里面，
-      // 这样不论华为内核如何处理 stacking context，弹窗都和个人主页同级。
+      // host 选择：优先挂到当前打开的顶层弹窗内部，这样确认弹窗天然浮在其上，
+      // 不受各弹窗自身 stacking context / overflow 影响（z-index 单独设不一定管用）。
+      // 云备份 overlay(100000) / 教程 overlay(100001) 若存在，优先挂进去；
+      // 否则回退到个人主页 overlay（华为 webview 兼容），再回退到 body。
+      const cloudOverlay = document.getElementById('cloud-backup-overlay');
+      const guideOverlay = document.getElementById('cb-guide-overlay');
       const profileOverlay = document.getElementById('auth-profile-overlay');
-      const host = (profileOverlay && profileOverlay.classList.contains('visible'))
-        ? profileOverlay : document.body;
+      const host = guideOverlay
+        || cloudOverlay
+        || ((profileOverlay && profileOverlay.classList.contains('visible')) ? profileOverlay : document.body);
       host.appendChild(modal);
 
       const input = modal.querySelector('#auth-modal-input');
