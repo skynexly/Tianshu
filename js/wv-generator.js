@@ -268,9 +268,17 @@ function _buildWorldContext(w, taskHint, overrideSetting) {
     }
     parts.push(`## 地区与势力结构\n${regLines.join('\n')}`);
   }
-  // 4. 常驻角色（name + summary）
+  // 4. 常驻角色（name + summary + detail，detail 单个截断防 token 失控）
   const globals = (w?.globalNpcs || []).filter(n => n && n.name);
-  if (globals.length) parts.push(`## 常驻角色\n${globals.map(n => `- ${n.name}${n.summary ? '：' + n.summary : ''}`).join('\n')}`);
+  if (globals.length) {
+    const npcBlocks = globals.map(n => {
+      const head = `### ${n.name}${n.summary ? '：' + n.summary : ''}`;
+      const detail = (n.detail || '').trim();
+      const detailStr = detail ? '\n' + (detail.length > 500 ? detail.slice(0, 500) + '…' : detail) : '';
+      return head + detailStr;
+    });
+    parts.push(`## 常驻角色\n${npcBlocks.join('\n\n')}`);
+  }
   // 5. 世界书条目
   const knowledges = (w?.knowledges || []).filter(k => k && k.enabled !== false && k.content);
   if (knowledges.length) parts.push(`## 世界书条目\n${knowledges.map(k => `### ${k.name || '未命名'}\n${k.content}`).join('\n\n')}`);

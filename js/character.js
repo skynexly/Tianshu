@@ -5,6 +5,8 @@ const Character = (() => {
   const BASIC_FIELDS = ['name', 'onlineName', 'background', 'note'];
   let currentMaskId = 'default';
   let editingMaskId = null; // 当前在弹窗中编辑的面具
+  let _maskLoading = false;  // openEdit 加载表单期间为 true，此时禁止自动保存（防加载间隙脏写）
+  let _loadedMaskId = null;  // 表单当前已完整加载的面具 id，写库前校验一致，防串号覆盖
 
   let currentAvatar = null; // 当前面具头像 dataURL 缓存
 
@@ -373,6 +375,9 @@ async function _getMasksForCurrentWv() {
     const fn = async () => {
       _maskAutoSaveTimer = null;
       if (!editingMaskId) return;
+      // 双保险：加载表单期间不写库；表单已加载身份必须与当前编辑一致，否则会把别的面具覆盖成当前表单内容
+      if (_maskLoading) return;
+      if (_loadedMaskId !== editingMaskId) return;
       try {
         const targetId = editingMaskId; // 快照当前 ID
         const data = { id: targetId };
@@ -495,6 +500,8 @@ async function _getMasksForCurrentWv() {
 
   async function openEdit(maskId) {
     _maskAutoSave.cancel(); // 切面具时取消上一张的挂起自动保存
+    _maskLoading = true;    // 加载期间禁止自动保存写库
+    _loadedMaskId = null;   // 表单尚未完成加载
     editingMaskId = maskId;
     const data = await DB.get('characters', maskId);
     BASIC_FIELDS.forEach(f => {
@@ -574,6 +581,9 @@ async function _getMasksForCurrentWv() {
     requestAnimationFrame(resizeMaskBackground);
     setTimeout(resizeMaskBackground, 260);
     setTimeout(resizeMaskBackground, 420);
+    // 表单已完整加载：放开闸门、记下当前身份，自动保存从此可安全写库
+    _loadedMaskId = maskId;
+    _maskLoading = false;
   }
 
   function updateAvatarPreview() {

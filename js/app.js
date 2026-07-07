@@ -180,14 +180,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v705.7';
-    const CHANGELOG = `【v705.7 更新内容】
-📖 世界书常驻条目支持导入 docx / txt 文档
-○ 用 --- 分隔线分段，一段导入一条常驻知识
-✨ 悬浮球可在右上角菜单选择显示 / 隐藏，刷新后保持
-○ 手机、番外、后台三个悬浮球现在都能常驻，刷新页面不再消失
-🐛 修复自定义历法开场时间保存后变成 0:00 的问题
-🔧 调整了部分提示词`;
+const APP_VERSION = 'v705.8';
+    const CHANGELOG = `【v705.8 更新内容】
+🐛 修复面具绑定逻辑
+🐛 修复个人主页、通话记录页顶部被灵动岛遮挡导致 iOS 无法返回的问题
+✨ 优化部分世界观生成提示词`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

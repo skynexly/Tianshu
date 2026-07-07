@@ -48473,7 +48473,7 @@ async function _showCallRecord(contactId, msgId) {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;background:var(--bg)';
   overlay.innerHTML = `
-    <div style="flex-shrink:0;display:flex;align-items:center;padding:14px 16px;gap:12px;border-bottom:1px solid var(--border)">
+    <div style="flex-shrink:0;display:flex;align-items:center;padding:max(14px, env(safe-area-inset-top, 14px)) 16px 14px;gap:12px;border-bottom:1px solid var(--border)">
       <button onclick="this.closest('div[style*=fixed]').remove()" style="background:none;border:none;color:var(--text);cursor:pointer;padding:4px;display:flex;align-items:center">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
       </button>
