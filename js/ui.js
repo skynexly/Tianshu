@@ -559,7 +559,7 @@ if (scrollBtn && name !== 'chat') scrollBtn.classList.add('hidden');
       Summary.renderSummaryView(data, cid, 'summary-content');
     }
     if (name === 'character') { Character.load(); if (typeof Character.exitManageMode === 'function') Character.exitManageMode(); }
-    if (name === 'gaiden') { await Gaiden.ensureLoaded(); Gaiden.renderList(); }
+    if (name === 'gaiden') { await Gaiden.ensureLoaded(); await Gaiden.reload(); Gaiden.renderList(); }
     if (name === 'worldview') { await Worldview.load(); if (typeof Worldview.switchWorldTab === 'function') Worldview.switchWorldTab('wv'); }
     if (name === 'settings') { Settings.load(); Prompts.render(); }
   }

@@ -82,6 +82,14 @@ const Gaiden = (() => {
     await DB.put('gameState', { key: 'gaidenList', value: gaidenList });
   }
 
+  // 从 DB 强制重读收藏列表（切到收藏页时用，避免内存与 DB 不同步导致新收藏不显示）
+  async function reload() {
+    try {
+      const data = await DB.get('gameState', 'gaidenList');
+      gaidenList = data?.value || [];
+    } catch(_) {}
+  }
+
   // 供外部模块（如WorldVoice）往收藏列表添加条目
   function addToList(item) {
     gaidenList.unshift(item);
@@ -1121,7 +1129,7 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
     await saveList();
     closeDetail();
     renderList();
-    UI.showToast('番外已删除');
+    UI.showToast('已删除');
   }
 
   // 查看手机收藏（按 phoneType 分发）
@@ -1246,7 +1254,7 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
   }
 
   return {
-    init, ensureLoaded, openGenerateModal, generate, rewrite, saveDraft, continueDraft, closeGenerateModal, abort,
+    init, ensureLoaded, reload, openGenerateModal, generate, rewrite, saveDraft, continueDraft, closeGenerateModal, abort,
     minimizeModal, restoreModal,
     renderList, viewDetail, viewWvPost, viewPhoneItem, closeDetail, enterWorldline, remove, addToList,
     startEdit, cancelEdit, saveEdit,
