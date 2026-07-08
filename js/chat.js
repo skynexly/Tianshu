@@ -926,10 +926,12 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
             (_calSys.seasons && _calSys.seasons.length !== 4);
           if (isCustom) {
             let calParts = [];
-            calParts.push(`每周${_calSys.daysPerWeek}天，分别为：${(_calSys.weekDayNames || []).join('、')}`);
+            const _wdNames = _calSys.weekDayNames || [];
+            const _wdWithIdx = _wdNames.map((n, i) => `${n}（第${i + 1}天）`).join('、');
+            calParts.push(`每周${_calSys.daysPerWeek}天，依次为：${_wdWithIdx}`);
             if (_calSys.weekDayTypes && _calSys.weekDayTypes.length) {
-              const workDays = _calSys.weekDayNames.filter((_, i) => _calSys.weekDayTypes[i] === 'work');
-              const restDays = _calSys.weekDayNames.filter((_, i) => _calSys.weekDayTypes[i] === 'rest');
+              const workDays = _wdNames.map((n, i) => _calSys.weekDayTypes[i] === 'work' ? `${n}（第${i + 1}天）` : null).filter(Boolean);
+              const restDays = _wdNames.map((n, i) => _calSys.weekDayTypes[i] === 'rest' ? `${n}（第${i + 1}天）` : null).filter(Boolean);
               if (workDays.length) calParts.push(`工作日：${workDays.join('、')}`);
               if (restDays.length) calParts.push(`休息日：${restDays.join('、')}`);
             }
@@ -2421,8 +2423,9 @@ const msgEl = appendMessage(aiMsg, true, true);
         if (name === 'search_messages') return convSettings.toolsHistory;
         // AI 编辑设定工具（read/update/add/delete/undo + list_extension + read_card）
         if (['read_worldview_setting','update_worldview_setting','read_worldview_entry','update_worldview_entry','add_worldview_entry',
-             'list_extension_entries','add_extension_entry','update_extension_entry','delete_extension_entry',
-             'list_cards','read_card','update_card','undo_last_edit'].includes(name)) return convSettings.toolsEdit;
+       'list_extension_entries','add_extension_entry','update_extension_entry','delete_extension_entry',
+       'read_gameplay_config','update_gameplay_config',
+       'list_cards','read_card','update_card','undo_last_edit'].includes(name)) return convSettings.toolsEdit;
         return convSettings.toolsMemory;
             });
           }

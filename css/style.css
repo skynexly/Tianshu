@@ -91,6 +91,11 @@ font-size: 15px;
   line-height: 1.6;
   overflow: hidden;
 }
+/* iOS PWA（添加到主屏/独立窗口）无地址栏，100dvh 只撑到 WebKit 可视区、底部露白边；
+   独立模式下改回 100vh 铺满物理屏幕。普通浏览器 tab 仍保留上面的 100dvh。 */
+@media (display-mode: standalone) {
+  html, body { min-height: 100vh; }
+}
 button, input, select, textarea, option, label {
   font-family: inherit;
 }

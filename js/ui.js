@@ -23,26 +23,76 @@ const UI = (() => {
         // 打开时刷新条件显示的菜单项，避免状态不同步导致"若隐若现"
         try { if (typeof SingleMode !== 'undefined' && SingleMode.updateMenuVisibility) SingleMode.updateMenuVisibility(); } catch(_) {}
         try { if (typeof Gaiden !== 'undefined' && Gaiden.updateMenuVisibility) Gaiden.updateMenuVisibility(); } catch(_) {}
-        try { _syncFabMenuItem(); } catch(_) {}
       }
     }
 
-  // 悬浮球显隐总开关：切换 + 刷新菜单项文字
+  // 悬浮球设置：弹出面板，三个球独立开关
   function toggleFabVisible() {
-    try {
-      if (typeof FabDrag === 'undefined') return;
-      FabDrag.setVisible(!FabDrag.isVisible());
-      _syncFabMenuItem();
-    } catch(_) {}
+    // 兼容旧入口名，实际打开设置面板
+    openFabSettings();
   }
 
-  // 同步烤串菜单里悬浮球开关项的文字/图标（显示态 => "隐藏悬浮球"，隐藏态 => "显示悬浮球"）
-  function _syncFabMenuItem() {
-    const btn = document.getElementById('fab-visible-menu-btn');
-    if (!btn) return;
-    const visible = (typeof FabDrag !== 'undefined') ? FabDrag.isVisible() : true;
-    const label = btn.querySelector('.fab-menu-label');
-    if (label) label.textContent = visible ? '隐藏悬浮球' : '显示悬浮球';
+  function openFabSettings() {
+    if (typeof FabDrag === 'undefined') return;
+    // 已打开则关闭（再次点击）
+    const existed = document.getElementById('fab-settings-overlay');
+    if (existed) { existed.remove(); return; }
+
+    const items = [
+      { id: 'phone-fab',     label: '手机悬浮球',   desc: '快速打开虚拟手机' },
+      { id: 'gaiden-fab',    label: '番外悬浮球',   desc: '番外生成时的入口' },
+      { id: 'backstage-fab', label: '后台悬浮球',   desc: '最小化后台面板后显示' },
+    ];
+
+    const rows = items.map(it => {
+      const on = FabDrag.isVisible(it.id);
+      return `
+        <label style="display:flex;align-items:center;gap:12px;padding:12px 4px;cursor:pointer">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;color:var(--text)">${it.label}</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${it.desc}</div>
+          </div>
+          <span class="fab-toggle" data-on="${on ? '1' : '0'}"
+            style="width:46px;height:26px;flex-shrink:0;border-radius:13px;position:relative;cursor:pointer;transition:background .2s;background:${on ? 'var(--accent)' : 'var(--border)'}">
+            <input type="checkbox" data-fab-id="${it.id}" ${on ? 'checked' : ''}
+              style="position:absolute;inset:0;opacity:0;margin:0;cursor:pointer">
+            <span class="fab-toggle-dot"
+              style="position:absolute;top:3px;left:${on ? '23px' : '3px'};width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.3);pointer-events:none"></span>
+          </span>
+        </label>`;
+    }).join('');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'fab-settings-overlay';
+    overlay.className = 'modal';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.45)';
+    overlay.innerHTML = `
+      <div class="modal-content" style="position:relative;background:var(--bg);border-radius:16px;padding:18px 18px 12px;width:min(340px,90vw);box-shadow:0 8px 40px rgba(0,0,0,0.3)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:16px;font-weight:600;color:var(--text)">悬浮球设置</div>
+          <button type="button" id="fab-settings-close" style="background:none;border:none;color:var(--text-secondary);font-size:22px;line-height:1;cursor:pointer;padding:0 4px">×</button>
+        </div>
+        <p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary);line-height:1.6">分别控制每个悬浮球显示与否。关闭后该球在任何情况下都不出现。</p>
+        <div>${rows}</div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    // 切换开关：更新滑块样式 + 写入偏好
+    overlay.querySelectorAll('input[data-fab-id]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const on = inp.checked;
+        const track = inp.closest('.fab-toggle');
+        const dot = track && track.querySelector('.fab-toggle-dot');
+        if (track) track.style.background = on ? 'var(--accent)' : 'var(--border)';
+        if (dot) dot.style.left = on ? '23px' : '3px';
+        FabDrag.setVisible(inp.getAttribute('data-fab-id'), on);
+      });
+    });
+
+    const close = () => overlay.remove();
+    overlay.querySelector('#fab-settings-close').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   }
   
     async function toggleTokenPopup() {
@@ -498,11 +548,8 @@ if (topbarActions) topbarActions.style.display = (name === 'chat') ? '' : 'none'
 const scrollBtn = document.getElementById('scroll-to-bottom-btn');
 if (scrollBtn && name !== 'chat') scrollBtn.classList.add('hidden');
 
-// 手机浮动按钮：非聊天面板时隐藏
-const phoneFab = document.getElementById('phone-fab');
-if (phoneFab && name !== 'chat') {
-  phoneFab.classList.add('hidden');
-}
+// 手机浮动按钮：切面板后按当前条件同步（常驻——有世界观/未锁机/手机未打开就显示，不限面板）
+ try { if (typeof Phone !== 'undefined' && Phone.syncFab) Phone.syncFab(); } catch(_) {}
 
     if (name === 'memory' || name === 'memory-edit') { Memory.onPanelShow(); if (typeof Memory.exitManageMode === 'function') Memory.exitManageMode(); }
     if (name === 'summary') {
@@ -1264,7 +1311,7 @@ function showToast(text, duration = 4500) {
     showSimpleInput, closeSimpleInput, confirmSimpleInput, showNameDescInput,
     showConfirm, showAlert, showCopyText, showToast,
     openGlobalSearch, closeGlobalSearch, _globalSearchDebounced, _jumpToMessage,
-    setMaskEditFrom, toggleLockBackGesture, initLockBackGestureToggle,
-    toggleFabVisible
-  };
+setMaskEditFrom, toggleLockBackGesture, initLockBackGestureToggle,
+      toggleFabVisible, openFabSettings
+    };
 })();

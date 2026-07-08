@@ -2279,7 +2279,10 @@ function _renderGameplayAttrs(w) {
             <div style="font-size:14px;font-weight:700;color:var(--text)">用户 / 全局属性</div>
             <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">通用于当前世界观玩法，可添加多条。</div>
           </div>
-          <button type="button" onclick="Worldview.addGameplayAttr('global', -1)" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 添加属性</button>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button type="button" onclick="Worldview.aiGenerateGlobalAttrs()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI生成</button>
+            <button type="button" onclick="Worldview.addGameplayAttr('global', -1)" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer">+ 添加属性</button>
+          </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px">${_renderAttrRows(gp.globalAttrs, 'global', -1)}</div>
       </div>`;
@@ -2316,7 +2319,10 @@ function _renderGameplayAttrs(w) {
             <div style="font-size:14px;font-weight:700;color:var(--text)">角色属性</div>
             <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">先选择角色，再为该角色添加多条属性。同一角色不能重复建卡。</div>
           </div>
-          <button type="button" onclick="Worldview.toggleGameplayCharPicker()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">+ 角色</button>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button type="button" onclick="Worldview.aiGenerateCharAttrs()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI生成</button>
+            <button type="button" onclick="Worldview.toggleGameplayCharPicker()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">+ 角色</button>
+          </div>
         </div>
         <div id="wv-attr-char-picker" class="hidden" style="margin-bottom:12px;border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--bg-secondary)">
           <input id="wv-attr-char-search" placeholder="搜索角色 / 别名 / 世界观" oninput="Worldview.renderGameplayCharPicker(this.value)" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;margin-bottom:8px">
@@ -2417,6 +2423,7 @@ function _renderTaskSystem(w) {
       </div>
       <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">任务类型模板</div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${typeCards || '<div style="padding:10px;color:var(--text-secondary);font-size:12px;text-align:center;border:1px dashed var(--border);border-radius:6px">暂无类型，点击下方添加</div>'}</div>
+      <button type="button" id="wv-task-ai-btn-${pi}" onclick="Worldview.aiGenerateTaskPhase(${pi})" style="width:100%;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成完整阶段配置</button>
       <button type="button" onclick="Worldview.openTaskTypeModal(${pi},-1)" style="width:100%;padding:6px;border-radius:6px;border:1px dashed var(--border);background:none;color:var(--accent);font-size:12px;cursor:pointer;margin-bottom:10px">+ 添加任务类型</button>
       <div style="display:flex;align-items:center;gap:6px">
         <span style="font-size:12px;font-weight:600;color:var(--text)">阶段完成奖励：</span>
@@ -3198,13 +3205,15 @@ let knowledgesData = [];
     closeFestivalModal();
     _wvExtAutoSave();
   }
-  function deleteFestivalFromModal() {
-    if (_editFestivalIdx === null) return;
-    festivalsData.splice(_editFestivalIdx, 1);
-    _renderFestivals(festivalsData);
-    closeFestivalModal();
-    _wvExtAutoSave();
-  }
+  async function deleteFestivalFromModal() {
+  if (_editFestivalIdx === null) return;
+  const nm = (festivalsData[_editFestivalIdx]?.name || '该节日');
+  if (!await UI.showConfirm('删除节日', `确定删除「${nm}」？此操作不可撤销。`)) return;
+  festivalsData.splice(_editFestivalIdx, 1);
+  _renderFestivals(festivalsData);
+  closeFestivalModal();
+  _wvExtAutoSave();
+}
   function closeFestivalModal() {
     _editFestivalIdx = null;
     document.getElementById('wv-festival-modal').classList.add('hidden');
@@ -3335,6 +3344,139 @@ let knowledgesData = [];
       if (btn) { btn.disabled = false; btn.textContent = '重试'; }
     } finally {
       _aiFestAbort = null;
+    }
+  }
+
+  // ===== AI 生成动态知识条目（keywordTrigger=true，围绕世界观自由发挥）=====
+  let _aiKnowAbort = null;
+
+  async function aiGenKnowledges() {
+    const w = window.__wvEditingCache;
+    if (!w) { UI.showToast('请先打开世界观编辑', 1500); return; }
+    const html = `
+    <div id="ai-know-gen-overlay" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-know-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成动态条目</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-know-gen-prompt" rows="3" placeholder="例如：多写点经济、货币、物价、交通出行方面的背景设定" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <div style="display:flex;gap:12px;margin-top:12px">
+          <div style="flex:1">
+            <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成数量</label>
+            <input type="number" id="ai-know-gen-count" value="3" min="1" max="10" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">生成围绕本世界观的背景设定（成套的体系如经济/教育，或点状的细节如物产/黑话），带触发关键词，命中时自动注入。追加进列表（不覆盖已有）。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-know-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-know-gen-btn" onclick="Worldview._doAiGenKnowledges()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-know-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  const _AI_KNOW_SYS = `你是一个为虚构世界观补充背景设定的世界构建师。请设计若干条「动态知识条目」——它们是这个世界的背景设定，平时不占用提示词，只有当聊天中提到相关内容时才会被自动注入给 AI 参考。
+
+条目可以是两种粒度，按世界观需要自由搭配（默认以体系为主、细节点缀）：
+1. **体系**：成套地讲清这个世界某一整个方面。比如「经济体系」把货币、物价、贸易、职业收入、贫富结构一并讲清；「教育体系」把求学阶段、门槛、师承、晋升路径一并讲清。一条 = 一个自成系统的板块，信息密度高。
+2. **细节**：一个具体而点状的设定。比如某种货币的兑换规矩、某条商路的门道、某种特色饮食、某个行当的黑话。轻、具体，用来补世界的血肉和质感。
+
+设计方向（放开选，但必须紧扣这个世界观本身）：
+体系类——经济、教育、军事/武力、政治与权力、律法与刑罚、修炼/能力/等级、金融、交通地理、通讯、宗教信仰、社会阶层、科技/工业、医疗、婚姻家族、语言文字等；
+细节类——具体的物产、习俗、行当、地名典故、日常生活片段、圈内黑话等。
+挑那些"平时不用讲、但聊到就得对得上"的内容来写。
+
+要求：
+- 每一条都要从这个世界观里生长出来，跟它的题材、设定、已有内容自洽，不要套用与本世界观无关的现实设定（除非世界观本身就是现实背景）。
+- 体系类成体系地写透，细节类写具体写实；条目之间不重叠。
+- 不要与「已有条目」重复（主题、名称都要避开）。
+
+输出格式：
+严格输出 JSON 数组，不要用 \`\`\`json 包裹，不要输出任何 JSON 以外的内容。
+每个条目对象包含：
+- name（string）：条目名称（体系如"灵石经济体系"，细节如"坊市黑话"）
+- keys（string）：触发关键词，2-6 个，用中文逗号分隔，是聊天时真的会冒出来、应该命中这条的词（关键概念、物名、场景词等）
+- content（string）：具体内容——体系类 250-500字成体系写清，细节类 150-300字写具体，都要落到这个世界里到底是怎样的`;
+
+  async function _doAiGenKnowledges() {
+    const overlay = document.getElementById('ai-know-gen-overlay');
+    const btn = document.getElementById('ai-know-gen-btn');
+    const status = document.getElementById('ai-know-gen-status');
+    const prompt = document.getElementById('ai-know-gen-prompt')?.value?.trim() || '';
+    const count = Math.max(1, Math.min(10, parseInt(document.getElementById('ai-know-gen-count')?.value) || 3));
+
+    const w = window.__wvEditingCache;
+    if (!w) { UI.showToast('请先打开世界观编辑', 1500); return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = `正在生成 ${count} 条动态条目…`; }
+
+    // 1. 上下文：世界书模式只发世界书自己的资料（无世界观设定）；世界观模式发完整上下文
+    let baseCtx;
+    if (isHiddenWv(w)) {
+      const parts = [];
+      if (w.description) parts.push(`## 世界书简介\n${w.description}`);
+      const ks = (w.knowledges || []).filter(k => k && k.content);
+      if (ks.length) parts.push(`## 世界书已有条目\n${ks.map(k => `### ${k.name || '未命名'}\n${k.content}`).join('\n\n')}`);
+      const npcs = (w.globalNpcs || []).filter(n => n && n.name);
+      if (npcs.length) parts.push(`## 角色\n${npcs.map(n => `- ${n.name}${n.summary ? '：' + n.summary : ''}`).join('\n')}`);
+      baseCtx = parts.length ? parts.join('\n\n') : '## 世界书\n（这是一本独立世界书，暂无世界观设定。请紧扣下面用户需求和已有条目来补充，不要脱离这本世界书已经确立的调性。）';
+    } else {
+      const settingText = document.getElementById('wv-setting')?.value?.trim() || w.setting || '';
+      baseCtx = (typeof WvGenerator !== 'undefined' && WvGenerator._buildWorldContext)
+        ? WvGenerator._buildWorldContext(w, '', settingText)
+        : `## 世界观设定\n${settingText || '（未提供）'}`;
+    }
+    // 2. 已有动态条目（防重复）
+    const existing = (knowledgesData || []).filter(k => k && k.name).map(k => k.name);
+    const existingBlock = existing.length ? `## 已有条目（不要重复名称、主题）\n${existing.join('、')}\n\n` : '';
+    // 3. 用户要求 + 数量
+    const userMsg = `${prompt ? '## 用户额外要求\n' + prompt + '\n\n' : ''}${baseCtx}\n\n${existingBlock}请生成 ${count} 条动态知识条目，严格按要求输出 JSON 数组。`;
+
+    try {
+      _aiKnowAbort = new AbortController();
+      const raw = await API.generate(_AI_KNOW_SYS, userMsg, { signal: _aiKnowAbort.signal, maxTokens: 8000 });
+      let cleaned = (raw || '').trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const fa = cleaned.indexOf('[');
+      const la = cleaned.lastIndexOf(']');
+      if (fa !== -1 && la > fa) cleaned = cleaned.substring(fa, la + 1);
+      const parsed = JSON.parse(cleaned);
+      const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.knowledges) ? parsed.knowledges : []);
+      if (!arr.length) throw new Error('AI 未返回有效条目');
+
+      const existSet = new Set(existing.map(n => String(n).toLowerCase()));
+      let added = 0;
+      for (const k of arr) {
+        if (!k || !k.name) continue;
+        const nm = String(k.name).trim();
+        if (!nm || existSet.has(nm.toLowerCase())) continue;
+        knowledgesData.push({
+          id: 'know_' + Utils.uuid().slice(0, 8),
+          name: nm,
+          keys: String(k.keys || '').trim(),
+          content: String(k.content || '').trim(),
+          enabled: true,
+          keywordTrigger: true,
+          position: 'system_top',
+          depth: 0
+        });
+        existSet.add(nm.toLowerCase());
+        added++;
+      }
+      if (added === 0) throw new Error('生成的条目都与已有条目重名');
+      _renderKnowledges(knowledgesData);
+      _wvExtAutoSave();
+      overlay?.remove();
+      UI.showToast(`已生成 ${added} 条动态条目`, 2000);
+    } catch (e) {
+      if (e.name === 'AbortError') { overlay?.remove(); return; }
+      console.error('[Worldview] AI 生成动态条目失败', e);
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiKnowAbort = null;
     }
   }
 
@@ -3530,13 +3672,15 @@ ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="1
     closeCustomModal();
     _wvExtAutoSave();
   }
-  function deleteCustomFromModal() {
-    if (_editCustomIdx === null) return;
-    customsData.splice(_editCustomIdx, 1);
-    _renderCustoms(customsData);
-    closeCustomModal();
-    _wvExtAutoSave();
-  }
+  async function deleteCustomFromModal() {
+  if (_editCustomIdx === null) return;
+  const nm = (customsData[_editCustomIdx]?.name || '该条目');
+  if (!await UI.showConfirm('删除常驻条目', `确定删除「${nm}」？此操作不可撤销。`)) return;
+  customsData.splice(_editCustomIdx, 1);
+  _renderCustoms(customsData);
+  closeCustomModal();
+  _wvExtAutoSave();
+}
   function closeCustomModal() {
 _editCustomIdx = null;
 document.getElementById('wv-custom-modal').classList.add('hidden');
@@ -3648,13 +3792,15 @@ _renderKnowledges(knowledgesData);
 closeKnowledgeModal();
     _wvExtAutoSave();
   }
-  function deleteKnowledgeFromModal() {
-    if (_editKnowledgeIdx === null) return;
-    knowledgesData.splice(_editKnowledgeIdx, 1);
-    _renderKnowledges(knowledgesData);
-    closeKnowledgeModal();
-    _wvExtAutoSave();
-  }
+  async function deleteKnowledgeFromModal() {
+  if (_editKnowledgeIdx === null) return;
+  const nm = (knowledgesData[_editKnowledgeIdx]?.name || '该条目');
+  if (!await UI.showConfirm('删除动态条目', `确定删除「${nm}」？此操作不可撤销。`)) return;
+  knowledgesData.splice(_editKnowledgeIdx, 1);
+  _renderKnowledges(knowledgesData);
+  closeKnowledgeModal();
+  _wvExtAutoSave();
+}
 function closeKnowledgeModal() {
     _editKnowledgeIdx = null;
     document.getElementById('wv-knowledge-modal').classList.add('hidden');
@@ -3793,9 +3939,1205 @@ function closeKnowledgeModal() {
   }
   let _editEventIdx = null;
 
+  // ===== AI 生成全局属性 =====
+  let _aiAttrAbort = null;
+
+  // 弹窗：让用户填数量 + 可选需求
+  function aiGenerateGlobalAttrs() {
+    const w = window.__wvEditingCache;
+    if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    const html = `
+    <div id="ai-attr-gen-overlay" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-attr-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成全局属性</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-attr-gen-prompt" rows="3" placeholder="例如：侧重生存要素、或偏向养成向的成长数值" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <div style="display:flex;gap:12px;margin-top:12px">
+          <div style="flex:1">
+            <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成数量</label>
+            <input type="number" id="ai-attr-gen-count" value="3" min="1" max="10" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">根据当前世界观基调生成独立属性（追加到已有属性后），进位/派生等联动请生成后手动配置。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-attr-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-attr-gen-btn" onclick="Worldview._doAiGenerateGlobalAttrs()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-attr-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  async function _doAiGenerateGlobalAttrs() {
+    const overlay = document.getElementById('ai-attr-gen-overlay');
+    const btn = document.getElementById('ai-attr-gen-btn');
+    const status = document.getElementById('ai-attr-gen-status');
+    const prompt = document.getElementById('ai-attr-gen-prompt')?.value?.trim() || '';
+    const count = Math.max(1, Math.min(10, parseInt(document.getElementById('ai-attr-gen-count')?.value) || 3));
+
+    const w = window.__wvEditingCache;
+    if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    const gp = _ensureGameplay(w);
+    const settingText = w?.setting || '';
+    const existingNames = (gp.globalAttrs || []).map(a => (a.name || '').trim()).filter(Boolean);
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = `正在生成 ${count} 个属性…`; }
+
+    const sysPrompt = `你是一个文字冒险游戏的玩法数值设计师。请根据世界观设定的基调，为该世界观设计一组"全局属性"（作用于玩家/全局的自定义数值）。
+
+设计要求：
+- 属性要贴合世界观基调。举例：生存/末世题材可以有「饱食度」「体力值」「精神状态」；娱乐圈题材可以有「星光值」「粉丝数」「话题度」；修仙题材可以有「灵力」「境界」「声望」；校园题材可以有「学分」「体力」「人气」。
+- 每个属性都是独立数值，不要设计属性之间的联动关系。
+- 属性名简洁（2-6字），有辨识度，符合世界观风格。
+- desc 说明这个数值代表什么、大致怎么变化，写给运行时 AI 看（30-80字），让 AI 知道什么时候该加减这个值。
+- initial：初始值（整数）。一般成长型属性从 0 起（如金币、经验、粉丝数），状态型属性可以给个中间值（如体力 100、饱食度 80）。
+- max：上限（整数）。有明确上限的状态属性填数值（如体力上限 100）；无上限的成长属性填空字符串 ""。
+
+输出纯 JSON 数组，每项格式：{"name":"属性名","desc":"说明","initial":0,"max":100}
+max 无上限时写 {"max":""}。不要输出 Markdown、注释或解释。`;
+
+    const userMsg = `请为以下世界观生成 ${count} 个全局属性。
+${prompt ? '\n## 用户额外需求\n' + prompt + '\n' : ''}
+## 世界观设定
+${settingText ? settingText.slice(0, 1500) : '（未提供，请生成通用的成长/状态属性）'}
+${existingNames.length ? '\n## 已有属性（不要重复）\n' + existingNames.join('、') : ''}`;
+
+    try {
+      _aiAttrAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _aiAttrAbort.signal, maxTokens: 3000 });
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const parsed = JSON.parse(cleaned);
+      const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.attrs) ? parsed.attrs : []);
+      if (!Array.isArray(arr) || arr.length === 0) throw new Error('AI 返回的不是有效属性数组');
+
+      const existSet = new Set(existingNames.map(n => n.toLowerCase()));
+      let added = 0;
+      for (const item of arr) {
+        const name = String(item?.name || '').trim();
+        if (!name || existSet.has(name.toLowerCase())) continue;
+        const attr = _defaultGameplayAttr();
+        attr.name = name;
+        attr.desc = String(item.desc || '').trim();
+        attr.initial = Number.isFinite(Number(item.initial)) ? Number(item.initial) : 0;
+        const mx = item.max;
+        attr.max = (mx === '' || mx === null || mx === undefined || !Number.isFinite(Number(mx))) ? '' : Number(mx);
+        // 联动字段一律留空（第一版不生成联动）
+        attr.overflowTo = ''; attr.deriveTo = ''; attr.deriveStep = '';
+        gp.globalAttrs.push(attr);
+        existSet.add(name.toLowerCase());
+        added++;
+      }
+
+      if (added === 0) throw new Error('生成的属性都与已有重复');
+      await _saveEditingWV(w);
+      window.__wvEditingCache = w;
+      _renderGameplayAttrs(w);
+      overlay?.remove();
+      UI.showToast(`已生成 ${added} 个全局属性`, 2000);
+    } catch(e) {
+      if (e.name === 'AbortError') { if (status) status.textContent = '已取消'; return; }
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiAttrAbort = null;
+    }
+  }
+  // ===== AI 生成角色属性（模板 → 批量套用勾选的角色）=====
+  // 收集当前世界观的可选角色（只列本世界观的 NPC，不含单人卡/其它世界观）
+  function _collectCurrentWvNpcs(w) {
+    const out = [];
+    if (!w) return out;
+    (w.globalNpcs || []).forEach(n => {
+      if (!n || !n.id) return;
+      out.push({ targetType: 'worldviewNpc', targetId: n.id, sourceWorldviewId: w.id, targetName: n.name || '未命名', aliases: n.aliases || '', sourceLabel: '全图常驻' });
+    });
+    (w.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(n => {
+      if (!n || !n.id) return;
+      out.push({ targetType: 'worldviewNpc', targetId: n.id, sourceWorldviewId: w.id, targetName: n.name || '未命名', aliases: n.aliases || '', sourceLabel: `${r.name || '未命名地区'} / ${f.name || '未命名势力'}` });
+    })));
+    return out;
+  }
+
+  function aiGenerateCharAttrs() {
+    const w = window.__wvEditingCache;
+    if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    const npcs = _collectCurrentWvNpcs(w);
+    if (!npcs.length) { UI.showToast('当前世界观还没有角色，请先添加 NPC', 2400); return; }
+    window.__wvCharAttrNpcCache = npcs;
+    const rows = npcs.map((c, i) => `
+      <label style="display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);cursor:pointer">
+        <input type="checkbox" class="ai-charattr-pick" data-idx="${i}" checked style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.targetName)}</div>
+          <div style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.sourceLabel || '')}</div>
+        </div>
+      </label>`).join('');
+    const html = `
+    <div id="ai-charattr-gen-overlay" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-charattr-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:440px;max-height:85vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成角色属性</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-charattr-gen-prompt" rows="2" placeholder="例如：侧重角色与玩家的关系发展，或加入信任/戒备这类对立向数值" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <div style="margin-top:12px">
+          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成数量</label>
+          <input type="number" id="ai-charattr-gen-count" value="3" min="1" max="10" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:14px;box-sizing:border-box">
+        </div>
+        <div style="margin-top:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <label style="font-size:12px;color:var(--text-secondary)">应用到角色</label>
+            <div style="display:flex;gap:8px">
+              <button type="button" onclick="Worldview._charAttrPickAll(true)" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0">全选</button>
+              <button type="button" onclick="Worldview._charAttrPickAll(false)" style="background:none;border:none;color:var(--text-secondary);font-size:12px;cursor:pointer;padding:0">全不选</button>
+            </div>
+          </div>
+          <div style="max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">${rows}</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">生成一套通用角色属性模板，套用到勾选的角色（各角色数值独立）。已有属性的角色只追加不重名的，联动请生成后手动配置。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-charattr-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-charattr-gen-btn" onclick="Worldview._doAiGenerateCharAttrs()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-charattr-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  function _charAttrPickAll(on) {
+    document.querySelectorAll('#ai-charattr-gen-overlay .ai-charattr-pick').forEach(cb => { cb.checked = !!on; });
+  }
+
+  async function _doAiGenerateCharAttrs() {
+    const overlay = document.getElementById('ai-charattr-gen-overlay');
+    const btn = document.getElementById('ai-charattr-gen-btn');
+    const status = document.getElementById('ai-charattr-gen-status');
+    const prompt = document.getElementById('ai-charattr-gen-prompt')?.value?.trim() || '';
+    const count = Math.max(1, Math.min(10, parseInt(document.getElementById('ai-charattr-gen-count')?.value) || 3));
+
+    const picks = Array.from(document.querySelectorAll('#ai-charattr-gen-overlay .ai-charattr-pick'))
+      .filter(cb => cb.checked)
+      .map(cb => (window.__wvCharAttrNpcCache || [])[Number(cb.getAttribute('data-idx'))])
+      .filter(Boolean);
+    if (!picks.length) { if (status) { status.style.display = 'block'; status.textContent = '请至少勾选一个角色'; } return; }
+
+    const w = window.__wvEditingCache;
+    if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    const settingText = w?.setting || '';
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = `正在生成模板并套用到 ${picks.length} 个角色…`; }
+
+    const sysPrompt = `你是一个文字冒险游戏的玩法数值设计师。请根据世界观基调，设计一套"角色属性模板"——衡量单个角色与玩家之间关系/状态的自定义数值，会被套用到多个角色身上。
+
+设计要求：
+- 以角色与玩家的关系向为主。举例：「好感度」「信任度」「亲密度」「戒备心」等，也可以根据世界观加入题材相关的关系数值（如宫斗题材的「宠爱值」、江湖题材的「义气」）。跟随用户需求，不必拘泥于好感度。
+- 每个属性都是独立数值，不要设计属性之间的联动关系。
+- 属性名简洁（2-6字），符合世界观风格。
+- desc 说明这个数值代表这个角色对玩家的什么态度/状态、大致怎么变化，写给运行时 AI 看（30-80字）。desc 里用"该角色/对方"这类通用称呼，不要写死具体角色名（因为会套用到多个角色）。
+- initial：初始值（整数）。关系类一般从中性值起（如好感度 50、信任 30），负向数值（如戒备心）可以从较低值起。
+- max：上限（整数）。关系类通常有上限（如好感度上限 100）；无上限的填空字符串 ""。
+
+输出纯 JSON 数组，每项格式：{"name":"属性名","desc":"说明","initial":50,"max":100}
+max 无上限时写 {"max":""}。不要输出 Markdown、注释或解释。`;
+
+    const userMsg = `请为以下世界观生成 ${count} 个角色属性（模板，将套用到多个角色）。
+${prompt ? '\n## 用户额外需求\n' + prompt + '\n' : ''}
+## 世界观设定
+${settingText ? settingText.slice(0, 1500) : '（未提供，请生成通用的角色关系属性）'}`;
+
+    try {
+      _aiAttrAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _aiAttrAbort.signal, maxTokens: 3000 });
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const parsed = JSON.parse(cleaned);
+      const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.attrs) ? parsed.attrs : []);
+      if (!Array.isArray(arr) || arr.length === 0) throw new Error('AI 返回的不是有效属性数组');
+
+      // 归一化成模板属性（去掉 id，套用时每个角色各自生成 id）
+      const template = [];
+      const tplSeen = new Set();
+      for (const item of arr) {
+        const name = String(item?.name || '').trim();
+        if (!name || tplSeen.has(name.toLowerCase())) continue;
+        const mx = item.max;
+        template.push({
+          name,
+          desc: String(item.desc || '').trim(),
+          initial: Number.isFinite(Number(item.initial)) ? Number(item.initial) : 0,
+          max: (mx === '' || mx === null || mx === undefined || !Number.isFinite(Number(mx))) ? '' : Number(mx)
+        });
+        tplSeen.add(name.toLowerCase());
+      }
+      if (!template.length) throw new Error('生成的属性无效');
+
+      // 重新拿最新世界观写入（避免 __wvEditingCache 过期）
+      const ww = await DB.get('worldviews', editingWorldviewId) || w;
+      const gp = _ensureGameplay(ww);
+      let touchedCards = 0, addedAttrs = 0;
+      for (const npc of picks) {
+        const key = _attrTargetKey({ targetType: npc.targetType, targetId: npc.targetId, sourceWorldviewId: npc.sourceWorldviewId });
+        let card = gp.characterAttrs.find(x => _attrTargetKey(x) === key);
+        if (!card) {
+          card = { targetType: npc.targetType, targetId: npc.targetId, targetName: npc.targetName, sourceWorldviewId: npc.sourceWorldviewId || '', sourceLabel: npc.sourceLabel || '', attrs: [] };
+          gp.characterAttrs.push(card);
+        }
+        const existSet = new Set((card.attrs || []).map(a => (a.name || '').trim().toLowerCase()).filter(Boolean));
+        let cardAdded = 0;
+        for (const t of template) {
+          if (existSet.has(t.name.toLowerCase())) continue;
+          const attr = _defaultGameplayAttr();
+          attr.name = t.name;
+          attr.desc = t.desc;
+          attr.initial = t.initial;
+          attr.max = t.max;
+          attr.overflowTo = ''; attr.deriveTo = ''; attr.deriveStep = '';
+          card.attrs.push(attr);
+          existSet.add(t.name.toLowerCase());
+          cardAdded++; addedAttrs++;
+        }
+        if (cardAdded > 0) touchedCards++;
+      }
+
+      if (addedAttrs === 0) throw new Error('勾选的角色都已有同名属性');
+      await _saveEditingWV(ww);
+      window.__wvEditingCache = ww;
+      _renderGameplayAttrs(ww);
+      overlay?.remove();
+      UI.showToast(`已为 ${touchedCards} 个角色套用属性（共 ${addedAttrs} 条）`, 2200);
+    } catch(e) {
+      if (e.name === 'AbortError') { if (status) status.textContent = '已取消'; return; }
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiAttrAbort = null;
+    }
+  }
+
+    // ===== AI 生成任务阶段配置（世界观级，照搬对话级逻辑，上下文用世界观设定）=====
+  let _aiTaskAbort = null;
+
+  // 弹窗：让用户填可选需求（任务的 types 数量由 AI 按 3-5 自定，不需要数量输入）
+  function aiGenerateTaskPhase(pi) {
+    const w = window.__wvEditingCache;
+    if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    const gp = _ensureGameplay(w);
+    if (!gp.taskSystem.phases[pi]) return;
+    const html = `
+    <div id="ai-task-gen-overlay" data-pi="${pi}" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-task-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成完整阶段配置</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-task-gen-prompt" rows="3" placeholder="例如：侧重日常养成向任务、或偏调查解谜、或围绕某条主线" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">会生成一套完整阶段配置（阶段名、任务类型、奖励），覆盖当前阶段的内容。任务类型数量由 AI 按需生成。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-task-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-task-gen-btn" onclick="Worldview._doAiGenerateTaskPhase()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-task-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  async function _doAiGenerateTaskPhase() {
+    const overlay = document.getElementById('ai-task-gen-overlay');
+    const btn = document.getElementById('ai-task-gen-btn');
+    const status = document.getElementById('ai-task-gen-status');
+    const prompt = document.getElementById('ai-task-gen-prompt')?.value?.trim() || '';
+    const pi = Number(overlay?.dataset?.pi);
+
+    const w = window.__wvEditingCache;
+    if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    const gp = _ensureGameplay(w);
+    const phase = gp.taskSystem.phases[pi];
+    if (!phase) { if (status) { status.style.display = 'block'; status.textContent = '阶段已不存在'; } return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = '正在生成阶段配置…'; }
+
+    try {
+      const settingText = w?.setting || '';
+      // 收集属性名（全局 + 各角色），供任务奖励绑定
+      const globals = (gp.globalAttrs || []).map(a => a.name).filter(Boolean);
+      const chars = (gp.characterAttrs || []).flatMap(c =>
+        (c.attrs || []).map(a => `${c.targetName || '角色'}的${a.name}`).filter(Boolean)
+      );
+      const attrList = [...globals, ...chars].join('、');
+
+      const sysPrompt = `你是一个文字冒险游戏的任务系统设计师。请根据世界观设定，为一个游戏阶段设计一套完整的任务系统配置。
+
+配置包括：
+- name：阶段名称（3-8字，反映这个阶段的主题）
+- batchSize：每批任务数量（2-5 之间，建议 3）
+- totalTasks：这个阶段的总任务目标数（5-20，建议 10）
+- types：任务类型模板数组，包含 3-5 个类型。每个类型：
+  - label：类型名称（2-6字，简洁有力，如"武力提升""线索探查""日常修炼"）
+  - desc：任务方向说明（给运行时 AI 看的大方向，50-100字）。只说这类任务的性质和内容方向，举1-2个具体任务例子，让 AI 知道应该给玩家派什么类型的事情去做。不要写触发时机，不要写"当玩家……时"，直接描述任务内容的形态。例如："属于武力提升类任务，内容围绕体能训练、格斗学习展开，如报名散打课、完成一次对练、跟师父学招式等。"
+  - rewardMode：奖励模式（"attr" / "free" / "none"）
+  - rewardAttr：当 rewardMode="attr" 时，填属性名（必须从下方属性列表选）
+  - rewardValue：当 rewardMode="attr" 时，奖励数值（1-5）
+  - rewardFree：当 rewardMode="free" 时，奖励方向（大方向，非具体物品，例如"获得与调查相关的线索或物品"）
+- completionReward：阶段完成奖励（对象格式）
+  - mode：奖励模式（"attr" / "free" / "none"）
+  - attr：当 mode="attr" 时，属性名
+  - value：当 mode="attr" 时，奖励数值
+  - free：当 mode="free" 时，奖励方向
+
+要求：
+- 这是"世界观级"任务配置，应来自世界观本身的题材、主题和玩家在该世界里会自然去做的事情，不要依赖某一次具体对话的临时剧情。
+- types 要覆盖玩家在这个阶段自然会去做的不同类型的事情。
+- 如果有自定义属性，优先使用属性奖励，选择与任务内容最相关的属性。
+- 阶段奖励可以用属性或 free，也可以无奖励（mode="none"）。
+
+输出纯JSON对象（不是数组），不要其他内容。格式：
+{"name":"阶段名","batchSize":3,"totalTasks":10,"types":[{"label":"武力提升","desc":"属于武力提升类任务，内容围绕体能训练、格斗学习展开，如报名散打课、完成一次对练等。","rewardMode":"attr","rewardAttr":"战斗力","rewardValue":2,"rewardFree":""}],"completionReward":{"mode":"attr","attr":"战斗力","value":5,"free":""}}`;
+
+      const userMsg = `请为以下世界观设计一套完整的阶段任务系统配置。
+${prompt ? '\n## 用户额外需求\n' + prompt + '\n' : ''}
+## 世界观设定
+${settingText ? settingText.slice(0, 1500) : '（未提供）'}
+
+## 可用自定义属性
+${attrList || '（未配置属性——请用 rewardMode "free" 或 "none"）'}`;
+
+      _aiTaskAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _aiTaskAbort.signal, maxTokens: 4000 });
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const config = JSON.parse(cleaned);
+      if (!config || typeof config !== 'object') throw new Error('AI 返回的不是有效对象');
+
+      // 重新拿最新世界观写入
+      const ww = await DB.get('worldviews', editingWorldviewId) || w;
+      const gpw = _ensureGameplay(ww);
+      const ph = gpw.taskSystem.phases[pi];
+      if (!ph) throw new Error('阶段已不存在');
+
+      ph.name = String(config.name || '').trim();
+      ph.batchSize = Math.max(1, Math.min(5, Number(config.batchSize) || 3));
+      ph.totalTasks = Math.max(1, Math.min(999, Number(config.totalTasks) || 10));
+      ph.types = [];
+      if (Array.isArray(config.types)) {
+        for (const item of config.types) {
+          if (!item || !item.label) continue;
+          ph.types.push({
+            id: 'tt_' + Utils.uuid().slice(0, 8),
+            label: String(item.label).trim(),
+            desc: String(item.desc || '').trim(),
+            rewardMode: ['attr', 'free', 'none'].includes(item.rewardMode) ? item.rewardMode : 'none',
+            rewardAttr: String(item.rewardAttr || '').trim(),
+            rewardValue: Number(item.rewardValue) || 0,
+            rewardFree: String(item.rewardFree || '').trim()
+          });
+        }
+      }
+      if (config.completionReward && typeof config.completionReward === 'object') {
+        ph.completionReward = {
+          mode: ['attr', 'free', 'none'].includes(config.completionReward.mode) ? config.completionReward.mode : 'none',
+          attr: String(config.completionReward.attr || '').trim(),
+          value: Number(config.completionReward.value) || 0,
+          free: String(config.completionReward.free || '').trim()
+        };
+      } else {
+        ph.completionReward = { mode: 'none', attr: '', value: 0, free: '' };
+      }
+
+      await _saveEditingWV(ww);
+      window.__wvEditingCache = ww;
+      _renderTaskSystem(ww);
+      overlay?.remove();
+      UI.showToast(`已生成阶段配置（${ph.types.length} 个任务类型）`, 2000);
+    } catch(e) {
+      if (e.name === 'AbortError') { if (status) status.textContent = '已取消'; return; }
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiTaskAbort = null;
+    }
+  }
+
+  // ===== AI 生成历法系统（世界观级，整体覆盖当前历法；hoursPerDay 锁 24）=====
+  let _aiCalAbort = null;
+
+  // 弹窗：填可选需求（历法是整体结构，只生成不需要数量）
+  function aiGenerateCalendar() {
+    const w = window.__wvEditingCache;
+    if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    const html = `
+    <div id="ai-cal-gen-overlay" style="position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-cal-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成历法系统</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-cal-gen-prompt" rows="3" placeholder="例如：修仙世界用天干纪日、日式月曜日、或用古风十二时辰" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">会根据世界观基调生成星期名、月份天数、季节、时段，<b>整体覆盖</b>当前历法（一天固定 24 小时不变）。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-cal-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-cal-gen-btn" onclick="Worldview._doAiGenerateCalendar()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-cal-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  async function _doAiGenerateCalendar() {
+    const overlay = document.getElementById('ai-cal-gen-overlay');
+    const btn = document.getElementById('ai-cal-gen-btn');
+    const status = document.getElementById('ai-cal-gen-status');
+    const prompt = document.getElementById('ai-cal-gen-prompt')?.value?.trim() || '';
+
+    const w = window.__wvEditingCache;
+    if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = '正在生成历法…'; }
+
+    try {
+      const settingText = w?.setting || '';
+
+      const sysPrompt = `你是一个文字冒险游戏的历法系统设计师。请根据世界观设定，设计一套贴合该世界基调的历法。
+
+必须输出以下字段（纯 JSON 对象）：
+- daysPerWeek：一周天数（整数，3-10，通常 7）
+- weekDayNames：星期名数组，长度必须等于 daysPerWeek。每个是完整名称（如"星期一""月曜日""甲日"）。**严禁包含任何阿拉伯数字或中文数字**（会干扰时间解析），要用有世界观特色的命名。
+- weekDayTypes：与 weekDayNames 等长的数组，每项是 "work"（工作/活动日）或 "rest"（休息日），一般末尾 1-2 天为 rest。
+- monthsPerYear：一年月份数（整数，通常 12，奇幻世界可 4-16）
+- daysPerMonth：每月天数数组，长度必须等于 monthsPerYear，每项 20-40 的整数。
+- seasons：季节数组，每项 {name:季节名(2-6字), months:该季节包含的月份数字数组(元素在 1..monthsPerYear 范围内), weather:天气概述(不超过20字)}。所有月份应被季节覆盖，不重不漏。
+- timePeriods：一天的时段数组，每项 {name:时段名(如"卯时""清晨"), startHour:起始小时(0-23整数), desc:该时段环境特征(不超过30字)}。至少 4 个时段，按 startHour 升序，第一个 startHour 应为 0。
+
+要求：
+- 历法命名和风格要贴合世界观题材（修仙用天干地支/时辰，日式用曜日，西幻可自造月份名等）。
+- 不要输出 hoursPerDay（一天固定 24 小时，由系统管理）。
+- 季节与月份要自洽（如四季对应的月份连续）。
+
+输出纯 JSON 对象，不要任何其他内容。格式示例：
+{"daysPerWeek":7,"weekDayNames":["星期一","星期二","星期三","星期四","星期五","星期六","星期日"],"weekDayTypes":["work","work","work","work","work","rest","rest"],"monthsPerYear":12,"daysPerMonth":[31,28,31,30,31,30,31,31,30,31,30,31],"seasons":[{"name":"春","months":[3,4,5],"weather":"微风渐暖"},{"name":"夏","months":[6,7,8],"weather":"炎热潮湿"},{"name":"秋","months":[9,10,11],"weather":"凉爽干燥"},{"name":"冬","months":[12,1,2],"weather":"寒冷"}],"timePeriods":[{"name":"凌晨","startHour":0,"desc":"天色未明，万籁俱寂"},{"name":"早晨","startHour":5,"desc":"天色渐亮"},{"name":"上午","startHour":8,"desc":"日光明亮"},{"name":"下午","startHour":14,"desc":"日光偏斜"},{"name":"傍晚","startHour":18,"desc":"太阳落山"},{"name":"夜晚","startHour":20,"desc":"灯火亮起"}]}`;
+
+      const userMsg = `请为以下世界观设计一套历法。
+${prompt ? '\n## 用户额外需求\n' + prompt + '\n' : ''}
+## 世界观设定
+${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
+
+      _aiCalAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _aiCalAbort.signal, maxTokens: 3000 });
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const c = JSON.parse(cleaned);
+      if (!c || typeof c !== 'object') throw new Error('AI 返回的不是有效对象');
+
+      // ===== 严格校验 + 归一化 =====
+      // 星期名：剥数字、去空、非空
+      let weekNames = Array.isArray(c.weekDayNames)
+        ? c.weekDayNames.map(n => String(n == null ? '' : n).replace(/[0-9\uFF10-\uFF19]/g, '').trim()).filter(Boolean)
+        : [];
+      if (weekNames.length < 1) throw new Error('星期名无效');
+      let daysPerWeek = weekNames.length;
+
+      // 星期类型：与星期名等长，非法值补 work
+      let weekTypes = Array.isArray(c.weekDayTypes) ? c.weekDayTypes.map(t => t === 'rest' ? 'rest' : 'work') : [];
+      while (weekTypes.length < daysPerWeek) weekTypes.push('work');
+      weekTypes = weekTypes.slice(0, daysPerWeek);
+
+      // 月份数
+      let monthsPerYear = Math.max(1, Math.min(24, Math.round(Number(c.monthsPerYear) || 12)));
+      // 每月天数：与月份数等长，缺补 30，越界钳到 1..999
+      let daysPerMonth = Array.isArray(c.daysPerMonth) ? c.daysPerMonth.map(d => Math.max(1, Math.min(999, Math.round(Number(d) || 30)))) : [];
+      while (daysPerMonth.length < monthsPerYear) daysPerMonth.push(30);
+      daysPerMonth = daysPerMonth.slice(0, monthsPerYear);
+
+      // 季节：过滤越界月份，非空名
+      let seasons = Array.isArray(c.seasons) ? c.seasons.map(s => ({
+        name: String(s?.name || '').trim().slice(0, 10),
+        months: Array.isArray(s?.months) ? s.months.map(m => Math.round(Number(m))).filter(m => m >= 1 && m <= monthsPerYear) : [],
+        weather: String(s?.weather || '').trim().slice(0, 20)
+      })).filter(s => s.name) : [];
+      if (!seasons.length) throw new Error('季节配置无效');
+
+      // 时段：startHour 0-23、按升序、非空名
+      let timePeriods = Array.isArray(c.timePeriods) ? c.timePeriods.map(p => ({
+        name: String(p?.name || '').trim().slice(0, 10),
+        startHour: Math.max(0, Math.min(23, Math.round(Number(p?.startHour) || 0))),
+        desc: String(p?.desc || '').trim().slice(0, 30)
+      })).filter(p => p.name) : [];
+      if (timePeriods.length < 1) throw new Error('时段配置无效');
+      timePeriods.sort((a, b) => a.startHour - b.startHour);
+      // 保证第一个时段从 0 点起，避免出现无法归属的凌晨时段
+      if (timePeriods[0].startHour !== 0) timePeriods[0].startHour = 0;
+
+      // ===== 整体覆盖写入（hoursPerDay 锁死 24）=====
+      const ww = await DB.get('worldviews', editingWorldviewId) || w;
+      const gpw = _ensureGameplay(ww);
+      gpw.calendarSystem = {
+        hoursPerDay: 24,
+        daysPerWeek,
+        weekDayNames: weekNames,
+        weekDayTypes: weekTypes,
+        monthsPerYear,
+        daysPerMonth,
+        uniformDaysPerMonth: false,
+        seasons,
+        timePeriods
+      };
+
+      await _saveEditingWV(ww);
+      window.__wvEditingCache = ww;
+      _editingCalRules = gpw.calendarSystem;
+      overlay?.remove();
+      // 刷新历法编辑器界面（若打开着）+ 卡片标签
+      _calSaveAndRefresh();
+      _updateCalendarCardLabel();
+      UI.showToast(`已生成历法（${daysPerWeek}天/周 · ${monthsPerYear}月/年 · ${seasons.length}季）`, 2200);
+    } catch(e) {
+      if (e.name === 'AbortError') { if (status) status.textContent = '已取消'; return; }
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiCalAbort = null;
+    }
+  }
+
+  // ===== AI 生成商城配置（短时效 takeout + 长时效 shop，一次生成两个，只回填不自动保存）=====
+  let _aiShopAbort = null;
+
+  function aiGenerateShops() {
+    const w = window.__wvEditingCache;
+    if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    const html = `
+    <div id="ai-shop-gen-overlay" style="position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-shop-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成商城配置</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-shop-gen-prompt" rows="3" placeholder="例如：末世废土风的补给站和黑市、或修仙界的灵厨外送和天机阁" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">会根据世界观基调一次生成<b>短时效商城</b>（即时到手，如外卖/补给）和<b>长时效商城</b>（等几天，如网购/大件）的名称、描述、配送时间，填进上面的表单。生成后可手动微调。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-shop-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-shop-gen-btn" onclick="Worldview._doAiGenerateShops()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-shop-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  async function _doAiGenerateShops() {
+    const overlay = document.getElementById('ai-shop-gen-overlay');
+    const btn = document.getElementById('ai-shop-gen-btn');
+    const status = document.getElementById('ai-shop-gen-status');
+    const prompt = document.getElementById('ai-shop-gen-prompt')?.value?.trim() || '';
+
+    const w = window.__wvEditingCache;
+    if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = '正在生成商城配置…'; }
+
+    try {
+      const settingText = w?.setting || '';
+
+      const sysPrompt = `你是一个文字冒险游戏的手机商城设计师。请根据世界观设定，一次性设计两个购物平台：短时效商城和长时效商城。
+
+- takeout（短时效商城）：即时/当天就能到手的东西，如餐食、饮品、日用补给、灵厨外送等。配送以分钟计（deliveryUnit="min"），deliveryMin/deliveryMax 是配送分钟数范围（如 15~45）。
+- shop（长时效商城）：需要等几天送达的大件或贵重物品，如装备、家具、法宝、丹药、网购商品等。配送以天计（deliveryUnit="day"），deliveryMin/deliveryMax 是配送天数范围（如 2~5）。
+
+每个商城都要有：
+- name：平台名称（有世界观特色，如现代"饿了咪/桃宝"、修仙"灵厨到家/天机阁"、末世"补给空投/黑市"）
+- desc：告诉运行时 AI 这家卖什么（50-100字，说明经营范围和特色，让 AI 知道玩家能在这买到什么）
+- deliveryMin / deliveryMax：配送时间范围的整数
+- deliveryUnit："min"（短时效固定用 min）或 "day"（长时效固定用 day）
+
+要求：
+- 两个平台的风格、命名都要贴合世界观题材。
+- 短时效卖即时消耗品，长时效卖需要等待的大件，两者定位要区分开。
+- 配送时间要符合常识：短时效几十分钟内，长时效几天。
+
+输出纯 JSON 对象，不要任何其他内容。格式示例：
+{"takeout":{"name":"灵厨到家","desc":"修真界即时灵膳外送，供应各类餐食、茶点、疗伤灵丹小食，下单后由御剑差役即刻送达。","deliveryMin":15,"deliveryMax":45,"deliveryUnit":"min"},"shop":{"name":"天机阁","desc":"跨域法宝集市，售卖法器、丹药、符箓、灵草与炼器材料等珍稀物品，需由飞舟运送数日方达。","deliveryMin":2,"deliveryMax":5,"deliveryUnit":"day"}}`;
+
+      const userMsg = `请为以下世界观设计短时效和长时效两个商城。
+${prompt ? '\n## 用户额外需求\n' + prompt + '\n' : ''}
+## 世界观设定
+${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
+
+      _aiShopAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _aiShopAbort.signal, maxTokens: 2000 });
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const c = JSON.parse(cleaned);
+      if (!c || typeof c !== 'object') throw new Error('AI 返回的不是有效对象');
+
+      const tk = c.takeout || {};
+      const sh = c.shop || {};
+      if (!tk.name && !sh.name) throw new Error('未生成有效商城');
+
+      // 只回填到表单（不自动保存，用户可微调，返回时走原有 autosave）
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
+      const setUnit = (id, v, def) => { const el = document.getElementById(id); if (el) el.value = (v === 'min' || v === 'day') ? v : def; };
+      // 短时效
+      setVal('pa-takeout-name', String(tk.name || '').trim());
+      setVal('pa-takeout-desc', String(tk.desc || '').trim());
+      const tkMin = Math.max(0, Math.round(Number(tk.deliveryMin))); if (Number.isFinite(tkMin) && tk.deliveryMin != null) setVal('pa-takeout-deliveryMin', tkMin);
+      const tkMax = Math.max(0, Math.round(Number(tk.deliveryMax))); if (Number.isFinite(tkMax) && tk.deliveryMax != null) setVal('pa-takeout-deliveryMax', tkMax);
+      setUnit('pa-takeout-deliveryUnit', tk.deliveryUnit, 'min');
+      // 长时效
+      setVal('pa-shop-name', String(sh.name || '').trim());
+      setVal('pa-shop-desc', String(sh.desc || '').trim());
+      const shMin = Math.max(0, Math.round(Number(sh.deliveryMin))); if (Number.isFinite(shMin) && sh.deliveryMin != null) setVal('pa-shop-deliveryMin', shMin);
+      const shMax = Math.max(0, Math.round(Number(sh.deliveryMax))); if (Number.isFinite(shMax) && sh.deliveryMax != null) setVal('pa-shop-deliveryMax', shMax);
+      setUnit('pa-shop-deliveryUnit', sh.deliveryUnit, 'day');
+
+      // 触发一次 autosave（表单 input 有绑定，但程序化 setVal 不触发 input 事件，主动存一次）
+      try {
+        const ww = await DB.get('worldviews', editingWorldviewId) || w;
+        ww.phoneApps = ww.phoneApps || {};
+        ww.phoneApps.takeout = ww.phoneApps.takeout || {};
+        ww.phoneApps.shop = ww.phoneApps.shop || {};
+        const gv = id => (document.getElementById(id)?.value || '');
+        ww.phoneApps.takeout.name = gv('pa-takeout-name');
+        ww.phoneApps.takeout.desc = gv('pa-takeout-desc');
+        ww.phoneApps.takeout.deliveryMin = gv('pa-takeout-deliveryMin');
+        ww.phoneApps.takeout.deliveryMax = gv('pa-takeout-deliveryMax');
+        ww.phoneApps.takeout.deliveryUnit = gv('pa-takeout-deliveryUnit') || 'min';
+        ww.phoneApps.shop.name = gv('pa-shop-name');
+        ww.phoneApps.shop.desc = gv('pa-shop-desc');
+        ww.phoneApps.shop.deliveryMin = gv('pa-shop-deliveryMin');
+        ww.phoneApps.shop.deliveryMax = gv('pa-shop-deliveryMax');
+        ww.phoneApps.shop.deliveryUnit = gv('pa-shop-deliveryUnit') || 'day';
+        await _saveEditingWV(ww);
+        window.__wvEditingCache = ww;
+        try { _updatePhoneAppsLabel(); } catch(_) {}
+      } catch(_) {}
+
+      overlay?.remove();
+      UI.showToast('已生成商城配置，可在表单里微调', 2200);
+    } catch(e) {
+      if (e.name === 'AbortError') { if (status) status.textContent = '已取消'; return; }
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiShopAbort = null;
+    }
+  }
+
+  // ===== AI 生成内容平台（信息载体/电台/阅读/视频，四个的 name + desc 一起生成）=====
+  let _aiMediaAbort = null;
+
+  function aiGenerateMediaApps() {
+    const w = window.__wvEditingCache;
+    if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    const html = `
+    <div id="ai-media-gen-overlay" style="position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-media-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成内容平台</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-media-gen-prompt" rows="3" placeholder="例如：末世废土风、或修真界的坊市传音风" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">会根据世界观基调一次生成<b>信息载体、电台、阅读、视频</b>四个内容平台的名称和描述，填进下面对应的表单。生成后可手动微调。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-media-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-media-gen-btn" onclick="Worldview._doAiGenerateMediaApps()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-media-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  async function _doAiGenerateMediaApps() {
+    const overlay = document.getElementById('ai-media-gen-overlay');
+    const btn = document.getElementById('ai-media-gen-btn');
+    const status = document.getElementById('ai-media-gen-status');
+    const prompt = document.getElementById('ai-media-gen-prompt')?.value?.trim() || '';
+
+    const w = window.__wvEditingCache;
+    if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = '正在生成内容平台…'; }
+
+    try {
+      const settingText = w?.setting || '';
+
+      const sysPrompt = `你是一个文字冒险游戏的手机应用设计师。请根据世界观设定，一次性设计四个"内容平台"应用。它们是这个世界里人们获取信息和娱乐的主流渠道：
+
+- forum（信息载体）：人们讨论交流、发帖爆料的平台（相当于论坛/微博/小红书/贴吧，或世界观对应形态如坊市传音阵、幸存者留言板）。
+- radio（电台）：音频广播平台（相当于电台/播客，或世界观对应形态如传音法阵、废土电波）。
+- reading（阅读）：小说/文本阅读平台（相当于起点/番茄小说，或世界观对应形态如藏书楼、灵典阁）。
+- video（视频）：影视点播平台（相当于优酷/爱奇艺，或世界观对应形态如光影阁、幻境投影）。
+
+每个平台都要有：
+- name：平台名称（有世界观特色，别用地球现实品牌名，要贴合题材再创作）
+- desc：平台描述（40-90字），告诉运行时 AI 这个平台的内容画风、主要用户群、常见内容类型，方便 AI 生成符合世界观的内容。
+
+要求：
+- 四个平台的命名风格要统一在同一个世界观基调下，但各有各的定位，不要雷同。
+- 描述要具体到"谁在用、有什么内容、什么画风"。
+
+输出纯 JSON 对象，不要任何其他内容。格式示例：
+{"forum":{"name":"传音坊","desc":"散修交流的阵盘社区，常见丹方交易、剑修吐槽、门派八卦，画风市井热闹。"},"radio":{"name":"灵音台","desc":"以传音法器广播的音频频道，涵盖宗门资讯、夜话情感、志怪奇谈等。"},"reading":{"name":"藏经阁","desc":"修真界小说文库，收录修仙志、异闻录、话本传奇，读者多为闲暇散修与坊市百姓。"},"video":{"name":"幻影镜","desc":"以幻境法阵投影的影像平台，播映斗法实录、秘境游记、志怪短剧等。"}}`;
+
+      const userMsg = `请为以下世界观设计信息载体、电台、阅读、视频四个内容平台。
+${prompt ? '\n## 用户额外需求\n' + prompt + '\n' : ''}
+## 世界观设定
+${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
+
+      _aiMediaAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _aiMediaAbort.signal, maxTokens: 2500 });
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const c = JSON.parse(cleaned);
+      if (!c || typeof c !== 'object') throw new Error('AI 返回的不是有效对象');
+
+      const fm = c.forum || {}, rd = c.radio || {}, rg = c.reading || {}, vg = c.video || {};
+      if (!fm.name && !rd.name && !rg.name && !vg.name) throw new Error('未生成有效内容');
+
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
+      setVal('pa-forum-name', String(fm.name || '').trim());
+      setVal('pa-forum-desc', String(fm.desc || '').trim());
+      setVal('pa-radio-name', String(rd.name || '').trim());
+      setVal('pa-radio-desc', String(rd.desc || '').trim());
+      setVal('pa-reading-name', String(rg.name || '').trim());
+      setVal('pa-reading-desc', String(rg.desc || '').trim());
+      setVal('pa-video-name', String(vg.name || '').trim());
+      setVal('pa-video-desc', String(vg.desc || '').trim());
+
+      // 主动存一次（程序化 setVal 不触发 input 的 autosave）
+      try {
+        const ww = await DB.get('worldviews', editingWorldviewId) || w;
+        ww.phoneApps = ww.phoneApps || {};
+        const gv = id => (document.getElementById(id)?.value || '');
+        ww.phoneApps.forum = ww.phoneApps.forum || {};
+        ww.phoneApps.forum.name = gv('pa-forum-name');
+        ww.phoneApps.forum.desc = gv('pa-forum-desc');
+        ww.phoneApps.radio = ww.phoneApps.radio || {};
+        ww.phoneApps.radio.name = gv('pa-radio-name');
+        ww.phoneApps.radio.desc = gv('pa-radio-desc');
+        ww.phoneApps.reading = ww.phoneApps.reading || {};
+        ww.phoneApps.reading.name = gv('pa-reading-name');
+        ww.phoneApps.reading.desc = gv('pa-reading-desc');
+        ww.phoneApps.video = ww.phoneApps.video || {};
+        ww.phoneApps.video.name = gv('pa-video-name');
+        ww.phoneApps.video.desc = gv('pa-video-desc');
+        await _saveEditingWV(ww);
+        window.__wvEditingCache = ww;
+        try { _updatePhoneAppsLabel(); } catch(_) {}
+      } catch(_) {}
+
+      overlay?.remove();
+      UI.showToast('已生成四个内容平台，可在表单里微调', 2200);
+    } catch(e) {
+      if (e.name === 'AbortError') { if (status) status.textContent = '已取消'; return; }
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiMediaAbort = null;
+    }
+  }
+
+  // ===== AI 生成电台分类（只生成分类 name+direction+icon，不含标签）=====
+  let _aiRadioCatAbort = null;
+  const _RADIO_ICON_IDS = ['news','emotion','ghost','talk','music','mic','star','book','tower','clock','heart','coffee'];
+
+  function aiGenerateRadioCats() {
+    const html = `
+    <div id="ai-radiocat-gen-overlay" style="position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-radiocat-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成电台分类</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-radiocat-gen-prompt" rows="3" placeholder="例如：侧重志怪灵异向、或围绕宗门时政" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px">生成数量</label>
+        <input type="number" id="ai-radiocat-gen-count" value="3" min="1" max="10" style="width:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px">
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">按世界观基调生成电台分类（只含分类名和大方向，不含具体标签），追加到自建分类。生成后可进各分类自行添加标签。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-radiocat-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-radiocat-gen-btn" onclick="Worldview._doAiGenerateRadioCats()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-radiocat-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  async function _doAiGenerateRadioCats() {
+    const overlay = document.getElementById('ai-radiocat-gen-overlay');
+    const btn = document.getElementById('ai-radiocat-gen-btn');
+    const status = document.getElementById('ai-radiocat-gen-status');
+    const prompt = document.getElementById('ai-radiocat-gen-prompt')?.value?.trim() || '';
+    let count = parseInt(document.getElementById('ai-radiocat-gen-count')?.value) || 3;
+    count = Math.max(1, Math.min(10, count));
+
+    const w = await _getEditingWV();
+    if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先选择世界观'; } return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = '正在生成电台分类…'; }
+
+    try {
+      const settingText = w?.setting || '';
+      // 电台 App 整体定位（名称 + 描述），让生成的分类贴合这个电台
+      const radioName = (w.phoneApps?.radio?.name || '').trim();
+      const radioDesc = (w.phoneApps?.radio?.desc || '').trim();
+      // 已有分类名（预设 + 自建）供去重提示
+      const presetNames = _RADIO_PRESET_CATS.map(p => p.name);
+      const customNames = (w.phoneApps?.radio?.categories || []).map(c => c.name).filter(Boolean);
+      const existNames = [...presetNames, ...customNames];
+
+      const sysPrompt = `你是一个文字冒险游戏的电台频道设计师。请根据世界观设定，设计若干个电台「分类」。
+
+**重要——分类是最顶层的大分类**。电台的层级是三层：分类（最大的一级，如"新闻""情感""音乐""财经"）→ 标签（分类下的小分类细分，如新闻分类下的"时政""本地""社区"）→ 具体的一档台（玩家在手机里点开才现场生成）。你现在**只生成最顶层的大分类**，粒度要非常宽泛，能往下容纳好几个小分类。
+- 正确示例（够大，是顶级大类）：新闻、情感、怪谈、音乐、闲聊、财经、体育、少儿、文艺、科普。
+- 错误示例（太细，这些是分类下面的小分类标签或具体节目，不要生成）：时政要闻、地方快报、社区简讯、深夜点歌台、某某夜话。
+
+每个分类输出：
+- name：分类名称（2-6字，一个宽泛的顶级大类名，别带具体节目色彩）
+- direction：这个大类整体覆盖哪一片内容领域、整体调性（30-80字）。描述的是"这一整个大类"，不是某一档节目或某个小分类。
+- icon：从以下图标 id 里选一个最贴合的：news(新闻)、emotion(情感)、ghost(怪谈)、talk(闲聊)、music(音乐)、mic(麦克风)、star(星星)、book(书本)、tower(信号塔)、clock(时钟)、heart(爱心)、coffee(咖啡)。
+
+要求：
+- 分类要贴合世界观题材，是这个世界的电台会有的几个大频道。
+- 分类之间是并列的大类，彼此不重叠，也不要和"已有分类"重名。
+- 保持宽泛：宁可大而全，不要细而专。
+
+输出纯 JSON 数组，不要其他内容。格式示例：
+[{"name":"修真要闻","direction":"这一整个大类覆盖修真界的时政、宗门、榜单、秘境等各类正经资讯，整体调性权威正式，下辖时政、地方、宗门等多个细分方向。","icon":"news"},{"name":"情感夜话","direction":"这一大类聚焦情感与心灵，涵盖道侣情缘、师门恩怨、红尘牵挂等各类倾诉与陪伴内容，整体调性温暖私密。","icon":"emotion"}]`;
+
+      const userMsg = `请为以下世界观设计 ${count} 个电台分类。
+${prompt ? '\n## 用户额外需求\n' + prompt + '\n' : ''}
+## 电台整体定位（分类要贴合这个电台的名称和描述）
+电台名称：${radioName || '（未命名）'}
+电台描述：${radioDesc || '（未填写）'}
+## 已有分类（不要重复）
+${existNames.join('、') || '（无）'}
+## 世界观设定
+${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
+
+      _aiRadioCatAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _aiRadioCatAbort.signal, maxTokens: 2500 });
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const arr = JSON.parse(cleaned);
+      if (!Array.isArray(arr) || !arr.length) throw new Error('AI 返回的不是有效数组');
+
+      // 重新拿最新世界观写入
+      const ww = await _getEditingWV();
+      if (!ww) throw new Error('世界观已不存在');
+      ww.phoneApps = ww.phoneApps || {};
+      ww.phoneApps.radio = ww.phoneApps.radio || {};
+      if (!Array.isArray(ww.phoneApps.radio.categories)) ww.phoneApps.radio.categories = [];
+      const existSet = new Set([...existNames, ...ww.phoneApps.radio.categories.map(c => (c.name || '').toLowerCase())].map(n => String(n).toLowerCase()));
+
+      let added = 0;
+      for (const item of arr) {
+        if (!item || !item.name) continue;
+        const nm = String(item.name).trim();
+        if (!nm || existSet.has(nm.toLowerCase())) continue;
+        const icon = _RADIO_ICON_IDS.includes(item.icon) ? item.icon : 'mic';
+        ww.phoneApps.radio.categories.push({
+          id: 'rc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          name: nm,
+          icon,
+          direction: String(item.direction || '').trim(),
+          tags: []
+        });
+        existSet.add(nm.toLowerCase());
+        added++;
+      }
+      if (added === 0) throw new Error('生成的分类都与已有分类重名');
+
+      await _saveEditingWV(ww);
+      window.__wvEditingCache = ww;
+      overlay?.remove();
+      // 刷新分类编辑器界面
+      const catsOverlay = document.getElementById('radio-cats-editor-overlay');
+      if (catsOverlay) _renderRadioCatsEditor(catsOverlay, ww);
+      UI.showToast(`已生成 ${added} 个电台分类`, 2200);
+    } catch(e) {
+      if (e.name === 'AbortError') { if (status) status.textContent = '已取消'; return; }
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiRadioCatAbort = null;
+    }
+  }
+
+  // ===== AI 生成电台标签（在某个分类下批量生成 name+desc+guide+plays+renewMode）=====
+  let _aiRadioTagAbort = null;
+  const _RADIO_PLAY_IDS = ['mail','vote','request','call','lottery','divination'];
+  const _RADIO_RENEW_MODES = ['unit','serial','free'];
+
+  function aiGenerateRadioTags(catIdx) {
+    const html = `
+    <div id="ai-radiotag-gen-overlay" data-cat-idx="${catIdx}" style="position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-radiotag-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成标签</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-radiotag-gen-prompt" rows="3" placeholder="例如：偏向轻松日常向、或多来点互动玩法" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px">生成数量</label>
+        <input type="number" id="ai-radiotag-gen-count" value="3" min="1" max="10" style="width:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px">
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">按当前分类的大方向生成标签（小分类），含名称、描述、规则、玩法、续期方式，追加到本分类。生成后可进各标签微调。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-radiotag-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-radiotag-gen-btn" onclick="Worldview._doAiGenerateRadioTags()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-radiotag-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  async function _doAiGenerateRadioTags() {
+    const overlay = document.getElementById('ai-radiotag-gen-overlay');
+    const btn = document.getElementById('ai-radiotag-gen-btn');
+    const status = document.getElementById('ai-radiotag-gen-status');
+    const prompt = document.getElementById('ai-radiotag-gen-prompt')?.value?.trim() || '';
+    let count = parseInt(document.getElementById('ai-radiotag-gen-count')?.value) || 3;
+    count = Math.max(1, Math.min(10, count));
+    const catIdx = parseInt(overlay?.dataset?.catIdx);
+
+    const w = await _getEditingWV();
+    if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先选择世界观'; } return; }
+    const cat = w.phoneApps?.radio?.categories?.[catIdx];
+    if (!cat) { if (status) { status.style.display = 'block'; status.textContent = '分类不存在'; } return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = '正在生成标签…'; }
+
+    try {
+      const settingText = w?.setting || '';
+      // 电台 App 整体定位
+      const radioName = (w.phoneApps?.radio?.name || '').trim();
+      const radioDesc = (w.phoneApps?.radio?.desc || '').trim();
+      // 当前分类信息
+      const catName = (cat.name || '').trim();
+      const catDir = (cat.direction || '').trim();
+      // 已有标签名（去重）
+      const existTagNames = (cat.tags || []).map(t => t.name).filter(Boolean);
+
+      const sysPrompt = `你是一个文字冒险游戏的电台节目设计师。请根据世界观设定和「所属分类」的大方向，为这个分类设计若干个「标签」。
+
+**电台的层级**：分类（大类，如"新闻""情感""音乐"）→ 标签（分类下的小分类细分）→ 具体的一档台（玩家在手机里点开才现场生成）。你现在设计的是**中间那层「标签」**，也就是这个大分类底下的几个小分类方向。比如"新闻"分类下可以有"时政""本地民生""社区简讯""娱乐八卦"这样的标签。
+
+每个标签输出：
+- name：标签名称（2-6字，是这个大分类底下的一个具体小方向，别再是宽泛大类，也别是某一档具体节目名）
+- desc：这个标签聊什么内容、什么调性（30-60字，用于让 AI 判断某档台该不该挂这个标签）
+- guide：规则（一段这个标签固定的写作要求，写清调性、内容取向、注意事项，50-150字。这是这个标签每期都遵循的规则，不是某一期的临时要求。别写开场/正文/结尾的三段结构，那些系统会自动加）
+- plays：可用玩法，从下面 6 种里挑 0~3 个（按这个标签的节目性质选，不合适就给空数组）。选项与适用场景：
+  - mail（读留言）：情感、闲聊、答疑、吐槽类适合
+  - vote（投票）：话题讨论、评选、剧场类适合
+  - request（点歌）：音乐类适合
+  - call（连线）：情感热线、连麦陪伴类适合
+  - lottery（抽奖）：娱乐、互动热闹类适合
+  - divination（问卜）：玄学、占卜类适合
+- renewMode：续期方式，三选一：
+  - unit（独立单元）：每期换题材、彼此独立，最常用
+  - serial（连载）：一个长故事分集播，接着上期往下讲
+  - free（自由发挥）：参考上期风格自由续
+
+要求：
+- 所有标签都要落在「${catName}」这个分类的大方向内，是它底下的细分小方向，别跑题到别的分类去。
+- 标签之间彼此不重叠，也不要和"已有标签"重名。
+- 贴合世界观题材和电台整体定位。
+
+输出纯 JSON 数组，不要其他内容。格式示例：
+[{"name":"时政要闻","desc":"聚焦国家大事、政策要闻、经济动向，正经严肃的时政播报。","guide":"这是一档严肃正经的新闻播报，主播口吻权威正式、字正腔圆，只播报事实、不夹带过多个人评论，保持新闻媒体的专业分寸。","plays":[],"renewMode":"unit"},{"name":"社区简讯","desc":"街坊邻里、家长里短、社区通知，充满烟火气的本地小广播。","guide":"主播口吻亲切热络、像唠家常，带着街坊人情味，可以有点本地腔和小幽默，播报的是社区里的琐碎小事。","plays":["mail"],"renewMode":"unit"}]`;
+
+      const userMsg = `请为以下分类设计 ${count} 个标签。
+${prompt ? '\n## 用户额外需求\n' + prompt + '\n' : ''}
+## 所属分类（标签必须落在这个大方向内）
+分类名称：${catName || '（未命名）'}
+分类大方向：${catDir || '（未填写）'}
+## 电台整体定位
+电台名称：${radioName || '（未命名）'}
+电台描述：${radioDesc || '（未填写）'}
+## 本分类已有标签（不要重复）
+${existTagNames.join('、') || '（无）'}
+## 世界观设定
+${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
+
+      _aiRadioTagAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _aiRadioTagAbort.signal, maxTokens: 3000 });
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const arr = JSON.parse(cleaned);
+      if (!Array.isArray(arr) || !arr.length) throw new Error('AI 返回的不是有效数组');
+
+      // 重新拿最新世界观写入
+      const ww = await _getEditingWV();
+      if (!ww) throw new Error('世界观已不存在');
+      const wcat = ww.phoneApps?.radio?.categories?.[catIdx];
+      if (!wcat) throw new Error('分类已不存在');
+      if (!Array.isArray(wcat.tags)) wcat.tags = [];
+      const existSet = new Set([...existTagNames, ...wcat.tags.map(t => (t.name || ''))].map(n => String(n).toLowerCase()));
+
+      let added = 0;
+      for (const item of arr) {
+        if (!item || !item.name) continue;
+        const nm = String(item.name).trim();
+        if (!nm || existSet.has(nm.toLowerCase())) continue;
+        // 玩法：过滤到合法 id，去重，最多 3 个
+        let plays = Array.isArray(item.plays) ? item.plays.filter(p => _RADIO_PLAY_IDS.includes(p)) : [];
+        plays = [...new Set(plays)].slice(0, 3);
+        // 续期方式：非法落 unit
+        const renewMode = _RADIO_RENEW_MODES.includes(item.renewMode) ? item.renewMode : 'unit';
+        wcat.tags.push({
+          name: nm,
+          desc: String(item.desc || '').trim(),
+          guide: String(item.guide || '').trim(),
+          wordCount: 2000,
+          plays,
+          renewMode
+        });
+        existSet.add(nm.toLowerCase());
+        added++;
+      }
+      if (added === 0) throw new Error('生成的标签都与已有标签重名');
+
+      await _saveEditingWV(ww);
+      window.__wvEditingCache = ww;
+      overlay?.remove();
+      // 刷新分类编辑器界面（回到当前分类）
+      const catsOverlay = document.getElementById('radio-cats-editor-overlay');
+      if (catsOverlay) _radioOpenCatEditor(ww, catIdx);
+      UI.showToast(`已生成 ${added} 个标签`, 2200);
+    } catch(e) {
+      if (e.name === 'AbortError') { if (status) status.textContent = '已取消'; return; }
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiRadioTagAbort = null;
+    }
+  }
+
+  // ===== AI 生成直播品类（phoneApps.video.liveCats，生成 name+desc+plays）=====
+  let _aiLiveCatAbort = null;
+  const _LIVE_PLAY_IDS = ['call','pk','cart'];
+
+  function aiGenerateLiveCats() {
+    const html = `
+    <div id="ai-livecat-gen-overlay" style="position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-livecat-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成直播品类</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-livecat-gen-prompt" rows="3" placeholder="例如：多来点才艺类、或贴合修真世界的特色直播" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px">生成数量</label>
+        <input type="number" id="ai-livecat-gen-count" value="3" min="1" max="10" style="width:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px">
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">按世界观基调生成直播品类（含名称、调性、可用玩法），追加到自建品类。生成后可进各品类微调。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-livecat-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-livecat-gen-btn" onclick="Worldview._doAiGenerateLiveCats()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-livecat-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  async function _doAiGenerateLiveCats() {
+    const overlay = document.getElementById('ai-livecat-gen-overlay');
+    const btn = document.getElementById('ai-livecat-gen-btn');
+    const status = document.getElementById('ai-livecat-gen-status');
+    const prompt = document.getElementById('ai-livecat-gen-prompt')?.value?.trim() || '';
+    let count = parseInt(document.getElementById('ai-livecat-gen-count')?.value) || 3;
+    count = Math.max(1, Math.min(10, count));
+
+    const w = await _getEditingWV();
+    if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先选择世界观'; } return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = '正在生成直播品类…'; }
+
+    try {
+      const settingText = w?.setting || '';
+      // 视频/直播 App 整体定位
+      const videoName = (w.phoneApps?.video?.name || '').trim();
+      const videoDesc = (w.phoneApps?.video?.desc || '').trim();
+      // 已有品类名（预设 + 自建）供去重
+      const customNames = (w.phoneApps?.video?.liveCats?.categories || []).map(c => c.name).filter(Boolean);
+      const existNames = [..._LIVE_PRESET_TAG_NAMES, ...customNames];
+
+      const sysPrompt = `你是一个文字冒险游戏的直播平台品类设计师。请根据世界观设定，设计若干个直播「品类」（直播间的类型）。
+
+参考现实直播平台的品类：游戏直播、唱歌、跳舞、带货、颜值聊天、兴趣陪伴、ASMR、答疑咨询等。你要按这个世界观的题材，设计契合这个世界的直播品类。
+
+每个品类输出：
+- name：品类名称（2-6字，一个直播间类型，如"斗法实况""古琴雅奏""灵材带货"）
+- desc：这个品类的直播间在播什么、什么调性（30-60字）
+- plays：可用玩法，从下面 3 种里挑 0~2 个（按品类性质选，不合适就给空数组）：
+  - call（连麦连线）：观众付费上麦和主播一对一聊，适合聊天陪伴、才艺互动类
+  - pk（礼物 PK）：和别的主播连麦battle刷礼物冲榜，适合游戏、才艺、颜值类
+  - cart（购物车带货）：挂商品观众下单，适合带货卖货类
+
+要求：
+- 品类要贴合世界观题材，是这个世界的直播平台会有的直播类型。
+- 品类之间不重叠，也不要和"已有品类"重名。
+
+输出纯 JSON 数组，不要其他内容。格式示例：
+[{"name":"斗法实况","desc":"主播现场演示修炼心得、法术对拆或秘境探险实况，边打边讲解，热血刺激。","plays":["pk"]},{"name":"灵材带货","desc":"主播上架各类灵草、法器、丹药，边讲功效边卖货，观众可直接下单。","plays":["cart"]}]`;
+
+      const userMsg = `请为以下世界观设计 ${count} 个直播品类。
+${prompt ? '\n## 用户额外需求\n' + prompt + '\n' : ''}
+## 直播平台整体定位
+平台名称：${videoName || '（未命名）'}
+平台描述：${videoDesc || '（未填写）'}
+## 已有品类（不要重复）
+${existNames.join('、') || '（无）'}
+## 世界观设定
+${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
+
+      _aiLiveCatAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _aiLiveCatAbort.signal, maxTokens: 2500 });
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const arr = JSON.parse(cleaned);
+      if (!Array.isArray(arr) || !arr.length) throw new Error('AI 返回的不是有效数组');
+
+      // 重新拿最新世界观写入
+      const ww = await _getEditingWV();
+      if (!ww) throw new Error('世界观已不存在');
+      ww.phoneApps = ww.phoneApps || {};
+      ww.phoneApps.video = ww.phoneApps.video || {};
+      ww.phoneApps.video.liveCats = ww.phoneApps.video.liveCats || {};
+      if (!Array.isArray(ww.phoneApps.video.liveCats.categories)) ww.phoneApps.video.liveCats.categories = [];
+      const existSet = new Set([...existNames, ...ww.phoneApps.video.liveCats.categories.map(c => (c.name || ''))].map(n => String(n).toLowerCase()));
+
+      let added = 0;
+      for (const item of arr) {
+        if (!item || !item.name) continue;
+        const nm = String(item.name).trim();
+        if (!nm || existSet.has(nm.toLowerCase())) continue;
+        let plays = Array.isArray(item.plays) ? item.plays.filter(p => _LIVE_PLAY_IDS.includes(p)) : [];
+        plays = [...new Set(plays)].slice(0, 2);
+        ww.phoneApps.video.liveCats.categories.push({
+          name: nm,
+          desc: String(item.desc || '').trim(),
+          plays
+        });
+        existSet.add(nm.toLowerCase());
+        added++;
+      }
+      if (added === 0) throw new Error('生成的品类都与已有品类重名');
+
+      await _saveEditingWV(ww);
+      window.__wvEditingCache = ww;
+      overlay?.remove();
+      // 刷新直播品类编辑器界面
+      const catsOverlay = document.getElementById('live-cats-editor-overlay');
+      if (catsOverlay) _renderLiveCatsEditor(catsOverlay, ww);
+      UI.showToast(`已生成 ${added} 个直播品类`, 2200);
+    } catch(e) {
+      if (e.name === 'AbortError') { if (status) status.textContent = '已取消'; return; }
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiLiveCatAbort = null;
+    }
+  }
+
   // ===== AI 批量生成事件 =====
   let _aiEventAbort = null;
-
   async function aiGenerateEvents(mode, chainId) {
     // 收集世界观上下文
     const w = window.__wvEditingCache;
@@ -4118,6 +5460,8 @@ function closeKnowledgeModal() {
   }
   async function deleteEventFromModal() {
     if (_editEventIdx === null) return;
+    const nm = (eventsData[_editEventIdx]?.name || '该事件');
+    if (!await UI.showConfirm('删除事件', `确定删除「${nm}」？此操作不可撤销。`)) return;
     eventsData.splice(_editEventIdx, 1);
     try {
       const w = await _getEditingWV();
@@ -5841,7 +7185,10 @@ function _buildCalendarEditorHTML(cal) {
         </button>
         <span style="font-size:16px;font-weight:600;color:var(--text)">历法系统</span>
       </div>
-      <button type="button" onclick="Worldview._calReset()" style="border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;padding:5px 10px;border-radius:6px;font-size:11px">恢复默认</button>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button type="button" onclick="Worldview.aiGenerateCalendar()" style="border:1px solid var(--accent);background:var(--bg-secondary);color:var(--accent);cursor:pointer;padding:5px 10px;border-radius:6px;font-size:11px;display:inline-flex;align-items:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI生成</button>
+        <button type="button" onclick="Worldview._calReset()" style="border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;padding:5px 10px;border-radius:6px;font-size:11px">恢复默认</button>
+      </div>
     </div>
     <div style="flex:1;overflow-y:auto;padding:16px">
 
@@ -6197,6 +7544,11 @@ function _buildPhoneAppsEditorHTML(w) {
     </div>
   </div>
 
+  <button type="button" onclick="Worldview.aiGenerateShops()" style="width:100%;margin-bottom:16px;border:1px solid var(--accent);background:var(--bg-secondary);color:var(--accent);cursor:pointer;padding:9px;border-radius:8px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成两个商城配置</button>
+
+  <button type="button" onclick="Worldview.aiGenerateMediaApps()" style="width:100%;margin-bottom:8px;border:1px solid var(--accent);background:var(--bg-secondary);color:var(--accent);cursor:pointer;padding:9px;border-radius:8px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成内容平台（信息载体/电台/阅读/视频）</button>
+  <div style="font-size:11px;color:var(--text-secondary);margin-bottom:16px;text-align:center;line-height:1.5">一次生成下面四个平台的名称和描述</div>
+
   <!-- 信息载体 -->
   <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px">
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
@@ -6527,6 +7879,7 @@ function _renderRadioCatsEditor(overlay, w) {
     <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:8px">自建分类</div>
     ${customsHtml || '<div style="font-size:12px;color:var(--text-secondary);padding:12px;text-align:center">还没有自建分类</div>'}
     <button type="button" onclick="Worldview._radioAddCat()" style="width:100%;margin-top:12px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">+ 新建分类</button>
+    <button type="button" onclick="Worldview.aiGenerateRadioCats()" style="width:100%;margin-top:8px;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成分类</button>
   </div>`;
 }
   async function closeRadioCatsEditor() {
@@ -7019,6 +8372,7 @@ function _videoCastSearch(query) {
       <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:8px">自建品类</div>
       ${customsHtml || '<div style="font-size:12px;color:var(--text-secondary);padding:12px;text-align:center">还没有自建品类</div>'}
       <button type="button" onclick="Worldview._liveAddCat()" style="width:100%;margin-top:12px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">+ 新建品类</button>
+      <button type="button" onclick="Worldview.aiGenerateLiveCats()" style="width:100%;margin-top:8px;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成品类</button>
     </div>`;
   }
 
@@ -7217,6 +8571,7 @@ function _radioOpenCatEditor(w, catIdx) {
     <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">标签列表</div>
     ${tagRows || '<div style="font-size:12px;color:var(--text-secondary);padding:8px;text-align:center">还没有标签，点下方按钮添加</div>'}
     <button type="button" onclick="Worldview._radioAddTag(${catIdx})" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">+ 添加标签</button>
+    <button type="button" onclick="Worldview.aiGenerateRadioTags(${catIdx})" style="width:100%;margin-top:6px;padding:8px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成标签</button>
   </div>`;
 }
 
@@ -7306,8 +8661,8 @@ function _radioOpenTagEditor(w, catIdx, tagIdx) {
       <textarea id="rt-tag-desc" rows="2" placeholder="例如：围绕一种深夜会吃的食物，讲讲来吃的人和他们的故事" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:50px" onchange="Worldview._radioSaveTagField(${catIdx},${tagIdx},'desc',this.value)">${(tag.desc || '').replace(/</g, '&lt;')}</textarea>
     </label>
     <label style="display:block;margin-bottom:12px">
-      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">本期要求 <span style="font-size:11px;color:var(--text-secondary)">（选填，详情生成时注入AI）</span></span>
-      <textarea id="rt-tag-guide" rows="3" placeholder="例如：轻松温暖的调子，别煽情过头" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:70px" onchange="Worldview._radioSaveTagField(${catIdx},${tagIdx},'guide',this.value)">${(tag.guide || '').replace(/</g, '&lt;')}</textarea>
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">规则 <span style="font-size:11px;color:var(--text-secondary)">（选填，详情生成时注入AI）</span></span>
+      <textarea id="rt-tag-guide" rows="3" placeholder="例如：轻松温暖的调子，别煽情过头，每期围绕一个具体的小主题展开" style="width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:70px" onchange="Worldview._radioSaveTagField(${catIdx},${tagIdx},'guide',this.value)">${(tag.guide || '').replace(/</g, '&lt;')}</textarea>
     </label>
     <label style="display:block;margin-bottom:12px">
       <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">字数</span>
@@ -7594,6 +8949,22 @@ switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromM
     toggleCustomEnabled, toggleKnowledgeEnabled, toggleFestivalEnabled,
     addEvent, editEvent, saveEventFromModal, deleteEventFromModal, closeEventModal, syncEventTriggerTypeUI, addEventAttrCondition, updateEventAttrCondition, removeEventAttrCondition,
     aiGenerateEvents, _doAiGenerateEvents, switchEventTab, addEventChain, addChainNode,
+      aiGenerateGlobalAttrs, _doAiGenerateGlobalAttrs,
+      aiGenerateCharAttrs, _doAiGenerateCharAttrs, _charAttrPickAll,
+aiGenerateTaskPhase,
+    _doAiGenerateTaskPhase,
+    aiGenerateCalendar,
+    _doAiGenerateCalendar,
+    aiGenerateShops,
+    _doAiGenerateShops,
+    aiGenerateMediaApps,
+    _doAiGenerateMediaApps,
+    aiGenerateRadioCats,
+    _doAiGenerateRadioCats,
+    aiGenerateRadioTags,
+    _doAiGenerateRadioTags,
+    aiGenerateLiveCats,
+    _doAiGenerateLiveCats,
     _onCardClick,
     applyBuiltinUpdate,
     handleIconImageUpload,
@@ -7632,7 +9003,7 @@ _radioAddTag, _radioEditTag, _radioDeleteTag, _radioOpenTagEditor, _radioBackToC
 editLorebookDescription,
     addFestival, editFestival, saveFestivalFromModal, deleteFestivalFromModal, closeFestivalModal, aiGenFestivals, _doAiGenFestivals,
   addCustom, importCustomsFromDoc, editCustom, saveCustomFromModal, deleteCustomFromModal, closeCustomModal,
-addKnowledge, editKnowledge, saveKnowledgeFromModal, deleteKnowledgeFromModal, closeKnowledgeModal,
+addKnowledge, editKnowledge, saveKnowledgeFromModal, deleteKnowledgeFromModal, closeKnowledgeModal, aiGenKnowledges, _doAiGenKnowledges,
 toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, selectKnowPosition,
     getCurrent, setCurrentId, getCurrentId,
     openViewer, switchViewerTab, filterViewerNPCs,

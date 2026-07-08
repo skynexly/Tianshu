@@ -180,11 +180,12 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v705.8';
-    const CHANGELOG = `【v705.8 更新内容】
-🐛 修复面具绑定逻辑
-🐛 修复个人主页、通话记录页顶部被灵动岛遮挡导致 iOS 无法返回的问题
-✨ 优化部分世界观生成提示词`;
+const APP_VERSION = 'v705.9';
+    const CHANGELOG = `【v705.9 更新内容】
+✨ 世界观扩展设定新增 AI 一键生成：电台标签、直播品类、动态知识条目（支持成体系/细节自由搭配）
+✨ 后台/剧情 AI 现可直接读写玩法配置——属性、任务、历法、电台/直播等手机 App 玩法都能改，支持一步回滚
+🎨 部分UI布局优化
+🐛 修复 iOS 添加到主屏后底部露白边的问题`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

@@ -184,26 +184,62 @@ window.FabDrag = (function() {
     });
   }
 
-  // ===== 全局显隐总开关（用户偏好，存 localStorage，跨对话）=====
+  // ===== 显隐开关（用户偏好，存 localStorage，跨对话）=====
   // 用独立 class fab-force-hidden 叠加，不动各 fab 自身的 hidden 业务逻辑：
   //   业务逻辑决定"逻辑上该不该显示"，本开关决定"用户允不允许显示"，两者与关系。
-  const VISIBLE_KEY = 'fab_visible';
+  //
+  // v2：从单一总开关升级为按 id 独立控制。
+  //   旧存储 VISIBLE_KEY('fab_visible', '0'/'1') 仍兼容读取（作为迁移默认值）。
+  //   新存储 VIS_MAP_KEY('fab_visible_map') = { 'phone-fab':true/false, ... }
+  const VISIBLE_KEY = 'fab_visible';          // 旧：全局总开关（保留兼容）
+  const VIS_MAP_KEY = 'fab_visible_map';      // 新：按 id 独立开关
+  const FAB_IDS = ['phone-fab', 'gaiden-fab', 'backstage-fab'];
 
-  function isVisible() {
-    // 默认显示（只有显式存了 '0' 才隐藏）
-    return localStorage.getItem(VISIBLE_KEY) !== '0';
+  function _readVisMap() {
+    try {
+      const raw = localStorage.getItem(VIS_MAP_KEY);
+      if (raw) return JSON.parse(raw) || {};
+    } catch(_) {}
+    // 没有新存储：从旧总开关迁移（旧存了 '0' 则三个都关，否则都开）
+    const legacyHidden = localStorage.getItem(VISIBLE_KEY) === '0';
+    const map = {};
+    FAB_IDS.forEach(id => { map[id] = !legacyHidden; });
+    return map;
   }
 
-  // 按当前开关刷新三个 fab 的强制隐藏态
+  function _writeVisMap(map) {
+    try { localStorage.setItem(VIS_MAP_KEY, JSON.stringify(map || {})); } catch(_) {}
+  }
+
+  // 单个球是否允许显示（默认显示：只有显式存 false 才隐藏）
+  function isVisible(id) {
+    const map = _readVisMap();
+    if (typeof id === 'string') return map[id] !== false;
+    // 不传 id：三个都开才算"全局可见"（兼容旧调用语义）
+    return FAB_IDS.every(fid => map[fid] !== false);
+  }
+
+  // 按各自开关刷新三个 fab 的强制隐藏态
   function apply() {
-    const hide = !isVisible();
+    const map = _readVisMap();
     document.querySelectorAll('.floating-fab').forEach(el => {
+      const hide = map[el.id] === false;
       el.classList.toggle('fab-force-hidden', hide);
     });
   }
 
-  function setVisible(v) {
-    try { localStorage.setItem(VISIBLE_KEY, v ? '1' : '0'); } catch(_) {}
+  function setVisible(id, v) {
+    // 兼容旧调用 setVisible(true/false) —— 一次设置三个
+    if (typeof id === 'boolean') {
+      const map = _readVisMap();
+      FAB_IDS.forEach(fid => { map[fid] = id; });
+      _writeVisMap(map);
+      apply();
+      return;
+    }
+    const map = _readVisMap();
+    map[id] = !!v;
+    _writeVisMap(map);
     apply();
   }
 
@@ -221,5 +257,5 @@ window.FabDrag = (function() {
     init();
   }
 
-  return { attach, attachAll, init, isVisible, setVisible, apply };
+  return { attach, attachAll, init, isVisible, setVisible, apply, FAB_IDS };
 })();

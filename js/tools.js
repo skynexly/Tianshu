@@ -137,6 +137,27 @@ const Tools = (() => {
     }
     return null;
   }
+  // 玩法配置点路径解析：支持 a.b.c、a.0.b、a[0].b 混合写法，返回键数组
+  function _gpSplitPath(path) {
+    const raw = String(path || '').trim();
+    if (!raw) return { err:'路径为空' };
+    // 把 [n] 归一成 .n，再按 . 切
+    const norm = raw.replace(/\[(\d+)\]/g, '.$1');
+    const keys = norm.split('.').map(s => s.trim()).filter(s => s.length > 0);
+    if (!keys.length) return { err:'路径无效' };
+    return { keys };
+  }
+  function _gpResolvePath(root, path) {
+    const seg = _gpSplitPath(path);
+    if (seg.err) return { err: seg.err };
+    let cur = root;
+    for (const k of seg.keys) {
+      if (cur == null || typeof cur !== 'object') return { err:`路径中断，${k} 之前不是对象/数组` };
+      cur = Array.isArray(cur) ? cur[Number(k)] : cur[k];
+      if (cur === undefined) return { err:`路径不存在：${path}（在 ${k} 处）` };
+    }
+    return { value: cur };
+  }
   async function _saveWorldview(wv) {
     await DB.put('worldviews', wv);
     try {
@@ -290,7 +311,9 @@ const Tools = (() => {
     { type:'function', function:{ name:'list_cards', description:'列出当前对话可编辑的单人卡（单人模式主角卡 + 对话级挂载的常驻角色卡）。修改前用来确认有哪些卡、各自的 id/名称。', parameters:{ type:'object', properties:{}, required:[] } }},
     { type:'function', function:{ name:'read_card', description:'读取单人卡的可编辑文本字段。当前对话只有一张可编辑卡时可不传 card；多张时用 card 指定名称或 id。', parameters:{ type:'object', properties:{ card:{ type:'string', description:'要读的卡名称或 id；只有一张卡时可省略' } }, required:[] } }},
     { type:'function', function:{ name:'update_card', description:'修改单人卡的 name/aliases/detail/firstMes/mesExample。仅在用户明确要求修改时使用；写入前会保存回滚快照。当前对话多张可编辑卡时必须用 card 指定改哪张。', parameters:{ type:'object', properties:{ card:{ type:'string', description:'要改的卡名称或 id（用于定位，不会被写入）；只有一张卡时可省略' }, name:{ type:'string', description:'新角色名' }, aliases:{ type:'string' }, detail:{ type:'string' }, firstMes:{ type:'string' }, mesExample:{ type:'string' } }, required:[] } }},
-    { type:'function', function:{ name:'undo_last_edit', description:'撤销上一次由AI编辑工具写入的世界观/扩展设定/单人卡修改。', parameters:{ type:'object', properties:{}, required:[] } }}
+    { type:'function', function:{ name:'read_gameplay_config', description:'读取当前世界观的「玩法配置」JSON。玩法配置涵盖：属性系统(gameplay.globalAttrs 全局属性 / gameplay.characterAttrs 角色属性模板)、任务系统(gameplay.taskSystem)、历法系统(gameplay.calendarSystem)，以及全部手机 App 配置(phoneApps：takeout/shop 商城、forum 论坛、radio 电台含分类与标签、video.liveCats 直播品类、reading 阅读等)。只读。改之前必须先 read 看清结构和数组下标，再用 update_gameplay_config 按路径精确修改。', parameters:{ type:'object', properties:{ section:{ type:'string', description:'要读的配置段点路径，例如 "gameplay"、"gameplay.taskSystem"、"gameplay.calendarSystem"、"phoneApps"、"phoneApps.radio"、"phoneApps.radio.categories"、"phoneApps.video.liveCats"。不传则返回 gameplay + phoneApps 全部。' } }, required:[] } }},
+    { type:'function', function:{ name:'update_gameplay_config', description:'按点路径精确修改玩法配置里的某一个字段/数组元素。仅在用户明确要求修改玩法/手机配置/属性/任务/历法时使用；写入前会保存整份玩法快照，可用 undo_last_edit 回滚。用法：先 read_gameplay_config 看清结构与下标，再指定 path + value。电台标签玩法 plays 取值 ["mail","vote","request","call","lottery","divination"]，renewMode 取值 "unit"/"serial"/"free"；直播品类 plays 取值 ["call","pk","cart"]。安全限制：只能修改已存在的字段或往已存在的数组末尾追加(在 path 末尾用 "[]" 表示 push)，不能把数组/对象整体替换成基本类型。', parameters:{ type:'object', properties:{ path:{ type:'string', description:'点路径，根从 gameplay 或 phoneApps 开始。改字段例："phoneApps.radio.categories.0.tags.1.plays"、"gameplay.calendarSystem.daysPerWeek"。往数组追加例："phoneApps.video.liveCats.categories[]"。' }, value:{ description:'新值，类型需与目标匹配（字符串/数字/布尔/数组/对象）。追加(path 以 []结尾)时 value 是要 push 的新元素。' } }, required:['path','value'] } }},
+    { type:'function', function:{ name:'undo_last_edit', description:'撤销上一次由AI编辑工具写入的世界观/扩展设定/单人卡/玩法配置修改。', parameters:{ type:'object', properties:{}, required:[] } }}
   ];
 
 
@@ -968,6 +991,64 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       if (typeof SingleCard !== 'undefined' && SingleCard.save) await SingleCard.save(got.card); else await DB.put('singleCards', got.card);
       return OK({ success:true, id:got.id, message:`单人卡「${got.card.name||got.id}」已修改；可用 undo_last_edit 回滚。` });
     },
+    async read_gameplay_config(args) {
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      const root = { gameplay: got.wv.gameplay || {}, phoneApps: got.wv.phoneApps || {} };
+      const section = (args && typeof args.section === 'string') ? args.section.trim() : '';
+      if (!section) return OK({ id:got.id, name:got.wv.name || '', config: root });
+      const node = _gpResolvePath(root, section);
+      if (node.err) return ERR(node.err);
+      return OK({ id:got.id, section, value: _clone(node.value) });
+    },
+    async update_gameplay_config(args) {
+      if (typeof args.path !== 'string' || !args.path.trim()) return ERR('缺少 path');
+      if (!('value' in args)) return ERR('缺少 value');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      // 保证根容器存在
+      if (!got.wv.gameplay) got.wv.gameplay = {};
+      if (!got.wv.phoneApps) got.wv.phoneApps = {};
+      const root = { gameplay: got.wv.gameplay, phoneApps: got.wv.phoneApps };
+      const raw = args.path.trim();
+      const rootKey = raw.split(/[.\[]/)[0];
+      if (rootKey !== 'gameplay' && rootKey !== 'phoneApps') return ERR('path 必须以 gameplay 或 phoneApps 开头');
+      const isAppend = /\[\]\s*$/.test(raw);
+      const applyPath = isAppend ? raw.replace(/\[\]\s*$/, '') : raw;
+      // 先取快照（整份 gameplay + phoneApps）
+      const beforeSnap = { gameplay: _clone(got.wv.gameplay), phoneApps: _clone(got.wv.phoneApps) };
+      if (isAppend) {
+        const target = _gpResolvePath(root, applyPath);
+        if (target.err) return ERR(target.err);
+        if (!Array.isArray(target.value)) return ERR(`路径 ${applyPath} 不是数组，无法追加`);
+        target.value.push(_clone(args.value));
+      } else {
+        // 定位父节点 + 末键，做安全校验后赋值
+        const seg = _gpSplitPath(applyPath);
+        if (seg.err) return ERR(seg.err);
+        const lastKey = seg.keys[seg.keys.length - 1];
+        const parentPath = seg.keys.slice(0, -1);
+        let parent = root;
+        for (const k of parentPath) {
+          if (parent == null || typeof parent !== 'object') return ERR(`路径中断：${parentPath.join('.')} 不存在`);
+          parent = Array.isArray(parent) ? parent[Number(k)] : parent[k];
+        }
+        if (parent == null || typeof parent !== 'object') return ERR(`父节点不存在或不是对象/数组：${parentPath.join('.')}`);
+        const existed = Array.isArray(parent) ? (Number(lastKey) < parent.length) : (lastKey in parent);
+        const oldVal = Array.isArray(parent) ? parent[Number(lastKey)] : parent[lastKey];
+        // 安全限制：已存在且原值是数组/对象时，不允许替换成基本类型（防止把结构改坏）
+        if (existed && oldVal && typeof oldVal === 'object') {
+          const newIsObj = args.value && typeof args.value === 'object';
+          if (!newIsObj) return ERR(`路径 ${applyPath} 原本是${Array.isArray(oldVal)?'数组':'对象'}，不允许替换成基本类型；如需清空请传空${Array.isArray(oldVal)?'数组 []':'对象 {}'}`);
+          if (Array.isArray(oldVal) !== Array.isArray(args.value)) return ERR(`路径 ${applyPath} 类型不匹配：原本是${Array.isArray(oldVal)?'数组':'对象'}`);
+        }
+        if (Array.isArray(parent)) parent[Number(lastKey)] = _clone(args.value);
+        else parent[lastKey] = _clone(args.value);
+      }
+      await _pushEditUndo({ type:'gameplay_config', worldviewId:got.id, label:`玩法配置：${raw}`, before: beforeSnap });
+      await _saveWorldview(got.wv);
+      return OK({ success:true, message:`玩法配置 ${raw} 已${isAppend?'追加':'修改'}；可用 undo_last_edit 回滚。` });
+    },
     async undo_last_edit() {
       const conv = _currentConv();
       if (!conv || !Array.isArray(conv._editUndoStack) || conv._editUndoStack.length === 0) return ERR('没有可回滚的 AI 编辑记录');
@@ -1011,6 +1092,13 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       } else if (u.type === 'card_update') {
         const before = _clone(u.before); if (!before) return ERR('缺少单人卡快照');
         if (typeof SingleCard !== 'undefined' && SingleCard.save) await SingleCard.save(before); else await DB.put('singleCards', before);
+      } else if (u.type === 'gameplay_config') {
+        const wv = await DB.get('worldviews', u.worldviewId); if (!wv) return ERR('找不到要回滚的世界观');
+        if (u.before && typeof u.before === 'object') {
+          wv.gameplay = _clone(u.before.gameplay) || {};
+          wv.phoneApps = _clone(u.before.phoneApps) || {};
+        }
+        await _saveWorldview(wv);
       } else return ERR('未知回滚类型');
       await _saveConvs();
       return OK({ success:true, message:`已回滚：${u.label || u.type}` });

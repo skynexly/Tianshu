@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=144">
+<link rel="stylesheet" href="css/style.css?v=145">
 <link rel="stylesheet" href="css/phone.css?v1=390">
 <link rel="stylesheet" href="css/phone-fudge.css?v=29">
 <link rel="stylesheet" href="css/markdown.css">
@@ -168,7 +168,7 @@
 <button onclick="Prompts.openConvOverrideModal(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg> 提示词</button>
           <button onclick="window.App &amp;&amp; window.App.showChangelogManually &amp;&amp; window.App.showChangelogManually(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/><path d="M3.6 9h16.8"/><path d="M3.6 15h16.8"/></svg> 更新公告</button>
           <button onclick="Tutorial.restart(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M21 12a9 9 0 1 1-3.2-6.9"/><path d="M21 3v6h-6"/></svg> 新手引导</button>
-          <button id="fab-visible-menu-btn" onclick="UI.toggleFabVisible(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="10"/></svg><span class="fab-menu-label">隐藏悬浮球</span></button>
+          <button id="fab-visible-menu-btn" onclick="UI.toggleFabVisible(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="10"/></svg><span class="fab-menu-label">悬浮球设置</span></button>
           <button onclick="Chat.openConvSettingsModal(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 对话设置</button>
         </div>
       </div>
@@ -3329,7 +3329,13 @@ NPC
   <div class="wv-ext-subtab-content hidden" data-subtab="dynamic">
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">最近 2 轮对话命中关键词时自动注入。</div>
     <div id="wv-knowledges-container"></div>
-    <button type="button" onclick="Worldview.addKnowledge()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加动态条目</button>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button type="button" onclick="Worldview.addKnowledge()" style="flex:1;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px">+ 添加动态条目</button>
+      <button type="button" onclick="Worldview.aiGenKnowledges()" style="flex:1;padding:10px;background:none;border:2px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px">
+        <svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>
+        AI 生成动态条目
+      </button>
+    </div>
   </div>
 
   <!-- 事件设定 -->
@@ -4106,12 +4112,12 @@ const GameLog = (() => {
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
 <script src="js/mcp-client.js"></script>
-<script src="js/fab-drag.js?v=2"></script>
+<script src="js/fab-drag.js?v=3"></script>
 <script src="js/memory.js?v=4"></script>
-<script src="js/tools.js?v=2"></script>
+<script src="js/tools.js?v=3"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=56"></script>
-<script src="js/worldview.js?v=71"></script>
+<script src="js/worldview.js?v=90"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
@@ -4124,7 +4130,7 @@ const GameLog = (() => {
 <script src="js/prompts.js?v=1"></script>
 <script src="js/conversations.js?v=6"></script>
 <script src="js/summary.js"></script>
-<script src="js/chat.js?v=83"></script>
+<script src="js/chat.js?v=85"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4132,7 +4138,7 @@ const GameLog = (() => {
 <script src="js/branch.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/gaiden.js"></script>
-<script src="js/backstage.js?v=9"></script>
+<script src="js/backstage.js?v=10"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
 <script src="js/status_bar.js?v=27"></script>
@@ -4142,13 +4148,13 @@ const GameLog = (() => {
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/phone.js?v1=1081"></script>
+<script src="js/phone.js?v1=1084"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
-<script src="js/ui.js?v=11"></script>
+<script src="js/ui.js?v=13"></script>
 <script src="js/data-mgr.js?v=11"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/colorpicker.js"></script>
@@ -4162,7 +4168,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=15"></script>
-<script src="js/app.js?v=126"></script>
+<script src="js/app.js?v=127"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
@@ -4461,8 +4467,8 @@ document.addEventListener('click', (e) => {
 <div class="modal-content">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
 <h3>编辑节日</h3>
-<button class="btn-icon" onclick="Worldview.deleteFestivalFromModal()" style="width:32px;height:32px;padding:4px;color:var(--danger)">
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+<button class="btn-icon" onclick="Worldview.closeFestivalModal()" style="width:32px;height:32px;padding:4px">
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
 </button>
 </div>
 <div class="form-group"><span class="form-label">节日名称</span><input type="text" id="wv-fest-modal-name" placeholder="如：光之祭"></div>
@@ -4472,7 +4478,7 @@ document.addEventListener('click', (e) => {
 <div class="form-group" style="display:flex;align-items:center;gap:8px;flex-direction:row"><label for="wv-fest-modal-yearly" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="wv-fest-modal-yearly" style="position:absolute;opacity:0;pointer-events:none"><span id="wv-fest-modal-yearly-ui" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex:0 0 20px;transition:all 0.15s ease;background:transparent"></span><span class="form-label" style="margin:0">每年重复</span></label></div>
 <div class="form-group"><span class="form-label">节日内容</span><div style="position:relative;width:100%"><textarea id="wv-fest-modal-content" rows="6" placeholder="节日描述、风俗、影响..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-fest-modal-content','节日内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
 <div class="modal-actions" style="flex-shrink:0;margin-top:12px">
-<button onclick="Worldview.closeFestivalModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
+<button onclick="Worldview.deleteFestivalFromModal()" style="flex:1;background:none;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));color:var(--danger)">删除</button>
 <button onclick="Worldview.saveFestivalFromModal()" style="flex:1">保存</button>
 </div>
 </div>
@@ -4484,8 +4490,8 @@ document.addEventListener('click', (e) => {
 <div class="modal-content">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
 <h3 id="wv-know-modal-title">编辑动态条目</h3>
-<button class="btn-icon" onclick="Worldview.deleteKnowledgeFromModal()" style="width:32px;height:32px;padding:4px;color:var(--danger)">
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+<button class="btn-icon" onclick="Worldview.closeKnowledgeModal()" style="width:32px;height:32px;padding:4px">
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
 </button>
 </div>
 <div class="form-group"><span class="form-label">条目名称</span><input type="text" id="wv-know-modal-name" placeholder="如：黑刃会"></div>
@@ -4511,7 +4517,7 @@ document.addEventListener('click', (e) => {
 <div class="form-group" id="wv-know-modal-depth-row" style="display:none"><span class="form-label">深度 <span style="font-size:11px;color:var(--text-secondary)">（0=最新消息前）</span></span><input type="number" id="wv-know-modal-depth" value="0" min="0"></div>
 <div class="form-group"><span class="form-label">注入内容</span><div style="position:relative;width:100%"><textarea id="wv-know-modal-content" rows="7" placeholder="注入到提示词的内容..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-know-modal-content','注入内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
 <div class="modal-actions" style="flex-shrink:0;margin-top:12px">
-<button onclick="Worldview.closeKnowledgeModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
+<button onclick="Worldview.deleteKnowledgeFromModal()" style="flex:1;background:none;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));color:var(--danger)">删除</button>
 <button onclick="Worldview.saveKnowledgeFromModal()" style="flex:1">保存</button>
 </div>
 </div>
@@ -4522,8 +4528,8 @@ document.addEventListener('click', (e) => {
 <div class="modal-content">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
 <h3 id="wv-event-modal-title">编辑事件</h3>
-<button class="btn-icon" onclick="Worldview.deleteEventFromModal()" style="width:32px;height:32px;padding:4px;color:var(--danger)">
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+<button class="btn-icon" onclick="Worldview.closeEventModal()" style="width:32px;height:32px;padding:4px">
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
 </button>
 </div>
 <div class="form-group hidden" id="wv-event-chain-row"><span class="form-label">事件链名称 <span style="font-size:11px;color:var(--text-secondary)">（改名会同步整条链）</span></span><input type="text" id="wv-event-chain-name" placeholder="如：深蓝教会覆灭录"></div>
@@ -4536,7 +4542,7 @@ document.addEventListener('click', (e) => {
 <div class="form-group"><span class="form-label">如何判断事件结束 <span style="font-size:11px;color:var(--text-secondary)">（满足后 AI 应输出结束关键词）</span></span><textarea id="wv-event-modal-finish-rule" rows="3" placeholder="如：当袭击者撤退、现场危机解除、主要角色确认安全后，视为事件结束。"></textarea></div>
 <div class="form-group"><span class="form-label">事件内容 <span style="font-size:11px;color:var(--text-secondary)">（触发后每轮注入，直到结束）</span></span><div style="position:relative;width:100%"><textarea id="wv-event-modal-content" rows="8" placeholder="事件剧情引导、NPC行为指令、结局走向提示等…" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-event-modal-content','事件内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
 <div class="modal-actions" style="flex-shrink:0;margin-top:12px">
-<button onclick="Worldview.closeEventModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
+<button onclick="Worldview.deleteEventFromModal()" style="flex:1;background:none;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));color:var(--danger)">删除</button>
 <button onclick="Worldview.saveEventFromModal()" style="flex:1">保存</button>
 </div>
 </div>
@@ -4572,8 +4578,8 @@ document.addEventListener('click', (e) => {
 <div class="modal-content">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
 <h3 id="wv-cust-modal-title">编辑常驻条目</h3>
-<button class="btn-icon" onclick="Worldview.deleteCustomFromModal()" style="width:32px;height:32px;padding:4px;color:var(--danger)">
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+<button class="btn-icon" onclick="Worldview.closeCustomModal()" style="width:32px;height:32px;padding:4px">
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
 </button>
 </div>
 <div class="form-group"><span class="form-label">条目名称</span><input type="text" id="wv-cust-modal-name" placeholder="如：魔法体系"></div>
@@ -4601,7 +4607,7 @@ document.addEventListener('click', (e) => {
 <div class="form-group" id="wv-cust-modal-depth-row" style="display:none"><span class="form-label">深度 <span style="font-size:11px;color:var(--text-secondary)">（0=最新消息前）</span></span><input type="number" id="wv-cust-modal-depth" value="0" min="0"></div>
 <div class="form-group"><span class="form-label">条目内容</span><div style="position:relative;width:100%"><textarea id="wv-cust-modal-content" rows="7" placeholder="条目描述..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-cust-modal-content','条目内容')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></div>
 <div class="modal-actions" style="flex-shrink:0;margin-top:12px">
-<button onclick="Worldview.closeCustomModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
+<button onclick="Worldview.deleteCustomFromModal()" style="flex:1;background:none;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));color:var(--danger)">删除</button>
 <button onclick="Worldview.saveCustomFromModal()" style="flex:1">保存</button>
 </div>
 </div>
