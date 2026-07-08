@@ -180,8 +180,9 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v705.9';
-    const CHANGELOG = `【v705.9 更新内容】
+const APP_VERSION = 'v706.0';
+    const CHANGELOG = `【v706.0 更新内容】
+✨ 新增「全屏显示手机」开关（设置 - 显示），让小手机铺满屏幕
 ✨ 世界观扩展设定新增 AI 一键生成：电台标签、直播品类、动态知识条目（支持成体系/细节自由搭配）
 ✨ 后台/剧情 AI 现可直接读写玩法配置——属性、任务、历法、电台/直播等手机 App 玩法都能改，支持一步回滚
 🎨 部分UI布局优化

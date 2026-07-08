@@ -6648,6 +6648,9 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
   async function clearDirective() {
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     if (!conv) return;
+    if ((conv.convDirective || '').trim() || (conv.convDirectiveRemaining || 0) > 0) {
+      if (!await UI.showConfirm('清空剧情引导', '确定清空当前的剧情引导？此操作不可撤销。')) return;
+    }
     conv.convDirective = '';
     conv.convDirectiveRemaining = 0;
     conv.convDirectiveTotal = 0;

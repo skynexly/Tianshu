@@ -1145,10 +1145,24 @@ function _setPhoneTheme(theme) {
   if (shell) _applyPhoneTheme(shell);
 }
 function _applyPhoneTheme(shell) {
-    if (!shell) return;
-    const t = _getPhoneTheme();
-    PHONE_THEMES.forEach(name => shell.classList.toggle('phone-theme-' + name, name === t));
-  }
+  if (!shell) return;
+  const t = _getPhoneTheme();
+  PHONE_THEMES.forEach(name => shell.classList.toggle('phone-theme-' + name, name === t));
+}
+
+// ===== 全屏显示手机（全局，存 localStorage）=====
+const _PHONE_FULLSCREEN_KEY = 'tianshu_phone_fullscreen';
+function _getPhoneFullscreen() {
+  try { return localStorage.getItem(_PHONE_FULLSCREEN_KEY) === '1'; } catch (_) { return false; }
+}
+function _setPhoneFullscreen(on) {
+  try { localStorage.setItem(_PHONE_FULLSCREEN_KEY, on ? '1' : '0'); } catch (_) {}
+  _applyPhoneFullscreen();
+}
+function _applyPhoneFullscreen() {
+  const modal = document.getElementById('phone-modal');
+  if (modal) modal.classList.toggle('phone-fullscreen-mode', _getPhoneFullscreen());
+}
 
   // ===== 奶油软糖主题：兑换码解锁（全局，存 localStorage）=====
   const _FUDGE_UNLOCK_KEY = 'tianshu_fudge_unlocked';
@@ -2177,6 +2191,7 @@ function _extractJsonArrayText(content) {
     }, { passive: false });
     modal.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
     document.body.appendChild(modal);
+    _applyPhoneFullscreen();
   }
 
   function _phoneIcon(type) {
@@ -35681,6 +35696,17 @@ function _renderSettings(pd) {
   </div>
   </div>
   <div class="phone-settings-card">
+  <div class="phone-settings-title">显示</div>
+  <div class="phone-settings-desc">开启后手机铺满整个屏幕（去掉手机边框留白），全局生效（所有存档通用）。</div>
+   <label class="circle-check-label" style="margin-top:0;padding:0">
+     <span class="circle-check-text" style="font-size:13px">全屏显示手机</span>
+     <span style="position:relative;display:inline-flex">
+       <input type="checkbox" id="phone-fullscreen" class="circle-check" ${_getPhoneFullscreen() ? 'checked' : ''} onchange="Phone._onToggleFullscreen(this.checked)">
+       <span class="circle-check-ui"></span>
+     </span>
+   </label>
+  </div>
+  <div class="phone-settings-card">
   <div class="phone-settings-title">壁纸</div>
  <div class="phone-settings-desc">上传一张图片作为当前对话的手机桌面壁纸。</div>
  <button class="phone-settings-btn" onclick="Phone._onWallpaperPicked()">更换壁纸</button>
@@ -35934,6 +35960,10 @@ async function _resetWallpaper() {
     _setPhoneTheme(theme);
     // 重渲染设置页以更新选中态高亮
     _getPhoneData().then(pd => { try { _renderSettings(pd); } catch(_) {} }).catch(() => {});
+  }
+
+  function _onToggleFullscreen(on) {
+    _setPhoneFullscreen(!!on);
   }
 
   // 奶油软糖兑换码输入弹窗
@@ -54419,7 +54449,7 @@ buildHeartsimAppFavorForBackstage,
     buildLicenseEventPrompt, applyLicenseMarkers, _readingLicenseSetup,
     flushActionLogForBackstage,
     getSnapshotForRollback, restoreFromSnapshot,
-    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _toggleRollbackKeep, _onThemePick, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
+    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _toggleRollbackKeep, _onThemePick, _onToggleFullscreen, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
     // 个人资料卡
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
     // 主屏分页
