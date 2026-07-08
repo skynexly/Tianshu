@@ -2424,8 +2424,9 @@ const msgEl = appendMessage(aiMsg, true, true);
         // AI 编辑设定工具（read/update/add/delete/undo + list_extension + read_card）
         if (['read_worldview_setting','update_worldview_setting','read_worldview_entry','update_worldview_entry','add_worldview_entry',
        'list_extension_entries','add_extension_entry','update_extension_entry','delete_extension_entry',
-       'read_gameplay_config','update_gameplay_config',
-       'list_cards','read_card','update_card','undo_last_edit'].includes(name)) return convSettings.toolsEdit;
+'read_gameplay_config','update_gameplay_config',
+        'list_event_settings','read_event_setting','add_event_setting','update_event_setting','delete_event_setting',
+        'list_cards','read_card','update_card','undo_last_edit'].includes(name)) return convSettings.toolsEdit;
         return convSettings.toolsMemory;
             });
           }

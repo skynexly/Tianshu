@@ -571,7 +571,7 @@ function _renderLoadingSkeleton() {
     const systemPrompt = `你是一个"${_mt}"内容生成器。用户给你一条帖子/动态的预览信息，请生成完整的正文和评论/回复区。${_mb}${_ub}
 
 要求：
-1. 正文长度贴合${_mt}的画风——该短的短、该长的长，不要一律写成千字小作文，像真的${_mt}用户在写
+1. 正文长度贴合${_mt}的画风——该短的短、该长的长，不要一律写成千字小作文，像真的${_mt}用户在写。正文分段时用真实换行分隔（段落之间空一行，即写成 "第一段\n\n第二段"），不要把整篇挤成一整行，也不要用 <br> 之类的 HTML 标签来换行
 2. 评论/回复区8-12条，绝大多数评论者是虚构的路人用户（非NPC），仅允许1-2条由有设定的角色评论。风格多样（赞同、反对、吐槽、跑题等）。长度自然，有人一句话有人写一段。可以加入适量的"@某人"或引用前排回复的互动感，但不要每条都@。
 3. 评论者的用户名和说话风格要符合世界观和${_mt}的氛围。角色评论时 username 直接填该角色在列表中的名字，语气符合角色性格
 4. 评论时间必须依次晚于该帖子的发帖时间和已有的最新评论。请根据"当前游戏时间"智能安排回复节奏：
@@ -625,7 +625,7 @@ ${wvPrompt}`;
           if (!jsonMatch) throw new Error('返回格式不正确');
           detail = JSON.parse(jsonMatch[0]);
         }
-        post.fullContent = detail.content || '';
+        post.fullContent = String(detail.content || '').replace(/<br\s*\/?>/gi, '\n');
         post._comments = detail.comments || [];
         try {
           const _rnMap = await _buildNpcRealNameMap();
@@ -876,7 +876,7 @@ ${wvPrompt}`;
     const systemPrompt = `你是一个"${_mt}"内容生成器。用户给你一条帖子/动态的预览信息，请生成完整的正文和评论/回复区。${_mb}${_ub}
 
 要求：
-1. 正文长度贴合${_mt}的画风——该短的短、该长的长，不要一律写成千字小作文，像真的${_mt}用户在写
+1. 正文长度贴合${_mt}的画风——该短的短、该长的长，不要一律写成千字小作文，像真的${_mt}用户在写。正文分段时用真实换行分隔（段落之间空一行，即写成 "第一段\n\n第二段"），不要把整篇挤成一整行，也不要用 <br> 之类的 HTML 标签来换行
 2. 评论/回复区8-12条，绝大多数评论者是虚构的路人用户（非NPC），仅允许1-2条由有设定的角色评论。风格多样（赞同、反对、吐槽、跑题等），长度自然，有人一句话有人写一段
 3. 评论者的用户名和说话风格要符合世界观和${_mt}的氛围。角色评论时 username 直接填该角色在列表中的名字，语气符合角色性格
 4. 评论时间必须晚于帖子的发帖时间、且不超过"当前游戏时间"；如果是挖坟老帖，评论可以横跨较长时间（早期评论紧贴发帖时间，近期评论紧贴当前游戏时间）
@@ -949,7 +949,7 @@ ${wvPrompt}`;
       if (!jsonMatch) throw new Error('返回格式不正确');
       detail = JSON.parse(jsonMatch[0]);
     }
-    post.fullContent = detail.content || '';
+    post.fullContent = String(detail.content || '').replace(/<br\s*\/?>/gi, '\n');
     post._comments = detail.comments || [];
     try {
       const _rnMap = await _buildNpcRealNameMap();

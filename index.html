@@ -3520,6 +3520,7 @@ NPC
 <div style="display:flex;justify-content:space-between;align-items:center">
             <h2 id="wv-npc-title" style="margin:0;font-size:22px;color:var(--text)">编辑角色</h2>
             <div style="display:flex;gap:8px">
+              <button onclick="Worldview.exportCurrentNpc()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">导出</button>
               <button onclick="Worldview.deleteNPC()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">删除</button>
               <button onclick="Worldview.saveNPC()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
           </div>
@@ -3669,7 +3670,7 @@ NPC
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text-secondary);pointer-events:none"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
       <input type="text" id="npcnote-search" placeholder="按角色名搜索…" oninput="Phone._npcNotesSearch(this.value)" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;color:var(--text);padding:9px 16px 9px 40px;font-size:13px;box-sizing:border-box;outline:none">
     </div>
-    <div style="font-size:11px;color:var(--text-secondary);line-height:1.6;margin-top:8px">角色在天枢城各 App 里留下的网络行为，会在 ta 出场或被提到时自动带给 AI。自动记录，也可手动编辑或删除。</div>
+    <div style="font-size:11px;color:var(--text-secondary);line-height:1.6;margin-top:8px">角色在各 App 里留下的网络行为，会在 ta 出场或被提到时自动带给 AI。自动记录，也可手动编辑或删除。</div>
   </div>
   <div id="npcnote-page-body" style="flex:1;overflow-y:auto;padding:4px 16px 24px"></div>
 </div>
@@ -4114,10 +4115,10 @@ const GameLog = (() => {
 <script src="js/mcp-client.js"></script>
 <script src="js/fab-drag.js?v=3"></script>
 <script src="js/memory.js?v=4"></script>
-<script src="js/tools.js?v=3"></script>
+<script src="js/tools.js?v=5"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=56"></script>
-<script src="js/worldview.js?v=90"></script>
+<script src="js/worldview.js?v=91"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
@@ -4129,8 +4130,8 @@ const GameLog = (() => {
 <script src="js/character.js?v=9"></script>
 <script src="js/prompts.js?v=1"></script>
 <script src="js/conversations.js?v=6"></script>
-<script src="js/summary.js"></script>
-<script src="js/chat.js?v=86"></script>
+<script src="js/summary.js?v=1"></script>
+<script src="js/chat.js?v=87"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4138,17 +4139,17 @@ const GameLog = (() => {
 <script src="js/branch.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/gaiden.js"></script>
-<script src="js/backstage.js?v=10"></script>
+<script src="js/backstage.js?v=11"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
 <script src="js/status_bar.js?v=27"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/watch-sfx.js?v=4"></script>
-<script src="js/worldvoice.js?v=20"></script>
+<script src="js/worldvoice.js?v=21"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/phone.js?v1=1085"></script>
+<script src="js/phone.js?v1=1087"></script>
     <script src="js/heartsim_intro.js"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>

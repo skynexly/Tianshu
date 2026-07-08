@@ -36798,7 +36798,7 @@ async function _clearMomentsCover() {
     html += '</div>';
     html += '</div>';
     // 正文（支持 Markdown 渲染，和 AI 帖子一致）
-    html += '<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">' + (window.Markdown ? Markdown.render(p.content || '') : Utils.escapeHtml(p.content || '')) + '</div>';
+    html += '<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">' + (window.Markdown ? Markdown.render(String(p.content || '').replace(/<br\s*\/?>/gi, '\n')) : Utils.escapeHtml(p.content || '')) + '</div>';
     // 配图描述
     if (p.imageDesc) {
       html += '<div class="phone-moment-image-desc" style="margin-bottom:12px">' + _uiIcon('image', 13) + '<span>' + Utils.escapeHtml(p.imageDesc) + '</span></div>';
@@ -37610,7 +37610,7 @@ ${wvPrompt}`;
       </div>`;
       // 正文或骨架屏
       if (p._detailLoaded) {
-        html += `<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">${(window.Markdown ? Markdown.render(p.fullContent||'') : Utils.escapeHtml(p.fullContent||''))}</div>`;
+        html += `<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">${(window.Markdown ? Markdown.render(String(p.fullContent||'').replace(/<br\s*\/?>/gi,'\n')) : Utils.escapeHtml(p.fullContent||''))}</div>`;
         if (p.tags?.length) html += `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px">${p.tags.map(t=>`<span style="font-size:10px;background:var(--bg-tertiary);color:var(--accent);padding:2px 8px;border-radius:10px">${Utils.escapeHtml(t)}</span>`).join('')}</div>`;
 html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secondary);padding:8px 0;border-top:1px solid var(--border);margin-bottom:12px">
         <span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> ${formatNum(p.views)}</span>
@@ -48522,7 +48522,7 @@ async function _showCallRecord(contactId, msgId) {
   let contentHtml = '';
   for (const r of record.rounds) {
     if (r.role === 'me') {
-      contentHtml += `<div style="align-self:flex-end;max-width:80%;padding:2px 4px;color:var(--text);font-size:14px;line-height:1.7;text-align:right;word-break:break-word;white-space:pre-wrap">${Utils.escapeHtml(r.text)}</div>`;
+      contentHtml += `<div style="align-self:flex-end;max-width:92%;padding:2px 4px;color:var(--text);font-size:14px;line-height:1.7;text-align:right;word-break:break-word;white-space:pre-wrap">${Utils.escapeHtml(r.text)}</div>`;
     } else {
       // AI 回复用解析
       const segs = _parseCallReply(r.text);
@@ -48533,7 +48533,7 @@ async function _showCallRecord(contactId, msgId) {
           if (seg.kind === 'desc') {
             contentHtml += `<div style="align-self:center;max-width:90%;padding:8px 16px;border-radius:18px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12.5px;text-align:center;line-height:1.6;word-break:break-word;white-space:pre-wrap">${Utils.escapeHtml(seg.text)}</div>`;
           } else {
-            contentHtml += `<div style="align-self:flex-start;max-width:80%;display:flex;flex-direction:column;gap:2px"><div style="padding:2px 4px;color:var(--text);font-size:14px;line-height:1.7;word-break:break-word;white-space:pre-wrap">${Utils.escapeHtml(seg.text)}</div>${seg.time ? `<div style="font-size:10px;color:var(--text-secondary);padding-left:4px">${Utils.escapeHtml(seg.time)}</div>` : ''}</div>`;
+            contentHtml += `<div style="align-self:flex-start;max-width:92%;display:flex;flex-direction:column;gap:2px"><div style="padding:2px 4px;color:var(--text);font-size:14px;line-height:1.7;word-break:break-word;white-space:pre-wrap">${Utils.escapeHtml(seg.text)}</div>${seg.time ? `<div style="font-size:10px;color:var(--text-secondary);padding-left:4px">${Utils.escapeHtml(seg.time)}</div>` : ''}</div>`;
           }
         }
       }

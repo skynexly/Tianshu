@@ -313,7 +313,12 @@ const Tools = (() => {
     { type:'function', function:{ name:'update_card', description:'修改单人卡的 name/aliases/detail/firstMes/mesExample。仅在用户明确要求修改时使用；写入前会保存回滚快照。当前对话多张可编辑卡时必须用 card 指定改哪张。', parameters:{ type:'object', properties:{ card:{ type:'string', description:'要改的卡名称或 id（用于定位，不会被写入）；只有一张卡时可省略' }, name:{ type:'string', description:'新角色名' }, aliases:{ type:'string' }, detail:{ type:'string' }, firstMes:{ type:'string' }, mesExample:{ type:'string' } }, required:[] } }},
     { type:'function', function:{ name:'read_gameplay_config', description:'读取当前世界观的「玩法配置」JSON。玩法配置涵盖：属性系统(gameplay.globalAttrs 全局属性 / gameplay.characterAttrs 角色属性模板)、任务系统(gameplay.taskSystem)、历法系统(gameplay.calendarSystem)，以及全部手机 App 配置(phoneApps：takeout/shop 商城、forum 论坛、radio 电台含分类与标签、video.liveCats 直播品类、reading 阅读等)。只读。改之前必须先 read 看清结构和数组下标，再用 update_gameplay_config 按路径精确修改。', parameters:{ type:'object', properties:{ section:{ type:'string', description:'要读的配置段点路径，例如 "gameplay"、"gameplay.taskSystem"、"gameplay.calendarSystem"、"phoneApps"、"phoneApps.radio"、"phoneApps.radio.categories"、"phoneApps.video.liveCats"。不传则返回 gameplay + phoneApps 全部。' } }, required:[] } }},
     { type:'function', function:{ name:'update_gameplay_config', description:'按点路径精确修改玩法配置里的某一个字段/数组元素。仅在用户明确要求修改玩法/手机配置/属性/任务/历法时使用；写入前会保存整份玩法快照，可用 undo_last_edit 回滚。用法：先 read_gameplay_config 看清结构与下标，再指定 path + value。电台标签玩法 plays 取值 ["mail","vote","request","call","lottery","divination"]，renewMode 取值 "unit"/"serial"/"free"；直播品类 plays 取值 ["call","pk","cart"]。安全限制：只能修改已存在的字段或往已存在的数组末尾追加(在 path 末尾用 "[]" 表示 push)，不能把数组/对象整体替换成基本类型。', parameters:{ type:'object', properties:{ path:{ type:'string', description:'点路径，根从 gameplay 或 phoneApps 开始。改字段例："phoneApps.radio.categories.0.tags.1.plays"、"gameplay.calendarSystem.daysPerWeek"。往数组追加例："phoneApps.video.liveCats.categories[]"。' }, value:{ description:'新值，类型需与目标匹配（字符串/数字/布尔/数组/对象）。追加(path 以 []结尾)时 value 是要 push 的新元素。' } }, required:['path','value'] } }},
-    { type:'function', function:{ name:'undo_last_edit', description:'撤销上一次由AI编辑工具写入的世界观/扩展设定/单人卡/玩法配置修改。', parameters:{ type:'object', properties:{}, required:[] } }}
+    { type:'function', function:{ name:'list_event_settings', description:'列出当前世界观的剧情事件（w.events）：独立事件 + 事件链。返回每个事件的 id/name/triggerType/keys/completeKey/chainId/chainName，以及现有事件链汇总(chains)。修改前先用它定位 id 和 chainId。', parameters:{ type:'object', properties:{ chainId:{ type:'string', description:'只列某条事件链的节点；不传则列全部' } }, required:[] } }},
+    { type:'function', function:{ name:'read_event_setting', description:'读取单个剧情事件的完整内容（name/keys/completeKey/finishRule/content/链信息）。用 id 或 name 定位。', parameters:{ type:'object', properties:{ id:{ type:'string' }, name:{ type:'string' } }, required:[] } }},
+    { type:'function', function:{ name:'add_event_setting', description:'给当前世界观新增一个关键词触发的剧情事件（写入前保存回滚快照）。【事件是什么】事件是埋在剧情里的"触发式导演指令"：当玩家的话或剧情中出现 keys 里的关键词时，事件被激活，它的 content 会作为提示词注入给主线 AI，指导主线 AI 接下来怎么演这段剧情；主线 AI 演完后输出 completeKey（通常包在 HTML 注释里）来关闭事件。【content 怎么写】要写成"给主线 AI 的导演指令/推进方向"，说清接下来应该发生什么、氛围走向、可引入的人物或冲突，用第二人称对主线 AI 说话的口吻更好（如"接下来，让…出现，向玩家…"），而不是干巴巴的设定百科。【keys】触发关键词，玩家或剧情里出现即激活，选玩家自然会说到/剧情自然会出现的词。【completeKey】结束暗号，事件自然演完时由主线 AI 输出以关闭事件，会被系统扫描（默认藏在 HTML 注释里不展示给玩家）。【事件链】链式事件按顺序推进：下一节点的 keys 通常要包含上一节点的 completeKey，这样上一段结束就自动触发下一段。仅支持关键词触发（不支持数值/时间触发，那些请用户在 UI 配）。', parameters:{ type:'object', properties:{ name:{ type:'string', description:'事件名' }, keys:{ type:'string', description:'触发关键词（逗号分隔）。追加到事件链时，第一个关键词通常要包含上一节点的结束词' }, completeKey:{ type:'string', description:'结束词：出现即视为事件完成（链式事件靠它触发下一节点）。取一个不容易在普通对话里误命中的独特短语' }, finishRule:{ type:'string', description:'完成规则的文字描述：什么情况算这个事件演完了，可空' }, content:{ type:'string', description:'事件正文=给主线 AI 的导演指令，描述这段剧情该怎么推进、往哪走' }, chainId:{ type:'string', description:'追加到已有事件链：传该链 chainId（先用 list_event_settings 查）' }, newChainName:{ type:'string', description:'新建一条事件链并作为首个节点：传链名（与 chainId 二选一，都不传=独立事件）' } }, required:['name','completeKey','content'] } }},
+    { type:'function', function:{ name:'update_event_setting', description:'修改一个剧情事件的 name/keys/completeKey/finishRule/content，或改事件链名(chainName，会同步整条链)。用 id 或 name 定位；写入前保存回滚快照。不改触发类型（保持原样）。', parameters:{ type:'object', properties:{ id:{ type:'string' }, name:{ type:'string', description:'定位用的当前名称；id/name 至少传一个' }, newName:{ type:'string', description:'新事件名' }, keys:{ type:'string' }, completeKey:{ type:'string' }, finishRule:{ type:'string' }, content:{ type:'string' }, chainName:{ type:'string', description:'改整条链的名字（仅当该事件属于某条链时生效）' } }, required:[] } }},
+    { type:'function', function:{ name:'delete_event_setting', description:'删除一个剧情事件。仅在用户明确要求删除时使用；写入前保存回滚快照。', parameters:{ type:'object', properties:{ id:{ type:'string' }, name:{ type:'string' } }, required:[] } }},
+    { type:'function', function:{ name:'undo_last_edit', description:'撤销上一次由AI编辑工具写入的世界观/扩展设定/单人卡/玩法配置/事件修改。', parameters:{ type:'object', properties:{}, required:[] } }}
   ];
 
 
@@ -962,6 +967,109 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       await _saveWorldview(got.wv);
       return OK({ success:true, message:'扩展设定已删除；可用 undo_last_edit 回滚。' });
     },
+    // --- 世界观事件（w.events）：关键词事件 + 事件链，不含数值(attr)/时间(time)触发 ---
+    async list_event_settings(args) {
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      const evts = Array.isArray(got.wv.events) ? got.wv.events : [];
+      const chainOnly = args && args.chainId ? String(args.chainId) : '';
+      const items = evts
+        .filter(e => e && (!chainOnly || e.chainId === chainOnly))
+        .map(e => ({
+          id: e.id || '', name: e.name || '', triggerType: e.triggerType || 'keyword',
+          keys: e.keys || '', completeKey: e.completeKey || '',
+          chainId: e.chainId || '', chainName: e.chainName || '', chainIndex: Number(e.chainIndex || 0)
+        }));
+      const chainMap = {};
+      evts.forEach(e => { if (e && e.chainId) chainMap[e.chainId] = e.chainName || '未命名事件链'; });
+      const chains = Object.keys(chainMap).map(id => ({ chainId:id, chainName:chainMap[id] }));
+      return OK({ worldview:got.wv.name || got.id, total:items.length, chains, items });
+    },
+    async read_event_setting(args) {
+      const key = args && (args.id || args.name);
+      if (!key) return ERR('缺少 id 或 name');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      const evts = Array.isArray(got.wv.events) ? got.wv.events : [];
+      const k = String(key).toLowerCase();
+      const ev = evts.find(e => e && (String(e.id).toLowerCase() === k || String(e.name || '').toLowerCase() === k));
+      if (!ev) return ERR('未找到事件');
+      return OK({
+        id:ev.id || '', name:ev.name || '', triggerType:ev.triggerType || 'keyword',
+        keys:ev.keys || '', completeKey:ev.completeKey || '', finishRule:ev.finishRule || '',
+        content:ev.content || '', chainId:ev.chainId || '', chainName:ev.chainName || '',
+        chainIndex:Number(ev.chainIndex || 0),
+        note: (ev.triggerType === 'attr' || ev.triggerType === 'time') ? '该事件为数值/时间触发，编辑只会改名称/关键词/结束词/正文，触发条件请在 UI 中调整' : undefined
+      });
+    },
+    async add_event_setting(args) {
+      if (!args || !args.name || !args.content) return ERR('缺少 name/content');
+      if (!args.completeKey) return ERR('缺少 completeKey（事件结束词，用于标记事件完成）');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      if (!Array.isArray(got.wv.events)) got.wv.events = [];
+      const evts = got.wv.events;
+      const id = 'evt_' + Utils.uuid().slice(0,8);
+      let chainId = '', chainName = '', chainIndex = 0;
+      if (args.chainId) {
+        const chainEvents = evts.filter(e => e && e.chainId === args.chainId).sort((a,b)=>Number(a.chainIndex||0)-Number(b.chainIndex||0));
+        if (!chainEvents.length) return ERR('指定的 chainId 不存在，先用 list_event_settings 查看，或用 newChainName 新建链');
+        chainId = args.chainId;
+        chainName = chainEvents[0].chainName || '未命名事件链';
+        chainIndex = Number(chainEvents[chainEvents.length-1].chainIndex || 0) + 1;
+      } else if (args.newChainName) {
+        chainId = 'chain_' + Utils.uuid().slice(0,8);
+        chainName = String(args.newChainName).trim() || '未命名事件链';
+        chainIndex = 0;
+      }
+      const item = {
+        id, name:args.name, keys:args.keys || '', triggerType:'keyword', attrConditions:[],
+        completeKey:args.completeKey, finishRule:args.finishRule || '', content:args.content,
+        triggerMode:'event', chainId, chainName, chainIndex
+      };
+      evts.push(item);
+      await _pushEditUndo({ type:'event_add', worldviewId:got.id, label:`新增事件:${args.name}`, id });
+      await _saveWorldview(got.wv);
+      return OK({ success:true, id, chainId:chainId||undefined, message:'事件已新增；可用 undo_last_edit 回滚。' });
+    },
+    async update_event_setting(args) {
+      const key = args && (args.id || args.name);
+      if (!key) return ERR('缺少 id 或 name');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      const evts = Array.isArray(got.wv.events) ? got.wv.events : [];
+      const k = String(key).toLowerCase();
+      const idx = evts.findIndex(e => e && (String(e.id).toLowerCase() === k || String(e.name || '').toLowerCase() === k));
+      if (idx < 0) return ERR('未找到事件');
+      const ev = evts[idx];
+      await _pushEditUndo({ type:'event_update', worldviewId:got.id, label:`事件:${ev.name || key}`, before:_clone(ev) });
+      if (typeof args.newName === 'string') ev.name = args.newName;
+      if (typeof args.keys === 'string') ev.keys = args.keys;
+      if (typeof args.completeKey === 'string') ev.completeKey = args.completeKey;
+      if (typeof args.finishRule === 'string') ev.finishRule = args.finishRule;
+      if (typeof args.content === 'string') ev.content = args.content;
+      if (typeof args.chainName === 'string' && ev.chainId) {
+        const nm = args.chainName.trim() || ev.chainName;
+        evts.forEach(e => { if (e && e.chainId === ev.chainId) e.chainName = nm; });
+      }
+      await _saveWorldview(got.wv);
+      return OK({ success:true, id:ev.id, message:'事件已修改；可用 undo_last_edit 回滚。' });
+    },
+    async delete_event_setting(args) {
+      const key = args && (args.id || args.name);
+      if (!key) return ERR('缺少 id 或 name');
+      const got = await _getWritableWorldview();
+      if (!got) return ERR('当前没有可写入的世界观');
+      const evts = Array.isArray(got.wv.events) ? got.wv.events : [];
+      const k = String(key).toLowerCase();
+      const idx = evts.findIndex(e => e && (String(e.id).toLowerCase() === k || String(e.name || '').toLowerCase() === k));
+      if (idx < 0) return ERR('未找到事件');
+      const before = _clone(evts[idx]);
+      evts.splice(idx, 1);
+      await _pushEditUndo({ type:'event_delete', worldviewId:got.id, label:`删除事件:${before.name || key}`, before });
+      await _saveWorldview(got.wv);
+      return OK({ success:true, message:'事件已删除；可用 undo_last_edit 回滚。' });
+    },
     async list_cards() {
       const cards = await _listEditableCards();
       if (cards.length === 0) return OK({ result:'当前对话没有可编辑的单人卡（主角卡或常驻挂载角色）。' });
@@ -1098,6 +1206,23 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
           wv.gameplay = _clone(u.before.gameplay) || {};
           wv.phoneApps = _clone(u.before.phoneApps) || {};
         }
+        await _saveWorldview(wv);
+      } else if (u.type === 'event_add') {
+        const wv = await DB.get('worldviews', u.worldviewId); if (!wv) return ERR('找不到要回滚的世界观');
+        if (Array.isArray(wv.events)) wv.events = wv.events.filter(e => e && e.id !== u.id);
+        await _saveWorldview(wv);
+      } else if (u.type === 'event_update') {
+        const wv = await DB.get('worldviews', u.worldviewId); if (!wv) return ERR('找不到要回滚的世界观');
+        const before = _clone(u.before); if (!before) return ERR('缺少事件快照');
+        if (!Array.isArray(wv.events)) wv.events = [];
+        const i = wv.events.findIndex(e => e && e.id === before.id);
+        if (i >= 0) wv.events[i] = before; else wv.events.push(before);
+        await _saveWorldview(wv);
+      } else if (u.type === 'event_delete') {
+        const wv = await DB.get('worldviews', u.worldviewId); if (!wv) return ERR('找不到要回滚的世界观');
+        const before = _clone(u.before); if (!before) return ERR('缺少事件快照');
+        if (!Array.isArray(wv.events)) wv.events = [];
+        if (!wv.events.some(e => e && e.id === before.id)) wv.events.push(before);
         await _saveWorldview(wv);
       } else return ERR('未知回滚类型');
       await _saveConvs();

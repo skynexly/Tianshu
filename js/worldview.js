@@ -2116,6 +2116,46 @@ document.getElementById('wv-npc-detail').value = npc.detail || '';
     _renderNPCCards(w.regions[_editRegionIdx].factions[_editFactionIdx].npcs);
     UI.showPanel('wv-faction', 'back');
   }
+
+  // 导出当前编辑中的角色为单 NPC JSON（不含头像；格式可被批量导入直接吃回）
+  async function exportCurrentNpc() {
+    // 先把表单当前值落库，导出的就是最新内容
+    try { await saveNPC(true); } catch(_) {}
+    const w = await _getEditingWV();
+    if (!w) { UI.showToast('没有正在编辑的世界观'); return; }
+    let npc = null;
+    if (_editGlobalNpcIdx >= 0) {
+      npc = w.globalNpcs && w.globalNpcs[_editGlobalNpcIdx];
+    } else if (_editRegionIdx >= 0 && _editFactionIdx >= 0 && _editNPCIdx >= 0) {
+      npc = w.regions?.[_editRegionIdx]?.factions?.[_editFactionIdx]?.npcs?.[_editNPCIdx];
+    }
+    if (!npc) { UI.showToast('未找到要导出的角色'); return; }
+    const name = (npc.name || '').trim() || '未命名角色';
+    // 单 NPC 对象，导入端 _extractNpcArray 的“单对象含 name”分支可直接识别；不含 id/avatar
+    const exportData = {
+      _format: 'tianshu-npc',
+      _version: 1,
+      _source: w.name || '',
+      _exportedAt: new Date().toISOString(),
+      name,
+      aliases: npc.aliases || '',
+      onlineName: npc.onlineName || '',
+      summary: npc.summary || '',
+      detail: npc.detail || ''
+    };
+    try {
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      UI.showToast(`已导出角色「${name}」`);
+    } catch(e) {
+      UI.showToast('导出失败：' + (e.message || e), 3000);
+    }
+  }
   
   // ---------- 添加按钮（传-1表示新增） ----------
   function addRegion() { openRegionEdit(-1); }
@@ -8972,7 +9012,7 @@ aiGenerateTaskPhase,
     addRegion, addFaction, addNPC,
     openRegionEdit, saveRegion, deleteRegion,
     openFactionEdit, saveFaction, deleteFaction,
-    openNPCEdit, saveNPC, deleteNPC,
+    openNPCEdit, saveNPC, deleteNPC, exportCurrentNpc,
     addGlobalNpc, editGlobalNpc, backFromNpcEdit,
     _pickEditingNpcAvatar, _clearEditingNpcAvatar,
     openNpcImporter,
