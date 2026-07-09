@@ -129,6 +129,87 @@ async function init() {
     await _updateTopbar();
   }
 
+  // ===== 对话自愈：从 messages 表反推重建丢失的对话 =====
+  // 背景：v706.1 的合并迁移误在本 init 之前执行，saveList 把空 list 写回，
+  //       覆盖了 gameState.conversations，导致对话列表消失（messages 表未受损）。
+  // 本函数扫描 messages 表里所有 conversationId，凡是当前 list 里没有对应对话的，
+  // 就从其消息反推重建一条对话（只新增，绝不删改现有对话）。带 flag 只跑一次。
+  async function recoverOrphanConversations() {
+    try {
+      const FLAG = 'recover_orphan_conversations_v1';
+      const flag = await DB.get('gameState', FLAG);
+      if (flag && flag.value) return;
+
+      const allMsgs = await DB.getAll('messages');
+      if (!Array.isArray(allMsgs) || allMsgs.length === 0) {
+        await DB.put('gameState', { key: FLAG, value: 1 });
+        return;
+      }
+
+      // 按 conversationId 分组，统计每个对话的消息范围 + 首条 user 文本
+      const existingIds = new Set(list.map(c => c.id));
+      const groups = {}; // convId -> { count, minTs, maxTs, firstUserText }
+      for (const m of allMsgs) {
+        const cid = m && m.conversationId;
+        if (!cid) continue;
+        if (existingIds.has(cid)) continue; // 已有对话，不动
+        let g = groups[cid];
+        if (!g) { g = groups[cid] = { count: 0, minTs: Infinity, maxTs: 0, firstUserText: '' }; }
+        g.count++;
+        const ts = Number(m.timestamp) || 0;
+        if (ts && ts < g.minTs) g.minTs = ts;
+        if (ts && ts > g.maxTs) g.maxTs = ts;
+        // 取最早的一条 user 消息文本作为标题线索
+        if (m.role === 'user' && typeof m.content === 'string' && m.content.trim()) {
+          const t = m.content.trim();
+          // 跳过系统占位符
+          if (t !== '<Continue the Chat/>' && t !== '<PhoneDown/>') {
+            if (!g._firstUserTs || ts < g._firstUserTs) { g._firstUserTs = ts; g.firstUserText = t; }
+          }
+        }
+      }
+
+      const orphanIds = Object.keys(groups);
+      if (orphanIds.length === 0) {
+        await DB.put('gameState', { key: FLAG, value: 1 });
+        return;
+      }
+
+      // 重建：按最早消息时间排序，逐个补进 list
+      const defaultWv = _activeWorldviewId();
+      const curPreset = (typeof Settings !== 'undefined' && Settings.getCurrentId) ? Settings.getCurrentId() : null;
+      orphanIds.sort((a, b) => (groups[a].minTs || 0) - (groups[b].minTs || 0));
+      let idx = 1;
+      for (const cid of orphanIds) {
+        const g = groups[cid];
+        // 标题：优先取首条 user 消息前 12 字，否则用序号
+        let title = '';
+        if (g.firstUserText) {
+          title = g.firstUserText.replace(/\s+/g, ' ').slice(0, 12);
+        }
+        if (!title) title = '恢复的对话 ' + idx;
+        list.push({
+          id: cid,
+          name: title,
+          created: (g.minTs && g.minTs !== Infinity) ? g.minTs : Date.now(),
+          folder: null,
+          worldviewId: '__default_wv__',
+          maskId: 'default',
+          presetId: curPreset,
+          _recovered: true
+        });
+        idx++;
+      }
+      await saveList();
+      try { renderList(); } catch(_) {}
+      await DB.put('gameState', { key: FLAG, value: 1 });
+      console.log('[Recover] 自愈重建对话 ' + orphanIds.length + ' 个');
+      try { if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已找回 ' + orphanIds.length + ' 个对话的聊天记录', 3000); } catch(_) {}
+    } catch (e) {
+      console.warn('[Recover] 对话自愈失败:', e);
+    }
+  }
+
   // ===== 顶栏更新（标题 + 头像）=====
   async function _updateTopbar() {
     try { if (typeof StatusBar !== 'undefined' && StatusBar.refreshFromConv) StatusBar.refreshFromConv(); } catch(e) {}
@@ -1591,6 +1672,7 @@ const allArchives = await DB.getAll('archives');
     changeFolderWorldview, _doChangeFolderWorldview,
     migrateWorldview,
     saveList,
+    recoverOrphanConversations,
     toggleCharFilter, pickCharFilter, refreshCharFilter,
     getList: () => list,
     setStreaming

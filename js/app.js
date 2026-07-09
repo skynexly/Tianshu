@@ -51,6 +51,14 @@
     // 多对话管理
     try { await Conversations.init(); } catch(e) { console.error('[Conversations]', e); }
 
+    // 对话自愈：从 messages 表反推重建丢失的对话（修复 v706.1 对话丢失事故）
+    // 必须在合并迁移之前——先把对话找回来，迁移才能在完整数据上跑。
+    try {
+      if (Conversations.recoverOrphanConversations) {
+        await Conversations.recoverOrphanConversations();
+      }
+    } catch(e) { console.error('[Conversations.recover]', e); }
+
     // 一次性 migration：合并因本名/代号分裂产生的重复身份数据
     // 【必须在 Conversations.init 之后】——迁移会遍历并 saveList 对话列表，
     // 早于 init 执行会拿到空 list 并把它写回，覆盖真实对话数据（v706.1 曾因此翻车）。
@@ -194,9 +202,9 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v706.2';
-    const CHANGELOG = `【v706.2 更新内容】
-🐛 紧急修复对话列表异常丢失的问题`;
+const APP_VERSION = 'v706.3';
+    const CHANGELOG = `【v706.3 更新内容】
+🐛 自动找回此前丢失的对话与聊天记录`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {
