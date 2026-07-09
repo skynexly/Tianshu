@@ -555,6 +555,11 @@ const Auth = (() => {
             <div class="auth-profile-item-label">导入存档</div>
             <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
           </div>
+          <div class="auth-profile-item" id="auth-profile-restore-backup" style="display:none">
+            <div class="auth-profile-item-label">恢复迁移前备份</div>
+            <div class="auth-profile-item-value" id="auth-profile-restore-backup-info"></div>
+            <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          </div>
           <div class="auth-profile-item" id="auth-profile-cloud">
             <div class="auth-profile-item-label">云备份（Supabase）</div>
           <div class="auth-profile-item-value" id="auth-profile-cloud-status">${SupabaseBackup.isConfigured() ? '已配置' : '未配置'}</div>
@@ -613,6 +618,37 @@ const Auth = (() => {
     _refreshImageStat();
     _refreshStorageEstimate();
     document.getElementById('auth-profile-import').addEventListener('click', () => DataMgr.importAll());
+    // 恢复迁移前备份：仅当存在备份时显示这一项
+    (async () => {
+      try {
+        if (typeof Conversations === 'undefined' || !Conversations.getPreMigrationBackupInfo) return;
+        const info = await Conversations.getPreMigrationBackupInfo();
+        const row = document.getElementById('auth-profile-restore-backup');
+        if (!info || !row) return;
+        const infoEl = document.getElementById('auth-profile-restore-backup-info');
+        const d = new Date(info.time || 0);
+        const pad = n => String(n).padStart(2, '0');
+        const timeStr = `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        if (infoEl) infoEl.textContent = `${timeStr}·${info.count}个对话`;
+        row.style.display = '';
+        row.addEventListener('click', async () => {
+          const ok = await _modal({
+            title: '恢复迁移前备份',
+            desc: `将把对话列表还原到 ${timeStr} 的备份（共 ${info.count} 个对话）。\n当前的对话列表会被覆盖，聊天记录不受影响。确定恢复吗？`,
+            okText: '恢复',
+            danger: true,
+          });
+          if (!ok) return;
+          const r = await Conversations.restorePreMigrationBackup();
+          if (r && r.ok) {
+            await _modal({ title: '恢复成功', desc: `已还原 ${r.count} 个对话。`, cancelText: false, okText: '好的' });
+            try { location.reload(); } catch(_) {}
+          } else {
+            await _modal({ title: '恢复失败', desc: (r && r.error) || '未知错误', cancelText: false, okText: '好的' });
+          }
+        });
+      } catch(_) {}
+    })();
     document.getElementById('auth-profile-cloud').addEventListener('click', () => openCloudBackup());
     root.querySelectorAll('[data-kick]').forEach(btn => {
       btn.addEventListener('click', async () => {

@@ -277,10 +277,11 @@ case 'panel-worldview-edit': return () => {
         case 'panel-wv-viewer': return () => showPanel('worldview', 'back');
         case 'panel-character': return () => showPanel('chat', 'back');
         case 'panel-single-card-edit': return () => {
-          showPanel('worldview', 'back');
-          if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
-            Worldview.switchWorldTab('char');
-          }
+          showPanel('worldview', 'back').then(() => {
+            if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
+              Worldview.switchWorldTab('char');
+            }
+          });
         };
         case 'panel-mask-edit': return () => showPanel(_maskEditFrom || 'character', 'back');
         case 'panel-memory': return () => showPanel('chat', 'back');

@@ -316,10 +316,11 @@ const SingleCard = (() => {
   function closeEditPanel() {
     _scAutoSave.cancel();
     _editingId = null;
-    UI.showPanel('worldview', 'back');
-    if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
-      Worldview.switchWorldTab('char');
-    }
+    UI.showPanel('worldview', 'back').then(() => {
+      if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
+        Worldview.switchWorldTab('char');
+      }
+    });
   }
 
   // v632：渲染卡的世界书绑定列表
@@ -361,10 +362,11 @@ const SingleCard = (() => {
   async function restoreEditPanel() {
     if (!_editingId) {
       // 没有编辑中的卡，退回列表
-      UI.showPanel('worldview', 'back');
-      if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
-        Worldview.switchWorldTab('char');
-      }
+      UI.showPanel('worldview', 'back').then(() => {
+        if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) {
+          Worldview.switchWorldTab('char');
+        }
+      });
       return;
     }
     const card = await get(_editingId);

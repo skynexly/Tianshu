@@ -2505,14 +2505,17 @@ function _renderTaskSystem(w) {
 let _ttModalPhaseIdx = -1;
 let _ttModalTypeIdx = -1; // -1 = 新建
 
-function openTaskTypeModal(pi, ti) {
-  _ttModalPhaseIdx = pi;
-  _ttModalTypeIdx = ti;
-  const w = window.__wvEditingCache;
-  if (!w) return;
-  const gp = _ensureGameplay(w);
-  const phase = gp.taskSystem.phases[pi];
-  if (!phase) return;
+async function openTaskTypeModal(pi, ti) {
+    _ttModalPhaseIdx = pi;
+    _ttModalTypeIdx = ti;
+    // 不依赖易失的 window.__wvEditingCache——从 DB 实时读当前编辑文档（与 addTaskPhase 等一致，避免缓存丢失时静默失败）
+    if (!editingWorldviewId) return;
+    const w = await DB.get('worldviews', editingWorldviewId);
+    if (!w) return;
+    window.__wvEditingCache = w; // 顺带回填缓存，保持其它路径可用
+    const gp = _ensureGameplay(w);
+    const phase = gp.taskSystem.phases[pi];
+    if (!phase) return;
   const isNew = ti < 0;
   const t = isNew ? _defaultTaskType() : (phase.types?.[ti] || _defaultTaskType());
 
@@ -3288,8 +3291,10 @@ let knowledgesData = [];
 
   // AI 生成节日：弹窗收集需求 + 数量，再调 AI 生成节日数组追加进列表
   async function aiGenFestivals() {
-    const w = window.__wvEditingCache;
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑', 1500); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('请先打开世界观编辑', 1500); return; }
+    window.__wvEditingCache = w;
     const html = `
     <div id="ai-fest-gen-overlay" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-fest-gen-overlay')?.remove()">
       <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
@@ -3341,8 +3346,10 @@ let knowledgesData = [];
     const prompt = document.getElementById('ai-fest-gen-prompt')?.value?.trim() || '';
     const count = Math.max(1, Math.min(10, parseInt(document.getElementById('ai-fest-gen-count')?.value) || 3));
 
-    const w = window.__wvEditingCache;
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑', 1500); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('请先打开世界观编辑', 1500); return; }
+    window.__wvEditingCache = w;
 
     if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
     if (status) { status.style.display = 'block'; status.textContent = `正在生成 ${count} 个节日…`; }
@@ -3415,8 +3422,10 @@ let knowledgesData = [];
   let _aiKnowAbort = null;
 
   async function aiGenKnowledges() {
-    const w = window.__wvEditingCache;
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑', 1500); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('请先打开世界观编辑', 1500); return; }
+    window.__wvEditingCache = w;
     const html = `
     <div id="ai-know-gen-overlay" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-know-gen-overlay')?.remove()">
       <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
@@ -3470,8 +3479,10 @@ let knowledgesData = [];
     const prompt = document.getElementById('ai-know-gen-prompt')?.value?.trim() || '';
     const count = Math.max(1, Math.min(10, parseInt(document.getElementById('ai-know-gen-count')?.value) || 3));
 
-    const w = window.__wvEditingCache;
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑', 1500); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('请先打开世界观编辑', 1500); return; }
+    window.__wvEditingCache = w;
 
     if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
     if (status) { status.style.display = 'block'; status.textContent = `正在生成 ${count} 条动态条目…`; }
@@ -4007,9 +4018,11 @@ function closeKnowledgeModal() {
   let _aiAttrAbort = null;
 
   // 弹窗：让用户填数量 + 可选需求
-  function aiGenerateGlobalAttrs() {
-    const w = window.__wvEditingCache;
+  async function aiGenerateGlobalAttrs() {
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑'); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    window.__wvEditingCache = w;
     const html = `
     <div id="ai-attr-gen-overlay" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-attr-gen-overlay')?.remove()">
       <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
@@ -4040,8 +4053,10 @@ function closeKnowledgeModal() {
     const prompt = document.getElementById('ai-attr-gen-prompt')?.value?.trim() || '';
     const count = Math.max(1, Math.min(10, parseInt(document.getElementById('ai-attr-gen-count')?.value) || 3));
 
-    const w = window.__wvEditingCache;
+    if (!editingWorldviewId) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    window.__wvEditingCache = w;
     const gp = _ensureGameplay(w);
     const settingText = w?.setting || '';
     const existingNames = (gp.globalAttrs || []).map(a => (a.name || '').trim()).filter(Boolean);
@@ -4125,9 +4140,11 @@ ${existingNames.length ? '\n## 已有属性（不要重复）\n' + existingNames
     return out;
   }
 
-  function aiGenerateCharAttrs() {
-    const w = window.__wvEditingCache;
+  async function aiGenerateCharAttrs() {
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑'); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    window.__wvEditingCache = w;
     const npcs = _collectCurrentWvNpcs(w);
     if (!npcs.length) { UI.showToast('当前世界观还没有角色，请先添加 NPC', 2400); return; }
     window.__wvCharAttrNpcCache = npcs;
@@ -4187,8 +4204,10 @@ ${existingNames.length ? '\n## 已有属性（不要重复）\n' + existingNames
       .filter(Boolean);
     if (!picks.length) { if (status) { status.style.display = 'block'; status.textContent = '请至少勾选一个角色'; } return; }
 
-    const w = window.__wvEditingCache;
+    if (!editingWorldviewId) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    window.__wvEditingCache = w;
     const settingText = w?.setting || '';
 
     if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
@@ -4285,9 +4304,12 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供，请生成通用的�
   let _aiTaskAbort = null;
 
   // 弹窗：让用户填可选需求（任务的 types 数量由 AI 按 3-5 自定，不需要数量输入）
-  function aiGenerateTaskPhase(pi) {
-    const w = window.__wvEditingCache;
+  async function aiGenerateTaskPhase(pi) {
+    // 不依赖易失的 window.__wvEditingCache——从 DB 实时读（与 addTaskPhase 等一致，避免缓存丢失时静默失败）
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑'); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    window.__wvEditingCache = w; // 回填缓存，保持 _doAiGenerateTaskPhase 等后续路径可用
     const gp = _ensureGameplay(w);
     if (!gp.taskSystem.phases[pi]) return;
     const html = `
@@ -4314,8 +4336,11 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供，请生成通用的�
     const prompt = document.getElementById('ai-task-gen-prompt')?.value?.trim() || '';
     const pi = Number(overlay?.dataset?.pi);
 
-    const w = window.__wvEditingCache;
+    // 不依赖易失的 window.__wvEditingCache——从 DB 实时读（与 addTaskPhase 等一致）
+    if (!editingWorldviewId) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    window.__wvEditingCache = w;
     const gp = _ensureGameplay(w);
     const phase = gp.taskSystem.phases[pi];
     if (!phase) { if (status) { status.style.display = 'block'; status.textContent = '阶段已不存在'; } return; }
@@ -4428,9 +4453,11 @@ ${attrList || '（未配置属性——请用 rewardMode "free" 或 "none"）'}`
   let _aiCalAbort = null;
 
   // 弹窗：填可选需求（历法是整体结构，只生成不需要数量）
-  function aiGenerateCalendar() {
-    const w = window.__wvEditingCache;
+  async function aiGenerateCalendar() {
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑'); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    window.__wvEditingCache = w;
     const html = `
     <div id="ai-cal-gen-overlay" style="position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-cal-gen-overlay')?.remove()">
       <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
@@ -4454,8 +4481,10 @@ ${attrList || '（未配置属性——请用 rewardMode "free" 或 "none"）'}`
     const status = document.getElementById('ai-cal-gen-status');
     const prompt = document.getElementById('ai-cal-gen-prompt')?.value?.trim() || '';
 
-    const w = window.__wvEditingCache;
+    if (!editingWorldviewId) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    window.__wvEditingCache = w;
 
     if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
     if (status) { status.style.display = 'block'; status.textContent = '正在生成历法…'; }
@@ -4568,9 +4597,11 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
   // ===== AI 生成商城配置（短时效 takeout + 长时效 shop，一次生成两个，只回填不自动保存）=====
   let _aiShopAbort = null;
 
-  function aiGenerateShops() {
-    const w = window.__wvEditingCache;
+  async function aiGenerateShops() {
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑'); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    window.__wvEditingCache = w;
     const html = `
     <div id="ai-shop-gen-overlay" style="position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-shop-gen-overlay')?.remove()">
       <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
@@ -4594,8 +4625,10 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
     const status = document.getElementById('ai-shop-gen-status');
     const prompt = document.getElementById('ai-shop-gen-prompt')?.value?.trim() || '';
 
-    const w = window.__wvEditingCache;
+    if (!editingWorldviewId) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    window.__wvEditingCache = w;
 
     if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
     if (status) { status.style.display = 'block'; status.textContent = '正在生成商城配置…'; }
@@ -4690,9 +4723,11 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
   // ===== AI 生成内容平台（信息载体/电台/阅读/视频，四个的 name + desc 一起生成）=====
   let _aiMediaAbort = null;
 
-  function aiGenerateMediaApps() {
-    const w = window.__wvEditingCache;
+  async function aiGenerateMediaApps() {
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑'); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    window.__wvEditingCache = w;
     const html = `
     <div id="ai-media-gen-overlay" style="position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-media-gen-overlay')?.remove()">
       <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
@@ -4716,8 +4751,10 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
     const status = document.getElementById('ai-media-gen-status');
     const prompt = document.getElementById('ai-media-gen-prompt')?.value?.trim() || '';
 
-    const w = window.__wvEditingCache;
+    if (!editingWorldviewId) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先打开世界观编辑'; } return; }
+    window.__wvEditingCache = w;
 
     if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
     if (status) { status.style.display = 'block'; status.textContent = '正在生成内容平台…'; }
@@ -5204,8 +5241,10 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
   let _aiEventAbort = null;
   async function aiGenerateEvents(mode, chainId) {
     // 收集世界观上下文
-    const w = window.__wvEditingCache;
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑'); return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
     if (!w) { UI.showToast('请先打开世界观编辑'); return; }
+    window.__wvEditingCache = w;
 
     const genMode = mode || (_wvEventTab === 'chain' ? 'newChain' : 'standalone');
     const title = genMode === 'appendChain' ? 'AI 续写事件链' : (genMode === 'newChain' ? 'AI 生成事件链' : 'AI 生成事件');
@@ -5249,7 +5288,10 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
     if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
     if (status) { status.style.display = 'block'; status.textContent = `正在生成 ${count} 个事件…`; }
 
-    const w = window.__wvEditingCache;
+    if (!editingWorldviewId) { UI.showToast('请先打开世界观编辑'); if (btn) { btn.disabled = false; btn.textContent = '生成'; } return; }
+    const w = await DB.get('worldviews', editingWorldviewId);
+    if (!w) { UI.showToast('请先打开世界观编辑'); if (btn) { btn.disabled = false; btn.textContent = '生成'; } return; }
+    window.__wvEditingCache = w;
     const settingText = w?.setting || '';
     const regionNames = (w?.regions || []).map(r => r.name).filter(Boolean);
     const factionNames = (w?.regions || []).flatMap(r => (r.factions || []).map(f => f.name)).filter(Boolean);
@@ -8958,9 +9000,10 @@ function _tryExitEdit() {
     }
   } else if (rt === 'lorebook-list') {
     if (Worldview.clearEditReturnTo) Worldview.clearEditReturnTo();
-    UI.showPanel('worldview', 'back');
-    if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) Worldview.switchWorldTab('lb');
-    if (typeof LorebookUI !== 'undefined' && LorebookUI.renderList) setTimeout(() => LorebookUI.renderList(), 50);
+    UI.showPanel('worldview', 'back').then(() => {
+      if (typeof Worldview !== 'undefined' && Worldview.switchWorldTab) Worldview.switchWorldTab('lb');
+      if (typeof LorebookUI !== 'undefined' && LorebookUI.renderList) setTimeout(() => LorebookUI.renderList(), 50);
+    });
   } else {
     UI.showPanel('worldview', 'back');
   }

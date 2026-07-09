@@ -213,6 +213,73 @@ async function init() {
     }
   }
 
+  // ===== 迁移前全量快照：防止迁移翻车导致对话数据全灭 =====
+  // 在任何一次性迁移执行【之前】调用。若检测到"有迁移待跑"（外部传入 hasPendingMigration=true），
+  // 就把当前 conversations 键整体快照到备份键（含对话外壳 + phoneData）。
+  // 只留最新一份（覆盖式）；备份满 KEEP_DAYS 天后自动清理（此时迁移早已成功、App 正常使用）。
+  // 老用户迁移 flag 早置位、hasPendingMigration=false，永不备份 → 零开销。
+  const _PRE_MIGRATION_BACKUP_KEY = 'conversations_pre_migration_backup';
+  const _PRE_MIGRATION_BACKUP_KEEP_DAYS = 7;
+  async function backupBeforeMigration(hasPendingMigration) {
+    try {
+      // 先做过期清理：已有备份且超过保留期 → 删除释放空间
+      const existing = await DB.get('gameState', _PRE_MIGRATION_BACKUP_KEY);
+      if (existing?.value && existing.value.time) {
+        const ageDays = (Date.now() - existing.value.time) / 86400000;
+        if (ageDays > _PRE_MIGRATION_BACKUP_KEEP_DAYS) {
+          try { await DB.del('gameState', _PRE_MIGRATION_BACKUP_KEY); } catch(_) {}
+        }
+      }
+      // 没有待跑的迁移，不备份
+      if (!hasPendingMigration) return;
+      // 只在 init 完成、list 非空时备份（不备空数据）
+      if (!_initialized || !Array.isArray(list) || list.length === 0) return;
+      // 已有一份未过期备份则不覆盖（保留最早的迁移前状态——那才是"干净"的）
+      if (existing?.value && existing.value.time) {
+        const ageDays = (Date.now() - existing.value.time) / 86400000;
+        if (ageDays <= _PRE_MIGRATION_BACKUP_KEEP_DAYS) return;
+      }
+      const snapshot = {
+        time: Date.now(),
+        conversations: JSON.parse(JSON.stringify(list)),
+        folders: JSON.parse(JSON.stringify(folders)),
+        currentId: currentId
+      };
+      await DB.put('gameState', { key: _PRE_MIGRATION_BACKUP_KEY, value: snapshot });
+      console.log('[Backup] 迁移前对话快照已保存，共 ' + list.length + ' 个对话');
+    } catch (e) {
+      console.warn('[Backup] 迁移前快照失败:', e);
+    }
+  }
+
+  // 读取迁移前备份的元信息（供数据管理界面展示：有没有、几号存的、多少个对话）
+  async function getPreMigrationBackupInfo() {
+    try {
+      const b = await DB.get('gameState', _PRE_MIGRATION_BACKUP_KEY);
+      if (!b?.value || !Array.isArray(b.value.conversations)) return null;
+      return { time: b.value.time || 0, count: b.value.conversations.length };
+    } catch (_) { return null; }
+  }
+
+  // 恢复迁移前备份：把快照写回 conversations 键并重载 list（覆盖当前对话列表）
+  async function restorePreMigrationBackup() {
+    try {
+      const b = await DB.get('gameState', _PRE_MIGRATION_BACKUP_KEY);
+      if (!b?.value || !Array.isArray(b.value.conversations) || b.value.conversations.length === 0) {
+        return { ok: false, error: '没有可用的备份' };
+      }
+      list = b.value.conversations;
+      folders = Array.isArray(b.value.folders) ? b.value.folders : [];
+      if (b.value.currentId) currentId = b.value.currentId;
+      _initialized = true; // 确保 saveList 放行
+      await saveList();
+      try { renderList(); } catch(_) {}
+      return { ok: true, count: list.length };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || '恢复失败' };
+    }
+  }
+
   // ===== 顶栏更新（标题 + 头像）=====
   async function _updateTopbar() {
     try { if (typeof StatusBar !== 'undefined' && StatusBar.refreshFromConv) StatusBar.refreshFromConv(); } catch(e) {}
@@ -1693,6 +1760,7 @@ const allArchives = await DB.getAll('archives');
     migrateWorldview,
     saveList,
     recoverOrphanConversations,
+    backupBeforeMigration, getPreMigrationBackupInfo, restorePreMigrationBackup,
     toggleCharFilter, pickCharFilter, refreshCharFilter,
     getList: () => list,
     setStreaming

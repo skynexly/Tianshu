@@ -51,6 +51,19 @@
     // 多对话管理
     try { await Conversations.init(); } catch(e) { console.error('[Conversations]', e); }
 
+    // 迁移前全量快照：只要有任一迁移待跑，就先把当前对话数据整体备份一份（7天自动清）。
+    // 必须在所有迁移/自愈动手之前——捕捉最原始状态，翻车了能一键还原。
+    try {
+      const _migFlags = ['migrate_merge_split_npc_v1', 'migrate_merge_split_relation_v1', 'recover_orphan_conversations_v1'];
+      let _hasPending = false;
+      for (const fk of _migFlags) {
+        try { const f = await DB.get('gameState', fk); if (!f || !f.value) { _hasPending = true; break; } } catch(_) { _hasPending = true; break; }
+      }
+      if (Conversations.backupBeforeMigration) {
+        await Conversations.backupBeforeMigration(_hasPending);
+      }
+    } catch(e) { console.error('[Conversations.backup]', e); }
+
     // 对话自愈：从 messages 表反推重建丢失的对话（修复 v706.1 对话丢失事故）
     // 必须在合并迁移之前——先把对话找回来，迁移才能在完整数据上跑。
     try {
@@ -202,9 +215,9 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v706.4';
-    const CHANGELOG = `【v706.4 更新内容】
-🔒 对话数据写入安全加固`;
+    const APP_VERSION = 'v706.9';
+    const CHANGELOG = `【v706.9 更新内容】
+🐛 修复部分交互问题`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {
