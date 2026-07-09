@@ -929,6 +929,11 @@ async function _migrateMergeSplitNpcIdentities() {
       return;
     }
     const convs = (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList() : [];
+    // 防护：Conversations 尚未 init（list 为空）时绝不继续——否则结尾的 saveList 会把空 list 写回，覆盖真实对话数据
+    if (!Array.isArray(convs) || convs.length === 0) {
+      // 不打 flag、不 saveList，等下次 Conversations 就绪后再跑
+      return;
+    }
     let mergedNotes = 0, mergedContacts = 0;
     for (const conv of (convs || [])) {
       if (!conv || !conv.phoneData) continue;

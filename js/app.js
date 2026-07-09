@@ -34,18 +34,6 @@
       await Worldview.migrateTianshuchengNpcNames();
     }
   } catch(e) { console.error('[Worldview.migrate]', e); }
-  // 一次性 migration：合并因本名/代号分裂产生的重复记事本档案 + 重复联系人
-  try {
-    if (typeof Phone !== 'undefined' && Phone.migrateMergeSplitNpcIdentities) {
-      await Phone.migrateMergeSplitNpcIdentities();
-    }
-  } catch(e) { console.error('[Phone.mergeSplitNpc]', e); }
-  // 一次性 migration：合并因本名/代号分裂产生的重复关系记忆
-  try {
-    if (typeof Memory !== 'undefined' && Memory.migrateMergeSplitRelations) {
-      await Memory.migrateMergeSplitRelations();
-    }
-  } catch(e) { console.error('[Memory.mergeSplitRelation]', e); }
   // v632：老隐藏世界观迁移为 lorebook
   try {
     if (typeof Lorebook !== 'undefined' && Lorebook.migrateHiddenWorldviewsOnce) {
@@ -62,6 +50,20 @@
 
     // 多对话管理
     try { await Conversations.init(); } catch(e) { console.error('[Conversations]', e); }
+
+    // 一次性 migration：合并因本名/代号分裂产生的重复身份数据
+    // 【必须在 Conversations.init 之后】——迁移会遍历并 saveList 对话列表，
+    // 早于 init 执行会拿到空 list 并把它写回，覆盖真实对话数据（v706.1 曾因此翻车）。
+    try {
+      if (typeof Phone !== 'undefined' && Phone.migrateMergeSplitNpcIdentities) {
+        await Phone.migrateMergeSplitNpcIdentities();
+      }
+    } catch(e) { console.error('[Phone.mergeSplitNpc]', e); }
+    try {
+      if (typeof Memory !== 'undefined' && Memory.migrateMergeSplitRelations) {
+        await Memory.migrateMergeSplitRelations();
+      }
+    } catch(e) { console.error('[Memory.mergeSplitRelation]', e); }
 
     // 面具
   try { await Character.init(); } catch(e) { console.error('[Character.init]', e); }
@@ -192,9 +194,9 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v706.1';
-    const CHANGELOG = `【v706.1 更新内容】
-✨ 新增 AI 生成角色卡头像`;
+const APP_VERSION = 'v706.2';
+    const CHANGELOG = `【v706.2 更新内容】
+🐛 紧急修复对话列表异常丢失的问题`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {
