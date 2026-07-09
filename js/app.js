@@ -202,9 +202,9 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v706.3';
-    const CHANGELOG = `【v706.3 更新内容】
-🐛 自动找回此前丢失的对话与聊天记录`;
+const APP_VERSION = 'v706.4';
+    const CHANGELOG = `【v706.4 更新内容】
+🔒 对话数据写入安全加固`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

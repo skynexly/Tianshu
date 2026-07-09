@@ -3,7 +3,8 @@
  */
 const Conversations = (() => {
 let currentId = 'default';
-let list = [];       // { id, name, created, maskId?, branchMaskId?, folder?, pinned?, worldviewId? }
+  let list = [];       // { id, name, created, maskId?, branchMaskId?, folder?, pinned?, worldviewId? }
+  let _initialized = false; // init 是否已完成加载——saveList 的前置守卫，防止 init 前空 list 覆盖 DB
 let folders = [];    // { id, name, collapsed?, worldviewId? }
   let longPressTimer = null;
   const _avatarCache = {};  // { convId: avatarUrl } 单人对话头像缓存
@@ -64,6 +65,8 @@ let dragState = null;
 async function init() {
     const data = await DB.get('gameState', 'conversations');
     list = (data?.value && data.value.length > 0) ? data.value : [{ id: 'default', name: '对话 1', created: Date.now() }];
+    // list 已从 DB 加载完成，解锁 saveList（此后写入才安全）
+    _initialized = true;
 
     // 兼容：为没有 maskId 的对话添加默认值
     for (const conv of list) {
@@ -300,6 +303,23 @@ async function init() {
   }
 
   async function saveList() {
+    // 防护①：Conversations 尚未 init 完成时，禁止 saveList——
+    //   init 之前 list 还是初始空数组，此时写入会用空 list 覆盖 DB 里的真实对话数据。
+    //   （v706.1 事故根因：合并迁移在 init 前执行并触发了 saveList）
+    if (!_initialized) {
+      console.warn('[Conversations] saveList 被拦截：init 尚未完成，拒绝写入以防覆盖对话数据');
+      return;
+    }
+    // 防护②：内存 list 为空、但 DB 里已存着非空对话数据时，拒绝"空覆盖非空"（几乎必为 bug）。
+    if (!Array.isArray(list) || list.length === 0) {
+      try {
+        const existing = await DB.get('gameState', 'conversations');
+        if (existing?.value && Array.isArray(existing.value) && existing.value.length > 0) {
+          console.warn('[Conversations] saveList 被拦截：内存 list 为空但 DB 有非空对话，拒绝覆盖');
+          return;
+        }
+      } catch(_) {}
+    }
     await DB.put('gameState', { key: 'conversations', value: list });
     await DB.put('gameState', { key: 'lastConversation', value: currentId });
     await DB.put('gameState', { key: 'convFolders', value: folders });
