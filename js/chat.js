@@ -386,8 +386,9 @@ const Chat = (() => {
 
     const allMsgs = await DB.getAllByIndex('messages', 'conversationId', convId);
   // 按分支过滤（已经按对话过滤过了，老数据迁移补了 'default'）
+  // main 分支额外捞回缺 branchId 的老消息（如历史通话记录曾漏写 branchId，导致重载后丢失）
   messages = allMsgs
-    .filter(m => m.branchId === currentBranchId)
+    .filter(m => m.branchId === currentBranchId || (currentBranchId === 'main' && !m.branchId))
 .sort((a, b) => a.timestamp - b.timestamp);
     roundCount = Math.floor(messages.filter(m => m.role === 'user').length);
     // v612：记忆提取游标按对话持久化，避免刷新/切窗口后从头重复提取
@@ -5952,7 +5953,7 @@ bgImage: conv?.convBgImage || '',
     toolsHistory: !!conv?.convToolsHistory,        // 默认关（历史搜索工具）
         autoExtract: conv?.convAutoExtract !== false,  // 默认开（自动记忆提取）
       replyWordCount: conv?.convReplyWordCount || 800,  // 默认800字
-      timeFormat: conv?.convTimeFormat || 'delta',       // 时间输出格式：'delta'(增量,默认) | 'absolute'(绝对时间)
+      timeFormat: conv?.convTimeFormat || 'absolute',   // 时间输出格式：'delta'(增量) | 'absolute'(绝对时间,默认)
       directive: conv?.convDirective || '',              // 剧情引导内容
       directiveRemaining: conv?.convDirectiveRemaining || 0, // 剩余轮数
       directiveTotal: conv?.convDirectiveTotal || 0,      // 原始设定轮数
@@ -6439,7 +6440,7 @@ document.getElementById('cs-format').checked = s.format;
     if (wcOpenEl) wcOpenEl.value = s.replyWordCount || 800;
     const tfEl = document.getElementById('cs-time-format');
     if (tfEl) {
-      tfEl.value = s.timeFormat || 'delta';
+      tfEl.value = s.timeFormat || 'absolute';
       const label = document.getElementById('cs-time-format-label');
       if (label) label.textContent = s.timeFormat === 'absolute' ? '绝对时间（完整日期时间）' : '增量（+1h20min，系统累加）';
     }

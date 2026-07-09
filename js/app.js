@@ -34,6 +34,18 @@
       await Worldview.migrateTianshuchengNpcNames();
     }
   } catch(e) { console.error('[Worldview.migrate]', e); }
+  // 一次性 migration：合并因本名/代号分裂产生的重复记事本档案 + 重复联系人
+  try {
+    if (typeof Phone !== 'undefined' && Phone.migrateMergeSplitNpcIdentities) {
+      await Phone.migrateMergeSplitNpcIdentities();
+    }
+  } catch(e) { console.error('[Phone.mergeSplitNpc]', e); }
+  // 一次性 migration：合并因本名/代号分裂产生的重复关系记忆
+  try {
+    if (typeof Memory !== 'undefined' && Memory.migrateMergeSplitRelations) {
+      await Memory.migrateMergeSplitRelations();
+    }
+  } catch(e) { console.error('[Memory.mergeSplitRelation]', e); }
   // v632：老隐藏世界观迁移为 lorebook
   try {
     if (typeof Lorebook !== 'undefined' && Lorebook.migrateHiddenWorldviewsOnce) {
@@ -180,13 +192,9 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-const APP_VERSION = 'v706.0';
-    const CHANGELOG = `【v706.0 更新内容】
-✨ 新增「全屏显示手机」开关（设置 - 显示），让小手机铺满屏幕
-✨ 世界观扩展设定新增 AI 一键生成：电台标签、直播品类、动态知识条目（支持成体系/细节自由搭配）
-✨ 后台/剧情 AI 现可直接读写玩法配置——属性、任务、历法、电台/直播等手机 App 玩法都能改，支持一步回滚
-🎨 部分UI布局优化
-🐛 修复 iOS 添加到主屏后底部露白边的问题`;
+const APP_VERSION = 'v706.1';
+    const CHANGELOG = `【v706.1 更新内容】
+✨ 新增 AI 生成角色卡头像`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

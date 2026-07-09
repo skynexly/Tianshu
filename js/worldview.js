@@ -1971,7 +1971,6 @@ return;
     btn.ontouchcancel = _cancelLp;
     btn.oncontextmenu = (e) => { e.preventDefault(); _clearEditingNpcAvatar(); };
   }
-
   async function _pickEditingNpcAvatar() {
     const npcId = await _currentEditNpcId();
     if (!npcId) { UI.showToast('请先保存角色名称再上传头像', 1800); return; }
@@ -1987,6 +1986,31 @@ return;
     await _refreshEditingNpcAvatar();
     UI.showToast('头像已更新', 1500);
   }
+
+  // AI 生成 NPC 头像：从表单当前值拼中文 prompt（名字+别名+网名+简介+设定，用户自己删减）
+  async function _aiGenEditingNpcAvatar() {
+    const npcId = await _currentEditNpcId();
+    if (!npcId) { UI.showToast('请先保存角色名称再生成头像', 1800); return; }
+    const g = id => (document.getElementById(id)?.value || '').trim();
+    const parts = [];
+    const name = g('wv-npc-name'); if (name) parts.push(name);
+    const aliases = g('wv-npc-aliases'); if (aliases) parts.push(aliases);
+    const onlineName = g('wv-npc-onlinename'); if (onlineName) parts.push(onlineName);
+    const summary = g('wv-npc-summary'); if (summary) parts.push(summary);
+    const detail = g('wv-npc-detail'); if (detail) parts.push(detail);
+    const dataUrl = await Utils.promptAiAvatar(parts.join('，'), { maxSize: 256, quality: 0.85 });
+    if (!dataUrl) return;
+    try {
+      if (typeof SingleCard !== 'undefined' && SingleCard.setNpcAvatar) {
+        await SingleCard.setNpcAvatar(npcId, dataUrl);
+      } else {
+        await DB.put('npcAvatars', { id: npcId, avatar: dataUrl, updated: Date.now() });
+      }
+    } catch(e) { console.warn('[wv-npc] 头像保存失败', e); UI.showToast('头像保存失败', 1500); return; }
+    await _refreshEditingNpcAvatar();
+    UI.showToast('头像已更新', 1500);
+  }
+
 
   async function _clearEditingNpcAvatar() {
     const npcId = await _currentEditNpcId();
@@ -5957,6 +5981,8 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
     const charFilter = document.getElementById('char-filter-wrapper');
     const isNoWv = w.id === '__default_wv__';
     if (headerWrap) headerWrap.style.display = isNoWv ? 'none' : '';
+    // 无世界观时 header 被隐藏，sidebar-nav 直接顶到最上面，需补灵动岛/刘海安全区
+    try { document.getElementById('sidebar')?.classList.toggle('sidebar-no-header', isNoWv); } catch(_) {}
     if (charFilter) {
       charFilter.style.display = isNoWv ? 'block' : 'none';
       if (isNoWv && typeof Conversations !== 'undefined' && Conversations.refreshCharFilter) {
@@ -6933,45 +6959,18 @@ async function pickDefaultTheme(value) {
   }
 
   /**
-   * 一次性 migration：天枢城内置 NPC 的 name/aliases 当年填反了，做一次精确交换
-   * 只动 name/aliases 两个字段，其它内容（detail/summary/regions/factions 等）一概不动
-   * 跑完打标记，下次不再跑
+   * 【已停用·2026-07】此函数当年为修"天枢城 NPC name/aliases 填反"而写，做无脑交换。
+   * 但它无法区分"用户数据已是对的"还是"反的"，会把已修正的数据又交换反，属于帮倒忙。
+   * 现改用 Phone 的身份归一（本名/代号双向兼容 _resolveNpcRealName），方向不再重要，
+   * 此函数彻底退休：不再交换，只打 flag 占位，避免旧逻辑继续作乱。
    */
   async function _migrateTianshuchengNpcNames() {
     try {
       const FLAG = 'migrate_tsc_npc_names_v1';
-      const flag = await DB.get('gameState', FLAG);
-      if (flag && flag.value) return;
-
-      const wv = await DB.get('worldviews', 'wv_tianshucheng');
-      if (!wv) {
-        // 还没有这个世界观，直接打标记跳过（新用户的 builtin 已是修好的）
-        await DB.put('gameState', { key: FLAG, value: 1 });
-        return;
-      }
-
-      const SKIP = new Set(['神钥', '易昂']);
-      let swapped = 0;
-      (wv.regions || []).forEach(r =>
-        (r.factions || []).forEach(f =>
-          (f.npcs || []).forEach(n => {
-            if (!n || SKIP.has(n.name)) return;
-            if (!n.aliases) return;
-            const old = n.name;
-            n.name = n.aliases;
-            n.aliases = old;
-            swapped++;
-          })
-        )
-      );
-
-      if (swapped > 0) {
-        await DB.put('worldviews', wv);
-        console.log('[Migration] 天枢城 NPC name/aliases 交换完成：' + swapped + '个');
-      }
+      // 直接打标记跳过，永不再交换（双向兼容已接管，无需纠正数据方向）
       await DB.put('gameState', { key: FLAG, value: 1 });
     } catch(e) {
-      console.warn('[Migration] 天枢城NPC名称交换失败:', e);
+      console.warn('[Migration] 天枢城NPC名称迁移(已停用)标记失败:', e);
     }
   }
 
@@ -9014,7 +9013,7 @@ aiGenerateTaskPhase,
     openFactionEdit, saveFaction, deleteFaction,
     openNPCEdit, saveNPC, deleteNPC, exportCurrentNpc,
     addGlobalNpc, editGlobalNpc, backFromNpcEdit,
-    _pickEditingNpcAvatar, _clearEditingNpcAvatar,
+    _pickEditingNpcAvatar, _aiGenEditingNpcAvatar, _clearEditingNpcAvatar,
     openNpcImporter,
     _bulkImportNpcs,
     _getEditingWVForImporter,

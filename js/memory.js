@@ -44,6 +44,52 @@ const Memory = (() => {
     return _mergeEventContent(m) || '';
   }
 
+  // ===== NPC 身份归一（双向兼容：本名/代号/网名 → 统一本名键）=====
+  // 记忆库人际关系按 title(NPC名) 归类、主线命中也按名字。用户存档里同一 NPC 可能
+  // 时而用代号、时而用本名，导致关系记忆分裂、命中错过。这张反查表把一个 NPC 的所有
+  // 称呼（name/aliases/onlineName）都映射到它的 name 字段作为稳定身份键。
+  // 只要求"归到同一个键"，不要求"归到正确的那个"——即便本地 NPC 数据 name/aliases
+  // 填反了也能保证双向兼容不错乱。memory.js 自建一份，不跨模块耦合 phone.js。
+  let _npcAliasMap = null; // { 归一化称呼: 本名 }
+  function _normNpcName(s) {
+    return String(s == null ? '' : s).trim().toLowerCase();
+  }
+  // 异步重建反查表（存关系/命中前 ensure 一次；数据源=所有世界观 NPC）
+  async function _ensureNpcAliasMap() {
+    const map = {};
+    try {
+      const all = await DB.getAll('worldviews');
+      const addNpc = (n) => {
+        if (!n || !n.name) return;
+        const real = String(n.name).trim();
+        if (!real) return;
+        const keys = [real,
+          ...String(n.aliases || '').split(/[,，、\s]+/),
+          ...String(n.onlineName || '').split(/[,，、\s]+/)
+        ].map(x => _normNpcName(x)).filter(Boolean);
+        keys.forEach(k => { if (!map[k]) map[k] = real; });
+      };
+      (all || []).forEach(wv => {
+        (wv.globalNpcs || []).forEach(addNpc);
+        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(addNpc)));
+      });
+    } catch(_) {}
+    _npcAliasMap = map;
+    return map;
+  }
+  // 同步 resolve：把任意称呼归一到本名键；表未建或未命中则原样返回（安全兜底）
+  function _resolveNpcRealName(name) {
+    const n = String(name == null ? '' : name).trim();
+    if (!n) return n;
+    try {
+      if (_npcAliasMap) {
+        const hit = _npcAliasMap[_normNpcName(n)];
+        if (hit) return hit;
+      }
+    } catch(_) {}
+    return n;
+  }
+
   async function add(type, data) {
     if (type === 'relation') {
       return upsertRelation(data);
@@ -109,9 +155,15 @@ const Memory = (() => {
   async function upsertRelation(data) {
     // 优先使用调用方传入的 scope（异步写入时锁定原面具）
     const scope = data.scope || Character.getCurrentId();
+    // 身份归一：把 AI 输出的名字（本名/代号）resolve 成稳定本名键，避免同一 NPC 分裂成两条关系
+    await _ensureNpcAliasMap();
+    const realTitle = _resolveNpcRealName(data.title);
+    data.title = realTitle;
     const all = await DB.getAll('memories');
+    // 找已有关系：优先精确匹配本名键；再兜底"已存的 title resolve 后相同"（认历史用代号存的那条）
     const existing = all.find(m =>
-      m.type === 'relation' && m.title === data.title && m.scope === scope
+      m.type === 'relation' && m.scope === scope &&
+      (m.title === realTitle || _resolveNpcRealName(m.title) === realTitle)
     );
 
     if (existing) {
@@ -145,6 +197,82 @@ const Memory = (() => {
       };
       await DB.put('memories', memory);
       return memory;
+    }
+  }
+
+  // ===== 一次性迁移：合并因"本名/代号分裂"产生的重复关系记忆 =====
+  // 场景：同一 NPC 因 AI 时而用代号、时而用本名，被记成了两条 relation。
+  // 用身份归一表把它们并回同一个本名键：保留 timestamp 较新那条的 relationship/impression，
+  // emotions 两条拼接去重。带 flag 只跑一次，幂等安全。
+  async function migrateMergeSplitRelations() {
+    try {
+      const FLAG = 'migrate_merge_split_relation_v1';
+      const flag = await DB.get('gameState', FLAG);
+      if (flag && flag.value) return;
+      await _ensureNpcAliasMap();
+      if (!_npcAliasMap || !Object.keys(_npcAliasMap).length) {
+        await DB.put('gameState', { key: FLAG, value: 1 });
+        return;
+      }
+      const all = await DB.getAll('memories');
+      const relations = all.filter(m => m.type === 'relation');
+      // 按 scope + resolve 后的本名键分组
+      const groups = {};
+      for (const m of relations) {
+        const realTitle = _resolveNpcRealName(m.title);
+        // 只处理能 resolve 到别名（即命中 NPC）的关系；未命中的保持原样不动
+        if (_normNpcName(realTitle) === _normNpcName(m.title) &&
+            !(_npcAliasMap[_normNpcName(m.title)])) {
+          continue;
+        }
+        const gkey = (m.scope || '') + '|' + _normNpcName(realTitle);
+        (groups[gkey] = groups[gkey] || []).push({ m, realTitle });
+      }
+      let merged = 0;
+      for (const gkey of Object.keys(groups)) {
+        const items = groups[gkey];
+        if (items.length < 2) {
+          // 单条：仅把 title 归一到本名键（保证后续 upsert 命中）
+          const only = items[0];
+          if (only.m.title !== only.realTitle) {
+            only.m.title = only.realTitle;
+            only.m.keywords = Utils.tokenize(
+              only.m.title + ' ' + (only.m.relationship || '') + ' ' + (only.m.impression || '')
+            );
+            await DB.put('memories', only.m);
+          }
+          continue;
+        }
+        // 多条：保留 timestamp 最新那条为主，合并其余
+        items.sort((a, b) => (b.m.timestamp || 0) - (a.m.timestamp || 0));
+        const keep = items[0].m;
+        const realTitle = items[0].realTitle;
+        const emotions = Array.isArray(keep.emotions) ? keep.emotions.slice() : [];
+        for (let i = 1; i < items.length; i++) {
+          const dup = items[i].m;
+          // relationship/impression：主条为空时用被合并条补
+          if (!keep.relationship && dup.relationship) keep.relationship = dup.relationship;
+          if (!keep.impression && dup.impression) keep.impression = dup.impression;
+          // emotions 拼接
+          (Array.isArray(dup.emotions) ? dup.emotions : []).forEach(e => {
+            if (e != null && !emotions.includes(e)) emotions.push(e);
+          });
+          try { await DB.delete('memories', dup.id); } catch(_) {}
+          merged++;
+        }
+        keep.title = realTitle;
+        keep.emotions = emotions;
+        keep.content = keep.content || keep.relationship || '';
+        keep.keywords = Utils.tokenize(
+          keep.title + ' ' + (keep.relationship || '') + ' ' + (keep.impression || '')
+        );
+        keep.timestamp = keep.timestamp || Utils.timestamp();
+        await DB.put('memories', keep);
+      }
+      await DB.put('gameState', { key: FLAG, value: 1 });
+      if (merged > 0) console.log('[Memory] 关系记忆身份归一合并:', merged, '条');
+    } catch (e) {
+      console.error('[Memory.migrateMergeSplitRelations]', e);
     }
   }
 
@@ -550,16 +678,33 @@ const Memory = (() => {
     const currentScope = Character.getCurrentId();
     const scoped = allMemories.filter(m => !m.scope || m.scope === currentScope);
 
-    // ===== 关系记忆：按NPC名字精确命中 =====
+    // 身份归一：在场 NPC 名先 resolve 成本名键，命中时双向兼容代号/本名
+    await _ensureNpcAliasMap();
+    const presentReal = presentNPCNames.map(n => _resolveNpcRealName(n));
+    // 收集所有 NPC 别名（含本名），用于反向文本命中：文本里出现任一称呼都算提到该 NPC
+    const _allAliases = _npcAliasMap ? Object.keys(_npcAliasMap) : [];
+    const _lowerText = String(recentText || '').toLowerCase();
+    // 判断某 realTitle 是否在文本里被任一称呼提到
+    const _textMentions = (realTitle) => {
+      const rt = _normNpcName(realTitle);
+      if (realTitle.length >= 2 && recentText.includes(realTitle)) return true;
+      for (const alias of _allAliases) {
+        if (alias.length >= 2 && _npcAliasMap[alias] && _normNpcName(_npcAliasMap[alias]) === rt && _lowerText.includes(alias)) return true;
+      }
+      return false;
+    };
+
+    // ===== 关系记忆：按NPC名字命中（本名/代号双向兼容）=====
     const relationResults = scoped
       .filter(m => m.type === 'relation')
       .filter(m => {
         const title = (m.title || '').trim();
         if (!title) return false;
-        // 路径1：在场NPC精确匹配
-        if (presentNPCNames.some(name => name === title)) return true;
-        // 路径2：对话文本中提到NPC名字（≥2字，避免单字碰撞）
-        if (title.length >= 2 && recentText.includes(title)) return true;
+        const realTitle = _resolveNpcRealName(title);
+        // 路径1：在场NPC匹配（两边都归一到本名键）
+        if (presentReal.some(name => name === realTitle)) return true;
+        // 路径2：对话文本中提到该 NPC 的任一称呼（本名或代号，≥2字）
+        if (_textMentions(realTitle)) return true;
         return false;
       })
       .slice(0, 5);
@@ -570,19 +715,19 @@ const Memory = (() => {
       .map(m => {
         let score = 0;
 
-        // 参与者和在场NPC交叉（主权重）
+        // 参与者和在场NPC交叉（主权重，本名/代号双向兼容）
         const parts = Array.isArray(m.participants) ? m.participants : [];
-        if (parts.length > 0 && presentNPCNames.length > 0) {
+        if (parts.length > 0 && presentReal.length > 0) {
           const matchCount = parts.filter(p =>
-            presentNPCNames.some(name => name === p)
+            presentReal.some(name => name === _resolveNpcRealName(p))
           ).length;
           if (matchCount > 0) score += 0.4 + matchCount * 0.15;
         }
 
-        // 对话文本中提到参与者名字（≥2字）
+        // 对话文本中提到参与者（任一称呼，本名/代号，≥2字）
         if (parts.length > 0) {
           for (const p of parts) {
-            if (p.length >= 2 && recentText.includes(p)) {
+            if (_textMentions(_resolveNpcRealName(p))) {
               score += 0.3;
               break;
             }
@@ -2904,6 +3049,7 @@ function _toggleEditScopeDropdown() { _toggleDropdown('mem-edit-scope-dropdown')
 
   return {
     add, upsertRelation, addNote, retrieve, retrieveNotes, formatNotesForPrompt, getPinnedNotes, formatPinnedNotesForPrompt, NOTE_TAGS, NOTE_PRIORITIES,
+    migrateMergeSplitRelations,
     addBackstageNote, queryBackstageNotes, retrieveBackstageNotes, formatBackstageNotesForPrompt,
     buildExtractionPrompt, buildNotesPrompt: _buildNotesPrompt, formatForPrompt,
     showTab, renderList, edit, saveEdit, closeEdit, _onEditTypeChange, remove, deleteNoteConfirm, _deleteBackstageNote,

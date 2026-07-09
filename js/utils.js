@@ -829,5 +829,104 @@ async function copyFromDataset(btn) {
     });
   }
 
-  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, promptImageInput, compressDataUrl };
+  /**
+   * AI 生成头像弹窗：预填 prompt（可编辑）→ 生成 → 预览 → 确认返回 dataURL
+   * @param {string} defaultPrompt 预填的 prompt（直接中文即可）
+   * @param {object} opts { maxSize, quality } 确认后压缩参数
+   * @returns {Promise<string|null>} dataUrl 或 null（取消）
+   */
+  function promptAiAvatar(defaultPrompt = '', opts = {}) {
+    const maxSize = opts.maxSize || 256;
+    const quality = opts.quality || 0.85;
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+      overlay.innerHTML = `
+        <div style="background:var(--bg-secondary,#1a1a1a);border:1px solid var(--border,#333);border-radius:12px;padding:20px;max-width:380px;width:100%;display:flex;flex-direction:column;gap:12px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
+          <div style="font-size:15px;font-weight:600;color:var(--text,#eee);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></svg>AI 生成头像</div>
+          <div style="font-size:11px;color:var(--text-secondary,#888);line-height:1.5">下方是根据角色设定预填的画面描述，可自由编辑（比如只留外貌、加画风）。生图会消耗额度，满意再点「用这张」。</div>
+          <textarea id="_aiav-prompt" style="padding:10px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg-tertiary,#222);color:var(--text,#eee);font-size:13px;outline:none;resize:vertical;min-height:176px;line-height:1.6"></textarea>
+          <div id="_aiav-preview" style="display:none;align-items:center;justify-content:center;padding:8px">
+            <img id="_aiav-img" src="" style="width:160px;height:160px;border-radius:12px;object-fit:cover;border:1px solid var(--border,#333)">
+          </div>
+          <div id="_aiav-status" style="display:none;font-size:12px;color:var(--text-secondary,#888);text-align:center;padding:6px"></div>
+          <div style="display:flex;gap:8px">
+            <button id="_aiav-cancel" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--border,#333);background:transparent;color:var(--text-secondary,#888);font-size:13px;cursor:pointer">取消</button>
+            <button id="_aiav-gen" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--accent,#f60);color:#111;font-size:13px;font-weight:600;cursor:pointer">生成</button>
+            <button id="_aiav-download" style="display:none;flex:1;padding:9px;border-radius:8px;border:1px solid var(--accent,#f60);background:transparent;color:var(--accent,#f60);font-size:13px;font-weight:600;cursor:pointer">下载原图</button>
+            <button id="_aiav-use" style="display:none;flex:1;padding:9px;border-radius:8px;border:none;background:var(--accent,#f60);color:#111;font-size:13px;font-weight:600;cursor:pointer">用这张</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      const promptEl = overlay.querySelector('#_aiav-prompt');
+      const genBtn = overlay.querySelector('#_aiav-gen');
+      const useBtn = overlay.querySelector('#_aiav-use');
+      const downloadBtn = overlay.querySelector('#_aiav-download');
+      const statusEl = overlay.querySelector('#_aiav-status');
+      const previewWrap = overlay.querySelector('#_aiav-preview');
+      const imgEl = overlay.querySelector('#_aiav-img');
+      promptEl.value = defaultPrompt;
+
+      let curDataUrl = null;
+
+      function cleanup() { overlay.remove(); }
+
+      genBtn.onclick = async () => {
+        const p = promptEl.value.trim();
+        if (!p) { statusEl.style.display = 'block'; statusEl.style.color = 'var(--danger,#e55)'; statusEl.textContent = '请先填写画面描述'; return; }
+        genBtn.disabled = true;
+        useBtn.style.display = 'none';
+        downloadBtn.style.display = 'none';
+        statusEl.style.display = 'block';
+        statusEl.style.color = 'var(--text-secondary,#888)';
+        statusEl.textContent = '正在生成…（最多约3分钟）';
+        try {
+          // 加画质后缀，提升头像出图质量
+          const fullPrompt = p + '，人物头像，半身像，正脸，高质量，精致细节';
+          const images = await API.generateImage(fullPrompt, { size: '1024x1024', n: 1, timeout: 180000 });
+          if (!images || !images.length) throw new Error('未返回图片');
+          curDataUrl = images[0];
+          imgEl.src = curDataUrl;
+          previewWrap.style.display = 'flex';
+          statusEl.style.display = 'none';
+          genBtn.textContent = '重新生成';
+          useBtn.style.display = 'block';
+          downloadBtn.style.display = 'block';
+        } catch (e) {
+          statusEl.style.color = 'var(--danger,#e55)';
+          statusEl.textContent = '生成失败：' + (e.message || e);
+        } finally {
+          genBtn.disabled = false;
+        }
+      };
+
+      useBtn.onclick = async () => {
+        if (!curDataUrl) return;
+        const result = await compressDataUrl(curDataUrl, { maxSize, quality, outputFormat: 'jpeg' });
+        cleanup();
+        resolve(result);
+      };
+
+      // 下载原图（未压缩的 1024 大图，避免花钱生成的图只能变小头像）
+      downloadBtn.onclick = () => {
+        if (!curDataUrl) return;
+        try {
+          const a = document.createElement('a');
+          a.href = curDataUrl;
+          a.download = `skynex-avatar-${Date.now()}.png`;
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => { try { document.body.removeChild(a); } catch(_) {} }, 100);
+          if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已保存到下载目录', 1500);
+        } catch(_) {}
+      };
+
+      overlay.querySelector('#_aiav-cancel').onclick = () => { cleanup(); resolve(null); };
+      overlay.onclick = (e) => { if (e.target === overlay) { cleanup(); resolve(null); } };
+    });
+  }
+
+  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, promptImageInput, promptAiAvatar, compressDataUrl };
 })();

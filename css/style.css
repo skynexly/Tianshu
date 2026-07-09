@@ -137,6 +137,11 @@ button, input, select, textarea, option, label {
   gap: 4px;
   overflow-y: auto;
 }
+/* 无世界观模式：顶部世界观卡片被隐藏，nav 直接顶到最上面，
+   补灵动岛/刘海安全区，避免"世界线"标题撞进状态栏 */
+.sidebar.sidebar-no-header .sidebar-nav {
+  padding-top: max(8px, env(safe-area-inset-top, 8px));
+}
 .nav-item {
   background: none;
   border: none;
