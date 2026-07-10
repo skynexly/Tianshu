@@ -527,6 +527,24 @@ priority:{ type:'string', enum:['important','normal'], description:'重要程度
       description:'清空当前主线的剧情引导。仅在用户明确同意撤销时使用。',
       parameters:{ type:'object', properties:{}, required:[] }
     }},
+    // --- 额外输出要求（自定义追加格式） ---
+    { type:'function', function:{
+      name:'query_custom_format',
+      description:'查询当前主线的额外输出要求（自定义追加格式）内容。改之前可先查现状。',
+      parameters:{ type:'object', properties:{}, required:[] }
+    }},
+    { type:'function', function:{
+      name:'set_custom_format',
+      description:'设置或修改主线的额外输出要求（会追加在内置回复格式之后发给主线 AI，影响每轮输出）。会覆盖当前已有内容。使用前必须向用户确认内容。',
+      parameters:{ type:'object', properties:{
+        content:{ type:'string', description:'额外输出要求的内容（希望 AI 每轮额外输出/遵守什么格式）' }
+      }, required:['content'] }
+    }},
+    { type:'function', function:{
+      name:'remove_custom_format',
+      description:'清空当前主线的额外输出要求。仅在用户明确同意撤销时使用。',
+      parameters:{ type:'object', properties:{}, required:[] }
+    }},
     // --- 世界观查询（后台也能查，方便闲聊时引用设定） ---
     { type:'function', function:{
       name:'query_worldview_detail',
@@ -789,6 +807,27 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       await Conversations.saveList();
       return OK({ success:true, message:'剧情引导已清空。' });
     },
+    async query_custom_format() {
+      if (typeof Chat === 'undefined' || !Chat._getConvSettings) return ERR('Chat 模块不可用');
+      const s = Chat._getConvSettings();
+      if (!s.customFormat || !s.customFormat.trim()) return OK({ active:false, message:'当前没有设置额外输出要求。' });
+      return OK({ active:true, content:s.customFormat });
+    },
+    async set_custom_format(args) {
+      if (!args.content) return ERR('缺少 content');
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      if (!conv) return ERR('找不到当前对话');
+      conv.convCustomFormat = args.content;
+      await Conversations.saveList();
+      return OK({ success:true, message:'额外输出要求已设置。' });
+    },
+    async remove_custom_format() {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      if (!conv) return ERR('找不到当前对话');
+      conv.convCustomFormat = '';
+      await Conversations.saveList();
+      return OK({ success:true, message:'额外输出要求已清空。' });
+    },
 
     // --- 世界观查询 ---
     async query_worldview_detail(args) {
@@ -943,6 +982,14 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       if (!got) return ERR('当前没有可写入的世界观');
       const hit = _findExtension(got.wv, args.kind, key);
       if (!hit) return ERR('未找到扩展设定条目');
+      // 诊断日志：确认工具改的世界观 = 对话读的世界观
+      try {
+        const _diagConv = _currentConv();
+        const _diagCurId = (typeof Worldview !== 'undefined' && Worldview.getCurrentId) ? Worldview.getCurrentId() : '(无)';
+        const _diagBody = (typeof document !== 'undefined') ? document.body?.getAttribute('data-worldview') : '(无document)';
+        GameLog.log('info', `[扩展改写诊断] 工具写入wvId=${got.id} / getCurrentId=${_diagCurId} / body=${_diagBody} / conv.worldviewId=${_diagConv?.worldviewId||'空'} / conv.singleWorldviewId=${_diagConv?.singleWorldviewId||'空'}`);
+        GameLog.log('info', `[扩展改写诊断] 命中条目 name=${hit.item.name} id=${hit.item.id||'无id'} kind=${hit.kind} / 改前keys=「${hit.item.keys||''}」 → 传入keys=「${typeof args.keys==='string'?args.keys:'(未传)'}」`);
+      } catch(_) {}
       await _pushEditUndo({ type:'extension_update', worldviewId:got.id, label:`扩展:${hit.item.name || key}`, kind:hit.kind, id:hit.item.id || '', before:_clone(hit.item) });
       if (typeof args.newName === 'string') hit.item.name = args.newName;
       if (typeof args.content === 'string') hit.item.content = args.content;
@@ -952,6 +999,12 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
         if (typeof args.yearly === 'boolean') hit.item.yearly = args.yearly;
       } else if (typeof args.keys === 'string') hit.item.keys = args.keys;
       await _saveWorldview(got.wv);
+      // 诊断日志：回读验证 DB 里是否真的写进去了
+      try {
+        const _reread = await DB.get('worldviews', got.id);
+        const _rk = (_reread?.knowledges || []).find(k => k && (k.id === hit.item.id || k.name === hit.item.name));
+        GameLog.log('info', `[扩展改写诊断] 落盘回读 wvId=${got.id} 条目keys=「${_rk?.keys||'(回读未找到条目)'}」`);
+      } catch(_) {}
       return OK({ success:true, message:'扩展设定已修改；可用 undo_last_edit 回滚。' });
     },
     async delete_extension_entry(args) {

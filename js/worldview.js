@@ -392,6 +392,39 @@ if (!isHidden && _currentExtSubtab === 'npc') {
     URL.revokeObjectURL(url);
     UI.showToast(`已导出 ${wvArr.length} 个世界观`);
   }
+
+  // 批量复制选中的世界观（平行世界：复制一份再改）
+  async function copySelectedWorldviews() {
+    if (selectedIds.size === 0) { await UI.showAlert('提示', '请先选择世界观'); return; }
+    const list = await getWorldviewList();
+    let copied = 0;
+    let skippedHs = 0;
+    for (const id of selectedIds) {
+      // 心动模拟有内置机制强绑定 wv_heartsim，复制出的新 id 副本会失效，禁止
+      if (id === 'wv_heartsim') { skippedHs++; continue; }
+      const w = await DB.get('worldviews', id);
+      if (!w) continue;
+      // 深拷贝整个世界观数据，换新 id，改名
+      const copy = JSON.parse(JSON.stringify(w));
+      copy.id = 'wv_' + Utils.uuid().slice(0, 8);
+      copy.name = (w.name || '未命名') + ' 副本';
+      // 副本不继承内置版本标记（避免被当成内置世界观触发更新逻辑）
+      delete copy._builtinVersion;
+      await DB.put('worldviews', copy);
+      list.push({ id: copy.id, name: copy.name, description: copy.description || '', icon: copy.icon || 'world', iconImage: copy.iconImage || '' });
+      copied++;
+    }
+    await saveWorldviewList(list);
+    if (copied === 0 && skippedHs > 0) {
+      UI.showToast('心动模拟不支持复制', 2500);
+      return;
+    }
+    // 复制完退出批量模式，刷新列表看到新副本
+    selectedIds.clear();
+    try { toggleManageMode(); } catch(_) {}
+    await load();
+    UI.showToast(`已复制 ${copied} 个世界观` + (skippedHs > 0 ? '（心动模拟不支持复制）' : ''));
+  }
   
   function _updateSelectAllIcon() {
     const iconEl = document.getElementById('worldview-select-all-icon');
@@ -5870,7 +5903,8 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
             <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:340px;width:100%;color:var(--text);font-size:14px;line-height:1.7">
               <div style="font-size:16px;font-weight:600;margin-bottom:12px;color:var(--accent)">⚠️ 内容提示</div>
               <div style="margin-bottom:16px">
-                心动模拟世界观为<strong>病娇题材</strong>，所有角色都存在不同类型的危险倾向，包括但不限于：占有、控制、监视、囚禁等极端行为。<br><br>
+                心动模拟为<strong>病娇题材</strong>的虚构演绎，所有角色都带有不同类型的危险倾向，包括但不限于占有、控制、监视、囚禁等极端行为。<br><br>
+                以上内容仅用于剧情模拟与心理议题的探讨，<strong>不代表、也不鼓励现实中的恋爱观与亲密关系</strong>。<br><br>
                 是否继续？
               </div>
               <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:12px;color:var(--text-secondary);cursor:pointer;user-select:none">
@@ -9022,6 +9056,7 @@ function _tryExitEdit() {
     toggleManageMode,
     deleteSelectedWorldviews,
     exportSelectedWorldviews,
+    copySelectedWorldviews,
     toggleSelectAll,
     toggleMenu,
     toggleSortMode, exitSortMode, saveSortOrder,

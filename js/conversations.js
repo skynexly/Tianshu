@@ -1206,7 +1206,7 @@ const allArchives = await DB.getAll('archives');
       { label: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M12 19V5"/><path d="m5 12 7 7 7-7"/></svg> 下移一位`, fn: () => { menu.remove(); moveConvStep(id, 'down'); } },
       { label: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;vertical-align:middle"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" /></svg> ${conv?.pinned ? '取消置顶' : '置顶'}`, fn: () => { menu.remove(); togglePin(id); } },
       { label: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg> 创建分支`, fn: () => { menu.remove(); createBranchFromConv(id); } },
-      // [hidden v660]       { label: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg> 切换世界观`, fn: () => { menu.remove(); changeWorldview(id); } },
+      { label: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg> 移动到其他世界观`, fn: () => { menu.remove(); changeWorldview(id); } },
     ];
 
     // 移动到文件夹子菜单
@@ -1243,7 +1243,7 @@ const allArchives = await DB.getAll('archives');
       { label: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M12 5v14"/><path d="m19 12-7-7-7 7"/></svg> 上移一位`, fn: () => { menu.remove(); moveFolderStep(folderId, 'up'); } },
       { label: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M12 19V5"/><path d="m5 12 7 7 7-7"/></svg> 下移一位`, fn: () => { menu.remove(); moveFolderStep(folderId, 'down'); } },
       { label: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;vertical-align:middle"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" /></svg> ${f?.pinned ? '取消置顶' : '置顶'}`, fn: () => { menu.remove(); toggleFolderPin(folderId); } },
-      // [hidden v660]       { label: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg> 切换世界观`, fn: () => { menu.remove(); changeFolderWorldview(folderId); } },
+      { label: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg> 移动到其他世界观`, fn: () => { menu.remove(); changeFolderWorldview(folderId); } },
       { sep: true },
       { label: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 仅删文件夹`, fn: () => { menu.remove(); deleteFolder(folderId); }, danger: true },
     ];
@@ -1496,6 +1496,12 @@ const allArchives = await DB.getAll('archives');
     const conv = list.find(c => c.id === convId);
     if (!conv) return;
 
+    // 心动模拟拦截：源对话属于心动模拟则禁止移动（内置机制强绑定）
+    if ((conv.worldviewId === 'wv_heartsim') || (conv.singleWorldviewId === 'wv_heartsim')) {
+      UI.showToast('心动模拟有内置机制，不支持移动对话');
+      return;
+    }
+
     const wvListData = await DB.get('gameState', 'worldviewList');
     const wvList = wvListData?.value || [];
 
@@ -1504,10 +1510,16 @@ const allArchives = await DB.getAll('archives');
     let html = '<div style="max-height:60vh;overflow-y:auto;padding:8px 0">';
     for (const w of wvList) {
       const isActive = w.id === currentWvId;
+      const isHeartsim = w.id === 'wv_heartsim';
       const iconHTML = w.iconImage
         ? `<img src="${w.iconImage}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px">`
         : `<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;color:#111;margin-right:8px;flex-shrink:0">${Utils.escapeHtml((w.name || '?')[0])}</div>`;
-      html += `<div onclick="Conversations._doChangeWorldview('${convId}','${w.id}')" style="padding:10px 16px;cursor:pointer;font-size:13px;display:flex;align-items:center;color:var(--text);border-radius:6px;margin:0 8px${isActive ? ';background:var(--bg-tertiary);font-weight:bold' : ''}">${iconHTML}${Utils.escapeHtml(w.name)}${isActive ? ' <span style="margin-left:auto;color:var(--accent);font-size:12px">当前</span>' : ''}</div>`;
+      if (isHeartsim) {
+        // 心动模拟不可作为目标（内置机制）：标灰、不可点
+        html += `<div style="padding:10px 16px;font-size:13px;display:flex;align-items:center;color:var(--text-secondary);opacity:.5;cursor:not-allowed;margin:0 8px">${iconHTML}${Utils.escapeHtml(w.name)}<span style="margin-left:auto;font-size:11px">不支持</span></div>`;
+      } else {
+        html += `<div onclick="Conversations._doChangeWorldview('${convId}','${w.id}')" style="padding:10px 16px;cursor:pointer;font-size:13px;display:flex;align-items:center;color:var(--text);border-radius:6px;margin:0 8px${isActive ? ';background:var(--bg-tertiary);font-weight:bold' : ''}">${iconHTML}${Utils.escapeHtml(w.name)}${isActive ? ' <span style="margin-left:auto;color:var(--accent);font-size:12px">当前</span>' : ''}</div>`;
+      }
     }
     html += '</div>';
 
@@ -1532,10 +1544,22 @@ const allArchives = await DB.getAll('archives');
       document.querySelector('.modal[style*="z-index:9999"]')?.remove();
       return;
     }
+    // 保险：心动模拟不可作为目标（内置机制）
+    if (newWvId === 'wv_heartsim') {
+      document.querySelector('.modal[style*="z-index:9999"]')?.remove();
+      UI.showToast('心动模拟有内置机制，不支持移入');
+      return;
+    }
+    // 先关弹窗再确认（避免两层弹窗叠加）
+    document.querySelector('.modal[style*="z-index:9999"]')?.remove();
+    if (!await UI.showConfirm('移动到其他世界观', '移动到其他世界观后，本世界观内的全部设定都将被替换，是否继续？（当前对话的单人卡和对话添加的常驻角色不受影响）')) return;
     conv.worldviewId = newWvId;
+    // 单人卡对话：运行世界观跟着走；移入无世界观则裸跑（清空）
+    if (conv.isSingle) {
+      conv.singleWorldviewId = (newWvId === '__default_wv__') ? '' : newWvId;
+    }
     conv.folder = null; // 移出原文件夹（跨世界观文件夹不通用）
     await saveList();
-    document.querySelector('.modal[style*="z-index:9999"]')?.remove();
     renderList();
     UI.showToast('已移动到其他世界观');
   }
@@ -1546,6 +1570,12 @@ const allArchives = await DB.getAll('archives');
     const f = folders.find(x => x.id === folderId);
     if (!f) return;
 
+    // 心动模拟拦截：文件夹属于心动模拟则禁止移动
+    if (f.worldviewId === 'wv_heartsim') {
+      UI.showToast('心动模拟有内置机制，不支持移动');
+      return;
+    }
+
     const wvListData = await DB.get('gameState', 'worldviewList');
     const wvList = wvListData?.value || [];
 
@@ -1553,10 +1583,15 @@ const allArchives = await DB.getAll('archives');
     let html = '<div style="max-height:60vh;overflow-y:auto;padding:8px 0">';
     for (const w of wvList) {
       const isActive = w.id === currentWvId;
+      const isHeartsim = w.id === 'wv_heartsim';
       const iconHTML = w.iconImage
         ? `<img src="${w.iconImage}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px">`
         : `<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;color:#111;margin-right:8px;flex-shrink:0">${Utils.escapeHtml((w.name || '?')[0])}</div>`;
-      html += `<div onclick="Conversations._doChangeFolderWorldview('${folderId}','${w.id}')" style="padding:10px 16px;cursor:pointer;font-size:13px;display:flex;align-items:center;color:var(--text);border-radius:6px;margin:0 8px${isActive ? ';background:var(--bg-tertiary);font-weight:bold' : ''}">${iconHTML}${Utils.escapeHtml(w.name)}${isActive ? ' <span style="margin-left:auto;color:var(--accent);font-size:12px">当前</span>' : ''}</div>`;
+      if (isHeartsim) {
+        html += `<div style="padding:10px 16px;font-size:13px;display:flex;align-items:center;color:var(--text-secondary);opacity:.5;cursor:not-allowed;margin:0 8px">${iconHTML}${Utils.escapeHtml(w.name)}<span style="margin-left:auto;font-size:11px">不支持</span></div>`;
+      } else {
+        html += `<div onclick="Conversations._doChangeFolderWorldview('${folderId}','${w.id}')" style="padding:10px 16px;cursor:pointer;font-size:13px;display:flex;align-items:center;color:var(--text);border-radius:6px;margin:0 8px${isActive ? ';background:var(--bg-tertiary);font-weight:bold' : ''}">${iconHTML}${Utils.escapeHtml(w.name)}${isActive ? ' <span style="margin-left:auto;color:var(--accent);font-size:12px">当前</span>' : ''}</div>`;
+      }
     }
     html += '</div>';
 
@@ -1581,13 +1616,25 @@ const allArchives = await DB.getAll('archives');
       document.querySelector('.modal[style*="z-index:9999"]')?.remove();
       return;
     }
+    // 保险：心动模拟不可作为目标
+    if (newWvId === 'wv_heartsim') {
+      document.querySelector('.modal[style*="z-index:9999"]')?.remove();
+      UI.showToast('心动模拟有内置机制，不支持移入');
+      return;
+    }
+    // 先关弹窗再确认
+    document.querySelector('.modal[style*="z-index:9999"]')?.remove();
+    if (!await UI.showConfirm('移动文件夹到其他世界观', '文件夹内的对话将一起移动。移动后原世界观内的全部设定都将被替换，是否继续？（对话的单人卡和添加的常驻角色不受影响）')) return;
     f.worldviewId = newWvId;
     // 文件夹内的对话也一起移
     list.forEach(c => {
-      if (c.folder === folderId) c.worldviewId = newWvId;
+      if (c.folder === folderId) {
+        c.worldviewId = newWvId;
+        // 单人卡对话：运行世界观跟着走；移入无世界观则裸跑
+        if (c.isSingle) c.singleWorldviewId = (newWvId === '__default_wv__') ? '' : newWvId;
+      }
     });
     await saveList();
-    document.querySelector('.modal[style*="z-index:9999"]')?.remove();
     renderList();
     UI.showToast('文件夹已移动到其他世界观');
   }

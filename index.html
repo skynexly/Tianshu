@@ -11,8 +11,8 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=146">
-<link rel="stylesheet" href="css/phone.css?v1=391">
-<link rel="stylesheet" href="css/phone-fudge.css?v=29">
+<link rel="stylesheet" href="css/phone.css?v1=397">
+<link rel="stylesheet" href="css/phone-fudge.css?v=48">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260707">
 </head>
@@ -574,6 +574,7 @@
       <div style="display:flex;justify-content:space-between;align-items:center">
         <h2 id="mask-edit-title" style="margin:0;font-size:24px;color:var(--text)">编辑面具</h2>
         <div style="display:flex;gap:8px">
+          <button onclick="Character.deleteCurrent()" style="padding:6px 14px;font-size:13px;background:none;color:var(--danger);border:1px solid var(--danger);border-radius:6px;cursor:pointer">删除</button>
           <button onclick="Character.openAiGen()" style="padding:6px 14px;font-size:13px;background:none;color:var(--accent);border:1px solid var(--accent);border-radius:6px;cursor:pointer">AI生成</button>
           <button onclick="Character.save()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
         </div>
@@ -1435,6 +1436,11 @@
             </span>
           </label>
           <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后不再发送内置回复格式提示词，AI回复仅做Markdown渲染</span>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:-4px">
+            <span style="font-size:13px;color:var(--text)">自定义追加格式</span>
+            <textarea id="cs-custom-format" rows="4" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:13px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;line-height:1.6"></textarea>
+            <span style="font-size:12px;color:var(--text-secondary)">此处文本会追加进预设回复格式</span>
+          </div>
           <label class="circle-check-label">
             <span class="circle-check-text">过滤历史HTML<br><span style="font-size:11px;color:var(--text-secondary)">发请求时剔除AI历史回复里的HTML标签，省token、降噪。不影响存档和气泡显示</span></span>
             <span style="position:relative;display:inline-flex">
@@ -2670,6 +2676,10 @@
               <span>状态栏美化</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
             </div>
+            <div class="settings-card-item" onclick="UI.switchSettingsTab('st-stickers');Stickers.renderList()">
+              <span>表情包管理</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
           </div>
 
           <!-- 第五个卡片：关于 -->
@@ -3074,6 +3084,24 @@
 
             </div>
 
+      <!-- Tab: 表情包管理 -->
+      <div id="st-stickers" class="settings-tab-content" style="display:none">
+        <h3 style="color:var(--accent);font-size:14px;margin-bottom:16px">表情包管理</h3>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6">表情全局通用，所有手机聊天都能发。给表情起个能看懂的名字（如：开心、无语、狗头），点名字可重命名。</div>
+        <div style="padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;margin-bottom:16px">
+          <label class="circle-check-label">
+            <span class="circle-check-text" style="font-size:14px;color:var(--text)">同步给角色</span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="stickers-sync-ai" class="circle-check" onchange="Stickers.setSyncAI(this.checked)">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
+          <span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:6px">勾选后，AI 也能在私聊和群聊里发这些表情</span>
+        </div>
+        <button onclick="Stickers.pickAndAdd()" style="width:100%;padding:11px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;margin-bottom:16px">添加表情</button>
+        <div id="stickers-list" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(84px, 1fr));gap:14px"></div>
+      </div>
+
       <!-- Tab: 状态栏美化 -->
       <div id="st-statusbar" class="settings-tab-content" style="display:none">
         <h3 style="color:var(--accent);font-size:14px;margin-bottom:16px">状态栏美化</h3>
@@ -3091,12 +3119,11 @@
   <section id="panel-worldview-edit" class="panel">
     <div class="panel-content">
       <div style="margin-bottom:16px">
-        <button class="btn-icon" onclick="Worldview._tryExitEdit()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;margin-bottom:12px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
-        </button>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-<h2 id="worldview-edit-title" style="margin:0;font-size:24px;color:var(--text)">编辑世界观</h2>
-<div style="display:flex;gap:8px;align-items:center;position:relative">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px">
+          <button class="btn-icon" onclick="Worldview._tryExitEdit()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;flex-shrink:0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <div style="display:flex;gap:8px;align-items:center;position:relative;flex-shrink:0">
 <!-- v632：仅世界书显示，编辑描述（用作 AI 生成时的设定背景） -->
 <button id="worldview-edit-lb-desc-btn" onclick="Worldview.editLorebookDescription()" style="display:none;width:36px;height:36px;padding:0;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;align-items:center;justify-content:center" title="编辑名字和描述"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
 <button id="worldview-edit-more-btn" onclick="Worldview.toggleEditMoreMenu(event)" style="width:36px;height:36px;padding:0;font-size:18px;line-height:1;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer" title="更多操作">⋯</button>
@@ -3109,6 +3136,7 @@
             <button onclick="Worldview.save()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
           </div>
         </div>
+        <h2 id="worldview-edit-title" style="margin:0;font-size:24px;color:var(--text)">编辑世界观</h2>
       </div>
       
       <!-- 编辑Tab切换 -->
@@ -3449,18 +3477,18 @@ NPC
   <!-- 地区编辑面板 -->
   <section id="panel-wv-region" class="panel">
     <div class="panel-content">
-      <div style="margin-bottom:16px">
-        <button class="btn-icon" onclick="UI.showPanel('worldview-edit','back')" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;margin-bottom:12px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
-        </button>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <h2 id="wv-region-title" style="margin:0;font-size:22px;color:var(--text)">编辑地区</h2>
-          <div style="display:flex;gap:8px">
-            <button onclick="Worldview.deleteRegion()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">删除</button>
-            <button onclick="Worldview.saveRegion()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+          <div style="margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px">
+              <button class="btn-icon" onclick="UI.showPanel('worldview-edit','back')" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;flex-shrink:0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <div style="display:flex;gap:8px;flex-shrink:0">
+                <button onclick="Worldview.deleteRegion()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">删除</button>
+                <button onclick="Worldview.saveRegion()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+              </div>
+            </div>
+            <h2 id="wv-region-title" style="margin:0;font-size:22px;color:var(--text)">编辑地区</h2>
           </div>
-        </div>
-      </div>
       <div style="overflow-y:auto;max-height:calc(100vh - 160px);padding-right:4px">
         <form onsubmit="return false">
           <label>地区名称<input type="text" id="wv-reg-name" placeholder="如：中央区"></label>
@@ -3482,18 +3510,18 @@ NPC
   <!-- 势力编辑面板 -->
   <section id="panel-wv-faction" class="panel">
     <div class="panel-content">
-      <div style="margin-bottom:16px">
-        <button class="btn-icon" onclick="UI.showPanel('wv-region','back')" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;margin-bottom:12px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
-        </button>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <h2 id="wv-faction-title" style="margin:0;font-size:22px;color:var(--text)">编辑势力</h2>
-          <div style="display:flex;gap:8px">
-            <button onclick="Worldview.deleteFaction()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">删除</button>
-            <button onclick="Worldview.saveFaction()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+<div style="margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px">
+              <button class="btn-icon" onclick="UI.showPanel('wv-region','back')" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;flex-shrink:0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <div style="display:flex;gap:8px;flex-shrink:0">
+                <button onclick="Worldview.deleteFaction()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">删除</button>
+                <button onclick="Worldview.saveFaction()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+              </div>
+            </div>
+            <h2 id="wv-faction-title" style="margin:0;font-size:22px;color:var(--text)">编辑势力</h2>
           </div>
-        </div>
-      </div>
       <div style="overflow-y:auto;max-height:calc(100vh - 160px);padding-right:4px">
         <form onsubmit="return false">
           <label>势力名称<input type="text" id="wv-fac-name" placeholder="如：银翼集团"></label>
@@ -3515,19 +3543,19 @@ NPC
   <!-- 角色编辑面板 -->
 <section id="panel-wv-npc" class="panel">
     <div class="panel-content">
-      <div style="margin-bottom:16px">
-        <button class="btn-icon" onclick="Worldview.backFromNpcEdit()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;margin-bottom:12px">
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
-  </button>
-<div style="display:flex;justify-content:space-between;align-items:center">
+<div style="margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px">
+              <button class="btn-icon" onclick="Worldview.backFromNpcEdit()" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;flex-shrink:0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <div style="display:flex;gap:8px;flex-shrink:0">
+                <button onclick="Worldview.exportCurrentNpc()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">导出</button>
+                <button onclick="Worldview.deleteNPC()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">删除</button>
+                <button onclick="Worldview.saveNPC()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+              </div>
+            </div>
             <h2 id="wv-npc-title" style="margin:0;font-size:22px;color:var(--text)">编辑角色</h2>
-            <div style="display:flex;gap:8px">
-              <button onclick="Worldview.exportCurrentNpc()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">导出</button>
-              <button onclick="Worldview.deleteNPC()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">删除</button>
-              <button onclick="Worldview.saveNPC()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
           </div>
-        </div>
-      </div>
       <div style="overflow-y:auto;max-height:calc(100vh - 160px);padding-right:4px">
         <form onsubmit="return false">
           <!-- 头像（v687.5：从单独子页迁入词条编辑页） -->
@@ -4109,7 +4137,8 @@ const GameLog = (() => {
   return { log, toggle, clear, render };
 })();
 </script>
-<script src="js/db.js?v=12"></script>
+<script src="js/db.js?v=13"></script>
+<script src="js/stickers.js?v=2"></script>
 <script src="js/utils.js?v=10"></script>
 <script src="js/markdown.js?v=7"></script>
 <script src="js/api.js"></script>
@@ -4118,10 +4147,10 @@ const GameLog = (() => {
 <script src="js/mcp-client.js"></script>
 <script src="js/fab-drag.js?v=3"></script>
 <script src="js/memory.js?v=5"></script>
-<script src="js/tools.js?v=5"></script>
+<script src="js/tools.js?v=7"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=56"></script>
-<script src="js/worldview.js?v=94"></script>
+<script src="js/worldview.js?v=96"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
@@ -4130,11 +4159,11 @@ const GameLog = (() => {
 <script src="js/single_card.js?v=12"></script>
 <script src="js/attached-chars.js?v=2"></script>
 <script src="js/single_mode.js?v=4"></script>
-<script src="js/character.js?v=9"></script>
+<script src="js/character.js?v=12"></script>
 <script src="js/prompts.js?v=1"></script>
-<script src="js/conversations.js?v=9"></script>
+<script src="js/conversations.js?v=10"></script>
 <script src="js/summary.js?v=1"></script>
-<script src="js/chat.js?v=89"></script>
+<script src="js/chat.js?v=94"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4142,37 +4171,37 @@ const GameLog = (() => {
 <script src="js/branch.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/gaiden.js"></script>
-<script src="js/backstage.js?v=11"></script>
+<script src="js/backstage.js?v=12"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
-<script src="js/status_bar.js?v=27"></script>
+<script src="js/status_bar.js?v=28"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/watch-sfx.js?v=4"></script>
 <script src="js/worldvoice.js?v=21"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/phone.js?v1=1090"></script>
-    <script src="js/heartsim_intro.js"></script>
+<script src="js/phone.js?v1=1109"></script>
+    <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
 <script src="js/ui.js?v=15"></script>
-<script src="js/data-mgr.js?v=11"></script>
+<script src="js/data-mgr.js?v=13"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>
   <script src="data/tutorial-script.js"></script>
   <script src="js/theme.js?v=4"></script>
   <script src="js/tutorial.js"></script>
-<script src="data/builtin-tianshucheng.js"></script>
-<script src="data/builtin-heartsim.js"></script>
+<script src="data/builtin-tianshucheng.js?v=2"></script>
+<script src="data/builtin-heartsim.js?v=2"></script>
 <script src="js/tianshucheng-fx.js"></script>
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=16"></script>
-<script src="js/app.js?v=133"></script>
+<script src="js/app.js?v=136"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
@@ -4273,6 +4302,9 @@ document.addEventListener('click', (e) => {
   <div style="display:flex;gap:6px">
     <button type="button" onclick="Worldview.exportSelectedWorldviews()" title="导出" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+    </button>
+    <button type="button" onclick="Worldview.copySelectedWorldviews()" title="复制" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
     </button>
     <button type="button" onclick="Worldview.deleteSelectedWorldviews()" title="删除" style="padding:8px;background:var(--danger);color:#fff;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
@@ -4847,6 +4879,14 @@ if ('serviceWorker' in navigator) {
 </span>
 </label>
 <span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 向主线注入临时剧情引导（设置前会向你确认）。</span>
+<label class="circle-check-label" style="margin-top:16px">
+<span class="circle-check-text">额外输出要求工具</span>
+<span style="position:relative;display:inline-flex">
+<input type="checkbox" id="backstage-tools-custom-format" class="circle-check">
+<span class="circle-check-ui"></span>
+</span>
+</label>
+<span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 修改主线的额外输出要求（设置前会向你确认）。</span>
 <label class="circle-check-label" style="margin-top:16px">
 <span class="circle-check-text">世界观查询工具</span>
 <span style="position:relative;display:inline-flex">

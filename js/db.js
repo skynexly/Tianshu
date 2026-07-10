@@ -3,7 +3,7 @@
  */
 const DB = (() => {
   const DB_NAME = 'TextGameEngine';
-  const DB_VERSION = 12;
+  const DB_VERSION = 13;
   let db = null;
 
   const STORES = {
@@ -21,7 +21,8 @@ const DB = (() => {
     drawnImages: { keyPath: 'id', indexes: ['createdAt'] },  // v9：生图独立存储，消息只存引用
     lorebooks: { keyPath: 'id', indexes: ['updated'] },  // v10：世界书（独立资源，可挂角色/世界观/对话）
     musicTracks: { keyPath: 'id', indexes: ['addedAt'] },  // v11：音乐库（全局共享，存音频Blob或外链）
-    importedBooks: { keyPath: 'id', indexes: ['addedAt'] }  // v12：导入电子书母本（全局共享，正文/目录；阅读痕迹仍按对话存在 readingBooks）
+    importedBooks: { keyPath: 'id', indexes: ['addedAt'] },  // v12：导入电子书母本（全局共享，正文/目录；阅读痕迹仍按对话存在 readingBooks）
+    stickers: { keyPath: 'id', indexes: ['createdAt'] }  // v13：表情包（全局共享，dataUrl+name，手机聊天通用）
   };
 
   function open() {

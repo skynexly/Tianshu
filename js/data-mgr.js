@@ -26,6 +26,25 @@ const DataMgr = (() => {
     const keepAvatar = (mode === 'lite');   // lite 保留头像小图；text 全剥；full 用原始数据不剥
     const strip = (v) => (mode === 'full') ? v : _stripDataUrls(v, keepAvatar);
 
+    // 循环引用安全的 stringify：遇到已经序列化过的对象引用（成环）就替换为 null，
+    // 避免 full 模式下 JSON.stringify 抛 "cyclic object value" 导致整个导出失败。
+    // label 用于诊断：检测到环时把所在的表名写进调试日志，便于定位脏数据源头。
+    const _safeStringify = (value, label) => {
+      const seen = new WeakSet();
+      let cyclicHit = 0;
+      const out = JSON.stringify(value, (k, v) => {
+        if (v && typeof v === 'object') {
+          if (seen.has(v)) { cyclicHit++; return null; }
+          seen.add(v);
+        }
+        return v;
+      });
+      if (cyclicHit > 0) {
+        try { if (typeof GameLog !== 'undefined') GameLog.log('warn', `[导出] 表「${label || '?'}」检测到 ${cyclicHit} 处循环引用，已断开为 null（数据可正常导出，但该字段内容缺失）`); } catch(_) {}
+      }
+      return out;
+    };
+
     const gameState = strip(await _safeGetAll('gameState'));
     const conversations = (gameState.find(x => x && x.key === 'conversations')?.value) || [];
 
@@ -33,7 +52,7 @@ const DataMgr = (() => {
     let _first = true;
     const _emit = (key, value) => {
       parts.push((_first ? '{' : ',') + JSON.stringify(key) + ':');
-      parts.push(JSON.stringify(value === undefined ? null : value));
+      parts.push(_safeStringify(value === undefined ? null : value, key));
       _first = false;
     };
     // 大数组逐条 stringify，避免一次性生成上百 MB 巨串触发 OOM（仅 full 模式的图片表用到）
@@ -43,7 +62,7 @@ const DataMgr = (() => {
       _first = false;
       const CHUNK = 20;
       for (let i = 0; i < list.length; i++) {
-        parts.push((i ? ',' : '') + JSON.stringify(list[i] === undefined ? null : list[i]));
+        parts.push((i ? ',' : '') + _safeStringify(list[i] === undefined ? null : list[i], key + '[' + i + ']'));
         if (i % CHUNK === CHUNK - 1) await new Promise(r => setTimeout(r, 0));
       }
       parts.push(']');
@@ -181,19 +200,25 @@ const DataMgr = (() => {
   // 原地修改传入对象，调用方应传入可丢弃的副本或本来就要序列化的数据。
   // keepAvatar=true 时，保留各类头像/图标小图字段（轻量导出要留）：
   //   avatar（面具/单人卡/NPC/主页/联系人/群/心动目标头像）、iconImage（世界观图标）。
-  function _stripDataUrls(node, keepAvatar) {
+  function _stripDataUrls(node, keepAvatar, _seen) {
     if (node == null) return node;
     if (typeof node === 'string') {
       return /^data:(image|font|audio|video)\//i.test(node) ? '' : node;
     }
+    if (typeof node === 'object') {
+      // 循环引用保护：遇到已经处理过的对象/数组，直接断开为 null，避免栈溢出（too much recursion）
+      if (!_seen) _seen = new WeakSet();
+      if (_seen.has(node)) return null;
+      _seen.add(node);
+    }
     if (Array.isArray(node)) {
-      for (let i = 0; i < node.length; i++) node[i] = _stripDataUrls(node[i], keepAvatar);
+      for (let i = 0; i < node.length; i++) node[i] = _stripDataUrls(node[i], keepAvatar, _seen);
       return node;
     }
     if (typeof node === 'object') {
       for (const k of Object.keys(node)) {
         if (keepAvatar && (k === 'avatar' || k === 'iconImage')) continue; // 头像/世界观图标整段保留
-        node[k] = _stripDataUrls(node[k], keepAvatar);
+        node[k] = _stripDataUrls(node[k], keepAvatar, _seen);
       }
       return node;
     }

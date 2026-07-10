@@ -269,7 +269,28 @@ async function _getMasksForCurrentWv() {
     await load();
   }
 
-  // ===== v616 菜单 / 导入 / 批量导出 / 排序（对齐记忆·世界观·单人卡） =====
+  // 编辑页顶部：删除当前正在编辑的面具（对齐批量删除的规则：默认面具不可删、至少保留一个）
+  async function deleteCurrent() {
+    const mid = editingMaskId;
+    if (!mid) return;
+    if (mid === 'default') { await UI.showAlert('提示', '默认面具不可删除'); return; }
+    const list = await getMaskList();
+    if (list.length <= 1) { await UI.showAlert('提示', '至少保留一个面具'); return; }
+    const entry = list.find(m => m.id === mid);
+    const nm = (entry && (entry.name || entry.note)) || '这个面具';
+    if (!await UI.showConfirm('删除面具', `确定删除「${nm}」？此操作不可撤销。`)) return;
+    _maskAutoSave.cancel();      // 取消挂起的自动保存，避免删除后又写回
+    _maskLoading = true;         // 阻止后续自动保存
+    await DB.del('characters', mid);
+    const newList = list.filter(m => m.id !== mid);
+    await saveMaskList(newList);
+    if (currentMaskId === mid) {
+      await switchMask(newList[0].id);
+    }
+    editingMaskId = null;
+    await load();
+    UI.showPanel('character', 'back');
+  }
   function toggleMenu() {
     const dropdown = document.getElementById('mask-menu-dropdown');
     if (!dropdown) return;
@@ -770,6 +791,9 @@ if (placeholder) placeholder.style.display = '';
     try {
       if (!(typeof HeartSimIntro !== 'undefined' && HeartSimIntro.isActive && HeartSimIntro.isActive())) {
         Chat.renderAll();
+        // 重建线上气泡头像缓存并回填——renderAll 用的是旧 map，切面具后新面具头像不在里面，
+        // 否则线上气泡头像会回落成首字占位，必须切对话/刷新才恢复。
+        try { Chat.refreshAiAvatar(); } catch(e) {}
       }
     } catch(e) {}
 
@@ -778,6 +802,21 @@ if (placeholder) placeholder.style.display = '';
       await load();
     }
     GameLog.log('info', `切换面具: ${id}`);
+  }
+
+  // 启动/恢复专用：无条件把当前面具设为 id（绕开 streaming / 心动开场 / 教程 那几个「仅拦用户手动切换」的 guard）。
+  // 修复：刷新后偶发面具被重置为默认——原因是启动同步走 switchMask，若此刻恰好命中某个 guard 会直接 return，
+  // currentMaskId 停在 init 读到的全局值，与当前对话绑定面具不一致。此函数不更新对话 maskId（updateConv 语义等价 false）。
+  async function forceSetMask(id) {
+    if (!id) return;
+    currentMaskId = id;
+    try { await DB.put('gameState', { key: 'currentMask', value: id }); } catch(e) {}
+    try {
+      const data = await DB.get('characters', id);
+      activeAvatar = data?.avatar || null;
+    } catch(e) {}
+    try { await Memory.syncViewScopeToCurrent(); Memory.renderList(); } catch(e) {}
+    try { Chat.renderQuickSwitches(); } catch(e) {}
   }
 
 
@@ -1826,14 +1865,14 @@ async function deleteItem() {
 
 return {
     init, load, save, get, getCurrentId, formatForPrompt, getAvatar,
-    createMask, deleteMask, switchMask, renderQuickSwitch, openEdit,
+    createMask, deleteMask, switchMask, forceSetMask, renderQuickSwitch, openEdit,
     _toggleWvDropdown, _selectWv,
   addAbility, removeAbility, editAbility, saveAbility, deleteAbility, closeAbilityEdit, closeAbilityModal,
   addItem, removeItem, editItem, saveItem, deleteItem, closeItemEdit, closeItemModal, moveItemToStorage, addItemDirect, removeItemByName, cloneMask, cloneMaskFrom, isolateMaskForConv, maskHasContent,
   onAvatarPicked, pickAvatar, removeAvatar, searchMasks,
     openAiGen, closeAiGen, runAiGen,
     clearBirthday, _toggleBirthDropdown, _selectBirth,
-  toggleManageMode, toggleSelectAll, batchClone, batchDelete, _onCardClick, exitManageMode,
+  toggleManageMode, toggleSelectAll, batchClone, batchDelete, deleteCurrent, _onCardClick, exitManageMode,
   // v616
   toggleMenu, exportSelected, importMask,
   toggleSortMode, exitSortMode, saveSortOrder

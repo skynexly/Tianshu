@@ -90,10 +90,12 @@
   try { await Character.init(); } catch(e) { console.error('[Character.init]', e); }
 
   // 按当前对话绑定的面具同步 activeAvatar（init 读的是全局 currentMask，可能和当前对话不一致）
+  // 用 forceSetMask 而非 switchMask：启动恢复不该被 streaming/心动开场/教程 那几个「仅拦用户手动切换」的 guard 拦掉，
+  // 否则会偶发命中 guard 提前 return，面具停在全局值 → 表现为刷新后对话面具变默认。
   try {
     const _curConv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     const _convMaskId = _curConv?.maskId || _curConv?.branchMaskId;
-    if (_convMaskId) await Character.switchMask(_convMaskId, false);
+    if (_convMaskId) await Character.forceSetMask(_convMaskId);
   } catch(e) { console.warn('[App] 初始化面具同步失败', e); }
 // 番外
 try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
@@ -215,9 +217,10 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v706.9';
-    const CHANGELOG = `【v706.9 更新内容】
-🐛 修复部分交互问题`;
+    const APP_VERSION = 'v707.1';
+    const CHANGELOG = `【v707.1 更新内容】
+🐛 修复部分交互问题
+✨ 天枢城世界观更新：补充角色网名、扩充手机应用配置`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

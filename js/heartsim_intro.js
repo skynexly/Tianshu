@@ -623,7 +623,6 @@ async function _onNewMaskAvatarPicked() {
   function _switchMaskTab(tab) {
     _renderMaskModalContent(tab === 'pick' ? 'pick' : 'new');
   }
-
   // 选择已有面具
   async function _pickExistingMask(maskId) {
     if (!maskId) return;
@@ -637,10 +636,55 @@ async function _onNewMaskAvatarPicked() {
       UI.showToast('加载面具失败: ' + e.message, 3000);
       return;
     }
+    // 面具隔离（方案C）：选中的已有面具若攒了记忆/物品，会和其它使用它的窗口共通。
+    // 这里问玩家要不要为本局心动模拟复制一份独立面具，避免这局剧情污染面具本体。
+    // 复用 Character.isolateMaskForConv（以当前激活面具为源，上面 Character.load 已把它设为当前）。
+    try {
+      if (Character.maskHasContent && Character.isolateMaskForConv && await Character.maskHasContent()) {
+        const mode = await _promptMaskCopyModal();
+        // mode 为 null（理论上不会，弹窗强制选择）时按 share 处理，不复制
+        const convId = (typeof Conversations !== 'undefined' && Conversations.getCurrent) ? Conversations.getCurrent() : _convId;
+        const convName = (typeof Conversations !== 'undefined' && Conversations.getCurrentName) ? Conversations.getCurrentName() : '心动模拟';
+        const r = await Character.isolateMaskForConv(convId, convName, mode || 'share');
+        if (r && r.ok && !r.shared) UI.showToast('已为本局复制独立面具', 1800);
+      }
+    } catch(e) { console.warn('[HSIntro] 面具隔离失败', e); }
     _removeMaskModals();
     _phase = 3;
     await _phase3Rules();
   }
+
+  // 面具复制粒度弹窗（心动模拟版，四选一，文案与普通对话隔离引导一致）
+  // 返回 Promise<'share'|'mask'|'maskInv'|'full'>；点遮罩不关闭，强制选择
+  function _promptMaskCopyModal() {
+    return new Promise((resolve) => {
+      const esc = (s) => (typeof Utils !== 'undefined' && Utils.escapeHtml) ? Utils.escapeHtml(String(s)) : String(s);
+      const convName = (typeof Conversations !== 'undefined' && Conversations.getCurrentName) ? Conversations.getCurrentName() : '本局';
+      const mask = document.createElement('div');
+      mask.className = 'hs-intro-mask-modal';
+      mask.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:20px';
+      const opt = (mode, title, desc) => `
+        <button type="button" data-mode="${mode}" style="width:100%;text-align:left;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:14px;cursor:pointer;margin-bottom:8px">
+          <div style="font-weight:600">${title}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${desc}</div>
+        </button>`;
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:18px 16px;max-width:360px;width:100%;max-height:86vh;overflow-y:auto;color:var(--text)">
+          <div style="font-size:15px;font-weight:600;margin-bottom:4px">这个面具已有记忆和物品</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:14px">它的记忆和物品栏会和其它使用同一面具的窗口共通。是否为「${esc(convName)}」复制一份独立的面具？</div>
+          ${opt('share', '不复制', '多窗口共通记忆和物品栏（保持现状）')}
+          ${opt('mask', '仅复制面具信息', '复制人设，不带记忆和物品栏（全新开始）')}
+          ${opt('maskInv', '复制面具信息 + 物品栏', '带着物品，但记忆从零开始')}
+          ${opt('full', '完全复制', '面具信息、物品栏、记忆库全部复制一份')}
+        </div>`;
+      mask.querySelectorAll('button[data-mode]').forEach(b => {
+        b.onclick = () => { const m = b.dataset.mode; if (mask.parentNode) document.body.removeChild(mask); resolve(m); };
+      });
+      // 点遮罩不关闭，强制做选择（避免误触跳过）
+      document.body.appendChild(mask);
+    });
+  }
+
 
   async function _submitMask() {
     const name = document.getElementById('hs-mask-name')?.value.trim();

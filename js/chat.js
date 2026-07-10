@@ -772,6 +772,11 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
       }
     }
 
+    // 2a'. 玩家自定义追加格式（独立生效，不依附「回复格式」开关；关了内置格式用自己的也能发）
+    if (isGameMode && convSettings.customFormat && convSettings.customFormat.trim()) {
+      systemParts.push('【额外输出要求】\n' + convSettings.customFormat.trim());
+    }
+
     // 2b. 自定义属性：独立于「回复格式」开关（v681.2 解耦）
     // 自定义属性已是独立的 custom-attrs 代码块，不依赖 status 块，所以只看 isGameMode
     if (isGameMode) {
@@ -1480,7 +1485,7 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
  const idx = [...historyForAPI].map((m, i) => ({ m, i })).reverse().find(x => x.m.role === 'user')?.i;
  if (idx !== undefined) {
  const hsRule = `[心动模拟·本轮数值规则]\nrelation只记录本轮实际发生变化的心动目标，表示本轮增量，不是当前总值。\naffinity（好感）每次单项变动必须在 -2 到 2 之间；darkness（黑化）每次单项变动必须在 -5 到 5 之间；没有在本轮直接互动、被明确影响或受到明确剧情刺激的目标，不要写入 relation。\n禁止为了推进进度而批量给所有心动目标加分。
-任务更新规则：tasks 只表示本轮任务变更，不是完整任务历史；当前仍有 active 任务时，本轮只能把现有任务标记为 active/done/skipped，禁止发布新的 active 任务；done/skipped 是结算事件，系统加减积分后会从任务栏移除，不需要下一轮继续输出；当任务栏没有 active 任务时，下一轮才允许发布新一批 active 任务，同一批最多3个。`;
+  任务更新规则：tasks 只表示本轮任务变更，不是完整任务历史；当前仍有 active 任务时，本轮只能把现有任务标记为 active/done/skipped，禁止发布新的 active 任务；done/skipped 是结算事件，系统加减积分后会从任务栏移除，不需要下一轮继续输出；当任务栏没有 active 任务时，下一轮才允许发布新一批 active 任务，同一批最多3个。`;
  historyForAPI[idx] = { ...historyForAPI[idx], content: `${hsRule}\n\n${historyForAPI[idx].content}` };
  }
  }
@@ -1504,6 +1509,36 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
         systemParts.push(`【上一轮工具使用情况】\n你在上一轮回复中调用了 ${lastAi.toolsUsed} 个工具。这是给你的参考——如果上一轮已经查过相关信息，本轮可以直接基于结果回复，不必重复调用相同工具。`);
       }
     } catch(e) { console.warn('[Chat] 工具使用提示注入失败', e); }
+
+    // 记忆工具使用指南（仅在记忆工具启用时注入）
+    if (convSettings.toolsMemory) {
+      try {
+        systemParts.push(`【记忆工具使用指南】
+你拥有三类记忆工具，分别记录不同层面的信息：
+
+1. **事件记忆**（query_events / add_event）
+   记录剧情中发生过的重要事件——一次冲突、一场意外、一个转折点。
+   结构：标题、时间、地点、起因、经过、结果、参与者。
+   查询时机：当你需要回忆过去的剧情细节时（"之前在那个仓库发生了什么来着"）。
+   记录时机：本轮发生了对剧情有影响的重要事件时。日常闲聊不需要记。
+
+2. **人际关系**（query_relations / upsert_relation）
+   记录 {{user}} 与各角色之间的关系档案——当前关系、对方印象、情感变化历程。
+   查询时机：当你需要确认某个角色和 {{user}} 目前什么关系、之前互动过什么时。
+   记录时机：关系发生了实质变化时（从陌生到熟悉、信任建立或破裂、好感度明显变化等）。
+
+3. **小纸条**（query_notes / add_note）
+   记录 {{user}} 这个角色的情绪碎片、个人偏好、生活习惯、口头禅。
+   是最细粒度的记忆——不是大事件，而是"这个人是什么样的人"。
+   查询时机：当你隐约记得 {{user}} 说过什么偏好但不确定细节时。
+   记录时机：{{user}} 明确表达了偏好/习惯/情绪时。只记用户说的/做的，不揣测。
+
+使用原则：
+- 主动查：当你对过去的事不确定时，查一下再回答，别编。
+- 克制记：不是每轮都需要记录。只有真正值得记住的才写。
+- 不重复：记之前先想想是否已经记过类似内容。`);
+      } catch(e) { console.warn('[Chat] 记忆工具指南注入失败', e); }
+    }
 
     // v687.15：现实环境感知（电量/天气）拼到最近 2 条 user message 前缀
     try {
@@ -2190,17 +2225,22 @@ isStreaming = true;
 // 历史消息不会重复注入手机操作，AI 不会反复提。
 // v627：尊重用户在手机设置里的"发送本轮操作"开关，关闭时清空当轮日志，不写入快照
 let _pendingPhoneLog = null;
-try {
-  if (typeof Phone !== 'undefined' && Phone.flushActionLog) {
-    const phoneLog = Phone.flushActionLog();
-    let _allowSend = true;
     try {
-      const _pd = (typeof Phone._getPhoneData === 'function') ? await Phone._getPhoneData() : null;
-      if (_pd && _pd.sendActionLog === false) _allowSend = false;
+      if (typeof Phone !== 'undefined' && Phone.flushActionLog) {
+        const phoneLog = Phone.flushActionLog();
+        let _allowSend = true;
+        try {
+          const _pd = (typeof Phone._getPhoneData === 'function') ? await Phone._getPhoneData() : null;
+          if (_pd && _pd.sendActionLog === false) _allowSend = false;
+        } catch(_) {}
+        if (_allowSend && phoneLog.length > 0) _pendingPhoneLog = phoneLog;
+      }
     } catch(_) {}
-    if (_allowSend && phoneLog.length > 0) _pendingPhoneLog = phoneLog;
-  }
-} catch(_) {}
+    // 重写兜底：重写时用户不重新操作手机，flush 拿不到日志，改用 regenerate 暂存的原快照（保证多次重写都能带上本轮手机操作）
+    if (!_pendingPhoneLog && _pendingRewritePhoneLog && _pendingRewritePhoneLog.length > 0) {
+      _pendingPhoneLog = _pendingRewritePhoneLog;
+    }
+    _pendingRewritePhoneLog = null; // 消费完清空（无论用没用到）
 
     // 心动模拟·回家系统通知注入（一次性，注入后清空）
     // 触发场景一：用户在客服那边发"回家"且通关条件达成 → 通知 AI 开始演绎传送倒计时
@@ -2879,6 +2919,14 @@ renderContent = renderContent.replace(/```mail_reply[\s\S]*$/i, '');
         setTimeout(() => { try { Phone._forgottenMailTick(); } catch(_) {} }, 7500);
       }
     } catch(e) { console.warn('[Chat] 故人来信 tick 失败', e); }
+
+    // 世间来信：主线每走一轮 +1，到随机阈值（5~12）且邮箱生态开关开启时，
+    // 结合当前主线剧情生成一封杂务来信（公务/讨债/官方群发/请柬/剧情钩子等）。延迟错开避免撞车。
+    try {
+      if (typeof Phone !== 'undefined' && Phone._worldAffairMailTick) {
+        setTimeout(() => { try { Phone._worldAffairMailTick(); } catch(_) {} }, 8500);
+      }
+    } catch(e) { console.warn('[Chat] 世间来信 tick 失败', e); }
 
 // 节日来信：主线每走一轮检查一次"今天是否世界观节日"，命中且未发过则触发。
       // 前端粗匹配日期，仅在邮箱生态开关开启时生效。延迟错开避免撞车。
@@ -4200,12 +4248,7 @@ exitMultiSelect();
       const avatarHtml = avatarUrl
         ? `<img src="${Utils.escapeHtml(avatarUrl)}" class="online-chat-avatar" style="object-fit:cover">`
         : `<div class="online-chat-avatar">${Utils.escapeHtml(initial)}</div>`;
-      div.classList.add('hs-intro-persist');
-      div.innerHTML = `
-        <div class="msg-body md-content">
-          <div class="online-chat-block hs-intro-chat-block">
-            <div class="online-chat-divider"><span>线上消息</span></div>
-            <div class="online-chat-bubble" data-npc-name="${name}" data-avatar-char="${Utils.escapeHtml(initial)}">
+      const bubbleHtml = `<div class="online-chat-bubble" data-npc-name="${name}" data-avatar-char="${Utils.escapeHtml(initial)}">
               <div class="online-chat-header">
                 ${avatarHtml}
                 <div class="online-chat-meta">
@@ -4214,7 +4257,24 @@ exitMultiSelect();
                 </div>
               </div>
               <div class="online-chat-text">${Utils.escapeHtml(b.text || '')}</div>
-            </div>
+            </div>`;
+      // 若上一条渲染的也是 intro 气泡，合并到同一个"线上消息"块里（共用一条分割线），
+      // 避免每条消息各自带一条分割线（刷新后连续多条会重复出现分割线）。
+      const prev = container.lastElementChild;
+      if (prev && prev.classList && prev.classList.contains('hs-intro-persist')) {
+        const block = prev.querySelector('.hs-intro-chat-block');
+        if (block) {
+          block.insertAdjacentHTML('beforeend', bubbleHtml);
+          if (animate) scrollToBottomIfFollowing();
+          return prev; // 复用上一条的 div，不新建
+        }
+      }
+      div.classList.add('hs-intro-persist');
+      div.innerHTML = `
+        <div class="msg-body md-content">
+          <div class="online-chat-block hs-intro-chat-block">
+            <div class="online-chat-divider"><span>线上消息</span></div>
+            ${bubbleHtml}
           </div>
         </div>`;
       container.appendChild(div);
@@ -4719,6 +4779,8 @@ renderAll();
   // 本轮重写建议（仅对下一次 send() 生效一次，发送后立刻清空）
   let _pendingRewriteHint = '';
   let _pendingRewriteMsgId = null;
+  // 重写时暂存被删除的 user 消息的手机操作快照（重写不重新操作手机，需把原快照带回新建的消息，避免 AI 丢失本轮手机操作记录）
+  let _pendingRewritePhoneLog = null;
 
   function openRewriteHint(msgId) {
     const idx = messages.findIndex(m => m.id === msgId);
@@ -4768,6 +4830,8 @@ renderAll();
     // 找到对应的用户消息（前一条），删掉后由 send() 重新创建，避免渲染两次导致气泡重复
     const lastUserMsg = messages[messages.length - 1];
     if (!lastUserMsg || lastUserMsg.role !== 'user') return;
+    // 暂存本轮手机操作快照：重写不会重新操作手机，需把原快照带回 send() 新建的 user 消息，避免 AI 丢失本轮手机操作记录（支持多次重写）
+    _pendingRewritePhoneLog = lastUserMsg.phoneLogSnapshot || null;
     document.getElementById('chat-input').value = lastUserMsg.content;
     roundCount--; // send() 会 ++，先 --
     await DB.del('messages', lastUserMsg.id);
@@ -5752,7 +5816,7 @@ if (!gp) return null;
       }).join('\n\n' + '='.repeat(60) + '\n\n');
 
       document.getElementById('edit-content').value =
-        `=== 上下文预览 ===\n消息数: ${apiMessages.length}\n总Token估算: ~${totalTokens}\n当前轮数: ${roundCount}\n当前分支: ${currentBranchId}\n当前区域: ${NPC.getRegion()}\n文游模式: ${isGameMode ? '开' : '关'}\n流式输出: ${convSettings.stream ? '开' : '关'}\n回复格式: ${convSettings.format ? '开' : '关'}\n番外对话: ${isGaidenConv ? '是' : '否'}\n命中记忆: ${relatedMemories.length}条\n\n${'='.repeat(50)}\n\n${content}`;
+        `=== 上下文预览 ===\n消息数: ${apiMessages.length}\n总Token估算: ~${totalTokens}\n当前轮数: ${roundCount}\n当前区域: ${NPC.getRegion()}\n文游模式: ${isGameMode ? '开' : '关'}\n流式输出: ${convSettings.stream ? '开' : '关'}\n回复格式: ${convSettings.format ? '开' : '关'}\n番外对话: ${isGaidenConv ? '是' : '否'}\n命中记忆: ${relatedMemories.length}条\n\n${'='.repeat(50)}\n\n${content}`;
       document.getElementById('edit-modal').classList.remove('hidden');
       document.getElementById('edit-modal').dataset.editId = '__debug__';
       if (typeof UI !== 'undefined' && UI.switchDebugTab) {
@@ -5953,7 +6017,8 @@ bgImage: conv?.convBgImage || '',
     toolsHistory: !!conv?.convToolsHistory,        // 默认关（历史搜索工具）
         autoExtract: conv?.convAutoExtract !== false,  // 默认开（自动记忆提取）
       replyWordCount: conv?.convReplyWordCount || 800,  // 默认800字
-      timeFormat: conv?.convTimeFormat || 'absolute',   // 时间输出格式：'delta'(增量) | 'absolute'(绝对时间,默认)
+      timeFormat: conv?.convTimeFormat || 'delta',   // 时间输出格式：'delta'(增量,默认) | 'absolute'(绝对时间)
+      customFormat: conv?.convCustomFormat || '',        // 玩家自定义追加格式（追加在内置回复格式之后，独立生效）
       directive: conv?.convDirective || '',              // 剧情引导内容
       directiveRemaining: conv?.convDirectiveRemaining || 0, // 剩余轮数
       directiveTotal: conv?.convDirectiveTotal || 0,      // 原始设定轮数
@@ -6328,6 +6393,8 @@ bgImage: conv?.convBgImage || '',
     document.getElementById('cs-stream').checked = s.stream;
     document.getElementById('cs-gamemode').checked = s.gameMode;
 document.getElementById('cs-format').checked = s.format;
+      const cfEl = document.getElementById('cs-custom-format');
+      if (cfEl) cfEl.value = s.customFormat || '';
       const suggestEnEl = document.getElementById('cs-suggest-enabled');
       if (suggestEnEl) suggestEnEl.checked = s.suggestEnabled;
       const shhEl = document.getElementById('cs-strip-history-html');
@@ -6468,6 +6535,8 @@ document.getElementById('cs-format').checked = s.format;
     conv.convStream = document.getElementById('cs-stream').checked;
     conv.convGameMode = document.getElementById('cs-gamemode').checked;
 conv.convFormat = document.getElementById('cs-format').checked;
+    const cfSaveEl = document.getElementById('cs-custom-format');
+    if (cfSaveEl) conv.convCustomFormat = cfSaveEl.value || '';
     const suggestSaveEl = document.getElementById('cs-suggest-enabled');
     if (suggestSaveEl) conv.convSuggestEnabled = suggestSaveEl.checked;
       const shhSaveEl = document.getElementById('cs-strip-history-html');

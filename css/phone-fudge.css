@@ -345,10 +345,10 @@
 .phone-shell.phone-theme-fudge .phone-shop-app .phone-tabbar {
   border: none;
 }
-/* 搜索框：更圆润 */
+/* 搜索框：更圆润 + 实色底（去半透明卡片色，与视频搜索框同款） */
 .phone-shell.phone-theme-fudge .phone-shop-app .phone-map-search-input-wrap {
   border-radius: 999px;
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
 }
 /* 搜索按钮：更圆润 */
 .phone-shell.phone-theme-fudge .phone-shop-app .phone-map-search-btn {
@@ -360,6 +360,10 @@
 .phone-shell.phone-theme-fudge .phone-shop-app .phone-shop-custom-btn {
   border-radius: 999px !important;
   border: none !important;
+}
+/* 刷新推荐按钮：实色底（去半透明卡片色，与搜索框同款；自定义按钮是 accent 不动） */
+.phone-shell.phone-theme-fudge .phone-shop-app .phone-shop-refresh-btn {
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
 }
 /* 商品卡 / 订单卡 / 搜索记录卡：更圆的圆角 + 背景色实色 + 加内边距防文字挤 */
 .phone-shell.phone-theme-fudge .phone-shop-app .phone-map-result-card,
@@ -378,6 +382,10 @@
 .phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-post-card {
   border-radius: 18px !important;
   border: none !important;
+}
+/* 搜索框：实色底（去半透明卡片色，与视频搜索框同款） */
+.phone-shell.phone-theme-fudge .phone-forum-app #phone-forum-search {
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
 }
 /* 帖子卡加内边距防文字挤 + 背景色实色 */
 .phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-post-card {
@@ -460,10 +468,10 @@
 .phone-shell.phone-theme-fudge .phone-map-app .phone-tabbar {
   border: none;
 }
-/* 搜索框：胶囊形 */
+/* 搜索框：胶囊形 + 实色底（去半透明卡片色，与视频搜索框同款） */
 .phone-shell.phone-theme-fudge .phone-map-app .phone-map-search-input-wrap {
   border-radius: 999px;
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
 }
 /* 搜索按钮：胶囊形 */
 .phone-shell.phone-theme-fudge .phone-map-app .phone-map-search-btn {
@@ -555,12 +563,13 @@
   padding: 14px;
   background: var(--bg) !important;
 }
-/* 编辑页输入框：大圆角 + 去边框 + 内边距 */
+/* 编辑页输入框：大圆角 + 去边框 + 内边距 + 实色底（去半透明卡片色，与搜索框同款） */
 .phone-shell.phone-theme-fudge .phone-memo-edit-page input,
 .phone-shell.phone-theme-fudge .phone-memo-edit-page textarea {
   border-radius: 16px !important;
   border: none !important;
   padding: 12px 16px !important;
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
 }
 /* 保存 / 收藏 / 分享 / 删除 按钮：胶囊形 + 去边框 */
 .phone-shell.phone-theme-fudge .phone-memo-save-btn,
@@ -574,13 +583,34 @@
 }
 
 /* ============================================================
+   相机 App：输入框 + 调整镜头/重置按钮 实色化 + 圆角
+   ============================================================ */
+/* 拍摄页文字输入框：大圆角 + 去边框 + 实色底 */
+.phone-shell.phone-theme-fudge .phone-camera-text {
+  border-radius: 16px !important;
+  border: none !important;
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
+}
+.phone-shell.phone-theme-fudge .phone-camera-text:focus {
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
+}
+/* 调整镜头 / 重置按钮：胶囊形 + 去边框 + 实色底 */
+.phone-shell.phone-theme-fudge .phone-camera-btn-secondary {
+  border-radius: 999px !important;
+  border: none !important;
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
+}
+
+/* ============================================================
    钱包 App：绑定属性卡 + 添加按钮 圆角化
    ============================================================ */
-/* 绑定属性卡：大圆角 + 去边框 + 背景色实色（压过 has-wallpaper 渐变） */
-.phone-shell.phone-theme-fudge .phone-wallet-card {
+/* 绑定属性卡：大圆角 + 去边框 + 实色底
+   注意：内联是 background:var(--bg-secondary)，会被 phone.css 全局渐变规则(特异性0,3,1)刷成 --bg-tertiary 半透明。
+   这里加属性选择器把特异性提到 (0,4,0) 压过它。 */
+.phone-shell.phone-theme-fudge .phone-wallet-card[style*="background:var(--bg-secondary)"] {
   border-radius: 18px !important;
   border: none !important;
-  background: var(--bg) !important;
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
 }
 /* 添加货币按钮：大圆角 + 去虚线边框 + 文字改深主色（行内写死了 text-secondary，需 !important 盖过） */
   .phone-shell.phone-theme-fudge .phone-wallet-add-btn {
@@ -643,10 +673,12 @@
 .phone-shell.phone-theme-fudge .wardrobe-portrait {
   border: none !important;
   border-radius: 18px;
+  background-color: var(--bg-secondary-solid, var(--bg-secondary)) !important;
 }
 .phone-shell.phone-theme-fudge .wardrobe-portrait-empty {
   border: none !important;
   border-radius: 18px;
+  background-color: var(--bg-secondary-solid, var(--bg-secondary)) !important;
 }
 .phone-shell.phone-theme-fudge .wardrobe-item {
   border-radius: 14px;
@@ -654,6 +686,7 @@
 .phone-shell.phone-theme-fudge .wardrobe-btn {
   border: none !important;
   border-radius: 999px;
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
 }
 .phone-shell.phone-theme-fudge .wardrobe-part-add {
   border: none !important;
@@ -828,12 +861,12 @@
   background: var(--bg) !important;
   padding: 14px;
 }
-/* 添加寄件 / 上架商品 按钮：大圆角 + 去虚线边框 + 文字深主色（行内写死 text-secondary，需 !important） */
+/* 添加寄件 / 上架商品 按钮：大圆角 + 去虚线边框 + 实色底 + 文字深主色（行内写死 text-secondary，需 !important） */
   .phone-shell.phone-theme-fudge .phone-feiniao-add-btn,
   .phone-shell.phone-theme-fudge .phone-youyu-add-btn {
     border-radius: 18px !important;
     border: none !important;
-    background: var(--bg-tertiary) !important;
+    background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
     color: var(--text) !important;
   }
 /* 底部 tabbar 去边框 */
@@ -885,11 +918,69 @@
   background: var(--text);
 }
 
-/* 聊天输入框：奶油软糖用圆润无边框（玻璃冰糖保持方正带边框） */
+/* 聊天输入框：奶油软糖用圆润无边框（玻璃冰糖保持方正带边框）+ 实色底 */
 .phone-shell.phone-theme-fudge .phone-chat-input-box {
   border: none !important;
   border-radius: 18px !important;
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
 }
+/* char（对方）气泡：默认透明底，fudge 下改实色浅底（形状/边框不动） */
+.phone-shell.phone-theme-fudge .online-chat-text {
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
+}
+/* 手机聊天 App 对方文字气泡：内联 --bg-tertiary 半透明，会被 phone.css 全局渐变规则(0,3,1)命中压制，
+   加属性选择器提特异性到 (0,4,0) 压过它，改实色（我方 accent 气泡不动） */
+.phone-shell.phone-theme-fudge .phone-chat-txt-char[style*="var(--bg-tertiary)"] {
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
+}
+/* 加号菜单（图片/表情/相册/语音/位置/转账…）图标底框：内层 div 内联 --bg-tertiary 半透明，
+   同样被全局规则压制，用子选择器+属性选择器提特异性改实色 */
+.phone-shell.phone-theme-fudge .phone-plus-item > div[style*="var(--bg-tertiary)"] {
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
+}
+/* 聊天设置页各分区卡片（备注昵称/角色语音/线下互动/视频通话立绘/上下文）：内联 --bg-tertiary 半透明，
+   被全局规则压制，用后代+属性选择器提特异性改实色 */
+.phone-shell.phone-theme-fudge .phone-chat-settings-page div[style*="var(--bg-tertiary)"] {
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
+}
+
+/* ============================================================
+   心动模拟客服对话气泡：奶油软糖深底上，默认 --bg-tertiary 会解析成深灰，
+   跟粉白顶栏/输入栏不搭（看起来很脏）。照论坛/邮箱卡片处理：
+   AI 气泡走实色浅底，用户气泡叠一层 accent 淡色，都无边框 + 大圆角。
+   ============================================================ */
+.phone-shell.phone-theme-fudge .hs-bubble-ai {
+  background: var(--bg) !important;
+  border: none !important;
+  border-radius: 18px !important;
+  color: var(--text) !important;
+}
+.phone-shell.phone-theme-fudge .hs-bubble-user {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg)) !important;
+  border: none !important;
+  border-radius: 18px !important;
+  color: var(--text) !important;
+}
+
+/* 客服顶栏文字：fudge 深底上默认 --text 深色会看不见，反成浅色 */
+.phone-shell.phone-theme-fudge .hs-svc-title {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge .hs-svc-sub {
+  color: var(--bg) !important;
+  opacity: 0.65 !important;
+}
+
+/* ============================================================
+   心动目标卡：fudge 深底上默认 --bg-tertiary 会发灰半透明、文字发暗看不清。
+   照论坛/书架卡处理：实色浅底 + 大圆角，文字反成浅色，
+   accent 元素（好感度数字/进度条填充/戳一下按钮）保持强调色不动。
+   ============================================================ */
+/* 卡片本体：实色浅底（加属性选择器提特异性，压过 phone.css 的全局卡片渐变规则 [style*=bg-tertiary]:not(.wv-tag-pill)） */
+.phone-shell.phone-theme-fudge .hs-app-target-card[style*="background:var(--bg-tertiary)"] {
+  background: var(--bg) !important;
+}
+/* 卡片是浅色实色底，文字/进度条槽/减号按钮都保持默认（--text 深字、--bg-secondary 浅槽），不反色 */
 
 /* ============================================================
    阅读 App：fudge 下 .phone-body 铺主文字色深底，

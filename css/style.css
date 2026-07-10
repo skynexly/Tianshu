@@ -3965,14 +3965,16 @@ body[data-worldview="心动模拟"] .sb-scene:hover {
   background: transparent;
 }
 body[data-sb-skin="neumorph"] #sb-custom-attrs,
-body[data-skin="single-default"] #sb-custom-attrs {
+body[data-skin="single-default"] #sb-custom-attrs,
+body[data-worldview="心动模拟"] #sb-custom-attrs {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 #sb-custom-attrs.hidden { display: none !important; }
 body[data-sb-skin="neumorph"] .sb-custom-attrs-title,
-body[data-skin="single-default"] .sb-custom-attrs-title {
+body[data-skin="single-default"] .sb-custom-attrs-title,
+body[data-worldview="心动模拟"] .sb-custom-attrs-title {
   font-size: 11px;
   line-height: 1;
   font-weight: 800;
@@ -3993,7 +3995,8 @@ body[data-sb-skin="terminal"] .sb-custom-attrs-title {
   text-transform: uppercase;
 }
 body[data-sb-skin="neumorph"] .sb-custom-attrs-grid,
-body[data-skin="single-default"] .sb-custom-attrs-grid {
+body[data-skin="single-default"] .sb-custom-attrs-grid,
+body[data-worldview="心动模拟"] .sb-custom-attrs-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
@@ -4004,7 +4007,8 @@ body[data-sb-skin="terminal"] .sb-custom-attrs-grid {
   gap: 4px;
 }
 body[data-sb-skin="neumorph"] .sb-custom-attr-card,
-body[data-skin="single-default"] .sb-custom-attr-card {
+body[data-skin="single-default"] .sb-custom-attr-card,
+body[data-worldview="心动模拟"] .sb-custom-attr-card {
   min-width: 0;
   border-radius: 14px;
   padding: 10px 11px;
@@ -4015,7 +4019,8 @@ body[data-skin="single-default"] .sb-custom-attr-card {
   transition: transform .16s ease, box-shadow .16s ease;
 }
 body[data-sb-skin="neumorph"] .sb-custom-attr-card:hover,
-body[data-skin="single-default"] .sb-custom-attr-card:hover {
+body[data-skin="single-default"] .sb-custom-attr-card:hover,
+body[data-worldview="心动模拟"] .sb-custom-attr-card:hover {
   transform: translateY(-1px);
   box-shadow: var(--hs-shadow-neu-hover);
 }
@@ -4042,7 +4047,8 @@ body[data-sb-skin="terminal"] .sb-custom-attr-card::before {
   order: 1;
 }
 body[data-sb-skin="neumorph"] .sb-custom-attr-name,
-body[data-skin="single-default"] .sb-custom-attr-name {
+body[data-skin="single-default"] .sb-custom-attr-name,
+body[data-worldview="心动模拟"] .sb-custom-attr-name {
   font-size: 11px;
   line-height: 1.2;
   font-weight: 800;
@@ -4053,7 +4059,8 @@ body[data-skin="single-default"] .sb-custom-attr-name {
   white-space: nowrap;
 }
 body[data-sb-skin="neumorph"] .sb-custom-attr-val,
-body[data-skin="single-default"] .sb-custom-attr-val {
+body[data-skin="single-default"] .sb-custom-attr-val,
+body[data-worldview="心动模拟"] .sb-custom-attr-val {
   margin-top: 6px;
   font-size: 18px;
   line-height: 1.1;

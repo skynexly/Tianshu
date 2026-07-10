@@ -392,6 +392,21 @@
  cursor: pointer;
  -webkit-tap-highlight-color: transparent;
  color: currentColor;
+ position: relative;
+}
+/* App 图标未读红点（邮箱等）：叠在图标圆形右上角 */
+.phone-app-icon-dot {
+  position: absolute;
+  top: -2px;
+  right: calc(50% - 34px);
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #e53935;
+  border: 2px solid var(--bg, #fff);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  z-index: 3;
+  pointer-events: none;
 }
 .phone-app-icon-circle {
  width:54px;
@@ -2366,23 +2381,23 @@ background: transparent !important;
    改用纯主题色半透明背景；自定义壁纸下用一次性 ::before 模糊（兜底类规则不命中类选择器）。 */
 .hs-bubble-ai {
   background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  border: none;
   color: var(--text);
 }
 .hs-bubble-user {
   background: color-mix(in srgb, var(--accent) 14%, var(--bg-tertiary));
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border: none;
   color: var(--text);
 }
 /* 自定义壁纸下：气泡换成深色半透明纯色块，不开 backdrop-filter，避免大量 blur 层叠加 */
 .phone-shell.has-custom-wallpaper .hs-bubble-ai {
   background: rgba(18, 20, 28, 0.38) !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
+  border-color: transparent !important;
   color: rgba(255, 255, 255, 0.94) !important;
 }
 .phone-shell.has-custom-wallpaper .hs-bubble-user {
   background: color-mix(in srgb, var(--accent) 28%, rgba(18, 20, 28, 0.38)) !important;
-  border-color: color-mix(in srgb, var(--accent) 36%, rgba(255, 255, 255, 0.18)) !important;
+  border-color: transparent !important;
   color: rgba(255, 255, 255, 0.96) !important;
 }
 
@@ -2406,9 +2421,7 @@ background: transparent !important;
 .phone-body div[style*="background: var(--bg-tertiary)"]:not(.wv-tag-pill),
 .phone-body div[style*="background:var(--bg-secondary)"]:not(.wv-tag-pill),
 .phone-body div[style*="background: var(--bg-secondary)"]:not(.wv-tag-pill) {
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--accent) 12%, var(--bg-tertiary-solid, var(--bg-tertiary))),
-    var(--bg-secondary-solid, var(--bg-secondary))) !important;
+  background: var(--bg-tertiary) !important;
 }
 .phone-shell.has-wallpaper .phone-tabbar {
   background: color-mix(in srgb, var(--bg-secondary-solid, var(--bg-secondary)) var(--phone-card-opacity-pct), transparent) !important;
@@ -4816,6 +4829,26 @@ align-self: start;
   transition: transform .12s, box-shadow .12s;
 }
 .phone-email-card:active { transform: scale(0.97); }
+/* 主屏未读信件提示条：个人主页卡上方，信封图标 + 文字，整条可点跳邮箱 */
+.phone-mail-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 10px;
+  padding: 8px 14px;
+  width: fit-content;
+  max-width: 90%;
+  border-radius: 999px;
+  background: rgba(229,57,53,0.12);
+  color: #e53935;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .12s, background .12s;
+}
+.phone-mail-notice:active { transform: scale(0.96); background: rgba(229,57,53,0.2); }
+.phone-mail-notice svg { flex-shrink: 0; }
 /* 未读圆点：卡片右上角 */
 .phone-email-card-unread {
   position: absolute; top: 9px; right: 9px;
