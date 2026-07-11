@@ -90,8 +90,12 @@ const Gaiden = (() => {
     } catch(_) {}
   }
 
-  // 供外部模块（如WorldVoice）往收藏列表添加条目
+  // 供外部模块（如WorldVoice/Phone/Chat）往收藏列表添加条目
   function addToList(item) {
+    if (!item || !item.id) return;
+    // 外部入口通常已经先写 DB，再通知这里刷新内存；这里做去重，避免同一条收藏出现两份。
+    const idx = gaidenList.findIndex(x => x && x.id === item.id);
+    if (idx !== -1) gaidenList.splice(idx, 1);
     gaidenList.unshift(item);
     // 如果收藏库面板正在显示，立即刷新
     const panel = document.getElementById('panel-gaiden');
@@ -721,6 +725,15 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
   function renderList() {
     const container = document.getElementById('gaiden-list');
     if (!container) return;
+    // 兜底自愈：#gaiden-list 复用了 settings-tab-content 动画类，旧的设置页全局 tab 切换可能残留 display:none。
+    // 每次渲染收藏页时强制恢复可见，避免主题/设置切换后内容已写入但容器不可见。
+    container.classList.remove('hidden');
+    container.style.display = '';
+    container.style.visibility = '';
+    container.style.opacity = '';
+    container.style.height = '';
+    container.style.maxHeight = '';
+    try { void container.offsetHeight; } catch(_) {}
 
     // 图片 tab 走独立逻辑（数据源是 drawnImages 表，不是 gaidenList）
     if (_collectionTab === 'image') {

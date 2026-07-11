@@ -83,6 +83,72 @@ const Utils = (() => {
   }
 
   /**
+   * 宽容 JSON 解析：先直接 parse，失败则逐级修复常见 AI 输出瑕疵后重试。
+   * 修复项：去掉代码块首尾包裹文字、中文引号→英文、全角标点→半角、
+   *         尾逗号、未闭合的括号补全。全部失败返回 null，并写一条诊断日志。
+   * @param {string} str  待解析文本
+   * @param {string} label 诊断用标签（块名，如 'chat'/'status'）
+   * @returns {*} 解析结果，或 null
+   */
+  function _looseJSONParse(str, label) {
+    if (str == null) return null;
+    let s = String(str).trim();
+    if (!s) return null;
+
+    // 0) 原样直解
+    try { return JSON.parse(s); } catch (_) {}
+
+    // 1) 截取第一个 { 或 [ 到最后一个 } 或 ]（去掉 AI 在 JSON 前后加的解释文字）
+    const firstBrace = s.indexOf('{');
+    const firstBracket = s.indexOf('[');
+    let start = -1;
+    if (firstBrace === -1) start = firstBracket;
+    else if (firstBracket === -1) start = firstBrace;
+    else start = Math.min(firstBrace, firstBracket);
+    if (start > 0) {
+      const openCh = s[start];
+      const closeCh = openCh === '{' ? '}' : ']';
+      const end = s.lastIndexOf(closeCh);
+      if (end > start) s = s.slice(start, end + 1);
+    }
+
+    // 2) 逐级修复后重试
+    const fixers = [
+      // 中文/弯引号 → 英文直引号
+      x => x.replace(/[\u201C\u201D\u2018\u2019]/g, '"'),
+      // 全角冒号/逗号 → 半角
+      x => x.replace(/：/g, ':').replace(/，/g, ','),
+      // 尾逗号：, } / , ]
+      x => x.replace(/,\s*([}\]])/g, '$1'),
+      // 补全未闭合：统计括号差额，在末尾补齐
+      x => {
+        const need = (open, close) => {
+          const o = (x.match(new RegExp('\\' + open, 'g')) || []).length;
+          const c = (x.match(new RegExp('\\' + close, 'g')) || []).length;
+          return Math.max(0, o - c);
+        };
+        return x + '}'.repeat(need('{', '}')) + ']'.repeat(need('[', ']'));
+      },
+    ];
+
+    // 累积应用修复器（每加一层修复就试一次，尽量早成功）
+    let cur = s;
+    for (const fix of fixers) {
+      cur = fix(cur);
+      try { return JSON.parse(cur); } catch (_) {}
+    }
+
+    // 3) 全部失败：写诊断日志（不抛错，交调用方决定默认值）
+    try {
+      if (typeof GameLog !== 'undefined') {
+        const preview = String(str).trim().slice(0, 80).replace(/\n/g, ' ');
+        GameLog.log('warn', `[解析] 「${label || '?'}」代码块 JSON 解析失败，已忽略。原文预览：${preview}${String(str).length > 80 ? '…' : ''}`);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /**
    * 解析AI输出格式
    * 结构：头部信息 → --- → 正文 → --- → 物品/变化（代码块）
    * 策略：从底部往上找代码块区域，中间全是正文
@@ -115,7 +181,7 @@ const Utils = (() => {
     }
 
     // 先把 ```status 代码块提取出来，并从 raw 里剥离（避免显示在气泡里）
-    const statusMatch = raw.match(/```status\s*\n([\s\S]*?)```/i);
+    const statusMatch = raw.match(/```status\s*\n?([\s\S]*?)```/i);
     if (statusMatch) {
       result.status = _parseStatusBlock(statusMatch[1]);
       raw = raw.replace(statusMatch[0], '').trim();
@@ -129,15 +195,16 @@ const Utils = (() => {
     }
 
     // 心动模拟专用代码块：```relation / ```task / ```chat
-    const relationMatch = raw.match(/```relation\s*\n([\s\S]*?)```/i);
+    const relationMatch = raw.match(/```relation\s*\n?([\s\S]*?)```/i);
     if (relationMatch) {
-      try { result.relation = JSON.parse(relationMatch[1].trim()); } catch(e) {
-        // 容错：非 JSON 格式（如 key:value 格式），尝试简单解析
+      result.relation = _looseJSONParse(relationMatch[1], 'relation');
+      if (result.relation == null) {
+        // 二级兜底：非 JSON 的 key:value 行格式
         try {
           const obj = {};
           relationMatch[1].trim().split('\n').forEach(line => {
             const m = line.match(/^(\S+?)\s*[:：]\s*(.+)/);
-            if (m) obj[m[1].trim()] = JSON.parse(m[2].trim());
+            if (m) { const v = _looseJSONParse(m[2].trim(), 'relation.val'); if (v != null) obj[m[1].trim()] = v; }
           });
           if (Object.keys(obj).length > 0) result.relation = obj;
         } catch(_) {}
@@ -147,45 +214,30 @@ const Utils = (() => {
 
     const taskMatch = raw.match(/```tasks?\s*\n?([\s\S]*?)```/i);
     if (taskMatch) {
-      try { result.tasks = JSON.parse(taskMatch[1].trim()); } catch(e) {
-        // 兜底：尝试修复常见JSON问题
+      result.tasks = _looseJSONParse(taskMatch[1], 'tasks');
+      if (result.tasks == null) {
+        // 二级兜底：逐个提取能解析的对象（应对严重损坏、只能抢救部分的情况）
         try {
-          let fix = taskMatch[1].trim();
-          // 补全截断的数组
-          if (!fix.endsWith(']')) fix += ']';
-          // 移除尾部多余逗号
-          fix = fix.replace(/,\s*([}\]])/g, '$1');
-          // 尝试解析
-          result.tasks = JSON.parse(fix);
-        } catch(_) {
-          // 再试：提取所有能找到的对象
-          try {
-            const objects = [];
-            const objRegex = /\{[^{}]*\}/g;
-            let m;
-            while ((m = objRegex.exec(taskMatch[1])) !== null) {
-              try { objects.push(JSON.parse(m[0])); } catch(_) {
-                // 尝试修复单个对象的引号/逗号问题
-                try {
-                  let o = m[0].replace(/'/g, '"').replace(/,\s*}/g, '}');
-                  objects.push(JSON.parse(o));
-                } catch(_) {}
-              }
-            }
-            if (objects.length > 0) result.tasks = objects;
-          } catch(_) {}
-        }
+          const objects = [];
+          const objRegex = /\{[^{}]*\}/g;
+          let m;
+          while ((m = objRegex.exec(taskMatch[1])) !== null) {
+            const o = _looseJSONParse(m[0], 'tasks.item');
+            if (o != null) objects.push(o);
+          }
+          if (objects.length > 0) result.tasks = objects;
+        } catch(_) {}
       }
       raw = raw.replace(taskMatch[0], '').trim();
     }
 
     // 心动模拟：char 锁/解锁手机（含状态面板）
-    const phoneLockMatch = raw.match(/```phone-lock\s*\n([\s\S]*?)```/i);
+    const phoneLockMatch = raw.match(/```phone-lock\s*\n?([\s\S]*?)```/i);
     if (phoneLockMatch) {
       try {
         // 容错：JSON 优先，否则按 key: value 行格式解析
-        let obj = null;
-        try { obj = JSON.parse(phoneLockMatch[1].trim()); } catch(_) {
+        let obj = _looseJSONParse(phoneLockMatch[1], 'phone-lock');
+        if (obj == null) {
           obj = {};
           phoneLockMatch[1].trim().split('\n').forEach(line => {
             const m = line.match(/^([A-Za-z_]+)\s*[:：]\s*(.+?)\s*(?:#.*)?$/);
@@ -203,23 +255,16 @@ const Utils = (() => {
       raw = raw.replace(phoneLockMatch[0], '').trim();
     }
 
-    const chatMatch = raw.match(/```chat\s*\n([\s\S]*?)```/i);
+    const chatMatch = raw.match(/```chat\s*\n?([\s\S]*?)```/i);
  if (chatMatch) {
-try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
+ result.chat = _looseJSONParse(chatMatch[1], 'chat');
  raw = raw.replace(chatMatch[0], '').trim();
  }
  
 // 自定义世界观：属性增量（JSON）
     const customAttrsMatch = raw.match(/```custom-attrs\s*\n?([\s\S]*?)```/i);
     if (customAttrsMatch) {
-      try { result.customAttrs = JSON.parse(customAttrsMatch[1].trim()); } catch(e) {
-        try {
-          let fix = customAttrsMatch[1].trim();
-          fix = fix.replace(/,\s*([}\]])/g, '$1');
-          if (fix.startsWith('{') && !fix.endsWith('}')) fix += '}';
-          result.customAttrs = JSON.parse(fix);
-        } catch(_) {}
-      }
+      result.customAttrs = _looseJSONParse(customAttrsMatch[1], 'custom-attrs');
       raw = raw.replace(customAttrsMatch[0], '').trim();
     }
  
@@ -232,9 +277,9 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
     // 尝试解析共同返航信息
     try {
       const hcContent = (homecomingMatch[1] || '').trim();
-      if (hcContent && hcContent.startsWith('{')) {
-        const hcData = JSON.parse(hcContent);
-        if (hcData.companion) {
+      if (hcContent) {
+        const hcData = _looseJSONParse(hcContent, 'homecoming');
+        if (hcData && hcData.companion) {
           // 支持 string 或 array
           result.homecomingCompanion = Array.isArray(hcData.companion)
             ? hcData.companion.join('、')
@@ -283,8 +328,10 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
   if (listenAcceptMatch) {
     try {
       const laContent = (listenAcceptMatch[1] || '').trim();
-      if (laContent && laContent.startsWith('{')) {
-        result.listenAccept = JSON.parse(laContent);
+      if (laContent) {
+        const la = _looseJSONParse(laContent, 'listen_together');
+        if (la != null) result.listenAccept = la;
+        else result.listenAccept = { accept: false, reason: '解析失败' };
       }
     } catch(_) { result.listenAccept = { accept: false, reason: '解析失败' }; }
     raw = raw.replace(listenAcceptMatch[0], '').trim();
@@ -303,8 +350,9 @@ try { result.chat = JSON.parse(chatMatch[1].trim()); } catch(e) {}
   if (youyuBuyMatch) {
     try {
       const ybContent = (youyuBuyMatch[1] || '').trim();
-      if (ybContent && ybContent.startsWith('{')) {
-        result.youyuBuy = JSON.parse(ybContent);
+      if (ybContent) {
+        const yb = _looseJSONParse(ybContent, 'youyu_buy');
+        if (yb != null) result.youyuBuy = yb;
       }
     } catch(_) {}
     raw = raw.replace(youyuBuyMatch[0], '').trim();

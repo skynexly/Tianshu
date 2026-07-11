@@ -9,19 +9,25 @@ const Stickers = (() => {
 
   // 把选中的图片压成表情尺寸（保留透明通道，用 png）
   function _compressToSticker(dataUrl, maxSide = 240) {
+    // 通用图片弹窗在 CORS 下载失败时可能返回原始远程 URL；远程 URL 不能安全上 canvas，直通保存。
+    if (!/^data:image\//i.test(dataUrl || '')) return Promise.resolve(dataUrl);
     return new Promise(resolve => {
       try {
         const img = new Image();
         img.onload = () => {
-          let w = img.width, h = img.height;
-          const scale = Math.min(1, maxSide / w, maxSide / h);
-          w = Math.round(w * scale);
-          h = Math.round(h * scale);
-          const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/png'));
+          try {
+            let w = img.width, h = img.height;
+            const scale = Math.min(1, maxSide / w, maxSide / h);
+            w = Math.round(w * scale);
+            h = Math.round(h * scale);
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (_) {
+            resolve(dataUrl);
+          }
         };
         img.onerror = () => resolve(dataUrl);
         img.src = dataUrl;
@@ -107,35 +113,96 @@ const Stickers = (() => {
     });
   }
 
-  // 选图 → 压缩 → 弹名字输入 → 存库。走完刷新管理列表。
-  function pickAndAdd() {
+  // 选图/URL → 压缩 → 弹名字输入 → 存库。走完刷新管理列表。
+  async function pickAndAdd() {
+    try {
+      const dataUrl = (typeof Utils !== 'undefined' && Utils.promptImageInput)
+        ? await Utils.promptImageInput({ maxSize: 240, outputFormat: 'png' })
+        : null;
+      if (!dataUrl) return;
+      const name = await _promptName('给表情起个名字', '如：开心、无语、狗头', '');
+      if (name === null) return; // 取消
+      const nm = String(name || '').trim();
+      if (!nm) { UI.showToast('名字不能为空', 1800); return; }
+      await add(nm, dataUrl);
+      UI.showToast('表情已添加', 1500);
+      renderList();
+    } catch (e) {
+      UI.showToast('添加失败：' + (e.message || e), 2000);
+    }
+  }
+
+  function _fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function _nameFromFile(file, fallbackIndex) {
+    const raw = String(file?.name || '').replace(/\.[^.]+$/, '').trim();
+    const cleaned = raw
+      .replace(/[\\/]/g, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return (cleaned || `表情${fallbackIndex}`).slice(0, 20);
+  }
+
+  function _uniqueName(base, used) {
+    const root = String(base || '表情').trim().slice(0, 20) || '表情';
+    if (!used.has(root)) { used.add(root); return root; }
+    let n = 2;
+    while (true) {
+      const suffix = `(${n})`;
+      const candidate = root.slice(0, Math.max(1, 20 - suffix.length)) + suffix;
+      if (!used.has(candidate)) { used.add(candidate); return candidate; }
+      n++;
+    }
+  }
+
+  // 批量导入本地图片：多选 → 文件名自动命名 → 压缩 → 存库。
+  async function pickBatchAndAdd() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.style.display = 'none';
-    document.body.appendChild(input);
+    input.multiple = true;
     input.onchange = async () => {
-      const file = input.files && input.files[0];
-      input.remove();
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const dataUrl = reader.result;
-        const defName = (file.name || '').replace(/\.[^.]+$/, '').slice(0, 20);
-        const name = await _promptName('给表情起个名字', '如：开心、无语、狗头', defName);
-        if (name === null) return; // 取消
-        const nm = String(name || '').trim();
-        if (!nm) { UI.showToast('名字不能为空', 1800); return; }
-        try {
-          await add(nm, dataUrl);
-          UI.showToast('表情已添加', 1500);
-          renderList();
-        } catch (e) {
-          UI.showToast('添加失败：' + (e.message || e), 2000);
+      const files = Array.from(input.files || []).filter(f => f && /^image\//i.test(f.type || ''));
+      if (!files.length) return;
+      if (files.length > 100) {
+        const ok = await UI.showConfirm('批量导入', `一次选择了 ${files.length} 张图片，数量较多可能会占用较多本地存储空间。确定继续导入吗？`);
+        if (!ok) return;
+      }
+      let imported = 0;
+      let failed = 0;
+      try {
+        UI.showToast(`开始导入 ${files.length} 个表情…`, 1600);
+        const existing = await list();
+        const used = new Set(existing.map(s => String(s.name || '').trim()).filter(Boolean));
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          try {
+            const dataUrl = await _fileToDataUrl(file);
+            const baseName = _nameFromFile(file, i + 1);
+            const name = _uniqueName(baseName, used);
+            await add(name, dataUrl);
+            imported++;
+            if (files.length >= 10 && (imported % 5 === 0 || imported === files.length)) {
+              UI.showToast(`正在导入 ${imported}/${files.length}`, 900);
+            }
+          } catch (e) {
+            console.warn('[Stickers] 批量导入失败', file?.name, e);
+            failed++;
+          }
         }
-      };
-      reader.onerror = () => UI.showToast('读取图片失败', 2000);
-      reader.readAsDataURL(file);
+        renderList();
+        UI.showToast(failed ? `已导入 ${imported} 个，失败 ${failed} 个` : `已导入 ${imported} 个表情`, 2200);
+      } catch (e) {
+        UI.showToast('批量导入失败：' + (e.message || e), 2400);
+      }
     };
     input.click();
   }
@@ -166,12 +233,12 @@ const Stickers = (() => {
       return;
     }
     wrap.innerHTML = items.map(s => `
-      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+      <div onclick="Stickers._promptRename('${s.id}')" title="点击重命名" style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer">
         <div style="position:relative;width:100%;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--bg-tertiary);border:1px solid var(--border)">
-          <img src="${s.dataUrl}" alt="${_esc(s.name)}" style="width:100%;height:100%;object-fit:contain">
-          <button onclick="Stickers.confirmRemove('${s.id}')" title="删除" style="position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.5);color:#fff;border:none;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0">×</button>
+          <img src="${s.dataUrl}" alt="${_esc(s.name)}" style="width:100%;height:100%;object-fit:contain;pointer-events:none">
+          <button onclick="event.stopPropagation();Stickers.confirmRemove('${s.id}')" title="删除" style="position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.5);color:#fff;border:none;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0">×</button>
         </div>
-        <div style="font-size:12px;color:var(--text);text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="Stickers._promptRename('${s.id}')">${_esc(s.name)}</div>
+        <div style="font-size:12px;color:var(--text);text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(s.name)}</div>
       </div>
     `).join('');
   }
@@ -216,6 +283,6 @@ const Stickers = (() => {
     return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '"', "'": '&#39;' }[c]));
   }
 
-  return { list, get, add, remove, rename, pickAndAdd, confirmRemove, renderList, _promptRename, isSyncAI, setSyncAI, findByName, buildPromptNames };
+  return { list, get, add, remove, rename, pickAndAdd, pickBatchAndAdd, confirmRemove, renderList, _promptRename, isSyncAI, setSyncAI, findByName, buildPromptNames };
 })();
 window.Stickers = Stickers;

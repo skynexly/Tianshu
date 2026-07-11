@@ -54,7 +54,7 @@
     // 迁移前全量快照：只要有任一迁移待跑，就先把当前对话数据整体备份一份（7天自动清）。
     // 必须在所有迁移/自愈动手之前——捕捉最原始状态，翻车了能一键还原。
     try {
-      const _migFlags = ['migrate_merge_split_npc_v1', 'migrate_merge_split_relation_v1', 'recover_orphan_conversations_v1'];
+      const _migFlags = ['migrate_merge_split_npc_v1', 'migrate_merge_split_relation_v1', 'recover_orphan_conversations_v1', 'cleanup_recovered_backstage_v1'];
       let _hasPending = false;
       for (const fk of _migFlags) {
         try { const f = await DB.get('gameState', fk); if (!f || !f.value) { _hasPending = true; break; } } catch(_) { _hasPending = true; break; }
@@ -71,6 +71,13 @@
         await Conversations.recoverOrphanConversations();
       }
     } catch(e) { console.error('[Conversations.recover]', e); }
+
+    // 一次性清理：移除早期恢复逻辑误捞的后台频道假对话（只删外壳，不碰后台聊天记录）
+    try {
+      if (Conversations.cleanupRecoveredBackstage) {
+        await Conversations.cleanupRecoveredBackstage();
+      }
+    } catch(e) { console.error('[Conversations.cleanupBackstage]', e); }
 
     // 一次性 migration：合并因本名/代号分裂产生的重复身份数据
     // 【必须在 Conversations.init 之后】——迁移会遍历并 saveList 对话列表，
@@ -217,10 +224,12 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v707.1';
-    const CHANGELOG = `【v707.1 更新内容】
-🐛 修复部分交互问题
-✨ 天枢城世界观更新：补充角色网名、扩充手机应用配置`;
+    const APP_VERSION = 'v708';
+    const CHANGELOG = `○优化了部分UI显示和交互
+○优化了AI写卡助手的流程和存储逻辑
+○修复了线上聊天的部分BUG
+○新增部分功能
+○修复重写剧情无法读取手机操作记录的BUG`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {
@@ -257,12 +266,45 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
             <div style="background:var(--bg-secondary);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:18px;font-size:12px;line-height:1.7;color:var(--text-secondary)">
               <div style="font-weight:600;color:var(--text);margin-bottom:4px">温馨提示</div>
               <div>· 请及时存档，以免数据丢失</div>
+              <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                <span>skynex交流群：<strong style="color:var(--text);font-weight:650">739657680</strong></span>
+                <button id="changelog-copy-group" type="button" style="padding:4px 10px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:11px;cursor:pointer;line-height:1.5">复制群号</button>
+              </div>
             </div>
             <div style="display:flex;justify-content:flex-end">
               <button id="changelog-ok" style="padding:8px 24px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">${force ? '关闭' : '已阅'}</button>
             </div>
           </div>`;
         document.body.appendChild(overlay);
+        const copyGroupBtn = overlay.querySelector('#changelog-copy-group');
+        if (copyGroupBtn) {
+          copyGroupBtn.onclick = async (e) => {
+            try { e.stopPropagation(); } catch(_) {}
+            const groupNo = '739657680';
+            let ok = false;
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(groupNo);
+                ok = true;
+              }
+            } catch(_) {}
+            if (!ok) {
+              try {
+                const ta = document.createElement('textarea');
+                ta.value = groupNo;
+                ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                ok = document.execCommand && document.execCommand('copy');
+                ta.remove();
+              } catch(_) {}
+            }
+            copyGroupBtn.textContent = ok ? '已复制' : '复制失败';
+            try { if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(ok ? '群号已复制' : '复制失败，请手动复制群号', 1600); } catch(_) {}
+            setTimeout(() => { if (copyGroupBtn) copyGroupBtn.textContent = '复制群号'; }, 1600);
+          };
+        }
         overlay.querySelector('#changelog-ok').onclick = () => {
           try { localStorage.setItem(SEEN_KEY, APP_VERSION); } catch(_) {}
           overlay.style.opacity = '0';

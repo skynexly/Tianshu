@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=146">
+<link rel="stylesheet" href="css/style.css?v=147">
 <link rel="stylesheet" href="css/phone.css?v1=397">
 <link rel="stylesheet" href="css/phone-fudge.css?v=48">
 <link rel="stylesheet" href="css/markdown.css">
@@ -1663,6 +1663,7 @@
                 <div id="cs-bubble-time-dropdown" class="custom-dropdown hidden" style="max-height:160px;overflow-y:auto;right:0;left:auto;min-width:140px"></div>
               </div>
             </div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:-4px">仅影响气泡右上角的时间显示</div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
               <span style="font-size:14px;color:var(--text)">对话背景图</span>
               <div style="display:flex;gap:8px;align-items:center">
@@ -3098,7 +3099,10 @@
           </label>
           <span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:6px">勾选后，AI 也能在私聊和群聊里发这些表情</span>
         </div>
-        <button onclick="Stickers.pickAndAdd()" style="width:100%;padding:11px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;margin-bottom:16px">添加表情</button>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <button onclick="Stickers.pickAndAdd()" style="flex:1;padding:11px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">添加表情</button>
+          <button onclick="Stickers.pickBatchAndAdd()" style="flex:1;padding:11px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">批量导入</button>
+        </div>
         <div id="stickers-list" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(84px, 1fr));gap:14px"></div>
       </div>
 
@@ -4138,8 +4142,8 @@ const GameLog = (() => {
 })();
 </script>
 <script src="js/db.js?v=13"></script>
-<script src="js/stickers.js?v=2"></script>
-<script src="js/utils.js?v=10"></script>
+<script src="js/stickers.js?v=5"></script>
+<script src="js/utils.js?v=11"></script>
 <script src="js/markdown.js?v=7"></script>
 <script src="js/api.js"></script>
 <script src="js/time-awareness.js"></script>
@@ -4155,23 +4159,23 @@ const GameLog = (() => {
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
 <script src="js/conv_gameplay.js?v=15"></script>
-<script src="js/wv-generator.js?v=11"></script>
+<script src="js/wv-generator.js?v=17"></script>
 <script src="js/single_card.js?v=12"></script>
 <script src="js/attached-chars.js?v=2"></script>
 <script src="js/single_mode.js?v=4"></script>
 <script src="js/character.js?v=12"></script>
 <script src="js/prompts.js?v=1"></script>
-<script src="js/conversations.js?v=10"></script>
+<script src="js/conversations.js?v=11"></script>
 <script src="js/summary.js?v=1"></script>
-<script src="js/chat.js?v=94"></script>
+<script src="js/chat.js?v=95"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
 <script src="js/tts.js"></script>
 <script src="js/branch.js"></script>
 <script src="js/settings.js"></script>
-<script src="js/gaiden.js"></script>
-<script src="js/backstage.js?v=12"></script>
+<script src="js/gaiden.js?v=2"></script>
+<script src="js/backstage.js?v=13"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
 <script src="js/status_bar.js?v=28"></script>
@@ -4181,19 +4185,19 @@ const GameLog = (() => {
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/phone.js?v1=1109"></script>
+<script src="js/phone.js?v1=1114"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
-<script src="js/ui.js?v=15"></script>
+<script src="js/ui.js?v=17"></script>
 <script src="js/data-mgr.js?v=13"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>
-  <script src="data/tutorial-script.js"></script>
-  <script src="js/theme.js?v=4"></script>
+  <script src="data/tutorial-script.js?v=2"></script>
+  <script src="js/theme.js?v=5"></script>
   <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js?v=2"></script>
 <script src="data/builtin-heartsim.js?v=2"></script>
@@ -4201,7 +4205,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=16"></script>
-<script src="js/app.js?v=136"></script>
+<script src="js/app.js?v=140"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

@@ -475,9 +475,14 @@ isOpen = !sidebar.classList.contains('hidden');
     // 提示词注入已搬入设置面板
     if (name === 'prompts') { showPanel('settings'); switchSettingsTab('st-prompts'); return; }
 
-    // 如果已经在该面板，直接返回
+    // 如果已经在该面板，通常直接返回；收藏页例外：再次打开时强制重读，保证新收藏立即出现
     const currentPanel = document.querySelector('.panel.active');
-    if (currentPanel && currentPanel.id === `panel-${name}`) return;
+    if (currentPanel && currentPanel.id === `panel-${name}`) {
+      if (name === 'gaiden' && typeof Gaiden !== 'undefined') {
+        try { await Gaiden.ensureLoaded(); await Gaiden.reload(); Gaiden.renderList(); } catch(_) {}
+      }
+      return;
+    }
 
     // v688.3：iOS Safari 兜底——切面板前主动隐藏可能残留的全屏遮罩，避免遮住整个屏幕导致按钮点不了
     try {
@@ -583,8 +588,11 @@ if (scrollBtn && name !== 'chat') scrollBtn.classList.add('hidden');
     if (overview) overview.style.display = 'none';
     if (contentArea) contentArea.style.display = 'block';
 
-    // 显示对应的 tab 内容
-    document.querySelectorAll('.settings-tab-content').forEach(el => {
+    // 显示对应的设置 tab 内容
+    // 注意：不要全局 query .settings-tab-content。收藏页/单人卡等地方也复用了这个动画类，
+    // 全局隐藏会把 #gaiden-list 一起 display:none，导致切换主题/设置后收藏页看起来内容消失。
+    const scope = contentArea || document.getElementById('panel-settings') || document;
+    scope.querySelectorAll('.settings-tab-content').forEach(el => {
       el.style.display = el.id === tabId ? '' : 'none';
     });
   }

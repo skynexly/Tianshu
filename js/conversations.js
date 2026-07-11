@@ -156,6 +156,9 @@ async function init() {
         const cid = m && m.conversationId;
         if (!cid) continue;
         if (existingIds.has(cid)) continue; // 已有对话，不动
+        // 后台频道消息（cid 以 bs_ 开头）不是普通对话，跳过——否则会被当孤儿重建成「无世界观」里的空对话，
+        // 且删除它会连带 deleteByIndex 删掉真正的后台聊天。
+        if (String(cid).startsWith('bs_')) continue;
         let g = groups[cid];
         if (!g) { g = groups[cid] = { count: 0, minTs: Infinity, maxTs: 0, firstUserText: '' }; }
         g.count++;
@@ -213,7 +216,33 @@ async function init() {
     }
   }
 
-  // ===== 迁移前全量快照：防止迁移翻车导致对话数据全灭 =====
+  // ===== 一次性清理：移除被误恢复的后台频道假对话 =====
+  // 早期版本的 recoverOrphanConversations 未跳过 bs_ 前缀，把后台频道当孤儿重建成
+  // 「无世界观」里的空对话。这些假对话 id 就是后台频道真实 cid，删除会连带删掉后台聊天。
+  // 这里只从 list 移除这些外壳（id 以 bs_ 开头且 _recovered），绝不碰 messages 表 → 后台聊天完好保留。
+  async function cleanupRecoveredBackstage() {
+    try {
+      const FLAG = 'cleanup_recovered_backstage_v1';
+      const flag = await DB.get('gameState', FLAG);
+      if (flag && flag.value) return;
+
+      const before = list.length;
+      const removed = list.filter(c => c && c._recovered && String(c.id).startsWith('bs_'));
+      if (removed.length > 0) {
+        // 原地过滤，保持 list 引用不变
+        const kept = list.filter(c => !(c && c._recovered && String(c.id).startsWith('bs_')));
+        list.length = 0;
+        list.push(...kept);
+        await saveList();
+        try { renderList(); } catch(_) {}
+        console.log('[Recover] 清理误恢复的后台频道假对话 ' + removed.length + ' 个（before=' + before + '）');
+      }
+      await DB.put('gameState', { key: FLAG, value: 1 });
+    } catch (e) {
+      console.warn('[Recover] 清理后台频道假对话失败:', e);
+    }
+  }
+
   // 在任何一次性迁移执行【之前】调用。若检测到"有迁移待跑"（外部传入 hasPendingMigration=true），
   // 就把当前 conversations 键整体快照到备份键（含对话外壳 + phoneData）。
   // 只留最新一份（覆盖式）；备份满 KEEP_DAYS 天后自动清理（此时迁移早已成功、App 正常使用）。
@@ -1807,6 +1836,7 @@ const allArchives = await DB.getAll('archives');
     migrateWorldview,
     saveList,
     recoverOrphanConversations,
+    cleanupRecoveredBackstage,
     backupBeforeMigration, getPreMigrationBackupInfo, restorePreMigrationBackup,
     toggleCharFilter, pickCharFilter, refreshCharFilter,
     getList: () => list,

@@ -310,6 +310,30 @@ function apply(cfg) {
     try {
       void document.documentElement.offsetHeight;
     } catch(_) {}
+
+    // 主题切换后，部分动态面板可能因为样式/高度重算出现“容器还在但内容空白”。
+    // 当前面板按需重渲染，避免收藏页/世界页在切换主题后看起来像内容消失。
+    _refreshActivePanelAfterThemeApply();
+  }
+
+  function _refreshActivePanelAfterThemeApply() {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        try {
+          const active = document.querySelector('.panel.active');
+          if (!active) return;
+          if (active.id === 'panel-gaiden' && typeof Gaiden !== 'undefined') {
+            const p = (Gaiden.ensureLoaded ? Gaiden.ensureLoaded() : Promise.resolve())
+              .then(() => Gaiden.reload ? Gaiden.reload() : null)
+              .then(() => { if (Gaiden.renderList) Gaiden.renderList(); });
+            if (p && p.catch) p.catch(() => { try { if (Gaiden.renderList) Gaiden.renderList(); } catch(_) {} });
+          } else if (active.id === 'panel-worldview' && typeof Worldview !== 'undefined') {
+            if (Worldview.load) Worldview.load();
+            if (Worldview.switchWorldTab) Worldview.switchWorldTab('wv');
+          }
+        } catch(_) {}
+      }, 0);
+    });
   }
 
   // 对话级背景图覆盖（优先级高于主题级 chatBgImage；空字符串/undefined 表示走主题级）
