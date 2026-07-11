@@ -645,6 +645,8 @@ const Chat = (() => {
     const { rewriteHint = null } = opts;
 // 构建system prompt
 const systemParts = [];
+// 名字防翻译/防本地化全局约束（英文名被中文语境自动翻译的问题）
+systemParts.push('【命名规则·全局强制】所有角色、玩家、NPC、地点、组织等专有名字必须严格保留其原文（包括英文名、数字、符号），不得翻译、音译或本地化，并严格保持原有大小写。例如英文名 "Lyra" 必须原样写作 "Lyra"，不得写成中文或改变大小写。');
 // v687.33：提前检测心动模拟返航状态（后续多处需要用）
 let _hsHomecoming = false;
 let _hsPostHomeMode = null; // 'continue' | 'end' | null

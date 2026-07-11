@@ -1741,6 +1741,9 @@ function _isAppStillActive(appId) {
     const includeConvChars = !!(opts && opts.includeConvChars);
     const parts = [];
 
+    // 名字防翻译/防本地化全局约束（论坛/好友圈/地图等旁路生成的英文名被自动翻译问题）
+    parts.push('【命名规则·全局强制】所有角色、玩家、NPC、用户名、地点、组织等专有名字必须严格保留其原文（包括英文名、数字、符号），不得翻译、音译或本地化，并严格保持原有大小写。例如英文名 "Lyra" 必须原样写作 "Lyra"，不得写成中文或改变大小写。');
+
     // v687.33：心动模拟返航后，根据 hsPostHomeMode 决定如何构建世界观/NPC 数据
     //   - continue（继续日常）：完全替换为返航世界设定，屏蔽所有 NPC/节日，保留知识（钩子通道）
     //   - epilogue（第二部钩子已触发）：与 continue 一致——屏蔽所有 NPC，剧情已彻底结束
