@@ -224,7 +224,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v709.1';
+    const APP_VERSION = 'v709.2';
     const CHANGELOG = `○增加了论坛分区功能，优化部分UI
 ○修复部分设备灵动岛遮挡顶部的问题
 ○增加视频数据兜底

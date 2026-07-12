@@ -160,6 +160,24 @@ function _defaultRegion() {
     return wv;
   }
 
+  /**
+   * 迁移：给缺 id 的 NPC 补上 id（幂等）。
+   * 背景：早期 AI 批量生成（wv-generator._buildWVFromGenData）落库的 NPC 漏了 id，
+   * 导致 _collectCurrentWvNpcs / 运行时属性匹配（靠 n.id 作为 targetId 主键）扫不到这些角色。
+   * 遍历 globalNpcs + regions[].factions[].npcs，缺 id 的补 'npc_'+uuid。
+   * 返回是否发生了改动（用于决定要不要落库）。
+   */
+  function _ensureNpcIds(wv) {
+    if (!wv) return false;
+    let changed = false;
+    const fix = (n) => {
+      if (n && !n.id) { n.id = 'npc_' + Utils.uuid().slice(0, 8); changed = true; }
+    };
+    (wv.globalNpcs || []).forEach(fix);
+    (wv.regions || []).forEach(r => (r.factions || []).forEach(f => (f.npcs || []).forEach(fix)));
+    return changed;
+  }
+
   // ---------- 隐藏世界观（v596：单人卡专属扩展设定容器）----------
   // 单人卡使用 `__sc_<cardId>__` id，仅存 worldviews store，不进 worldviewList 索引
   function _scHiddenId(cardId) {
@@ -1065,7 +1083,16 @@ function _syncBuiltinRestoreButton(w) {
     // 数据迁移（v581）：customs[] + knowledges[] → 统一 knowledges[]
     _migrateToKnowledges(w);
 
-    // v596：隐藏世界观（单人卡专属扩展设定容器）特殊处理
+    // 迁移：补齐早期 AI 批量生成漏掉的 NPC id（仅真正的世界观；lorebook 不参与角色属性系统）
+    if (!_isLorebookEditing(id)) {
+      try {
+        if (_ensureNpcIds(w)) {
+          await DB.put('worldviews', w);
+          window.__wvEditingCache = w;
+        }
+      } catch (e) { console.warn('[WV] NPC id 迁移失败', e); }
+    }
+
     const isHidden = isHiddenWv(w);
     document.getElementById('worldview-edit-title').textContent = isHidden ? '编辑世界书' : '编辑世界观';
     _applyHiddenWvUI(isHidden);
@@ -6906,11 +6933,13 @@ async function pickDefaultTheme(value) {
     input.accept = '.json';
     input.style.display = 'none';
     document.body.appendChild(input);
-    input.onchange = async () => {
-      const file = input.files[0];
-      if (!file) { input.remove(); return; }
+    input.onchange = async (e) => {
+      const file = (e && e.target && e.target.files && e.target.files[0]) || (input.files && input.files[0]);
+      if (!file) { UI.showToast('未选择文件', 2000); input.remove(); return; }
       try {
-        const text = await file.text();
+        // 用 FileReader 读取，兼容 file.text() 不可用的内核（鸿蒙/老 WebKit 等）
+        const text = await _readFileAsText(file);
+        if (!text || !text.trim()) { UI.showToast('文件为空或读取失败', 3000); return; }
         const data = JSON.parse(text);
         const wvArr = data.worldviews;
         if (!wvArr || !Array.isArray(wvArr) || wvArr.length === 0) {
@@ -6936,14 +6965,39 @@ async function pickDefaultTheme(value) {
         }
         await saveWorldviewList(list);
         await load();
-        UI.showToast(`已导入 ${count} 个世界观`);
+        await UI.showAlert('导入成功', `已导入 ${count} 个世界观`);
       } catch(e) {
-        UI.showToast('导入失败：' + e.message, 3000);
+        await UI.showAlert('导入失败', (e && e.message ? e.message : String(e)));
       } finally {
         input.remove();
       }
     };
     input.click();
+  }
+
+  // 读取文件文本：优先 file.text()，不可用时降级到 FileReader（兼容鸿蒙可拓/老内核）
+  function _readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      try {
+        if (typeof file.text === 'function') {
+          file.text().then(resolve, () => _readViaFileReader(file, resolve, reject));
+        } else {
+          _readViaFileReader(file, resolve, reject);
+        }
+      } catch (e) {
+        _readViaFileReader(file, resolve, reject);
+      }
+    });
+  }
+  function _readViaFileReader(file, resolve, reject) {
+    try {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result || ''));
+      fr.onerror = () => reject(new Error('读取文件失败'));
+      fr.readAsText(file);
+    } catch (e) {
+      reject(e);
+    }
   }
 
   // 内置世界观自动加载（增量；已有的不自动覆盖，标记待更新）

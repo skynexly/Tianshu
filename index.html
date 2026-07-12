@@ -46,7 +46,7 @@
 <div id="app">
   <!-- 侧边栏 -->
   <aside id="sidebar" class="sidebar hidden">
-<div id="sidebar-header-wrapper" class="sidebar-header" style="padding:20px 12px 12px">
+<div id="sidebar-header-wrapper" class="sidebar-header" style="padding:max(20px, env(safe-area-inset-top, 20px)) 12px 12px">
       <div id="sidebar-wv-card" style="display:flex;align-items:center;gap:10px">
         <div id="sidebar-wv-icon" style="width:52px;height:52px;border-radius:50%;background:transparent;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;font-size:26px"><div style="width:52px;height:52px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:30px;color:rgba(255,255,255,0.8)">✦</div></div>
         <div style="flex:1;min-width:0">
@@ -4153,12 +4153,12 @@ const GameLog = (() => {
 <script src="js/tools.js?v=7"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=56"></script>
-<script src="js/worldview.js?v=98"></script>
+<script src="js/worldview.js?v=100"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
 <script src="js/conv_gameplay.js?v=15"></script>
-<script src="js/wv-generator.js?v=17"></script>
+<script src="js/wv-generator.js?v=18"></script>
 <script src="js/single_card.js?v=13"></script>
 <script src="js/attached-chars.js?v=2"></script>
 <script src="js/single_mode.js?v=4"></script>
@@ -4204,7 +4204,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=16"></script>
-<script src="js/app.js?v=143"></script>
+<script src="js/app.js?v=144"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
