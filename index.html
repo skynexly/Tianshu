@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=148">
-<link rel="stylesheet" href="css/phone.css?v1=398">
+<link rel="stylesheet" href="css/phone.css?v1=399">
 <link rel="stylesheet" href="css/phone-fudge.css?v=48">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260707">
@@ -498,6 +498,9 @@
                   <div class="custom-dropdown-item" onclick="SingleCard.toggleMenu();setTimeout(()=>SingleCard.importCard(),150)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 导入
                   </div>
+                  <div class="custom-dropdown-item" onclick="SingleCard.toggleMenu();setTimeout(()=>SingleCard.importCardFromDoc(),150)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg> 文档导入
+                  </div>
                 </div>
               </div>
             </div>
@@ -551,6 +554,7 @@
               </div>
               <div class="custom-dropdown-item" onclick="Character.toggleMenu();setTimeout(()=>Character.importMask(),150)">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 导入
+              </div>
               </div>
             </div>
           </div>
@@ -3105,6 +3109,7 @@
           <button onclick="Stickers.pickBatchAndAdd()" style="flex:1;padding:11px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">批量本地</button>
           <button onclick="Stickers.pickBatchUrlAndAdd()" style="flex:1;padding:11px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">批量URL</button>
         </div>
+        <div id="stickers-cat-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
         <div id="stickers-list" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(84px, 1fr));gap:14px"></div>
       </div>
 
@@ -4141,7 +4146,7 @@ const GameLog = (() => {
 })();
 </script>
 <script src="js/db.js?v=14"></script>
-<script src="js/stickers.js?v=6"></script>
+<script src="js/stickers.js?v=7"></script>
 <script src="js/utils.js?v=12"></script>
 <script src="js/markdown.js?v=7"></script>
 <script src="js/api.js?v=1"></script>
@@ -4159,10 +4164,10 @@ const GameLog = (() => {
 <script src="js/lorebook_ui.js?v=1"></script>
 <script src="js/conv_gameplay.js?v=15"></script>
 <script src="js/wv-generator.js?v=18"></script>
-<script src="js/single_card.js?v=13"></script>
+<script src="js/single_card.js?v=14"></script>
 <script src="js/attached-chars.js?v=2"></script>
 <script src="js/single_mode.js?v=4"></script>
-<script src="js/character.js?v=13"></script>
+<script src="js/character.js?v=14"></script>
 <script src="js/prompts.js?v=1"></script>
 <script src="js/conversations.js?v=11"></script>
 <script src="js/summary.js?v=1"></script>
@@ -4184,7 +4189,7 @@ const GameLog = (() => {
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/phone.js?v1=1120"></script>
+<script src="js/phone.js?v1=1122"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -4204,7 +4209,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=16"></script>
-<script src="js/app.js?v=144"></script>
+<script src="js/app.js?v=145"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

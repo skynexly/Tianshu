@@ -673,6 +673,51 @@ const SingleCard = (() => {
     input.click();
   }
 
+  // 从文档导入角色卡（txt/md/docx/pdf）：首行标题→名字（>10字则用文件名），全文→详细设定(detail)
+  function importCardFromDoc() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt,.md,.docx,.pdf';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.onchange = async (e) => {
+      const file = (e && e.target && e.target.files && e.target.files[0]) || (input.files && input.files[0]);
+      if (!file) { UI.showToast('未选择文件', 2000); input.remove(); return; }
+      try {
+        const raw = await Utils.readFileAsText(file);
+        const text = (raw || '').replace(/\r\n/g, '\n').trim();
+        if (!text) { UI.showToast('文件内容为空', 2500); return; }
+
+        // 文件名去扩展名，作为名字的兜底
+        const fileBase = (file.name || '').replace(/\.[^.]+$/, '').trim() || '导入角色';
+        // 取第一行非空文本当标题；首行 ≤10 字才用作名字，否则退回文件名（首行仍保留在正文里）
+        const firstLine = (text.split('\n').find(l => l.trim()) || '').trim();
+        const name = (firstLine && firstLine.length <= 10) ? firstLine : fileBase;
+
+        const newCard = {
+          name,
+          aliases: '',
+          onlineName: '',
+          detail: text,
+          avatar: '',
+          firstMes: '',
+          mesExample: '',
+          creator: '',
+          creatorNotes: ''
+        };
+        await save(newCard);
+        await renderList();
+        UI.showToast(`已导入角色「${name}」`, 2000);
+      } catch (err) {
+        console.error('[importCardFromDoc]', err);
+        UI.showToast('导入失败：' + (err && err.message ? err.message : err), 3000);
+      } finally {
+        input.remove();
+      }
+    };
+    input.click();
+  }
+
   // 解析 JSON 卡：兼容自家格式 + 通用 v1/v2
   function _parseJsonCard(text) {
     let json;
@@ -1387,7 +1432,7 @@ openCardExtEdit, restoreEditPanel,
 // v632 世界书绑定
 openLorebookPicker,
     formatForPrompt,
-    importCard, exportCurrent,
+    importCard, importCardFromDoc, exportCurrent,
     // v614 批量管理 / 排序 / 菜单（对齐记忆/世界观）
     toggleMenu,
     toggleManageMode, exitManageMode, toggleSelectAll, _onCardClick,

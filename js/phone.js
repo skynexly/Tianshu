@@ -1380,21 +1380,6 @@ function _applyPhoneFullscreen() {
   if (modal) modal.classList.toggle('phone-fullscreen-mode', _getPhoneFullscreen());
 }
 
-  // ===== 奶油软糖主题：兑换码解锁（全局，存 localStorage）=====
-  const _FUDGE_UNLOCK_KEY = 'tianshu_fudge_unlocked';
-  // 兑换码（大小写不敏感，校验时统一转大写并去空格）
-  const _FUDGE_CODES = ['SK100196'];
-  function _isFudgeUnlocked() {
-    try { return localStorage.getItem(_FUDGE_UNLOCK_KEY) === '1'; } catch (_) { return false; }
-  }
-  function _unlockFudge() {
-    try { localStorage.setItem(_FUDGE_UNLOCK_KEY, '1'); } catch (_) {}
-  }
-  function _checkFudgeCode(input) {
-    const code = (input || '').trim().toUpperCase();
-    return _FUDGE_CODES.includes(code);
-  }
-
 function _applyWallpaper(pd) {
   const shell = document.querySelector('#phone-modal .phone-shell');
   if (!shell) return;
@@ -34889,12 +34874,15 @@ function _renderCalBody(pd, rules, todayObj) {
     ? Calendar._getDaysInMonth(mo, yr, rules)
     : new Date(yr, mo, 0).getDate();
 
-  // 本月第一天的星期索引（0=第一天）
+  // 本月第一天的星期索引（0=第一列）
+  // 复用 Calendar.getWeekDay（与状态栏/开场时间同一套算法）：默认公历走 JS Date，自定义历法走 epoch。
+  // 避免此前直接用 _daysSinceEpoch 导致默认公历星期与状态栏差一天。
   const daysPerWeek = rules?.daysPerWeek || 7;
   let firstDayOffset = 0;
-  if (rules && typeof Calendar !== 'undefined') {
-    const firstDayEpoch = Calendar._daysSinceEpoch({ year: yr, month: mo, day: 1, hour: 0, minute: 0 }, rules);
-    firstDayOffset = ((firstDayEpoch % daysPerWeek) + daysPerWeek) % daysPerWeek;
+  if (typeof Calendar !== 'undefined' && Calendar.getWeekDay) {
+    const wdName = Calendar.getWeekDay({ year: yr, month: mo, day: 1, hour: 0, minute: 0 }, rules);
+    const idx = (rules?.weekDayNames || []).indexOf(wdName);
+    firstDayOffset = idx >= 0 ? idx : 0;
   } else {
     firstDayOffset = new Date(yr, mo - 1, 1).getDay();
     firstDayOffset = firstDayOffset === 0 ? 6 : firstDayOffset - 1; // 周一起始
@@ -36028,7 +36016,7 @@ function _renderSettings(pd) {
     </button>
           <button type="button" class="phone-theme-option ${_getPhoneTheme() === 'fudge' ? 'active' : ''}" onclick="Phone._onThemePick('fudge')">
             <span class="phone-theme-swatch phone-theme-swatch-fudge"></span>
-            <span class="phone-theme-name">奶油软糖${_isFudgeUnlocked() ? '' : ' <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;opacity:0.7"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'}</span>
+            <span class="phone-theme-name">奶油软糖</span>
           </button>
   </div>
   </div>
@@ -36285,11 +36273,6 @@ async function _resetWallpaper() {
   }
 
   function _onThemePick(theme) {
-    // 奶油软糖需兑换码解锁
-    if (theme === 'fudge' && !_isFudgeUnlocked()) {
-      _showFudgeUnlockDialog();
-      return;
-    }
     _setPhoneTheme(theme);
     // 重渲染设置页以更新选中态高亮
     _getPhoneData().then(pd => { try { _renderSettings(pd); } catch(_) {} }).catch(() => {});
@@ -36297,46 +36280,6 @@ async function _resetWallpaper() {
 
   function _onToggleFullscreen(on) {
     _setPhoneFullscreen(!!on);
-  }
-
-  // 奶油软糖兑换码输入弹窗
-  function _showFudgeUnlockDialog() {
-    const mask = document.createElement('div');
-    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px';
-    mask.innerHTML = `
-      <div style="background:var(--bg);border-radius:18px;padding:22px 20px;max-width:320px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,0.3)">
-        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">解锁「奶油软糖」</div>
-        <div style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin-bottom:16px">输入兑换码即可永久解锁这套主题，只需输入一次。</div>
-        <input id="fudge-code-input" type="text" placeholder="请输入兑换码" autocomplete="off"
-          style="width:100%;box-sizing:border-box;padding:11px 14px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;outline:none;margin-bottom:8px">
-        <div id="fudge-code-err" style="font-size:12px;color:#e0464b;min-height:16px;margin-bottom:8px"></div>
-        <div style="display:flex;gap:10px">
-          <button id="fudge-code-cancel" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--bg-tertiary);color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="fudge-code-ok" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">解锁</button>
-        </div>
-      </div>`;
-    document.body.appendChild(mask);
-    const input = mask.querySelector('#fudge-code-input');
-    const errEl = mask.querySelector('#fudge-code-err');
-    const close = () => { try { document.body.removeChild(mask); } catch(_) {} };
-    mask.addEventListener('click', (e) => { if (e.target === mask) close(); });
-    mask.querySelector('#fudge-code-cancel').onclick = close;
-    const submit = () => {
-      if (_checkFudgeCode(input.value)) {
-        _unlockFudge();
-        close();
-        _setPhoneTheme('fudge');
-        _getPhoneData().then(pd => { try { _renderSettings(pd); } catch(_) {} }).catch(() => {});
-        try { UI.showToast('已解锁奶油软糖主题', 1500); } catch(_) {}
-      } else {
-        errEl.textContent = '兑换码不正确，请检查后重试';
-        input.focus();
-        input.select();
-      }
-    };
-    mask.querySelector('#fudge-code-ok').onclick = submit;
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
-    setTimeout(() => { try { input.focus(); } catch(_) {} }, 50);
   }
 
   async function _toggleWallpaperOverlay(checked) {
@@ -50163,6 +50106,7 @@ async function _onChatImagePicked(contactId, input) {
 
 // ===== 表情包发送 =====
 // 聊天界面"表情"：弹表情选择面板，选中后作为表情气泡发送到当前会话
+let _chatStickerFilter = null; // null=全部, ''=未分类, 其它=类别名
 async function _openStickerPickerForChat(contactId) {
   const items = (typeof Stickers !== 'undefined') ? await Stickers.list() : [];
   // 关掉加号菜单
@@ -50177,30 +50121,66 @@ async function _openStickerPickerForChat(contactId) {
   const old = document.getElementById('phone-sticker-picker-overlay');
   if (old) old.remove();
 
-  const cardsHtml = items.map(s => `
-    <div onclick="Phone._pickStickerForChat('${contactId}', '${s.id}')" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px">
-      <div style="width:100%;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center">
-        <img src="${s.dataUrl}" alt="${Utils.escapeHtml(s.name)}" style="width:100%;height:100%;object-fit:contain">
-      </div>
-      <div style="font-size:11px;color:var(--text-secondary);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(s.name)}</div>
-    </div>
-  `).join('');
+  _chatStickerFilter = null;
 
   const overlay = document.createElement('div');
   overlay.id = 'phone-sticker-picker-overlay';
-  overlay.className = 'phone-inner-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10005;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:18px';
   overlay.innerHTML = `
-    <div class="modal-content" style="max-width:420px;width:calc(100% - 32px);max-height:70vh;display:flex;flex-direction:column">
+    <div class="modal-content" style="max-width:480px;width:100%;max-height:76vh;display:flex;flex-direction:column">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <span style="font-size:14px;font-weight:600">发送表情</span>
         <button type="button" onclick="Phone._closeStickerPicker()" style="background:none;border:none;color:var(--text-secondary);font-size:22px;line-height:1;cursor:pointer;padding:0 4px" aria-label="关闭">×</button>
       </div>
-      <div style="overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill, minmax(72px, 1fr));gap:12px">${cardsHtml}</div>
+      <div id="phone-sticker-cat-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;flex-shrink:0"></div>
+      <div id="phone-sticker-grid" style="overflow-y:auto;display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:10px"></div>
     </div>
   `;
   overlay.onclick = (e) => { if (e.target === overlay) _closeStickerPicker(); };
-  const shell = document.querySelector('#phone-modal .phone-shell');
-  (shell || document.body).appendChild(overlay);
+  document.body.appendChild(overlay);
+  _renderStickerPickerBody(contactId, items);
+}
+
+// 渲染表情选择器的 tab + 网格（按 _chatStickerFilter 过滤）
+function _renderStickerPickerBody(contactId, items) {
+  const tabBar = document.getElementById('phone-sticker-cat-tabs');
+  const grid = document.getElementById('phone-sticker-grid');
+  if (!grid) return;
+  const cats = (typeof Stickers !== 'undefined' && Stickers.getCategories) ? Stickers.getCategories() : [];
+  // 只显示实际有表情的类别（含未分类）
+  const hasUncat = items.some(s => !(s.category || '').trim());
+  if (tabBar) {
+    const tab = (label, val) => {
+      const active = (val === _chatStickerFilter);
+      const css = active ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : 'background:var(--bg-tertiary);color:var(--text);border-color:var(--border)';
+      const arg = (val == null) ? 'null' : `'${Utils.escapeHtml(String(val)).replace(/'/g, "\\'")}'`;
+      return `<button onclick="Phone._setChatStickerFilter('${contactId}', ${arg})" style="padding:4px 11px;border:1px solid;border-radius:999px;font-size:12px;cursor:pointer;font-family:inherit;${css}">${Utils.escapeHtml(label)}</button>`;
+    };
+    let html = tab('全部', null);
+    if (hasUncat) html += tab('未分类', '');
+    for (const c of cats) {
+      if (items.some(s => (s.category || '') === c)) html += tab(c, c);
+    }
+    tabBar.innerHTML = html;
+  }
+  let shown = items;
+  if (_chatStickerFilter === '') shown = items.filter(s => !(s.category || '').trim());
+  else if (_chatStickerFilter != null) shown = items.filter(s => (s.category || '') === _chatStickerFilter);
+
+  grid.innerHTML = shown.map(s => `
+    <div onclick="Phone._pickStickerForChat('${contactId}', '${s.id}')" style="cursor:pointer;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="width:100%;position:relative;padding-bottom:100%;border-radius:10px;overflow:hidden;background:var(--bg-tertiary)">
+        <img src="${s.dataUrl}" alt="${Utils.escapeHtml(s.name)}" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain">
+      </div>
+      <div style="font-size:11px;color:var(--text-secondary);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(s.name)}</div>
+    </div>
+  `).join('') || '<div style="grid-column:1/-1;text-align:center;color:var(--text-secondary);font-size:12px;padding:20px 0">这个分类下没有表情</div>';
+}
+
+async function _setChatStickerFilter(contactId, val) {
+  _chatStickerFilter = val;
+  const items = (typeof Stickers !== 'undefined') ? await Stickers.list() : [];
+  _renderStickerPickerBody(contactId, items);
 }
 
 function _closeStickerPicker() {
@@ -55474,7 +55454,7 @@ _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioH
     _wardrobeAddItem, _wardrobeRemoveItem, _wardrobeItemDetail, _wardrobePickPortrait, _wardrobeSaveSuit, _wardrobeOpenSuits, _wardrobeAiGenSuits, _switchWardrobeHomeTab, _wardrobeOpenMall, _wardrobeOpenInventory, _wardrobeMallSettings, _wardrobeMallToggleTag, _wardrobeMallRefresh, _wardrobeMallBuy, _wardrobeInvToggleTag, _wardrobeInvSearch, _wardrobeInvDelete, _wardrobeInvEdit, _wardrobeInvEditTag, _wardrobeInvWear, _wardrobeShowOrders,
     // 聊天 App
   _switchChatTab, _showCreateGroupDialog, _createGroup, _groupDoSend, _groupRequestReply, _openGroupSettings, _groupSaveName, _groupSaveDesc, _toggleGroupVoiceMode, _playGroupVoice, _showGroupPhotoDetail, _groupCancelQuote, _openGroupRedPacketSend, _openGroupRedPacket, _groupPickAvatar, _groupRemoveMember, _groupAddContacts, _groupAddExtra, _groupEditExtra, _groupAiGenExtras, _groupDissolve, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _onChatSettingsCallAutoPlayToggle, _onChatSettingsPhoneDownToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
-  ingestChatMessages, getChatHistoryForNPCs, getCoReadForNPCs, _openStickerPickerForChat, _closeStickerPicker, _pickStickerForChat,
+  ingestChatMessages, getChatHistoryForNPCs, getCoReadForNPCs, _openStickerPickerForChat, _closeStickerPicker, _pickStickerForChat, _setChatStickerFilter,
     buildGroupListBlock, handleMainlineGroupChatTag, handleMainlineGroupCreateTag, _groupToggleAutoChat, _groupAutoChatTick, _userLiveGenWave,
   // 通话
 _openCall, _callSendMessage, _callRequestReply, _endCall, _callDoSend, _callDoRefresh, _callDoEnd, _callEditRound, _callSaveEdit,

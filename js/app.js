@@ -224,13 +224,12 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v709.2';
-    const CHANGELOG = `○增加了论坛分区功能，优化部分UI
-○修复部分设备灵动岛遮挡顶部的问题
-○增加视频数据兜底
-○修复世界观查看器显示问题
-○加固JSON导入兼容、优化图片URL容错
-○增加了表情包URL批量导入`;
+    const APP_VERSION = 'v710';
+    const CHANGELOG = `○增加了表情包分类功能
+○角色卡支持docx导入
+○部分BUG修复
+○手机滑动体验优化
+○奶油软糖主题完全开放`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

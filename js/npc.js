@@ -94,6 +94,10 @@ const NPC = (() => {
   function formatForPrompt(region, options) {
     const includeNpc = !options || options.includeNpc !== false;
     const isAll = !region || region === 'all';
+    // v709.3：未命中具体地区（region='all'）时不再全量输出所有地区/势力/NPC detail，
+    // 只保留世界观基础 + 速查表概要 + 全图/在场 NPC（这些在 chat.js 里另发），避免 token 爆炸。
+    // 命中具体地区后照常发该地区详细档案。
+    if (isAll) return '';
     const npcs = includeNpc ? getByRegion(region) : [];
     if (npcs.length === 0 && !isAll && !includeNpc) {
       // 检查是否有地区/势力detail可发

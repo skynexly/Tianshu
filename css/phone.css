@@ -227,6 +227,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   scroll-snap-align: start;
+  scroll-snap-stop: always;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
