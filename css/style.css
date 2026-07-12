@@ -2431,6 +2431,14 @@ input[type="range"] {
 .custom-dropdown-item.active {
   background: var(--bg-tertiary);
 }
+/* 世界观查看器·角色筛选下拉 + 面具编辑·所属世界观下拉：条目多时限高自滚，避免被外层滚动容器裁成半截 */
+#wv-viewer-npc-region-dropdown,
+#wv-viewer-npc-faction-dropdown,
+#char-worldview-dropdown {
+  max-height: 38vh;
+  overflow-y: auto;
+  z-index: 20;
+}
 .form-group input,
 .form-group select,
 .form-group textarea {

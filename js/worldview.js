@@ -4882,8 +4882,8 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成电台分类</h3>
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
         <textarea id="ai-radiocat-gen-prompt" rows="3" placeholder="例如：侧重志怪灵异向、或围绕宗门时政" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
-        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px">生成数量</label>
-        <input type="number" id="ai-radiocat-gen-count" value="3" min="1" max="10" style="width:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px">
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px">生成数量（默认3，最多10）</label>
+        <input type="number" id="ai-radiocat-gen-count" value="3" min="1" max="10" oninput="if(this.value>10)this.value=10;if(this.value<1&&this.value!=='')this.value=1" style="width:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px">
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">按世界观基调生成电台分类（只含分类名和大方向，不含具体标签），追加到自建分类。生成后可进各分类自行添加标签。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-radiocat-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
@@ -5009,8 +5009,8 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成标签</h3>
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
         <textarea id="ai-radiotag-gen-prompt" rows="3" placeholder="例如：偏向轻松日常向、或多来点互动玩法" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
-        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px">生成数量</label>
-        <input type="number" id="ai-radiotag-gen-count" value="3" min="1" max="10" style="width:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px">
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px">生成数量（默认3，最多10）</label>
+        <input type="number" id="ai-radiotag-gen-count" value="3" min="1" max="10" oninput="if(this.value>10)this.value=10;if(this.value<1&&this.value!=='')this.value=1" style="width:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px">
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">按当前分类的大方向生成标签（小分类），含名称、描述、规则、玩法、续期方式，追加到本分类。生成后可进各标签微调。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-radiotag-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
@@ -5156,8 +5156,8 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成直播品类</h3>
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
         <textarea id="ai-livecat-gen-prompt" rows="3" placeholder="例如：多来点才艺类、或贴合修真世界的特色直播" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
-        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px">生成数量</label>
-        <input type="number" id="ai-livecat-gen-count" value="3" min="1" max="10" style="width:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px">
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px">生成数量（默认3，最多10）</label>
+        <input type="number" id="ai-livecat-gen-count" value="3" min="1" max="10" oninput="if(this.value>10)this.value=10;if(this.value<1&&this.value!=='')this.value=1" style="width:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px">
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">按世界观基调生成直播品类（含名称、调性、可用玩法），追加到自建品类。生成后可进各品类微调。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-livecat-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
@@ -6314,7 +6314,7 @@ const allNPCs = [];
     }
     
     if (allNPCs.length === 0) {
-      container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:40px 0;font-size:13px">无匹配角色</div>';
+      container.innerHTML = '<div style="min-height:42vh;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--text-secondary);font-size:13px">无匹配角色</div>';
       return;
     }
     
@@ -6904,9 +6904,11 @@ async function pickDefaultTheme(value) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
     input.onchange = async () => {
       const file = input.files[0];
-      if (!file) return;
+      if (!file) { input.remove(); return; }
       try {
         const text = await file.text();
         const data = JSON.parse(text);
@@ -6937,6 +6939,8 @@ async function pickDefaultTheme(value) {
         UI.showToast(`已导入 ${count} 个世界观`);
       } catch(e) {
         UI.showToast('导入失败：' + e.message, 3000);
+      } finally {
+        input.remove();
       }
     };
     input.click();

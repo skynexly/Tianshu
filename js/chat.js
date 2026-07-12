@@ -3478,8 +3478,9 @@ _extractRunning = false;
       UI.showToast('正在进行剧情总结，请稍候…', 5000);
     }
 
-    // 保留最近10轮
-    const toSummarize = messages.slice(0, -(10 * 2));
+    // 保留最近 N 轮（可在 API 预设中配置，默认10，范围2-15）
+    const keepRounds = Math.min(15, Math.max(2, parseInt(config.keepRounds) || 10));
+    const toSummarize = messages.slice(0, -(keepRounds * 2));
     if (toSummarize.length === 0) return;
 
     // 1. 总结前提取记忆（去重）
@@ -3570,7 +3571,8 @@ const MAX_RETRIES = isRetryDisabled() ? 1 : 3;
     GameLog.log('info', '[Summary] 手动触发剧情总结');
     // 跳过token阈值，直接走总结流程
     const config = await API.getConfig();
-    const toSummarize = messages.slice(0, -(10 * 2));
+    const keepRounds = Math.min(15, Math.max(2, parseInt(config.keepRounds) || 10));
+    const toSummarize = messages.slice(0, -(keepRounds * 2));
     if (toSummarize.length === 0) {
       UI.showToast('消息太少，无法总结', 2000);
       return;
@@ -4913,14 +4915,8 @@ menu.classList.add('hidden');
       return;
     }
 
-    // 没缓存：检查二次确认开关
-    let skip = false;
-    try { skip = localStorage.getItem('skynex_suggestConfirmSkip') === '1'; } catch(_) {}
-    if (skip) {
-      await _doGenerateSuggestions(convId);
-    } else {
-      _showSuggestConfirm(convId);
-    }
+    // 没缓存：弹确认框（内含方向提示词输入），每次都弹（方向框本身就是二次确认）
+    _showSuggestConfirm(convId);
   }
 
   function _showSuggestConfirm(convId) {
@@ -4930,11 +4926,12 @@ menu.classList.add('hidden');
       _doGenerateSuggestions(convId);
       return;
     }
-    // 重置复选框
-    const skipBox = document.getElementById('suggest-confirm-skip');
-    if (skipBox) skipBox.checked = false;
+    // 每次打开清空方向输入框（方向每轮不同，不记忆）
+    const dirEl = document.getElementById('suggest-direction');
+    if (dirEl) dirEl.value = '';
     modal._pendingConvId = convId;
     modal.classList.remove('hidden');
+    if (dirEl) setTimeout(() => { try { dirEl.focus(); } catch(_) {} }, 50);
   }
 
   function _cancelSuggestConfirm() {
@@ -4947,17 +4944,17 @@ menu.classList.add('hidden');
   function _okSuggestConfirm() {
     const modal = document.getElementById('suggest-confirm-modal');
     if (!modal) return;
-    const skipBox = document.getElementById('suggest-confirm-skip');
-    if (skipBox && skipBox.checked) {
-      try { localStorage.setItem('skynex_suggestConfirmSkip', '1'); } catch(_) {}
-    }
+    const dirEl = document.getElementById('suggest-direction');
+    const direction = dirEl ? String(dirEl.value || '').trim() : '';
     const convId = modal._pendingConvId;
     modal.classList.add('hidden');
     modal._pendingConvId = null;
-    if (convId) _doGenerateSuggestions(convId);
+    // 清空方向框（每轮方向不同，不保留）
+    if (dirEl) dirEl.value = '';
+    if (convId) _doGenerateSuggestions(convId, direction);
   }
 
-  async function _doGenerateSuggestions(convId) {
+  async function _doGenerateSuggestions(convId, direction) {
     const panel = document.getElementById('suggest-panel');
     if (!panel) return;
 
@@ -4989,7 +4986,7 @@ menu.classList.add('hidden');
 
     _suggestAbort = new AbortController();
     try {
-      const suggestions = await API.suggest(recent, charPrompt);
+      const suggestions = await API.suggest(recent, charPrompt, direction);
       console.log('[Suggest] 解析出', suggestions.length, '条建议:', suggestions);
       if (!Array.isArray(suggestions) || suggestions.length === 0) {
         panel.innerHTML = '<div class="suggest-loading">未能生成建议，请重试</div>';

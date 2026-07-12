@@ -352,9 +352,11 @@ async function _getMasksForCurrentWv() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json,application/json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
     input.onchange = async (e) => {
       const file = e.target.files[0];
-      if (!file) return;
+      if (!file) { input.remove(); return; }
       try {
         const text = await file.text();
         const json = JSON.parse(text);
@@ -385,6 +387,8 @@ async function _getMasksForCurrentWv() {
       } catch (err) {
         console.error('[importMask]', err);
         UI.showToast('导入失败：' + (err.message || err));
+      } finally {
+        input.remove();
       }
     };
     input.click();

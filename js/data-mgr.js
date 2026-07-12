@@ -255,9 +255,11 @@ const DataMgr = (() => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
     input.onchange = async (e) => {
       const file = e.target.files[0];
-      if (!file) return;
+      if (!file) { input.remove(); return; }
       try {
         const text = await file.text();
         const data = JSON.parse(text);
@@ -278,6 +280,8 @@ const DataMgr = (() => {
         location.reload();
       } catch (e) {
         await UI.showAlert('导入失败', e.message || String(e));
+      } finally {
+        input.remove();
       }
     };
     input.click();

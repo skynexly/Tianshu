@@ -51,6 +51,7 @@ let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set()
     { id: 'sp-temperature', key: 'temperature', def: '0.8' },
     { id: 'sp-max-tokens', key: 'maxTokens', def: '4096' },
     { id: 'sp-token-limit', key: 'tokenLimit', def: '230000' },
+    { id: 'sp-keep-rounds', key: 'keepRounds', def: '10' },
     { id: 'sp-extract-interval', key: 'extractInterval', def: '20' },
   { id: 'sp-max-extract-events', key: 'maxExtractEvents', def: '5' },
   { id: 'sp-max-extract-relations', key: 'maxExtractRelations', def: '5' }
@@ -61,7 +62,7 @@ let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set()
     presets = (data?.value && data.value.length > 0) ? data.value : [{
       id: 'default', name: '默认',
       apiUrl: '', apiKey: '', model: '',
-      temperature: '0.8', maxTokens: '4096', tokenLimit: '230000', extractInterval: '20'
+      temperature: '0.8', maxTokens: '4096', tokenLimit: '230000', keepRounds: '10', extractInterval: '20'
   }];
   // 迁移旧数据
     const oldData = await DB.get('settings', 'api');
@@ -299,7 +300,7 @@ async function cancelEdit() {
       id: 'preset_' + Utils.uuid().slice(0, 8),
       name: `API ${presets.length + 1}`,
       apiUrl: '', apiKey: '', model: '',
-      temperature: '0.8', maxTokens: '4096', tokenLimit: '230000', extractInterval: '20'
+      temperature: '0.8', maxTokens: '4096', tokenLimit: '230000', keepRounds: '10', extractInterval: '20'
   };
   presets.push(np);
     await savePresets();

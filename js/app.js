@@ -7,7 +7,7 @@
   // 初始化手势锁状态
   try { UI.initLockBackGestureToggle(); } catch(e) { console.error('[UI] 初始化手势锁失败', e); }
   // 初始化数据库
-  try { await DB.open(); } catch(e) { console.error('[DB]', e); alert('数据库初始化失败: ' + e.message); return; }
+  try { await DB.openWithRetry(); } catch(e) { console.error('[DB]', e); alert('数据库初始化失败: ' + e.message); return; }
 
   // 世界观：确保worldviewPrompt被正确设置
   try {
@@ -224,12 +224,13 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v708';
-    const CHANGELOG = `○优化了部分UI显示和交互
-○优化了AI写卡助手的流程和存储逻辑
-○修复了线上聊天的部分BUG
-○新增部分功能
-○修复重写剧情无法读取手机操作记录的BUG`;
+    const APP_VERSION = 'v709';
+    const CHANGELOG = `○增加了论坛分区功能，优化部分UI
+○修复部分设备灵动岛遮挡顶部的问题
+○增加视频数据兜底
+○修复世界观查看器显示问题
+○加固JSON导入兼容、优化图片URL容错
+○增加了表情包URL批量导入`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

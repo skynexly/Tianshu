@@ -908,9 +908,10 @@ ${isEditing
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
+    input.style.display = 'none';
     input.onchange = async () => {
       const file = input.files[0];
-      if (!file) return;
+      if (!file) { input.remove(); return; }
       try {
         const text = await file.text();
         const imported = JSON.parse(text);
@@ -931,8 +932,11 @@ ${isEditing
         UI.showToast(`已导入 ${newNames.length} 个主题`, 2000);
       } catch (e) {
         UI.showToast('导入失败：' + e.message, 3000);
+      } finally {
+        input.remove();
       }
     };
+    document.body.appendChild(input);
     input.click();
   }
 

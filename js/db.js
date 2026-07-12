@@ -27,8 +27,16 @@ const DB = (() => {
 
   function open() {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      let req;
+      try {
+        req = indexedDB.open(DB_NAME, DB_VERSION);
+      } catch (e) { reject(e); return; }
       req.onerror = () => reject(req.error);
+      // 版本升级被其他标签页占用而阻塞：明确 reject，避免永久挂起
+      req.onblocked = () => {
+        console.warn('[DB] open blocked（可能有其他标签页占用旧版本）');
+        reject(new Error('数据库被其他标签页占用，请关闭其他天枢城页面后重试'));
+      };
       req.onupgradeneeded = (e) => {
         const _db = e.target.result;
         const _tx = e.target.transaction; // 升级事务，可拿已存在的 store
@@ -72,8 +80,39 @@ const DB = (() => {
           }
         }
       };
-      req.onsuccess = () => { db = req.result; resolve(db); };
+      req.onsuccess = () => {
+        db = req.result;
+        // 别的标签页要升级版本时，主动关掉本连接，避免把对方 block 住
+        db.onversionchange = () => {
+          try { db.close(); } catch(_) {}
+          db = null;
+          console.warn('[DB] versionchange：连接已主动关闭');
+        };
+        // 连接被浏览器意外断开（挂起/内存压力等）：置 null，下次 openWithRetry 会重开
+        db.onclose = () => {
+          db = null;
+          console.warn('[DB] 连接被关闭');
+        };
+        resolve(db);
+      };
     });
+  }
+
+  // 带重试的打开：偶发首次打开失败（连接不稳）时重试，避免直接停摆
+  async function openWithRetry(maxRetries = 2) {
+    let lastErr = null;
+    for (let i = 0; i <= maxRetries; i++) {
+      try {
+        return await open();
+      } catch (e) {
+        lastErr = e;
+        console.warn(`[DB] open 第 ${i + 1} 次失败：`, e && e.message ? e.message : e);
+        // blocked 类错误重试无意义（需用户关标签页），直接抛出
+        if (e && /占用/.test(e.message || '')) throw e;
+        if (i < maxRetries) await new Promise(r => setTimeout(r, 300 * (i + 1)));
+      }
+    }
+    throw lastErr;
   }
 
   function tx(storeName, mode = 'readonly') {
@@ -152,5 +191,5 @@ const DB = (() => {
     });
   }
 
-  return { open, put, get, getAll, del, clear, getAllByIndex, deleteByIndex };
+  return { open, openWithRetry, put, get, getAll, del, clear, getAllByIndex, deleteByIndex };
 })();

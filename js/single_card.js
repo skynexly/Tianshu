@@ -610,9 +610,11 @@ const SingleCard = (() => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json,application/json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
     input.onchange = async (e) => {
       const file = e.target.files[0];
-      if (!file) return;
+      if (!file) { input.remove(); return; }
       try {
         // 先尝试批量格式
         if (file.name.toLowerCase().endsWith('.json') || file.type === 'application/json') {
@@ -664,6 +666,8 @@ const SingleCard = (() => {
       } catch (err) {
         console.error('[importCard]', err);
         UI.showToast('导入失败：' + (err.message || err));
+      } finally {
+        input.remove();
       }
     };
     input.click();

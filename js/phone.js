@@ -11832,6 +11832,7 @@ ${houseDataText}`;
 async function _renderVideo(pd) {
     const body = document.getElementById('phone-body');
     if (!body) return;
+    try {
     document.getElementById('phone-title').textContent = (_shopMeta?.video?.name || '视频');
     _applyWallpaper(pd);
 
@@ -11921,6 +11922,20 @@ async function _renderVideo(pd) {
         </div>
       </div>`;
     document.getElementById('phone-back-btn')?.classList.remove('hidden');
+    } catch (e) {
+      console.warn('[renderVideo] 渲染异常，降级空态', e);
+      body.innerHTML = `
+        <div class="phone-video-shell" style="display:flex;flex-direction:column;height:100%">
+          <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center">
+            <div style="color:var(--text-secondary);font-size:13px;line-height:1.7">内容加载出了点问题<br>可以返回桌面重新进入，或刷新一下</div>
+          </div>
+          <div class="phone-tabbar">
+            <div class="phone-tab active" onclick="Phone._switchVideoHomeTab('discover')">发现</div>
+            <div class="phone-tab" onclick="Phone._switchVideoHomeTab('mine')">我的</div>
+          </div>
+        </div>`;
+      document.getElementById('phone-back-btn')?.classList.remove('hidden');
+    }
   }
 
   // 收集所有视频作品（以 videoDiscover 为准，watched 标记设在这里的对象上）
@@ -13875,6 +13890,7 @@ ${_direction ? `\n【本次生成的推进方向（用户指定，请重点围�
 
   // 关注的直播：圆头像 + 名字小卡（横滑用）。editing=true 时叠加取消关注角标、点卡不进间。
   function _liveFollowCardHtml(w, editing) {
+    try {
     if (!w) return '';
     const esc = Utils.escapeHtml;
     const realName = w.streamerName || '';
@@ -13895,10 +13911,15 @@ ${_direction ? `\n【本次生成的推进方向（用户指定，请重点围�
         <div class="phone-live-follow-ava" style="background:${grad}">${avaInner}${del}</div>
         <div class="phone-live-follow-name">${esc(displayName)}</div>
       </div>`;
+    } catch (e) {
+      console.warn('[liveFollowCard] 跳过脏数据', e, w && w.id);
+      return '';
+    }
   }
 
   // 单个视频缩略卡（16:9 横构图 + 时长/评分角标 + 标题 + 副信息）。editing=true 时叠加删除角标、点卡不进详情。
   function _videoCardHtml(w, editing) {
+    try {
     if (!w) return '';
     const cover = (w.cover || '').trim();
     const coverHtml = cover
@@ -13936,6 +13957,10 @@ ${_direction ? `\n【本次生成的推进方向（用户指定，请重点围�
         <div class="phone-video-card-title">${Utils.escapeHtml(w.title || '未命名')}</div>
         ${by ? `<div class="phone-video-card-by">${Utils.escapeHtml(by)}</div>` : ''}
       </div>`;
+    } catch (e) {
+      console.warn('[videoCard] 跳过脏数据', e, w && w.id);
+      return '';
+    }
   }
 
   // 视频列表生成中的骨架占位（16:9 卡形状，复用通用 wv-skeleton 微光样式）
@@ -15454,6 +15479,8 @@ ${presetRules}
   // 单屏直播间预览卡片（封面层 + 信息覆盖层）
   // opts.followMode=true：关注预览页用（右上角加设置/记录按钮，total 用关注列表数）
   function _liveFeedPageHtml(w, idx, opts) {
+    try {
+    if (!w) return '';
     opts = opts || {};
     const followMode = !!opts.followMode;
     const total = opts.total || _liveFeedTotal;
@@ -15502,6 +15529,10 @@ ${presetRules}
           </div>
         </div>
       </div>`;
+    } catch (e) {
+      console.warn('[liveFeedPage] 跳过脏数据', e, w && w.id);
+      return '';
+    }
   }
 
   let _liveFeedTotal = 0;
@@ -15529,6 +15560,18 @@ ${presetRules}
       scrollInner = list.map((w, i) => _liveFeedPageHtml(w, i)).join('');
     }
 
+    // 兜底：list 非空但每张卡片都被脏数据 try-catch 吞成空串（多见于老对话的历史存量间）→
+    // 退回空态显示刷新按钮，避免留一个"能下拉但纯黑"的空 scroll。刷新会重新生成，用户即可恢复。
+    const _liveRenderedEmpty = !scrollInner.trim();
+    if (_liveRenderedEmpty) {
+      scrollInner = `
+        <div class="phone-live-empty">
+          <div class="phone-live-empty-icon">${_phoneIcon('video')}</div>
+          <div class="phone-live-empty-text">看看现在谁在播</div>
+          <button class="phone-live-empty-btn" onclick="Phone._liveGenPreview('')">刷新直播</button>
+        </div>`;
+    }
+
     body.innerHTML = `
       <div class="phone-live-feed">
         <div class="phone-live-topbar">
@@ -15544,7 +15587,7 @@ ${presetRules}
         </div>
       </div>`;
 
-    if (list.length) _bindLiveFeedGestures();
+    if (list.length && !_liveRenderedEmpty) _bindLiveFeedGestures();
   }
 
   // ===== 关注预览页（整屏滑动，复用即时流卡片结构）=====
@@ -36568,6 +36611,18 @@ async function _clearMomentsCover() {
     });
     const searchHistory = pd.forumSearchHistory || [];
 
+    // 分区数据（跟对话走，可增删）
+    const _cats = Array.isArray(pd.forumCategories) && pd.forumCategories.length
+      ? pd.forumCategories : ['热门', '情感', '校园', '都市', '娱乐'];
+    const _activeCat = pd.forumActiveCategory || (_cats[0] || '热门');
+    const _catTabsHtml = _cats.map(c => {
+      const active = c === _activeCat;
+      return `<div class="phone-forum-cat${active ? ' active' : ''}" style="flex-shrink:0;display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:14px;font-size:12px;cursor:pointer;white-space:nowrap;background:${active ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${active ? '#111' : 'var(--text-secondary)'};border:1px solid ${active ? 'var(--accent)' : 'var(--border)'}">
+        <span onclick="Phone._switchForumCategory('${encodeURIComponent(c)}')">${Utils.escapeHtml(c)}</span>
+        <span onclick="event.stopPropagation();Phone._deleteForumCategory('${encodeURIComponent(c)}')" style="opacity:.7;font-size:13px;line-height:1;margin-left:1px">×</span>
+      </div>`;
+    }).join('');
+
     const historyHtml = searchHistory.length > 0
       ? searchHistory.slice(-30).reverse().map((s, idx) => {
           const realIdx = searchHistory.length - 1 - idx;
@@ -36583,6 +36638,10 @@ async function _clearMomentsCover() {
     body.innerHTML = `
       <div class="phone-forum-app" style="display:flex;flex-direction:column;height:100%">
         <div id="phone-forum-posts-panel" style="flex:1;overflow-y:auto;padding:10px 12px;display:${_forumTab === 'posts' ? 'block' : 'none'}">
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px">
+            ${_catTabsHtml}
+            <div onclick="Phone._addForumCategory()" style="flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--bg-tertiary);color:var(--text-secondary);border:1px solid var(--border);font-size:15px;cursor:pointer;line-height:1">＋</div>
+          </div>
           <div style="display:flex;gap:6px;margin-bottom:10px">
             <input id="phone-forum-search" type="text" placeholder="搜索…" oninput="Phone._forumSyncActionBtn()" onkeydown="if(event.key==='Enter')Phone._forumSearchOrRefresh()" style="flex:1;min-width:0;border:1px solid var(--border);border-radius:6px;padding:6px 10px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
             <button id="phone-forum-action-btn" onclick="Phone._forumSearchOrRefresh()" class="phone-forum-search-btn" style="flex-shrink:0;background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
@@ -36616,6 +36675,64 @@ async function _clearMomentsCover() {
     _forumTab = tab;
     const pd = await _getPhoneData();
     if (pd) _renderForum(pd);
+  }
+
+  // 切换论坛分区：只换显示，不刷新。把当前显示的帖子存回旧分区，再载入新分区的存档。
+  async function _switchForumCategory(catEnc) {
+    const cat = decodeURIComponent(catEnc || '');
+    if (!cat) return;
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const oldCat = pd.forumActiveCategory || '热门';
+    if (cat === oldCat) return;
+    pd.forumPostsByCat = pd.forumPostsByCat || {};
+    // 存回旧分区当前显示的帖子
+    pd.forumPostsByCat[oldCat] = Array.isArray(pd.cachedForumPosts) ? pd.cachedForumPosts : [];
+    // 切换并载入新分区的存档（没有就空，提示点刷新）
+    pd.forumActiveCategory = cat;
+    pd.cachedForumPosts = Array.isArray(pd.forumPostsByCat[cat]) ? pd.forumPostsByCat[cat] : [];
+    await _savePhoneData();
+    _renderForum(pd);
+  }
+
+  // 新增分区
+  async function _addForumCategory() {
+    const name = (typeof UI !== 'undefined' && UI.showSimpleInput)
+      ? await UI.showSimpleInput('新增分区\n输入分区名称（如：游戏、美食、职场）', '')
+      : window.prompt('新增分区\n输入分区名称（如：游戏、美食、职场）', '');
+    const cat = String(name || '').trim().slice(0, 12);
+    if (!cat) return;
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    pd.forumCategories = Array.isArray(pd.forumCategories) && pd.forumCategories.length
+      ? pd.forumCategories : ['热门', '情感', '校园', '都市', '娱乐'];
+    if (pd.forumCategories.includes(cat)) { UI.showToast('该分区已存在', 1500); return; }
+    if (pd.forumCategories.length >= 20) { UI.showToast('分区最多 20 个', 1500); return; }
+    pd.forumCategories.push(cat);
+    await _savePhoneData();
+    _renderForum(pd);
+  }
+
+  // 删除分区
+  async function _deleteForumCategory(catEnc) {
+    const cat = decodeURIComponent(catEnc || '');
+    if (!cat) return;
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const cats = Array.isArray(pd.forumCategories) && pd.forumCategories.length
+      ? pd.forumCategories : ['热门', '情感', '校园', '都市', '娱乐'];
+    if (cats.length <= 1) { UI.showToast('至少保留一个分区', 1500); return; }
+    if (!await UI.showConfirm('删除分区', `确定删除「${cat}」分区？该分区已生成的帖子也会一并清除。`)) return;
+    pd.forumCategories = cats.filter(c => c !== cat);
+    if (pd.forumPostsByCat) delete pd.forumPostsByCat[cat];
+    // 如果删的是当前分区，切到第一个分区
+    if ((pd.forumActiveCategory || '热门') === cat) {
+      const first = pd.forumCategories[0] || '热门';
+      pd.forumActiveCategory = first;
+      pd.cachedForumPosts = (pd.forumPostsByCat && Array.isArray(pd.forumPostsByCat[first])) ? pd.forumPostsByCat[first] : [];
+    }
+    await _savePhoneData();
+    _renderForum(pd);
   }
 
   function _shareForumSearch(index) {
@@ -36774,12 +36891,23 @@ async function _clearMomentsCover() {
   }
 
   // 渲染论坛评论区（含楼中楼）：默认展开 2 条，超出折叠。kind/index 用于事件回调定位
-  function _forumCommentsHtml(comments, kind, index) {
+  function _forumCommentsHtml(comments, kind, index, post) {
     const list = (Array.isArray(comments) ? comments : []).filter(Boolean);
     if (!list.length) return '';
     const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
     const md = (s) => window.Markdown ? Markdown.render(s || '') : esc(s || '');
     const meTag = '<span style="color:var(--accent);font-weight:400;margin-left:3px">（我）</span>';
+    // 楼主标：仅 AI 帖判定（玩家帖楼主是玩家本人、不会出现在评论区，不判）。
+    // 身份比对优先本名 realName（NPC 楼主最稳），网名 username 兜底（未识别路人楼主）。
+    const opTag = '<span style="color:var(--accent);border:1px solid var(--accent);border-radius:3px;font-size:9px;padding:0 3px;margin-left:4px;font-weight:400">楼主</span>';
+    const _opReal = (kind !== 'my' && post && post.realName) ? String(post.realName).trim() : '';
+    const _opName = (kind !== 'my' && post && post.username) ? String(post.username).trim() : '';
+    const _isOp = (item) => {
+      if (kind === 'my' || !item) return false;
+      const r = (item.realName || '').trim();
+      const u = (item.username || '').trim();
+      return (!!_opReal && r === _opReal) || (!!_opName && u === _opName);
+    };
 
     // 单条楼中楼
     const replyRow = (rp, mainId) => {
@@ -36791,7 +36919,7 @@ async function _clearMomentsCover() {
         ${_forumAvatar(rp, 22)}
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-size:12px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(rp.username || '匿名')}${rp.isPlayer ? meTag : ''}</span>
+            <span style="font-size:12px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(rp.username || '匿名')}${rp.isPlayer ? meTag : (_isOp(rp) ? opTag : '')}</span>
             <span style="margin-left:auto;flex-shrink:0;font-size:10px;color:var(--text-secondary)">${esc(_formatPhoneTime(rp.time || ''))}</span>
           </div>
           <div class="md-content" style="font-size:12.5px;line-height:1.6;color:var(--text);margin-top:3px;word-break:break-word">${replyTo}${md(rp.content)}</div>
@@ -36815,7 +36943,7 @@ async function _clearMomentsCover() {
         ${_forumAvatar(c, 28)}
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:7px">
-            <span style="font-size:12px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.username || '匿名')}${c.isPlayer ? meTag : ''}</span>
+            <span style="font-size:12px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.username || '匿名')}${c.isPlayer ? meTag : (_isOp(c) ? opTag : '')}</span>
             <span style="margin-left:auto;flex-shrink:0;font-size:10px;color:var(--text-secondary)">${esc(_formatPhoneTime(c.time || ''))}</span>
           </div>
           <div class="md-content" style="font-size:12.5px;line-height:1.6;color:var(--text);margin-top:4px;word-break:break-word">${md(c.content)}</div>
@@ -37535,6 +37663,12 @@ ${wvPrompt}`;
       const pd = await _getPhoneData();
       if (pd && posts.length > 0) {
         pd.cachedForumPosts = posts;
+        // 同步存进当前分区的存档（切分区时用来还原）
+        try {
+          const _cat = pd.forumActiveCategory || '热门';
+          pd.forumPostsByCat = pd.forumPostsByCat || {};
+          pd.forumPostsByCat[_cat] = posts;
+        } catch(_) {}
         await _savePhoneData();
       }
     } catch(_) {}
@@ -37911,7 +38045,7 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
       </div>`;
         // 评论区（楼中楼，在滚动区内）
         if (p._comments?.length) {
-          html += _forumCommentsHtml(p._comments, 'ai', index);
+          html += _forumCommentsHtml(p._comments, 'ai', index, p);
         }
         // 关闭内容滚动区域
         html += `</div>`;
@@ -55329,7 +55463,7 @@ _chatPickCallPortrait, _chatClearCallPortrait, _showCallRecord,
  _feiniaoShowOrderDetail, _feiniaoDeleteOrder, _switchFeiniaoTab,
  _renderYouyu, _switchYouyuTab, _youyuAddListing, _youyuPickSource, _youyuPickFromInventory, _youyuPickInvItem, _youyuOpenListModal, _youyuRenderListModal, _youyuDraftSet, _youyuSetDelivery, _youyuConfirmListing, _youyuRemoveListing, _youyuShareListing, _youyuSendToChat, _youyuHandleBuy, _youyuDeleteOrder, _youyuShowOrderDetail,
     _forumRefresh, _forumSearch, _forumSyncActionBtn, _forumSearchOrRefresh, _forumOpenAddMenu, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,
-    _switchForumTab, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
+    _switchForumTab, _switchForumCategory, _addForumCategory, _deleteForumCategory, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
     _addForumPost, _editForumPost, _saveForumPost, _deleteForumPost, _viewMyForumPost, _collectMyForumPost, _likeMyForumPost, _sendMyForumComment, _sendForumComment, _refreshForumComment, _shareMyForumPost, _refreshMyForumPost,
 _forumReplyTo, _forumToggleReplies,
     _forumShareToChat,

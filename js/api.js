@@ -596,7 +596,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
   /**
    * 回复建议（非流式）
    */
-  async function suggest(recentMessages, charPrompt) {
+  async function suggest(recentMessages, charPrompt, directionHint) {
     const mainConfig = await getConfig();
     const funcConfig = Settings.getSuggestConfig();
     const url = (funcConfig.apiUrl || mainConfig.apiUrl).replace(/\/$/, '') + '/chat/completions';
@@ -610,6 +610,9 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
       `[${m.role === 'user' ? charName : 'AI'}] ${m.content}`
     ).join('\n\n');
 
+    const _dir = String(directionHint || '').trim();
+    const directionBlock = _dir ? `\n【本轮方向要求】用户希望这轮回复往这个方向走：${_dir}\n请让三个建议都围绕这个方向展开（仍保持人设、说话风格与前述所有要求）。\n` : '';
+
     const systemPrompt = `你是一个角色扮演的回复建议助手。
 以下是用户的角色设定：
 角色名：${charName}
@@ -617,7 +620,7 @@ ${charDesc ? `角色描述：${charDesc}` : ''}
 
 以下是最近的对话：
 ${dialogue}
-
+${directionBlock}
 请根据角色设定和对话上下文，生成 3 个不同的回复。
 要求：
 - 符合${charName}的人设和说话风格

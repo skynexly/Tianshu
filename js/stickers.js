@@ -207,7 +207,98 @@ const Stickers = (() => {
     input.click();
   }
 
-  // 删除（带确认）
+  // 批量 URL 导入：弹一个大文本框，用户把一堆图片 URL 粘进去（一行一条）→ 解析 → 逐条存库。
+  // 每行支持「URL」或「URL 名字」；不写名字自动命名「表情N」，重名自动加序号。
+  // 直接存 URL（不转 base64、不联网校验）：批量场景校验太慢且会被图床防盗链误杀，与酒馆行为一致。
+  // 代价：这些表情依赖图床长期有效，图床挂掉/防盗链变严会裂图（弹窗已提示）。
+  function pickBatchUrlAndAdd() {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal';
+    overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;z-index:100020';
+    overlay.innerHTML = `
+      <div class="modal-content" style="max-width:420px;width:calc(100% - 40px)">
+        <h3 style="margin:0 0 8px">批量 URL 导入</h3>
+        <p style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:0 0 12px">
+          把表情清单粘进来，<span style="color:var(--accent)">一行一条</span>，格式 <span style="color:var(--accent)">名字:链接</span>（也兼容纯链接、或链接后加名字）。<br>
+          <span style="color:var(--danger,#e55)">注意：URL 表情依赖图床长期有效，图床失效会裂图；想存久建议用「批量本地」。</span>
+        </p>
+        <textarea id="stk-url-input" rows="9" placeholder="吹泡泡:https://i.imglt.com/xxx.jpg&#10;拜拜:https://i.imglt.com/yyy.jpg&#10;早安:https://i.imglt.com/zzz.jpg" style="outline:none;width:100%;box-sizing:border-box;font-size:13px;line-height:1.6;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px 12px;resize:vertical"></textarea>
+        <div class="modal-actions" style="display:flex;gap:8px;margin-top:14px">
+          <button data-act="cancel" style="flex:1;padding:9px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text-secondary);font-size:13px;cursor:pointer;font-family:inherit">取消</button>
+          <button data-act="ok" style="flex:1;padding:9px;background:var(--accent);border:none;border-radius:8px;color:var(--bg);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">导入</button>
+        </div>
+      </div>`;
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', async (e) => {
+      if (e.target === overlay) { close(); return; }
+      const b = e.target.closest('button[data-act]');
+      if (!b) return;
+      if (b.dataset.act === 'cancel') { close(); return; }
+      if (b.dataset.act === 'ok') {
+        const raw = overlay.querySelector('#stk-url-input').value || '';
+        close();
+        await _importUrls(raw);
+      }
+    });
+    document.body.appendChild(overlay);
+    setTimeout(() => overlay.querySelector('#stk-url-input')?.focus(), 50);
+  }
+
+  // 解析多行文本 → 逐条存库。智能识别两种常见写法：
+  //   ①「名字:URL」或「名字：URL」（名字在前，冒号分隔，最常见的表情包清单格式）
+  //   ②「URL」或「URL 名字」（纯链接，或链接后空格跟名字）
+  // 统一策略：定位行内 http(s):// 的位置，之前是名字、从 http 起是 URL——不受冒号/空格分隔差异影响，
+  // 也不会被 URL 里自带的「https:」冒号误伤。
+  async function _importUrls(rawText) {
+    const lines = String(rawText || '').split(/\r?\n/);
+    const entries = [];
+    for (const line of lines) {
+      const s = line.trim();
+      if (!s) continue;
+      const um = s.match(/https?:\/\/\S+/i); // 行内第一个链接
+      if (!um) continue; // 没链接的杂行跳过
+      const url = um[0];
+      // 名字 = 链接之前的部分，去掉尾部的分隔符（: ： 空格）；链接在最前则名字为空
+      let name = s.slice(0, um.index).trim().replace(/[:：]\s*$/, '').trim();
+      // 若名字为空、但链接后面还有文字（「URL 名字」写法），取链接后的部分当名字
+      if (!name) {
+        const after = s.slice(um.index + url.length).trim();
+        if (after) name = after;
+      }
+      entries.push({ url, name });
+    }
+    if (!entries.length) { UI.showToast('没有解析到有效的图片链接', 2000); return; }
+    if (entries.length > 100) {
+      const ok = await UI.showConfirm('批量导入', `解析到 ${entries.length} 条链接，数量较多。确定继续导入吗？`);
+      if (!ok) return;
+    }
+    let imported = 0;
+    let failed = 0;
+    try {
+      UI.showToast(`开始导入 ${entries.length} 个表情…`, 1600);
+      const existing = await list();
+      const used = new Set(existing.map(s => String(s.name || '').trim()).filter(Boolean));
+      for (let i = 0; i < entries.length; i++) {
+        const { url, name } = entries[i];
+        try {
+          const baseName = name || `表情${i + 1}`;
+          const finalName = _uniqueName(baseName, used);
+          await add(finalName, url);
+          imported++;
+          if (entries.length >= 10 && (imported % 5 === 0 || imported === entries.length)) {
+            UI.showToast(`正在导入 ${imported}/${entries.length}`, 900);
+          }
+        } catch (e) {
+          console.warn('[Stickers] URL 批量导入失败', url, e);
+          failed++;
+        }
+      }
+      renderList();
+      UI.showToast(failed ? `已导入 ${imported} 个，失败 ${failed} 个` : `已导入 ${imported} 个表情`, 2200);
+    } catch (e) {
+      UI.showToast('批量导入失败：' + (e.message || e), 2400);
+    }
+  }
   async function confirmRemove(id) {
     const item = await get(id);
     if (!item) return;
@@ -283,6 +374,6 @@ const Stickers = (() => {
     return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '"', "'": '&#39;' }[c]));
   }
 
-  return { list, get, add, remove, rename, pickAndAdd, pickBatchAndAdd, confirmRemove, renderList, _promptRename, isSyncAI, setSyncAI, findByName, buildPromptNames };
+  return { list, get, add, remove, rename, pickAndAdd, pickBatchAndAdd, pickBatchUrlAndAdd, confirmRemove, renderList, _promptRename, isSyncAI, setSyncAI, findByName, buildPromptNames };
 })();
 window.Stickers = Stickers;

@@ -334,7 +334,16 @@ const banNames = [userName, userOnlineName].filter(Boolean);
 const userBan = banNames.length > 0
   ? `\n\n【禁止冒充玩家】玩家角色"${banNames.join('"和"')}"绝对不能作为帖子/动态发布者或评论者出现。所有用户名和评论者名字都不允许是"${banNames.join('"或"')}"，也不允许任何角色用"我"（指代玩家）的口吻发言。玩家自己发的内容由用户单独操作，不在本生成范围内。`
   : '\n\n【禁止冒充玩家】不要让玩家角色作为发布者或评论者，也不要让任何角色冒充玩家发言。';
-const systemPrompt = `你是一个"${mediaType}"内容生成器。根据提供的世界观和当前剧情，生成${mediaType}上的帖子/动态。${mediaBrief}${userBan}
+// 论坛分区倾向：非"热门"分区时，让本次生成严格贴合该分区基调
+let _catHint = '';
+try {
+  const _pd = (typeof Phone !== 'undefined' && Phone._getPhoneData) ? await Phone._getPhoneData() : null;
+  const _cat = _pd && _pd.forumActiveCategory;
+  if (_cat && _cat !== '热门') {
+    _catHint = `\n\n【当前分区】用户正在浏览"${_cat}"分区，本次生成的帖子需要严格符合"${_cat}"分区的基调和话题范围。`;
+  }
+} catch (_) {}
+const systemPrompt = `你是一个"${mediaType}"内容生成器。根据提供的世界观和当前剧情，生成${mediaType}上的帖子/动态。${mediaBrief}${userBan}${_catHint}
 
 要求：
 1. 生成8-10条帖子/动态预览

@@ -855,13 +855,26 @@ async function copyFromDataset(btn) {
           // CORS 失败时尝试直接用 URL（不转 base64）
           errEl.style.color = 'var(--text-secondary,#888)';
           errEl.textContent = '无法下载图片，尝试直接使用URL…';
-          // 验证是否能作为 img src 加载
-          const testImg = new Image();
-          testImg.onload = () => { cleanup(); resolve(url); };
-          testImg.onerror = () => {
+          // 验证是否能作为 img src 加载。注意：图床防盗链/CORS 会让验证 onerror，
+          // 但同一 URL 当 <img> 真正显示时往往正常（别的端能用即此理）。所以验证失败
+          // 不再一票否决，而是让用户「仍要使用此链接」强行确认，避免误杀有效图床链接。
+          let _imgSettled = false;
+          const _acceptUrl = () => { if (_imgSettled) return; _imgSettled = true; cleanup(); resolve(url); };
+          const _offerForceUse = (msg) => {
+            if (_imgSettled) return;
             errEl.style.color = 'var(--danger,#e55)';
-            errEl.textContent = '图片加载失败，请检查URL是否正确';
+            errEl.textContent = msg;
+            const confirmBtn = overlay.querySelector('#_img-pick-confirm');
+            if (confirmBtn) {
+              confirmBtn.textContent = '仍要使用此链接';
+              confirmBtn.onclick = _acceptUrl;
+            }
           };
+          const testImg = new Image();
+          testImg.onload = () => { if (_imgSettled) return; _imgSettled = true; cleanup(); resolve(url); };
+          testImg.onerror = () => _offerForceUse('图片验证失败（可能是图床防盗链）。若确认链接无误，可直接使用。');
+          // 超时兜底：部分图床既不触发 onload 也不触发 onerror，避免一直卡「加载中…」
+          setTimeout(() => _offerForceUse('图片验证超时（可能是图床防盗链）。若确认链接无误，可直接使用。'), 6000);
           testImg.src = url;
         }
       };
