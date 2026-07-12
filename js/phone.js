@@ -36595,6 +36595,7 @@ async function _clearMomentsCover() {
     const body = document.getElementById('phone-body');
     document.getElementById('phone-title').textContent = _getForumName();
 
+   try {
     // 确保论坛头像映射已就绪
     await _ensureForumNpcAvatarMap();
     await _ensureForumDisplayNameMap();
@@ -36669,6 +36670,23 @@ async function _clearMomentsCover() {
         </div>
       </div>
     `;
+   } catch (e) {
+      console.warn('[renderForum] 渲染异常，降级空态', e);
+      if (body) body.innerHTML = `
+        <div class="phone-forum-app" style="display:flex;flex-direction:column;height:100%">
+          <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center">
+            <div style="color:var(--text-secondary);font-size:13px;line-height:1.7">内容加载出了点问题<br>可以返回桌面重新进入，或点下方刷新</div>
+          </div>
+          <div style="padding:0 12px 12px;display:flex;justify-content:center">
+            <button onclick="Phone._forumSearchOrRefresh()" style="background:var(--accent);color:#111;border:none;border-radius:8px;padding:9px 20px;font-size:13px;cursor:pointer">刷新论坛</button>
+          </div>
+          <div class="phone-tabbar">
+            <div class="phone-tab active" onclick="Phone._switchForumTab('posts')">推荐</div>
+            <div class="phone-tab" onclick="Phone._switchForumTab('history')">搜索记录</div>
+            <div class="phone-tab" onclick="Phone._switchForumTab('myposts')">我的</div>
+          </div>
+        </div>`;
+   }
   }
 
   async function _switchForumTab(tab) {
@@ -36763,7 +36781,10 @@ async function _clearMomentsCover() {
   }
 
   function _renderForumPosts(posts) {
-    return posts.map((p, i) => `
+    return (Array.isArray(posts) ? posts : []).map((p, i) => {
+     try {
+      if (!p) return '';
+      return `
       <div onclick="Phone._forumViewDetail(${i})" class="phone-forum-post-card" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
           ${_forumAvatar(p, 24)}
@@ -36782,7 +36803,12 @@ async function _clearMomentsCover() {
           <button type="button" onclick="event.stopPropagation();Phone._shareForumPost(${i},'card')" class="phone-forum-preview-action-btn" title="分享">${_uiIcon('share', 12)} 分享</button>
         </div>
       </div>
-    `).join('');
+    `;
+     } catch (e) {
+      console.warn('[forumPost] 跳过脏数据', e, p && p.id);
+      return '';
+     }
+    }).join('');
   }
 
   // ===== 发帖功能 =====
@@ -37055,7 +37081,10 @@ async function _clearMomentsCover() {
     if (!posts || posts.length === 0) {
       return '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">还没有发过帖子</p>';
     }
-    return posts.map((p, i) => `
+    return (Array.isArray(posts) ? posts : []).map((p, i) => {
+     try {
+      if (!p) return '';
+      return `
       <div onclick="Phone._viewMyForumPost(${i})" class="phone-forum-post-card" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
           ${_forumAvatar(p, 24)}
@@ -37066,7 +37095,12 @@ async function _clearMomentsCover() {
         <div style="font-size:11px;color:var(--text-secondary);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml(p.content ? p.content.substring(0, 80) : '')}</div>
         ${(p.tags && p.tags.length) ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${p.tags.map(t => `<span style="font-size:9px;padding:1px 6px;background:var(--bg-secondary);color:var(--accent);border-radius:8px">${Utils.escapeHtml(t)}</span>`).join('')}</div>` : ''}
       </div>
-    `).join('');
+    `;
+     } catch (e) {
+      console.warn('[myForumPost] 跳过脏数据', e, p && p.id);
+      return '';
+     }
+    }).join('');
   }
 
   async function _addForumPost() {
