@@ -2344,6 +2344,23 @@ input[type="range"] {
 .wv-gen-help { font-size:12px; line-height:1.55; color:var(--text-secondary); margin-top:6px; }
 .wv-gen-help.full { flex:0 0 100%; width:100%; margin-top:-2px; }
 .wv-gen-option .wv-gen-help { margin-top:8px; }
+/* v711：势力生成 — 地区勾选列表 + 字数预估 */
+.wv-gen-region-list { display:flex; flex-direction:column; gap:2px; max-height:220px; overflow-y:auto; margin-top:6px; padding:4px; border:1px solid var(--border); border-radius:10px; background:var(--bg-tertiary); }
+.wv-gen-region-check { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; cursor:pointer; }
+.wv-gen-region-check:active { background:rgba(255,255,255,0.05); }
+.wv-gen-region-check input { width:16px; height:16px; accent-color:var(--accent); flex:0 0 auto; }
+.wv-gen-region-nm { flex:1; font-size:14px; color:var(--text); }
+.wv-gen-region-done { font-size:12px; color:var(--accent); flex:0 0 auto; }
+/* 已生成项：名字划删除线、整行淡化，仍可重新勾选覆盖 */
+.wv-gen-region-check.is-done .wv-gen-region-nm { text-decoration:line-through; opacity:0.55; }
+/* v711：参考世界书长条按钮 */
+.wv-gen-ref-lb-btn { width:100%; padding:10px 14px; border-radius:11px; cursor:pointer; font-size:13px; font-family:inherit; border:1px dashed color-mix(in srgb, var(--accent) 40%, var(--border)); background:color-mix(in srgb, var(--accent) 5%, var(--bg-tertiary)); color:var(--text); display:flex; align-items:center; gap:8px; text-align:left; }
+.wv-gen-ref-lb-btn::before { content:''; display:none; }
+.wv-gen-ref-lb-icon { width:16px; height:16px; flex:0 0 auto; color:var(--accent); }
+.wv-gen-ref-lb-btn:active { background:color-mix(in srgb, var(--accent) 12%, var(--bg-tertiary)); }
+.wv-gen-ref-lb-btn > span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wv-gen-estimate { margin:10px 0 4px; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.55; color:var(--text-secondary); background:var(--bg-tertiary); border:1px solid var(--border); }
+.wv-gen-estimate.warn { color:#e0a24e; border-color:rgba(224,162,78,0.4); background:rgba(224,162,78,0.08); }
 .wv-gen-option {
   margin-bottom: 12px;
   padding: 12px;

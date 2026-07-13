@@ -224,12 +224,13 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v710.2';
-    const CHANGELOG = `○增加了表情包分类功能
-○角色卡支持docx导入
-○部分BUG修复
-○手机滑动体验优化
-○奶油软糖主题完全开放`;
+    const APP_VERSION = 'v711';
+    const CHANGELOG = `○新增AI气泡容纳完整html
+○AI生成世界观支持勾选世界书
+○AI生成世界观支持批量一次性写入，无需多次调用
+○新增世界观快捷编辑角色头像（世界观编辑页右上角菜单）
+○对话设置沿用上个窗口的配置
+○部分机制优化`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

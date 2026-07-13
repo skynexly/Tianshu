@@ -5,18 +5,36 @@
  */
 const Markdown = (() => {
 
-  function render(text) {
+  function render(text, opts) {
     if (!text) return '';
+    const _streaming = !!(opts && opts.streaming);
     // 先提取代码块保护起来
     const codeBlocks = [];
+    // v711：HTML 沙箱 iframe 单独存，在 sanitize 之后才恢复——绝不能让 sanitize 洗它的 srcdoc
+    // （sanitize 会删 on* 事件，会把 srcdoc 里 AI 写的 onclick 全删掉，导致 iframe 内点不了）。
+    const iframeBlocks = [];
     let processed = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-      const idx = codeBlocks.length;
-      // html/svg/xml 围栏：作为真实 HTML 渲染（气泡富文本排版），不转义、不包 <pre>
+      // html/svg/xml 围栏（v711）：渲染进 sandbox iframe 隔离执行（可交互、不污染主页面、读不到本站数据）。
+      // 流式过程中先占位，避免半截 HTML 反复重建 iframe 导致闪烁/报错；流结束才真正建 iframe。
       if (/^(html|svg|xml)$/i.test(lang)) {
-        codeBlocks.push(code);
-      } else {
-        codeBlocks.push(`<pre><code class="lang-${lang}">${esc(code)}</code></pre>`);
+        if (_streaming) {
+          const idx = codeBlocks.length;
+          codeBlocks.push('<div class="html-sandbox-loading" style="padding:12px;border:1px dashed var(--border);border-radius:8px;color:var(--text-secondary);font-size:12px;opacity:0.7">✦ HTML 组件加载中…</div>');
+          return `\x00CB${idx}\x00`;
+        }
+        const fid = 'htmlbox_' + Math.random().toString(36).slice(2, 10);
+        const doc = _buildSandboxDoc(code, fid);
+        const ifIdx = iframeBlocks.length;
+        iframeBlocks.push(
+          '<iframe class="html-sandbox" data-hid="' + fid + '" ' +
+          'sandbox="allow-scripts" scrolling="no" loading="lazy" ' +
+          'style="width:100%;height:60px;border:0;display:block;background:transparent" ' +
+          'srcdoc="' + escAttr(doc) + '"></iframe>'
+        );
+        return `\x00IF${ifIdx}\x00`;
       }
+      const idx = codeBlocks.length;
+      codeBlocks.push(`<pre><code class="lang-${lang}">${esc(code)}</code></pre>`);
       return `\x00CB${idx}\x00`;
     });
 
@@ -53,8 +71,8 @@ const Markdown = (() => {
     while (i < lines.length) {
       const line = lines[i];
 
-      // 占位符独占一行（如 <style> 块、<script> 块、html 围栏块）：原样通过，不要包 <p>
-      if (/^\s*\x00(?:SB|CB|JS)\d+\x00\s*$/.test(line)) {
+      // 占位符独占一行（如 <style> 块、<script> 块、html 围栏块、iframe 沙箱块）：原样通过，不要包 <p>
+      if (/^\s*\x00(?:SB|CB|JS|IF)\d+\x00\s*$/.test(line)) {
         html += line.trim();
         i++;
         continue;
@@ -151,6 +169,10 @@ const Markdown = (() => {
 
     // <script> 块一律丢弃：innerHTML 注入的 <script> 本就不会执行，且放行有安全风险。
     html = html.replace(/\x00JS(\d+)\x00/g, '');
+
+    // v711：在 sanitize 之后恢复 HTML 沙箱 iframe——它的 srcdoc 内容不能被 sanitize 洗
+    // （否则 srcdoc 里 AI 写的 onclick/script 会被删，iframe 内点不了）。iframe 有 sandbox 隔离，安全。
+    html = html.replace(/\x00IF(\d+)\x00/g, (_, idx) => iframeBlocks[parseInt(idx)] || '');
 
     return html;
   }
@@ -380,6 +402,75 @@ const Markdown = (() => {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  // v711：HTML 属性值转义（用于 srcdoc）。必须转义双引号，否则内部 " 会截断属性导致 iframe 空白。
+  function escAttr(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, String.fromCharCode(38) + 'quot;');
+  }
+
+  // v711：为 HTML 围栏构建 sandbox iframe 文档（统一返回字符串）。
+  // 量高不看 body/html 的 scrollHeight（受 100vh/flex 居中干扰会虚高或量不到），
+  // 而是遍历文档里所有元素、取最大 bottom 坐标 = 内容真实底部。这对"一个按钮"和
+  // "固定尺寸手机壳"都准，且完整文档/片段用同一套逻辑，不再靠 isFullDoc 猜意图。
+  function _buildSandboxDoc(userHtml, fid) {
+    const src = String(userHtml || '');
+    const isFullDoc = /<html[\s>]/i.test(src) || /<!doctype/i.test(src);
+
+    // 量高脚本：只在 load + 有限几次定时量高，不用 ResizeObserver/resize（避免撑高→回量的死循环）。
+    // measure：取所有元素 getBoundingClientRect().bottom 的最大值（相对文档顶部），得内容真实高度。
+    const heightScript = '<scr' + 'ipt>'
+      + '(function(){'
+      + 'var last=0;'
+      + 'function measure(){'
+      + 'var max=0,els=document.body?document.body.getElementsByTagName("*"):[];'
+      + 'for(var i=0;i<els.length;i++){var el=els[i];'
+      + 'var st=window.getComputedStyle(el);'
+      + 'if(st&&st.position==="fixed")continue;'
+      + 'var b=el.getBoundingClientRect().bottom;'
+      + 'if(b>max)max=b;}'
+      + 'return Math.ceil(max);}'
+      + 'function r(){var h=measure();if(h>0&&Math.abs(h-last)>1){last=h;'
+      + "parent.postMessage({__htmlbox:'" + fid + "',height:h},'*');}}"
+      + "window.addEventListener('load',r);"
+      + 'setTimeout(r,80);setTimeout(r,300);setTimeout(r,800);setTimeout(r,1600);'
+      + '})();'
+      + '</scr' + 'ipt>';
+
+    if (isFullDoc) {
+      // 完整文档：只注入一句"背景透明"（融进气泡），绝不碰尺寸/定位/子元素以免压烂布局。
+      // 手机壳等有自己背景色的容器不受影响；只把 body 直接铺的白/纯色底透明化。
+      const bgFix = '<style>html,body{background:transparent!important}</style>';
+      let doc = src;
+      if (/<\/head>/i.test(doc)) {
+        doc = doc.replace(/<\/head>/i, bgFix + '</head>');
+      } else if (/<body[^>]*>/i.test(doc)) {
+        doc = doc.replace(/(<body[^>]*>)/i, '$1' + bgFix);
+      } else {
+        doc = bgFix + doc;
+      }
+      if (/<\/body>/i.test(doc)) {
+        doc = doc.replace(/<\/body>/i, heightScript + '</body>');
+      } else {
+        doc = doc + heightScript;
+      }
+      return doc;
+    }
+
+    // 片段：套上骨架 + 量高脚本。
+    const head = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+      + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<style>'
+      + 'html,body{margin:0;padding:0;background:transparent;color:#e8e8e8;'
+      + "font-family:-apple-system,'Noto Sans SC',sans-serif;font-size:14px;"
+      + 'line-height:1.6;word-break:break-word;overflow:hidden}'
+      + 'img{max-width:100%}'
+      + '</style></head><body>';
+    return head + src + heightScript + '</body></html>';
   }
 
   return { render };

@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=148">
+<link rel="stylesheet" href="css/style.css?v=152">
 <link rel="stylesheet" href="css/phone.css?v1=399">
 <link rel="stylesheet" href="css/phone-fudge.css?v=48">
 <link rel="stylesheet" href="css/markdown.css">
@@ -907,9 +907,9 @@
           </fieldset>
           <fieldset><legend>对话参数</legend>
             <div class="form-group"><span class="form-label">温度 <span id="sp-temp-val">0.8</span></span><input type="range" id="sp-temperature" min="0" max="2" step="0.1" value="0.8" oninput="document.getElementById('sp-temp-val').textContent=this.value"></div>
-            <div class="form-group"><span class="form-label">Max Tokens</span><input type="number" id="sp-max-tokens" value="4096" min="256"></div>
+            <div class="form-group"><span class="form-label">Max Tokens</span><input type="number" id="sp-max-tokens" placeholder="不限制" min="256"></div>
             <div class="form-group"><span class="form-label">Token总结阈值 <span style="font-size:11px;color:var(--text-secondary)">达到此token数时触发总结</span></span><input type="number" id="sp-token-limit" value="230000" min="0"></div>
-            <div class="form-group"><span class="form-label">总结后保留轮数 <span style="font-size:11px;color:var(--text-secondary)">总结后当前窗口保留的最近对话轮数，默认10</span></span><input type="number" id="sp-keep-rounds" value="10" min="2" max="15"></div>
+            <div class="form-group"><span class="form-label">总结后保留轮数 <span style="font-size:11px;color:var(--text-secondary)">总结后当前窗口保留的最近对话轮数，默认10</span></span><input type="number" id="sp-keep-rounds" value="10" min="2" max="15" oninput="Settings.enforceNumberInput(&#39;sp-keep-rounds&#39;, 2, 15, &#39;保留轮数&#39;)" onblur="Settings.enforceNumberInput(&#39;sp-keep-rounds&#39;, 2, 15, &#39;保留轮数&#39;)"></div>
             <div class="form-group"><span class="form-label">记忆提取间隔(轮) <span style="font-size:11px;color:var(--text-secondary)">默认20</span></span><input type="number" id="sp-extract-interval" value="20" min="5" max="100"></div>
 <div class="form-group"><span class="form-label">每次最多提取事件数 <span style="font-size:11px;color:var(--text-secondary)">默认5</span></span><input type="number" id="sp-max-extract-events" value="5" min="1" max="20"></div>
 <div class="form-group"><span class="form-label">每次最多提取关系数 <span style="font-size:11px;color:var(--text-secondary)">默认5</span></span><input type="number" id="sp-max-extract-relations" value="5" min="1" max="20"></div>
@@ -3141,6 +3141,7 @@
             <div id="worldview-edit-more-menu" class="hidden" style="position:absolute;right:74px;top:42px;min-width:148px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:30;padding:6px;display:flex;flex-direction:column;gap:2px">
               <button onclick="Worldview.closeEditMoreMenu();Worldview.exportCurrent()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">导出世界观</button>
               <button onclick="Worldview.closeEditMoreMenu();Worldview.importSingle()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">导入世界观</button>
+              <button onclick="Worldview.closeEditMoreMenu();Worldview.openNpcAvatarLib()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">角色头像库</button>
               <button id="worldview-restore-builtin-btn" onclick="Worldview.closeEditMoreMenu();Worldview.restoreBuiltinWorldview()" class="hidden" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">恢复内置</button>
               <button onclick="Worldview.closeEditMoreMenu();Worldview.deleteCurrentWorldview()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--danger);font-size:13px;border-radius:7px;cursor:pointer">删除世界观</button>
             </div>
@@ -3268,8 +3269,12 @@
 <div style="display:flex;gap:8px;margin-top:4px">
 <button type="button" onclick="Worldview.addRegion()" style="flex:1;padding:12px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:14px">+ 添加地区</button>
 <button type="button" onclick="WvGenerator.inlineFillAllRegions()" class="ai-action-btn" style="flex:1;padding:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>填充已有</button>
-<button type="button" onclick="WvGenerator.inlineRegions()" class="ai-action-btn" style="flex:1;padding:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>追加新的</button>
-</div>
+ <button type="button" onclick="WvGenerator.inlineRegions()" class="ai-action-btn" style="flex:1;padding:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>追加新的</button>
+ </div>
+ <div style="display:flex;gap:8px;margin-top:8px">
+ <button type="button" onclick="WvGenerator.inlineFactionsBatch()" class="ai-action-btn" style="flex:1;padding:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V8l3 2 3-2 2 2 2-2 3 2 3-2v13"/><path d="M9 21v-6a3 3 0 0 1 6 0v6"/></svg>批量生成势力</button>
+ <button type="button" onclick="WvGenerator.inlineNpcsBatch()" class="ai-action-btn" style="flex:1;padding:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>批量生成角色</button>
+ </div>
         </div>
         
         <!-- 扩展设定Tab -->
@@ -4148,7 +4153,7 @@ const GameLog = (() => {
 <script src="js/db.js?v=14"></script>
 <script src="js/stickers.js?v=7"></script>
 <script src="js/utils.js?v=12"></script>
-<script src="js/markdown.js?v=7"></script>
+<script src="js/markdown.js?v=9"></script>
 <script src="js/api.js?v=1"></script>
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
@@ -4158,26 +4163,26 @@ const GameLog = (() => {
 <script src="js/tools.js?v=7"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=56"></script>
-<script src="js/worldview.js?v=100"></script>
+<script src="js/worldview.js?v=101"></script>
 <script src="js/npc_importer.js"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
 <script src="js/conv_gameplay.js?v=15"></script>
-<script src="js/wv-generator.js?v=18"></script>
+<script src="js/wv-generator.js?v=31"></script>
 <script src="js/single_card.js?v=14"></script>
 <script src="js/attached-chars.js?v=2"></script>
 <script src="js/single_mode.js?v=4"></script>
 <script src="js/character.js?v=14"></script>
 <script src="js/prompts.js?v=1"></script>
-<script src="js/conversations.js?v=11"></script>
+<script src="js/conversations.js?v=12"></script>
 <script src="js/summary.js?v=1"></script>
-<script src="js/chat.js?v=99"></script>
+<script src="js/chat.js?v=100"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
 <script src="js/tts.js"></script>
 <script src="js/branch.js"></script>
-<script src="js/settings.js?v=1"></script>
+<script src="js/settings.js?v=3"></script>
 <script src="js/gaiden.js?v=2"></script>
 <script src="js/backstage.js?v=13"></script>
 <script src="js/dice.js"></script>
@@ -4209,7 +4214,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=16"></script>
-<script src="js/app.js?v=147"></script>
+<script src="js/app.js?v=148"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

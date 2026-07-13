@@ -5,6 +5,20 @@
 const Chat = (() => {
   let messages = []; // 当前分支的线性消息列表
   let currentBranchId = 'main';
+
+  // v711：HTML 沙箱 iframe 自动量高。iframe 内脚本 postMessage 高度过来，撑到内容高度。
+  // 无 same-origin 的 sandbox iframe，e.origin 为 "null"，只能靠 __htmlbox + fid 匹配（无数据泄露风险）。
+  if (!window.__htmlSandboxHeightBound) {
+    window.__htmlSandboxHeightBound = true;
+    window.addEventListener('message', (e) => {
+      const d = e && e.data;
+      if (!d || !d.__htmlbox || typeof d.height !== 'number') return;
+      try {
+        const f = document.querySelector('iframe.html-sandbox[data-hid="' + d.__htmlbox + '"]');
+        if (f) f.style.height = Math.min(Math.max(d.height + 4, 24), 4000) + 'px';
+      } catch (_) {}
+    });
+  }
   let roundCount = 0;
   let _aiAvatarUrl = ''; // 当前单人对话的 AI 头像（非单人为空）
   let _onlineNpcAvatarMap = {}; // 心动模拟线上小气泡 NPC 头像缓存：name/alias -> url
@@ -2500,7 +2514,7 @@ renderContent = renderContent.replace(/```groupcreate[\s\S]*$/i, '');
 renderContent = renderContent.replace(/```mail_reply\s*[\s\S]*?```/gi, '');
 renderContent = renderContent.replace(/```mail_reply[\s\S]*$/i, '');
           renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
-          contentEl.innerHTML = Markdown.render(renderContent);
+          contentEl.innerHTML = Markdown.render(renderContent, { streaming: true });
           if (convSettings.stream) contentEl.classList.add('streaming-cursor');
           scrollToBottomIfFollowing();
         };

@@ -1426,18 +1426,25 @@ _updatePhoneAppsLabel();
     const menu = document.getElementById('wv-ext-io-menu');
     if (menu) menu.classList.add('hidden');
     if (!editingWorldviewId) { UI.showToast('没有正在编辑的世界观'); return; }
+    // v710.3：先把当前内存态落库，再统一从持久化对象读全部四类数据。
+    // 修复"导出0条/漏常驻条目"——旧逻辑 festivals/knowledges 读内存变量
+    // （festivalsData 只在点开对应子 tab 才填、knowledgesData 只含动态条目、
+    //  导入的条目未即时落库），与 events/npcs 直读持久化对象的口径不一致。
+    try { await save({ silent: true }); } catch(_) {}
     const w = await _getEditingWV();
     const wvName = w?.name || '扩展设定';
+    const festivals = Array.isArray(w?.festivals) ? w.festivals : [];
+    // w.knowledges 已是常驻(customs)+动态 合并后的完整集合（见 save()）
+    const knowledges = Array.isArray(w?.knowledges) ? w.knowledges : [];
     const evts = Array.isArray(w?.events) ? w.events : [];
     const npcs = Array.isArray(w?.globalNpcs) ? w.globalNpcs : [];
-    // 注：导出当前内存中的数据（已编辑但未保存的也会一并导出）
     const exportData = {
       _format: 'tianshu-extended',
       _version: 2,
       _source: wvName,
       _exportedAt: new Date().toISOString(),
-      festivals: JSON.parse(JSON.stringify(festivalsData || [])),
-      knowledges: JSON.parse(JSON.stringify(knowledgesData || [])),
+      festivals: JSON.parse(JSON.stringify(festivals)),
+      knowledges: JSON.parse(JSON.stringify(knowledges)),
       events: JSON.parse(JSON.stringify(evts)),
       globalNpcs: JSON.parse(JSON.stringify(npcs)),
     };
@@ -1448,7 +1455,7 @@ _updatePhoneAppsLabel();
     a.download = wvName + '-扩展设定.json';
     a.click();
     URL.revokeObjectURL(url);
-    const total = (festivalsData?.length || 0) + (knowledgesData?.length || 0) + evts.length + npcs.length;
+    const total = festivals.length + knowledges.length + evts.length + npcs.length;
     UI.showToast(`已导出 ${total} 条`);
   }
 
@@ -2199,6 +2206,102 @@ document.getElementById('wv-npc-detail').value = npc.detail || '';
     await _saveEditingWV(w);
     _renderNPCCards(w.regions[_editRegionIdx].factions[_editFactionIdx].npcs);
     UI.showPanel('wv-faction', 'back');
+  }
+
+  // ===== 角色头像库（集中入口）：一站式给当前世界观所有 NPC 换/删头像，免逐词条钻进去 =====
+  async function openNpcAvatarLib() {
+    const w = await _getEditingWV();
+    if (!w) { UI.showToast('没有正在编辑的世界观'); return; }
+    // 收集所有 NPC：全图常驻 + 各地区各势力（_getEditingWV 已确保有 id）
+    const list = [];
+    (w.globalNpcs || []).forEach(n => {
+      if (n && n.id) list.push({ id: n.id, name: n.name || '未命名', tag: '全图常驻' });
+    });
+    (w.regions || []).forEach(r => {
+      (r.factions || []).forEach(f => {
+        (f.npcs || []).forEach(n => {
+          if (n && n.id) list.push({ id: n.id, name: n.name || '未命名', tag: `${r.name || '地区'} · ${f.name || '势力'}` });
+        });
+      });
+    });
+    if (list.length === 0) { UI.showToast('当前世界观还没有角色', 1800); return; }
+
+    // 预读各 NPC 已存头像
+    const avatarMap = {};
+    for (const it of list) {
+      try { const r = await DB.get('npcAvatars', it.id); if (r && r.avatar) avatarMap[it.id] = r.avatar; } catch(_) {}
+    }
+
+    const _ph = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-secondary)"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>`;
+    const _rowInner = (it) => {
+      const url = avatarMap[it.id];
+      const ava = url
+        ? `<img src="${Utils.escapeHtml(url)}" style="width:100%;height:100%;object-fit:cover">`
+        : _ph;
+      return `
+        <div data-npc-ava="${Utils.escapeHtml(it.id)}" style="width:48px;height:48px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--bg-tertiary);border:1px solid var(--border);cursor:pointer">${ava}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(it.name)}</div>
+          <div style="font-size:11px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(it.tag)}</div>
+        </div>
+        ${url ? `<button data-npc-del="${Utils.escapeHtml(it.id)}" style="flex-shrink:0;padding:5px 10px;font-size:12px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--danger,#e57373);cursor:pointer">删除</button>` : ''}`;
+    };
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10006;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.innerHTML = `
+      <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:14px;max-width:440px;width:100%;max-height:78vh;display:flex;flex-direction:column;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px">
+          <div style="font-size:16px;font-weight:600;color:var(--text)">角色头像库 <span style="font-size:12px;color:var(--text-secondary);font-weight:400">· ${list.length} 个角色</span></div>
+          <button id="_npc-ava-close" style="width:30px;height:30px;padding:0;font-size:20px;line-height:1;background:none;border:none;color:var(--text-secondary);cursor:pointer">×</button>
+        </div>
+        <div id="_npc-ava-list" style="flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:4px">
+          ${list.map(it => `<div class="_npc-ava-row" data-row="${Utils.escapeHtml(it.id)}" style="display:flex;align-items:center;gap:12px;padding:8px 4px">${_rowInner(it)}</div>`).join('')}
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('#_npc-ava-close').onclick = close;
+
+    // 刷新单行 DOM
+    const _refreshRow = (id) => {
+      const row = overlay.querySelector(`._npc-ava-row[data-row="${CSS.escape(id)}"]`);
+      const it = list.find(x => x.id === id);
+      if (row && it) row.innerHTML = _rowInner(it);
+    };
+
+    // 事件委托：点头像换图，点删除清空
+    overlay.querySelector('#_npc-ava-list').addEventListener('click', async (e) => {
+      const avaEl = e.target.closest('[data-npc-ava]');
+      const delEl = e.target.closest('[data-npc-del]');
+      if (delEl) {
+        const id = delEl.getAttribute('data-npc-del');
+        if (!await UI.showConfirm('删除头像', '删除该角色的自定义头像？')) return;
+        try {
+          if (typeof SingleCard !== 'undefined' && SingleCard.setNpcAvatar) await SingleCard.setNpcAvatar(id, '');
+          else await DB.delete('npcAvatars', id);
+          delete avatarMap[id];
+          _refreshRow(id);
+          UI.showToast('已删除', 1200);
+        } catch(_) { UI.showToast('删除失败', 1500); }
+        return;
+      }
+      if (avaEl) {
+        const id = avaEl.getAttribute('data-npc-ava');
+        let dataUrl = null;
+        try { dataUrl = await Utils.promptImageInput({ maxSize: 256, quality: 0.85 }); } catch(_) {}
+        if (!dataUrl) return;
+        try {
+          if (typeof SingleCard !== 'undefined' && SingleCard.setNpcAvatar) await SingleCard.setNpcAvatar(id, dataUrl);
+          else await DB.put('npcAvatars', { id, avatar: dataUrl, updated: Date.now() });
+          avatarMap[id] = dataUrl;
+          _refreshRow(id);
+          UI.showToast('头像已更新', 1200);
+        } catch(_) { UI.showToast('头像保存失败', 1500); }
+      }
+    });
   }
 
   // 导出当前编辑中的角色为单 NPC JSON（不含头像；格式可被批量导入直接吃回）
@@ -9190,7 +9293,7 @@ toggleCustPositionDropdown, selectCustPosition, toggleKnowPositionDropdown, sele
     toggleThemeDropdown, selectTheme,
     openDefaultThemePicker, closeDefaultThemePicker, pickDefaultTheme, openDefaultSkinPicker, closeDefaultSkinPicker, pickDefaultSkin,
     restoreCurrentWorldview: _restoreCurrentWorldview,
-    exportCurrent, importSingle, restoreBuiltinWorldview: _restoreBuiltinWorldview, toggleEditMoreMenu: _toggleEditMoreMenu, closeEditMoreMenu: _closeEditMoreMenu, loadBuiltinWorldviews: _loadBuiltinWorldviews, migrateTianshuchengNpcNames: _migrateTianshuchengNpcNames,
+    exportCurrent, importSingle, openNpcAvatarLib, restoreBuiltinWorldview: _restoreBuiltinWorldview, toggleEditMoreMenu: _toggleEditMoreMenu, closeEditMoreMenu: _closeEditMoreMenu, loadBuiltinWorldviews: _loadBuiltinWorldviews, migrateTianshuchengNpcNames: _migrateTianshuchengNpcNames,
     ensureHiddenWvForCard, deleteHiddenWvForCard, isHiddenWv,
     getEditReturnTo, clearEditReturnTo, _stopFullSaveTimer,
     switchWorldTab(tab) {

@@ -49,7 +49,7 @@ let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set()
     { id: 'sp-api-key', key: 'apiKey', def: '', type: 'password' },
     { id: 'sp-model', key: 'model', def: '' },
     { id: 'sp-temperature', key: 'temperature', def: '0.8' },
-    { id: 'sp-max-tokens', key: 'maxTokens', def: '4096' },
+    { id: 'sp-max-tokens', key: 'maxTokens', def: '' },
     { id: 'sp-token-limit', key: 'tokenLimit', def: '230000' },
     { id: 'sp-keep-rounds', key: 'keepRounds', def: '10' },
     { id: 'sp-extract-interval', key: 'extractInterval', def: '20' },
@@ -62,7 +62,7 @@ let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set()
     presets = (data?.value && data.value.length > 0) ? data.value : [{
       id: 'default', name: '默认',
       apiUrl: '', apiKey: '', model: '',
-      temperature: '0.8', maxTokens: '4096', tokenLimit: '230000', keepRounds: '10', extractInterval: '20'
+      temperature: '0.8', maxTokens: '', tokenLimit: '230000', keepRounds: '10', extractInterval: '20'
   }];
   // 迁移旧数据
     const oldData = await DB.get('settings', 'api');
@@ -71,6 +71,14 @@ let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set()
       presets[0].name = presets[0].name || '默认';
       await savePresets();
     }
+    // v711 迁移：Max Tokens 默认值从 '4096' 改为空（不限制）。
+    // 把恰好等于老默认 '4096' 的预设清空——这几乎肯定是没手动改过的老默认，
+    // 让老用户也享受"不限制输出"，解决"吃长文被 4096 卡住"的问题。
+    let _mtMigrated = false;
+    presets.forEach(p => {
+      if (p && String(p.maxTokens).trim() === '4096') { p.maxTokens = ''; _mtMigrated = true; }
+    });
+    if (_mtMigrated) { try { await savePresets(); } catch(_) {} }
     const lastUsed = await DB.get('settings', 'currentPreset');
     currentPresetId = lastUsed?.value || presets[0].id;
     if (!presets.find(p => p.id === currentPresetId)) currentPresetId = presets[0].id;
@@ -300,7 +308,7 @@ async function cancelEdit() {
       id: 'preset_' + Utils.uuid().slice(0, 8),
       name: `API ${presets.length + 1}`,
       apiUrl: '', apiKey: '', model: '',
-      temperature: '0.8', maxTokens: '4096', tokenLimit: '230000', keepRounds: '10', extractInterval: '20'
+      temperature: '0.8', maxTokens: '', tokenLimit: '230000', keepRounds: '10', extractInterval: '20'
   };
   presets.push(np);
     await savePresets();
@@ -1211,8 +1219,25 @@ else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; switchFn
     }
   }
 
+  // 数字输入框范围钳制：超出 [min,max] 时自动回填边界值，超上限给个 toast 提示。
+  // 用于设置面板里带 min/max 的 number 输入框（浏览器的 max 只约束箭头/校验，手动键入不拦，这里补齐）。
+  function enforceNumberInput(inputId, min, max, label) {
+    const el = document.getElementById(inputId);
+    if (!el) return;
+    const raw = String(el.value || '').trim();
+    if (!raw) return; // 空值不动，交给保存时的默认值兜底
+    const n = parseInt(raw, 10);
+    if (Number.isFinite(n) && n > max) {
+      el.value = max;
+      try { UI.showToast(`${label || '该值'}最大为 ${max}，已自动调整`, 1500); } catch(_) {}
+    } else if (Number.isFinite(n) && n < min) {
+      el.value = min;
+      try { UI.showToast(`${label || '该值'}最小为 ${min}，已自动调整`, 1500); } catch(_) {}
+    }
+  }
+
   return {
-    init, load, getCurrent, getCurrentId, switchPreset,
+    init, load, getCurrent, getCurrentId, switchPreset, enforceNumberInput,
     editPreset, savePreset, cancelEdit, createPreset, clonePreset, deletePreset, previewPresetEndpoint,
     fetchModels, toggleKeyVisibility, copyKey, _getPresets,
     toggleModelDropdown, selectModel,

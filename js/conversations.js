@@ -437,9 +437,34 @@ async function init() {
       worldviewId: wvId,
       presetId: Settings.getCurrentId()
     };
-    // 从上一次对话设置继承「关闭自动重试」
+    // v712：新建对话继承「上一个当前对话」的设置类字段（白名单）——用户懒得挨个调
+    // 只沿用"设置"，不沿用剧情内容（世界观/事件链/属性/剧情引导/背景图各自独立）
     try {
-      if (localStorage.getItem('skynex_lastDisableRetry') === '1') {
+      const tpl = list.find(c => c.id === currentId);
+      if (tpl) {
+        const INHERIT_KEYS = [
+          'convStream', 'convGameMode', 'convFormat', 'convCustomFormat', 'convSuggestEnabled',
+          'convStripHistoryHtml', 'convStripHtmlKeepText', 'convDisableRetry', 'backstageEnabled',
+          'convTimeAware', 'convBatteryAware', 'convWeatherAware',
+          'convAmbientEnabled', 'convAmbientVolume', 'convAmbientMode',
+          'convOnlineChat', 'convImgGen', 'convCallEnabled', 'convCallFreq',
+          'convGroupChatEnabled', 'convNarrPerson',
+          'convToolsMemory', 'convToolsWorldview', 'convToolsEdit', 'convToolsHistory', 'convAutoExtract',
+          'convEventsEnabled', 'convTasksEnabled', 'convAttrsEnabled', 'convKnowledgeEnabled',
+          'convReplyWordCount', 'convTimeFormat',
+          'convConstraintEcho', 'convConstraintSublime', 'convConstraintGodView',
+          'convConstraintAbility', 'convConstraintAutonomy', 'convConstraintTimeFlow', 'convConstraintGender'
+        ];
+        for (const k of INHERIT_KEYS) {
+          if (tpl[k] !== undefined) conv[k] = tpl[k];
+        }
+        // convVoice 是对象，深拷贝避免共享引用
+        if (tpl.convVoice) conv.convVoice = JSON.parse(JSON.stringify(tpl.convVoice));
+      }
+    } catch(_) {}
+    // 无模板对话时的兜底：从 localStorage 继承「关闭自动重试」
+    try {
+      if (!conv.convDisableRetry && localStorage.getItem('skynex_lastDisableRetry') === '1') {
         conv.convDisableRetry = true;
       }
     } catch(_) {}
