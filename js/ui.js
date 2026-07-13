@@ -316,6 +316,12 @@ isOpen = !sidebar.classList.contains('hidden');
         directionLocked = true;
         gestureActive = false;
       }
+ // 文本输入/可编辑元素内不触发返回/侧栏手势：iOS 双击选词、拖动选区、光标微调会产生横向位移，
+ // 会被误判成"返回滑动"导致面板啪一下退回上一页。这里在源头短路，交还原生文本操作。
+      if (e.target.closest('textarea, input, [contenteditable="true"], [contenteditable=""]')) {
+        directionLocked = true;
+        gestureActive = false;
+      }
     }, { passive: true });
 
     document.addEventListener('touchmove', (e) => {
