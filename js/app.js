@@ -224,7 +224,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v710';
+    const APP_VERSION = 'v710.1';
     const CHANGELOG = `○增加了表情包分类功能
 ○角色卡支持docx导入
 ○部分BUG修复

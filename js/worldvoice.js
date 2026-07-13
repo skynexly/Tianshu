@@ -269,7 +269,7 @@ const WorldVoice = (() => {
   }
 
   // 刷新帖子（含3次重试）
-  async function refresh() {
+  async function refresh(forcedCat) {
     if (isGenerating) return;
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
@@ -287,6 +287,7 @@ const WorldVoice = (() => {
     }
     _renderLoadingSkeleton();
 
+    try {
     _abortCtrl = new AbortController();
 
     const mediaType = await _getMediaType();
@@ -335,10 +336,14 @@ const userBan = banNames.length > 0
   ? `\n\n【禁止冒充玩家】玩家角色"${banNames.join('"和"')}"绝对不能作为帖子/动态发布者或评论者出现。所有用户名和评论者名字都不允许是"${banNames.join('"或"')}"，也不允许任何角色用"我"（指代玩家）的口吻发言。玩家自己发的内容由用户单独操作，不在本生成范围内。`
   : '\n\n【禁止冒充玩家】不要让玩家角色作为发布者或评论者，也不要让任何角色冒充玩家发言。';
 // 论坛分区倾向：非"热门"分区时，让本次生成严格贴合该分区基调
+// 分区优先用调用方显式传入的 forcedCat（消除内部异步读 pd 的时序/引用风险），回退才读 pd
 let _catHint = '';
 try {
-  const _pd = (typeof Phone !== 'undefined' && Phone._getPhoneData) ? await Phone._getPhoneData() : null;
-  const _cat = _pd && _pd.forumActiveCategory;
+  let _cat = forcedCat;
+  if (_cat === undefined || _cat === null) {
+    const _pd = (typeof Phone !== 'undefined' && Phone._getPhoneData) ? await Phone._getPhoneData() : null;
+    _cat = _pd && _pd.forumActiveCategory;
+  }
   if (_cat && _cat !== '热门') {
     _catHint = `\n\n【当前分区】用户正在浏览"${_cat}"分区，本次生成的帖子需要严格符合"${_cat}"分区的基调和话题范围。`;
   }
@@ -427,6 +432,8 @@ ${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}${readingEcho ? '\n\n' + readin
       console.error('[WorldVoice] 最终失败 systemPrompt:', systemPrompt);
       console.error('[WorldVoice] 最终失败 userPrompt:', userPrompt);
     }
+    } finally {
+    // 解锁清理放进 finally：无论中途哪一步抛错，isGenerating 一定复位，永不锁死
     _hideLoadingHint();
 
     isGenerating = false;
@@ -436,6 +443,7 @@ ${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}${readingEcho ? '\n\n' + readin
       btn.disabled = false;
       btn.title = '刷新';
       btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>';
+    }
     }
   }
 
