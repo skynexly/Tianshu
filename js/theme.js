@@ -360,6 +360,8 @@ function init() {
 apply(load());
 // 启动时应用省电模式（持久化在 localStorage）
 try { applyLiteMode(isLiteMode()); } catch(_) {}
+// 启动时应用自定义气泡 CSS
+try { applyBubbleCss(); } catch(_) {}
 }
 
   // ── 表单操作（已迁移至 _syncAllTriggers）──────────────────
@@ -1091,8 +1093,278 @@ function toggleAiBubbleRender() {
     return load().aiBubbleRender !== false;
   }
 
+  // ===== 自定义气泡 CSS =====
+  // 存独立 localStorage（不随主题切换/重置），五个作用域各存一段"声明"。
+  // 生效：拼成带作用域前缀的 <style> 注入 <head>；手机两类自动补 !important（压内联样式）。
+  const BUBBLE_CSS_KEY = 'tianshu_bubble_css';
+  // 每类气泡：selector 作用域、phone(是否补!important)、defaultCss(空框时预填的默认样式起点)
+  const BUBBLE_CSS_DEFS = [
+    { key: 'mainAi',    label: '主线 AI 气泡',   selector: '.chat-msg.assistant',   phone: false,
+      defaultCss: 'background: var(--msg-ai-bg);\nborder: 1px solid var(--msg-ai-border);\ncolor: var(--msg-ai-text);' },
+    { key: 'mainUser',  label: '主线用户气泡',   selector: '.chat-msg.user',        phone: false,
+      defaultCss: 'background: var(--msg-user-bg);\nborder: 1px solid var(--msg-user-border);\ncolor: var(--msg-user-text);' },
+    { key: 'phoneAi',   label: '手机 AI 气泡',   selector: '.phone-chat-txt-char',  phone: true,
+      defaultCss: 'background: var(--bg-tertiary);\ncolor: var(--text);\npadding: 8px 12px;\nborder-radius: 18px;\nborder-bottom-left-radius: 4px;' },
+    { key: 'phoneUser', label: '手机用户气泡',   selector: '.phone-chat-txt-mine',  phone: true,
+      defaultCss: 'background: var(--accent);\ncolor: #fff;\npadding: 8px 12px;\nborder-radius: 18px;\nborder-bottom-right-radius: 4px;' },
+    { key: 'quote',     label: '引号文本',       selector: '.md-content .quoted-text, .chat-msg .quoted-text', phone: false,
+      defaultCss: 'border-bottom: 1.5px solid var(--border);' },
+  ];
+
+  // 可复制的主题变量清单（供用户拿去问 AI 时保持与主题联动）
+  const THEME_VARS_TEXT = [
+    '【任务】我要自定义一个聊天气泡的样式。请只输出 CSS 声明（形如 background:#222; border-radius:16px;），',
+    '不要写选择器、不要写大括号 {}、不要写 ::before/::after 伪元素、不要解释、不要 markdown 代码块。',
+    '禁止使用这些会破坏布局的属性：display、position、width、height、float、top/left/right/bottom、content、flex、z-index。',
+    '只用视觉属性：background、color、border、border-radius、box-shadow、padding、backdrop-filter、background-image(渐变)、transform、transition 等。',
+    'border-radius 请用固定像素值（如 18px），不要用百分比（%），否则宽气泡会被拉成大椭圆。',
+    '关于文字色：如果背景用了写死的颜色（不是 var），文字色 color 也请写死成与之对比清晰的颜色（浅底配深字、深底配浅字），不要留用 var(--text)，否则换主题时可能浅底浅字看不清。背景用 var(--xxx) 时文字色才跟着用 var。',
+    '',
+    '可用的主题变量（用 var(--xxx) 引用，会跟着主题自动变色）：',
+    '--bg              页面主背景色',
+    '--bg-secondary    次级背景（侧栏/卡片）',
+    '--bg-tertiary     三级背景（手机 AI 气泡就是这个色）',
+    '--text            主文字色',
+    '--text-secondary  次要文字色（灰）',
+    '--accent          主题强调色（手机用户气泡就是这个色）',
+    '--decoration      装饰色（斜体等）',
+    '--border          边框/分割线色（引号下划线用的就是它）',
+    '--msg-ai-bg       主线 AI 气泡背景',
+    '--msg-ai-border   主线 AI 气泡边框',
+    '--msg-ai-text     主线 AI 气泡文字',
+    '--msg-user-bg     主线用户气泡背景',
+    '--msg-user-border 主线用户气泡边框',
+    '--msg-user-text   主线用户气泡文字',
+    '',
+    '我想要的效果是：（在这里描述，比如：毛玻璃、圆角大一点、淡紫色半透明、加点阴影）',
+  ].join('\n');
+
+  function loadBubbleCss() {
+    try {
+      const raw = localStorage.getItem(BUBBLE_CSS_KEY);
+      const obj = raw ? JSON.parse(raw) : {};
+      return (obj && typeof obj === 'object') ? obj : {};
+    } catch(_) { return {}; }
+  }
+  function saveBubbleCssStore(obj) {
+    try { localStorage.setItem(BUBBLE_CSS_KEY, JSON.stringify(obj || {})); } catch(_) {}
+  }
+
+  // 把用户填的一段内容规整成"安全的纯声明"：
+  // - 若含完整规则（含 { }），只取第一个规则块（丢掉 ::before/::after 等伪元素块，避免声明混入主体）。
+  // - 规范化全角标点（中文模型爱输出 ：；）。
+  // - 剔除会破坏布局的危险属性（display/position/width/height/float/content 等），无论用户还是 AI 写的。
+  const _BUBBLE_CSS_BLOCKLIST = [
+    'display', 'position', 'float', 'clear',
+    'width', 'height', 'min-width', 'min-height', 'max-height',
+    'top', 'left', 'right', 'bottom', 'inset',
+    'content', 'z-index', 'flex', 'flex-direction', 'flex-grow', 'flex-shrink',
+    'grid', 'grid-template', 'grid-template-columns', 'grid-template-rows',
+    'writing-mode', 'white-space', 'contain', 'transform-origin'
+  ];
+  function _sanitizeDecls(raw) {
+    let s = String(raw || '').trim();
+    if (!s) return '';
+    // 去注释
+    s = s.replace(/\/\*[\s\S]*?\*\//g, '');
+    // 剥掉可能残留的 markdown 代码块围栏
+    s = s.replace(/```[a-z]*\s*/gi, '').replace(/```/g, '');
+    // 规范化全角标点：全角冒号/分号/引号 → 半角（模型常输出全角）
+    s = s.replace(/：/g, ':').replace(/；/g, ';')
+         .replace(/[""]/g, '"').replace(/['']/g, "'")
+         .replace(/，/g, ',');
+    // 若含 {}，只取第一个规则块的声明（AI 常连伪元素规则一起写，取第一块避免 ::before 声明混进主体）
+    if (s.indexOf('{') !== -1) {
+      const m = s.match(/\{([^{}]*)\}/);
+      s = m ? m[1] : s.replace(/[{}]/g, '');
+    }
+    // 换行也当分隔符（模型常一行一条声明不带分号）
+    s = s.replace(/\r?\n+/g, ';');
+    // 拆成声明，过滤掉不含冒号的碎片，并剔除黑名单属性
+    const decls = s.split(';').map(d => d.trim()).filter(d => {
+      if (!d || d.indexOf(':') === -1) return false;
+      const prop = d.slice(0, d.indexOf(':')).trim().toLowerCase();
+      if (!prop) return false;
+      return !_BUBBLE_CSS_BLOCKLIST.includes(prop);
+    });
+    return decls.join(';');
+  }
+
+  // 给一段声明里的每条属性加 !important（用于手机气泡，压内联样式）
+  function _forceImportant(decls) {
+    return decls.split(';').map(d => {
+      const t = d.trim();
+      if (!t) return '';
+      if (/!important\s*$/i.test(t)) return t;
+      return t + ' !important';
+    }).filter(Boolean).join(';');
+  }
+
+  function _buildBubbleCssText(store) {
+    const parts = [];
+    for (const def of BUBBLE_CSS_DEFS) {
+      let decls = _sanitizeDecls(store[def.key]);
+      if (!decls) continue;
+      if (def.phone) decls = _forceImportant(decls);
+      parts.push(`${def.selector}{${decls}}`);
+    }
+    return parts.join('\n');
+  }
+
+  function applyBubbleCss() {
+    const text = _buildBubbleCssText(loadBubbleCss());
+    let el = document.getElementById('custom-bubble-css');
+    if (!el) {
+      el = document.createElement('style');
+      el.id = 'custom-bubble-css';
+      document.head.appendChild(el);
+    }
+    el.textContent = text;
+  }
+
+  function renderBubbleCssPanel() {
+    const store = loadBubbleCss();
+    const list = document.getElementById('bubble-css-list');
+    if (!list) return;
+    // 空框预填该气泡的默认样式，让用户有起点可改
+    list.innerHTML = BUBBLE_CSS_DEFS.map(def => {
+      const val = (store[def.key] && store[def.key].trim()) ? store[def.key] : def.defaultCss;
+      return `
+      <div class="settings-card" style="padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:13px;color:var(--text);font-weight:600">${def.label}</span>
+          <button onclick="Theme.resetBubbleCssField('${def.key}')" style="font-size:11px;padding:4px 10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);cursor:pointer;white-space:nowrap">恢复默认</button>
+        </div>
+        <textarea id="bubble-css-ta-${def.key}" placeholder="background:...; border-radius:...;" style="width:100%;min-height:150px;font-family:monospace;font-size:13px;line-height:1.6;padding:10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:8px;resize:vertical;box-sizing:border-box">${Utils.escapeHtml(val)}</textarea>
+      </div>`;
+    }).join('');
+  }
+
+  function saveBubbleCss() {
+    const store = {};
+    for (const def of BUBBLE_CSS_DEFS) {
+      const ta = document.getElementById('bubble-css-ta-' + def.key);
+      if (ta && ta.value.trim()) store[def.key] = ta.value.trim();
+    }
+    saveBubbleCssStore(store);
+    applyBubbleCss();
+    if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('气泡样式已应用', 1600);
+    // 主线气泡重渲染，让某些依赖结构的样式立即可见
+    try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
+  }
+async function clearAllBubbleCss() {
+    const ok = await UI.showConfirm('全部清空', '清空所有五类气泡的自定义 CSS？');
+    if (!ok) return;
+    saveBubbleCssStore({});
+    applyBubbleCss();
+    for (const def of BUBBLE_CSS_DEFS) {
+      const ta = document.getElementById('bubble-css-ta-' + def.key);
+      if (ta) ta.value = '';
+    }
+    if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已清空', 1400);
+    try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
+  }
+
+  // 导出气泡样式：五类打包成一个 json 文件（带 _type 标识，防与主题文件混淆）
+  function exportBubbleCss() {
+    const store = loadBubbleCss();
+    if (!store || !Object.keys(store).length) { UI.showToast('还没有自定义气泡样式可导出', 2000); return; }
+    const pkg = { _type: 'tianshu-bubble-css', _version: 1, css: store };
+    const json = JSON.stringify(pkg, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `skynex-气泡样式_${new Date().toLocaleDateString('zh-CN').replace(/\//g,'-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    UI.showToast('气泡样式已导出', 2200);
+  }
+
+  // 导入气泡样式：纯覆盖（整套换成文件里的）
+  function importBubbleCss() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.style.display = 'none';
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) { input.remove(); return; }
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        // 兼容两种：{ _type, css:{...} } 或直接 {mainAi:...}
+        let css = null;
+        if (parsed && parsed._type === 'tianshu-bubble-css' && parsed.css && typeof parsed.css === 'object') {
+          css = parsed.css;
+        } else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          // 裸对象：认已知 key
+          const known = BUBBLE_CSS_DEFS.map(d => d.key);
+          if (known.some(k => k in parsed)) css = parsed;
+        }
+        if (!css) { UI.showToast('不是有效的气泡样式文件', 2500); return; }
+        // 只保留已知的五类 key，过滤无关字段
+        const clean = {};
+        for (const def of BUBBLE_CSS_DEFS) {
+          if (typeof css[def.key] === 'string' && css[def.key].trim()) clean[def.key] = css[def.key].trim();
+        }
+        if (!Object.keys(clean).length) { UI.showToast('文件里没有有效的气泡样式', 2500); return; }
+        // 已有则确认覆盖（纯覆盖：整套替换）
+        const existing = loadBubbleCss();
+        if (existing && Object.keys(existing).length) {
+          const ok = await UI.showConfirm('导入气泡样式', '导入将覆盖当前全部气泡样式，确定？');
+          if (!ok) return;
+        }
+        saveBubbleCssStore(clean);
+        applyBubbleCss();
+        // 刷新面板输入框
+        try { renderBubbleCssPanel(); } catch(_) {}
+        try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
+        UI.showToast('气泡样式已导入并应用', 2200);
+      } catch (e) {
+        UI.showToast('导入失败：' + (e.message || ''), 3000);
+      } finally {
+        input.remove();
+      }
+    };
+    document.body.appendChild(input);
+    input.click();
+  }
+
+
+  // 把某一类气泡的框恢复成默认样式
+  function resetBubbleCssField(defKey) {
+    const def = BUBBLE_CSS_DEFS.find(d => d.key === defKey);
+    if (!def) return;
+    const ta = document.getElementById('bubble-css-ta-' + defKey);
+    if (ta) ta.value = def.defaultCss;
+    if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已恢复默认，记得保存', 1600);
+  }
+
+  // 复制主题变量清单到剪贴板（用户拿去问 AI 时保持与主题联动）
+  async function copyThemeVars() {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(THEME_VARS_TEXT);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = THEME_VARS_TEXT;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('指令已复制，去问 AI 时贴上', 2200);
+    } catch(e) {
+      if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('复制失败：' + (e && e.message || ''), 2200);
+    }
+  }
+
   async function applyToAllWorldviews() {
-    const ok = await UI.showConfirm('全局应用主题', '将当前主题绑定至所有世界观（含无世界观），确定？');
+     const ok = await UI.showConfirm('全局应用主题', '将当前主题绑定至所有世界观（含无世界观），确定？');
     if (!ok) return;
     const cfg = load();
     let themeName = '';
@@ -1191,6 +1463,7 @@ function toggleAiBubbleRender() {
     preview, saveForm, resetDefaults,
     applyPreset, handleBgImageUpload, clearBgImage, syncLabel,
     openPicker, toggleGlass, toggleAiBubbleRender, isAiBubbleRenderEnabled,
+    renderBubbleCssPanel, saveBubbleCss, clearAllBubbleCss, resetBubbleCssField, copyThemeVars, applyBubbleCss, exportBubbleCss, importBubbleCss,
 toggleLite, isLiteMode, applyLiteMode,
     setFontMode, handleFontUpload, useFontSlot, clearFontSlot, openFontPanel,
 setMsgFontSize,

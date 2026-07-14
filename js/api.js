@@ -501,8 +501,8 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     };
     if (model) body.model = model;
 
-    // 超时控制（90秒），避免中转站卡住时永远转圈不报错
-    const timeout = options.timeout || 90000;
+    // 超时控制（300秒，给中转站排队/慢速模型留足余量），避免中转站卡住时永远转圈不报错
+    const timeout = options.timeout || 300000;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
     const mergedSignal = options.signal

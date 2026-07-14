@@ -1120,7 +1120,7 @@ async function deleteItem() {
 
   function formatForPrompt(char) {
     if (!char) return '';
-    let text = '【用户角色卡】\n';
+    let text = '【用户设定】\n以下是和你对话的用户「{{user}}」的设定，可以将它们作为背景资料自然地融入对话中，但不要直接复述、罗列或反复提起这些设定内容。\n\n';
     if (char.name) text += `姓名: ${char.name}\n`;
     if (char.onlineName) text += `网名: ${char.onlineName}\n`;
     if (char.gender) text += `性别: ${char.gender}\n`;

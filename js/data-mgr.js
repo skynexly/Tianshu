@@ -180,6 +180,11 @@ const DataMgr = (() => {
     if (data.themeConfig) localStorage.setItem('themeConfig', data.themeConfig);
     if (data.themeCustomPresets) localStorage.setItem('themeCustomPresets', data.themeCustomPresets);
 
+    // 落盘屏障：确保上面所有写事务真正 commit 到磁盘后再返回。
+    // 否则调用方 location.reload() 会打断尚未提交的事务，导致靠后写入（如功能模型
+    // summaryPresets 等，它们在 settings 里靠后写）在部分浏览器/设备上丢失。
+    try { if (DB.flush) await DB.flush('settings'); } catch(_) {}
+
     return { isLite, isTextOnly };
   }
 
@@ -277,6 +282,8 @@ const DataMgr = (() => {
         await importFromData(data);
 
         await UI.showAlert('导入成功', isLite ? '文字数据和各类头像已恢复。生成图库保留了本机现有的；手机里的壁纸/封面等内联大图因为轻量存档不含它们，会是空的（恢复默认）。页面将自动刷新' : isTextOnly ? '文字数据已恢复。独立图库（生成图/头像）保留了本机现有的；手机里的壁纸/头像/封面等内联图因为纯文字存档不含它们，会是空的（恢复默认）。页面将自动刷新' : '总存档已恢复，页面将自动刷新');
+        // reload 前再兜底等一小会，确保落盘（配合 importFromData 里的 DB.flush）
+        await new Promise(r => setTimeout(r, 150));
         location.reload();
       } catch (e) {
         await UI.showAlert('导入失败', e.message || String(e));
@@ -286,6 +293,89 @@ const DataMgr = (() => {
     };
     input.click();
   }
+
+  // ===== 功能模型（API 预设）单独备份 =====
+  // 功能模型全部存在 settings store 的这 20 个 key 里（10 组 presets + 10 个 current 指针）。
+  // 单独导出/导入这些 key，作为功能模型丢失时的硬保险，不牵动对话/世界观/图库等其它数据。
+  const FUNC_MODEL_KEYS = [
+    'apiPresets', 'currentPreset',
+    'summaryPresets', 'currentSummary',
+    'memoryPresets', 'currentMemory',
+    'visionPresets', 'currentVision',
+    'gaidenPresets', 'currentGaiden',
+    'worldvoicePresets', 'currentWorldvoice',
+    'backstagePresets', 'currentBackstage',
+    'ttsPresets', 'currentTts',
+    'drawPresets', 'currentDraw',
+    'suggestPresets', 'currentSuggest'
+  ];
+
+  async function exportFuncModels() {
+    try {
+      const all = await _safeGetAll('settings');
+      const keep = new Set(FUNC_MODEL_KEYS);
+      const rows = (all || []).filter(r => r && keep.has(r.key));
+      if (rows.length === 0) {
+        await UI.showAlert('没有可导出的功能模型', '当前没有读到任何功能模型配置。如果你确定配置存在，可能是 DB 暂时未就绪，稍后再试。');
+        return;
+      }
+      const payload = {
+        version: 1,
+        type: 'funcmodels',
+        exportedAt: Date.now(),
+        settings: rows
+      };
+      _downloadJson(JSON.stringify(payload), `skynex-funcmodels-${new Date().toISOString().slice(0, 10)}.json`);
+      UI.showToast('已导出功能模型配置', 2000);
+      // 提醒：该文件含 API Key，属敏感文件
+      setTimeout(() => { UI.showToast('注意：该文件含 API Key，请妥善保管、勿分享', 3500); }, 800);
+    } catch (e) {
+      console.error('[DataMgr.exportFuncModels]', e);
+      await UI.showAlert('导出失败', e.message || String(e));
+    }
+  }
+
+  function importFuncModels() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) { input.remove(); return; }
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        // 校验：既支持功能模型专用备份，也兼容从总存档里提取（只要 settings 数组存在）
+        const rows = Array.isArray(data.settings) ? data.settings : null;
+        if (!rows) throw new Error('无效的功能模型备份文件');
+        const keep = new Set(FUNC_MODEL_KEYS);
+        const funcRows = rows.filter(r => r && keep.has(r.key));
+        if (funcRows.length === 0) throw new Error('文件里没有功能模型配置');
+
+        if (!await UI.showConfirm('导入功能模型', `将用备份里的 ${funcRows.length} 项功能模型配置整组覆盖当前配置（只影响功能模型，不动对话、世界观、图库等其它数据）。确定继续？`)) {
+          input.remove();
+          return;
+        }
+
+        // 整组覆盖：只写这 20 个 key，绝不清空整个 settings 表
+        for (const r of funcRows) await _safePut('settings', r);
+        // 落盘屏障，防止 reload 打断未提交事务
+        try { if (DB.flush) await DB.flush('settings'); } catch(_) {}
+
+        await UI.showAlert('导入成功', '功能模型配置已恢复，页面将自动刷新。');
+        await new Promise(r => setTimeout(r, 150));
+        location.reload();
+      } catch (e) {
+        await UI.showAlert('导入失败', e.message || String(e));
+      } finally {
+        input.remove();
+      }
+    };
+    input.click();
+  }
+
 
   function getLastExportAt() {
     try {
@@ -587,7 +677,7 @@ const DataMgr = (() => {
     return { updated, count, freed };
   }
 
-  return { exportAll, exportTextOnly, exportLite, importAll, getLastExportAt,
+  return { exportAll, exportTextOnly, exportLite, importAll, exportFuncModels, importFuncModels, getLastExportAt,
            buildSaveJson, importFromData,
            getStorageStats, listDrawnImages, getDrawnImageData, deleteDrawnImages, deleteDrawnImagesBefore,
            scanPhoneImages, getPhoneImageCats, clearPhoneImages, getStorageEstimate,

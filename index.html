@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=152">
+<link rel="stylesheet" href="css/style.css?v=154">
 <link rel="stylesheet" href="css/phone.css?v1=399">
 <link rel="stylesheet" href="css/phone-fudge.css?v=48">
 <link rel="stylesheet" href="css/markdown.css">
@@ -1981,6 +1981,13 @@
             <input type="number" id="directive-rounds" value="3" min="1" max="50" step="1" style="width:70px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;text-align:center">
             <span style="font-size:11px;color:var(--text-secondary)">轮（到期后自动清空）</span>
           </div>
+          <label class="circle-check-label">
+            <span class="circle-check-text">永久生效<span style="font-size:11px;color:var(--text-secondary)">（不限轮数，直到手动清空）</span></span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="directive-permanent" class="circle-check" onchange="var r=document.getElementById('directive-rounds');if(r)r.disabled=this.checked">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
           <div id="directive-status" style="display:none;padding:8px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-secondary)"></div>
         </div>
         <div class="modal-actions" style="flex-shrink:0;margin-top:16px;padding-top:12px">
@@ -2678,8 +2685,16 @@
               <span>界面主题</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
             </div>
+            <div class="settings-card-item" onclick="UI.switchSettingsTab('st-bubble-css');Theme.renderBubbleCssPanel()">
+              <span>自定义气泡 CSS</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
             <div class="settings-card-item" onclick="UI.switchSettingsTab('st-statusbar');StatusBarTheme.renderList()">
               <span>状态栏美化</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+            <div class="settings-card-item" onclick="UI.switchSettingsTab('st-appicons');Phone.renderAppIconList()">
+              <span>手机图标</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
             </div>
             <div class="settings-card-item" onclick="UI.switchSettingsTab('st-stickers');Stickers.renderList()">
@@ -2957,10 +2972,10 @@
 <div style="font-size:14px;color:var(--text);font-weight:600">AI气泡渲染</div>
 <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">关闭后AI消息仅做Markdown渲染</div>
 </div>
-<label class="pill-toggle"><input type="checkbox" id="th-ai-render-toggle" onchange="Theme.toggleAiBubbleRender()"><span class="pill-track"></span></label>
-</div>
+ <label class="pill-toggle"><input type="checkbox" id="th-ai-render-toggle" onchange="Theme.toggleAiBubbleRender()"><span class="pill-track"></span></label>
+ </div>
 
-<!-- 锁定返回手势 -->
+ <!-- 锁定返回手势 -->
 <div class="settings-card" style="padding:12px;display:flex;justify-content:space-between;align-items:center">
 <div>
 <div style="font-size:14px;color:var(--text);font-weight:600">锁定返回手势</div>
@@ -3089,6 +3104,29 @@
 </div>
 
             </div>
+
+      <!-- Tab: 自定义气泡 CSS -->
+      <div id="st-bubble-css" class="settings-tab-content" style="display:none">
+        <h3 style="color:var(--accent);font-size:14px;margin-bottom:12px">自定义气泡 CSS</h3>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.7">每个框预填了该气泡的默认样式，直接改就行——只写 CSS 声明（如 <code>background:#222;border-radius:16px</code>），不用写选择器和大括号。手机气泡会自动加 !important。<br>不会写？点「复制给 AI 的指令」，连同框里的默认样式一起发给 AI（DeepSeek 等）让它改，粘回来保存即可。</div>
+        <button onclick="Theme.copyThemeVars()" style="width:100%;padding:10px 0;font-size:13px;background:none;border:1px dashed var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg> 复制给 AI 的指令</button>
+        <div id="bubble-css-list" style="display:flex;flex-direction:column;gap:16px"></div>
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <button onclick="Theme.exportBubbleCss()" style="flex:1;padding:11px 0;font-size:13px;background:none;border:1px solid var(--border);border-radius:9px;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出</button>
+          <button onclick="Theme.importBubbleCss()" style="flex:1;padding:11px 0;font-size:13px;background:none;border:1px solid var(--border);border-radius:9px;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>导入</button>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <button onclick="Theme.clearAllBubbleCss()" style="flex:1;padding:11px 0;font-size:13px;background:none;border:1px solid var(--border);border-radius:9px;color:var(--text-secondary);cursor:pointer">全部清空</button>
+          <button onclick="Theme.saveBubbleCss()" style="flex:2;padding:11px 0;font-size:13px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-weight:600;cursor:pointer">保存并应用</button>
+        </div>
+      </div>
+
+      <!-- Tab: 手机图标 -->
+      <div id="st-appicons" class="settings-tab-content" style="display:none">
+        <h3 style="color:var(--accent);font-size:14px;margin-bottom:16px">手机图标</h3>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6">自定义世界观手机里各 APP 的桌面图标，全局生效（所有对话通用）。点图标更换（支持本地图片 / 图片链接），点右上角 × 恢复默认。</div>
+        <div id="appicons-list" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(78px, 1fr));gap:16px"></div>
+      </div>
 
       <!-- Tab: 表情包管理 -->
       <div id="st-stickers" class="settings-tab-content" style="display:none">
@@ -4150,17 +4188,17 @@ const GameLog = (() => {
   return { log, toggle, clear, render };
 })();
 </script>
-<script src="js/db.js?v=14"></script>
+<script src="js/db.js?v=15"></script>
 <script src="js/stickers.js?v=7"></script>
-<script src="js/utils.js?v=12"></script>
+<script src="js/utils.js?v=16"></script>
 <script src="js/markdown.js?v=9"></script>
-<script src="js/api.js?v=1"></script>
+<script src="js/api.js?v=3"></script>
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
 <script src="js/mcp-client.js"></script>
 <script src="js/fab-drag.js?v=3"></script>
-<script src="js/memory.js?v=6"></script>
-<script src="js/tools.js?v=7"></script>
+<script src="js/memory.js?v=8"></script>
+<script src="js/tools.js?v=8"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=56"></script>
 <script src="js/worldview.js?v=101"></script>
@@ -4172,18 +4210,18 @@ const GameLog = (() => {
 <script src="js/single_card.js?v=14"></script>
 <script src="js/attached-chars.js?v=2"></script>
 <script src="js/single_mode.js?v=4"></script>
-<script src="js/character.js?v=14"></script>
+<script src="js/character.js?v=15"></script>
 <script src="js/prompts.js?v=1"></script>
 <script src="js/conversations.js?v=12"></script>
 <script src="js/summary.js?v=1"></script>
-<script src="js/chat.js?v=100"></script>
+<script src="js/chat.js?v=103"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
 <script src="js/tts.js"></script>
 <script src="js/branch.js"></script>
-<script src="js/settings.js?v=3"></script>
-<script src="js/gaiden.js?v=2"></script>
+<script src="js/settings.js?v=4"></script>
+<script src="js/gaiden.js?v=3"></script>
 <script src="js/backstage.js?v=13"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
@@ -4194,27 +4232,28 @@ const GameLog = (() => {
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/phone.js?v1=1123"></script>
+<script src="js/app_icons.js?v=1"></script>
+<script src="js/phone.js?v1=1125"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
 <script src="js/ui.js?v=18"></script>
-<script src="js/data-mgr.js?v=14"></script>
+<script src="js/data-mgr.js?v=16"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>
   <script src="data/tutorial-script.js?v=2"></script>
-  <script src="js/theme.js?v=6"></script>
+  <script src="js/theme.js?v=15"></script>
   <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js?v=2"></script>
 <script src="data/builtin-heartsim.js?v=2"></script>
 <script src="js/tianshucheng-fx.js"></script>
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
-<script src="js/auth.js?v=16"></script>
-<script src="js/app.js?v=148"></script>
+<script src="js/auth.js?v=19"></script>
+<script src="js/app.js?v=149"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

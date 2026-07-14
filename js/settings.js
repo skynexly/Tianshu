@@ -58,6 +58,10 @@ let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set()
   ];
 
   async function init() {
+    // v712：init 是"加载"，默认只读不回写。只有确实发生了数据迁移才置 _needSave 并在结尾保存。
+    // 修复：此前 init 结尾无条件 savePresets()，一旦某次启动 DB 读取抖动/返回空，
+    // 功能模型 fallback 成空默认后被立即写回 DB，导致"没导入导出也丢配置"。
+    let _needSave = false;
     const data = await DB.get('settings', 'apiPresets');
     presets = (data?.value && data.value.length > 0) ? data.value : [{
       id: 'default', name: '默认',
@@ -69,7 +73,7 @@ let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set()
     if (oldData?.value?.apiUrl && presets[0].apiUrl === '') {
       Object.assign(presets[0], oldData.value);
       presets[0].name = presets[0].name || '默认';
-      await savePresets();
+      _needSave = true;
     }
     // v711 迁移：Max Tokens 默认值从 '4096' 改为空（不限制）。
     // 把恰好等于老默认 '4096' 的预设清空——这几乎肯定是没手动改过的老默认，
@@ -78,7 +82,7 @@ let funcSelectedIds = { summary: new Set(), memory: new Set(), vision: new Set()
     presets.forEach(p => {
       if (p && String(p.maxTokens).trim() === '4096') { p.maxTokens = ''; _mtMigrated = true; }
     });
-    if (_mtMigrated) { try { await savePresets(); } catch(_) {} }
+    if (_mtMigrated) { _needSave = true; }
     const lastUsed = await DB.get('settings', 'currentPreset');
     currentPresetId = lastUsed?.value || presets[0].id;
     if (!presets.find(p => p.id === currentPresetId)) currentPresetId = presets[0].id;
@@ -102,6 +106,7 @@ worldvoicePresets.forEach(p => {
     _worldvoiceNameMigrated = true;
   }
 });
+if (_worldvoiceNameMigrated) { _needSave = true; }
 const bsData = await DB.get('settings', 'backstagePresets');
     backstagePresets = (bsData?.value && bsData.value.length > 0) ? bsData.value : [{ id: 'default', name: '默认', apiUrl: '', apiKey: '', model: '' }];
     const ttsData = await DB.get('settings', 'ttsPresets');
@@ -141,7 +146,11 @@ const bsData = await DB.get('settings', 'backstagePresets');
     if (!drawPresets.find(p => p.id === currentDrawId)) currentDrawId = drawPresets[0]?.id || 'default';
     if (!suggestPresets.find(p => p.id === currentSuggestId)) currentSuggestId = suggestPresets[0]?.id || 'default';
 
-    await savePresets();
+    // v712：只有确实发生了数据迁移才回写；正常加载不保存，避免用空默认覆盖真实配置。
+    // currentXxx 的安全校验只改内存里的"当前选中指针"，不改预设本身，不触发保存。
+    if (_needSave) {
+      try { await savePresets(); } catch(e) { console.warn('[Settings] init 迁移保存失败', e); }
+    }
   }
 
   async function savePresets() {

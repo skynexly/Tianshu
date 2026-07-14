@@ -2094,6 +2094,14 @@ function _collectEmotionsForEdit() {
     if (!m) return;
     editingId = id;
 
+    // 损坏数据防护：数组字段可能被存成字符串/对象，强制规整，避免 .map/.join 崩溃导致面板打不开
+    if (!Array.isArray(m.emotions)) m.emotions = [];
+    if (!Array.isArray(m.participants)) {
+      m.participants = typeof m.participants === 'string'
+        ? m.participants.split(/[,，、]/).map(s => s.trim()).filter(Boolean)
+        : [];
+    }
+
     document.getElementById('mem-edit-type').value = m.type || 'event';
     // 更新类型下拉label
     const typeLabel = document.getElementById('mem-edit-type-label');
@@ -2299,6 +2307,8 @@ function _collectEmotionsForEdit() {
   }
 
   function addManual() {
+    editingId = null;
+    const type = currentTab === 'relations' ? 'relation' : 'event';
     document.getElementById('mem-edit-type').value = type;
     // 更新类型下拉label
     const editTypeLabel = document.getElementById('mem-edit-type-label');

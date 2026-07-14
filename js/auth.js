@@ -12,6 +12,8 @@ const Auth = (() => {
   const API = 'https://auth.skynexyl.com';
   const LS_KEY = 'tianshu_auth_v1';
   const HEARTBEAT_INTERVAL = 30 * 60 * 1000; // 30 min
+  const MIN_HEARTBEAT_GAP = 5 * 60 * 1000; // 前台唤醒节流：距上次校验不足 5 分钟则跳过（省 KV 读）
+  let _lastHeartbeatAt = 0;
 
   let _state = null;        // { token, device_id, email, nickname, devices }
   let _heartbeatTimer = null;
@@ -114,14 +116,18 @@ const Auth = (() => {
   function _startHeartbeat() {
     if (_heartbeatTimer) clearInterval(_heartbeatTimer);
     _heartbeatTimer = setInterval(() => _heartbeat(), HEARTBEAT_INTERVAL);
-    // 页面切回前台时立刻 ping 一次
+    // 页面切回前台时 ping 一次（走节流，狂切窗口不会狂打后端）
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') _heartbeat();
     });
   }
 
-  async function _heartbeat() {
+  // force=true 时跳过节流（登录成功、打开账号卡等需要立刻拿最新设备列表的场景）
+  async function _heartbeat(force) {
     if (!_state?.token) return;
+    // 前台唤醒节流：距上次校验不足 MIN_HEARTBEAT_GAP 就跳过，省 KV 读
+    if (!force && Date.now() - _lastHeartbeatAt < MIN_HEARTBEAT_GAP) return;
+    _lastHeartbeatAt = Date.now();
     try {
       const { status, data } = await _post('/check', { token: _state.token, device_id: _state.device_id });
       if (status === 200 && data?.ok) {
@@ -455,8 +461,8 @@ const Auth = (() => {
     _renderProfile();
     overlay.classList.add('visible');
     document.body.style.overflow = 'hidden';
-    // 静默刷一次最新设备列表
-    _heartbeat();
+    // 静默刷一次最新设备列表（用户主动打开，force 跳过节流）
+    _heartbeat(true);
   }
 
   function closeProfile() {
@@ -555,6 +561,16 @@ const Auth = (() => {
             <div class="auth-profile-item-label">导入存档</div>
             <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
           </div>
+          <div class="auth-profile-item" id="auth-profile-export-func">
+            <div class="auth-profile-item-label">导出功能模型</div>
+            <div class="auth-profile-item-value">仅 API 预设·防丢保险</div>
+            <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          </div>
+          <div class="auth-profile-item" id="auth-profile-import-func">
+            <div class="auth-profile-item-label">导入功能模型</div>
+            <div class="auth-profile-item-value">整组覆盖</div>
+            <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          </div>
           <div class="auth-profile-item" id="auth-profile-restore-backup" style="display:none">
             <div class="auth-profile-item-label">恢复迁移前备份</div>
             <div class="auth-profile-item-value" id="auth-profile-restore-backup-info"></div>
@@ -618,6 +634,8 @@ const Auth = (() => {
     _refreshImageStat();
     _refreshStorageEstimate();
     document.getElementById('auth-profile-import').addEventListener('click', () => DataMgr.importAll());
+    document.getElementById('auth-profile-export-func')?.addEventListener('click', () => DataMgr.exportFuncModels());
+    document.getElementById('auth-profile-import-func')?.addEventListener('click', () => DataMgr.importFuncModels());
     // 恢复迁移前备份：仅当存在备份时显示这一项
     (async () => {
       try {
@@ -1181,6 +1199,8 @@ const Auth = (() => {
         try {
           await SupabaseBackup.restoreBackup(id);
           await _modal({ title: '恢复成功', desc: '数据已从云端恢复，页面将自动刷新。', okText: '好', cancelText: false });
+          // reload 前兜底等一小会，确保落盘（importFromData 内已有 DB.flush，这里双保险）
+          await new Promise(r => setTimeout(r, 150));
           location.reload();
         } catch (err) {
           btn.disabled = false; btn.textContent = '恢复';

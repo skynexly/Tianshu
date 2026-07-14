@@ -1234,6 +1234,19 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
             </div>
             <div style="font-size:13px;color:var(--text);line-height:1.5">${Utils.escapeHtml(c.content || '')}</div>
             <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;display:flex;align-items:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>${c.likes || 0}</div>
+            ${(Array.isArray(c.replies) && c.replies.length) ? `<div style="margin-top:8px;padding-left:10px;border-left:2px solid var(--border)">${c.replies.map(rp => {
+              const to = (rp.replyToName || '').trim() ? `<span style="color:#5a8fc0">@${Utils.escapeHtml(rp.replyToName)}</span><span style="color:var(--text-secondary)">：</span>` : '';
+              return `<div style="display:flex;gap:8px;padding:6px 0">
+                <div style="width:22px;height:22px;border-radius:50%;background:${Utils.escapeHtml(rp.avatar_color || '#666')};display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:bold;flex-shrink:0">${Utils.escapeHtml((rp.username || '?')[0])}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <span style="font-size:12px;font-weight:600;color:var(--text)">${Utils.escapeHtml(rp.username || '匿名')}</span>
+                    <span style="font-size:10px;color:var(--text-secondary)">${Utils.escapeHtml(rp.time || '')}</span>
+                  </div>
+                  <div style="font-size:12.5px;color:var(--text);line-height:1.5;margin-top:2px;word-break:break-word">${to}${Utils.escapeHtml(rp.content || '')}</div>
+                </div>
+              </div>`;
+            }).join('')}</div>` : ''}
           </div>
         </div>`;
       });

@@ -159,6 +159,30 @@ const DB = (() => {
     });
   }
 
+  // 落盘屏障：开一个 readwrite 空事务并等它 oncomplete。
+  // IndexedDB 里 put/clear 的 request.onsuccess 只代表"请求已处理"，数据真正提交是在
+  // 事务 oncomplete 时。之前每次 put 各开一个事务、只等 request.onsuccess 就 resolve，
+  // 导入后立即 location.reload() 会打断尚未 commit 的事务，导致靠后写入（如功能模型）丢失。
+  // 调用 flush() 会新开一个事务；由于 IndexedDB 事务按创建顺序串行提交，等到这个事务
+  // oncomplete，就能保证它之前创建的所有写事务都已落盘。
+  function flush(storeName) {
+    return new Promise((resolve) => {
+      try {
+        // 任选一个存在的 store 开事务即可（默认用 settings）
+        const name = storeName || 'settings';
+        const t = db.transaction(name, 'readwrite');
+        t.oncomplete = () => resolve(true);
+        t.onerror = () => resolve(false);
+        t.onabort = () => resolve(false);
+        // 触发一次无害的读，确保事务真正被排入队列并提交
+        try { t.objectStore(name).get('__flush_probe__'); } catch(_) {}
+      } catch (e) {
+        console.warn('[DB] flush 失败（忽略）', e);
+        resolve(false);
+      }
+    });
+  }
+
   function getAllByIndex(storeName, indexName, value) {
     return new Promise((resolve, reject) => {
       const store = tx(storeName);
@@ -191,5 +215,5 @@ const DB = (() => {
     });
   }
 
-  return { open, openWithRetry, put, get, getAll, del, clear, getAllByIndex, deleteByIndex };
+  return { open, openWithRetry, put, get, getAll, del, clear, flush, getAllByIndex, deleteByIndex };
 })();

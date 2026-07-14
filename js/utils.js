@@ -930,12 +930,28 @@ async function copyFromDataset(btn) {
       promptEl.value = defaultPrompt;
 
       let curDataUrl = null;
+      let downloaded = false; // 下载过就不拦截关闭
 
       function cleanup() { overlay.remove(); }
+
+      // 关闭前检查：已生成头像但既没「用这张」也没下载 → 弹确认，避免手滑关掉白费额度
+      async function _tryClose() {
+        if (curDataUrl && !downloaded) {
+          const ok = await UI.showConfirm('确定关闭？', '已生成的头像还没使用，也没下载。关闭后这张图就找不回来了（生图消耗的额度会白费）。确定关闭？');
+          if (!ok) return; // 用户改主意，留在弹窗
+        }
+        cleanup();
+        resolve(null);
+      }
 
       genBtn.onclick = async () => {
         const p = promptEl.value.trim();
         if (!p) { statusEl.style.display = 'block'; statusEl.style.color = 'var(--danger,#e55)'; statusEl.textContent = '请先填写画面描述'; return; }
+        // 重新生成前：若已有一张还没「用这张」也没下载的图，先确认——避免手滑覆盖掉满意的图
+        if (curDataUrl && !downloaded) {
+          const ok = await UI.showConfirm('重新生成？', '当前这张头像还没使用，也没下载。重新生成会覆盖它，旧图找不回来（额度也会再花一次）。确定重新生成？');
+          if (!ok) return;
+        }
         genBtn.disabled = true;
         useBtn.style.display = 'none';
         downloadBtn.style.display = 'none';
@@ -945,9 +961,10 @@ async function copyFromDataset(btn) {
         try {
           // 加画质后缀，提升头像出图质量
           const fullPrompt = p + '，人物头像，半身像，正脸，高质量，精致细节';
-          const images = await API.generateImage(fullPrompt, { size: '1024x1024', n: 1, timeout: 180000 });
+          const images = await API.generateImage(fullPrompt, { size: '1024x1024', n: 1 });
           if (!images || !images.length) throw new Error('未返回图片');
           curDataUrl = images[0];
+          downloaded = false; // 新图未下载，重置拦截标记
           imgEl.src = curDataUrl;
           previewWrap.style.display = 'flex';
           statusEl.style.display = 'none';
@@ -964,6 +981,27 @@ async function copyFromDataset(btn) {
 
       useBtn.onclick = async () => {
         if (!curDataUrl) return;
+        // 提醒：「用这张」只把压缩后的小图设为头像，高清原图不会自动存本地。
+        // 给个勾选项让用户顺手留底（没下载过才提示，避免重复）。
+        if (!downloaded) {
+          const r = await UI.showConfirm('用这张头像', '这会把它设为头像（存的是压缩后的小图）。高清原图不会自动保存到本地，之后想要原图就没有了。', { checkbox: '同时下载高清原图到本地留存' });
+          const ok = (r && typeof r === 'object') ? r.ok : r;
+          if (!ok) return; // 取消：留在弹窗
+          if (r && r.checked) {
+            // 下载高清原图
+            try {
+              const a = document.createElement('a');
+              a.href = curDataUrl;
+              a.download = `skynex-avatar-${Date.now()}.png`;
+              a.style.display = 'none';
+              document.body.appendChild(a);
+              a.click();
+              setTimeout(() => { try { document.body.removeChild(a); } catch(_) {} }, 100);
+              downloaded = true;
+              if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('原图已保存到下载目录', 1500);
+            } catch(_) {}
+          }
+        }
         const result = await compressDataUrl(curDataUrl, { maxSize, quality, outputFormat: 'jpeg' });
         cleanup();
         resolve(result);
@@ -980,12 +1018,13 @@ async function copyFromDataset(btn) {
           document.body.appendChild(a);
           a.click();
           setTimeout(() => { try { document.body.removeChild(a); } catch(_) {} }, 100);
+          downloaded = true; // 已下载，关闭时不再拦截
           if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已保存到下载目录', 1500);
         } catch(_) {}
       };
 
-      overlay.querySelector('#_aiav-cancel').onclick = () => { cleanup(); resolve(null); };
-      overlay.onclick = (e) => { if (e.target === overlay) { cleanup(); resolve(null); } };
+      overlay.querySelector('#_aiav-cancel').onclick = () => { _tryClose(); };
+      overlay.onclick = (e) => { if (e.target === overlay) { _tryClose(); } };
     });
   }
 

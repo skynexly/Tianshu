@@ -311,7 +311,9 @@ const Chat = (() => {
 6. 当输出了 \`\`\`chat 块时，**消息的具体内容只写在 chat 块里，正文不要复述**。正文需要简短交代"发送/收到了消息"这个动作或场景本身（例如"她拿起手机，给他发了一条消息"/"手机震了一下，是来自{{NPC}}的消息"），但不要把消息原文也写进正文，避免一条消息出现两次。
 7. **chat 块里只放 NPC 发出的消息，不要包含{{user}}的消息**。用户的消息由用户自己输入，AI 既不要复述也不要替用户写入 chat 块。
 8. **chat 块只填本轮新产生的线上消息，不要把历史轮次已经出现过的消息再填一遍**。历史消息前端已经渲染过，重复输出会导致用户看到同一条消息出现多次。
-9. **chat 块只用于私聊/群聊类的即时通讯消息**。论坛帖子、论坛评论、好友圈动态、好友圈评论等内容不要放入 chat 块——它们有独立的手机 APP 界面承载，不属于线上消息。`;
+9. **chat 块只用于一对一私聊的即时通讯消息**。以下内容一律不要放入 chat 块：
+   - **群聊消息**：多人群里的对话绝对不要用 chat 块输出、也不要在 chat 块里编造群成员的你一言我一语。群聊有独立机制：若本次启用了"群聊能力"（见相应说明），需要群聊时输出 \`\`\`groupchat 信号块交给系统在手机群聊 APP 里生成；若未启用群聊能力，则用正文旁白简述"群里聊了什么"即可，不要用 chat 块伪造群消息。
+   - 论坛帖子、论坛评论、好友圈动态、好友圈评论等内容——它们有独立的手机 APP 界面承载，不属于线上消息。`;
 
 
   /**
@@ -659,8 +661,12 @@ const Chat = (() => {
     const { rewriteHint = null } = opts;
 // 构建system prompt
 const systemParts = [];
-// 名字防翻译/防本地化全局约束（英文名被中文语境自动翻译的问题）
+// 名字防翻译/防本地化全局约束（英文名被中文语境自动翻译的问题）— 非文游模式跳过
+// 注：isGameMode 在下方定义，这里用函数提前取一次
+const _isGameModeForNaming = _getConvSettings().gameMode;
+if (_isGameModeForNaming) {
 systemParts.push('【命名规则·全局强制】所有角色、玩家、NPC、地点、组织等专有名字必须严格保留其原文（包括英文名、数字、符号），不得翻译、音译或本地化，并严格保持原有大小写。例如英文名 "Lyra" 必须原样写作 "Lyra"，不得写成中文或改变大小写。');
+}
 // v687.33：提前检测心动模拟返航状态（后续多处需要用）
 let _hsHomecoming = false;
 let _hsPostHomeMode = null; // 'continue' | 'end' | null
@@ -759,7 +765,7 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
       systemParts.push(`【AI 扮演角色】
 本对话为群像模式（多角色剧情）。你是"叙事者 + 所有 NPC 的扮演者"，用户扮演"{{user}}"。
 你应该：
-1. 通过场景描写、NPC 对话和环境互动推进剧情，把"用户角色卡"作为玩家的身份资料理解，不要把用户角色卡本身当成需要你扮演的对象。
+1. 通过场景描写、NPC 对话和环境互动推进剧情，把"用户设定"作为玩家的身份资料理解，不要把用户设定本身当成需要你扮演的对象。
 2. ${_groupPersonLine}
 3. 根据场景需要让 NPC 自然登场，不必所有 NPC 都登场。`);
     }
@@ -890,12 +896,10 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
       }
     }
 
-    // 2a. 首轮现实时间戳（兜底开场时间）
-    // 不论文游/非文游、不论有没有 startTime，第一条 user 消息时都发——
-    // AI 自己判断：优先用 startTime 或 setting 里写的开场时间，都没有再用现实时间。
+    // 2a. 首轮现实时间戳（兜底开场时间）— 非文游模式跳过
     try {
       const userMsgCount = messages.filter(m => m.role === 'user').length;
-      if (userMsgCount <= 1) {
+      if (isGameMode && userMsgCount <= 1) {
         const now = new Date();
         const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
         const realTime = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -987,9 +991,9 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
 const char = await Character.get();
 if (char) systemParts.push(Character.formatForPrompt(char));
 
-// 3-衣橱. 当前着装（从衣橱系统读取，只要穿了就发）
+// 3-衣橱. 当前着装（从衣橱系统读取，只要穿了就发）— 非文游模式跳过
 try {
-  if (typeof Phone !== 'undefined' && Phone._getPhoneData) {
+  if (isGameMode && typeof Phone !== 'undefined' && Phone._getPhoneData) {
     const _pd = await Phone._getPhoneData();
     const _outfit = (_pd && _pd.wardrobeOutfit) || {};
     const _WARDROBE_PARTS = [
@@ -1013,9 +1017,9 @@ try {
   }
 } catch(_) {}
 
-// 3a. 玩家当前居住地（从小屋系统读取）
+// 3a. 玩家当前居住地（从小屋系统读取）— 非文游模式跳过
 try {
-  if (typeof Phone !== 'undefined' && Phone._getPhoneData) {
+  if (isGameMode && typeof Phone !== 'undefined' && Phone._getPhoneData) {
     const _pd = await Phone._getPhoneData();
     if (_pd && Array.isArray(_pd.houses)) {
       const curHouse = _pd.houses.find(h => h.isCurrent);
@@ -1207,10 +1211,10 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
       _normalNoteCount = _noteCount - _importantNoteCount;
     } catch(_) {}
 
-    // 5c. 角色记事本（NPC 网络行为档案）：命中在场/被提及的 NPC → 注入其行为记录
+    // 5c. 角色记事本（NPC 网络行为档案）：命中在场/被提及的 NPC → 注入其行为记录 — 非文游模式跳过
     let _npcNoteHitCount = 0;
     try {
-      if (Phone && Phone._npcNotesRetrieve) {
+      if (isGameMode && Phone && Phone._npcNotesRetrieve) {
         const npcHits = Phone._npcNotesRetrieve(presentNPCs, recentText);
         const npcNotePrompt = Phone._npcNotesFormatForPrompt(npcHits);
         if (npcNotePrompt) systemParts.push(npcNotePrompt);
@@ -1234,9 +1238,10 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
       systemParts.push(...injections.systemBottom);
     }
 
-    // 6.5 v687.34：AI行为约束（分层注入：深度0/深度3/system_bottom）
+    // 6.5 v687.34：AI行为约束（分层注入：深度0/深度3/system_bottom）— 非文游模式跳过整组叙述约束
     const _constraintDepth0 = [];
     const _constraintDepth3 = [];
+    if (isGameMode) {
     if (convSettings.constraintEcho) {
     _constraintDepth0.push('<rules:叙述协议·边界声明>\n\n概述：你需要保护{{user}}的叙事主权，防止任何越权描述{{user}}的行为。\n\n- **不可虚构用户行为**\n  - 生成剧情时，明确{{user}}为用户控制的角色，一切{{user}}的主动行为只能由用户本人输入，你不可代替用户描写{{user}}。\n  - 禁止描写{{user}}任何主动行为，包括但不限动作、神态、语言、情绪、内心活动、决策等。禁止生成以"你"、"{{user}}"、其他代指{{user}}的词汇作为主语的句子，例如"你点了点头"、"{{user}}接过了水"、"你表情呆滞"，但允许{{user}}作为客体时使用"你"，如"他看向你"、"他为你盖好了被子"；也禁止省略主语，但依旧属于{{user}}主动行为的句子，如"走向玄关"、"打开包装"。\n  - 禁止描写或猜测{{user}}未在设定中写明的习惯和喜好（如口味、装修、音乐品味、财力、过往经历等）。\n  - 禁止通过描写"{{user}}沉默/没有回应"来跳过{{user}}的行动，需要{{user}}做出反应的部分必须等待回复。\n\n- **你被允许的事项**\n  - 更多描写其他在场角色的举动、景色、天气、客观存在的事物。\n  - 涉及到{{user}}的部分，你可以描写{{user}}行为带来的影响，如其他角色的反应、外部环境、行为后果等不属于{{user}}可以主观控制的内容。例如"门被推开了"、"NPC被吓了一跳"、"室内只有一把椅子"\n  - 或用第三方视角描写其他角色对{{user}}的动作和观察，或环境对{{user}}造成的影响。例如"他看向{{user}}"、"狂风吹飞了帽子"、"阳光落在你的脸颊"\n\n</rules:叙述协议·边界声明>\n\n<rules:叙述协议·防止回声>\n\n概述：不要做复读机。\n\n- 回复时，严禁转述、复述、引用、扩写或加工{{user}}上一条消息的内容，不要通过旁白如"你的那句…""你的那声…"等类似表达重复{{user}}说过的话，更不要通过角色重复或反问任何{{user}}的语言，如"……在口中过了一遍""……重复了一遍"等。\n- 不得在正文中重复描述{{user}}已提及的行为，而是根据{{user}}的回复描写外部反应。\n- 不得以"等你回应"、"等待指令"等生硬描述作为结尾，应通过角色已完成的行为动作、语言、环境描写、情节转折等形成可以自然承接的结尾。\n\n</rules:叙述协议·防止回声>');
   }
@@ -1268,6 +1273,7 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
 - 禁止无剧情支撑的大幅时间推进。如果互动只有几句对话、拥抱牵手拍肩捏脸等肢体动作，时间推进不应超过5分钟
 </rules:时间流逝感知>`);
     }
+    } // end if (isGameMode) — 叙述约束整组
 
     // v687.41b：防八股（全局每5轮自动触发，不依赖角色名检测）
     // 改版原因：心动模拟等多人情感向卡里走单角色线也需要防八股，按角色名检测反而漏触发
@@ -6694,11 +6700,19 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     const contentEl = document.getElementById('directive-content');
     const roundsEl = document.getElementById('directive-rounds');
     const statusEl = document.getElementById('directive-status');
+    const permEl = document.getElementById('directive-permanent');
+    const perm = s.directiveRemaining === -1;
     if (contentEl) contentEl.value = s.directive;
-    if (roundsEl) roundsEl.value = s.directiveRemaining || s.directiveTotal || 3;
+    if (roundsEl) roundsEl.value = (perm ? 0 : s.directiveRemaining) || s.directiveTotal || 3;
+    if (permEl) permEl.checked = perm;
+    // 永久时禁用轮数输入
+    if (roundsEl) roundsEl.disabled = perm;
     // 状态提示
     if (statusEl) {
-      if (s.directive && s.directiveRemaining > 0) {
+      if (s.directive && perm) {
+        statusEl.style.display = 'block';
+        statusEl.textContent = '当前生效中 · 长期生效';
+      } else if (s.directive && s.directiveRemaining > 0) {
         statusEl.style.display = 'block';
         statusEl.textContent = `当前生效中 · 剩余 ${s.directiveRemaining}/${s.directiveTotal} 轮`;
       } else {
@@ -6716,17 +6730,23 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     if (!conv) return;
     const content = document.getElementById('directive-content')?.value?.trim() || '';
+    const perm = !!document.getElementById('directive-permanent')?.checked;
     const rounds = Math.max(1, Math.min(50, parseInt(document.getElementById('directive-rounds')?.value) || 3));
     if (!content) {
       UI.showToast('请输入引导内容', 2000);
       return;
     }
     conv.convDirective = content;
-    conv.convDirectiveRemaining = rounds;
-    conv.convDirectiveTotal = rounds;
+    if (perm) {
+      conv.convDirectiveRemaining = -1;
+      conv.convDirectiveTotal = -1;
+    } else {
+      conv.convDirectiveRemaining = rounds;
+      conv.convDirectiveTotal = rounds;
+    }
     await Conversations.saveList();
     closeDirectiveModal();
-    UI.showToast('剧情引导已设置（' + rounds + '轮）', 2000);
+    UI.showToast(perm ? '剧情引导已设置（长期生效）' : ('剧情引导已设置（' + rounds + '轮）'), 2000);
   }
 
   async function clearDirective() {
@@ -6746,14 +6766,19 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
   /** 构建剧情引导注入文本（每轮发消息时调用） */
   function _buildDirectiveInjection() {
     const s = _getConvSettings();
-    if (!s.directive || s.directiveRemaining <= 0) return '';
-    return `[剧情引导·剩余${s.directiveRemaining}轮]\n接下来的剧情请自然地朝以下方向过渡。\n如果转变较大，不需要一轮就彻底完成转变——可以用多轮逐步推进。\n转折需要逻辑自洽，并且符合角色设定和世界观设定。不要生硬转折。\n\n${s.directive}`;
+    // remaining === -1 表示永久生效
+    const perm = s.directiveRemaining === -1;
+    if (!s.directive || (!perm && s.directiveRemaining <= 0)) return '';
+    const head = perm ? '[剧情引导·长期生效]' : `[剧情引导·剩余${s.directiveRemaining}轮]`;
+    return `${head}\n接下来的剧情请自然地朝以下方向过渡。\n如果转变较大，不需要一轮就彻底完成转变——可以用多轮逐步推进。\n转折需要逻辑自洽，并且符合角色设定和世界观设定。不要生硬转折。\n\n${s.directive}`;
   }
 
   /** 每轮发送后递减剩余轮数 */
   async function _decrementDirective() {
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     if (!conv || !conv.convDirective || !conv.convDirectiveRemaining) return;
+    // 永久引导（-1）不递减
+    if (conv.convDirectiveRemaining === -1) return;
     conv.convDirectiveRemaining--;
     if (conv.convDirectiveRemaining <= 0) {
       conv.convDirective = '';

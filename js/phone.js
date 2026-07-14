@@ -1203,6 +1203,7 @@ function _flushChatRoundLog() {
       forumViewHistory: [],      // [{title, summary, content, time}]  最多保留10条
       mapSearchHistory: [],      // [{query, time}]  最多保留10条
       cachedForumPosts: [],      // 上一次刷新/搜索到的帖子列表，持久化
+      forumCollectedPosts: [],   // 我的收藏：收藏的帖子完整快照（含 fullContent、_comments 全量含楼中楼），收藏后可独立追评/盖楼
       myForumPosts: [],          // [{id, username, avatar_color, time, title, content, tags[], createdAt}] 用户发的帖子
       moments: [],               // [{id, text, image, imageDesc, visibleNpcs, time, comments, createdAt}]
       momentsCover: '',          // 好友圈顶部封面 DataURL
@@ -1511,6 +1512,55 @@ function _applyWallpaper(pd) {
       await _savePhoneData();
       _applyProfile(pd);
     } catch(e) { console.warn('[Profile] avatar pick failed', e); UI.showToast('头像设置失败', 1500); }
+  }
+
+  // ===== 手机 APP 图标自定义（全局，设置 → 手机图标）=====
+  // 渲染管理网格
+  function renderAppIconList() {
+    const box = document.getElementById('appicons-list');
+    if (!box) return;
+    if (typeof AppIcons === 'undefined') { box.innerHTML = '<div style="color:var(--text-secondary);font-size:13px">图标模块未就绪</div>'; return; }
+    const defs = AppIcons.APP_DEFS || [];
+    box.innerHTML = defs.map(d => {
+      const custom = AppIcons.get(d.id);
+      const iconInner = custom
+        ? `<img src="${custom}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">`
+        : (d.icon === 'heartsim'
+          ? `<img src="img/worldviews/heartsim.png" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">`
+          : _phoneIcon(d.icon));
+      const resetBtn = custom
+        ? `<button class="appicon-reset" title="恢复默认" onclick="event.stopPropagation();Phone._resetAppIcon('${d.id}')">×</button>`
+        : '';
+      return `<div class="appicon-cell" onclick="Phone._pickAppIcon('${d.id}')">
+        <div class="appicon-thumb">${iconInner}${resetBtn}</div>
+        <span class="appicon-name">${Utils.escapeHtml(d.name)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // 点格子：选图 → 存 → 刷新（管理界面 + 若手机开着的主屏）
+  async function _pickAppIcon(appId) {
+    if (typeof Utils === 'undefined' || !Utils.promptImageInput) { UI.showToast('图片输入组件未就绪', 1500); return; }
+    if (typeof AppIcons === 'undefined') return;
+    try {
+      const dataUrl = await Utils.promptImageInput({ maxSize: 128, outputFormat: 'png' });
+      if (!dataUrl) return;
+      await AppIcons.set(appId, dataUrl);
+      renderAppIconList();
+      try { if (document.getElementById('phone-body')) _renderHomeScreen(); } catch(_) {}
+      UI.showToast('图标已更换', 1200);
+    } catch(e) { console.warn('[AppIcons] pick failed', e); UI.showToast('图标设置失败', 1500); }
+  }
+
+  // 点 ×：恢复默认
+  function _resetAppIcon(appId) {
+    if (typeof AppIcons === 'undefined') return;
+    try {
+      AppIcons.remove(appId);
+      renderAppIconList();
+      try { if (document.getElementById('phone-body')) _renderHomeScreen(); } catch(_) {}
+      UI.showToast('已恢复默认', 1000);
+    } catch(e) { console.warn('[AppIcons] reset failed', e); }
   }
 
 function _compressWallpaper(file, opts = {}) {
@@ -2508,10 +2558,14 @@ function _renderHomeIcon(a) {
       </div>`;
     }
   const action = a.id === 'minimize' ? 'Phone.minimize()' : `Phone.openApp('${a.id}')`;
-  // 心动模拟 APP：用世界观图标 png 而非 SVG
-  const iconHTML = a.icon === 'heartsim'
-    ? `<img src="img/worldviews/heartsim.png" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">`
-    : _phoneIcon(a.icon);
+  // 图标优先级：用户自定义（全局，AppIcons）> 心动模拟默认 png > SVG
+  let customIcon = null;
+  try { if (typeof AppIcons !== 'undefined') customIcon = AppIcons.get(a.id); } catch(_) {}
+  const iconHTML = customIcon
+    ? `<img src="${customIcon}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">`
+    : (a.icon === 'heartsim'
+      ? `<img src="img/worldviews/heartsim.png" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">`
+      : _phoneIcon(a.icon));
   // 邮箱红点已移除（首页已有未读提示）—— [hidden v704] 保留逻辑便于恢复
   let notifDot = '';
   // if (a.id === 'email') {
@@ -36361,6 +36415,18 @@ async function _clearMomentsCover() {
 // ===== 外壳渲染 =====
 // ===== 各 App 占位渲染 =====
   let _forumTab = 'posts'; // 'posts' | 'history' | 'myposts'
+  let _forumMineSub = 'posts'; // 我的页子标签：'posts'（我的发帖） | 'collected'（我的收藏）
+  // 论坛详情页当前数据来源：'cached'（推荐/搜索的实时帖）| 'collected'（我的收藏，独立生长的快照）
+  // 详情页里的刷新评论/发评论/收藏/分享按钮据此决定读写哪个数组，避免给每个 onclick 传 source 参数。
+  let _forumDetailSource = 'cached';
+
+  // 按当前 _forumDetailSource 取帖子列表：collected → phoneData.forumCollectedPosts；否则 cachedForumPosts（兜底 WorldVoice 内存）
+  function _forumPostsBySource(pd) {
+    if (_forumDetailSource === 'collected') return (pd && pd.forumCollectedPosts) || [];
+    let posts = (pd && pd.cachedForumPosts) || [];
+    if (posts.length === 0) posts = (window.WorldVoice && WorldVoice.getPosts()) || [];
+    return posts;
+  }
 
   // 论坛头像匹配：根据用户名（本名/代号/网名）从 NPC 头像表中查找
   let _forumNpcAvatarMap = null; // 延迟初始化
@@ -36611,7 +36677,12 @@ async function _clearMomentsCover() {
         </div>
         <div id="phone-forum-myposts-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_forumTab === 'myposts' ? 'block' : 'none'}">
           ${_forumMineHeader(forumMineMaskInfo, (pd.myForumPosts || []).length)}
-          ${_renderMyForumPosts(pd.myForumPosts || [])}
+          ${_forumMineSubCards((pd.myForumPosts || []).length, (pd.forumCollectedPosts || []).length)}
+          <div id="phone-forum-mine-list">
+            ${_forumMineSub === 'collected'
+              ? _renderForumCollectedPosts(pd.forumCollectedPosts || [])
+              : _renderMyForumPosts(pd.myForumPosts || [])}
+          </div>
         </div>
         <div class="phone-tabbar">
           <div class="phone-tab ${_forumTab === 'posts' ? 'active' : ''}" onclick="Phone._switchForumTab('posts')">推荐</div>
@@ -36735,7 +36806,7 @@ async function _clearMomentsCover() {
      try {
       if (!p) return '';
       return `
-      <div onclick="Phone._forumViewDetail(${i})" class="phone-forum-post-card" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer">
+      <div onclick="Phone._forumViewRecommended(${i})" class="phone-forum-post-card" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
           ${_forumAvatar(p, 24)}
           <span style="font-size:11px;font-weight:600">${Utils.escapeHtml(p.username || '匿名')}</span>
@@ -36805,10 +36876,11 @@ async function _clearMomentsCover() {
     });
   }
 
-  // 取当前详情页对应的帖子对象。kind='my' 取玩家帖，否则取 AI 帖（cached 优先，回退 WorldVoice）
+  // 取当前详情页对应的帖子对象。kind='my' 取玩家帖，'collected' 取收藏帖，否则取 AI 帖（cached 优先，回退 WorldVoice）
   async function _forumGetPost(kind, index) {
     const pd = await _getPhoneData();
     if (kind === 'my') return (pd && pd.myForumPosts && pd.myForumPosts[index]) || null;
+    if (kind === 'collected') return (pd && pd.forumCollectedPosts && pd.forumCollectedPosts[index]) || null;
     let posts = (pd && pd.cachedForumPosts) || [];
     if (!posts.length) posts = (window.WorldVoice && WorldVoice.getPosts()) || [];
     return posts[index] || null;
@@ -36819,7 +36891,8 @@ async function _clearMomentsCover() {
     const oldScroll = document.querySelector('#phone-body .phone-forum-detail-scroll');
     const top = oldScroll ? oldScroll.scrollTop : 0;
     _navStack.pop();
-    if (kind === 'my') _viewMyForumPost(index); else _forumViewDetail(index);
+    if (kind === 'my') { _viewMyForumPost(index); }
+    else { _forumDetailSource = (kind === 'collected') ? 'collected' : 'cached'; _forumViewDetail(index); }
     // 重建是异步的：轮询直到出现的滚动容器不再是旧的那个（说明新 DOM 已就位），设一次滚动位置即停
     const start = Date.now();
     const tick = () => {
@@ -37016,6 +37089,108 @@ async function _clearMomentsCover() {
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>`;
+  }
+
+  // 论坛「我的」页：我的发帖 / 我的收藏 双卡片切换
+  function _forumMineSubCards(postCount, collectedCount) {
+    const pc = Number(postCount) || 0;
+    const cc = Number(collectedCount) || 0;
+    const card = (sub, label, num, iconSvg) => {
+      const active = _forumMineSub === sub;
+      return `<div onclick="Phone._switchForumMineSub('${sub}')" style="flex:1;cursor:pointer;background:${active ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${active ? '#111' : 'var(--text)'};border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;transition:background .15s,color .15s">
+        <span style="display:flex;align-items:center;color:${active ? '#111' : 'var(--text-secondary)'}">${iconSvg}</span>
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:600;line-height:1.2">${label}</div>
+          <div style="font-size:11px;opacity:.75;margin-top:2px">${num} 篇</div>
+        </div>
+      </div>`;
+    };
+    const iconPost = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+    const iconStar = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+    return `<div style="display:flex;gap:10px;margin:12px 0">
+      ${card('posts', '我的发帖', pc, iconPost)}
+      ${card('collected', '我的收藏', cc, iconStar)}
+    </div>`;
+  }
+
+  // 切换「我的发帖 / 我的收藏」子标签，只重渲染列表区（不动导航栈）
+  async function _switchForumMineSub(sub) {
+    _forumMineSub = (sub === 'collected') ? 'collected' : 'posts';
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const wrap = document.getElementById('phone-forum-myposts-panel');
+    const listEl = document.getElementById('phone-forum-mine-list');
+    if (listEl) {
+      listEl.innerHTML = _forumMineSub === 'collected'
+        ? _renderForumCollectedPosts(pd.forumCollectedPosts || [])
+        : _renderMyForumPosts(pd.myForumPosts || []);
+    }
+    // 重渲染卡片高亮：卡片块紧跟在个人资料头部之后
+    if (wrap) {
+      const headerEl = wrap.querySelector('.phone-radio-mine-header');
+      if (headerEl && headerEl.nextElementSibling) {
+        headerEl.nextElementSibling.outerHTML = _forumMineSubCards((pd.myForumPosts || []).length, (pd.forumCollectedPosts || []).length);
+      }
+    }
+  }
+
+  // 渲染「我的收藏」列表（收藏的论坛帖子，点进走 collected 来源的详情页）
+  function _renderForumCollectedPosts(posts) {
+    if (!posts || posts.length === 0) {
+      return '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">还没有收藏的帖子<br>在帖子详情里点右下角星标即可收藏</p>';
+    }
+    return (Array.isArray(posts) ? posts : []).map((p, i) => {
+      try {
+        if (!p) return '';
+        const cnt = (p._comments || []).length;
+        return `
+        <div onclick="Phone._forumViewCollected(${i})" class="phone-forum-post-card" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            ${_forumAvatar(p, 22)}
+            <span style="font-size:12px;font-weight:600;color:var(--text)">${Utils.escapeHtml(p.username || '匿名')}</span>
+            <span style="font-size:10px;color:var(--text-secondary);margin-left:auto">${Utils.escapeHtml(_formatPhoneTime(p.time || ''))}</span>
+          </div>
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(p.title || '无标题')}</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${Utils.escapeHtml((p.fullContent || p.summary || '').slice(0, 80))}</div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:8px;font-size:10px;color:var(--text-secondary)">
+            <span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>${cnt}</span>
+            <span onclick="event.stopPropagation();Phone._removeForumCollected(${i})" style="margin-left:auto;cursor:pointer;color:var(--text-secondary);display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>取消收藏</span>
+          </div>
+        </div>`;
+      } catch(e) { return ''; }
+    }).join('');
+  }
+
+  // 取消收藏（从「我的收藏」移除；gaiden 那份保留，互不影响）
+  async function _removeForumCollected(index) {
+    const pd = await _getPhoneData();
+    if (!pd || !Array.isArray(pd.forumCollectedPosts) || !pd.forumCollectedPosts[index]) return;
+    if (!await UI.showConfirm('取消收藏', '从「我的收藏」移除这篇帖子？（收藏库里的备份不受影响）')) return;
+    pd.forumCollectedPosts.splice(index, 1);
+    await _savePhoneData();
+    const listEl = document.getElementById('phone-forum-mine-list');
+    if (listEl) listEl.innerHTML = _renderForumCollectedPosts(pd.forumCollectedPosts || []);
+    // 刷新卡片计数
+    const wrap = document.getElementById('phone-forum-myposts-panel');
+    if (wrap) {
+      const headerEl = wrap.querySelector('.phone-radio-mine-header');
+      if (headerEl && headerEl.nextElementSibling) {
+        headerEl.nextElementSibling.outerHTML = _forumMineSubCards((pd.myForumPosts || []).length, (pd.forumCollectedPosts || []).length);
+      }
+    }
+    UI.showToast('已取消收藏', 900);
+  }
+
+  // 打开收藏帖详情：设 source=collected，复用 _forumViewDetail 的渲染 + 追评能力
+  async function _forumViewCollected(index) {
+    _forumDetailSource = 'collected';
+    await _forumViewDetail(index);
+  }
+
+  // 打开推荐/搜索流帖详情：确保 source=cached（避免刚从收藏页返回后 source 残留 collected）
+  async function _forumViewRecommended(index) {
+    _forumDetailSource = 'cached';
+    await _forumViewDetail(index);
   }
 
   // 论坛「我的」页右上角「+」菜单：复用音乐库同款底部弹窗（_musicSheet）
@@ -37351,10 +37526,9 @@ async function _clearMomentsCover() {
     const content = input?.value.trim();
     if (!content) { UI.showToast('评论内容不能为空', 1000); return; }
 
+    const _src = _forumDetailSource;
     const pd = await _getPhoneData();
-    let posts = [];
-    if (pd && pd.cachedForumPosts) posts = pd.cachedForumPosts;
-    if (posts.length === 0) posts = (window.WorldVoice && WorldVoice.getPosts()) || [];
+    let posts = _forumPostsBySource(pd);
     const post = posts[index];
     if (!post) return;
 
@@ -37382,16 +37556,18 @@ async function _clearMomentsCover() {
     post._comments.push(comment);
     _log(`在${_getForumName() || '论坛'}评论了帖子「${post.title || '无标题'}」：${content}`);
     
-    // 如果是 cachedForumPosts，需要保存回 phoneData
-    if (pd && pd.cachedForumPosts && pd.cachedForumPosts[index] === post) {
+    // 保存回 phoneData：按来源写回对应数组
+    const _arr = (_src === 'collected') ? (pd && pd.forumCollectedPosts) : (pd && pd.cachedForumPosts);
+    if (_arr && _arr[index] === post) {
       await _savePhoneData();
     }
     
     input.value = '';
     UI.showToast('评论已发送', 1000);
     
-    // 刷新当前详情页
+    // 刷新当前详情页（保持数据来源）
     _navStack.pop();
+    _forumDetailSource = _src;
     _forumViewDetail(index);
   }
 
@@ -37513,10 +37689,9 @@ ${wvPrompt}`;
 
   async function _refreshForumComment(index) {
     if (window._myForumRefreshing) { UI.showToast('正在生成评论中…', 1000); return; }
+    const _src = _forumDetailSource;
     const pd = await _getPhoneData();
-    let posts = [];
-    if (pd && pd.cachedForumPosts) posts = pd.cachedForumPosts;
-    if (posts.length === 0) posts = (window.WorldVoice && WorldVoice.getPosts()) || [];
+    let posts = _forumPostsBySource(pd);
     const post = posts[index];
     if (!post) return;
 
@@ -37597,18 +37772,20 @@ ${wvPrompt}`;
         await _ensureForumDisplayNameMap();
         _forumNormalizeComments(post._comments);
         (post._comments || []).forEach(c => { _matchForumAvatar(c); (c.replies || []).forEach(rp => { if (!rp.avatar) _matchForumAvatar(rp); }); });
-        // 如果是 cachedForumPosts，保存回 phoneData
-        if (pd && pd.cachedForumPosts && pd.cachedForumPosts[index] === post) {
+        // 保存回 phoneData：collected 或 cachedForumPosts 命中同一对象时都要落盘
+        const _arr = (_src === 'collected') ? (pd && pd.forumCollectedPosts) : (pd && pd.cachedForumPosts);
+        if (_arr && _arr[index] === post) {
           await _savePhoneData();
         }
         // 角色记事本：刷新出新评论也算观测，抽 NPC 行为落库
         try { _npcNoteFromForumPost(post, _getForumName()); } catch(_) {}
         _log(`刷新了${mt}帖子「${post.title}」的评论，追加了 ${added} 条`);
         UI.showToast('评论已刷新', 1000);
-        // 重渲染详情页
+        // 重渲染详情页（保持数据来源）
         const titleEl = document.getElementById('phone-title');
         if (titleEl && titleEl.textContent === (post.title || '帖子详情')) {
           _navStack.pop();
+          _forumDetailSource = _src;
           _forumViewDetail(index);
         }
       } else {
@@ -37966,36 +38143,42 @@ ${wvPrompt}`;
   }
 
   async function _forumViewDetail(index) {
-    // 统一从 phoneData.cachedForumPosts 取，与渲染一致
+    // 数据源按 _forumDetailSource 区分：collected → forumCollectedPosts；否则 cachedForumPosts
+    const _src = _forumDetailSource;
     let posts = [];
-    try { const pd0 = await _getPhoneData(); posts = pd0?.cachedForumPosts || []; } catch(_) {}
-    if (posts.length === 0) {
-      // 兜底：从 WorldVoice 内存取
+    try { const pd0 = await _getPhoneData(); posts = _forumPostsBySource(pd0); } catch(_) {}
+    if (posts.length === 0 && _src !== 'collected') {
+      // 兜底：从 WorldVoice 内存取（仅推荐流）
       posts = (window.WorldVoice && WorldVoice.getPosts()) || [];
     }
     const post = posts[index];
     if (!post) { UI.showToast('帖子不存在', 1000); return; }
     // 本轮去重：同一帖子反复查看只记一条（基于待发送日志内容，跨刷新/切对话恢复后也生效）
-    const _viewLog = `在${_getForumName()}查看了帖子：${post.title || '无标题'}`;
-    if (!_actionLog.includes(_viewLog)) _log(_viewLog);
+    // 收藏页浏览不计入"查看帖子"日志（避免重复刷屏，也不影响 AI 上下文）
+    if (_src !== 'collected') {
+      const _viewLog = `在${_getForumName()}查看了帖子：${post.title || '无标题'}`;
+      if (!_actionLog.includes(_viewLog)) _log(_viewLog);
+    }
 
-    // 记录详情浏览历史（标题+摘要+正文）
-    try {
-      const pdv = await _getPhoneData();
-      if (pdv) {
-        const content = post.fullContent || post.content || post.summary || '';
-        pdv.forumViewHistory.push({
-          title: post.title || '',
-          summary: post.summary || '',
-          content: content,
-          time: post.time || ''
-        });
-        if (pdv.forumViewHistory.length > 10) pdv.forumViewHistory = pdv.forumViewHistory.slice(-10);
-        await _savePhoneData();
-      }
-    } catch(_) {}
-    // 论坛刷多了塞垃圾邮件（受邮箱生态开关控制）——不阻塞浏览
-    try { _spamMailTick(); } catch(_) {}
+    // 记录详情浏览历史（标题+摘要+正文）——仅推荐流；收藏页浏览不再重复记
+    if (_src !== 'collected') {
+      try {
+        const pdv = await _getPhoneData();
+        if (pdv) {
+          const content = post.fullContent || post.content || post.summary || '';
+          pdv.forumViewHistory.push({
+            title: post.title || '',
+            summary: post.summary || '',
+            content: content,
+            time: post.time || ''
+          });
+          if (pdv.forumViewHistory.length > 10) pdv.forumViewHistory = pdv.forumViewHistory.slice(-10);
+          await _savePhoneData();
+        }
+      } catch(_) {}
+      // 论坛刷多了塞垃圾邮件（受邮箱生态开关控制）——不阻塞浏览
+      try { _spamMailTick(); } catch(_) {}
+    }
 
     const body = document.getElementById('phone-body');
     document.querySelector('#phone-modal .phone-shell')?.classList.add('phone-forum-detail-mode');
@@ -38008,8 +38191,8 @@ ${wvPrompt}`;
     (post._comments || []).forEach(c => { _matchForumAvatar(c); (c.replies || []).forEach(rp => _matchForumAvatar(rp)); });
     // 角色记事本：已加载过详情的帖子（用户观测过），抽 NPC 行为落库；未加载的走下方异步分支再记
     if (post._detailLoaded) { try { _npcNoteFromForumPost(post, _getForumName()); } catch(_) {} }
-    // push 详情页到导航栈
-    _pushNav(() => _forumViewDetail(index));
+    // push 详情页到导航栈（重进时恢复正确的数据来源）
+    _pushNav(() => { _forumDetailSource = _src; _forumViewDetail(index); });
 
     function _renderDetailInPhone(p) {
       const formatNum = n => { if (!n) return '0'; if (n >= 10000) return (n/10000).toFixed(1)+'w'; if (n >= 1000) return (n/1000).toFixed(1)+'k'; return String(n); };
@@ -38032,7 +38215,7 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
       </div>`;
         // 评论区（楼中楼，在滚动区内）
         if (p._comments?.length) {
-          html += _forumCommentsHtml(p._comments, 'ai', index, p);
+          html += _forumCommentsHtml(p._comments, (_src === 'collected' ? 'collected' : 'ai'), index, p);
         }
         // 关闭内容滚动区域
         html += `</div>`;
@@ -38045,7 +38228,7 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
             </button>
           </div>
           <div style="display:flex;gap:2px;flex-shrink:0;min-width:max-content;color:var(--text-secondary)">
-            <span onclick="Phone._collectForumPost(${index})" id="phone-forum-collect-btn" style="cursor:pointer;display:flex;align-items:center;padding:4px">${_uiIcon('star', 18)}</span>
+            ${_src === 'collected' ? '' : `<span onclick="Phone._collectForumPost(${index})" id="phone-forum-collect-btn" style="cursor:pointer;display:flex;align-items:center;padding:4px">${_uiIcon('star', 18)}</span>`}
             <span onclick="Phone._shareForumPost(${index},'detail')" style="cursor:pointer;display:flex;align-items:center;padding:4px">${_uiIcon('share', 18)}</span>
           </div>
         </div>`;
@@ -38075,11 +38258,12 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
         await WorldVoice.loadDetailSilent(post);
         if (!_isAppStillActive('forum')) { _setFabGenerating(false); return; }
         if (post._detailLoaded) {
-          // 回写到 phoneData 缓存（保留其它字段）
+          // 回写到 phoneData 缓存（保留其它字段）——按来源写回对应数组
           try {
             const _pd = await _getPhoneData();
-            if (_pd && _pd.cachedForumPosts) {
-              const target = _pd.cachedForumPosts[index];
+            const _arr = (_src === 'collected') ? (_pd && _pd.forumCollectedPosts) : (_pd && _pd.cachedForumPosts);
+            if (_arr) {
+              const target = _arr[index];
               if (target) {
                 target.fullContent = post.fullContent;
                 target._comments = post._comments;
@@ -38124,8 +38308,7 @@ async function _likeForumPost(index) {
 
   async function _shareForumPost(index, mode) {
     const pd = await _getPhoneData();
-    let posts = pd?.cachedForumPosts || [];
-    if (posts.length === 0) posts = (window.WorldVoice && WorldVoice.getPosts()) || [];
+    let posts = _forumPostsBySource(pd);
     const p = posts[index];
     if (!p) { UI.showToast('帖子不存在', 1000); return; }
 
@@ -39165,6 +39348,21 @@ ${playerReplyHint}
     const p = posts[index];
     if (!p) { UI.showToast('帖子不存在', 1000); return; }
     const content = p.fullContent || p.summary || '';
+    // 收藏前把楼中楼 replyToName 的本名固化成网名——收藏后脱离对话映射表，任何地方看都对
+    try {
+      await _ensureForumDisplayNameMap();
+      const toDisp = (name) => {
+        const n = String(name || '').trim();
+        if (!n) return n;
+        return (_forumDisplayNameMap && _forumDisplayNameMap[n]) || n;
+      };
+      (p._comments || []).forEach(c => {
+        (Array.isArray(c && c.replies) ? c.replies : []).forEach(rp => {
+          if (rp && rp.replyToName) rp.replyToName = toDisp(rp.replyToName);
+        });
+      });
+    } catch(_) {}
+    // 双写①：进 gaiden 收藏库（定格快照备份，保持原有行为）
     await _addPhoneCollection('forum', p.title || `${_getForumName()}帖子`, content, {
       username: p.username,
       avatar_color: p.avatar_color,
@@ -39174,6 +39372,21 @@ ${playerReplyHint}
       likes: p.likes,
       comments: p._comments || []
     });
+    // 双写②：进论坛「我的收藏」——存完整帖子深拷贝（含 _comments 全量含楼中楼），收藏后可独立追评/盖楼
+    try {
+      if (pd) {
+        if (!Array.isArray(pd.forumCollectedPosts)) pd.forumCollectedPosts = [];
+        // 去重键：title + username + time（同一帖不重复收藏）
+        const dupKey = (x) => `${x?.title || ''}|${x?.username || ''}|${x?.time || ''}`;
+        const key = dupKey(p);
+        if (!pd.forumCollectedPosts.some(x => dupKey(x) === key)) {
+          const snap = JSON.parse(JSON.stringify(p)); // 深拷贝，脱离 cachedForumPosts 引用
+          snap._collectedAt = Date.now();
+          pd.forumCollectedPosts.unshift(snap);
+          await _savePhoneData();
+        }
+      }
+    } catch(e) { console.warn('[forum] 收藏进我的收藏失败', e); }
     // 收藏成功动画
     if (btn) {
       btn.classList.add('active-collect');
@@ -55453,6 +55666,8 @@ buildHeartsimAppFavorForBackstage,
     _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _toggleRollbackKeep, _onThemePick, _onToggleFullscreen, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
     // 个人资料卡
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
+    // 手机 APP 图标自定义
+    renderAppIconList, _pickAppIcon, _resetAppIcon,
     // 主屏分页
 _onPagesScroll,
     // 番茄钟
@@ -55498,7 +55713,7 @@ _chatPickCallPortrait, _chatClearCallPortrait, _showCallRecord,
  _feiniaoAddRecipient, _feiniaoRecipToggle, _feiniaoRecipConfirm, _feiniaoRecipRemove,
  _feiniaoShowOrderDetail, _feiniaoDeleteOrder, _switchFeiniaoTab,
  _renderYouyu, _switchYouyuTab, _youyuAddListing, _youyuPickSource, _youyuPickFromInventory, _youyuPickInvItem, _youyuOpenListModal, _youyuRenderListModal, _youyuDraftSet, _youyuSetDelivery, _youyuConfirmListing, _youyuRemoveListing, _youyuShareListing, _youyuSendToChat, _youyuHandleBuy, _youyuDeleteOrder, _youyuShowOrderDetail,
-    _forumRefresh, _forumSearch, _forumSyncActionBtn, _forumSearchOrRefresh, _forumOpenAddMenu, _forumViewDetail, _shareForumPost, _collectForumPost, _likeForumPost,
+    _forumRefresh, _forumSearch, _forumSyncActionBtn, _forumSearchOrRefresh, _forumOpenAddMenu, _forumViewDetail, _forumViewRecommended, _forumViewCollected, _switchForumMineSub, _removeForumCollected, _shareForumPost, _collectForumPost, _likeForumPost,
     _switchForumTab, _switchForumCategory, _addForumCategory, _deleteForumCategory, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
     _addForumPost, _editForumPost, _saveForumPost, _deleteForumPost, _viewMyForumPost, _collectMyForumPost, _likeMyForumPost, _sendMyForumComment, _sendForumComment, _refreshForumComment, _shareMyForumPost, _refreshMyForumPost,
 _forumReplyTo, _forumToggleReplies,

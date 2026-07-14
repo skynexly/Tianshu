@@ -519,7 +519,7 @@ priority:{ type:'string', enum:['important','normal'], description:'重要程度
       description:'设置或修改主线的剧情引导。会覆盖当前已有内容。使用前必须向用户确认内容和轮数。',
       parameters:{ type:'object', properties:{
         content:{ type:'string', description:'引导内容（希望剧情朝什么方向发展）' },
-        rounds:{ type:'number', description:'持续轮数，默认3' }
+        rounds:{ type:'number', description:'持续轮数，默认3；传 -1 表示永久生效（不限轮数，直到手动清空）' }
       }, required:['content'] }
     }},
     { type:'function', function:{
@@ -784,15 +784,25 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
     async query_directive() {
       if (typeof Chat === 'undefined' || !Chat._getConvSettings) return ERR('Chat 模块不可用');
       const s = Chat._getConvSettings();
-      if (!s.directive || s.directiveRemaining <= 0) return OK({ active:false, message:'当前没有生效中的剧情引导。' });
-      return OK({ active:true, content:s.directive, remaining:s.directiveRemaining, total:s.directiveTotal });
+      const perm = s.directiveRemaining === -1;
+      if (!s.directive || (!perm && s.directiveRemaining <= 0)) return OK({ active:false, message:'当前没有生效中的剧情引导。' });
+      if (perm) return OK({ active:true, permanent:true, content:s.directive, message:'剧情引导长期生效（不限轮数）。' });
+      return OK({ active:true, permanent:false, content:s.directive, remaining:s.directiveRemaining, total:s.directiveTotal });
     },
     async set_directive(args) {
       if (!args.content) return ERR('缺少 content');
       const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
       if (!conv) return ERR('找不到当前对话');
-      const rounds = Math.max(1, Math.min(50, args.rounds || 3));
+      // permanent=true 或 rounds=-1 表示永久生效
+      const perm = args.permanent === true || args.rounds === -1;
       conv.convDirective = args.content;
+      if (perm) {
+        conv.convDirectiveRemaining = -1;
+        conv.convDirectiveTotal = -1;
+        await Conversations.saveList();
+        return OK({ success:true, message:'剧情引导已设置，长期生效（不限轮数）。' });
+      }
+      const rounds = Math.max(1, Math.min(50, args.rounds || 3));
       conv.convDirectiveRemaining = rounds;
       conv.convDirectiveTotal = rounds;
       await Conversations.saveList();
