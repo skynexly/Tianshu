@@ -610,7 +610,7 @@ const SingleCard = (() => {
     try {
         // 先尝试批量格式
         if (file.name.toLowerCase().endsWith('.json') || file.type === 'application/json') {
-          const text = await file.text();
+          const text = await Utils.fileToText(file);
           let json;
           try { json = JSON.parse(text); } catch (_) { json = null; }
           if (json && json.__format === 'tianshu_single_card_v1_batch' && Array.isArray(json.cards)) {
@@ -634,7 +634,7 @@ const SingleCard = (() => {
           UI.showToast('暂不支持导入 PNG 角色卡，请使用 JSON 格式', 3500);
           return;
         } else {
-          const text = await file.text();
+          const text = await Utils.fileToText(file);
           parsed = _parseJsonCard(text);
         }
         if (!parsed) { UI.showToast('无法识别该文件'); return; }

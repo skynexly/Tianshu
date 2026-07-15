@@ -22,6 +22,8 @@ const AppIcons = (() => {
     { id: 'settings',     icon: 'gear',       name: '设置' },
     { id: 'email',        icon: 'mail',       name: '邮箱' },
     { id: 'radio',        icon: 'radio',      name: '电台' },
+    { id: 'reading',      icon: 'reading',    name: '阅读' },
+    { id: 'video',        icon: 'video',      name: '视频' },
     { id: 'feiniao',      icon: 'feiniao',    name: '飞鸟快递' },
     { id: 'youyu',        icon: 'youyu',      name: '游鱼小铺' },
     { id: 'cottage',      icon: 'cottage',    name: '小屋' },

@@ -1456,7 +1456,7 @@ _updatePhoneAppsLabel();
     const file = await Utils.pickFile({ accept: '.json' });
     if (!file) return;
     try {
-      const text = await file.text();
+      const text = await Utils.fileToText(file);
       const data = JSON.parse(text);
       // 格式 sniff：优先原生格式，否则尝试 entries 格式
       if (data._format === 'tianshu-extended') {
@@ -7689,7 +7689,7 @@ async function openPhoneAppsEditor() {
     const file = await Utils.pickFile({ accept: '.json,application/json' });
     if (!file) return;
     try {
-      const text = await file.text();
+      const text = await Utils.fileToText(file);
       const data = JSON.parse(text);
       let tpl = null;
       if (data.__format === 'tianshu_cottage_v1' && Array.isArray(data.houses) && data.houses.length) {

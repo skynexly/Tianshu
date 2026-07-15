@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=155">
-<link rel="stylesheet" href="css/phone.css?v1=402">
+<link rel="stylesheet" href="css/phone.css?v1=404">
 <link rel="stylesheet" href="css/phone-fudge.css?v=48">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260707">
@@ -4079,6 +4079,31 @@ NPC
       <div class="form-group"><span class="form-label">正则表达式</span><input type="text" id="regex-pattern" placeholder="如：极其|非常地"></div>
       <div class="form-group"><span class="form-label">替换为 <span style="font-size:11px;color:var(--text-secondary)">留空=删除匹配内容</span></span><input type="text" id="regex-replacement" placeholder="留空=删除"></div>
       <div class="form-group"><span class="form-label">标志位</span><input type="text" id="regex-flags" value="g" placeholder="g / gi / gm"></div>
+      <div class="form-group"><span class="form-label">作用范围 <span style="font-size:11px;color:var(--text-secondary)">这条规则在哪些场景生效</span></span>
+        <div style="position:relative">
+          <input type="hidden" id="regex-scope" value="all">
+          <button type="button" class="custom-select-btn" onclick="Settings._toggleRegexScopeDropdown()">
+            <span id="regex-scope-label" style="display:flex;align-items:center;gap:6px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> 全部（主线+后台+手机）
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+          </button>
+          <div id="regex-scope-dropdown" class="custom-dropdown hidden">
+            <div class="custom-dropdown-item active" onclick="Settings._selectRegexScope('all')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> 全部（主线+后台+手机）
+            </div>
+            <div class="custom-dropdown-item" onclick="Settings._selectRegexScope('chat')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 仅主线对话
+            </div>
+            <div class="custom-dropdown-item" onclick="Settings._selectRegexScope('backstage')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> 仅后台频道
+            </div>
+            <div class="custom-dropdown-item" onclick="Settings._selectRegexScope('phone')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg> 仅手机（阅读/论坛/私聊等）
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="form-group"><span class="form-label">备注（可选）</span><input type="text" id="regex-note" placeholder="如：过滤Gemini极其增殖"></div>
       <div class="modal-actions" style="flex-shrink:0;margin-top:12px;padding-top:12px">
         <button onclick="Settings.closeRegexEdit()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
@@ -4247,7 +4272,7 @@ const GameLog = (() => {
 </script>
 <script src="js/db.js?v=15"></script>
 <script src="js/stickers.js?v=7"></script>
-<script src="js/utils.js?v=18"></script>
+<script src="js/utils.js?v=20"></script>
 <script src="js/markdown.js?v=11"></script>
 <script src="js/api.js?v=4"></script>
 <script src="js/time-awareness.js"></script>
@@ -4257,29 +4282,29 @@ const GameLog = (() => {
 <script src="js/memory.js?v=9"></script>
 <script src="js/tools.js?v=9"></script>
 <script src="js/npc.js"></script>
-<script src="js/statusbar_theme.js?v=56"></script>
-<script src="js/worldview.js?v=103"></script>
+<script src="js/statusbar_theme.js?v=57"></script>
+<script src="js/worldview.js?v=104"></script>
 <script src="js/npc_importer.js?v=2"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
 <script src="js/conv_gameplay.js?v=15"></script>
 <script src="js/wv-generator.js?v=31"></script>
-<script src="js/single_card.js?v=16"></script>
+<script src="js/single_card.js?v=17"></script>
 <script src="js/attached-chars.js?v=2"></script>
 <script src="js/single_mode.js?v=4"></script>
-<script src="js/character.js?v=17"></script>
-<script src="js/prompts.js?v=2"></script>
+<script src="js/character.js?v=18"></script>
+<script src="js/prompts.js?v=3"></script>
 <script src="js/conversations.js?v=12"></script>
 <script src="js/summary.js?v=2"></script>
-<script src="js/chat.js?v=105"></script>
+<script src="js/chat.js?v=107"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
 <script src="js/tts.js"></script>
 <script src="js/branch.js"></script>
-<script src="js/settings.js?v=5"></script>
+<script src="js/settings.js?v=7"></script>
 <script src="js/gaiden.js?v=3"></script>
-<script src="js/backstage.js?v=16"></script>
+<script src="js/backstage.js?v=18"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
 <script src="js/status_bar.js?v=28"></script>
@@ -4289,20 +4314,20 @@ const GameLog = (() => {
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/app_icons.js?v=6"></script>
-<script src="js/phone.js?v1=1140"></script>
+<script src="js/app_icons.js?v=7"></script>
+<script src="js/phone.js?v1=1142"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
 <script src="js/ui.js?v=18"></script>
-<script src="js/data-mgr.js?v=20"></script>
+<script src="js/data-mgr.js?v=21"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>
   <script src="data/tutorial-script.js?v=2"></script>
-  <script src="js/theme.js?v=16"></script>
+  <script src="js/theme.js?v=17"></script>
   <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js?v=2"></script>
 <script src="data/builtin-heartsim.js?v=2"></script>
@@ -4310,7 +4335,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=22"></script>
-<script src="js/app.js?v=151"></script>
+<script src="js/app.js?v=152"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

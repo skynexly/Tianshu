@@ -322,6 +322,14 @@ const Utils = (() => {
     mailReplyRe.lastIndex = 0;
   }
 
+  // 邮件拒回信号：```mail_noreply 块从正文剥离（前端标记该信为"对方无回应"，不再进上下文）
+  let mailNoReplyMatch;
+  const mailNoReplyRe = /```mail_noreply\s*\n?([\s\S]*?)```/gi;
+  while ((mailNoReplyMatch = mailNoReplyRe.exec(raw)) !== null) {
+    raw = raw.replace(mailNoReplyMatch[0], '').trim();
+    mailNoReplyRe.lastIndex = 0;
+  }
+
   // 一起听：接受/拒绝邀请 marker
   // 形如 ```listen_together\n{"accept":true}``` 或 ```listen_together\n{"accept":false,"reason":"..."}```
   const listenAcceptMatch = raw.match(/```listen_together\s*([\s\S]*?)```/i);
@@ -736,6 +744,35 @@ async function copyFromDataset(btn) {
     });
   }
 
+  // 轻量通用文本读取：把 File 读成字符串。
+  // 优先 file.text()，但它在老 iOS Safari(<14.5)/鸿蒙可拓/部分老内核上不存在或抛错——
+  // 那种情况下页面表现是"选了文件没反应"。这里统一降级到 FileReader（兼容性最好），
+  // 供所有 JSON/文本导入直接用（无 docx/pdf 逻辑、无 5MB 限制，适合大存档）。
+  function fileToText(file) {
+    return new Promise((resolve, reject) => {
+      if (!file) { reject(new Error('没有文件')); return; }
+      const viaReader = () => {
+        try {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(String(e.target.result || ''));
+          reader.onerror = () => reject(new Error('文件读取失败'));
+          reader.readAsText(file);
+        } catch (e) { reject(e); }
+      };
+      if (typeof file.text === 'function') {
+        // file.text() 可能返回 rejected promise 或直接抛错，两种都降级到 FileReader
+        try {
+          file.text().then(
+            (t) => resolve(String(t || '')),
+            () => viaReader()
+          );
+        } catch (_) { viaReader(); }
+      } else {
+        viaReader();
+      }
+    });
+  }
+
   /**
    * 压缩图片 dataUrl（独立可复用）。动图（gif/webp/apng）直通不压，避免被压成静态首帧。
    * @param {string} dataUrl - 源图 dataUrl
@@ -1111,9 +1148,12 @@ async function copyFromDataset(btn) {
       const o = opts || {};
       const input = document.createElement('input');
       input.type = 'file';
-      if (o.accept) input.accept = o.accept;
+      // 【全平台通用加固】纯扩展名 accept（如 .json/.css）在 iOS「文件」App、鸿蒙、部分安卓杂牌
+      // WebView 里会把目标文件灰掉导致选不中——一律不设，放开所有文件（读取都走 FileReader 按文本解析，
+      // 不挑扩展名）。含 '/' 的 MIME 类型（image/* / audio/* / text/plain 等）兼容性好且能过滤相册，保留。
+      if (o.accept && /\//.test(o.accept)) input.accept = o.accept;
       if (o.multiple) input.multiple = true;
-      input.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;width:1px;height:1px;pointer-events:none';
+      input.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;width:1px;height:1px';
       document.body.appendChild(input);
       let settled = false;
       const done = (val) => {
@@ -1126,13 +1166,37 @@ async function copyFromDataset(btn) {
         const f = o.multiple ? Array.from(input.files || []) : (input.files && input.files[0]) || null;
         done(f);
       };
-      // 取消选择时多数浏览器不触发 onchange；用 focus 兜底回收（延时判断没选到文件）
+      // 取消选择时多数浏览器不触发 onchange；用 focus 兜底回收。
+      // 两个 iOS 坑一起治：
+      //   ① onchange 竞态：从系统文件选择器/「文件」App 切回来时，focus 常早于 onchange 填充 input.files——
+      //      延时太短会把"选了文件"误判成"取消"。故全平台拉长到 1500ms。
+      //   ② onchange 不触发：iOS 上隐藏的 file input（opacity:0+移屏外）选完后 onchange 可能根本不触发，
+      //      但 input.files 已填充。此时绝不能"交给 onchange"傻等（会永久卡死＝选了没反应），
+      //      必须由 focus 兜底直接 done(f) 把文件交出去（done 有 settled 保护，不会和 onchange 重复）。
       window.addEventListener('focus', () => {
-        setTimeout(() => { if (!settled && (!input.files || input.files.length === 0)) done(o.multiple ? [] : null); }, 500);
+        setTimeout(() => {
+          if (settled) return;
+          if (input.files && input.files.length > 0) {
+            // 有文件：直接交出去，不等 onchange（治 iOS onchange 不触发导致的卡死）
+            const f = o.multiple ? Array.from(input.files || []) : (input.files && input.files[0]) || null;
+            done(f);
+            return;
+          }
+          // 没文件：再等 400ms 二次确认，仍为空才判定取消（治 onchange 慢半拍）
+          setTimeout(() => {
+            if (settled) return;
+            if (input.files && input.files.length > 0) {
+              const f = o.multiple ? Array.from(input.files || []) : (input.files && input.files[0]) || null;
+              done(f);
+            } else {
+              done(o.multiple ? [] : null);
+            }
+          }, 400);
+        }, 1500);
       }, { once: true });
       input.click();
     });
   }
 
-  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, promptImageInput, promptAiAvatar, compressDataUrl, saveFile, pickFile };
+  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, fileToText, promptImageInput, promptAiAvatar, compressDataUrl, saveFile, pickFile };
 })();

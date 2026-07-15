@@ -563,7 +563,7 @@ const Prompts = (() => {
     const file = await Utils.pickFile({ accept: '.json,application/json' });
     if (!file) return;
     try {
-      const text = await file.text();
+      const text = await Utils.fileToText(file);
       const data = JSON.parse(text);
       const result = await _parseAndImport(data, file.name.replace(/\.json$/i, ''));
       UI.showToast(`已导入 ${result.imported} 条提示词${result.skipped ? `（跳过 ${result.skipped} 条空内容）` : ''}`, 2500);

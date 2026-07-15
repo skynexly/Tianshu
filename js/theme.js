@@ -896,7 +896,7 @@ ${isEditing
     const file = await Utils.pickFile({ accept: '.json' });
     if (!file) return;
     try {
-      const text = await file.text();
+      const text = await Utils.fileToText(file);
       const imported = JSON.parse(text);
       if (typeof imported !== 'object' || Array.isArray(imported)) {
         UI.showToast('数据格式不正确', 2000); return;
@@ -1257,7 +1257,7 @@ async function clearAllBubbleCss() {
     const file = await Utils.pickFile({ accept: '.json' });
     if (!file) return;
     try {
-      const text = await file.text();
+      const text = await Utils.fileToText(file);
       const parsed = JSON.parse(text);
       // 兼容两种：{ _type, css:{...} } 或直接 {mainAi:...}
       let css = null;

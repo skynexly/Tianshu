@@ -1035,11 +1035,13 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
         const _onDone = async (fullContent) => {
           // v687.11：拼接工具调用前的内容
           fullContent = _priorContent ? (_priorContent + fullContent) : fullContent;
-          // 正则替换规则
+          // 正则替换规则（仅作用于 scope=all 或 backstage 的规则）
           try {
             const regexRules = await Settings.getRegexRules();
             for (const rule of regexRules) {
               if (rule.enabled === false) continue;
+              const _sc = rule.scope || 'all';
+              if (_sc !== 'all' && _sc !== 'backstage') continue;
               try { fullContent = fullContent.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement ?? ''); } catch(e) {}
             }
           } catch(_) {}
@@ -1512,7 +1514,7 @@ aiMsg.content = baseContent + fullContent;
     const file = await Utils.pickFile({ accept: '.json,application/json' });
     if (!file) return;
     try {
-      const text = await file.text();
+      const text = await Utils.fileToText(file);
       const data = JSON.parse(text);
       if (!Array.isArray(data.messages)) throw new Error('文件不包含 messages 数组');
 

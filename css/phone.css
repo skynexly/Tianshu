@@ -168,6 +168,7 @@
  min-height:34px;
  color: currentColor;
  flex-shrink:0;
+ position: relative;
 }
 .phone-home-mode .phone-header {
  display: none;
@@ -186,7 +187,7 @@
  justify-content:center;
 }
 .phone-nav-btn svg { display:block; }
-#phone-title { font-weight:750; font-size:15px; flex:1; text-align: center; letter-spacing: .03em; }
+#phone-title { font-weight:750; font-size:15px; letter-spacing: .03em; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); max-width:56%; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; pointer-events:none; }
 #phone-header-right { min-width: 36px; flex-shrink: 0; }
 .phone-body {
  flex:1;

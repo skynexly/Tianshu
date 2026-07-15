@@ -530,12 +530,46 @@ async function cancelEdit() {
 
   let editingRegexIdx = -1; // -1=新建，>=0=编辑
 
+  // 同步缓存：渲染时（如手机内容拼 HTML）是同步调用，无法 await DB，故维护一份内存缓存。
+  // scope 语义：'all'=全部 / 'chat'=主线对话 / 'backstage'=后台频道 / 'phone'=手机（含阅读/论坛/私聊等）
+  // 老规则无 scope 字段时按 'all' 处理，向下兼容。
+  let _regexRulesCache = null;
+
   async function getRegexRules() {
     const data = await DB.get('gameState', 'regexRules');
-    return data?.value || [];
+    const rules = data?.value || [];
+    _regexRulesCache = rules; // 顺便刷新同步缓存
+    return rules;
+  }
+
+  // 同步读取（供渲染出口用）。首次未加载时返回已缓存值或空数组；后台会异步预载。
+  function getRegexRulesSync() {
+    if (_regexRulesCache) return _regexRulesCache;
+    // 未预载时触发一次异步加载填充缓存（本次先返回空，下次渲染就有了）
+    getRegexRules().catch(() => {});
+    return [];
+  }
+
+  // 判断一条规则是否作用于指定场景。scope 缺省=all。
+  function regexRuleInScope(rule, scene) {
+    const sc = rule && rule.scope ? rule.scope : 'all';
+    return sc === 'all' || sc === scene;
+  }
+
+  // 对文本应用指定场景的正则规则（同步）。scene: 'chat'|'backstage'|'phone'
+  function applyRegexSync(text, scene) {
+    let out = String(text == null ? '' : text);
+    const rules = getRegexRulesSync();
+    for (const rule of rules) {
+      if (rule.enabled === false) continue;
+      if (!regexRuleInScope(rule, scene)) continue;
+      try { out = out.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement ?? ''); } catch (_) {}
+    }
+    return out;
   }
 
   async function saveRegexRules(rules) {
+    _regexRulesCache = rules; // 同步更新缓存
     await DB.put('gameState', { key: 'regexRules', value: rules });
   }
 
@@ -568,6 +602,7 @@ async function cancelEdit() {
           <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">→</span>
           <code style="flex:1;min-width:40px;font-size:12px;background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px;color:var(--text);word-break:break-all;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.replacement === '' ? '<i style="color:var(--text-secondary)">删除</i>' : Utils.escapeHtml(r.replacement)}</code>
           <span style="font-size:11px;color:var(--text-secondary);flex-shrink:0">${r.flags || 'g'}</span>
+          ${(() => { const sc = r.scope || 'all'; const label = { all:'全部', chat:'主线', backstage:'后台', phone:'手机' }[sc] || '全部'; return `<span style="font-size:10px;color:var(--accent);background:rgba(0,0,0,0.2);padding:1px 6px;border-radius:8px;flex-shrink:0">${label}</span>`; })()}
         </div>
         ${r.note ? `<p style="font-size:11px;color:var(--text-secondary);margin-top:4px;margin-bottom:0">${Utils.escapeHtml(r.note)}</p>` : ''}
       </div>
@@ -616,6 +651,44 @@ async function cancelEdit() {
     renderRegexRules();
   }
 
+  const _regexScopeOptions = {
+    all: { label: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> 全部（主线+后台+手机）' },
+    chat: { label: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 仅主线对话' },
+    backstage: { label: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> 仅后台频道' },
+    phone: { label: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg> 仅手机（阅读/论坛/私聊等）' }
+  };
+
+  function _toggleRegexScopeDropdown() {
+    const dropdown = document.getElementById('regex-scope-dropdown');
+    if (!dropdown) return;
+    if (dropdown.classList.contains('hidden')) {
+      dropdown.classList.remove('closing');
+      dropdown.classList.remove('hidden');
+    } else {
+      if (dropdown.classList.contains('closing')) return;
+      dropdown.classList.add('closing');
+      setTimeout(() => { dropdown.classList.remove('closing'); dropdown.classList.add('hidden'); }, 120);
+    }
+  }
+
+  function _selectRegexScope(value, closeDropdown = true) {
+    const inp = document.getElementById('regex-scope');
+    if (inp) inp.value = value;
+    const label = document.getElementById('regex-scope-label');
+    if (label && _regexScopeOptions[value]) label.innerHTML = _regexScopeOptions[value].label;
+    document.querySelectorAll('#regex-scope-dropdown .custom-dropdown-item').forEach(item => {
+      const isActive = item.getAttribute('onclick').includes(`'${value}'`);
+      item.classList.toggle('active', isActive);
+    });
+    if (closeDropdown) {
+      const dropdown = document.getElementById('regex-scope-dropdown');
+      if (dropdown && !dropdown.classList.contains('hidden') && !dropdown.classList.contains('closing')) {
+        dropdown.classList.add('closing');
+        setTimeout(() => { dropdown.classList.remove('closing'); dropdown.classList.add('hidden'); }, 120);
+      }
+    }
+  }
+
   function addRegex() {
     editingRegexIdx = -1;
     document.getElementById('regex-edit-title').textContent = '添加正则规则';
@@ -623,6 +696,7 @@ async function cancelEdit() {
     document.getElementById('regex-replacement').value = '';
     document.getElementById('regex-flags').value = 'g';
     document.getElementById('regex-note').value = '';
+    _selectRegexScope('all', false);
     document.getElementById('regex-edit-modal').classList.remove('hidden');
   }
 
@@ -636,6 +710,7 @@ async function cancelEdit() {
     document.getElementById('regex-replacement').value = r.replacement || '';
     document.getElementById('regex-flags').value = r.flags || 'g';
     document.getElementById('regex-note').value = r.note || '';
+    _selectRegexScope(r.scope || 'all', false);
     document.getElementById('regex-edit-modal').classList.remove('hidden');
   }
 
@@ -644,11 +719,13 @@ async function cancelEdit() {
     if (!pattern) { await UI.showAlert('提示', '正则表达式不能为空'); return; }
     const flags = document.getElementById('regex-flags').value.trim() || 'g';
     try { new RegExp(pattern, flags); } catch(e) { await UI.showAlert('提示', '正则语法错误：' + e.message); return; }
+    const scEl = document.getElementById('regex-scope');
     const rule = {
       pattern,
       replacement: document.getElementById('regex-replacement').value,
       flags,
       note: document.getElementById('regex-note').value.trim(),
+      scope: (scEl && scEl.value) || 'all',
       enabled: true
     };
     const rules = await getRegexRules();
@@ -1273,7 +1350,8 @@ else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; switchFn
     toggleModelDropdown, selectModel,
     renderPresetList, renderQuickSwitch,
     togglePresetSelect, togglePresetManageMode, exitPresetManageMode, batchDeletePresets, batchClonePresets,
-    getRegexRules, addRegex, editRegex, saveRegex, closeRegexEdit,
+    getRegexRules, getRegexRulesSync, applyRegexSync, addRegex, editRegex, saveRegex, closeRegexEdit,
+    _toggleRegexScopeDropdown, _selectRegexScope,
     toggleRegex, removeRegex, renderRegexRules,
     toggleRegexSelect, toggleRegexManageMode, exitRegexManageMode, batchDeleteRegex,
     getSummaryConfig, getMemoryConfig, getVisionConfig, getGaidenConfig, getWorldvoiceConfig, getBackstageConfig, getTtsConfig, getDrawConfig, getSuggestConfig,

@@ -1329,7 +1329,8 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
       let pendingMailStr = '';
       try { pendingMailStr = await Phone.buildPendingMailForAI(); } catch(_) {}
       if (pendingMailStr && pendingMailStr.trim()) {
-        systemParts.push('[邮件·待回复]\n{{user}} 通过邮箱寄出了下面这些信，正在等待回音。邮件不是即时消息——对方要先有空看邮箱、看到了还要斟酌怎么回，所以回信通常是滞后的，不会秒回。\n\n待回复的信：\n' + pendingMailStr.trim() + '\n\n【你要做的判断】\n逐封判断此刻这封信是否到了"对方会回"的时机，考虑：\n- 这个角色现在有没有空、有没有心情看邮箱？（在忙、在剧情紧张的当口，多半没空）\n- 这个角色多久看一次邮箱？公务往来可能一天看几次，私人信件可能好几天才想起来看。正式的信件，回复本身也需要时间组织措辞，更慢。\n- 这个角色和 {{user}} 的关系亲疏，也影响回得快不快、上不上心。\n- 从寄出到现在过了多久？刚寄出就回是不真实的；隔了合理的时间才回才对味。\n- 这个角色是否愿意回、会不会回？（有些信对方可能根本不想回，那就别回。）\n\n【触发回信】\n当你判断某封信此刻到了对方该回的时机，在回复末尾输出信号（可以同时回好几封，一封一行）：\n```mail_reply\n{"from":"回信人名"}\n```\n- from 必须是上面列出的收信人名之一，精确匹配。\n- 只输出信号，不要写回信正文——正文由系统另行生成（你看不到原信正文，也不需要替对方写）。\n- 没到时机就不要输出，不必每轮都回。宁可让信多等一会儿，也不要不真实地秒回。\n- 这个信号是给系统的，不要在剧情正文里复述或提及。');
+        // 完整块（含真身/匿名分段 + 触发信号说明）由 buildPendingMailForAI 内部组装，直接注入
+        systemParts.push(pendingMailStr.trim());
       }
     }
 
@@ -2529,6 +2530,8 @@ const msgEl = appendMessage(aiMsg, true, true);
 renderContent = renderContent.replace(/```groupcreate[\s\S]*$/i, '');
 renderContent = renderContent.replace(/```mail_reply\s*[\s\S]*?```/gi, '');
 renderContent = renderContent.replace(/```mail_reply[\s\S]*$/i, '');
+renderContent = renderContent.replace(/```mail_noreply\s*[\s\S]*?```/gi, '');
+renderContent = renderContent.replace(/```mail_noreply[\s\S]*$/i, '');
           renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
           contentEl.innerHTML = Markdown.render(renderContent, { streaming: true });
           if (convSettings.stream) contentEl.classList.add('streaming-cursor');
@@ -2542,10 +2545,12 @@ renderContent = renderContent.replace(/```mail_reply[\s\S]*$/i, '');
           // 否则用户若配了剥离 HTML 注释的正则，会把 <!-- completeKey --> 删掉导致事件永远标记不了 done。
           const _rawForEventScan = fullContent;
           try {
-            // 正则替换规则
+            // 正则替换规则（仅作用于 scope=all 或 chat 的规则）
             const regexRules = await Settings.getRegexRules();
             for (const rule of regexRules) {
               if (rule.enabled === false) continue;
+              const _sc = rule.scope || 'all';
+              if (_sc !== 'all' && _sc !== 'chat') continue;
               try {
                 const re = new RegExp(rule.pattern, rule.flags || 'g');
                 fullContent = fullContent.replace(re, rule.replacement ?? '');
@@ -2928,6 +2933,14 @@ renderContent = renderContent.replace(/```mail_reply[\s\S]*$/i, '');
         setTimeout(() => { try { Phone.handleMainlineMailTag(fullContent); } catch(_) {} }, 3000);
       }
     } catch(e) { console.warn('[Chat] 邮件标记处理失败', e); }
+
+    // 主线邮件：检测 ```mail_noreply 块，把对应待回信标记为"对方无回应"，不再进上下文
+    try {
+      if (typeof Phone !== 'undefined' && Phone.handleMainlineMailNoReply
+        && /```mail_noreply[\s\S]*?```/.test(fullContent)) {
+        setTimeout(() => { try { Phone.handleMainlineMailNoReply(fullContent); } catch(_) {} }, 3000);
+      }
+    } catch(e) { console.warn('[Chat] 邮件拒回标记处理失败', e); }
 
     // 群聊自动发消息：主线每走一轮 +1，到随机阈值随机挑一个开了 autoChat 的群触发
     // （独立于群聊触发开关，由各群自己的 autoChat 控制；延迟错开避免和上面的触发撞一起）

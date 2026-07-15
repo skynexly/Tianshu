@@ -1344,7 +1344,7 @@ ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'
       if (!file) return;
       
       try {
-        const text = await file.text();
+        const text = await Utils.fileToText(file);
         const data = JSON.parse(text);
         
         // 判断是单个主题还是多个主题

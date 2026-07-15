@@ -319,7 +319,7 @@ const DataMgr = (() => {
         if (!_gzipSupported()) throw new Error('当前环境不支持解压（gzip），无法导入这份压缩存档');
         text = await _gunzip(file);
       } else {
-        text = await file.text();
+        text = await Utils.fileToText(file);
       }
       const data = JSON.parse(text);
       if (!data.version) throw new Error('无效的存档文件');
@@ -391,7 +391,7 @@ const DataMgr = (() => {
     const file = await Utils.pickFile({ accept: '.json' });
     if (!file) return;
     try {
-      const text = await file.text();
+      const text = await Utils.fileToText(file);
       const data = JSON.parse(text);
       // 校验：既支持功能模型专用备份，也兼容从总存档里提取（只要 settings 数组存在）
       const rows = Array.isArray(data.settings) ? data.settings : null;

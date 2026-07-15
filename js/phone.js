@@ -6440,7 +6440,7 @@ async function _editMusicTrack(id) {
         const file = input.files && input.files[0];
         if (!file) { input.remove(); return; }
         try {
-          const text = await file.text();
+          const text = await Utils.fileToText(file);
           await Music.updateTrack(id, { lrc: text });
           UI.showToast('歌词已导入', 1200);
           _renderMusicDetail(id);
@@ -8078,7 +8078,7 @@ function _refreshCalBanner() {
       const file = await Utils.pickFile({ accept: '.json,application/json' });
       if (!file) return;
       try {
-        const text = await file.text();
+        const text = await Utils.fileToText(file);
         const data = JSON.parse(text);
         if (data.__format !== 'tianshu_cottage_v1') {
           UI.showToast('无法识别的小屋数据格式', 3000);
@@ -24218,6 +24218,66 @@ ${digest}
     _emailPrefsExpanded = !_emailPrefsExpanded;
     _renderEmail(await _getPhoneData());
   }
+
+  // ===== 邮箱马甲（匿名身份）=====
+  // 开启后，新写的信以马甲名义寄出（独立线程，按「马甲名+收件人」聚合），
+  // 且喂给 AI 的回信 prompt 摘掉玩家真名/关系记忆——对方（AI）只当收到一封陌生人来信。
+  const _EMAIL_ALIAS_PREFS_DEFAULT = { aliasEnabled: false, aliases: [], activeAliasId: '' };
+  function _emailAliasPrefs(pd) {
+    const p = (pd && pd.emailAliasPrefs && typeof pd.emailAliasPrefs === 'object') ? pd.emailAliasPrefs : {};
+    const out = { ..._EMAIL_ALIAS_PREFS_DEFAULT, ...p };
+    if (!Array.isArray(out.aliases)) out.aliases = [];
+    return out;
+  }
+  // 取当前生效的马甲名：启用开关开 + 有 activeAliasId 命中 → 返回该马甲名；否则返回 ''（表示用真身）。
+  function _emailActiveAliasName(pd) {
+    const prefs = _emailAliasPrefs(pd);
+    if (!prefs.aliasEnabled) return '';
+    const hit = prefs.aliases.find(a => a && a.id === prefs.activeAliasId);
+    return (hit && String(hit.name || '').trim()) || '';
+  }
+  let _emailAliasPrefsExpanded = false;
+  async function _emailToggleAliasEnabled(val) {
+    const pd = await _getPhoneData();
+    if (!pd.emailAliasPrefs || typeof pd.emailAliasPrefs !== 'object') pd.emailAliasPrefs = { ..._EMAIL_ALIAS_PREFS_DEFAULT };
+    pd.emailAliasPrefs.aliasEnabled = !!val;
+    await _savePhoneData();
+    _renderEmail(await _getPhoneData());
+  }
+  async function _emailToggleAliasPrefsExpand() {
+    _emailAliasPrefsExpanded = !_emailAliasPrefsExpanded;
+    _renderEmail(await _getPhoneData());
+  }
+  async function _emailAddAlias() {
+    const name = await UI.showSimpleInput('添加马甲', '');
+    const nm = (name || '').trim();
+    if (!nm) return;
+    const pd = await _getPhoneData();
+    if (!pd.emailAliasPrefs || typeof pd.emailAliasPrefs !== 'object') pd.emailAliasPrefs = { ..._EMAIL_ALIAS_PREFS_DEFAULT };
+    if (!Array.isArray(pd.emailAliasPrefs.aliases)) pd.emailAliasPrefs.aliases = [];
+    const id = 'alias' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    pd.emailAliasPrefs.aliases.push({ id, name: nm });
+    // 第一个添加的马甲自动设为启用
+    if (!pd.emailAliasPrefs.activeAliasId) pd.emailAliasPrefs.activeAliasId = id;
+    await _savePhoneData();
+    _renderEmail(await _getPhoneData());
+  }
+  async function _emailSetActiveAlias(id) {
+    const pd = await _getPhoneData();
+    if (!pd.emailAliasPrefs || typeof pd.emailAliasPrefs !== 'object') return;
+    // 点已启用的再点一次 = 取消启用（回到真身）
+    pd.emailAliasPrefs.activeAliasId = (pd.emailAliasPrefs.activeAliasId === id) ? '' : id;
+    await _savePhoneData();
+    _renderEmail(await _getPhoneData());
+  }
+  async function _emailDeleteAlias(id) {
+    const pd = await _getPhoneData();
+    if (!pd.emailAliasPrefs || !Array.isArray(pd.emailAliasPrefs.aliases)) return;
+    pd.emailAliasPrefs.aliases = pd.emailAliasPrefs.aliases.filter(a => a && a.id !== id);
+    if (pd.emailAliasPrefs.activeAliasId === id) pd.emailAliasPrefs.activeAliasId = '';
+    await _savePhoneData();
+    _renderEmail(await _getPhoneData());
+  }
   // 一条线程是否有未读回信（对方来信 in 且未读）
   function _emailThreadHasUnread(t) {
     return !!(t && Array.isArray(t.letters) && t.letters.some(l => l && l.dir === 'in' && !l.read));
@@ -24340,6 +24400,42 @@ ${digest}
       </div>`;
     const gear = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
     const chevron = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s;transform:rotate(${_emailPrefsExpanded ? 180 : 0}deg)"><path d="m6 9 6 6 6-6"/></svg>`;
+    // ===== 马甲（匿名身份）管理区 =====
+    const aliasPrefs = _emailAliasPrefs(pd);
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const listHtml = aliasPrefs.aliases.length
+      ? aliasPrefs.aliases.map(a => {
+          const on = a && a.id === aliasPrefs.activeAliasId;
+          const check = on
+            ? `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke="var(--accent)" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5.5"/></svg>`
+            : `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-tertiary,#999)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>`;
+          return `<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-top:1px solid var(--border)">
+              <span onclick="Phone._emailSetActiveAlias('${a.id}')" style="cursor:pointer;display:flex;align-items:center">${check}</span>
+              <span onclick="Phone._emailSetActiveAlias('${a.id}')" style="flex:1;min-width:0;cursor:pointer;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}${on ? '<span style="color:var(--accent);font-size:11px;margin-left:6px">启用中</span>' : ''}</span>
+              <span onclick="Phone._emailDeleteAlias('${a.id}')" style="cursor:pointer;color:var(--text-secondary);display:flex;align-items:center;padding:2px" title="删除">${_uiIcon('trash', 15)}</span>
+            </div>`;
+        }).join('')
+      : `<div style="padding:12px 4px;font-size:12px;color:var(--text-tertiary,#888);text-align:center">还没有马甲，点下面添加一个</div>`;
+    const aliasManage = aliasPrefs.aliasEnabled ? `
+        <div style="margin-top:8px;padding-top:4px">
+          ${listHtml}
+          <div onclick="Phone._emailAddAlias()" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px;padding:9px;border:1px dashed var(--border);border-radius:8px;color:var(--accent);font-size:13px">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            添加马甲
+          </div>
+          <div style="font-size:11px;color:var(--text-tertiary,#888);margin-top:8px;line-height:1.5">启用马甲后，新写的信会以马甲名义匿名寄出，独立成一条往来，收信人（AI）不会知道是你本人。同时只能启用一个，再点一次可取消启用（恢复真身）。</div>
+        </div>` : '';
+    const aliasSwitch = `
+      <div class="phone-radio-pref-row">
+        <div style="flex:1;min-width:0">
+          <div>启用马甲</div>
+          <div style="font-size:11px;color:var(--text-tertiary,#888);margin-top:2px">以匿名身份写信，隐藏真实身份</div>
+        </div>
+        <label class="phone-radio-switch">
+          <input type="checkbox" ${aliasPrefs.aliasEnabled ? 'checked' : ''} onchange="Phone._emailToggleAliasEnabled(this.checked)">
+          <span class="phone-radio-switch-slider"></span>
+        </label>
+      </div>`;
     return `
       <div class="phone-radio-prefs">
         <div class="phone-radio-prefs-head" onclick="Phone._emailTogglePrefsExpand()">
@@ -24349,6 +24445,8 @@ ${digest}
         </div>
         <div class="phone-radio-prefs-body" style="display:${_emailPrefsExpanded ? 'block' : 'none'}">
           ${sw('ecosystem', '启用邮箱生态', '随着你的行动，可能会收到各种类型的新信件。请注意会有额外调用。', prefs.ecosystem)}
+          ${aliasSwitch}
+          ${aliasManage}
         </div>
       </div>`;
   }
@@ -24390,6 +24488,7 @@ ${digest}
         <div class="phone-email-card-info">
           <div class="phone-email-card-toprow">
             <span class="phone-email-card-who">${Utils.escapeHtml(who)}</span>
+            ${t && t.viaAlias ? `<span class="phone-email-card-dir" style="background:var(--bg-tertiary);color:var(--text-secondary)">马甲·${Utils.escapeHtml(String(t.aliasName || '').trim() || '匿名')}</span>` : ''}
             ${cnt > 1 ? `<span class="phone-email-card-dir dir-out">${cnt} 封</span>` : ''}
             ${time ? `<span class="phone-email-card-time">${Utils.escapeHtml(time)}</span>` : ''}
           </div>
@@ -24514,6 +24613,8 @@ ${digest}
   }
 
   // 寄出新信：新建会话（按人聚合）+ 第一封 out（主题在信上）
+  // 马甲模式：以当前启用的马甲名义寄出——独立线程，按「马甲名 + 收件人名」聚合，
+  //           与真身给同一 NPC 的往来完全分开；喂给 AI 的回信 prompt 会摘掉真名/关系（真匿名）。
   async function _emailSendNew(party, subject, body, sign) {
     const pd = await _getPhoneData();
     if (!pd.emails || typeof pd.emails !== 'object') pd.emails = { threads: [] };
@@ -24521,16 +24622,43 @@ ${digest}
     const now = Date.now();
     let gameTime = '';
     try { const sb = Conversations.getStatusBar(); gameTime = (sb && sb.time) ? String(sb.time) : ''; } catch (_) {}
-    const thread = {
-      id: 'et_' + now + '_' + Math.floor(Math.random() * 10000),
-      party: { name: (party.name || '未知').trim(), source: party.source || 'custom', avatar: party.avatar || '' },
-      createdAt: now,
-      updatedAt: now,
-      letters: [
-        { id: 'el_' + now, dir: 'out', subject: (subject || '').trim(), body: body, sign: (sign || '').trim(), gameTime: gameTime, awaiting: true, createdAt: now, read: true }
-      ]
-    };
-    pd.emails.threads.unshift(thread);
+    const aliasName = _emailActiveAliasName(pd);
+    const partyName = (party.name || '未知').trim();
+    const letter = { id: 'el_' + now, dir: 'out', subject: (subject || '').trim(), body: body, sign: (sign || '').trim(), gameTime: gameTime, awaiting: true, createdAt: now, read: true };
+    if (aliasName) {
+      // 马甲信：找同一「马甲名+收件人+viaAlias」的既有独立线程，有就追加、没有才新建
+      let thread = pd.emails.threads.find(t =>
+        t && t.viaAlias && ((t.aliasName || '').trim() === aliasName) &&
+        ((t.party && t.party.name || '').trim() === partyName)
+      );
+      if (thread) {
+        if (!Array.isArray(thread.letters)) thread.letters = [];
+        thread.letters.push(letter);
+        thread.updatedAt = now;
+        // 置顶到最新
+        pd.emails.threads = [thread, ...pd.emails.threads.filter(t => t !== thread)];
+      } else {
+        thread = {
+          id: 'et_' + now + '_' + Math.floor(Math.random() * 10000),
+          party: { name: partyName, source: party.source || 'custom', avatar: party.avatar || '' },
+          viaAlias: true,
+          aliasName: aliasName,
+          createdAt: now,
+          updatedAt: now,
+          letters: [letter]
+        };
+        pd.emails.threads.unshift(thread);
+      }
+    } else {
+      const thread = {
+        id: 'et_' + now + '_' + Math.floor(Math.random() * 10000),
+        party: { name: partyName, source: party.source || 'custom', avatar: party.avatar || '' },
+        createdAt: now,
+        updatedAt: now,
+        letters: [letter]
+      };
+      pd.emails.threads.unshift(thread);
+    }
     await _savePhoneData();
     UI.showToast('已寄出', 1400);
     _emailHomeTab = 'mine';
@@ -24605,8 +24733,11 @@ ${digest}
     }
 
     const userMask = await _getMaskInfo().catch(() => null);
-    const myAvatar = (userMask && userMask.avatar) || '';
-    const myName = (userMask && userMask.username) || '我';
+    // 匿名（马甲）线程：out 信的发件身份用马甲名、不带面具头像，避免暴露真身
+    const _threadViaAlias = !!(t && t.viaAlias);
+    const _threadAliasName = _threadViaAlias ? (String(t.aliasName || '').trim() || '匿名') : '';
+    const myAvatar = _threadViaAlias ? '' : ((userMask && userMask.avatar) || '');
+    const myName = _threadViaAlias ? _threadAliasName : ((userMask && userMask.username) || '我');
 
     const cards = (t.letters || []).map(l => {
       const isOut = l.dir === 'out';
@@ -24630,6 +24761,7 @@ ${digest}
             </div>
           </div>
           <div class="phone-email-letter-text">${Utils.escapeHtml(l.body || '')}</div>
+          ${(isOut && l.declined) ? `<div class="phone-email-letter-declined" style="font-size:11px;color:var(--text-secondary);opacity:0.7;margin-top:6px;font-style:italic">· 这封信似乎石沉大海，没有等到回音</div>` : ''}
         </div>`;
     }).join('');
 
@@ -24696,7 +24828,8 @@ ${digest}
     const isOut = l.dir === 'out';
 
     const userMask = await _getMaskInfo().catch(() => null);
-    const myName = (userMask && userMask.username) || '我';
+    // 匿名（马甲）线程：寄出方身份用马甲名，隐藏真身
+    const myName = (t && t.viaAlias) ? (String(t.aliasName || '').trim() || '匿名') : ((userMask && userMask.username) || '我');
     const fromName = isOut ? myName : (party.name || '对方');
     const toName = isOut ? (party.name || '对方') : myName;
     const subject = (l.subject || '（无主题）').trim();
@@ -27811,17 +27944,44 @@ ${myNotesBlock}${oldBlock}
     await _savePhoneData(pd);
   }
 
-  // 对阅读正文应用「设置→正则处理」规则（与主线消息同一套规则）。异步。
+  // 对阅读正文应用「设置→正则处理」规则（收编进 scope=phone/all，与手机其他内容统一）。异步。
   async function _readingApplyRegexRules(text) {
     let out = String(text || '');
     try {
+      if (typeof Settings !== 'undefined' && Settings.applyRegexSync) {
+        // 优先用同步缓存版（scope 感知）；先确保规则已加载
+        try { await Settings.getRegexRules(); } catch (_) {}
+        return Settings.applyRegexSync(out, 'phone');
+      }
       const rules = await Settings.getRegexRules();
       for (const rule of (rules || [])) {
         if (rule.enabled === false) continue;
+        const _sc = rule.scope || 'all';
+        if (_sc !== 'all' && _sc !== 'phone') continue;
         try { out = out.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement ?? ''); } catch (_) {}
       }
     } catch (_) {}
     return out;
+  }
+
+  // 手机内容统一渲染出口：先跑 scope=phone/all 的正则（同步缓存），再 Markdown 渲染。
+  // 用于替换 phone.js 里散落的 Markdown.render 调用，让论坛/私聊/评论等全部过一遍正则。
+  function _phoneMd(s) {
+    let t = String(s == null ? '' : s);
+    try {
+      if (typeof Settings !== 'undefined' && Settings.applyRegexSync) t = Settings.applyRegexSync(t, 'phone');
+    } catch (_) {}
+    return window.Markdown ? Markdown.render(t) : (typeof Utils !== 'undefined' ? Utils.escapeHtml(t) : t);
+  }
+
+  // 纯文本展示型内容（朋友圈/私聊/评论等，非 Markdown）：只过正则 + HTML 转义，不改渲染方式。
+  // 用于给那些原本走 escapeHtml 直出的展示内容加上 scope=phone/all 的正则清洗（如滤"极其"增殖）。
+  function _phoneText(s) {
+    let t = String(s == null ? '' : s);
+    try {
+      if (typeof Settings !== 'undefined' && Settings.applyRegexSync) t = Settings.applyRegexSync(t, 'phone');
+    } catch (_) {}
+    return typeof Utils !== 'undefined' ? Utils.escapeHtml(t) : t;
   }
 
   // 渲染阅读器页：正文 + 上一章/下一章导航
@@ -36767,6 +36927,67 @@ async function _clearMomentsCover() {
   // 详情页里的刷新评论/发评论/收藏/分享按钮据此决定读写哪个数组，避免给每个 onclick 传 source 参数。
   let _forumDetailSource = 'cached';
 
+  // ===== 论坛马甲（匿名身份）=====
+  // aliasEnabled：启用马甲；aliases：马甲列表 [{id, name}]；activeAliasId：当前启用的那一个（同时只启用一个）。
+  // 启用且有生效马甲时，发帖/评论的 username 固化存马甲名、头像走默认色块，且给 AI 的 prompt 不带任何“玩家/用户本人”标记，
+  // 改成中性“这条是 xx 发的，请积极回应”，让 NPC 认不出是用户本人（真匿名）。
+  const _FORUM_ALIAS_PREFS_DEFAULT = { aliasEnabled: false, aliases: [], activeAliasId: '' };
+  function _forumAliasPrefs(pd) {
+    const p = (pd && pd.forumAliasPrefs && typeof pd.forumAliasPrefs === 'object') ? pd.forumAliasPrefs : {};
+    const out = { ..._FORUM_ALIAS_PREFS_DEFAULT, ...p };
+    if (!Array.isArray(out.aliases)) out.aliases = [];
+    return out;
+  }
+  // 取当前生效的马甲名：启用开关开 + 有 activeAliasId 命中 → 返回该马甲名；否则返回 ''（表示用真身/面具）。
+  function _forumActiveAliasName(pd) {
+    const prefs = _forumAliasPrefs(pd);
+    if (!prefs.aliasEnabled) return '';
+    const hit = prefs.aliases.find(a => a && a.id === prefs.activeAliasId);
+    return (hit && String(hit.name || '').trim()) || '';
+  }
+  let _forumAliasPrefsExpanded = false;
+  async function _forumToggleAliasEnabled(val) {
+    const pd = await _getPhoneData();
+    if (!pd.forumAliasPrefs || typeof pd.forumAliasPrefs !== 'object') pd.forumAliasPrefs = { ..._FORUM_ALIAS_PREFS_DEFAULT };
+    pd.forumAliasPrefs.aliasEnabled = !!val;
+    await _savePhoneData();
+    _renderForum(await _getPhoneData());
+  }
+  async function _forumToggleAliasPrefsExpand() {
+    _forumAliasPrefsExpanded = !_forumAliasPrefsExpanded;
+    _renderForum(await _getPhoneData());
+  }
+  async function _forumAddAlias() {
+    const name = await UI.showSimpleInput('添加马甲', '');
+    const nm = (name || '').trim();
+    if (!nm) return;
+    const pd = await _getPhoneData();
+    if (!pd.forumAliasPrefs || typeof pd.forumAliasPrefs !== 'object') pd.forumAliasPrefs = { ..._FORUM_ALIAS_PREFS_DEFAULT };
+    if (!Array.isArray(pd.forumAliasPrefs.aliases)) pd.forumAliasPrefs.aliases = [];
+    const id = 'alias' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    pd.forumAliasPrefs.aliases.push({ id, name: nm });
+    // 第一个添加的马甲自动设为启用
+    if (!pd.forumAliasPrefs.activeAliasId) pd.forumAliasPrefs.activeAliasId = id;
+    await _savePhoneData();
+    _renderForum(await _getPhoneData());
+  }
+  async function _forumSetActiveAlias(id) {
+    const pd = await _getPhoneData();
+    if (!pd.forumAliasPrefs || typeof pd.forumAliasPrefs !== 'object') return;
+    // 点已启用的再点一次 = 取消启用（回到真身）
+    pd.forumAliasPrefs.activeAliasId = (pd.forumAliasPrefs.activeAliasId === id) ? '' : id;
+    await _savePhoneData();
+    _renderForum(await _getPhoneData());
+  }
+  async function _forumDeleteAlias(id) {
+    const pd = await _getPhoneData();
+    if (!pd.forumAliasPrefs || !Array.isArray(pd.forumAliasPrefs.aliases)) return;
+    pd.forumAliasPrefs.aliases = pd.forumAliasPrefs.aliases.filter(a => a && a.id !== id);
+    if (pd.forumAliasPrefs.activeAliasId === id) pd.forumAliasPrefs.activeAliasId = '';
+    await _savePhoneData();
+    _renderForum(await _getPhoneData());
+  }
+
   // 按当前 _forumDetailSource 取帖子列表：collected → phoneData.forumCollectedPosts；否则 cachedForumPosts（兜底 WorldVoice 内存）
   function _forumPostsBySource(pd) {
     if (_forumDetailSource === 'collected') return (pd && pd.forumCollectedPosts) || [];
@@ -37022,14 +37243,10 @@ async function _clearMomentsCover() {
           </div>
           ${historyHtml}
         </div>
-        <div id="phone-forum-myposts-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_forumTab === 'myposts' ? 'block' : 'none'}">
+        <div id="phone-forum-myposts-panel" style="flex:1;overflow-y:auto;padding:0 0 12px;display:${_forumTab === 'myposts' ? 'block' : 'none'}">
           ${_forumMineHeader(forumMineMaskInfo, (pd.myForumPosts || []).length)}
-          ${_forumMineSubCards((pd.myForumPosts || []).length, (pd.forumCollectedPosts || []).length)}
-          <div id="phone-forum-mine-list">
-            ${_forumMineSub === 'collected'
-              ? _renderForumCollectedPosts(pd.forumCollectedPosts || [])
-              : _renderMyForumPosts(pd.myForumPosts || [])}
-          </div>
+          ${_forumAliasPrefsBar(pd)}
+          ${_forumMineEntryCards((pd.myForumPosts || []).length, (pd.forumCollectedPosts || []).length)}
         </div>
         <div class="phone-tabbar">
           <div class="phone-tab ${_forumTab === 'posts' ? 'active' : ''}" onclick="Phone._switchForumTab('posts')">推荐</div>
@@ -37269,12 +37486,16 @@ async function _clearMomentsCover() {
     const t = (text || '').trim();
     if (!t) return;
     const mi = await _getMaskInfo();
+    let _u = mi.username || '我', _av = mi.avatar || '';
+    const _alias = _forumActiveAliasName(await _getPhoneData());
+    if (_alias) { _u = _alias; _av = ''; }
     if (!Array.isArray(c.replies)) c.replies = [];
     c.replies.push({
       id: _forumNewCommentId(),
-      username: mi.username || '我',
-      avatar: mi.avatar || '',
+      username: _u,
+      avatar: _av,
       isNpc: false, isPlayer: true,
+      viaAlias: !!_alias,
       content: t,
       time: _formatPhoneTime(Conversations.getStatusBar()?.time || new Date().toISOString()),
       likes: 0,
@@ -37335,7 +37556,7 @@ async function _clearMomentsCover() {
     const list = (Array.isArray(comments) ? comments : []).filter(Boolean);
     if (!list.length) return '';
     const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
-    const md = (s) => window.Markdown ? Markdown.render(s || '') : esc(s || '');
+    const md = (s) => _phoneMd(s || '');
     const meTag = '<span style="color:var(--accent);font-weight:400;margin-left:3px">（我）</span>';
     // 楼主标：仅 AI 帖判定（玩家帖楼主是玩家本人、不会出现在评论区，不判）。
     // 身份比对优先本名 realName（NPC 楼主最稳），网名 username 兜底（未识别路人楼主）。
@@ -37407,10 +37628,13 @@ async function _clearMomentsCover() {
     const list = (Array.isArray(comments) ? comments : []).filter(Boolean);
     if (!list.length) return '暂无';
     return list.map(c => {
-      const me = c.isPlayer ? '【楼主是玩家】' : '';
+      // 马甲评论：不暴露“玩家/用户本人”，只标记“重点照顾此人”，AI 不发面具压根不知道 xx 是谁，天然匿名
+      const me = c.viaAlias ? `【重点照顾「${c.username || '匿名'}」，多生成针对性回复】`
+        : (c.isPlayer ? '【楼主是玩家】' : '');
       const head = `[${c.id}] ${me}(${c.isNpc ? 'NPC' : '路人'}/赞${c.likes || 0}/${c.time || ''}) ${c.username || '匿名'}：${c.content || ''}`;
       const reps = (c.replies || []).map(rp => {
-        const rme = rp.isPlayer ? '【玩家】' : '';
+        const rme = rp.viaAlias ? `【重点照顾「${rp.username || '匿名'}」】`
+          : (rp.isPlayer ? '【玩家】' : '');
         const to = (rp.replyToName || '').trim() ? `回复@${rp.replyToName} ` : '';
         return `  └ [${rp.id}] ${rme}${rp.username || '匿名'}：${to}${rp.content || ''}`;
       }).join('\n');
@@ -37488,47 +37712,97 @@ async function _clearMomentsCover() {
       </div>`;
   }
 
-  // 论坛「我的」页：我的发帖 / 我的收藏 双卡片切换
-  function _forumMineSubCards(postCount, collectedCount) {
-    const pc = Number(postCount) || 0;
-    const cc = Number(collectedCount) || 0;
-    const card = (sub, label, num, iconSvg) => {
-      const active = _forumMineSub === sub;
-      return `<div onclick="Phone._switchForumMineSub('${sub}')" style="flex:1;cursor:pointer;background:${active ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${active ? '#111' : 'var(--text)'};border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;transition:background .15s,color .15s">
-        <span style="display:flex;align-items:center;color:${active ? '#111' : 'var(--text-secondary)'}">${iconSvg}</span>
-        <div style="min-width:0">
-          <div style="font-size:13px;font-weight:600;line-height:1.2">${label}</div>
-          <div style="font-size:11px;opacity:.75;margin-top:2px">${num} 篇</div>
+  // 论坛「我的」页：马甲（匿名身份）偏好横条，仿邮箱/电台同款可折叠横条
+  function _forumAliasPrefsBar(pd) {
+    const prefs = _forumAliasPrefs(pd);
+    const esc = (s) => Utils.escapeHtml(String(s == null ? '' : s));
+    const gear = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
+    const chevron = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s;transform:rotate(${_forumAliasPrefsExpanded ? 180 : 0}deg)"><path d="m6 9 6 6 6-6"/></svg>`;
+    // 马甲列表：每条一行，左侧勾选（单选启用）+ 名字，右侧删除
+    const listHtml = prefs.aliases.length
+      ? prefs.aliases.map(a => {
+          const on = a.id === prefs.activeAliasId;
+          const check = on
+            ? `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke="var(--accent)" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5.5"/></svg>`
+            : `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-tertiary,#999)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>`;
+          return `<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-top:1px solid var(--border)">
+              <span onclick="Phone._forumSetActiveAlias('${a.id}')" style="cursor:pointer;display:flex;align-items:center">${check}</span>
+              <span onclick="Phone._forumSetActiveAlias('${a.id}')" style="flex:1;min-width:0;cursor:pointer;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}${on ? '<span style="color:var(--accent);font-size:11px;margin-left:6px">启用中</span>' : ''}</span>
+              <span onclick="Phone._forumDeleteAlias('${a.id}')" style="cursor:pointer;color:var(--text-secondary);display:flex;align-items:center;padding:2px" title="删除">${_uiIcon('trash', 15)}</span>
+            </div>`;
+        }).join('')
+      : `<div style="padding:12px 4px;font-size:12px;color:var(--text-tertiary,#888);text-align:center">还没有马甲，点下面添加一个</div>`;
+    const aliasManage = prefs.aliasEnabled ? `
+        <div style="margin-top:8px;padding-top:4px">
+          ${listHtml}
+          <div onclick="Phone._forumAddAlias()" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px;padding:9px;border:1px dashed var(--border);border-radius:8px;color:var(--accent);font-size:13px">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            添加马甲
+          </div>
+          <div style="font-size:11px;color:var(--text-tertiary,#888);margin-top:8px;line-height:1.5">启用马甲后，发帖/评论会以马甲名义匿名发出，对方（AI）不会知道是你本人。同时只能启用一个，再点一次可取消启用（恢复真身）。</div>
+        </div>` : '';
+    return `
+      <div class="phone-radio-prefs" style="margin-left:16px;margin-right:16px">
+        <div class="phone-radio-prefs-head" onclick="Phone._forumToggleAliasPrefsExpand()">
+          <span class="phone-radio-prefs-gear">${gear}</span>
+          <span class="phone-radio-prefs-title">全局偏好设置</span>
+          <span class="phone-radio-prefs-chevron">${chevron}</span>
+        </div>
+        <div class="phone-radio-prefs-body" style="display:${_forumAliasPrefsExpanded ? 'block' : 'none'}">
+          <div class="phone-radio-pref-row">
+            <div style="flex:1;min-width:0">
+              <div>启用马甲</div>
+              <div style="font-size:11px;color:var(--text-tertiary,#888);margin-top:2px">以匿名身份发帖/评论，隐藏真实身份</div>
+            </div>
+            <label class="phone-radio-switch">
+              <input type="checkbox" ${prefs.aliasEnabled ? 'checked' : ''} onchange="Phone._forumToggleAliasEnabled(this.checked)">
+              <span class="phone-radio-switch-slider"></span>
+            </label>
+          </div>
+          ${aliasManage}
         </div>
       </div>`;
-    };
-    const iconPost = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
-    const iconStar = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
-    return `<div style="display:flex;gap:10px;margin:12px 0">
+  }
+
+  // 论坛「我的」页：我的发帖 / 我的收藏 两个横条长卡入口，点击进独立列表页
+  function _forumMineEntryCards(postCount, collectedCount) {
+    const pc = Number(postCount) || 0;
+    const cc = Number(collectedCount) || 0;
+    const chevron = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="m9 18 6-6-6-6"/></svg>`;
+    const card = (sub, label, num, iconSvg) => `
+      <div onclick="Phone._forumOpenMineList('${sub}')" style="cursor:pointer;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;padding:14px 14px;display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <span style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;background:var(--bg-secondary);color:var(--accent);flex-shrink:0">${iconSvg}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;line-height:1.2;color:var(--text)">${label}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${num} 篇</div>
+        </div>
+        ${chevron}
+      </div>`;
+    const iconPost = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+    const iconStar = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+    return `<div style="margin:12px 16px 0">
       ${card('posts', '我的发帖', pc, iconPost)}
       ${card('collected', '我的收藏', cc, iconStar)}
     </div>`;
   }
 
-  // 切换「我的发帖 / 我的收藏」子标签，只重渲染列表区（不动导航栈）
-  async function _switchForumMineSub(sub) {
+  // 点击横条入口 → 进独立列表页（我的发帖 / 我的收藏）
+  async function _forumOpenMineList(sub) {
     _forumMineSub = (sub === 'collected') ? 'collected' : 'posts';
     const pd = await _getPhoneData();
     if (!pd) return;
-    const wrap = document.getElementById('phone-forum-myposts-panel');
-    const listEl = document.getElementById('phone-forum-mine-list');
-    if (listEl) {
-      listEl.innerHTML = _forumMineSub === 'collected'
-        ? _renderForumCollectedPosts(pd.forumCollectedPosts || [])
-        : _renderMyForumPosts(pd.myForumPosts || []);
-    }
-    // 重渲染卡片高亮：卡片块紧跟在个人资料头部之后
-    if (wrap) {
-      const headerEl = wrap.querySelector('.phone-radio-mine-header');
-      if (headerEl && headerEl.nextElementSibling) {
-        headerEl.nextElementSibling.outerHTML = _forumMineSubCards((pd.myForumPosts || []).length, (pd.forumCollectedPosts || []).length);
-      }
-    }
+    _pushNav(() => _forumOpenMineList(sub));
+    const body = document.getElementById('phone-body');
+    const titleEl = document.getElementById('phone-title');
+    const isColl = _forumMineSub === 'collected';
+    if (titleEl) titleEl.textContent = isColl ? '我的收藏' : '我的发帖';
+    // 顶栏右上角：发帖入口（仅我的发帖页显示）
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = isColl ? '' : `<button class="phone-nav-btn" title="发帖" onclick="Phone._forumOpenAddMenu(event)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`;
+    const listHtml = isColl
+      ? _renderForumCollectedPosts(pd.forumCollectedPosts || [])
+      : _renderMyForumPosts(pd.myForumPosts || []);
+    if (body) body.innerHTML = `<div style="flex:1;overflow-y:auto;padding:12px;height:100%;box-sizing:border-box">${listHtml}</div>`;
   }
 
   // 渲染「我的收藏」列表（收藏的论坛帖子，点进走 collected 来源的详情页）
@@ -37628,7 +37902,11 @@ async function _clearMomentsCover() {
   async function _addForumPost() {
     const pd = await _getPhoneData();
     if (!pd) return;
-    const { username, avatar } = await _getMaskInfo();
+    let { username, avatar } = await _getMaskInfo();
+    // 马甲：启用且有生效马甲时，用马甲名匿名发帖，头像走默认色块（不暴露面具头像）
+    const _alias = _forumActiveAliasName(pd);
+    let viaAlias = false;
+    if (_alias) { username = _alias; avatar = ''; viaAlias = true; }
     let gameTime = '';
     try {
       const sb = Conversations.getStatusBar();
@@ -37640,6 +37918,7 @@ async function _clearMomentsCover() {
       username,
       avatar,
       avatar_color: '#888',
+      viaAlias,
       time: gameTime,
       title: '',
       content: '',
@@ -37774,7 +38053,7 @@ async function _clearMomentsCover() {
     html += '</div>';
     html += '</div>';
     // 正文（支持 Markdown 渲染，和 AI 帖子一致）
-    html += '<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">' + (window.Markdown ? Markdown.render(String(p.content || '').replace(/<br\s*\/?>/gi, '\n')) : Utils.escapeHtml(p.content || '')) + '</div>';
+    html += '<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">' + _phoneMd(String(p.content || '').replace(/<br\s*\/?>/gi, '\n')) + '</div>';
     // 配图描述
     if (p.imageDesc) {
       html += '<div class="phone-moment-image-desc" style="margin-bottom:12px">' + _uiIcon('image', 13) + '<span>' + Utils.escapeHtml(p.imageDesc) + '</span></div>';
@@ -37892,6 +38171,9 @@ async function _clearMomentsCover() {
       username = (mask?.onlineName || '').trim() || mask?.name || '我';
       avatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
     } catch(_) {}
+    // 马甲：启用且有生效马甲时，用马甲名匿名评论，头像走默认色块
+    const _alias = _forumActiveAliasName(pd);
+    if (_alias) { username = _alias; avatar = ''; }
 
     const comment = {
       id: _forumNewCommentId(),
@@ -37899,6 +38181,7 @@ async function _clearMomentsCover() {
       avatar,
       isNpc: false,
       isPlayer: true,
+      viaAlias: !!_alias,
       content,
       time: _formatPhoneTime(Conversations.getStatusBar()?.time || new Date().toISOString()),
       likes: 0,
@@ -37936,6 +38219,9 @@ async function _clearMomentsCover() {
       username = (mask?.onlineName || '').trim() || mask?.name || '我';
       avatar = (typeof Character !== 'undefined' && Character.getAvatar ? Character.getAvatar() : '') || mask?.avatar || '';
     } catch(_) {}
+    // 马甲：启用且有生效马甲时，用马甲名匿名评论，头像走默认色块
+    const _alias = _forumActiveAliasName(pd);
+    if (_alias) { username = _alias; avatar = ''; }
 
     const comment = {
       id: _forumNewCommentId(),
@@ -37943,6 +38229,7 @@ async function _clearMomentsCover() {
       avatar,
       isNpc: false,
       isPlayer: true,
+      viaAlias: !!_alias,
       content,
       time: _formatPhoneTime(Conversations.getStatusBar()?.time || new Date().toISOString()),
       likes: 0,
@@ -37997,7 +38284,7 @@ ${md ? `载体说明：${md}\n\n` : ''}要求：
    - newReplies：3-8 条"盖到已有楼层的楼中楼"，每条必须带 targetId，指向上面现状里真实存在的某个 id（主楼或楼中楼的 id 都行）。
 3. 绝大多数评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与（0-3条）。如果评论者是 NPC，username 直接填该 NPC 的网名或本名（不要加括号或注释），并标记 "isNpc": true；否则 "isNpc": false。
    - 如果【最近主线剧情】里出现过某些有名有姓的路人/配角（路边摊老板、同事、邻居、出租司机等非核心角色），允许让 ta 们以路人评论者身份自然出现在评论区，标记 "isNpc": false 即可，能增强"这个世界是连贯的"的真实感。但不要硬塞，只在贴合时用。
-4. 【重点照顾玩家】如果现状里有标【楼主是玩家】或【玩家】的评论，请生成 2-3 条 newReplies，targetId 指向玩家那层，有附和也有抬杠，让玩家有被回应的感觉。
+4. 【重点照顾玩家】如果现状里有标【楼主是玩家】或【玩家】的评论，请生成 2-3 条 newReplies，targetId 指向玩家那层，有附和也有抬杠，让玩家有被回应的感觉。若有标【重点照顾「xxx」】的评论，同样生成 2-3 条 newReplies 指向该楼，让 ta 有被回应的感觉（就当 ta 是个活跃网友，正常对待即可）。
 5. 内容自然多样：赞同、反对、追问、吐槽、跑题、阴阳怪气都行；长度错落有致。楼中楼里 replyToName 留空=回复楼主，填某人网名=回复楼里那个人（可接续已有对线）。
 6. 新内容要参考已有评论，避免重复；可接续讨论，也可开新分歧。
 7. 时间安排：所有 time 必须晚于被回复对象（主楼晚于发帖、楼中楼晚于其所在楼层），并根据"当前游戏时间"合理顺延，最新几条紧贴当前游戏时间，严禁跳到不合逻辑的遥远未来。
@@ -38115,7 +38402,7 @@ ${md ? `载体说明：${md}\n\n` : ''}要求：
    - newReplies：3-8 条"盖到已有楼层的楼中楼"，每条必须带 targetId，指向上面现状里真实存在的某个 id（主楼或楼中楼的 id 都行）。
 3. 绝大多数评论者应是符合世界观和"${mt}"氛围的普通路人用户；可以有少量 NPC 参与（0-3条）。如果评论者是 NPC，username 直接填该 NPC 的网名或本名（不要加括号或注释），并标记 "isNpc": true；否则 "isNpc": false。
 4. 如果楼主（发帖人）出现在评论区，必须是以作者/楼主身份回复读者（如答疑、补充），而不是以路人视角评论自己。
-5. 【重点照顾玩家】如果现状里有标【楼主是玩家】或【玩家】的评论，请生成 2-3 条 newReplies，targetId 指向玩家那层，有附和也有抬杠。
+5. 【重点照顾玩家】如果现状里有标【楼主是玩家】或【玩家】的评论，请生成 2-3 条 newReplies，targetId 指向玩家那层，有附和也有抬杠。若有标【重点照顾「xxx」】的评论，同样生成 2-3 条 newReplies 指向该楼（就当 ta 是个活跃网友，正常对待即可）。
 6. 内容自然多样：赞同、反对、追问、吐槽、跑题、补充、阴阳怪气、认真分析都行；长度错落有致。楼中楼里 replyToName 留空=回复楼主，填某人网名=回复楼里那个人（可接续已有对线）。
 7. 新内容要参考已有评论，避免重复；可接续讨论，也可开新分歧。
 8. 时间安排：所有 time 必须晚于被回复对象（主楼晚于发帖、楼中楼晚于其所在楼层），并根据"当前游戏时间"合理顺延，最新几条紧贴当前游戏时间，严禁跳到不合逻辑的遥远未来。
@@ -38603,7 +38890,7 @@ ${wvPrompt}`;
       </div>`;
       // 正文或骨架屏
       if (p._detailLoaded) {
-        html += `<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">${(window.Markdown ? Markdown.render(String(p.fullContent||'').replace(/<br\s*\/?>/gi,'\n')) : Utils.escapeHtml(p.fullContent||''))}</div>`;
+        html += `<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">${_phoneMd(String(p.fullContent||'').replace(/<br\s*\/?>/gi,'\n'))}</div>`;
         if (p.tags?.length) html += `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px">${p.tags.map(t=>`<span style="font-size:10px;background:var(--bg-tertiary);color:var(--accent);padding:2px 8px;border-radius:10px">${Utils.escapeHtml(t)}</span>`).join('')}</div>`;
 html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secondary);padding:8px 0;border-top:1px solid var(--border);margin-bottom:12px">
         <span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> ${formatNum(p.views)}</span>
@@ -39202,7 +39489,7 @@ ${wvPrompt}` },
       ? `<div class="phone-moment-comments"><div class="phone-moment-comments-title">评论区</div>${comments.map((c, ci) => `
           <div class="phone-moment-comment-card">
             <span class="phone-moment-comment-name"${c.byUser ? ' style="color:var(--accent)"' : ''}>${Utils.escapeHtml(_dispName(c.name))}</span>
-            <span class="phone-moment-comment-text">${Utils.escapeHtml(c.text || '')}</span>
+            <span class="phone-moment-comment-text">${_phoneText(c.text || '')}</span>
             <button class="phone-cmt-del" title="删除评论" onclick="Phone._deleteMomentComment('${scope}',${mi},${ci})">${_uiIcon('trash', 12)}</button>
           </div>`).join('')}</div>`
       : '';
@@ -39219,9 +39506,10 @@ ${wvPrompt}` },
             <div class="phone-moment-head">
               <div class="phone-moment-name">${Utils.escapeHtml(maskName)}</div>
               <div class="phone-moment-time">${Utils.escapeHtml(_formatPhoneTime(m.time || ''))}</div>
-            </div>
-            <div class="phone-moment-text">${Utils.escapeHtml(m.text || '')}</div>
-${m.shareCard ? `<div class="phone-moment-share-card" style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;background:var(--bg-tertiary);display:flex;align-items:center;gap:8px;margin-top:8px">
+<div class="phone-moment-text">${_phoneText(m.text || '')}</div>
+ ${m.shareCard ? `<div class="phone-moment-share-card" style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;background:var(--bg-tertiary);display:flex;align-items:center;gap:8px;margin-top:8px">
+              </div>
+              <div class="phone-moment-text">${_phoneText(m.text || '')}</div>
                 <div class="phone-moment-share-kind" style="flex-shrink:0;font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:1px 6px">${Utils.escapeHtml(m.shareCard.kind || '分享')}</div>
               <div style="flex:1;min-width:0">
                 <div style="font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(m.shareCard.title || '')}</div>
@@ -41722,7 +42010,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px;flex-direction:row-reverse">
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${meAvatarInner}</div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;min-width:0;max-width:72%">
-        <div style="padding:8px 12px;border-radius:18px;border-bottom-right-radius:4px;font-size:14px;line-height:1.5;background:var(--accent);color:#fff;word-break:break-word">${quoteBlock}${Utils.escapeHtml(m.text || '')}</div>
+        <div style="padding:8px 12px;border-radius:18px;border-bottom-right-radius:4px;font-size:14px;line-height:1.5;background:var(--accent);color:#fff;word-break:break-word">${quoteBlock}${_phoneText(m.text || '')}</div>
         ${footTag}
       </div>
     </div>`;
@@ -41730,7 +42018,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
   return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px">
     <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
     <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:72%">
-      <div style="padding:8px 12px;border-radius:18px;border-bottom-left-radius:4px;font-size:14px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);word-break:break-word">${quoteBlock}${Utils.escapeHtml(m.text || '')}</div>
+      <div style="padding:8px 12px;border-radius:18px;border-bottom-left-radius:4px;font-size:14px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);word-break:break-word">${quoteBlock}${_phoneText(m.text || '')}</div>
       ${footTag}
     </div>
   </div>`;
@@ -49299,6 +49587,8 @@ async function handleMainlineCallTag(content) {
 // ===== 邮件：主线信号处理 =====
 // 主线输出 ```mail_reply {"from":"回信人名"} ``` （可多个）表示"某人此刻该回信了"。
 // 前端按 from 匹配对应会话线程，取玩家最后一封 out 信 + 角色人设 + 世界观，调手机模型生成回信正文，落成 in 未读信。
+// 正在生成回信的信件集合（按 letterId 去重）——防止同一封信被多次触发并发生成、重复推送
+const _mailReplyBusy = new Set();
 async function handleMainlineMailTag(content) {
   if (!content) return;
   // 抓所有 mail_reply 块（宽松匹配，兼容有无换行）
@@ -49333,6 +49623,58 @@ async function handleMainlineMailTag(content) {
   }
 }
 
+// 主线输出 ```mail_noreply {"from":"收信人名"} ``` 表示"这封信对方不会回/没下文"。
+// 前端把该线程玩家最后那封 awaiting 的 out 信标记为 declined、清 awaiting——不再进主线上下文，
+// 邮箱里那封信底下显示一行灰字反馈。玩家日后再补寄新信会自然重新 awaiting，给对方新的机会。
+async function handleMainlineMailNoReply(content) {
+  if (!content) return;
+  const blocks = [];
+  const re = /```mail_noreply\s*\n?([\s\S]*?)```/gi;
+  let mm;
+  while ((mm = re.exec(content)) !== null) { blocks.push(mm[1]); }
+  if (!blocks.length) return;
+  const froms = [];
+  for (const b of blocks) {
+    const chunks = b.split(/\n+/).map(s => s.trim()).filter(Boolean);
+    for (const c of chunks) {
+      try { const o = JSON.parse(c); if (o && o.from) froms.push(String(o.from).trim()); } catch(_) {}
+    }
+    if (!chunks.some(c => { try { const o = JSON.parse(c); return o && o.from; } catch(_) { return false; } })) {
+      try { const o = JSON.parse(b.trim()); if (o && o.from) froms.push(String(o.from).trim()); } catch(_) {}
+    }
+  }
+  const uniqFroms = [...new Set(froms.filter(Boolean))];
+  if (!uniqFroms.length) return;
+
+  const pd = await _getPhoneData();
+  const threads = _emailThreads(pd);
+  let changed = false;
+  for (const from of uniqFroms) {
+    const name = String(from || '').trim();
+    if (!name) continue;
+    // 匹配"最后一封是玩家 out 且 awaiting"的线程（含真身与马甲线程）
+    const t = threads.find(x => {
+      const who = ((x.party && x.party.name) || '').trim();
+      if (who !== name) return false;
+      const ls = Array.isArray(x.letters) ? x.letters : [];
+      const last = ls.length ? ls[ls.length - 1] : null;
+      return last && last.dir === 'out' && last.awaiting;
+    });
+    if (!t) continue;
+    const ls = t.letters;
+    const srcLetter = ls[ls.length - 1];
+    // 已在生成回信中的信不处理（回信优先）
+    if (_mailReplyBusy.has(srcLetter.id)) continue;
+    srcLetter.awaiting = false;
+    srcLetter.declined = true;   // 标记"对方无回应"，供渲染层显示灰字
+    changed = true;
+  }
+  if (changed) {
+    await _savePhoneData();
+    // 不主动 re-render：与回信生成一致，用户下次打开该邮箱线程时自然看到"对方无回应"的灰字。
+  }
+}
+
 // 为指定回信人生成一封回信并落地。匹配"最后一封是玩家 out 且 awaiting"的线程。
 async function _emailGenerateReply(fromName) {
   const name = String(fromName || '').trim();
@@ -49350,21 +49692,51 @@ async function _emailGenerateReply(fromName) {
   if (!t) return;
   const ls = t.letters;
   const srcLetter = ls[ls.length - 1]; // 玩家最后一封 out 信（此刻读取，编辑随时生效）
+
+  // ===== 防重复推送 =====
+  // B. 并发锁：同一封信正在生成回信时，后来的触发直接跳过（按 letterId 去重）
+  if (srcLetter && srcLetter.id) {
+    if (_mailReplyBusy.has(srcLetter.id)) return;
+    _mailReplyBusy.add(srcLetter.id);
+  }
+  // A. 立即抢占 awaiting：先清掉并落盘，再去调模型。
+  //    这样生成期间（好几秒）若同名 mail_reply 再次触发，那封信已不是 awaiting，会被上面的 find 直接过滤掉。
+  try {
+    srcLetter.awaiting = false;
+    await _savePhoneData();
+  } catch(_) {}
+
+  let _replyOk = false;
+  try {
   const subject = (srcLetter.subject || '（无主题）').trim();
   const body = (srcLetter.body || '').trim();
   const sentDisp = srcLetter.gameTime ? _formatPhoneTime(srcLetter.gameTime) : '（时间未知）';
   const nowDisp = _getGameTime() || '（当前时间未知）';
+
+  // 是否匿名（马甲）线程：真匿名——AI 不知道是玩家本人，也不带玩家和该角色的关系记忆
+  const _viaAlias = !!(t && t.viaAlias);
+  const _aliasName = _viaAlias ? String(t.aliasName || '').trim() : '';
 
   // 角色人设
   let personaDetail = '';
   try {
     const cands = await _collectChatCandidates();
     const cand = cands.find(c => c.name === name);
-    if (cand && cand.detail) personaDetail = String(cand.detail).replace(/\n{3,}/g, '\n\n');
+    if (cand && cand.detail) {
+      personaDetail = String(cand.detail).replace(/\n{3,}/g, '\n\n');
+      // 匿名信：剥掉人设里"关系：…"那一行（描述该角色与玩家/主角的羁绊，会暴露真身），
+      // 只保留角色自身设定，让 ta 以陌生人视角回信。
+      if (_viaAlias) {
+        personaDetail = personaDetail.split('\n').filter(line => !/^\s*关系[：:]/.test(line)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      }
+    }
   } catch(_) {}
+
   // 世界观/处境上下文
+  //   匿名信用 lite 模式：跳过玩家面具/住所/主角/挂载角色，只留世界观基础+时间+节日+知识+速查表+主线，
+  //   从根上不给 AI "写信人是谁、和这个角色什么关系" 的线索。
   let fullCtx = '';
-  try { fullCtx = await _buildFullContext({ npcBrief: true }); } catch(_) {}
+  try { fullCtx = await _buildFullContext(_viaAlias ? { lite: true } : { npcBrief: true }); } catch(_) {}
 
   const myName = (() => { try { return Character.get()?.name || '我'; } catch(_) { return '我'; } })();
 
@@ -49385,32 +49757,51 @@ async function _emailGenerateReply(fromName) {
   } catch(_) {}
 
   const systemPrompt = `${personaDetail ? personaDetail + '\n\n' : ''}${fullCtx ? fullCtx + '\n\n' : ''}${bookProgressBlock ? bookProgressBlock + '\n\n' : ''}【场景】
-你是「${name}」。{{user}}（${myName}）给你寄了一封信，你现在看到了，决定回一封。
+${_viaAlias
+  ? `你是「${name}」。一个自称「${_aliasName}」的人给你寄来一封信，你和 ta 素不相识（至少你并不知道 ta 是谁）。你现在看到了，决定回一封。`
+  : `你是「${name}」。{{user}}（${myName}）给你寄了一封信，你现在看到了，决定回一封。`}
 ${digestBlock ? '\n【你们之前的往来摘要】（按时间先后，帮你记起这条通信的来龙去脉）\n' + digestBlock + '\n' : ''}
-【{{user}} 寄来的信】
+【${_viaAlias ? '「' + _aliasName + '」' : '{{user}}'} 寄来的信】
 主题：${subject}
 正文：
 ${body || '（正文为空）'}
 （寄出于 ${sentDisp}，现在是 ${nowDisp}）
 
 【怎么回】
-- 以「${name}」的身份、口吻、说话习惯写一封回信，要贴合你的人设、所处的世界，以及此刻与 {{user}} 的关系。
+${_viaAlias
+  ? `- 以「${name}」的身份、口吻、说话习惯写一封回信，要贴合你的人设和所处的世界。
+- 你和寄信人「${_aliasName}」并不相识，就以"收到一封陌生人来信"的态度来回——好奇、客气、警惕、热络都可以，取决于你的性格和信的内容，但别假装认识 ta。
+- 结合上面的往来摘要（如果有），记得你们这条通信之前聊到哪，自然地接着说。
+- 内容自然回应「${_aliasName}」信里说的事，可以有你自己的态度、情绪、想法。`
+  : `- 以「${name}」的身份、口吻、说话习惯写一封回信，要贴合你的人设、所处的世界，以及此刻与 {{user}} 的关系。
 - 结合上面的往来摘要，记得你们之前聊到哪、为什么会有这封信，自然地接着说。
+- 内容自然回应 {{user}} 信里说的事，可以有你自己的态度、情绪、想法。`}
 - 信不是聊天，语气比即时消息更完整、更有条理一点，但别太官腔（除非你这个角色本来就正式）。
-- 内容自然回应 {{user}} 信里说的事，可以有你自己的态度、情绪、想法。
 - 长度随内容自然定，一般两三段。
 - 结尾按你的身份写个落款。
 
 【输出格式】
 \`\`\`mail
-{"subject":"回信主题（可以沿用原主题，也可以另起）","body":"回信正文","sign":"落款","digest":"用一两句话总结这次往来：{{user}}这封（或这几封）信说了什么、你回了什么。写成第三人称流水记录，如「ta说……，我回……」"}
+{"subject":"回信主题（可以沿用原主题，也可以另起）","body":"回信正文","sign":"落款","digest":"用一两句话总结这次往来：${_viaAlias ? '「' + _aliasName + '」' : '{{user}}'}这封（或这几封）信说了什么、你回了什么。写成第三人称流水记录，如「ta说……，我回……」"}
 \`\`\`
 只输出这个 mail 块，不要输出别的。digest 字段务必填写。`;
 
   const apiMessages = [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: `（请以「${name}」的身份，给 {{user}} 回一封信。）` }
+    { role: 'user', content: _viaAlias
+      ? `（请以「${name}」的身份，给寄信来的「${_aliasName}」回一封信。）`
+      : `（请以「${name}」的身份，给 {{user}} 回一封信。）` }
   ];
+
+  // 匿名信兜底：把 prompt 里任何残留的 {{user}} 全部替换成马甲名。
+  // 否则 _phoneStreamChat 的宏替换会把 {{user}} 换成面具名/本名，直接泄露真身。
+  if (_viaAlias && _aliasName) {
+    for (const m of apiMessages) {
+      if (m && typeof m.content === 'string' && m.content.includes('{{user}}')) {
+        m.content = m.content.replaceAll('{{user}}', _aliasName);
+      }
+    }
+  }
 
   let fullReply = '';
   await new Promise((resolve, reject) => {
@@ -49446,13 +49837,12 @@ ${body || '（正文为空）'}
     createdAt: now,
     read: false
   });
-  // 清掉玩家那封信的 awaiting（已被回复）
-  const srcInT2 = t2.letters.find(x => x.id === srcLetter.id);
-  if (srcInT2) srcInT2.awaiting = false;
+  // awaiting 已在函数开头抢占清除，这里无需再清
   // 追加往来摘要（滚动 digest，最多留 12 条）
   _emailPushDigest(t2, gameTime, obj.digest || String(obj.body || '').trim().slice(-300));
   t2.updatedAt = now;
   await _savePhoneData();
+  _replyOk = true;
   try { setNotification(true); } catch(_) {}
   // 横幅提示（不在邮箱详情页时）
   try {
@@ -49463,6 +49853,19 @@ ${body || '（正文为空）'}
       onClick: async () => { try { if (_currentApp !== 'email') { await openApp('email'); } _openEmail(t2.id); } catch(_) {} }
     });
   } catch(_) {}
+  } finally {
+    // 生成失败/中途返回：恢复 awaiting，让下一轮主线还能重新触发这封信的回信
+    if (!_replyOk) {
+      try {
+        const pd3 = await _getPhoneData();
+        const t3 = _emailThreads(pd3).find(x => x.id === t.id);
+        const src3 = t3 && Array.isArray(t3.letters) ? t3.letters.find(x => x.id === srcLetter.id) : null;
+        if (src3) { src3.awaiting = true; await _savePhoneData(); }
+      } catch(_) {}
+    }
+    // 始终释放并发锁
+    if (srcLetter && srcLetter.id) _mailReplyBusy.delete(srcLetter.id);
+  }
 }
 
 // 通话中用户发消息
@@ -54294,7 +54697,9 @@ _renderMemo(pd);
       const pd = await _getPhoneData();
       const threads = _emailThreads(pd);
       if (!threads.length) return '';
-      const lines = [];
+      // 分两类收集：真身寄出（走玩家/关系视角）与马甲寄出（走陌生人视角，绝不关联 {{user}}）
+      const realLines = [];
+      const aliasLines = [];
       for (const t of threads) {
         const ls = Array.isArray(t.letters) ? t.letters : [];
         // 只有当线程最后一封是玩家寄出且标记 awaiting 时，才算"在等回音"
@@ -54304,10 +54709,58 @@ _renderMemo(pd);
         const subject = (last.subject || '（无主题）').trim();
         const sentDisp = last.gameTime ? _formatPhoneTime(last.gameTime) : '（时间未知）';
         const elapsed = last.gameTime ? _emailElapsedText(last.gameTime) : '';
-        lines.push(`· 寄给「${who}」·《${subject}》｜寄出于 ${sentDisp}${elapsed ? '（' + elapsed + '）' : ''}`);
+        if (t.viaAlias) {
+          const alias = (String(t.aliasName || '').trim() || '匿名');
+          aliasLines.push(`· 「${alias}」寄给「${who}」·《${subject}》｜寄出于 ${sentDisp}${elapsed ? '（' + elapsed + '）' : ''}`);
+        } else {
+          realLines.push(`· 寄给「${who}」·《${subject}》｜寄出于 ${sentDisp}${elapsed ? '（' + elapsed + '）' : ''}`);
+        }
       }
-      if (!lines.length) return '';
-      return lines.join('\n');
+      if (!realLines.length && !aliasLines.length) return '';
+
+      const blocks = [];
+
+      // —— 真身寄出：维持原视角（玩家本人 + 关系亲疏）——
+      if (realLines.length) {
+        blocks.push(
+          '[邮件·待回复]\n{{user}} 通过邮箱寄出了下面这些信，正在等待回音。邮件不是即时消息——对方要先有空看邮箱、看到了还要斟酌怎么回，所以回信通常是滞后的，不会秒回。\n\n' +
+          '待回复的信：\n' + realLines.join('\n') +
+          '\n\n【你要做的判断】\n逐封判断此刻这封信是否到了"对方会回"的时机，考虑：\n' +
+          '- 这个角色现在有没有空、有没有心情看邮箱？（在忙、在剧情紧张的当口，多半没空）\n' +
+          '- 这个角色多久看一次邮箱？公务往来可能一天看几次，私人信件可能好几天才想起来看。正式的信件，回复本身也需要时间组织措辞，更慢。\n' +
+          '- 这个角色和 {{user}} 的关系亲疏，也影响回得快不快、上不上心。\n' +
+          '- 从寄出到现在过了多久？刚寄出就回是不真实的；隔了合理的时间才回才对味。\n' +
+          '- 这个角色是否愿意回、会不会回？（有些信对方可能根本不想回，那就别回。）'
+        );
+      }
+
+      // —— 马甲寄出：陌生人视角，绝不出现 {{user}}/面具名，不能和玩家关联 ——
+      if (aliasLines.length) {
+        blocks.push(
+          '[邮件·待回复·匿名来信]\n下面这些信是用**化名**寄出的，收信人和寄信人**素不相识**——收信人并不知道这些信是谁寄的，也不知道寄信人和这个世界里的任何人有什么关系。请把它们**当成纯粹的陌生人来信**来判断，**绝对不要把寄信人和当前主角（{{user}}）扯上任何关系**，也不要假设收信人认识寄信人。\n\n' +
+          '待回复的匿名信：\n' + aliasLines.join('\n') +
+          '\n\n【你要做的判断】\n逐封判断此刻这封信是否到了"对方会回"的时机，考虑：\n' +
+          '- 这个角色现在有没有空、有没有心情看邮箱？（在忙、在剧情紧张的当口，多半没空）\n' +
+          '- 这个角色多久看一次邮箱？收到一封素不相识的陌生人来信，未必第一时间就看、就回。\n' +
+          '- 回不回、多快回、上不上心，取决于这封陌生来信本身勾不勾得起对方的兴趣或警惕，而不是什么"关系"。\n' +
+          '- 从寄出到现在过了多久？刚寄出就回是不真实的；隔了合理的时间才回才对味。\n' +
+          '- 这个角色是否愿意搭理一个陌生人？（有些信对方可能根本不想回，那就别回。）'
+        );
+      }
+
+      // 触发信号说明（两类共用，放最后）
+      blocks.push(
+        '【触发回信 / 判定不回】\n针对上面每一封待回信，你可以在回复末尾输出信号（可同时处理多封，一封一行）：\n' +
+        '· 到了对方该回的时机 —— 输出回信信号：\n```mail_reply\n{"from":"回信人名"}\n```\n' +
+        '· 判定这封信对方压根不会回、不想回、或永远不会有下文 —— 输出拒回信号：\n```mail_noreply\n{"from":"收信人名"}\n```\n' +
+        '- from 必须是上面列出的收信人名之一，精确匹配。\n' +
+        '- mail_reply 只输出信号，不要写回信正文——正文由系统另行生成（你看不到原信正文，也不需要替对方写）。\n' +
+        '- mail_noreply 用于"这封信没下文了"：输出后这封信不再等回音、也不再来烦你，玩家那边会看到"石沉大海"的反馈。别轻易用——只有当角色确实不会回（不感兴趣、不想搭理陌生人、关系破裂、信被无视等）才用。\n' +
+        '- 没到时机、也没到"确定不回"的程度，就两个都不输出，让信继续等着。不必每轮都处理。宁可让信多等一会儿，也不要不真实地秒回。\n' +
+        '- 这些信号是给系统的，不要在剧情正文里复述或提及。'
+      );
+
+      return blocks.join('\n\n');
     } catch(_) { return ''; }
   }
 
@@ -56205,7 +56658,7 @@ _onPagesScroll,
 _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioHomeTab, _radioOpenSubscribed, _radioDeleteSubscribed, _radioTogglePrefsExpand, _radioOnGlobalPref,
     // 阅读 App
     _renderReading, _switchReadingHomeTab, _switchReadingDiscoverType, _readingToggleWvRef, _readingToggleMainlineRef, _readingOpenBook, _readingImportEbook, _readingOpenAddMenu, _readingShowWriteSetup, _readingEditOutline, _readingSearch, _readingTogglePref, _readingSetMapping, _readingTogglePrefsExpand,
-    _renderEmail, _switchEmailHomeTab, _emailCompose, _openEmail, _emailReply, _openEmailLetter, _emailEditLetter, _emailShareLetter, _emailShowDigest, _emailTogglePref, _emailTogglePrefsExpand, handleMainlineMailTag, buildPendingMailForAI, _forgottenMailTick, _worldAffairMailTick, _festivalMailTick, _staffMailTick, _birthdayMailTick,
+    _renderEmail, _switchEmailHomeTab, _emailCompose, _openEmail, _emailReply, _openEmailLetter, _emailEditLetter, _emailShareLetter, _emailShowDigest, _emailTogglePref, _emailTogglePrefsExpand, _emailToggleAliasEnabled, _emailToggleAliasPrefsExpand, _emailAddAlias, _emailSetActiveAlias, _emailDeleteAlias, handleMainlineMailTag, handleMainlineMailNoReply, buildPendingMailForAI, _forgottenMailTick, _worldAffairMailTick, _festivalMailTick, _staffMailTick, _birthdayMailTick,
     _renderVideo, _switchVideoCat, _switchVideoHomeTab, _videoSearch, _syncSearchBtn, _videoGenList, _videoToggleWvRef, _videoToggleMainlineRef, _videoTogglePref, _videoTogglePrefsExpand, _videoOpenWork, _videoOpenAddMenu, _videoDeleteWork, _videoShareWork, _liveGenPreview, _liveEnterRoom, _liveUnfollowFromMine, _liveEnterFollowFeed, _exitLiveFollowFeed, _liveOpenRoomSettings,
     _readingGenToc, _readingGenMoreToc, _readingOpenToc, _readingReadChapter, _readingContinueAfterChapter, _readingOpenBookSettings, _readingSetCover, _readingClearCover, _readingRewriteLast, _readingRewriteChapter, _readingEditChapterText, _readingViewOutline, _readingEditAuthorStyle, _readingDeleteBook, _readingRewriteShort, _readingActionTap, _readingCollectGift, _readingRefreshComments, _readingSendComment, _deleteReadingComment, _readingEditAuthorNote, _readingTapPara, _readingCoReadSetup,
   // 小屋 App
@@ -56238,8 +56691,9 @@ _chatPickCallPortrait, _chatClearCallPortrait, _showCallRecord,
  _feiniaoAddRecipient, _feiniaoRecipToggle, _feiniaoRecipConfirm, _feiniaoRecipRemove,
  _feiniaoShowOrderDetail, _feiniaoDeleteOrder, _switchFeiniaoTab,
  _renderYouyu, _switchYouyuTab, _youyuAddListing, _youyuPickSource, _youyuPickFromInventory, _youyuPickInvItem, _youyuOpenListModal, _youyuRenderListModal, _youyuDraftSet, _youyuSetDelivery, _youyuConfirmListing, _youyuRemoveListing, _youyuShareListing, _youyuSendToChat, _youyuHandleBuy, _youyuDeleteOrder, _youyuShowOrderDetail,
-    _forumRefresh, _forumSearch, _forumSyncActionBtn, _forumSearchOrRefresh, _forumOpenAddMenu, _forumViewDetail, _forumViewRecommended, _forumViewCollected, _switchForumMineSub, _removeForumCollected, _shareForumPost, _collectForumPost, _likeForumPost,
+    _forumRefresh, _forumSearch, _forumSyncActionBtn, _forumSearchOrRefresh, _forumOpenAddMenu, _forumViewDetail, _forumViewRecommended, _forumViewCollected, _forumOpenMineList, _removeForumCollected, _shareForumPost, _collectForumPost, _likeForumPost,
     _switchForumTab, _switchForumCategory, _addForumCategory, _deleteForumCategory, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
+    _forumToggleAliasEnabled, _forumToggleAliasPrefsExpand, _forumAddAlias, _forumSetActiveAlias, _forumDeleteAlias,
     _addForumPost, _editForumPost, _saveForumPost, _deleteForumPost, _viewMyForumPost, _collectMyForumPost, _likeMyForumPost, _sendMyForumComment, _sendForumComment, _refreshForumComment, _shareMyForumPost, _refreshMyForumPost,
 _forumReplyTo, _forumToggleReplies, _deleteForumComment,
     _forumShareToChat,

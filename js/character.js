@@ -347,7 +347,7 @@ async function _getMasksForCurrentWv() {
     const file = await Utils.pickFile({ accept: '.json,application/json' });
     if (!file) return;
     try {
-      const text = await file.text();
+      const text = await Utils.fileToText(file);
       const json = JSON.parse(text);
       const list = await getMaskList();
       let count = 0;
