@@ -158,6 +158,7 @@ const SingleCard = (() => {
           card.name = (panelEl.value || '').trim() || card.name;
           card.aliases = document.getElementById('sc-panel-aliases')?.value || '';
           card.detail = document.getElementById('sc-panel-detail')?.value || '';
+          card.drawDesc = document.getElementById('sc-panel-drawdesc')?.value || '';
           card.firstMes = document.getElementById('sc-panel-firstmes')?.value || '';
           card.mesExample = document.getElementById('sc-panel-mesexample')?.value || '';
           card.creator = document.getElementById('sc-panel-creator')?.value || '';
@@ -170,6 +171,7 @@ const SingleCard = (() => {
           card.name = (document.getElementById('sc-edit-name')?.value || '').trim() || card.name;
           card.aliases = document.getElementById('sc-edit-aliases')?.value || '';
           card.detail = document.getElementById('sc-edit-detail')?.value || '';
+          card.drawDesc = document.getElementById('sc-edit-drawdesc')?.value || '';
           card.firstMes = document.getElementById('sc-edit-firstmes')?.value || '';
           card.mesExample = document.getElementById('sc-edit-mesexample')?.value || '';
           card.creator = document.getElementById('sc-edit-creator')?.value || '';
@@ -230,6 +232,7 @@ const SingleCard = (() => {
     const panelOnline = document.getElementById('sc-panel-onlinename');
     if (panelOnline) panelOnline.value = card.onlineName || '';
     document.getElementById('sc-panel-detail').value = card.detail || '';
+    { const dd = document.getElementById('sc-panel-drawdesc'); if (dd) dd.value = card.drawDesc || ''; }
     document.getElementById('sc-panel-firstmes').value = card.firstMes || '';
     document.getElementById('sc-panel-mesexample').value = card.mesExample || '';
     document.getElementById('sc-panel-creator').value = card.creator || '';
@@ -445,6 +448,7 @@ const SingleCard = (() => {
     const editOnline = document.getElementById('sc-edit-onlinename');
     if (editOnline) editOnline.value = card.onlineName || '';
     document.getElementById('sc-edit-detail').value = card.detail || '';
+    { const dd = document.getElementById('sc-edit-drawdesc'); if (dd) dd.value = card.drawDesc || ''; }
     const fm = document.getElementById('sc-edit-firstmes'); if (fm) fm.value = card.firstMes || '';
     const me = document.getElementById('sc-edit-mesexample'); if (me) me.value = card.mesExample || '';
     const cr = document.getElementById('sc-edit-creator'); if (cr) cr.value = card.creator || '';
@@ -519,22 +523,16 @@ const SingleCard = (() => {
   }
 
   // 选择头像（复用世界观图片选择逻辑或简单的文件上传）
-  function pickAvatar() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const dataUrl = ev.target.result;
-        const preview = document.getElementById('sc-edit-avatar-preview');
-        preview.innerHTML = `<img src="${dataUrl}" data-value="${dataUrl}" style="width:80px;height:80px;border-radius:50%;object-fit:cover">`;
-      };
-      reader.readAsDataURL(file);
+  async function pickAvatar() {
+    const file = await Utils.pickFile({ accept: 'image/*' });
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      const preview = document.getElementById('sc-edit-avatar-preview');
+      preview.innerHTML = `<img src="${dataUrl}" data-value="${dataUrl}" style="width:80px;height:80px;border-radius:50%;object-fit:cover">`;
     };
-    input.click();
+    reader.readAsDataURL(file);
   }
 
   // 从表单当前值拼一个中文预填 prompt（名字 + 全部设定，用户自己删减）
@@ -542,9 +540,16 @@ const SingleCard = (() => {
     const g = id => (document.getElementById(prefix + id)?.value || '').trim();
     const parts = [];
     const name = g('name'); if (name) parts.push(name);
-    const aliases = g('aliases'); if (aliases) parts.push(aliases);
-    const onlineName = g('onlinename'); if (onlineName) parts.push(onlineName);
-    const detail = g('detail'); if (detail) parts.push(detail);
+    // 有专属生图描述：只用「名字 + 生图描述」，不喂整段设定（用户可在弹窗里自己再编辑）
+    // 没填：退回老逻辑，拼别名/网名/详细设定
+    const drawDesc = g('drawdesc');
+    if (drawDesc) {
+      parts.push(drawDesc);
+    } else {
+      const aliases = g('aliases'); if (aliases) parts.push(aliases);
+      const onlineName = g('onlinename'); if (onlineName) parts.push(onlineName);
+      const detail = g('detail'); if (detail) parts.push(detail);
+    }
     return parts.join('，');
   }
 
@@ -579,7 +584,7 @@ const SingleCard = (() => {
   // ===== 导入 / 导出 =====
   function exportCurrent() {
     if (!_editingId) { UI.showToast('请先保存后再导出'); return; }
-    get(_editingId).then(card => {
+    get(_editingId).then(async card => {
       if (!card) return;
       const data = {
         __format: 'tianshu_single_card_v1',
@@ -594,28 +599,15 @@ const SingleCard = (() => {
         creatorNotes: card.creatorNotes || ''
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(card.name || 'card').replace(/[\\/:*?"<>|]/g, '_')}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      UI.showToast(`已导出「${card.name || 'card'}」`, 1800);
+      const saved = await Utils.saveFile(blob, `${(card.name || 'card').replace(/[\\/:*?"<>|]/g, '_')}.json`);
+      if (saved) UI.showToast(`已导出「${card.name || 'card'}」`, 1800);
     });
   }
 
-  function importCard() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,application/json';
-    input.style.display = 'none';
-    document.body.appendChild(input);
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) { input.remove(); return; }
-      try {
+  async function importCard() {
+    const file = await Utils.pickFile({ accept: '.json,application/json' });
+    if (!file) return;
+    try {
         // 先尝试批量格式
         if (file.name.toLowerCase().endsWith('.json') || file.type === 'application/json') {
           const text = await file.text();
@@ -666,56 +658,42 @@ const SingleCard = (() => {
       } catch (err) {
         console.error('[importCard]', err);
         UI.showToast('导入失败：' + (err.message || err));
-      } finally {
-        input.remove();
       }
-    };
-    input.click();
   }
 
   // 从文档导入角色卡（txt/md/docx/pdf）：首行标题→名字（>10字则用文件名），全文→详细设定(detail)
-  function importCardFromDoc() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.txt,.md,.docx,.pdf';
-    input.style.display = 'none';
-    document.body.appendChild(input);
-    input.onchange = async (e) => {
-      const file = (e && e.target && e.target.files && e.target.files[0]) || (input.files && input.files[0]);
-      if (!file) { UI.showToast('未选择文件', 2000); input.remove(); return; }
-      try {
-        const raw = await Utils.readFileAsText(file);
-        const text = (raw || '').replace(/\r\n/g, '\n').trim();
-        if (!text) { UI.showToast('文件内容为空', 2500); return; }
+  async function importCardFromDoc() {
+    const file = await Utils.pickFile({ accept: '.txt,.md,.docx,.pdf' });
+    if (!file) { return; }
+    try {
+      const raw = await Utils.readFileAsText(file);
+      const text = (raw || '').replace(/\r\n/g, '\n').trim();
+      if (!text) { UI.showToast('文件内容为空', 2500); return; }
 
-        // 文件名去扩展名，作为名字的兜底
-        const fileBase = (file.name || '').replace(/\.[^.]+$/, '').trim() || '导入角色';
-        // 取第一行非空文本当标题；首行 ≤10 字才用作名字，否则退回文件名（首行仍保留在正文里）
-        const firstLine = (text.split('\n').find(l => l.trim()) || '').trim();
-        const name = (firstLine && firstLine.length <= 10) ? firstLine : fileBase;
+      // 文件名去扩展名，作为名字的兜底
+      const fileBase = (file.name || '').replace(/\.[^.]+$/, '').trim() || '导入角色';
+      // 取第一行非空文本当标题；首行 ≤10 字才用作名字，否则退回文件名（首行仍保留在正文里）
+      const firstLine = (text.split('\n').find(l => l.trim()) || '').trim();
+      const name = (firstLine && firstLine.length <= 10) ? firstLine : fileBase;
 
-        const newCard = {
-          name,
-          aliases: '',
-          onlineName: '',
-          detail: text,
-          avatar: '',
-          firstMes: '',
-          mesExample: '',
-          creator: '',
-          creatorNotes: ''
-        };
-        await save(newCard);
-        await renderList();
-        UI.showToast(`已导入角色「${name}」`, 2000);
-      } catch (err) {
-        console.error('[importCardFromDoc]', err);
-        UI.showToast('导入失败：' + (err && err.message ? err.message : err), 3000);
-      } finally {
-        input.remove();
-      }
-    };
-    input.click();
+      const newCard = {
+        name,
+        aliases: '',
+        onlineName: '',
+        detail: text,
+        avatar: '',
+        firstMes: '',
+        mesExample: '',
+        creator: '',
+        creatorNotes: ''
+      };
+      await save(newCard);
+      await renderList();
+      UI.showToast(`已导入角色「${name}」`, 2000);
+    } catch (err) {
+      console.error('[importCardFromDoc]', err);
+      UI.showToast('导入失败：' + (err && err.message ? err.message : err), 3000);
+    }
   }
 
   // 解析 JSON 卡：兼容自家格式 + 通用 v1/v2
@@ -959,13 +937,8 @@ const SingleCard = (() => {
     if (cards.length === 0) { UI.showToast('未找到可导出的角色'); return; }
     const exportData = { __format: 'tianshu_single_card_v1_batch', cards };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `single_cards_${cards.length}个_${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    UI.showToast(`已导出 ${cards.length} 个角色`);
+    const saved = await Utils.saveFile(blob, `single_cards_${cards.length}个_${new Date().toISOString().slice(0,10)}.json`);
+    if (saved) UI.showToast(`已导出 ${cards.length} 个角色`);
   }
   
   // 批量复制

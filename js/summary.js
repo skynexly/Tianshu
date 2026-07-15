@@ -266,7 +266,7 @@ ${dialogue}
 
   // ===== 导出归档 =====
 
-  function exportArchive(arch, convName) {
+  async function exportArchive(arch, convName) {
     const lines = [`=== 归档记录 · ${convName || '对话'} ===`,
       `归档时间：${new Date(arch.archivedAt).toLocaleString()}`, ''];
     for (const m of arch.messages) {
@@ -275,13 +275,8 @@ ${dialogue}
       lines.push('');
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `archive_${new Date(arch.archivedAt).toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已导出归档记录', 1800);
+    const saved = await Utils.saveFile(blob, `archive_${new Date(arch.archivedAt).toISOString().slice(0, 10)}.txt`);
+    if (saved && typeof UI !== 'undefined' && UI.showToast) UI.showToast('已导出归档记录', 1800);
   }
 
   // ===== UI =====

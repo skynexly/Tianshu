@@ -2160,6 +2160,16 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
     const text = input.value.trim();
     if (!text) return;
 
+    // 发送前二次确认（防误触）：仅对真实用户输入生效，排除系统触发指令
+    if (text !== '<PhoneDown/>' && text !== '<Continue the Chat/>') {
+      try {
+        if (_getConvSettings().sendConfirm) {
+          const ok = await UI.showConfirm('确认发送？', text);
+          if (!ok) return;
+        }
+      } catch(_) {}
+    }
+
     // 发消息前确保世界观初始住所已就位（幂等：已有住所秒返回），避免切对话后立刻发消息时住所还没克隆完
     if (text !== '<PhoneDown/>' && text !== '<Continue the Chat/>') {
       try { if (typeof Phone !== 'undefined' && Phone.ensureInitialHouse) await Phone.ensureInitialHouse(); } catch(_) {}
@@ -6013,6 +6023,7 @@ if (!gp) return null;
       batteryAware: !!conv?.convBatteryAware,   // v687.14：默认关
       weatherAware: !!conv?.convWeatherAware,   // v687.14：默认关
       onlineChat: !!conv?.convOnlineChat,       // 默认关（线上消息气泡）
+      sendConfirm: !!conv?.convSendConfirm,      // 默认关（发送前二次确认，防误触）
       eventsEnabled: conv?.convEventsEnabled !== false, // 默认开（世界观事件系统）
       tasksEnabled: conv?.convTasksEnabled !== false,   // 默认开（通用任务系统）
       attrsEnabled: conv?.convAttrsEnabled !== false,   // 默认开（数值系统注入）v686.9
@@ -6416,6 +6427,8 @@ document.getElementById('cs-format').checked = s.format;
       if (cfEl) cfEl.value = s.customFormat || '';
       const suggestEnEl = document.getElementById('cs-suggest-enabled');
       if (suggestEnEl) suggestEnEl.checked = s.suggestEnabled;
+      const sendConfirmEl = document.getElementById('cs-send-confirm');
+      if (sendConfirmEl) sendConfirmEl.checked = s.sendConfirm;
       const shhEl = document.getElementById('cs-strip-history-html');
       if (shhEl) shhEl.checked = s.stripHistoryHtml;
       const shktEl = document.getElementById('cs-strip-html-keeptext');
@@ -6558,6 +6571,8 @@ conv.convFormat = document.getElementById('cs-format').checked;
     if (cfSaveEl) conv.convCustomFormat = cfSaveEl.value || '';
     const suggestSaveEl = document.getElementById('cs-suggest-enabled');
     if (suggestSaveEl) conv.convSuggestEnabled = suggestSaveEl.checked;
+    const sendConfirmSaveEl = document.getElementById('cs-send-confirm');
+    if (sendConfirmSaveEl) conv.convSendConfirm = sendConfirmSaveEl.checked;
       const shhSaveEl = document.getElementById('cs-strip-history-html');
       if (shhSaveEl) conv.convStripHistoryHtml = shhSaveEl.checked;
       const shktSaveEl = document.getElementById('cs-strip-html-keeptext');
@@ -7302,12 +7317,11 @@ async function applyLorebooksToWorldview() {
   }
 
   function _updateImgGenButtons() {
-    const s = _getConvSettings();
-    const show = s.imgGen;
+    // 手动生图是用户自主行为，与 AI 生图模式(imgGen)解绑，按钮常驻显示
     const mainBtn = document.getElementById('plus-imggen-btn');
-    if (mainBtn) mainBtn.style.display = show ? 'flex' : 'none';
+    if (mainBtn) mainBtn.style.display = 'flex';
     const bsBtn = document.getElementById('backstage-imggen-btn');
-    if (bsBtn) bsBtn.style.display = show ? 'flex' : 'none';
+    if (bsBtn) bsBtn.style.display = 'flex';
   }
 
   // 回复建议灯泡按钮显隐：跟随对话设置 suggestEnabled（默认开）

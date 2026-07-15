@@ -105,6 +105,35 @@ let _hasNewNotif = false;
       Conversations.saveList && Conversations.saveList();
     } catch (_) {}
   }
+  // 按 ref 精确删除 npcNotes 派生记录（用户手动删评论时调用，连带清掉"角色行为档案"里的对应条目，
+  // 避免删了显示/原数组但下次构建上下文又把它发给 AI）。refList 是一组精确 ref 字符串。
+  function _npcNoteRemoveByRefs(refList) {
+    try {
+      const refs = (Array.isArray(refList) ? refList : [refList])
+        .map(r => String(r || '').trim()).filter(Boolean);
+      if (!refs.length) return;
+      const refSet = new Set(refs);
+      const s = _npcNotesStore();
+      if (!s) return;
+      const { store } = s;
+      for (const name of Object.keys(store)) {
+        const entry = store[name];
+        if (!entry || typeof entry !== 'object') continue;
+        ['identity', 'important', 'minor'].forEach(tier => {
+          if (Array.isArray(entry[tier])) {
+            entry[tier] = entry[tier].filter(x => !(x && refSet.has(String(x.ref || ''))));
+          }
+        });
+        // 三档全空则删键，避免残留空档
+        if ((!entry.identity || !entry.identity.length) &&
+            (!entry.important || !entry.important.length) &&
+            (!entry.minor || !entry.minor.length)) {
+          delete store[name];
+        }
+      }
+      Conversations.saveList && Conversations.saveList();
+    } catch (_) {}
+  }
   // flush 时推进轮次并清理过期 minor（活 2 轮）。在 flushActionLog 里调用。
   function _npcNotesTick() {
     try {
@@ -739,6 +768,17 @@ function pushLog(action) {
   _actionLogForBackstage.push(action);
   _persistActionLog();
 } // 供外部模块调用
+// 从尚未 flush 的操作记录里删掉包含指定子串的条目（用户删自己的评论时，
+// 顺带清掉"还没喂给 AI"的那条留言记录，避免下一轮仍被发出）。已 flush 的无需处理。
+function _actionLogRemoveBySubstr(substr) {
+  try {
+    const s = String(substr || '').trim();
+    if (!s) return;
+    _actionLog = _actionLog.filter(a => !String(a || '').includes(s));
+    _actionLogForBackstage = _actionLogForBackstage.filter(a => !String(a || '').includes(s));
+    _persistActionLog();
+  } catch (_) {}
+}
 function flushActionLog() {
   // 触发身份归一表重建（不阻塞；记事本存储/召回依赖它把本名代号归一）
   try { _ensureNpcRealNameMap(); } catch (_) {}
@@ -1520,11 +1560,26 @@ function _applyWallpaper(pd) {
     const box = document.getElementById('appicons-list');
     if (!box) return;
     if (typeof AppIcons === 'undefined') { box.innerHTML = '<div style="color:var(--text-secondary);font-size:13px">图标模块未就绪</div>'; return; }
+    // 去边框全局开关：初始化状态 + 绑定切换（切换后刷新预览网格 + 桌面）
+    const bareCb = document.getElementById('appicons-bare-cb');
+    if (bareCb && !bareCb._bound) {
+      bareCb._bound = true;
+      bareCb.addEventListener('change', () => {
+        try { AppIcons.setBare(bareCb.checked); } catch(_) {}
+        renderAppIconList();
+        try { if (document.getElementById('phone-body')) _renderHomeScreen(); } catch(_) {}
+      });
+    }
+    let bareOn = false;
+    try { bareOn = AppIcons.getBare(); } catch(_) {}
+    if (bareCb) bareCb.checked = bareOn;
     const defs = AppIcons.APP_DEFS || [];
     box.innerHTML = defs.map(d => {
       const custom = AppIcons.get(d.id);
+      const fit = (custom && bareOn) ? 'contain' : 'cover';
+      const bareCls = (custom && bareOn) ? ' appicon-thumb-bare' : '';
       const iconInner = custom
-        ? `<img src="${custom}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">`
+        ? `<img src="${custom}" alt="" style="width:100%;height:100%;object-fit:${fit};border-radius:inherit;display:block">`
         : (d.icon === 'heartsim'
           ? `<img src="img/worldviews/heartsim.png" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">`
           : _phoneIcon(d.icon));
@@ -1532,10 +1587,95 @@ function _applyWallpaper(pd) {
         ? `<button class="appicon-reset" title="恢复默认" onclick="event.stopPropagation();Phone._resetAppIcon('${d.id}')">×</button>`
         : '';
       return `<div class="appicon-cell" onclick="Phone._pickAppIcon('${d.id}')">
-        <div class="appicon-thumb">${iconInner}${resetBtn}</div>
+        <div class="appicon-thumb${bareCls}">${iconInner}${resetBtn}</div>
         <span class="appicon-name">${Utils.escapeHtml(d.name)}</span>
       </div>`;
     }).join('');
+    // 顺带渲染悬浮球（桌宠）区
+    try { _renderFabIconList(); } catch(_) {}
+  }
+
+  // 悬浮球（桌宠）：三个 fab 各自图标 + 全局尺寸
+  const _FAB_DEFS = [
+    { fabId: 'phone-fab',     name: '手机' },
+    { fabId: 'gaiden-fab',    name: '番外' },
+    { fabId: 'backstage-fab', name: '后台' },
+  ];
+  function _renderFabIconList() {
+    const box = document.getElementById('fab-icons-list');
+    if (!box || typeof AppIcons === 'undefined') return;
+    // 尺寸分段按钮高亮
+    let size = 'sm';
+    try { size = AppIcons.getFabSize(); } catch(_) {}
+    document.querySelectorAll('#fab-size-seg [data-fab-size]').forEach(btn => {
+      const on = btn.getAttribute('data-fab-size') === size;
+      btn.style.background = on ? 'var(--accent)' : 'none';
+      btn.style.color = on ? '#fff' : 'var(--text-secondary)';
+      btn.style.fontWeight = on ? '600' : '400';
+    });
+    // 异形开关状态
+    const bareCb = document.getElementById('fab-bare-cb');
+    if (bareCb) { try { bareCb.checked = AppIcons.getFabBare(); } catch(_) { bareCb.checked = true; } }
+    box.innerHTML = _FAB_DEFS.map(d => {
+      const key = (typeof FabDrag !== 'undefined' && FabDrag.getFabIconKey) ? FabDrag.getFabIconKey(d.fabId) : null;
+      const custom = key ? AppIcons.get(key) : null;
+      let fabBare = true;
+      try { fabBare = AppIcons.getFabBare(); } catch(_) {}
+      const fit = (custom && !fabBare) ? 'cover' : 'contain';
+      const iconInner = custom
+        ? `<img src="${custom}" alt="" style="width:100%;height:100%;object-fit:${fit};border-radius:inherit;display:block">`
+        : `<div style="font-size:11px;color:var(--text-secondary)">默认</div>`;
+      const bareCls = (custom && fabBare) ? ' appicon-thumb-bare' : '';
+      const resetBtn = custom
+        ? `<button class="appicon-reset" title="恢复默认" onclick="event.stopPropagation();Phone._resetFabIcon('${d.fabId}')">×</button>`
+        : '';
+      return `<div class="appicon-cell" onclick="Phone._pickFabIcon('${d.fabId}')">
+        <div class="appicon-thumb${bareCls}">${iconInner}${resetBtn}</div>
+        <span class="appicon-name">${Utils.escapeHtml(d.name)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // 设置悬浮球全局尺寸
+  function _setFabSize(size) {
+    if (typeof AppIcons === 'undefined') return;
+    try { AppIcons.setFabSize(size); } catch(_) {}
+    try { if (typeof FabDrag !== 'undefined' && FabDrag.applyFabCustom) FabDrag.applyFabCustom(); } catch(_) {}
+    _renderFabIconList();
+  }
+
+  // 设置悬浮球异形（去边框）开关
+  function _setFabBare(on) {
+    if (typeof AppIcons === 'undefined') return;
+    try { AppIcons.setFabBare(on); } catch(_) {}
+    try { if (typeof FabDrag !== 'undefined' && FabDrag.applyFabCustom) FabDrag.applyFabCustom(); } catch(_) {}
+    _renderFabIconList();
+  }
+
+  // 点悬浮球格子：选图 → 存 → 应用 + 刷新
+  async function _pickFabIcon(fabId) {
+    if (typeof Utils === 'undefined' || !Utils.promptImageInput) { UI.showToast('图片输入组件未就绪', 1500); return; }
+    if (typeof AppIcons === 'undefined' || typeof FabDrag === 'undefined') return;
+    const key = FabDrag.getFabIconKey(fabId);
+    if (!key) return;
+    try {
+      const dataUrl = await Utils.promptImageInput({ maxSize: 256, outputFormat: 'png' });
+      if (!dataUrl) return;
+      await AppIcons.set(key, dataUrl, 256);
+      try { FabDrag.applyFabCustom(); } catch(_) {}
+      _renderFabIconList();
+      UI.showToast('悬浮球图标已更换', 1200);
+    } catch(e) { console.warn('[FabIcon] pick failed', e); UI.showToast('图标设置失败', 1500); }
+  }
+
+  // 点 ×：恢复默认悬浮球图标
+  function _resetFabIcon(fabId) {
+    if (typeof AppIcons === 'undefined' || typeof FabDrag === 'undefined') return;
+    const key = FabDrag.getFabIconKey(fabId);
+    if (!key) return;
+    try { AppIcons.remove(key); } catch(_) {}
+    try { FabDrag.applyFabCustom(); } catch(_) {}
+    _renderFabIconList();
   }
 
   // 点格子：选图 → 存 → 刷新（管理界面 + 若手机开着的主屏）
@@ -1543,9 +1683,9 @@ function _applyWallpaper(pd) {
     if (typeof Utils === 'undefined' || !Utils.promptImageInput) { UI.showToast('图片输入组件未就绪', 1500); return; }
     if (typeof AppIcons === 'undefined') return;
     try {
-      const dataUrl = await Utils.promptImageInput({ maxSize: 128, outputFormat: 'png' });
+      const dataUrl = await Utils.promptImageInput({ maxSize: 256, outputFormat: 'png' });
       if (!dataUrl) return;
-      await AppIcons.set(appId, dataUrl);
+      await AppIcons.set(appId, dataUrl, 256);
       renderAppIconList();
       try { if (document.getElementById('phone-body')) _renderHomeScreen(); } catch(_) {}
       UI.showToast('图标已更换', 1200);
@@ -2561,8 +2701,12 @@ function _renderHomeIcon(a) {
   // 图标优先级：用户自定义（全局，AppIcons）> 心动模拟默认 png > SVG
   let customIcon = null;
   try { if (typeof AppIcons !== 'undefined') customIcon = AppIcons.get(a.id); } catch(_) {}
+  // 全局「去边框」开关：仅对有自定义图标的 app 生效，图片用 contain 完整显示（不裁切）
+  let bare = false;
+  try { bare = !!customIcon && typeof AppIcons !== 'undefined' && AppIcons.getBare(); } catch(_) {}
+  const imgFit = bare ? 'contain' : 'cover';
   const iconHTML = customIcon
-    ? `<img src="${customIcon}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">`
+    ? `<img src="${customIcon}" alt="" style="width:100%;height:100%;object-fit:${imgFit};border-radius:inherit;display:block">`
     : (a.icon === 'heartsim'
       ? `<img src="img/worldviews/heartsim.png" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">`
       : _phoneIcon(a.icon));
@@ -2576,7 +2720,7 @@ function _renderHomeIcon(a) {
   //   } catch (_) {}
   // }
   return `<div class="phone-app-icon phone-app-${a.id}" onclick="${action}">
-  <div class="phone-app-icon-circle">${iconHTML}</div>${notifDot}
+  <div class="phone-app-icon-circle${bare ? ' phone-app-icon-circle-bare' : ''}">${iconHTML}</div>${notifDot}
   <span class="phone-app-icon-label">${Utils.escapeHtml(a.name)}</span>
   </div>`;
 }
@@ -2734,6 +2878,7 @@ function _renderHomeIcon(a) {
     _refreshMusicCard();
   } catch (_) {}
   _currentApp = null;
+  try { _initHomePagesDrag(); } catch(_) {}
    }
 
   // 主屏分页滚动：更新页面指示器
@@ -2745,6 +2890,59 @@ function _renderHomeIcon(a) {
     const idx = Math.round(pages.scrollLeft / pageW);
     indicator.querySelectorAll('.phone-page-dot').forEach((dot, i) => {
       dot.classList.toggle('active', i === idx);
+    });
+  }
+
+  // 主屏翻页鼠标拖拽（桌面兼容）：横向 scroll-snap 在桌面鼠标下无法滑动，
+  // 这里补一层「按住拖动横滚」。移动超过阈值才算拖动并抑制随后的 click，避免误点图标/编辑资料。
+  function _initHomePagesDrag() {
+    const pages = document.getElementById('phone-pages');
+    if (!pages || pages._dragBound) return;
+    pages._dragBound = true;
+    const DRAG_THRESHOLD = 6;  // 位移超过此值才算拖动
+    let down = false, moved = false, startX = 0, startScroll = 0;
+
+    const onMove = (e) => {
+      if (!down) return;
+      const dx = e.clientX - startX;
+      if (!moved && Math.abs(dx) > DRAG_THRESHOLD) {
+        moved = true;
+        pages.style.scrollBehavior = 'auto';   // 拖动时关平滑，跟手
+        pages.classList.add('phone-pages-dragging');
+      }
+      if (moved) {
+        pages.scrollLeft = startScroll - dx;
+        e.preventDefault();
+      }
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (!down) return;
+      down = false;
+      if (moved) {
+        pages.style.scrollBehavior = '';        // 恢复平滑，让 scroll-snap 吸附到最近页
+        pages.classList.remove('phone-pages-dragging');
+        // 手动吸附：松手时按当前位置就近对齐到整页
+        const pageW = pages.clientWidth || 1;
+        const target = Math.round(pages.scrollLeft / pageW) * pageW;
+        pages.scrollTo({ left: target, behavior: 'smooth' });
+        // 抑制这一次拖动尾随的 click（避免松手点在图标上误触发打开）
+        const killClick = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
+        pages.addEventListener('click', killClick, { capture: true, once: true });
+        setTimeout(() => pages.removeEventListener('click', killClick, { capture: true }), 0);
+      }
+    };
+    pages.addEventListener('mousedown', (e) => {
+      // 左键才响应；在正在编辑的文本框里按下不拦截（允许选字）
+      if (e.button !== 0) return;
+      const t = e.target;
+      if (t && t.closest && t.closest('[contenteditable="true"]')) return;
+      down = true; moved = false;
+      startX = e.clientX;
+      startScroll = pages.scrollLeft;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
     });
   }
 
@@ -4266,6 +4464,16 @@ function _bindMusicProgressDrag() {
   bar.addEventListener('touchstart', () => { dragging = true; }, { passive: true });
   bar.addEventListener('touchmove', (e) => { if (dragging && e.touches[0]) seekTo(e.touches[0].clientX); }, { passive: true });
   bar.addEventListener('touchend', () => { dragging = false; });
+  // 桌面鼠标拖动 seek：move/up 挂 document 防拖出丢事件（click 已能点选任意位置，这里补按住拖动）
+  const mMove = (e) => { if (dragging) seekTo(e.clientX); };
+  const mUp = () => { dragging = false; document.removeEventListener('mousemove', mMove); document.removeEventListener('mouseup', mUp); };
+  bar.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    dragging = true;
+    seekTo(e.clientX);
+    document.addEventListener('mousemove', mMove);
+    document.addEventListener('mouseup', mUp);
+  });
 }
 
 // 订阅 Music 事件（只绑一次）
@@ -4753,7 +4961,7 @@ function _renderMusicComments(id) {
     ? `<img src="${Utils.escapeHtml(t.coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`
     : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);opacity:0.4">${_musicSvg('list')}</div>`;
 
-  const commentRows = comments.length ? comments.map(c => {
+  const commentRows = comments.length ? comments.map((c, ci) => {
     const nameClass = c.isNpc ? 'phone-mcomment-name npc' : 'phone-mcomment-name';
     const color = c.avatar_color || '#888';
     const initial = (c.username || '?').trim().charAt(0);
@@ -4767,6 +4975,7 @@ function _renderMusicComments(id) {
         <div class="phone-mcomment-content">${Utils.escapeHtml(_forumMapAtNames(c.content || ''))}</div>
         <div class="phone-mcomment-meta">${Utils.escapeHtml(c.time || '')}${c.likes ? ` · ♡ ${c.likes}` : ''}</div>
       </div>
+      <button class="phone-cmt-del" title="删除评论" onclick="Phone._deleteMusicComment('${t.id}',${ci})">${_uiIcon('trash', 14)}</button>
     </div>`;
   }).join('') : `<div class="phone-mcomment-empty">暂无评论，点击刷新生成评论</div>`;
 
@@ -4839,6 +5048,26 @@ async function _sendMusicComment(id) {
   });
   await _savePhoneData();
   input.value = '';
+  _renderMusicComments(id);
+}
+
+// 删除单条音乐评论（同步清 npcNotes 派生记录，避免下次仍发给 AI）
+async function _deleteMusicComment(id, ci) {
+  const ok = await UI.showConfirm('删除评论', '确定删除这条评论？删除后不会再出现在 AI 的上下文里。');
+  if (!ok) return;
+  const pd = await _getPhoneData();
+  if (!pd || !pd.musicComments || !Array.isArray(pd.musicComments[id])) return;
+  const arr = pd.musicComments[id];
+  const c = arr[ci];
+  if (!c) return;
+  const t = Music.getTracks().find(x => x.id === id);
+  const title = String((t && t.title) || '未命名').trim();
+  // 拼出与 _npcNoteFromMusicComments 完全一致的 ref
+  const ref = 'mcmt:' + (id || title) + ':' + (c.content || '');
+  arr.splice(ci, 1);
+  try { _npcNoteRemoveByRefs(ref); } catch(_) {}
+  await _savePhoneData();
+  UI.showToast('已删除', 1000);
   _renderMusicComments(id);
 }
 
@@ -7837,47 +8066,34 @@ function _refreshCalBanner() {
       };
       const json = JSON.stringify(exportData, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `cottage_${(pd.houses || []).length}套_${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      document.body.removeChild(mask);
-      UI.showToast(`已导出 ${(pd.houses || []).length} 套住所 + 仓库`, 2200);
+      if (mask.parentNode) document.body.removeChild(mask);
+      const saved = await Utils.saveFile(blob, `cottage_${(pd.houses || []).length}套_${new Date().toISOString().slice(0, 10)}.json`);
+      if (saved) UI.showToast(`已导出 ${(pd.houses || []).length} 套住所 + 仓库`, 2200);
     };
 
     // 导入
-    mask.querySelector('#cottage-data-import').onclick = () => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json,application/json';
-      input.onchange = async () => {
-        const file = input.files[0];
-        if (!file) return;
-        try {
-          const text = await file.text();
-          const data = JSON.parse(text);
-          if (data.__format !== 'tianshu_cottage_v1') {
-            UI.showToast('无法识别的小屋数据格式', 3000);
-            return;
-          }
-          const ok = await UI.showConfirm('导入小屋数据', `将导入 ${(data.houses || []).length} 套住所和 ${(data.furnitureInventory || []).length} 件仓库物品。\n\n⚠️ 这会覆盖当前的住所和仓库数据，确定继续吗？`);
-          if (!ok) return;
-          const pd = await _getPhoneData();
-          pd.houses = data.houses || [];
-          pd.furnitureInventory = data.furnitureInventory || [];
-          await _savePhoneData();
-          mask.remove();
-          UI.showToast(`已导入 ${pd.houses.length} 套住所`, 2200);
-          try { _renderCottage(pd); } catch(_) {}
-        } catch (e) {
-          UI.showToast('导入失败：' + (e.message || '格式错误'), 3000);
+    mask.querySelector('#cottage-data-import').onclick = async () => {
+      const file = await Utils.pickFile({ accept: '.json,application/json' });
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (data.__format !== 'tianshu_cottage_v1') {
+          UI.showToast('无法识别的小屋数据格式', 3000);
+          return;
         }
-      };
-      input.click();
+        const ok = await UI.showConfirm('导入小屋数据', `将导入 ${(data.houses || []).length} 套住所和 ${(data.furnitureInventory || []).length} 件仓库物品。\n\n⚠️ 这会覆盖当前的住所和仓库数据，确定继续吗？`);
+        if (!ok) return;
+        const pd = await _getPhoneData();
+        pd.houses = data.houses || [];
+        pd.furnitureInventory = data.furnitureInventory || [];
+        await _savePhoneData();
+        if (mask.parentNode) mask.remove();
+        UI.showToast(`已导入 ${pd.houses.length} 套住所`, 2200);
+        try { _renderCottage(pd); } catch(_) {}
+      } catch (e) {
+        UI.showToast('导入失败：' + (e.message || '格式错误'), 3000);
+      }
     };
   }
 
@@ -8926,10 +9142,10 @@ ${shipSection}
       const req = (mask.querySelector('#wardrobe-img-req').value || '').trim();
       const useMask = mask.querySelector('#wardrobe-img-usemask').checked;
 
-      // 取面具外观参考（仅 background，不含名字/异能/物品）
+      // 取面具外观参考（优先生图描述，没填退回 background；不含名字/异能/物品）
       let maskRef = '';
       if (useMask) {
-        try { const ch = await Character.get(); maskRef = (ch && ch.background) ? String(ch.background).trim() : ''; } catch(_) {}
+        try { const ch = await Character.get(); maskRef = (ch && (ch.drawPrompt || ch.background)) ? String(ch.drawPrompt || ch.background).trim() : ''; } catch(_) {}
       }
 
       // 拼生图 prompt
@@ -15705,23 +15921,45 @@ ${presetRules}
 
     sc.addEventListener('touchstart', (e) => {
       if (!e.touches || !e.touches.length) return;
-      startY = e.touches[0].clientY;
+      _liveGestureStart(e.touches[0].clientY);
+    }, { passive: true });
+
+    sc.addEventListener('touchmove', (e) => {
+      if (!e.touches || !e.touches.length) return;
+      _liveGestureMove(e.touches[0].clientY);
+    }, { passive: true });
+
+    sc.addEventListener('touchend', _liveGestureEnd, { passive: true });
+
+    // 桌面鼠标拖动兼容：按住拖动等效于下拉/上拽。move/up 挂 document 防拖出丢事件
+    const mMove = (e) => _liveGestureMove(e.clientY);
+    const mUp = () => { _liveGestureEnd(); document.removeEventListener('mousemove', mMove); document.removeEventListener('mouseup', mUp); };
+    sc.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      _liveGestureStart(e.clientY);
+      document.addEventListener('mousemove', mMove);
+      document.addEventListener('mouseup', mUp);
+    });
+
+    // 起手判定：记录起点 Y、是否停在边界
+    function _liveGestureStart(clientY) {
+      startY = clientY;
       overscroll = 0; edge = ''; tracking = true;
       // 起手那一刻就在边界，才有资格触发刷新（中途滑到边界不算）
       const atTop = sc.scrollTop <= DEAD;
       const atBottom = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - DEAD;
       startEdge = atTop ? 'top' : atBottom ? 'bottom' : '';
-    }, { passive: true });
+    }
 
-    sc.addEventListener('touchmove', (e) => {
-      if (!tracking || !startEdge || !e.touches || !e.touches.length) return;
-      const dy = e.touches[0].clientY - startY;
+    // 拖动跟随：渲染黑带（带阻尼，可回滚）
+    function _liveGestureMove(clientY) {
+      if (!tracking || !startEdge) return;
+      const dy = clientY - startY;
       // 起手在顶部→只认下拉(dy>0)；起手在底部→只认上拉(dy<0)
       let os = 0, ed = '';
       if (startEdge === 'top' && dy > 0 && sc.scrollTop <= DEAD) { ed = 'top'; os = dy; }
       else if (startEdge === 'bottom' && dy < 0 && sc.scrollTop + sc.clientHeight >= sc.scrollHeight - DEAD) { ed = 'bottom'; os = -dy; }
       edge = ed; overscroll = os;
-      // 渲染黑带（高度跟随拽动，带阻尼，可回滚）
       [topBand, botBand].forEach(b => { if (b && bandOf(edge) !== b) { b.style.height = '0px'; b.classList.remove('phone-live-band-ready'); } });
       const band = bandOf(edge);
       if (band) {
@@ -15732,17 +15970,17 @@ ${presetRules}
         const txt = band.querySelector('.phone-live-band-text');
         if (txt) txt.textContent = ready ? '松手刷新' : (edge === 'top' ? '继续下拉刷新' : '继续上拉刷新');
       }
-    }, { passive: true });
+    }
 
-    sc.addEventListener('touchend', async () => {
+    // 松手判定：拽过阈值 → 二次确认后刷新
+    async function _liveGestureEnd() {
       const trigger = startEdge && edge && overscroll >= THRESHOLD;
       tracking = false; startEdge = ''; edge = ''; overscroll = 0;
       resetBands();
       if (!trigger) return;
-      // 第四道闸：二次确认
       const ok = await UI.showConfirm('刷新直播', '重新生成一批此刻正在播的直播间？');
       if (ok) _liveGenPreview('');
-    }, { passive: true });
+    }
   }
 
   // ===== A3 直播间详情（全屏 overlay，当前用假数据跑 UI 效果）=====
@@ -22743,6 +22981,15 @@ ${digest}
       };
     });
 
+    // 删除（主楼 repidx=-1，楼中楼 repidx>=0）
+    root.querySelectorAll('.phone-video-cmt-delbtn').forEach(el => {
+      el.onclick = () => {
+        const rid = el.getAttribute('data-rid');
+        const repidx = parseInt(el.getAttribute('data-repidx'), 10);
+        _videoDeleteComment(work, rid, repidx);
+      };
+    });
+
     // 刷新出更多评论（追加生成）
     const moreBtn = root.querySelector('.phone-video-cmt-more');
     if (moreBtn) moreBtn.onclick = () => {
@@ -22838,6 +23085,56 @@ ${digest}
     _videoRenderTab('reviews');
   }
 
+  // 删除影评：repidx=-1 删主楼（连同它的楼中楼），>=0 删该主楼下第 repidx 条楼中楼
+  // 同步清理 npcNotes 派生（主楼 vrev:、楼中楼 vrevrep:）。影评发布不写操作记录，无需清 log
+  async function _videoDeleteComment(work, mainId, repidx) {
+    if (!work) return;
+    if (!await UI.showConfirm('删除评论', '确定删除这条评论？删除后不会再提供给 AI。')) return;
+    const reviews = Array.isArray(work.reviews) ? work.reviews : [];
+    const r = reviews.find(x => x && x.id === mainId);
+    if (!r) return;
+    // 单集影评与整部影评的 npcNote ref 前缀/键不同：
+    //   整部：主楼 vrev:{base}:{rid}  楼中楼 vrevrep:{base}:{rid}
+    //   单集：主楼 vreveP:{parentBase}:{idx}:{rid}  楼中楼 vrevepr:{parentBase}:{idx}:{rid}
+    const isEp = !!work._isEpisode;
+    let mainPfx, repPfx, base;
+    if (isEp) {
+      const parent = work._parent || {};
+      const ptitle = String(parent.title || '未命名').trim();
+      base = (parent.id || ptitle) + ':' + work.idx;
+      mainPfx = 'vreveP:';
+      repPfx = 'vrevepr:';
+    } else {
+      const title = String(work.title || '未命名').trim();
+      base = (work.id || title);
+      mainPfx = 'vrev:';
+      repPfx = 'vrevrep:';
+    }
+    const refList = [];
+
+    if (repidx === -1 || isNaN(repidx)) {
+      // 删主楼：连同它的每条楼中楼一起清
+      const idx = reviews.indexOf(r);
+      if (idx < 0) return;
+      refList.push(mainPfx + base + ':' + (r.id || r.text || ''));
+      (Array.isArray(r.replies) ? r.replies : []).forEach(rp => {
+        refList.push(repPfx + base + ':' + (rp.id || rp.text || ''));
+      });
+      reviews.splice(idx, 1);
+    } else {
+      // 删楼中楼
+      const reps = Array.isArray(r.replies) ? r.replies : [];
+      const rp = reps[repidx];
+      if (!rp) return;
+      refList.push(repPfx + base + ':' + (rp.id || rp.text || ''));
+      reps.splice(repidx, 1);
+    }
+
+    try { _npcNoteRemoveByRefs(refList); } catch(_) {}
+    await _savePhoneData();
+    UI.showToast('已删除', 1000);
+    _videoRenderTab('reviews');
+  }
 
   // 主题曲信息卡片（纯展示，不可播放）。themeSong = { trackId, title, artist }
   function _videoThemeSongHtml(themeSong) {
@@ -23123,7 +23420,7 @@ ${digest}
     </div>`;
 
     // 单条楼中楼
-    const replyRow = (rp, ridMain) => {
+    const replyRow = (rp, ridMain, ri) => {
       const initial = (rp.username || '?').trim().charAt(0);
       const avColor = colorPalette[Math.abs(_strHash(rp.username || '')) % colorPalette.length];
       const av = rp.avatar
@@ -23144,7 +23441,10 @@ ${digest}
             </span>
           </div>
           <div style="font-size:12.5px;line-height:1.6;color:var(--text);margin-top:3px;word-break:break-word">${replyTo}${esc(rp.text)}</div>
-          <div class="phone-video-cmt-replybtn" data-rid="${esc(ridMain)}" data-toname="${esc(rp.username)}" style="font-size:11px;color:var(--text-secondary);margin-top:4px;cursor:pointer;display:inline-block">回复</div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+            <div class="phone-video-cmt-replybtn" data-rid="${esc(ridMain)}" data-toname="${esc(rp.username)}" style="font-size:11px;color:var(--text-secondary);cursor:pointer;display:inline-block">回复</div>
+            <div class="phone-video-cmt-delbtn" data-rid="${esc(ridMain)}" data-repidx="${ri}" style="font-size:11px;color:var(--text-secondary);cursor:pointer;display:inline-block">删除</div>
+          </div>
         </div>
       </div>`;
     };
@@ -23160,7 +23460,7 @@ ${digest}
       let repliesHtml = '';
       if (replies.length) {
         const shown = r._expanded ? replies : replies.slice(0, 2);
-        const inner = shown.map(rp => replyRow(rp, r.id)).join('');
+        const inner = shown.map((rp, ri) => replyRow(rp, r.id, ri)).join('');
         const more = (!r._expanded && replies.length > 2)
           ? `<div class="phone-video-cmt-expand" data-rid="${esc(r.id)}" style="font-size:12px;color:#5a8fc0;cursor:pointer;padding:5px 0 2px">展开 ${replies.length - 2} 条回复 ▾</div>`
           : '';
@@ -23179,7 +23479,10 @@ ${digest}
           </div>
           ${r.rating ? `<div style="font-size:12px;color:#e8b73a;letter-spacing:1px;margin-top:3px">${starsFull(r.rating || 0)}</div>` : ''}
           <div style="font-size:13px;line-height:1.65;color:var(--text);margin-top:5px;word-break:break-word">${esc(r.text)}</div>
-          <div class="phone-video-cmt-replybtn" data-rid="${esc(r.id)}" data-toname="" style="font-size:11px;color:var(--text-secondary);margin-top:5px;cursor:pointer;display:inline-block">回复</div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:5px">
+            <div class="phone-video-cmt-replybtn" data-rid="${esc(r.id)}" data-toname="" style="font-size:11px;color:var(--text-secondary);cursor:pointer;display:inline-block">回复</div>
+            <div class="phone-video-cmt-delbtn" data-rid="${esc(r.id)}" data-repidx="-1" style="font-size:11px;color:var(--text-secondary);cursor:pointer;display:inline-block">删除</div>
+          </div>
           ${repliesHtml}
         </div>
       </div>`;
@@ -23759,6 +24062,15 @@ ${digest}
       content.addEventListener('touchmove', onMove, { passive: false });
       content.addEventListener('touchend', onEnd);
       content.addEventListener('touchcancel', onEnd);
+      // 桌面鼠标拖动兼容：move/up 挂 document（鼠标会拖出元素范围），松手即解绑
+      const mMove = (e) => onMove(e);
+      const mUp = (e) => { onEnd(e); document.removeEventListener('mousemove', mMove); document.removeEventListener('mouseup', mUp); };
+      content.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        onStart(e);
+        document.addEventListener('mousemove', mMove);
+        document.addEventListener('mouseup', mUp);
+      });
     });
   }
 
@@ -28598,7 +28910,7 @@ ${existing}
         <div class="phone-reading-authornote-tx">${esc(note)}</div>
       </div>` : '');
 
-    const cmtHtml = comments.length ? comments.map(c => {
+    const cmtHtml = comments.length ? comments.map((c, ci) => {
       const color = c.avatar_color || '#888';
       const initial = (c.username || '?').trim().charAt(0);
       const av = c.avatar
@@ -28612,6 +28924,7 @@ ${existing}
             <div class="phone-reading-cmt-name">${esc(c.username || '书友')}${tag}</div>
             <div class="phone-reading-cmt-tx">${esc(_forumMapAtNames(c.content || ''))}</div>
           </div>
+          <button class="phone-cmt-del" title="删除评论" onclick="Phone._deleteReadingComment('${esc(book.id)}',${idx},${ci})">${_uiIcon('trash', 14)}</button>
         </div>`;
     }).join('') : '<div style="padding:30px;text-align:center;color:var(--text-secondary);font-size:13px">还没有评论，点右上角刷新出来～</div>';
 
@@ -28706,6 +29019,29 @@ ${existing}
     const _ch = (Array.isArray(book.toc) ? book.toc : []).find(c => c.idx === idx);
     const _chSum = (_ch && _ch.summary || '').trim().slice(0, 60);
     _readingSyncLog(`在${_shopMeta?.reading?.name || '阅读'}《${book.title || '未命名'}》（作者${book.author || '佚名'}）第${idx}章《${(_ch && _ch.title) || ''}》${_chSum ? '（' + _chSum + '）' : ''}的书评区评论：${content.slice(0, 120)}`);
+    _renderReadingComments(bookId, idx);
+  }
+
+  // 删除单条本章说评论（同步清 npcNotes 派生记录）
+  async function _deleteReadingComment(bookId, idx, ci) {
+    if (!await UI.showConfirm('删除评论', '确定删除这条评论？删除后不会再出现在 AI 的上下文里。')) return;
+    const pd = await _getPhoneData();
+    const book = (pd.readingBooks || []).find(b => b && b.id === bookId);
+    if (!book) return;
+    const store = _readingGetCommentStore(book, idx);
+    if (!store || !Array.isArray(store.comments) || !store.comments[ci]) return;
+    const c = store.comments[ci];
+    const title = String(book.title || '未命名').trim();
+    // 拼出与 _npcNoteFromReadingChapter 完全一致的 ref
+    const ref = 'rcmt:' + (book.id || title) + ':' + idx + ':' + (c.content || '');
+    store.comments.splice(ci, 1);
+    try { _npcNoteRemoveByRefs(ref); } catch(_) {}
+    // 若是用户自己的评论，顺带清掉尚未 flush 的操作记录（发评论时写过 _readingSyncLog）
+    if (c.isPlayer && c.content) {
+      try { _actionLogRemoveBySubstr(String(c.content).slice(0, 40)); } catch(_) {}
+    }
+    await _savePhoneData(pd);
+    UI.showToast('已删除', 1000);
     _renderReadingComments(bookId, idx);
   }
 
@@ -29372,6 +29708,15 @@ ${spec}
       content.addEventListener('touchmove', onMove, { passive: false });
       content.addEventListener('touchend', onEnd);
       content.addEventListener('touchcancel', onEnd);
+      // 桌面鼠标拖动兼容：move/up 挂 document（鼠标会拖出元素范围），松手即解绑
+      const mMove = (e) => onMove(e);
+      const mUp = (e) => { onEnd(e); document.removeEventListener('mousemove', mMove); document.removeEventListener('mouseup', mUp); };
+      content.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        onStart(e);
+        document.addEventListener('mousemove', mMove);
+        document.addEventListener('mouseup', mUp);
+      });
     });
   }
 
@@ -36939,6 +37284,50 @@ async function _clearMomentsCover() {
     _forumRerenderDetail(kind, index);
   }
 
+  // 删除论坛评论：replyIdx=-1 删主楼（连同它所有楼中楼），>=0 删该主楼下第 replyIdx 条楼中楼
+  // 同步清理：① 原数组 splice ② npcNotes 派生（按 freply: ref）③ 未flush的操作记录（仅玩家自己发的评论写过 log）
+  async function _deleteForumComment(kind, index, mainId, replyIdx) {
+    if (!await UI.showConfirm('删除评论', '确定删除这条评论？删除后不会再提供给 AI。')) return;
+    const post = await _forumGetPost(kind, index);
+    if (!post) return;
+    const comments = Array.isArray(post._comments) ? post._comments : [];
+    const c = comments.find(x => x && x.id === mainId);
+    if (!c) return;
+    const title = String(post.title || '无标题');
+    const refBase = 'freply:' + (post.id || title) + ':';
+    const refList = [];
+    const logSubs = [];
+
+    if (replyIdx === -1 || replyIdx == null) {
+      // 删主楼：连同它的每条楼中楼一起清
+      const idx = comments.indexOf(c);
+      if (idx < 0) return;
+      refList.push(refBase + (c.id || c.content || ''));
+      if (c.isPlayer) logSubs.push(String(c.content || '').slice(0, 40));
+      (Array.isArray(c.replies) ? c.replies : []).forEach(rp => {
+        refList.push(refBase + (rp.id || rp.content || rp.text || ''));
+        if (rp && rp.isPlayer) logSubs.push(String(rp.content || '').slice(0, 40));
+      });
+      comments.splice(idx, 1);
+    } else {
+      // 删楼中楼
+      const reps = Array.isArray(c.replies) ? c.replies : [];
+      const rp = reps[replyIdx];
+      if (!rp) return;
+      refList.push(refBase + (rp.id || rp.content || rp.text || ''));
+      if (rp.isPlayer) logSubs.push(String(rp.content || '').slice(0, 40));
+      reps.splice(replyIdx, 1);
+    }
+
+    try { _npcNoteRemoveByRefs(refList); } catch(_) {}
+    // 玩家自己发的评论/回复写过操作记录，删评论时一并从未flush的log里清掉
+    logSubs.forEach(s => { if (s) { try { _actionLogRemoveBySubstr(s); } catch(_) {} } });
+
+    await _savePhoneData();
+    UI.showToast('已删除', 1000);
+    _forumRerenderDetail(kind, index);
+  }
+
   // 渲染论坛评论区（含楼中楼）：默认展开 2 条，超出折叠。kind/index 用于事件回调定位
   function _forumCommentsHtml(comments, kind, index, post) {
     const list = (Array.isArray(comments) ? comments : []).filter(Boolean);
@@ -36959,7 +37348,7 @@ async function _clearMomentsCover() {
     };
 
     // 单条楼中楼
-    const replyRow = (rp, mainId) => {
+    const replyRow = (rp, mainId, ri) => {
       const replyToDisp = (rp.replyToName || '').trim();
       const replyTo = replyToDisp
         ? `<span style="color:var(--text-secondary)">回复 </span><span style="color:#5a8fc0">@${esc((_forumDisplayNameMap && _forumDisplayNameMap[replyToDisp]) || replyToDisp)}</span><span style="color:var(--text-secondary)">：</span>`
@@ -36972,7 +37361,10 @@ async function _clearMomentsCover() {
             <span style="margin-left:auto;flex-shrink:0;font-size:10px;color:var(--text-secondary)">${esc(_formatPhoneTime(rp.time || ''))}</span>
           </div>
           <div class="md-content" style="font-size:12.5px;line-height:1.6;color:var(--text);margin-top:3px;word-break:break-word">${replyTo}${md(rp.content)}</div>
-          <div onclick="Phone._forumReplyTo('${kind}',${index},'${esc(mainId)}','${esc(rp.username || '')}')" style="font-size:11px;color:var(--text-secondary);margin-top:4px;cursor:pointer;display:inline-block">回复</div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+            <div onclick="Phone._forumReplyTo('${kind}',${index},'${esc(mainId)}','${esc(rp.username || '')}')" style="font-size:11px;color:var(--text-secondary);cursor:pointer;display:inline-block">回复</div>
+            <div onclick="Phone._deleteForumComment('${kind}',${index},'${esc(mainId)}',${ri})" style="font-size:11px;color:var(--text-secondary);cursor:pointer;display:inline-block">删除</div>
+          </div>
         </div>
       </div>`;
     };
@@ -36982,7 +37374,7 @@ async function _clearMomentsCover() {
       let repliesHtml = '';
       if (replies.length) {
         const shown = c._expanded ? replies : replies.slice(0, 2);
-        const inner = shown.map(rp => replyRow(rp, c.id)).join('');
+        const inner = shown.map((rp, ri) => replyRow(rp, c.id, ri)).join('');
         const more = (!c._expanded && replies.length > 2)
           ? `<div onclick="Phone._forumToggleReplies('${kind}',${index},'${esc(c.id)}')" style="font-size:12px;color:#5a8fc0;cursor:pointer;padding:5px 0 2px">展开 ${replies.length - 2} 条回复 ▾</div>`
           : '';
@@ -36996,7 +37388,10 @@ async function _clearMomentsCover() {
             <span style="margin-left:auto;flex-shrink:0;font-size:10px;color:var(--text-secondary)">${esc(_formatPhoneTime(c.time || ''))}</span>
           </div>
           <div class="md-content" style="font-size:12.5px;line-height:1.6;color:var(--text);margin-top:4px;word-break:break-word">${md(c.content)}</div>
-          <div onclick="Phone._forumReplyTo('${kind}',${index},'${esc(c.id)}','')" style="font-size:11px;color:var(--text-secondary);margin-top:5px;cursor:pointer;display:inline-block">回复</div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:5px">
+            <div onclick="Phone._forumReplyTo('${kind}',${index},'${esc(c.id)}','')" style="font-size:11px;color:var(--text-secondary);cursor:pointer;display:inline-block">回复</div>
+            <div onclick="Phone._deleteForumComment('${kind}',${index},'${esc(c.id)}',-1)" style="font-size:11px;color:var(--text-secondary);cursor:pointer;display:inline-block">删除</div>
+          </div>
           ${repliesHtml}
         </div>
       </div>`;
@@ -38801,11 +39196,12 @@ ${wvPrompt}` },
       ? `<img src="${Utils.escapeHtml(avatar)}" class="phone-moment-avatar ${cls}" alt="头像">`
       : `<div class="phone-moment-avatar ${cls}">${Utils.escapeHtml((name || '?')[0])}</div>`;
 
-    const commentsHtml = (comments) => (comments && comments.length)
-      ? `<div class="phone-moment-comments"><div class="phone-moment-comments-title">评论区</div>${comments.map(c => `
+    const commentsHtml = (comments, scope, mi) => (comments && comments.length)
+      ? `<div class="phone-moment-comments"><div class="phone-moment-comments-title">评论区</div>${comments.map((c, ci) => `
           <div class="phone-moment-comment-card">
             <span class="phone-moment-comment-name"${c.byUser ? ' style="color:var(--accent)"' : ''}>${Utils.escapeHtml(_dispName(c.name))}</span>
             <span class="phone-moment-comment-text">${Utils.escapeHtml(c.text || '')}</span>
+            <button class="phone-cmt-del" title="删除评论" onclick="Phone._deleteMomentComment('${scope}',${mi},${ci})">${_uiIcon('trash', 12)}</button>
           </div>`).join('')}</div>`
       : '';
 
@@ -38843,7 +39239,7 @@ ${m.shareCard ? `<div class="phone-moment-share-card" style="border:1px solid va
   <button type="button" onclick="Phone._deleteMyMoment(${i})" class="phone-moment-action-btn danger" title="删除">${_uiIcon('trash', 13)}</button>
   <button type="button" onclick="Phone._refreshMomentComments(${i})" class="phone-moment-action-btn" title="${(m.comments && m.comments.length) ? '追加评论' : '刷新评论'}">${_uiIcon('refresh', 13)}</button>
           </div>
-          ${(m.comments && m.comments.length) ? commentsHtml(m.comments) : ''}
+          ${(m.comments && m.comments.length) ? commentsHtml(m.comments, 'my', i) : ''}
         </div>
       `).join('')
       : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">还没有动态，点击"发动态"发一条</p>';
@@ -38872,7 +39268,7 @@ ${m.shareCard ? `<div class="phone-moment-share-card" style="border:1px solid va
             <button type="button" onclick="Phone._shareNpcMoment(${i})" class="phone-moment-action-btn" title="分享">${_uiIcon('share', 13)}</button>
             <button type="button" onclick="Phone._deleteNpcMoment(${i})" class="phone-moment-action-btn danger" title="删除">${_uiIcon('trash', 13)}</button>
           </div>
-          ${commentsHtml(m.comments)}
+          ${commentsHtml(m.comments, 'npc', i)}
         </div>
       `).join('')
       : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">点击"刷新动态"查看好友动态</p>';
@@ -39267,6 +39663,29 @@ ${playerReplyHint}
     } catch(e) {
       UI.showToast('存入相册失败：' + (e.message || '未知错误'), 2000);
     }
+  }
+
+  async function _deleteMomentComment(scope, mi, ci) {
+    if (!await UI.showConfirm('删除评论', '确定删除这条评论？删除后不会再出现在 AI 的上下文里。')) return;
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const list = scope === 'npc' ? pd.npcMoments : pd.moments;
+    const m = list && list[mi];
+    if (!m || !Array.isArray(m.comments) || !m.comments[ci]) return;
+    const c = m.comments[ci];
+    // 拼出与 _npcNoteFromMoments 完全一致的 ref（评论者名 + 归一化后的评论文本）
+    const cn = String(c.name || '').trim();
+    const ct = String(c.text || '').replace(/\s+/g, ' ').trim();
+    const ref = 'mmcmt:' + cn + ':' + ct;
+    m.comments.splice(ci, 1);
+    try { _npcNoteRemoveByRefs(ref); } catch(_) {}
+    // 若是用户自己的评论，顺带清掉尚未 flush 的操作记录（发评论时写过 _log，log 里文本被归一化过）
+    if (c.byUser && c.text) {
+      try { _actionLogRemoveBySubstr(String(c.text).replace(/\s+/g, ' ').trim().slice(0, 30)); } catch(_) {}
+    }
+    await _savePhoneData();
+    UI.showToast('已删除', 1000);
+    _renderMoments(pd);
   }
 
   async function _deleteMyMoment(index) {
@@ -41320,7 +41739,7 @@ function _renderGroupThread(pd, groupId) {
   const group = (pd.chatGroups || []).find(g => g.id === groupId);
   if (!group) return;
   const members = _groupMemberList(pd, group);
-  document.getElementById('phone-title').textContent = `${group.name}（${members.length}）`;
+  document.getElementById('phone-title').textContent = `${group.name}（${members.length + 1}）`;
   const msgs = (pd.chatThreads && pd.chatThreads[groupId]) || [];
 
   // me 头像
@@ -45447,8 +45866,9 @@ async function _groupDissolve(groupId) {
   if (pd.chatThreads) delete pd.chatThreads[groupId];
   await _savePhoneData();
   UI.showToast('群聊已解散', 1200);
-  _navStack = [];
-  document.getElementById('phone-back-btn')?.classList.add('hidden');
+  // 解散后停在聊天列表：栈底放列表渲染函数、返回按钮保留（点它回手机首页）
+  _navStack = [() => _renderChatApp(pd)];
+  document.getElementById('phone-back-btn')?.classList.remove('hidden');
   _renderChatApp(pd);
 }
 
@@ -49770,6 +50190,10 @@ async function _cameraOpenAdjust() {
           <span style="font-size:12px;color:var(--text-secondary)">×</span>
           <input id="phone-camera-size-h" type="number" min="64" max="2048" step="1" value="${lastSize.h}" style="width:60px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:6px 8px;outline:none;text-align:center" />
         </div>
+        <div id="phone-camera-cast-wrap" style="margin-bottom:14px;display:none">
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:6px">画面角色（仅 AI 画用，勾选后附上外观描述）</label>
+          <div id="phone-camera-cast" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
       </div>
       <div style="padding:0 20px 18px;display:flex;flex-direction:column;gap:8px">
         <button class="phone-camera-adjust-btn-write" type="button" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:14px 16px;font-size:14px;color:var(--text);cursor:pointer;text-align:left">
@@ -49785,6 +50209,12 @@ async function _cameraOpenAdjust() {
     </div>
   `;
   document.body.appendChild(overlay);
+
+  // 收集画面角色（面具 + 单人卡主角 + 在场 NPC），渲染勾选列表。默认不勾。
+  // 只有勾选且有生图描述的角色，AI 画时才附上外观。没生图描述的灰字标注、勾了也不发。
+  try {
+    await _cameraRenderCast(overlay);
+  } catch(e) { console.warn('[Camera] 角色列表渲染失败', e); }
 
   // 高亮上次选中的比例按钮
   const initBtn = overlay.querySelector(`.phone-camera-ratio-btn[data-ratio="${lastSize.ratio}"]`);
@@ -49955,6 +50385,75 @@ ${extra ? `\n## 用户的额外要求\n${extra}\n` : ''}
   }
 }
 
+// 收集画面可选角色：面具 + 单人卡主角 + 在场 NPC。返回 [{key, label, roleTag, name, desc}]
+// desc 为空表示没填生图描述（勾了也不发）。
+async function _cameraCollectCast() {
+  const cast = [];
+  const seen = new Set();
+  // 1) 面具（玩家自己）
+  try {
+    const ch = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+    if (ch && ch.name) {
+      cast.push({ key: 'mask', roleTag: '我的面具', name: ch.name, desc: (ch.drawPrompt || '').trim() });
+      seen.add(ch.name);
+    }
+  } catch(_) {}
+  // 2) 单人卡主角
+  try {
+    const convId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
+    const conv = convId ? Conversations.getList().find(c => c.id === convId) : null;
+    if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+      const card = await SingleCard.get(conv.singleCharId);
+      if (card && card.name && !seen.has(card.name)) {
+        cast.push({ key: 'card', roleTag: '主角', name: card.name, desc: (card.drawDesc || '').trim() });
+        seen.add(card.name);
+      }
+    }
+  } catch(_) {}
+  // 3) 在场 NPC：先取 present 名单，空则退回状态栏 npcs
+  try {
+    let names = [];
+    if (typeof NPC !== 'undefined' && NPC.getPresentNPCs) names = NPC.getPresentNPCs() || [];
+    if (!names.length) {
+      const sb = (typeof Conversations !== 'undefined') ? Conversations.getStatusBar() : null;
+      if (sb && Array.isArray(sb.npcs)) names = sb.npcs.map(n => n && n.name).filter(Boolean);
+    }
+    if (names.length && typeof NPC !== 'undefined' && NPC.getByNames) {
+      const objs = NPC.getByNames(names) || [];
+      objs.forEach(n => {
+        if (n && n.name && !seen.has(n.name)) {
+          cast.push({ key: 'npc:' + n.name, roleTag: '在场', name: n.name, desc: (n.drawDesc || '').trim() });
+          seen.add(n.name);
+        }
+      });
+    }
+  } catch(_) {}
+  return cast;
+}
+
+// 渲染画面角色勾选列表。没有可选角色时整块隐藏。
+async function _cameraRenderCast(overlay) {
+  const wrap = overlay.querySelector('#phone-camera-cast-wrap');
+  const box = overlay.querySelector('#phone-camera-cast');
+  if (!wrap || !box) return;
+  const cast = await _cameraCollectCast();
+  if (!cast.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  box.innerHTML = cast.map((c, i) => {
+    const noDesc = !c.desc;
+    const hint = noDesc ? '<span style="font-size:11px;color:var(--text-secondary);opacity:0.7">（无生图描述）</span>' : '';
+    return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;user-select:none${noDesc ? ';opacity:0.7' : ''}">
+      <span style="position:relative;display:inline-flex;flex-shrink:0">
+        <input type="checkbox" class="circle-check phone-camera-cast-cb" data-idx="${i}">
+        <span class="circle-check-ui"></span>
+      </span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.name)} <span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(c.roleTag)}</span> ${hint}</span>
+    </label>`;
+  }).join('');
+  // 把 cast 挂到 overlay 上供 _cameraAIDraw 读取
+  overlay._cameraCast = cast;
+}
+
 // AI 画：根据当前文字 + 用户额外要求 + 剧情上下文，调生图 API 出一张真图
 async function _cameraAIDraw() {
   const el = document.getElementById('phone-camera-text');
@@ -49978,14 +50477,36 @@ async function _cameraAIDraw() {
   const ratioMark = activeRatioBtn?.dataset?.ratio || '';
 
   // 拼最终发送给生图模型的 prompt
-  const drawPrompt = extra
+  let drawPrompt = extra
     ? `${currentText}\n\n额外要求：${extra}`
     : currentText;
 
-  // ⚠ 提示用户检查 prompt——生图模型不知道角色性别/外貌，画错责任在用户
-  const previewMsg = `即将把以下内容发给生图模型（${w}×${h}）：\n\n${drawPrompt}\n\n———\n⚠ 注意：生图模型只看到这段文字，不知道角色性别/身材/外貌等信息。\n如有重要信息（性别、长相、关键服饰等），请取消后在"调整镜头"里补充。`;
+  // 附上勾选角色的生图描述（只发有描述的；没描述的即使勾了也跳过）
+  let castLines = [];
+  try {
+    const overlay = document.getElementById('phone-camera-adjust-overlay');
+    const cast = overlay?._cameraCast || [];
+    overlay?.querySelectorAll('.phone-camera-cast-cb:checked').forEach(cb => {
+      const idx = parseInt(cb.dataset.idx, 10);
+      const c = cast[idx];
+      if (c && c.desc) castLines.push(`${c.name}：${c.desc}`);
+    });
+  } catch(_) {}
+  if (castLines.length) {
+    drawPrompt += `\n\n画面人物外观参考——\n${castLines.join('\n')}`;
+  }
+
+  // 确认预览：带了角色描述就提示已附上，否则沿用"模型不知外貌"的警告
+  const previewMsg = castLines.length
+    ? `即将把以下内容发给生图模型（${w}×${h}）：\n\n${drawPrompt}\n\n———\n已附上勾选角色的外观描述。`
+    : `即将把以下内容发给生图模型（${w}×${h}）：\n\n${drawPrompt}\n\n———\n⚠ 注意：生图模型只看到这段文字，不知道角色性别/身材/外貌等信息。\n如有重要信息（性别、长相、关键服饰等），可取消后在"调整镜头"里勾选角色或补充。`;
   const ok = (typeof UI.showConfirm === 'function')
-    ? await UI.showConfirm('确认生成', previewMsg)
+    ? await (async () => {
+        // 等当前 pointerdown/click 事件序列跑完再弹确认框，
+        // 否则手指抬起的 click 会落到刚弹出的确认框上，把它一闪点掉。
+        await new Promise(r => setTimeout(r, 80));
+        return UI.showConfirm('确认生成', previewMsg);
+      })()
     : confirm(previewMsg);
   if (!ok) return;
 
@@ -55668,6 +56189,8 @@ buildHeartsimAppFavorForBackstage,
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
     // 手机 APP 图标自定义
     renderAppIconList, _pickAppIcon, _resetAppIcon,
+    // 悬浮球（桌宠）图标 + 尺寸
+    _renderFabIconList, _setFabSize, _setFabBare, _pickFabIcon, _resetFabIcon,
     // 主屏分页
 _onPagesScroll,
     // 番茄钟
@@ -55682,7 +56205,7 @@ _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioH
     _renderReading, _switchReadingHomeTab, _switchReadingDiscoverType, _readingToggleWvRef, _readingToggleMainlineRef, _readingOpenBook, _readingImportEbook, _readingOpenAddMenu, _readingShowWriteSetup, _readingEditOutline, _readingSearch, _readingTogglePref, _readingSetMapping, _readingTogglePrefsExpand,
     _renderEmail, _switchEmailHomeTab, _emailCompose, _openEmail, _emailReply, _openEmailLetter, _emailEditLetter, _emailShareLetter, _emailShowDigest, _emailTogglePref, _emailTogglePrefsExpand, handleMainlineMailTag, buildPendingMailForAI, _forgottenMailTick, _worldAffairMailTick, _festivalMailTick, _staffMailTick, _birthdayMailTick,
     _renderVideo, _switchVideoCat, _switchVideoHomeTab, _videoSearch, _syncSearchBtn, _videoGenList, _videoToggleWvRef, _videoToggleMainlineRef, _videoTogglePref, _videoTogglePrefsExpand, _videoOpenWork, _videoOpenAddMenu, _videoDeleteWork, _videoShareWork, _liveGenPreview, _liveEnterRoom, _liveUnfollowFromMine, _liveEnterFollowFeed, _exitLiveFollowFeed, _liveOpenRoomSettings,
-    _readingGenToc, _readingGenMoreToc, _readingOpenToc, _readingReadChapter, _readingContinueAfterChapter, _readingOpenBookSettings, _readingSetCover, _readingClearCover, _readingRewriteLast, _readingRewriteChapter, _readingEditChapterText, _readingViewOutline, _readingEditAuthorStyle, _readingDeleteBook, _readingRewriteShort, _readingActionTap, _readingCollectGift, _readingRefreshComments, _readingSendComment, _readingEditAuthorNote, _readingTapPara, _readingCoReadSetup,
+    _readingGenToc, _readingGenMoreToc, _readingOpenToc, _readingReadChapter, _readingContinueAfterChapter, _readingOpenBookSettings, _readingSetCover, _readingClearCover, _readingRewriteLast, _readingRewriteChapter, _readingEditChapterText, _readingViewOutline, _readingEditAuthorStyle, _readingDeleteBook, _readingRewriteShort, _readingActionTap, _readingCollectGift, _readingRefreshComments, _readingSendComment, _deleteReadingComment, _readingEditAuthorNote, _readingTapPara, _readingCoReadSetup,
   // 小屋 App
   _renderCottage, _cottageAddHouse, _cottageOpenHouse, _cottageEditHouse, _cottageSetCurrent, _switchCottageHomeTab, _cottageDataMenu, getCottageLayoutForLocation, _cottageOpenMall, _cottageOpenInventory, _cottageMallSettings, _cottageMallToggleTag, _cottageMallRefresh, _cottageMallBuy, _cottageInvToggleTag, _cottageInvSearch, _cottageInvDelete, _cottageInvEdit, _cottageInvEditTag, _cottageInvPick, _cottageShowOrders,
   _cottageToggleFloorMenu, _cottageSelectFloor, _cottageAddFloor, _cottageRenameFloor, _cottageDeleteFloor, _cottageAddRoom, _cottageOpenRoom,
@@ -55716,9 +56239,9 @@ _chatPickCallPortrait, _chatClearCallPortrait, _showCallRecord,
     _forumRefresh, _forumSearch, _forumSyncActionBtn, _forumSearchOrRefresh, _forumOpenAddMenu, _forumViewDetail, _forumViewRecommended, _forumViewCollected, _switchForumMineSub, _removeForumCollected, _shareForumPost, _collectForumPost, _likeForumPost,
     _switchForumTab, _switchForumCategory, _addForumCategory, _deleteForumCategory, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
     _addForumPost, _editForumPost, _saveForumPost, _deleteForumPost, _viewMyForumPost, _collectMyForumPost, _likeMyForumPost, _sendMyForumComment, _sendForumComment, _refreshForumComment, _shareMyForumPost, _refreshMyForumPost,
-_forumReplyTo, _forumToggleReplies,
+_forumReplyTo, _forumToggleReplies, _deleteForumComment,
     _forumShareToChat,
-    _postMoment, _onMomentImagePicked, _toggleImageDesc, _submitMoment, _shareMoment, _collectMyMoment, _commentMyMoment, _editMyMoment, _deleteMyMoment, _shareNpcMoment, _refreshMomentComments, _refreshNpcMoments, _editNpcMoment, _deleteNpcMoment,
+    _postMoment, _onMomentImagePicked, _toggleImageDesc, _submitMoment, _shareMoment, _collectMyMoment, _commentMyMoment, _editMyMoment, _deleteMyMoment, _deleteMomentComment, _shareNpcMoment, _refreshMomentComments, _refreshNpcMoments, _editNpcMoment, _deleteNpcMoment,
       _shareToMoments, _clearMomentShareCard,
 _openMomentVisibleModal, _closeMomentVisibleModal, _filterMomentVisibleOptions, _toggleMomentVisibleOption, _setMomentVisibleAll,
 _onMomentsConfigCountChange, _onMomentsConfigImgChange, _onMomentsConfigStorageChange,
@@ -55742,7 +56265,7 @@ _calSwitchTab, _weekSelectDay, _weekToggleEnable, _weekDeleteSlot, _weekOpenAddS
     // 纪念日
     _openAnniversaryEditor, _anniPickImage, _anniSave, _anniDelete, _refreshAnniversaryCard,
     // 音乐播放器
-     _openMusicLibrary, _renderMusicLibrary, _addMusicFile, _addMusicUrl, _editMusicTrack, _musicLike, _musicCycleRepeat, _refreshMusicCard, _musicAddMenu, _openMusicDetail, _renderMusicDetail, _musicListPopup, _musicComment, _musicShare, _sendMusicComment, _refreshMusicComments, _openListenTogether, _renderListenTogether, _refreshListenTogether, _listenTogetherInvite, _exitListenTogether, _musicLibRowClick, _toggleMusicEarphone, _logMusicPlay, _logMusicPause, _logMusicSwitch, _ltRetryInvite, _ltCancelInvite, _ltActivate, _ltGetPendingPrompt, _ltGetActivePrompt, _ltHandleAccept, _ltHandleMsg, _ltAddMessage, _ltWriteMessage, _switchMusicLibTab, _openListenHistoryDetail, _ltShareHistory,
+     _openMusicLibrary, _renderMusicLibrary, _addMusicFile, _addMusicUrl, _editMusicTrack, _musicLike, _musicCycleRepeat, _refreshMusicCard, _musicAddMenu, _openMusicDetail, _renderMusicDetail, _musicListPopup, _musicComment, _musicShare, _sendMusicComment, _deleteMusicComment, _refreshMusicComments, _openListenTogether, _renderListenTogether, _refreshListenTogether, _listenTogetherInvite, _exitListenTogether, _musicLibRowClick, _toggleMusicEarphone, _logMusicPlay, _logMusicPause, _logMusicSwitch, _ltRetryInvite, _ltCancelInvite, _ltActivate, _ltGetPendingPrompt, _ltGetActivePrompt, _ltHandleAccept, _ltHandleMsg, _ltAddMessage, _ltWriteMessage, _switchMusicLibTab, _openListenHistoryDetail, _ltShareHistory,
     get _anniTempImage() { return _anniTempImage; },
     set _anniTempImage(v) { _anniTempImage = v; },
     // 心动模拟 APP

@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=154">
-<link rel="stylesheet" href="css/phone.css?v1=399">
+<link rel="stylesheet" href="css/style.css?v=155">
+<link rel="stylesheet" href="css/phone.css?v1=402">
 <link rel="stylesheet" href="css/phone-fudge.css?v=48">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260707">
@@ -369,7 +369,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
 生成番外
 </button>
-<button id="plus-imggen-btn" onclick="Chat.openImgGenModal(); Chat.togglePlusMenu()" style="display:none;align-items:center;gap:8px">
+<button id="plus-imggen-btn" onclick="Chat.openImgGenModal(); Chat.togglePlusMenu()" style="display:flex;align-items:center;gap:8px">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M21.731 2.269a2.625 2.625 0 0 0-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 0 0 0-3.712ZM19.513 8.199l-3.712-3.712-8.4 8.4a5.25 5.25 0 0 0-1.32 2.214l-.8 2.685a.75.75 0 0 0 .933.933l2.685-.8a5.25 5.25 0 0 0 2.214-1.32l8.4-8.4Z"/><path d="M5.25 5.25a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V13.5a.75.75 0 0 0-1.5 0v5.25a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5V8.25a1.5 1.5 0 0 1 1.5-1.5h5.25a.75.75 0 0 0 0-1.5H5.25Z"/></svg>
 生成图片
 </button>
@@ -594,6 +594,7 @@
           <div style="font-size:13px;color:var(--text);margin-bottom:4px">角色头像</div>
           <div style="font-size:11px;color:var(--text-secondary)">点击圆框上传图片，聊天气泡会显示</div>
           <button type="button" onclick="Character.removeAvatar()" style="margin-top:4px;padding:2px 8px;font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--text-secondary);cursor:pointer">移除头像</button>
+          <button type="button" onclick="Character.aiGenAvatar()" style="margin-top:4px;margin-left:6px;padding:2px 8px;font-size:11px;background:none;border:1px solid var(--accent);border-radius:4px;color:var(--accent);cursor:pointer">AI 生成头像</button>
         </div>
         <input type="file" id="mask-avatar-input" accept="image/*" onchange="Character.onAvatarPicked(this)" style="display:none">
       </div>
@@ -612,6 +613,7 @@
                     </div>
                   </label>
         <label>设定<div style="position:relative;width:100%"><textarea id="char-background" class="auto-resize-textarea" rows="8" placeholder="外貌、性格、背景等角色设定" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('char-background','角色设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
+        <label>生图描述（画头像/立绘时用，可选）<textarea id="char-drawPrompt" class="auto-resize-textarea" rows="3" placeholder="只写外观：发色瞳色、身材、常见穿着、画风等。填了生成头像/衣橱立绘时只用这段（+名字），不填则退回用设定。"></textarea></label>
         <label>生日<div style="display:flex;gap:8px;align-items:flex-start">
           <div style="position:relative;flex:1">
             <input type="hidden" id="char-birth-month" value="">
@@ -1548,6 +1550,13 @@
               <span class="circle-check-ui"></span>
             </span>
           </label>
+          <label class="circle-check-label">
+            <span class="circle-check-text">发送前确认<br><span style="font-size:11px;color:var(--text-secondary)">点发送后弹窗展示完整内容，二次确认再发出，防止误触</span></span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-send-confirm" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
         </div>
 
         <!-- ===== 玩法 Tab ===== -->
@@ -2338,6 +2347,11 @@
         <div style="position:relative;width:100%"><textarea id="sc-panel-detail" placeholder="外貌、性格、背景、关系、能力……" rows="8" style="min-height:160px;line-height:1.6;resize:vertical;padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('sc-panel-detail','详细设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div>
         <button type="button" onclick="SingleCard.inlineGenDetail()" class="ai-action-btn" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:6px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></svg>AI 生成</button>
       </div>
+      <!-- 生图描述 -->
+      <div class="form-group">
+        <span class="form-label">生图描述 <span style="font-size:11px;opacity:0.7;font-weight:normal">（画头像/立绘时用，可选）</span></span>
+        <textarea id="sc-panel-drawdesc" placeholder="只写外观：发色瞳色、身材、常见穿着、画风等。填了生成头像时只用这段（+名字），不填则退回用详细设定。" rows="3" style="line-height:1.6;resize:vertical"></textarea>
+      </div>
       <!-- 开场白 -->
       <div class="form-group">
         <span class="form-label">开场白 <span style="font-size:11px;opacity:0.7;font-weight:normal">（新建对话时角色的第一句话）</span></span>
@@ -2422,6 +2436,10 @@
       <div>
         <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px">详细设定</label>
         <textarea id="sc-edit-detail" placeholder="外貌、性格、背景、关系、能力……" rows="8" style="width:100%;min-height:140px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:14px;outline:none;resize:vertical;line-height:1.6"></textarea>
+      </div>
+      <div>
+        <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px">生图描述 <span style="font-size:11px;opacity:0.7">（画头像/立绘时用，可选）</span></label>
+        <textarea id="sc-edit-drawdesc" placeholder="只写外观：发色瞳色、身材、常见穿着、画风等。填了生成头像时只用这段（+名字），不填则退回用详细设定。" rows="3" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:14px;outline:none;resize:vertical;line-height:1.6"></textarea>
       </div>
       <!-- 开场白 -->
       <div>
@@ -2694,7 +2712,7 @@
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
             </div>
             <div class="settings-card-item" onclick="UI.switchSettingsTab('st-appicons');Phone.renderAppIconList()">
-              <span>手机图标</span>
+              <span>手机/悬浮球图标</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
             </div>
             <div class="settings-card-item" onclick="UI.switchSettingsTab('st-stickers');Stickers.renderList()">
@@ -2848,6 +2866,17 @@
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
               新建生图模型
             </button>
+            <!-- 全局生图提示词（与生图模型无关，所有生图共用） -->
+            <div style="margin-top:16px">
+              <div class="form-group">
+                <span class="form-label">全局正向词<span style="font-size:11px;color:var(--text-secondary);font-weight:400">（追加到每次生图 prompt 后，如画质/风格词）</span></span>
+                <textarea id="draw-global-prefix" rows="2" placeholder="如：masterpiece, best quality, highly detailed" style="width:100%;box-sizing:border-box;padding:8px 12px;font-size:13px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:8px;outline:none;resize:vertical" onchange="Settings.setDrawPrefix(this.value)"></textarea>
+              </div>
+              <div class="form-group">
+                <span class="form-label">全局负向词<span style="font-size:11px;color:var(--text-secondary);font-weight:400">（negative_prompt，仅部分生图后端支持）</span></span>
+                <textarea id="draw-global-negative" rows="2" placeholder="如：lowres, bad anatomy, watermark, text" style="width:100%;box-sizing:border-box;padding:8px 12px;font-size:13px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:8px;outline:none;resize:vertical" onchange="Settings.setDrawNegative(this.value)"></textarea>
+              </div>
+            </div>
 
             <!-- 回复建议模型 -->
             <div style="display:flex;align-items:center;justify-content:space-between;margin:24px 0 12px">
@@ -2895,7 +2924,7 @@
                   <div class="custom-dropdown-item" onclick="Prompts.toggleMenu();Prompts.togglePromptManageMode()">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> 批量选择
                   </div>
-                  <div class="custom-dropdown-item" onclick="Prompts.toggleMenu();document.getElementById('prompt-import-picker').click()">
+                  <div class="custom-dropdown-item" onclick="Prompts.toggleMenu();Prompts.importPreset()">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 导入
                   </div>
                   <div class="custom-dropdown-item" onclick="Prompts.toggleMenu();Prompts.exportPreset()">
@@ -3123,9 +3152,35 @@
 
       <!-- Tab: 手机图标 -->
       <div id="st-appicons" class="settings-tab-content" style="display:none">
-        <h3 style="color:var(--accent);font-size:14px;margin-bottom:16px">手机图标</h3>
+        <h3 style="color:var(--accent);font-size:14px;margin-bottom:16px">手机/悬浮球图标</h3>
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6">自定义世界观手机里各 APP 的桌面图标，全局生效（所有对话通用）。点图标更换（支持本地图片 / 图片链接），点右上角 × 恢复默认。</div>
+        <label class="circle-check-label" style="margin-bottom:14px">
+          <span class="circle-check-text">去边框（异形图标）<br><span style="font-size:11px;color:var(--text-secondary)">开启后自定义图标去掉底框/阴影，完整显示透明或异形图标</span></span>
+          <span style="position:relative;display:inline-flex">
+            <input type="checkbox" id="appicons-bare-cb" class="circle-check">
+            <span class="circle-check-ui"></span>
+          </span>
+        </label>
         <div id="appicons-list" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(78px, 1fr));gap:16px"></div>
+        <!-- 悬浮球图标自定义 -->
+        <h3 style="color:var(--accent);font-size:14px;margin:26px 0 10px">悬浮球</h3>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <span style="font-size:13px;color:var(--text)">大小</span>
+          <div id="fab-size-seg" style="display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden">
+            <button type="button" data-fab-size="sm" onclick="Phone._setFabSize('sm')" style="padding:6px 14px;font-size:13px;background:none;border:none;color:var(--text-secondary);cursor:pointer">小</button>
+            <button type="button" data-fab-size="md" onclick="Phone._setFabSize('md')" style="padding:6px 14px;font-size:13px;background:none;border:none;border-left:1px solid var(--border);color:var(--text-secondary);cursor:pointer">中</button>
+            <button type="button" data-fab-size="lg" onclick="Phone._setFabSize('lg')" style="padding:6px 14px;font-size:13px;background:none;border:none;border-left:1px solid var(--border);color:var(--text-secondary);cursor:pointer">大</button>
+            <button type="button" data-fab-size="xl" onclick="Phone._setFabSize('xl')" style="padding:6px 14px;font-size:13px;background:none;border:none;border-left:1px solid var(--border);color:var(--text-secondary);cursor:pointer">超大</button>
+          </div>
+        </div>
+        <label class="circle-check-label" style="margin-bottom:16px">
+          <span class="circle-check-text">异形（去边框）<br><span style="font-size:11px;color:var(--text-secondary)">开：图标裸露显示透明/异形图标。关：图标塞进圆形底框里</span></span>
+          <span style="position:relative;display:inline-flex">
+            <input type="checkbox" id="fab-bare-cb" class="circle-check" onchange="Phone._setFabBare(this.checked)">
+            <span class="circle-check-ui"></span>
+          </span>
+        </label>
+        <div id="fab-icons-list" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(78px, 1fr));gap:16px"></div>
       </div>
 
       <!-- Tab: 表情包管理 -->
@@ -3627,7 +3682,9 @@ NPC
 <label>代号/别名<input type="text" id="wv-npc-aliases" placeholder="多个用逗号或顿号分隔，如：影、Agent-7"></label>
 <label>网名<input type="text" id="wv-npc-onlinename" placeholder="可选，如：深夜码字人、xXx_shadow_xXx"></label>
 <label id="wv-npc-summary-label">简介（速查表用）<textarea id="wv-npc-summary" class="auto-resize-textarea" rows="3" placeholder="一句话简介"></textarea></label>
-          <label>完整设定<div style="position:relative;width:100%"><textarea id="wv-npc-detail" class="auto-resize-textarea" rows="10" placeholder="角色详细设定..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-npc-detail','完整设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
+           <label>完整设定<div style="position:relative;width:100%"><textarea id="wv-npc-detail" class="auto-resize-textarea" rows="10" placeholder="角色详细设定..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-npc-detail','完整设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
+ <label>生图描述（画头像/立绘时用）<textarea id="wv-npc-drawdesc" class="auto-resize-textarea" rows="3" placeholder="可选。只写外观：发色瞳色、身材、常见穿着、画风等。填了生成头像时只用这段（+名字），不填则退回用简介/完整设定。"></textarea></label>
+ <button type="button" onclick="WvGenerator.inlineFillNpc()"
 <button type="button" onclick="WvGenerator.inlineFillNpc()" class="ai-action-btn" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>AI 填充本角色</button>
         </form>
       </div>
@@ -4190,39 +4247,39 @@ const GameLog = (() => {
 </script>
 <script src="js/db.js?v=15"></script>
 <script src="js/stickers.js?v=7"></script>
-<script src="js/utils.js?v=16"></script>
+<script src="js/utils.js?v=18"></script>
 <script src="js/markdown.js?v=9"></script>
-<script src="js/api.js?v=3"></script>
+<script src="js/api.js?v=4"></script>
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
 <script src="js/mcp-client.js"></script>
-<script src="js/fab-drag.js?v=3"></script>
-<script src="js/memory.js?v=8"></script>
+<script src="js/fab-drag.js?v=5"></script>
+<script src="js/memory.js?v=9"></script>
 <script src="js/tools.js?v=8"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=56"></script>
-<script src="js/worldview.js?v=101"></script>
-<script src="js/npc_importer.js"></script>
+<script src="js/worldview.js?v=103"></script>
+<script src="js/npc_importer.js?v=2"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
 <script src="js/conv_gameplay.js?v=15"></script>
 <script src="js/wv-generator.js?v=31"></script>
-<script src="js/single_card.js?v=14"></script>
+<script src="js/single_card.js?v=16"></script>
 <script src="js/attached-chars.js?v=2"></script>
 <script src="js/single_mode.js?v=4"></script>
-<script src="js/character.js?v=15"></script>
-<script src="js/prompts.js?v=1"></script>
+<script src="js/character.js?v=17"></script>
+<script src="js/prompts.js?v=2"></script>
 <script src="js/conversations.js?v=12"></script>
-<script src="js/summary.js?v=1"></script>
-<script src="js/chat.js?v=103"></script>
+<script src="js/summary.js?v=2"></script>
+<script src="js/chat.js?v=105"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
 <script src="js/tts.js"></script>
 <script src="js/branch.js"></script>
-<script src="js/settings.js?v=4"></script>
+<script src="js/settings.js?v=5"></script>
 <script src="js/gaiden.js?v=3"></script>
-<script src="js/backstage.js?v=13"></script>
+<script src="js/backstage.js?v=14"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
 <script src="js/status_bar.js?v=28"></script>
@@ -4232,28 +4289,28 @@ const GameLog = (() => {
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
-<script src="js/app_icons.js?v=1"></script>
-<script src="js/phone.js?v1=1125"></script>
+<script src="js/app_icons.js?v=6"></script>
+<script src="js/phone.js?v1=1140"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
 <script src="js/ui.js?v=18"></script>
-<script src="js/data-mgr.js?v=16"></script>
+<script src="js/data-mgr.js?v=20"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/colorpicker.js"></script>
 <script src="data/tianshucheng-bg.js"></script>
   <script src="data/tutorial-script.js?v=2"></script>
-  <script src="js/theme.js?v=15"></script>
+  <script src="js/theme.js?v=16"></script>
   <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js?v=2"></script>
 <script src="data/builtin-heartsim.js?v=2"></script>
 <script src="js/tianshucheng-fx.js"></script>
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
-<script src="js/auth.js?v=19"></script>
-<script src="js/app.js?v=149"></script>
+<script src="js/auth.js?v=22"></script>
+<script src="js/app.js?v=150"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
@@ -4776,12 +4833,12 @@ if ('serviceWorker' in navigator) {
         导出记录
       </button>
       <div style="font-size:11px;color:var(--text-secondary);opacity:0.7;padding:2px 8px 2px 34px;line-height:1.4">可用于转移后台聊天记录到其他对话</div>
-      <button onclick="document.getElementById('backstage-history-picker').click()" style="display:flex;align-items:center;gap:8px">
+      <button onclick="Backstage.importHistory()" style="display:flex;align-items:center;gap:8px">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round;flex-shrink:0"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
         导入记录
       </button>
       <div style="height:1px;background:var(--border);margin:4px 0"></div>
-      <button id="backstage-imggen-btn" onclick="Chat.openImgGenModal('backstage'); Backstage.togglePlusMenu()" style="display:none;align-items:center;gap:8px">
+      <button id="backstage-imggen-btn" onclick="Chat.openImgGenModal('backstage'); Backstage.togglePlusMenu()" style="display:flex;align-items:center;gap:8px">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;flex-shrink:0"><path d="M21.731 2.269a2.625 2.625 0 0 0-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 0 0 0-3.712ZM19.513 8.199l-3.712-3.712-8.4 8.4a5.25 5.25 0 0 0-1.32 2.214l-.8 2.685a.75.75 0 0 0 .933.933l2.685-.8a5.25 5.25 0 0 0 2.214-1.32l8.4-8.4Z"/><path d="M5.25 5.25a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V13.5a.75.75 0 0 0-1.5 0v5.25a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5V8.25a1.5 1.5 0 0 1 1.5-1.5h5.25a.75.75 0 0 0 0-1.5H5.25Z"/></svg>
         生成图片
       </button>
@@ -5024,6 +5081,29 @@ if ('serviceWorker' in navigator) {
   0%,20%,40% { transform:scale(1.15); }
   10%,30% { transform:scale(0.95); }
   50%,100% { transform:scale(1); }
+}
+/* 悬浮球自定义图标（桌宠）：去掉 accent 圆底/边框/转圈装饰，图标裸露 */
+.floating-fab.fab-custom {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.floating-fab.fab-custom::before { opacity: 0 !important; animation: none !important; }
+.floating-fab.fab-custom::after { opacity: 0 !important; }
+.floating-fab .fab-custom-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: inherit;
+  pointer-events: none;
+}
+/* 生成中仍允许转圈提示：自定义图标下用轻微缩放呼吸代替（不遮图标） */
+.floating-fab.fab-custom.generating { animation: floatingFabPulse 1.2s ease-in-out infinite; }
+@keyframes floatingFabPulse {
+  0%,100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
 }
 </style>
 <script>

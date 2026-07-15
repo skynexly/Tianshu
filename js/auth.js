@@ -537,6 +537,13 @@ const Auth = (() => {
             </div>
             <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">由浏览器估算，仅供参考</div>
           </div>
+          <label class="auth-profile-item" id="auth-profile-export-compress" style="cursor:pointer">
+            <div class="auth-profile-item-label">导出时压缩<br><span style="font-size:11px;color:var(--text-secondary)">体积更小(.gz)。若你浏览器导入解压有问题，可关掉出明文</span></div>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="auth-export-compress-cb" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
           <div class="auth-profile-item" id="auth-profile-export">
             <div class="auth-profile-item-label">导出存档</div>
             <div class="auth-profile-item-value" id="auth-profile-last-export">${_formatLastExport()}</div>
@@ -630,6 +637,14 @@ const Auth = (() => {
         if (el) el.textContent = _formatLastExport();
       } catch(_) {}
     });
+    // 导出压缩开关：读取当前状态 + 绑定切换
+    const _compressCb = document.getElementById('auth-export-compress-cb');
+    if (_compressCb) {
+      try { _compressCb.checked = DataMgr.getExportCompress(); } catch(_) { _compressCb.checked = true; }
+      _compressCb.addEventListener('change', () => {
+        try { DataMgr.setExportCompress(_compressCb.checked); } catch(_) {}
+      });
+    }
     document.getElementById('auth-profile-image-mgr').addEventListener('click', () => _openImageManager());
     _refreshImageStat();
     _refreshStorageEstimate();
@@ -1438,32 +1453,19 @@ create policy "anon saves bucket"
 }
 
   // 选头像（本地，存 dataUrl）
-  function _onPickAvatar() {
-    let inp = document.getElementById('auth-avatar-file');
-    if (!inp) {
-      inp = document.createElement('input');
-      inp.type = 'file';
-      inp.accept = 'image/*';
-      inp.id = 'auth-avatar-file';
-      inp.style.display = 'none';
-      document.body.appendChild(inp);
+  async function _onPickAvatar() {
+    const f = await Utils.pickFile({ accept: 'image/*' });
+    if (!f) return;
+    try {
+      const dataUrl = await _readImageCompressed(f, 256);
+      if (!_state) return;
+      _state.avatar = dataUrl;
+      _saveState(_state);
+      _renderProfile();
+      _refreshAccountCard();
+    } catch(e) {
+      await _modal({ title: '头像处理失败', desc: e.message || '请换一张图片再试。', cancelText: false, okText: '好的' });
     }
-    inp.value = '';
-    inp.onchange = async () => {
-      const f = inp.files?.[0];
-      if (!f) return;
-      try {
-        const dataUrl = await _readImageCompressed(f, 256);
-        if (!_state) return;
-        _state.avatar = dataUrl;
-        _saveState(_state);
-        _renderProfile();
-        _refreshAccountCard();
-      } catch(e) {
-        await _modal({ title: '头像处理失败', desc: e.message || '请换一张图片再试。', cancelText: false, okText: '好的' });
-      }
-    };
-    inp.click();
   }
 
   // 把图片压到 maxSize×maxSize 内的正方形 dataUrl

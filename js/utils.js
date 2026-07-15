@@ -931,11 +931,20 @@ async function copyFromDataset(btn) {
 
       let curDataUrl = null;
       let downloaded = false; // 下载过就不拦截关闭
+      let generating = false; // 正在生成中（请求进行时为 true）
 
       function cleanup() { overlay.remove(); }
 
       // 关闭前检查：已生成头像但既没「用这张」也没下载 → 弹确认，避免手滑关掉白费额度
       async function _tryClose() {
+        // 生成中关闭：请求不会中断，额度仍会消耗——提示知情，防误触
+        if (generating) {
+          const ok = await UI.showConfirm('图片正在生成', '关闭不会停止已经发出的生图请求，额度仍会消耗（生成的图也会被丢弃）。确定关闭？');
+          if (!ok) return;
+          cleanup();
+          resolve(null);
+          return;
+        }
         if (curDataUrl && !downloaded) {
           const ok = await UI.showConfirm('确定关闭？', '已生成的头像还没使用，也没下载。关闭后这张图就找不回来了（生图消耗的额度会白费）。确定关闭？');
           if (!ok) return; // 用户改主意，留在弹窗
@@ -958,6 +967,7 @@ async function copyFromDataset(btn) {
         statusEl.style.display = 'block';
         statusEl.style.color = 'var(--text-secondary,#888)';
         statusEl.textContent = '正在生成…（最多约3分钟）';
+        generating = true;
         try {
           // 加画质后缀，提升头像出图质量
           const fullPrompt = p + '，人物头像，半身像，正脸，高质量，精致细节';
@@ -975,6 +985,7 @@ async function copyFromDataset(btn) {
           statusEl.style.color = 'var(--danger,#e55)';
           statusEl.textContent = '生成失败：' + (e.message || e);
         } finally {
+          generating = false;
           genBtn.disabled = false;
         }
       };
@@ -1028,5 +1039,100 @@ async function copyFromDataset(btn) {
     });
   }
 
-  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, promptImageInput, promptAiAvatar, compressDataUrl };
+  // ===== 统一文件保存/选择（v709.80）=====
+  // 背景：安卓 WebView 有"用户手势窗口"——下载(a.click)和文件选择(input.click)都必须
+  // 在用户手势的同步调用栈里触发。若 click 之前隔了 await（生成/压缩数据），手势会被消费掉，
+  // click 被静默拒绝（下载框/文件框不弹，表现为"点了没反应""薛定谔成功"）。
+  // 另外隐藏用 display:none 的 file input 在部分 WebView 上也会被拒绝 click()。
+  // 这两个工具把正确姿势封装起来，全项目统一走它，避免各处各写各的坑。
+
+  // 保存文件。source 可以是 Blob 或 dataURL 字符串。
+  // 弹一个「文件已就绪」面板，用户点「保存」时在纯同步栈里 a.click()，手势必定有效。
+  // 返回 Promise<boolean>：true=已点保存，false=取消。
+  function saveFile(source, fileName) {
+    return new Promise((resolve) => {
+      let url, isObjectUrl = false;
+      if (typeof source === 'string') {
+        url = source; // dataURL，直接用
+      } else {
+        url = URL.createObjectURL(source);
+        isObjectUrl = true;
+      }
+      let sizeText = '';
+      try {
+        if (source && typeof source.size === 'number') {
+          const kb = source.size / 1024;
+          sizeText = kb >= 1024 ? (kb / 1024).toFixed(2) + ' MB' : kb.toFixed(1) + ' KB';
+        }
+      } catch(_) {}
+
+      const mask = document.createElement('div');
+      mask.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:24px';
+      const panel = document.createElement('div');
+      panel.style.cssText = 'background:var(--bg-elevated,#1c1c1e);color:var(--text-primary,#fff);border-radius:16px;max-width:340px;width:100%;padding:22px 20px;box-shadow:0 12px 40px rgba(0,0,0,0.45)';
+      panel.innerHTML = `
+        <div style="font-size:16px;font-weight:600;margin-bottom:10px">文件已就绪</div>
+        <div style="font-size:13px;color:var(--text-secondary,#aaa);line-height:1.6;margin-bottom:6px;word-break:break-all">${fileName}</div>
+        <div style="font-size:12px;color:var(--text-secondary,#888);margin-bottom:18px">${sizeText ? '大小约 ' + sizeText + '　·　' : ''}点「保存到文件」选择存放位置</div>
+        <div style="display:flex;gap:10px">
+          <button type="button" id="_sf-cancel" style="flex:1;padding:11px;border:none;border-radius:10px;background:var(--bg-input,#2c2c2e);color:var(--text-primary,#fff);font-size:14px;cursor:pointer">取消</button>
+          <button type="button" id="_sf-save" style="flex:1.4;padding:11px;border:none;border-radius:10px;background:var(--accent,#e08a2b);color:#fff;font-size:14px;font-weight:600;cursor:pointer">保存到文件</button>
+        </div>
+      `;
+      mask.appendChild(panel);
+      document.body.appendChild(mask);
+
+      const cleanup = () => {
+        if (mask.parentNode) mask.parentNode.removeChild(mask);
+        if (isObjectUrl) setTimeout(() => { try { URL.revokeObjectURL(url); } catch(_) {} }, 1000);
+      };
+
+      panel.querySelector('#_sf-save').onclick = () => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        cleanup();
+        resolve(true);
+      };
+      panel.querySelector('#_sf-cancel').onclick = () => { cleanup(); resolve(false); };
+      mask.onclick = (e) => { if (e.target === mask) { cleanup(); resolve(false); } };
+    });
+  }
+
+  // 选择文件。opts.accept 例如 '.json' / 'image/*' / '.json,.gz'。
+  // 统一处理：append 到 DOM（否则部分 WebView 不弹）+ 占位隐藏（非 display:none）+ 用完清理。
+  // 返回 Promise<File|null>：选了文件返回 File，取消返回 null。
+  function pickFile(opts) {
+    return new Promise((resolve) => {
+      const o = opts || {};
+      const input = document.createElement('input');
+      input.type = 'file';
+      if (o.accept) input.accept = o.accept;
+      if (o.multiple) input.multiple = true;
+      input.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;width:1px;height:1px;pointer-events:none';
+      document.body.appendChild(input);
+      let settled = false;
+      const done = (val) => {
+        if (settled) return;
+        settled = true;
+        try { if (input.parentNode) input.parentNode.removeChild(input); } catch(_) {}
+        resolve(val);
+      };
+      input.onchange = () => {
+        const f = o.multiple ? Array.from(input.files || []) : (input.files && input.files[0]) || null;
+        done(f);
+      };
+      // 取消选择时多数浏览器不触发 onchange；用 focus 兜底回收（延时判断没选到文件）
+      window.addEventListener('focus', () => {
+        setTimeout(() => { if (!settled && (!input.files || input.files.length === 0)) done(o.multiple ? [] : null); }, 500);
+      }, { once: true });
+      input.click();
+    });
+  }
+
+  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, promptImageInput, promptAiAvatar, compressDataUrl, saveFile, pickFile };
 })();

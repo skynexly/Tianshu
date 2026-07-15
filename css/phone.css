@@ -217,6 +217,12 @@
   scrollbar-width: none;
 }
 .phone-pages::-webkit-scrollbar { display: none; }
+/* 桌面鼠标拖动翻页时：禁用吸附与文本选中，避免拖动过程被 snap 拉扯、误选文字 */
+.phone-pages.phone-pages-dragging {
+  scroll-snap-type: none;
+  cursor: grabbing;
+  user-select: none;
+}
 /* 单页：内容超高时本页可纵向滚动（兜底，避免图标被裁掉）；正常屏幕由矮屏媒体查询压紧后不会出现滚动条 */
 .phone-page {
   flex-shrink: 0;
@@ -425,6 +431,21 @@
 }
 .phone-app-settings .phone-app-icon-circle { background: linear-gradient(145deg, rgba(255,255,255,0.30), rgba(255,255,255,0.16)); }
 .phone-app-minimize .phone-app-icon-circle { background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.20)), rgba(255,255,255,0.16)); }
+/* 去边框（异形/透明图标）：全局开关开启且该 app 有自定义图标时生效。
+   清掉背景/边框/阴影/毛玻璃，图标裸露。选择器带 shell 前缀 + !important，
+   以压过 minimize 的 accent 底与 fudge 主题的 var(--text) 底。 */
+.phone-shell .phone-app-icon-circle-bare,
+.phone-shell.phone-theme-fudge .phone-app-icon-circle-bare,
+.phone-shell.phone-theme-fudge .phone-app-minimize .phone-app-icon-circle-bare,
+.phone-shell.phone-theme-fudge .phone-app-settings .phone-app-icon-circle-bare {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
 /* 占位图标：和普通图标同款外框，内部留空，不响应点击 */
 .phone-app-placeholder { pointer-events: none; }
 .phone-app-icon-circle-placeholder {
@@ -4314,6 +4335,18 @@ align-self: start;
   display: flex; gap: 10px;
 }
 .phone-mcomment-row:last-child { border-bottom: none; }
+/* 评论删除按钮（音乐评论用 flex 靠右；好友圈评论卡用绝对定位到右上角） */
+.phone-cmt-del {
+  flex-shrink: 0; align-self: flex-start;
+  background: transparent; border: none; padding: 2px 4px; cursor: pointer;
+  color: var(--text-secondary); opacity: 0.45; line-height: 0;
+  border-radius: 6px; transition: opacity 0.15s, color 0.15s;
+}
+.phone-cmt-del:hover, .phone-cmt-del:active { opacity: 1; color: var(--error, #e0464b); }
+.phone-moment-comment-card { position: relative; padding-right: 26px; }
+.phone-moment-comment-card .phone-cmt-del {
+  position: absolute; top: 4px; right: 4px;
+}
 .phone-mcomment-av {
   flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; object-fit: cover;
   display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 600;

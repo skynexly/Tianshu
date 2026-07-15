@@ -219,6 +219,20 @@ const bsData = await DB.get('settings', 'backstagePresets');
   function getDrawConfig() {
     return _cleanFuncConfig(drawPresets.find(p => p.id === currentDrawId) || drawPresets[0]);
   }
+
+  // 全局生图正向/负向提示词（独立存储，不进 preset，切换生图模型也保留）
+  function getDrawPrefix() {
+    try { return localStorage.getItem('drawGlobalPrefix') || ''; } catch(_) { return ''; }
+  }
+  function setDrawPrefix(v) {
+    try { localStorage.setItem('drawGlobalPrefix', (v || '').trim()); } catch(_) {}
+  }
+  function getDrawNegative() {
+    try { return localStorage.getItem('drawGlobalNegative') || ''; } catch(_) { return ''; }
+  }
+  function setDrawNegative(v) {
+    try { localStorage.setItem('drawGlobalNegative', (v || '').trim()); } catch(_) {}
+  }
   function getSuggestConfig() {
     return _cleanFuncConfig(suggestPresets.find(p => p.id === currentSuggestId) || suggestPresets[0]);
   }
@@ -253,6 +267,13 @@ const bsData = await DB.get('settings', 'backstagePresets');
     try {
       const uk = document.getElementById('unsplash-access-key');
       if (uk) uk.value = getUnsplashKey();
+    } catch(_) {}
+    // 回填全局生图正向/负向词
+    try {
+      const pf = document.getElementById('draw-global-prefix');
+      if (pf) pf.value = getDrawPrefix();
+      const ng = document.getElementById('draw-global-negative');
+      if (ng) ng.value = getDrawNegative();
     } catch(_) {}
   }
 
@@ -1256,6 +1277,7 @@ else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; switchFn
     toggleRegex, removeRegex, renderRegexRules,
     toggleRegexSelect, toggleRegexManageMode, exitRegexManageMode, batchDeleteRegex,
     getSummaryConfig, getMemoryConfig, getVisionConfig, getGaidenConfig, getWorldvoiceConfig, getBackstageConfig, getTtsConfig, getDrawConfig, getSuggestConfig,
+    getDrawPrefix, setDrawPrefix, getDrawNegative, setDrawNegative,
     renderFuncPresetList, switchSummary, switchMemory, switchVision, switchGaiden, switchWorldvoice, switchBackstage, switchTts, switchDraw, switchSuggest,
     editFuncPreset, saveFuncPreset, cancelFuncEdit, createFuncPreset,
     cloneFuncPreset, deleteFuncPreset, fetchFuncModels, fillFromMainPreset, toggleFillDropdown,

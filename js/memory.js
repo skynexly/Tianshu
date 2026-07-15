@@ -1786,12 +1786,7 @@ participants: document.getElementById('mem-edit-participants-input').value.split
     const dateStr = new Date().toISOString().slice(0, 10);
     const filename = `记忆导出_${tabName}_${dateStr}.txt`;
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    await Utils.saveFile(blob, filename);
 
     // 同时复制到剪贴板
     try { await navigator.clipboard.writeText(text); } catch(e) {}

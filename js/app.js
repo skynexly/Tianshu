@@ -224,14 +224,16 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v712';
-    const CHANGELOG = `○新增功能模型数据兜底保护
-○论坛已收藏帖子留存
-○剧情引导新增永久生效
-○生图超时延长至300秒
-○新增自定义手机图标
-○新增自定义线上线下气泡、引号渲染CSS
-○修复部分按钮卡死`;
+    const APP_VERSION = 'v713';
+    const CHANGELOG = `○新增手机图标隐藏边框、悬浮球自定义图标
+○新增全局生图正负提示词（功能模型→生图模型下）
+○角色卡、面具新增生图描述框
+○相机生图可勾选在场角色的生图描述
+○新增发送前二次确认（对话设置→输入辅助）
+○新增论坛、好友圈等评论删除按钮
+○部分交互的PC端适配
+○部分交互优化
+○一些BUG修复`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

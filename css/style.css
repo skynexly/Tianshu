@@ -6429,6 +6429,11 @@ body[data-skin="single-default"] .sb-character-attr-bar i {
 }
 .appicon-cell:active .appicon-thumb { transform: scale(.93); }
 .appicon-cell:hover .appicon-thumb { border-color: var(--accent); }
+/* 去边框预览：全局开关开启时，有自定义图标的格子去掉底框/边框，与桌面一致 */
+.appicon-thumb-bare {
+  background: none !important;
+  border-color: transparent !important;
+}
 /* 管理界面里 SVG 图标染成 accent，避免默认白色在浅底看不见 */
 .appicon-thumb .phone-icon-glyph {
   width: 30px;

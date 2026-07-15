@@ -493,13 +493,26 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
     const model = drawConfig.model || '';
     if (!url || !key) throw new Error('请先在设置→功能模型→生图模型中配置 API');
 
+    // 全局正向/负向提示词（options 里显式传 skipGlobalPrompt 可跳过，如某些不该带全局词的场景）
+    let finalPrompt = prompt;
+    let negative = '';
+    if (!options.skipGlobalPrompt) {
+      try {
+        const prefix = Settings.getDrawPrefix && Settings.getDrawPrefix();
+        if (prefix) finalPrompt = `${prompt}, ${prefix}`;
+        negative = (Settings.getDrawNegative && Settings.getDrawNegative()) || '';
+      } catch(_) {}
+    }
+
     const body = {
-      prompt,
+      prompt: finalPrompt,
       n: options.n || 1,
       size: options.size || '1024x768',
       response_format: 'b64_json'
     };
     if (model) body.model = model;
+    // 负向词：OpenAI 兼容接口标准无此字段，支持的后端（如部分 SD 系中转）会用，不支持的忽略
+    if (negative) body.negative_prompt = negative;
 
     // 超时控制（300秒，给中转站排队/慢速模型留足余量），避免中转站卡住时永远转圈不报错
     const timeout = options.timeout || 300000;

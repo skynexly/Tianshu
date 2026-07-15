@@ -1472,24 +1472,16 @@ aiMsg.content = baseContent + fullContent;
       }))
     };
     const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `后台记录_${(conv?.name || '未命名').replace(/[\/\\:*?"<>|]/g, '_')}_${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    UI.showToast(`已导出 ${messages.length} 条消息`, 2000);
+    const saved = await Utils.saveFile(blob, `后台记录_${(conv?.name || '未命名').replace(/[\/\\:*?"<>|]/g, '_')}_${Date.now()}.json`);
+    if (saved) UI.showToast(`已导出 ${messages.length} 条消息`, 2000);
   }
 
-  async function importHistory(input) {
+  async function importHistory() {
     _closePlusMenu();
-    const file = input.files?.[0];
+    const file = await Utils.pickFile({ accept: '.json,application/json' });
     if (!file) return;
     try {
       const text = await file.text();
-      input.value = '';
       const data = JSON.parse(text);
       if (!Array.isArray(data.messages)) throw new Error('文件不包含 messages 数组');
 

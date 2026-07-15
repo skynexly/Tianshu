@@ -807,7 +807,7 @@ ${isEditing
 }
 
   // ── 导出导入 ──────────────────────────────────────────────
-  function exportCustomThemes() {
+  async function exportCustomThemes() {
     const map = loadCustomPresets();
     const names = Object.keys(map);
     if (!names.length) { UI.showToast('没有自定义主题可导出', 2000); return; }
@@ -817,15 +817,8 @@ ${isEditing
     if (!modal || !list) {
       const json = JSON.stringify(map, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `skynex-theme-${names.length}个.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      UI.showToast(`已导出 ${names.length} 个主题`, 2500);
+      const saved = await Utils.saveFile(blob, `skynex-theme-${names.length}个.json`);
+      if (saved) UI.showToast(`已导出 ${names.length} 个主题`, 2500);
       return;
     }
     const escHtml = s => String(s)
@@ -883,7 +876,7 @@ ${isEditing
   }
 
 
-  function confirmExportSelectedThemes() {
+  async function confirmExportSelectedThemes() {
     const map = loadCustomPresets();
     const checks = Array.from(document.querySelectorAll('.theme-export-check:checked'));
     const names = checks.map(el => el.value).filter(Boolean);
@@ -894,52 +887,35 @@ ${isEditing
     });
     const json = JSON.stringify(picked, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `skynex-theme-${names.length}个_${new Date().toLocaleDateString('zh-CN').replace(/\//g,'-')}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
     closeExportModal();
-    UI.showToast(`已导出 ${Object.keys(picked).length} 个主题`, 2500);
+    const saved = await Utils.saveFile(blob, `skynex-theme-${names.length}个_${new Date().toLocaleDateString('zh-CN').replace(/\//g,'-')}.json`);
+    if (saved) UI.showToast(`已导出 ${Object.keys(picked).length} 个主题`, 2500);
   }
 
   async function importCustomThemes() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.style.display = 'none';
-    input.onchange = async () => {
-      const file = input.files[0];
-      if (!file) { input.remove(); return; }
-      try {
-        const text = await file.text();
-        const imported = JSON.parse(text);
-        if (typeof imported !== 'object' || Array.isArray(imported)) {
-          UI.showToast('数据格式不正确', 2000); return;
-        }
-        const existing = loadCustomPresets();
-        const newNames = Object.keys(imported);
-        if (!newNames.length) { UI.showToast('没有找到主题数据', 2000); return; }
-        const dupes = newNames.filter(n => existing[n]);
-        if (dupes.length) {
-          const ok = await UI.showConfirm('覆盖主题', `以下主题已存在将被覆盖：\n${dupes.join('、')}`);
-          if (!ok) return;
-        }
-        Object.assign(existing, imported);
-        saveCustomPresets(existing);
-        renderCustomList();
-        UI.showToast(`已导入 ${newNames.length} 个主题`, 2000);
-      } catch (e) {
-        UI.showToast('导入失败：' + e.message, 3000);
-      } finally {
-        input.remove();
+    const file = await Utils.pickFile({ accept: '.json' });
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const imported = JSON.parse(text);
+      if (typeof imported !== 'object' || Array.isArray(imported)) {
+        UI.showToast('数据格式不正确', 2000); return;
       }
-    };
-    document.body.appendChild(input);
-    input.click();
+      const existing = loadCustomPresets();
+      const newNames = Object.keys(imported);
+      if (!newNames.length) { UI.showToast('没有找到主题数据', 2000); return; }
+      const dupes = newNames.filter(n => existing[n]);
+      if (dupes.length) {
+        const ok = await UI.showConfirm('覆盖主题', `以下主题已存在将被覆盖：\n${dupes.join('、')}`);
+        if (!ok) return;
+      }
+      Object.assign(existing, imported);
+      saveCustomPresets(existing);
+      renderCustomList();
+      UI.showToast(`已导入 ${newNames.length} 个主题`, 2000);
+    } catch (e) {
+      UI.showToast('导入失败：' + e.message, 3000);
+    }
   }
 
 function saveCustomPresetNow(oldName) {
@@ -1266,71 +1242,54 @@ async function clearAllBubbleCss() {
   }
 
   // 导出气泡样式：五类打包成一个 json 文件（带 _type 标识，防与主题文件混淆）
-  function exportBubbleCss() {
+  async function exportBubbleCss() {
     const store = loadBubbleCss();
     if (!store || !Object.keys(store).length) { UI.showToast('还没有自定义气泡样式可导出', 2000); return; }
     const pkg = { _type: 'tianshu-bubble-css', _version: 1, css: store };
     const json = JSON.stringify(pkg, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `skynex-气泡样式_${new Date().toLocaleDateString('zh-CN').replace(/\//g,'-')}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    UI.showToast('气泡样式已导出', 2200);
+    const saved = await Utils.saveFile(blob, `skynex-气泡样式_${new Date().toLocaleDateString('zh-CN').replace(/\//g,'-')}.json`);
+    if (saved) UI.showToast('气泡样式已导出', 2200);
   }
 
   // 导入气泡样式：纯覆盖（整套换成文件里的）
-  function importBubbleCss() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.style.display = 'none';
-    input.onchange = async () => {
-      const file = input.files[0];
-      if (!file) { input.remove(); return; }
-      try {
-        const text = await file.text();
-        const parsed = JSON.parse(text);
-        // 兼容两种：{ _type, css:{...} } 或直接 {mainAi:...}
-        let css = null;
-        if (parsed && parsed._type === 'tianshu-bubble-css' && parsed.css && typeof parsed.css === 'object') {
-          css = parsed.css;
-        } else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          // 裸对象：认已知 key
-          const known = BUBBLE_CSS_DEFS.map(d => d.key);
-          if (known.some(k => k in parsed)) css = parsed;
-        }
-        if (!css) { UI.showToast('不是有效的气泡样式文件', 2500); return; }
-        // 只保留已知的五类 key，过滤无关字段
-        const clean = {};
-        for (const def of BUBBLE_CSS_DEFS) {
-          if (typeof css[def.key] === 'string' && css[def.key].trim()) clean[def.key] = css[def.key].trim();
-        }
-        if (!Object.keys(clean).length) { UI.showToast('文件里没有有效的气泡样式', 2500); return; }
-        // 已有则确认覆盖（纯覆盖：整套替换）
-        const existing = loadBubbleCss();
-        if (existing && Object.keys(existing).length) {
-          const ok = await UI.showConfirm('导入气泡样式', '导入将覆盖当前全部气泡样式，确定？');
-          if (!ok) return;
-        }
-        saveBubbleCssStore(clean);
-        applyBubbleCss();
-        // 刷新面板输入框
-        try { renderBubbleCssPanel(); } catch(_) {}
-        try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
-        UI.showToast('气泡样式已导入并应用', 2200);
-      } catch (e) {
-        UI.showToast('导入失败：' + (e.message || ''), 3000);
-      } finally {
-        input.remove();
+  async function importBubbleCss() {
+    const file = await Utils.pickFile({ accept: '.json' });
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      // 兼容两种：{ _type, css:{...} } 或直接 {mainAi:...}
+      let css = null;
+      if (parsed && parsed._type === 'tianshu-bubble-css' && parsed.css && typeof parsed.css === 'object') {
+        css = parsed.css;
+      } else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        // 裸对象：认已知 key
+        const known = BUBBLE_CSS_DEFS.map(d => d.key);
+        if (known.some(k => k in parsed)) css = parsed;
       }
-    };
-    document.body.appendChild(input);
-    input.click();
+      if (!css) { UI.showToast('不是有效的气泡样式文件', 2500); return; }
+      // 只保留已知的五类 key，过滤无关字段
+      const clean = {};
+      for (const def of BUBBLE_CSS_DEFS) {
+        if (typeof css[def.key] === 'string' && css[def.key].trim()) clean[def.key] = css[def.key].trim();
+      }
+      if (!Object.keys(clean).length) { UI.showToast('文件里没有有效的气泡样式', 2500); return; }
+      // 已有则确认覆盖（纯覆盖：整套替换）
+      const existing = loadBubbleCss();
+      if (existing && Object.keys(existing).length) {
+        const ok = await UI.showConfirm('导入气泡样式', '导入将覆盖当前全部气泡样式，确定？');
+        if (!ok) return;
+      }
+      saveBubbleCssStore(clean);
+      applyBubbleCss();
+      // 刷新面板输入框
+      try { renderBubbleCssPanel(); } catch(_) {}
+      try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
+      UI.showToast('气泡样式已导入并应用', 2200);
+    } catch (e) {
+      UI.showToast('导入失败：' + (e.message || ''), 3000);
+    }
   }
 
 

@@ -553,25 +553,17 @@ const Prompts = (() => {
     };
 
     const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
     const safeName = (selectedGroup === '全部' ? '全部提示词' : selectedGroup).replace(/[\/\\:*?"<>|]/g, '_');
-    a.download = `prompts_${safeName}_${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    UI.showToast(`已导出 ${prompts.length} 条提示词`, 2000);
+    const saved = await Utils.saveFile(blob, `prompts_${safeName}_${Date.now()}.json`);
+    if (saved) UI.showToast(`已导出 ${prompts.length} 条提示词`, 2000);
   }
 
   // ===== 导入预设 =====
-  async function importPreset(input) {
-    const file = input.files?.[0];
+  async function importPreset() {
+    const file = await Utils.pickFile({ accept: '.json,application/json' });
     if (!file) return;
     try {
       const text = await file.text();
-      input.value = '';
       const data = JSON.parse(text);
       const result = await _parseAndImport(data, file.name.replace(/\.json$/i, ''));
       UI.showToast(`已导入 ${result.imported} 条提示词${result.skipped ? `（跳过 ${result.skipped} 条空内容）` : ''}`, 2500);
@@ -579,7 +571,6 @@ const Prompts = (() => {
     } catch(e) {
       console.error('[Prompts.importPreset]', e);
       await UI.showAlert('导入失败', '文件不是合法的 JSON，或格式不支持。\n\n' + (e.message || ''));
-      input.value = '';
     }
   }
 

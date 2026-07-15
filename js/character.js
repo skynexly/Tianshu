@@ -2,7 +2,7 @@
  * 面具（角色卡）管理 — 多面具支持
  */
 const Character = (() => {
-  const BASIC_FIELDS = ['name', 'onlineName', 'background', 'note'];
+  const BASIC_FIELDS = ['name', 'onlineName', 'background', 'note', 'drawPrompt'];
   let currentMaskId = 'default';
   let editingMaskId = null; // 当前在弹窗中编辑的面具
   let _maskLoading = false;  // openEdit 加载表单期间为 true，此时禁止自动保存（防加载间隙脏写）
@@ -338,60 +338,45 @@ async function _getMasksForCurrentWv() {
     if (entries.length === 0) { UI.showToast('未找到可导出的面具'); return; }
     const exportData = { __format: 'tianshu_masks_v1_batch', list: entries, characters: chars };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `masks_${entries.length}个_${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    UI.showToast(`已导出 ${entries.length} 个面具`);
+    const saved = await Utils.saveFile(blob, `masks_${entries.length}个_${new Date().toISOString().slice(0,10)}.json`);
+    if (saved) UI.showToast(`已导出 ${entries.length} 个面具`);
   }
 
   // 导入面具：支持 tianshu_masks_v1_batch 批量包，也支持单个面具 JSON
-  function importMask() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,application/json';
-    input.style.display = 'none';
-    document.body.appendChild(input);
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) { input.remove(); return; }
-      try {
-        const text = await file.text();
-        const json = JSON.parse(text);
-        const list = await getMaskList();
-        let count = 0;
-        if (json.__format === 'tianshu_masks_v1_batch' && Array.isArray(json.list) && Array.isArray(json.characters)) {
-          for (const entry of json.list) {
-            const newId = 'mask_' + Utils.uuid().slice(0, 8);
-            const data = json.characters.find(c => c.id === entry.id) || { id: newId };
-            const cloned = { ...data, id: newId };
-            await DB.put('characters', cloned);
-            list.push({ id: newId, name: entry.name || '导入面具', worldviewId: entry.worldviewId || '' });
-            count++;
-          }
-        } else if (json.__format === 'tianshu_mask_v1' && json.entry && json.character) {
+  async function importMask() {
+    const file = await Utils.pickFile({ accept: '.json,application/json' });
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const list = await getMaskList();
+      let count = 0;
+      if (json.__format === 'tianshu_masks_v1_batch' && Array.isArray(json.list) && Array.isArray(json.characters)) {
+        for (const entry of json.list) {
           const newId = 'mask_' + Utils.uuid().slice(0, 8);
-          const cloned = { ...json.character, id: newId };
+          const data = json.characters.find(c => c.id === entry.id) || { id: newId };
+          const cloned = { ...data, id: newId };
           await DB.put('characters', cloned);
-          list.push({ id: newId, name: json.entry.name || '导入面具', worldviewId: json.entry.worldviewId || '' });
-          count = 1;
-        } else {
-          UI.showToast('无法识别的面具文件格式', 3000);
-          return;
+          list.push({ id: newId, name: entry.name || '导入面具', worldviewId: entry.worldviewId || '' });
+          count++;
         }
-        await saveMaskList(list);
-        await renderMaskList();
-        UI.showToast(`已导入 ${count} 个面具`);
-      } catch (err) {
-        console.error('[importMask]', err);
-        UI.showToast('导入失败：' + (err.message || err));
-      } finally {
-        input.remove();
+      } else if (json.__format === 'tianshu_mask_v1' && json.entry && json.character) {
+        const newId = 'mask_' + Utils.uuid().slice(0, 8);
+        const cloned = { ...json.character, id: newId };
+        await DB.put('characters', cloned);
+        list.push({ id: newId, name: json.entry.name || '导入面具', worldviewId: json.entry.worldviewId || '' });
+        count = 1;
+      } else {
+        UI.showToast('无法识别的面具文件格式', 3000);
+        return;
       }
-    };
-    input.click();
+      await saveMaskList(list);
+      await renderMaskList();
+      UI.showToast(`已导入 ${count} 个面具`);
+    } catch (err) {
+      console.error('[importMask]', err);
+      UI.showToast('导入失败：' + (err.message || err));
+    }
   }
 
   // ===== 面具自动保存 =====
@@ -664,6 +649,24 @@ if (placeholder) placeholder.style.display = '';
   function removeAvatar() {
     currentAvatar = null;
     updateAvatarPreview();
+  }
+
+  // AI 生成头像：有生图描述就只用「名字 + 生图描述」，没填退回名字 + 设定
+  async function aiGenAvatar() {
+    const g = id => (document.getElementById(id)?.value || '').trim();
+    const parts = [];
+    const name = g('char-name'); if (name) parts.push(name);
+    const drawPrompt = g('char-drawPrompt');
+    if (drawPrompt) {
+      parts.push(drawPrompt);
+    } else {
+      const bg = g('char-background'); if (bg) parts.push(bg);
+    }
+    const dataUrl = await Utils.promptAiAvatar(parts.join('，'), { maxSize: 256, quality: 0.85 });
+    if (!dataUrl) return;
+    _processAvatarDataUrl(dataUrl);
+    // 立即触发自动保存，把新头像落库
+    try { _maskAutoSave(); } catch(_) {}
   }
 
   async function save() {
@@ -1873,7 +1876,7 @@ return {
     _toggleWvDropdown, _selectWv,
   addAbility, removeAbility, editAbility, saveAbility, deleteAbility, closeAbilityEdit, closeAbilityModal,
   addItem, removeItem, editItem, saveItem, deleteItem, closeItemEdit, closeItemModal, moveItemToStorage, addItemDirect, removeItemByName, cloneMask, cloneMaskFrom, isolateMaskForConv, maskHasContent,
-  onAvatarPicked, pickAvatar, removeAvatar, searchMasks,
+  onAvatarPicked, pickAvatar, removeAvatar, aiGenAvatar, searchMasks,
     openAiGen, closeAiGen, runAiGen,
     clearBirthday, _toggleBirthDropdown, _selectBirth,
   toggleManageMode, toggleSelectAll, batchClone, batchDelete, deleteCurrent, _onCardClick, exitManageMode,

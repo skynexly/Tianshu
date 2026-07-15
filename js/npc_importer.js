@@ -135,67 +135,52 @@ const NpcImporter = (() => {
   async function openImporter(opts = {}) {
     const target = opts.target || 'global';
 
-    // 1. 创建隐藏 file input
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,application/json';
-    input.multiple = true;
-    input.style.display = 'none';
-    document.body.appendChild(input);
+    // 1. 选文件（统一走 Utils.pickFile，规避 WebView 拒绝 click）
+    const files = await Utils.pickFile({ accept: '.json,application/json', multiple: true });
+    if (!files || files.length === 0) return;
 
-    input.onchange = async () => {
+    // 2. 读取 + 解析所有文件
+    const allRaw = [];
+    const errors = [];
+    for (const f of files) {
       try {
-        const files = Array.from(input.files || []);
-        if (files.length === 0) return;
-
-        // 2. 读取 + 解析所有文件
-        const allRaw = [];
-        const errors = [];
-        for (const f of files) {
-          try {
-            const text = await _readFileAsText(f);
-            const parsed = JSON.parse(text);
-            const npcs = _extractNpcArray(parsed, f.name);
-            if (npcs.length === 0) {
-              errors.push(`${f.name}：未识别出 NPC`);
-            } else {
-              allRaw.push(...npcs);
-            }
-          } catch (e) {
-            errors.push(`${f.name}：${e.message || '解析失败'}`);
-          }
+        const text = await _readFileAsText(f);
+        const parsed = JSON.parse(text);
+        const npcs = _extractNpcArray(parsed, f.name);
+        if (npcs.length === 0) {
+          errors.push(`${f.name}：未识别出 NPC`);
+        } else {
+          allRaw.push(...npcs);
         }
-
-        if (allRaw.length === 0) {
-          UI.showToast(errors.length > 0 ? errors[0] : '没有可导入的 NPC', 3000);
-          return;
-        }
-
-        // 3. 标准化
-        const normalized = [];
-        const skipped = [];
-        allRaw.forEach((item, idx) => {
-          const npc = _normalize(item.raw);
-          if (npc) {
-            normalized.push({ npc, sourceFile: item.sourceFile });
-          } else {
-            skipped.push(`第 ${idx + 1} 条（${item.sourceFile}）：缺少姓名`);
-          }
-        });
-
-        if (normalized.length === 0) {
-          UI.showToast('全部 NPC 缺少姓名，无法导入', 3000);
-          return;
-        }
-
-        // 4. 弹预览
-        await _showPreviewModal(normalized, target, errors, skipped, opts.onDone);
-      } finally {
-        input.remove();
+      } catch (e) {
+        errors.push(`${f.name}：${e.message || '解析失败'}`);
       }
-    };
+    }
 
-    input.click();
+    if (allRaw.length === 0) {
+      UI.showToast(errors.length > 0 ? errors[0] : '没有可导入的 NPC', 3000);
+      return;
+    }
+
+    // 3. 标准化
+    const normalized = [];
+    const skipped = [];
+    allRaw.forEach((item, idx) => {
+      const npc = _normalize(item.raw);
+      if (npc) {
+        normalized.push({ npc, sourceFile: item.sourceFile });
+      } else {
+        skipped.push(`第 ${idx + 1} 条（${item.sourceFile}）：缺少姓名`);
+      }
+    });
+
+    if (normalized.length === 0) {
+      UI.showToast('全部 NPC 缺少姓名，无法导入', 3000);
+      return;
+    }
+
+    // 4. 弹预览
+    await _showPreviewModal(normalized, target, errors, skipped, opts.onDone);
   }
 
   // ========== 预览弹窗 ==========

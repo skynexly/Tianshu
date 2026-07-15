@@ -402,13 +402,8 @@ if (!isHidden && _currentExtSubtab === 'npc') {
     if (wvArr.length === 0) { UI.showToast('未找到可导出的世界观'); return; }
     const exportData = { worldviews: wvArr };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `worldviews_${wvArr.length}个_${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    UI.showToast(`已导出 ${wvArr.length} 个世界观`);
+    const saved = await Utils.saveFile(blob, `worldviews_${wvArr.length}个_${new Date().toISOString().slice(0,10)}.json`);
+    if (saved) UI.showToast(`已导出 ${wvArr.length} 个世界观`);
   }
 
   // 批量复制选中的世界观（平行世界：复制一份再改）
@@ -1011,7 +1006,7 @@ function _syncBuiltinRestoreButton(w) {
     });
   }
   function _attachWVNpcAutoSave() {
-    ['wv-npc-name','wv-npc-aliases','wv-npc-onlinename','wv-npc-summary','wv-npc-detail'].forEach(id => {
+    ['wv-npc-name','wv-npc-aliases','wv-npc-onlinename','wv-npc-summary','wv-npc-detail','wv-npc-drawdesc'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.removeEventListener('input', _wvNpcAutoSave); el.addEventListener('input', _wvNpcAutoSave); }
     });
@@ -1449,46 +1444,35 @@ _updatePhoneAppsLabel();
       globalNpcs: JSON.parse(JSON.stringify(npcs)),
     };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = wvName + '-扩展设定.json';
-    a.click();
-    URL.revokeObjectURL(url);
     const total = festivals.length + knowledges.length + evts.length + npcs.length;
-    UI.showToast(`已导出 ${total} 条`);
+    const saved = await Utils.saveFile(blob, wvName + '-扩展设定.json');
+    if (saved) UI.showToast(`已导出 ${total} 条`);
   }
 
   // 导入扩展设定（单一入口，内部静默识别两种格式）
   async function importExtended() {
     const menu = document.getElementById('wv-ext-io-menu');
     if (menu) menu.classList.add('hidden');
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = async () => {
-      const file = input.files[0];
-      if (!file) return;
-      try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        // 格式 sniff：优先原生格式，否则尝试 entries 格式
-        if (data._format === 'tianshu-extended') {
-          return _importNativeFormat(data);
-        }
-        if (data.entries && typeof data.entries === 'object') {
-          return _importEntriesFormat(data);
-        }
-        // 兜底：直接是数组（少数情况）
-        if (Array.isArray(data)) {
-          return _importEntriesFormat({ entries: data });
-        }
-        UI.showToast('文件格式不识别', 3000);
-      } catch(e) {
-        UI.showToast('导入失败：' + e.message, 3000);
+    const file = await Utils.pickFile({ accept: '.json' });
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      // 格式 sniff：优先原生格式，否则尝试 entries 格式
+      if (data._format === 'tianshu-extended') {
+        return _importNativeFormat(data);
       }
-    };
-    input.click();
+      if (data.entries && typeof data.entries === 'object') {
+        return _importEntriesFormat(data);
+      }
+      // 兜底：直接是数组（少数情况）
+      if (Array.isArray(data)) {
+        return _importEntriesFormat({ entries: data });
+      }
+      UI.showToast('文件格式不识别', 3000);
+    } catch(e) {
+      UI.showToast('导入失败：' + e.message, 3000);
+    }
   }
 
   // 导入原生格式
@@ -2061,10 +2045,17 @@ return;
     const g = id => (document.getElementById(id)?.value || '').trim();
     const parts = [];
     const name = g('wv-npc-name'); if (name) parts.push(name);
-    const aliases = g('wv-npc-aliases'); if (aliases) parts.push(aliases);
-    const onlineName = g('wv-npc-onlinename'); if (onlineName) parts.push(onlineName);
-    const summary = g('wv-npc-summary'); if (summary) parts.push(summary);
-    const detail = g('wv-npc-detail'); if (detail) parts.push(detail);
+    // 有专属生图描述：只用「名字 + 生图描述」，不喂整段人设（用户可在弹窗里自己再编辑）
+    // 没填：退回老逻辑，拼别名/网名/简介/完整设定
+    const drawDesc = g('wv-npc-drawdesc');
+    if (drawDesc) {
+      parts.push(drawDesc);
+    } else {
+      const aliases = g('wv-npc-aliases'); if (aliases) parts.push(aliases);
+      const onlineName = g('wv-npc-onlinename'); if (onlineName) parts.push(onlineName);
+      const summary = g('wv-npc-summary'); if (summary) parts.push(summary);
+      const detail = g('wv-npc-detail'); if (detail) parts.push(detail);
+    }
     const dataUrl = await Utils.promptAiAvatar(parts.join('，'), { maxSize: 256, quality: 0.85 });
     if (!dataUrl) return;
     try {
@@ -2133,14 +2124,15 @@ document.getElementById('wv-npc-name').value = npc.name || '';
 document.getElementById('wv-npc-aliases').value = npc.aliases || '';
 const wvNpcOnline1 = document.getElementById('wv-npc-onlinename');
 if (wvNpcOnline1) wvNpcOnline1.value = npc.onlineName || '';
-document.getElementById('wv-npc-summary').value = npc.summary || '';
-document.getElementById('wv-npc-detail').value = npc.detail || '';
+ document.getElementById('wv-npc-summary').value = npc.summary || '';
+ document.getElementById('wv-npc-detail').value = npc.detail || '';
+ { const dd = document.getElementById('wv-npc-drawdesc'); if (dd) dd.value = npc.drawDesc || ''; }
 
     UI.showPanel('wv-npc', 'forward');
     requestAnimationFrame(_attachWVNpcAutoSave);
     _refreshEditingNpcAvatar();
     const resizeNPCEdit = () => {
-      ['wv-npc-summary', 'wv-npc-detail'].forEach(id => {
+      ['wv-npc-summary', 'wv-npc-detail', 'wv-npc-drawdesc'].forEach(id => {
         const ta = document.getElementById(id);
         if (!ta) return;
         ta.style.height = 'auto';
@@ -2165,6 +2157,7 @@ document.getElementById('wv-npc-detail').value = npc.detail || '';
       npc.onlineName = (document.getElementById('wv-npc-onlinename')?.value || '').trim();
       npc.summary = document.getElementById('wv-npc-summary').value.trim();
       npc.detail = document.getElementById('wv-npc-detail').value.trim();
+      npc.drawDesc = (document.getElementById('wv-npc-drawdesc')?.value || '').trim();
       await _saveEditingWV(w);
       if (!silent) UI.showToast('常驻角色已保存');
       _renderGlobalNpcs(w.globalNpcs);
@@ -2179,6 +2172,7 @@ document.getElementById('wv-npc-detail').value = npc.detail || '';
     npc.onlineName = (document.getElementById('wv-npc-onlinename')?.value || '').trim();
     npc.summary = document.getElementById('wv-npc-summary').value.trim();
     npc.detail = document.getElementById('wv-npc-detail').value.trim();
+    npc.drawDesc = (document.getElementById('wv-npc-drawdesc')?.value || '').trim();
 
     await _saveEditingWV(w);
     if (!silent) UI.showToast('角色已保存');
@@ -2332,13 +2326,8 @@ document.getElementById('wv-npc-detail').value = npc.detail || '';
     };
     try {
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name + '.json';
-      a.click();
-      URL.revokeObjectURL(url);
-      UI.showToast(`已导出角色「${name}」`);
+      const saved = await Utils.saveFile(blob, name + '.json');
+      if (saved) UI.showToast(`已导出角色「${name}」`);
     } catch(e) {
       UI.showToast('导出失败：' + (e.message || e), 3000);
     }
@@ -3295,16 +3284,17 @@ function _editingFactionIdxForImporter() { return _editFactionIdx; }
     document.getElementById('wv-npc-aliases').value = npc.aliases || '';
     const wvNpcOnline2 = document.getElementById('wv-npc-onlinename');
     if (wvNpcOnline2) wvNpcOnline2.value = npc.onlineName || '';
-    document.getElementById('wv-npc-summary').value = npc.summary || '';
-    document.getElementById('wv-npc-detail').value = npc.detail || '';
-    const sumLbl = document.getElementById('wv-npc-summary-label');
-    if (sumLbl) sumLbl.style.display = 'none';
+     document.getElementById('wv-npc-summary').value = npc.summary || '';
+     document.getElementById('wv-npc-detail').value = npc.detail || '';
+     { const dd = document.getElementById('wv-npc-drawdesc'); if (dd) dd.value = npc.drawDesc || ''; }
+     const sumLbl = document.getElementById('wv-npc-summary-label');
+     if (sumLbl) sumLbl.style.display = 'none';
 
     UI.showPanel('wv-npc', 'forward');
     requestAnimationFrame(_attachWVNpcAutoSave);
     _refreshEditingNpcAvatar();
     const resize = () => {
-      ['wv-npc-summary', 'wv-npc-detail'].forEach(id => {
+      ['wv-npc-summary', 'wv-npc-detail', 'wv-npc-drawdesc'].forEach(id => {
         const ta = document.getElementById(id);
         if (!ta) return;
         ta.style.height = 'auto';
@@ -3779,63 +3769,57 @@ ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="1
 
   // 从文档导入常驻条目（txt/md/json/docx/pdf）：按空行分段，每段一条常驻知识
   async function importCustomsFromDoc() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.txt,.md,.json,.docx,.pdf';
-    input.onchange = async (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      let text = '';
-      try {
-        UI.showToast('正在解析文档...', 1500);
-        text = await Utils.readFileAsText(file);
-      } catch (err) {
-        UI.showToast('解析失败：' + (err && err.message ? err.message : '无法读取该文档'), 3000);
-        return;
+    const file = await Utils.pickFile({ accept: '.txt,.md,.json,.docx,.pdf' });
+    if (!file) return;
+    let text = '';
+    try {
+      UI.showToast('正在解析文档...', 1500);
+      text = await Utils.readFileAsText(file);
+    } catch (err) {
+      UI.showToast('解析失败：' + (err && err.message ? err.message : '无法读取该文档'), 3000);
+      return;
+    }
+    text = String(text || '').replace(/\r\n/g, '\n').trim();
+    if (!text) { UI.showToast('文档中没有可导入的文本', 2500); return; }
+    // 按分隔线（单独一行的 --- / === / ***，至少3个）分段
+    let segs = [];
+    { const _lines = text.split('\n'); let _buf = [];
+      const _SEP = /^[ \t]*[-=*]{3,}[ \t]*$/;
+      for (const _ln of _lines) {
+        if (_SEP.test(_ln)) { const _s = _buf.join('\n').trim(); if (_s) segs.push(_s); _buf = []; }
+        else { _buf.push(_ln); }
       }
-      text = String(text || '').replace(/\r\n/g, '\n').trim();
-      if (!text) { UI.showToast('文档中没有可导入的文本', 2500); return; }
-      // 按分隔线（单独一行的 --- / === / ***，至少3个）分段
-      let segs = [];
-      { const _lines = text.split('\n'); let _buf = [];
-        const _SEP = /^[ \t]*[-=*]{3,}[ \t]*$/;
-        for (const _ln of _lines) {
-          if (_SEP.test(_ln)) { const _s = _buf.join('\n').trim(); if (_s) segs.push(_s); _buf = []; }
-          else { _buf.push(_ln); }
-        }
-        const _sLast = _buf.join('\n').trim(); if (_sLast) segs.push(_sLast);
+      const _sLast = _buf.join('\n').trim(); if (_sLast) segs.push(_sLast);
+    }
+    if (segs.length === 0) segs = [text];
+    const CAP = 100;
+    const docName = (file.name || '文档').replace(/\.[^.]+$/, '');
+    const _doImport = (list) => {
+      for (const seg of list) {
+        const firstLine = seg.split('\n')[0].trim();
+        const name = (firstLine.slice(0, 20) || docName) + (firstLine.length > 20 ? '...' : '');
+        const item = _defaultCustom();
+        item.name = name;
+        item.content = seg;
+        item.enabled = true;
+        item.keywordTrigger = false;
+        item.position = 'system_top';
+        item.depth = 0;
+        customsData.push(item);
       }
-      if (segs.length === 0) segs = [text];
-      const CAP = 100;
-      const docName = (file.name || '文档').replace(/\.[^.]+$/, '');
-      const _doImport = (list) => {
-        for (const seg of list) {
-          const firstLine = seg.split('\n')[0].trim();
-          const name = (firstLine.slice(0, 20) || docName) + (firstLine.length > 20 ? '...' : '');
-          const item = _defaultCustom();
-          item.name = name;
-          item.content = seg;
-          item.enabled = true;
-          item.keywordTrigger = false;
-          item.position = 'system_top';
-          item.depth = 0;
-          customsData.push(item);
-        }
-        _renderCustoms(customsData);
-        _wvExtAutoSave();
-        UI.showToast('已导入 ' + list.length + ' 条常驻条目', 2500);
-      };
-      if (segs.length > CAP) {
-        const ok1 = await UI.showConfirm('导入文档', `从《${docName}》解析出 ${segs.length} 段，超过建议上限 ${CAP} 段。常驻条目每轮都会全量注入，过多会占用大量上下文。\n是否只导入前 ${CAP} 段？（推荐）`);
-        if (ok1) { _doImport(segs.slice(0, CAP)); return; }
-        const ok2 = await UI.showConfirm('全部导入？', `确定要把全部 ${segs.length} 段都导入吗？内容很多时会明显占用上下文并增加消耗，建议导入后逐条改为「动态（关键词触发）」。`);
-        if (ok2) _doImport(segs);
-      } else {
-        const ok = await UI.showConfirm('导入文档', `从《${docName}》解析出 ${segs.length} 段，将作为常驻知识条目导入。\n\n分段规则：用单独一行的分隔线（--- 或 === 或 ***，至少3个符号）来分隔条目，分隔线之间的内容为一条。若整篇没有分隔线，则作为一条导入。\n\n提示：常驻条目每轮都会注入，内容较多时可在编辑后逐条改为「动态（关键词触发）」以节省上下文。\n确定导入吗？`);
-        if (ok) _doImport(segs);
-      }
+      _renderCustoms(customsData);
+      _wvExtAutoSave();
+      UI.showToast('已导入 ' + list.length + ' 条常驻条目', 2500);
     };
-    input.click();
+    if (segs.length > CAP) {
+      const ok1 = await UI.showConfirm('导入文档', `从《${docName}》解析出 ${segs.length} 段，超过建议上限 ${CAP} 段。常驻条目每轮都会全量注入，过多会占用大量上下文。\n是否只导入前 ${CAP} 段？（推荐）`);
+      if (ok1) { _doImport(segs.slice(0, CAP)); return; }
+      const ok2 = await UI.showConfirm('全部导入？', `确定要把全部 ${segs.length} 段都导入吗？内容很多时会明显占用上下文并增加消耗，建议导入后逐条改为「动态（关键词触发）」。`);
+      if (ok2) _doImport(segs);
+    } else {
+      const ok = await UI.showConfirm('导入文档', `从《${docName}》解析出 ${segs.length} 段，将作为常驻知识条目导入。\n\n分段规则：用单独一行的分隔线（--- 或 === 或 ***，至少3个符号）来分隔条目，分隔线之间的内容为一条。若整篇没有分隔线，则作为一条导入。\n\n提示：常驻条目每轮都会注入，内容较多时可在编辑后逐条改为「动态（关键词触发）」以节省上下文。\n确定导入吗？`);
+      if (ok) _doImport(segs);
+    }
   }
 
   function editCustom(i) {
@@ -7020,62 +7004,47 @@ async function pickDefaultTheme(value) {
     if (!w) { UI.showToast('世界观数据不存在'); return; }
     const exportData = { worldviews: [w] };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = (w.name || '世界观') + '.json';
-    a.click();
-    URL.revokeObjectURL(url);
-    UI.showToast('已导出「' + w.name + '」');
+    const saved = await Utils.saveFile(blob, (w.name || '世界观') + '.json');
+    if (saved) UI.showToast('已导出「' + w.name + '」');
   }
 
   // 导入单个世界观
   async function importSingle() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.style.display = 'none';
-    document.body.appendChild(input);
-    input.onchange = async (e) => {
-      const file = (e && e.target && e.target.files && e.target.files[0]) || (input.files && input.files[0]);
-      if (!file) { UI.showToast('未选择文件', 2000); input.remove(); return; }
-      try {
-        // 用 FileReader 读取，兼容 file.text() 不可用的内核（鸿蒙/老 WebKit 等）
-        const text = await _readFileAsText(file);
-        if (!text || !text.trim()) { UI.showToast('文件为空或读取失败', 3000); return; }
-        const data = JSON.parse(text);
-        const wvArr = data.worldviews;
-        if (!wvArr || !Array.isArray(wvArr) || wvArr.length === 0) {
-          UI.showToast('文件格式不正确，需包含 worldviews 数组', 3000);
-          return;
-        }
-        let count = 0;
-        const list = await getWorldviewList();
-        for (const w of wvArr) {
-          if (!w.id) w.id = 'wv_' + Utils.uuid().slice(0, 8);
-          const existing = list.find(e => e.id === w.id);
-          if (existing) {
-            if (!await UI.showConfirm('覆盖', `已存在「${existing.name}」，确定覆盖？`)) continue;
-            existing.name = w.name;
-            existing.description = w.description;
-            existing.icon = w.icon || 'world';
-            existing.iconImage = w.iconImage || '';
-          } else {
-            list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || 'world', iconImage: w.iconImage || '' });
-          }
-          await DB.put('worldviews', w);
-          count++;
-        }
-        await saveWorldviewList(list);
-        await load();
-        await UI.showAlert('导入成功', `已导入 ${count} 个世界观`);
-      } catch(e) {
-        await UI.showAlert('导入失败', (e && e.message ? e.message : String(e)));
-      } finally {
-        input.remove();
+    const file = await Utils.pickFile({ accept: '.json' });
+    if (!file) { return; }
+    try {
+      // 用 FileReader 读取，兼容 file.text() 不可用的内核（鸿蒙/老 WebKit 等）
+      const text = await _readFileAsText(file);
+      if (!text || !text.trim()) { UI.showToast('文件为空或读取失败', 3000); return; }
+      const data = JSON.parse(text);
+      const wvArr = data.worldviews;
+      if (!wvArr || !Array.isArray(wvArr) || wvArr.length === 0) {
+        UI.showToast('文件格式不正确，需包含 worldviews 数组', 3000);
+        return;
       }
-    };
-    input.click();
+      let count = 0;
+      const list = await getWorldviewList();
+      for (const w of wvArr) {
+        if (!w.id) w.id = 'wv_' + Utils.uuid().slice(0, 8);
+        const existing = list.find(e => e.id === w.id);
+        if (existing) {
+          if (!await UI.showConfirm('覆盖', `已存在「${existing.name}」，确定覆盖？`)) continue;
+          existing.name = w.name;
+          existing.description = w.description;
+          existing.icon = w.icon || 'world';
+          existing.iconImage = w.iconImage || '';
+        } else {
+          list.push({ id: w.id, name: w.name || '未命名', description: w.description || '', icon: w.icon || 'world', iconImage: w.iconImage || '' });
+        }
+        await DB.put('worldviews', w);
+        count++;
+      }
+      await saveWorldviewList(list);
+      await load();
+      await UI.showAlert('导入成功', `已导入 ${count} 个世界观`);
+    } catch(e) {
+      await UI.showAlert('导入失败', (e && e.message ? e.message : String(e)));
+    }
   }
 
   // 读取文件文本：优先 file.text()，不可用时降级到 FileReader（兼容鸿蒙可拓/老内核）
@@ -7716,34 +7685,30 @@ async function openPhoneAppsEditor() {
       UI.showToast('已从当前住所复制为模板', 1600);
     } catch(e) { UI.showToast('复制失败：' + (e.message || e), 2500); }
   };
-  if (tplImportBtn) tplImportBtn.onclick = () => {
-    const input = document.createElement('input');
-    input.type = 'file'; input.accept = '.json,application/json';
-    input.onchange = async () => {
-      const file = input.files[0]; if (!file) return;
-      try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        let tpl = null;
-        if (data.__format === 'tianshu_cottage_v1' && Array.isArray(data.houses) && data.houses.length) {
-          tpl = JSON.parse(JSON.stringify(data.houses[0]));
-        } else if (data.name && (data.floors || data.rooms)) {
-          tpl = JSON.parse(JSON.stringify(data));
-        } else { UI.showToast('无法识别的住所数据', 2500); return; }
-        delete tpl.id; delete tpl.isCurrent; delete tpl.image;
-        const ww = await _getEditingWV();
-        if (!ww) return;
-        ww.phoneApps = ww.phoneApps || {};
-        ww.phoneApps.cottage = ww.phoneApps.cottage || {};
-        ww.phoneApps.cottage.initialHouse = tpl;
-        await _saveEditingWV(ww);
-        const roomCount = (tpl.floors || []).reduce((n, f) => n + (f.rooms || []).length, 0) || (tpl.rooms || []).length;
-        const st = document.getElementById('pa-cottage-template-status');
-        if (st) { st.textContent = `已设置：${tpl.name || '住所'}（${roomCount} 个房间）`; st.style.color = 'var(--accent)'; }
-        UI.showToast('已导入住所模板', 1600);
-      } catch(e) { UI.showToast('导入失败：' + (e.message || e), 2500); }
-    };
-    input.click();
+  if (tplImportBtn) tplImportBtn.onclick = async () => {
+    const file = await Utils.pickFile({ accept: '.json,application/json' });
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      let tpl = null;
+      if (data.__format === 'tianshu_cottage_v1' && Array.isArray(data.houses) && data.houses.length) {
+        tpl = JSON.parse(JSON.stringify(data.houses[0]));
+      } else if (data.name && (data.floors || data.rooms)) {
+        tpl = JSON.parse(JSON.stringify(data));
+      } else { UI.showToast('无法识别的住所数据', 2500); return; }
+      delete tpl.id; delete tpl.isCurrent; delete tpl.image;
+      const ww = await _getEditingWV();
+      if (!ww) return;
+      ww.phoneApps = ww.phoneApps || {};
+      ww.phoneApps.cottage = ww.phoneApps.cottage || {};
+      ww.phoneApps.cottage.initialHouse = tpl;
+      await _saveEditingWV(ww);
+      const roomCount = (tpl.floors || []).reduce((n, f) => n + (f.rooms || []).length, 0) || (tpl.rooms || []).length;
+      const st = document.getElementById('pa-cottage-template-status');
+      if (st) { st.textContent = `已设置：${tpl.name || '住所'}（${roomCount} 个房间）`; st.style.color = 'var(--accent)'; }
+      UI.showToast('已导入住所模板', 1600);
+    } catch(e) { UI.showToast('导入失败：' + (e.message || e), 2500); }
   };
   if (tplClearBtn) tplClearBtn.onclick = async () => {
     const ww = await _getEditingWV();

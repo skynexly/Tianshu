@@ -243,10 +243,75 @@ window.FabDrag = (function() {
     apply();
   }
 
+  // ===== 悬浮球自定义图标 + 尺寸（桌宠）=====
+  // 图标存 AppIcons（key: __fab_phone__/__fab_gaiden__/__fab_backstage__），尺寸全局。
+  const _FAB_ICON_KEY = {
+    'phone-fab': '__fab_phone__',
+    'gaiden-fab': '__fab_gaiden__',
+    'backstage-fab': '__fab_backstage__',
+  };
+  const _FAB_SIZE_PX = { sm: 36, md: 52, lg: 72, xl: 96 };
+
+  // 应用自定义图标 + 尺寸到三个 fab；改完 reclamp 一次防放大后越界。
+  function applyFabCustom() {
+    if (typeof AppIcons === 'undefined') return;
+    let size = 'sm';
+    try { size = AppIcons.getFabSize(); } catch(_) {}
+    const px = _FAB_SIZE_PX[size] || 36;
+    let bare = true;
+    try { bare = AppIcons.getFabBare(); } catch(_) {}
+    FAB_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      let icon = null;
+      try { icon = AppIcons.get(_FAB_ICON_KEY[id]); } catch(_) {}
+      // 尺寸（全局）：覆盖内联 width/height（gaiden/backstage 内联写死了 36px）
+      el.style.setProperty('width', px + 'px', 'important');
+      el.style.setProperty('height', px + 'px', 'important');
+      // 图标
+      let img = el.querySelector('.fab-custom-img');
+      if (icon) {
+        el.classList.add('fab-has-custom');
+        el.classList.toggle('fab-custom', bare); // 异形开=裸露；关=保留 accent 圆底框
+        if (!img) {
+          img = document.createElement('img');
+          img.className = 'fab-custom-img';
+          el.insertBefore(img, el.firstChild);
+        }
+        // 非异形时图标塞进圆框，用 cover 填满更好看；异形用 contain 完整显示
+        img.style.objectFit = bare ? 'contain' : 'cover';
+        if (img.getAttribute('src') !== icon) img.src = icon;
+        // 隐藏原生 SVG（保留在 DOM，恢复默认时复原）
+        el.querySelectorAll(':scope > svg').forEach(s => { s.style.display = 'none'; });
+      } else {
+        el.classList.remove('fab-custom');
+        el.classList.remove('fab-has-custom');
+        if (img) img.remove();
+        el.querySelectorAll(':scope > svg').forEach(s => { s.style.display = ''; });
+      }
+    });
+    // reclamp：尺寸变了，位置可能越界
+    try {
+      document.querySelectorAll('.floating-fab').forEach(el => {
+        if (!el._fabDragAttached) return;
+        const saved = _readPositions()[el.id];
+        if (!saved) return;
+        const rect = el.getBoundingClientRect();
+        const c = _clamp(saved.x, saved.y, rect.width, rect.height);
+        _applyPos(el, c.x, c.y);
+        _savePos(el.id, c.x, c.y);
+      });
+    } catch(_) {}
+  }
+
+  // 供 UI 用：换图标 / 恢复默认 / 读图标
+  function getFabIconKey(fabId) { return _FAB_ICON_KEY[fabId] || null; }
+
   // 初始化
   function init() {
     attachAll();
     apply();
+    try { applyFabCustom(); } catch(_) {}
     window.addEventListener('resize', _onResize);
     window.addEventListener('orientationchange', _onResize);
   }
@@ -257,5 +322,5 @@ window.FabDrag = (function() {
     init();
   }
 
-  return { attach, attachAll, init, isVisible, setVisible, apply, FAB_IDS };
+  return { attach, attachAll, init, isVisible, setVisible, apply, applyFabCustom, getFabIconKey, FAB_IDS };
 })();

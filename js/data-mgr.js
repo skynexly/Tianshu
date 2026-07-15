@@ -114,6 +114,52 @@ const DataMgr = (() => {
     return parts.join('');
   }
 
+  // gzip 压缩：字符串 → gzip Blob。浏览器原生 CompressionStream，不引库。
+  async function _gzip(str) {
+    const enc = new TextEncoder().encode(str);
+    const cs = new Response(new Blob([enc]).stream().pipeThrough(new CompressionStream('gzip')));
+    return await cs.blob();
+  }
+  // gzip 解压：Blob/ArrayBuffer → 原始字符串
+  async function _gunzip(blob) {
+    const ds = new Response(blob.stream().pipeThrough(new DecompressionStream('gzip')));
+    return await ds.text();
+  }
+  // 当前环境是否支持原生 gzip（老 webview 可能没有）
+  function _gzipSupported() {
+    return typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+  }
+
+  // v709.80：下载统一走 Utils.saveFile（两步式，规避 WebView 手势窗口丢失）。
+  // 保留函数名，内部委托；额外记录 last_export_at。resolve(true=已保存/false=取消)。
+  async function _presentDownload(blob, fileName) {
+    const saved = await Utils.saveFile(blob, fileName);
+    if (saved) { try { localStorage.setItem('tianshu_last_export_at', String(Date.now())); } catch(_) {} }
+    return saved;
+  }
+  // 支持则压成 baseName.json.gz，不支持则降级为 baseName.json。
+  // 返回 { saved, gz }：saved=用户是否真的点了保存；gz=是否压缩。
+  async function _exportJsonMaybeGz(jsonStr, baseName) {
+    if (getExportCompress() && _gzipSupported()) {
+      try {
+        const blob = await _gzip(jsonStr);
+        const saved = await _presentDownload(blob, baseName + '.json.gz');
+        return { saved, gz: true };
+      } catch(_) { /* 压缩失败降级为明文 */ }
+    }
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const saved = await _presentDownload(blob, baseName + '.json');
+    return { saved, gz: false };
+  }
+
+  // 导出是否压缩（全局开关）。默认开启；用户浏览器解压有岔子时可关掉出明文。
+  function getExportCompress() {
+    try { return localStorage.getItem('tianshu_export_compress') !== '0'; } catch(_) { return true; }
+  }
+  function setExportCompress(on) {
+    try { localStorage.setItem('tianshu_export_compress', on ? '1' : '0'); } catch(_) {}
+  }
+
   // 触发浏览器下载一个 JSON 字符串
   function _downloadJson(jsonStr, fileName) {
     const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -191,8 +237,9 @@ const DataMgr = (() => {
   async function exportAll() {
     try {
       const jsonStr = await buildSaveJson('full');
-      _downloadJson(jsonStr, `skynex-save-${new Date().toISOString().slice(0, 10)}.json`);
-      UI.showToast('已导出总存档', 2000);
+      const { saved, gz } = await _exportJsonMaybeGz(jsonStr, `skynex-save-${new Date().toISOString().slice(0, 10)}`);
+      if (!saved) return;
+      UI.showToast(gz ? '已导出总存档（已压缩）' : '已导出总存档', 2000);
     } catch (e) {
       console.error('[DataMgr.exportAll]', e);
       await UI.showAlert('导出失败', e.message || String(e));
@@ -236,8 +283,9 @@ const DataMgr = (() => {
   async function exportTextOnly() {
     try {
       const jsonStr = await buildSaveJson('text');
-      _downloadJson(jsonStr, `skynex-save-text-${new Date().toISOString().slice(0, 10)}.json`);
-      UI.showToast('已导出纯文字存档（不含图片）', 2500);
+      const { saved, gz } = await _exportJsonMaybeGz(jsonStr, `skynex-save-text-${new Date().toISOString().slice(0, 10)}`);
+      if (!saved) return;
+      UI.showToast(gz ? '已导出纯文字存档（已压缩，不含图片）' : '已导出纯文字存档（不含图片）', 2500);
     } catch (e) {
       console.error('[DataMgr.exportTextOnly]', e);
       await UI.showAlert('导出失败', e.message || String(e));
@@ -248,50 +296,52 @@ const DataMgr = (() => {
   async function exportLite() {
     try {
       const jsonStr = await buildSaveJson('lite');
-      _downloadJson(jsonStr, `skynex-save-lite-${new Date().toISOString().slice(0, 10)}.json`);
-      UI.showToast('已导出轻量存档（含头像，不含图库）', 2500);
+      const { saved, gz } = await _exportJsonMaybeGz(jsonStr, `skynex-save-lite-${new Date().toISOString().slice(0, 10)}`);
+      if (!saved) return;
+      UI.showToast(gz ? '已导出轻量存档（已压缩，含头像，不含图库）' : '已导出轻量存档（含头像，不含图库）', 2500);
     } catch (e) {
       console.error('[DataMgr.exportLite]', e);
       await UI.showAlert('导出失败', e.message || String(e));
     }
   }
 
-  function importAll() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.style.display = 'none';
-    document.body.appendChild(input);
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) { input.remove(); return; }
-      try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        if (!data.version) throw new Error('无效的存档文件');
-
-        const isTextOnly = !!data.textOnly;
-        const isLite = !!data.lite;
-        const confirmMsg = isLite
-          ? '这是轻量存档（含文字和各类头像，不含生成图库）。导入会覆盖文字数据和头像，并保留你当前设备上的生成图库（不会被空图覆盖）。确定继续？'
-          : isTextOnly
-          ? '这是纯文字存档（不含任何图片）。导入会覆盖文字数据，并保留你当前设备上已有的图片（不会用存档里的空图覆盖）。注意：如果导入到一台没有这些图的新设备，那些图就会是空的。确定继续？'
-          : '导入将覆盖当前所有数据，确定继续？';
-        if (!await UI.showConfirm('导入存档', confirmMsg)) return;
-
-        await importFromData(data);
-
-        await UI.showAlert('导入成功', isLite ? '文字数据和各类头像已恢复。生成图库保留了本机现有的；手机里的壁纸/封面等内联大图因为轻量存档不含它们，会是空的（恢复默认）。页面将自动刷新' : isTextOnly ? '文字数据已恢复。独立图库（生成图/头像）保留了本机现有的；手机里的壁纸/头像/封面等内联图因为纯文字存档不含它们，会是空的（恢复默认）。页面将自动刷新' : '总存档已恢复，页面将自动刷新');
-        // reload 前再兜底等一小会，确保落盘（配合 importFromData 里的 DB.flush）
-        await new Promise(r => setTimeout(r, 150));
-        location.reload();
-      } catch (e) {
-        await UI.showAlert('导入失败', e.message || String(e));
-      } finally {
-        input.remove();
+  async function importAll() {
+    // v709.80：统一走 Utils.pickFile（append+占位隐藏，规避 WebView 拒绝 click）。
+    const file = await Utils.pickFile({ accept: '.json,.gz' });
+    if (!file) return;
+    try {
+      // 按文件内容的 gzip 魔数（0x1f 0x8b）判断是否压缩，而不是靠后缀——
+      // 因为下载器/传输过程常会把 .gz 后缀改掉或吞掉，光看文件名不可靠。
+      let text;
+      const head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+      const isGz = head[0] === 0x1f && head[1] === 0x8b;
+      if (isGz) {
+        if (!_gzipSupported()) throw new Error('当前环境不支持解压（gzip），无法导入这份压缩存档');
+        text = await _gunzip(file);
+      } else {
+        text = await file.text();
       }
-    };
-    input.click();
+      const data = JSON.parse(text);
+      if (!data.version) throw new Error('无效的存档文件');
+
+      const isTextOnly = !!data.textOnly;
+      const isLite = !!data.lite;
+      const confirmMsg = isLite
+        ? '这是轻量存档（含文字和各类头像，不含生成图库）。导入会覆盖文字数据和头像，并保留你当前设备上的生成图库（不会被空图覆盖）。确定继续？'
+        : isTextOnly
+        ? '这是纯文字存档（不含任何图片）。导入会覆盖文字数据，并保留你当前设备上已有的图片（不会用存档里的空图覆盖）。注意：如果导入到一台没有这些图的新设备，那些图就会是空的。确定继续？'
+        : '导入将覆盖当前所有数据，确定继续？';
+      if (!await UI.showConfirm('导入存档', confirmMsg)) return;
+
+      await importFromData(data);
+
+      await UI.showAlert('导入成功', isLite ? '文字数据和各类头像已恢复。生成图库保留了本机现有的；手机里的壁纸/封面等内联大图因为轻量存档不含它们，会是空的（恢复默认）。页面将自动刷新' : isTextOnly ? '文字数据已恢复。独立图库（生成图/头像）保留了本机现有的；手机里的壁纸/头像/封面等内联图因为纯文字存档不含它们，会是空的（恢复默认）。页面将自动刷新' : '总存档已恢复，页面将自动刷新');
+      // reload 前再兜底等一小会，确保落盘（配合 importFromData 里的 DB.flush）
+      await new Promise(r => setTimeout(r, 150));
+      location.reload();
+    } catch (e) {
+      await UI.showAlert('导入失败', e.message || String(e));
+    }
   }
 
   // ===== 功能模型（API 预设）单独备份 =====
@@ -325,7 +375,9 @@ const DataMgr = (() => {
         exportedAt: Date.now(),
         settings: rows
       };
-      _downloadJson(JSON.stringify(payload), `skynex-funcmodels-${new Date().toISOString().slice(0, 10)}.json`);
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      const saved = await _presentDownload(blob, `skynex-funcmodels-${new Date().toISOString().slice(0, 10)}.json`);
+      if (!saved) return;
       UI.showToast('已导出功能模型配置', 2000);
       // 提醒：该文件含 API Key，属敏感文件
       setTimeout(() => { UI.showToast('注意：该文件含 API Key，请妥善保管、勿分享', 3500); }, 800);
@@ -335,45 +387,34 @@ const DataMgr = (() => {
     }
   }
 
-  function importFuncModels() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.style.display = 'none';
-    document.body.appendChild(input);
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) { input.remove(); return; }
-      try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        // 校验：既支持功能模型专用备份，也兼容从总存档里提取（只要 settings 数组存在）
-        const rows = Array.isArray(data.settings) ? data.settings : null;
-        if (!rows) throw new Error('无效的功能模型备份文件');
-        const keep = new Set(FUNC_MODEL_KEYS);
-        const funcRows = rows.filter(r => r && keep.has(r.key));
-        if (funcRows.length === 0) throw new Error('文件里没有功能模型配置');
+  async function importFuncModels() {
+    const file = await Utils.pickFile({ accept: '.json' });
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      // 校验：既支持功能模型专用备份，也兼容从总存档里提取（只要 settings 数组存在）
+      const rows = Array.isArray(data.settings) ? data.settings : null;
+      if (!rows) throw new Error('无效的功能模型备份文件');
+      const keep = new Set(FUNC_MODEL_KEYS);
+      const funcRows = rows.filter(r => r && keep.has(r.key));
+      if (funcRows.length === 0) throw new Error('文件里没有功能模型配置');
 
-        if (!await UI.showConfirm('导入功能模型', `将用备份里的 ${funcRows.length} 项功能模型配置整组覆盖当前配置（只影响功能模型，不动对话、世界观、图库等其它数据）。确定继续？`)) {
-          input.remove();
-          return;
-        }
-
-        // 整组覆盖：只写这 20 个 key，绝不清空整个 settings 表
-        for (const r of funcRows) await _safePut('settings', r);
-        // 落盘屏障，防止 reload 打断未提交事务
-        try { if (DB.flush) await DB.flush('settings'); } catch(_) {}
-
-        await UI.showAlert('导入成功', '功能模型配置已恢复，页面将自动刷新。');
-        await new Promise(r => setTimeout(r, 150));
-        location.reload();
-      } catch (e) {
-        await UI.showAlert('导入失败', e.message || String(e));
-      } finally {
-        input.remove();
+      if (!await UI.showConfirm('导入功能模型', `将用备份里的 ${funcRows.length} 项功能模型配置整组覆盖当前配置（只影响功能模型，不动对话、世界观、图库等其它数据）。确定继续？`)) {
+        return;
       }
-    };
-    input.click();
+
+      // 整组覆盖：只写这 20 个 key，绝不清空整个 settings 表
+      for (const r of funcRows) await _safePut('settings', r);
+      // 落盘屏障，防止 reload 打断未提交事务
+      try { if (DB.flush) await DB.flush('settings'); } catch(_) {}
+
+      await UI.showAlert('导入成功', '功能模型配置已恢复，页面将自动刷新。');
+      await new Promise(r => setTimeout(r, 150));
+      location.reload();
+    } catch (e) {
+      await UI.showAlert('导入失败', e.message || String(e));
+    }
   }
 
 
@@ -678,6 +719,7 @@ const DataMgr = (() => {
   }
 
   return { exportAll, exportTextOnly, exportLite, importAll, exportFuncModels, importFuncModels, getLastExportAt,
+           getExportCompress, setExportCompress,
            buildSaveJson, importFromData,
            getStorageStats, listDrawnImages, getDrawnImageData, deleteDrawnImages, deleteDrawnImagesBefore,
            scanPhoneImages, getPhoneImageCats, clearPhoneImages, getStorageEstimate,
