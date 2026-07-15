@@ -224,7 +224,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v713';
+    const APP_VERSION = 'v713.1';
     const CHANGELOG = `○新增手机图标隐藏边框、悬浮球自定义图标
 ○新增全局生图正负提示词（功能模型→生图模型下）
 ○角色卡、面具新增生图描述框
@@ -232,7 +232,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 ○新增发送前二次确认（对话设置→输入辅助）
 ○新增论坛、好友圈等评论删除按钮
 ○部分交互的PC端适配
-○部分交互优化
+○气泡内HTML完整支持（含JS交互）
 ○一些BUG修复`;
     const SEEN_KEY = 'changelog_seen_version';
 

@@ -167,8 +167,17 @@ const Markdown = (() => {
     // 此时 <script> 仍是 \x00JS 占位符，不受影响。
     html = sanitize(html);
 
-    // <script> 块一律丢弃：innerHTML 注入的 <script> 本就不会执行，且放行有安全风险。
-    html = html.replace(/\x00JS(\d+)\x00/g, '');
+    // <script> 块：提取内容，转成运行时动态执行的触发节点
+    // （innerHTML 注入的 <script> 标签浏览器不执行，用 onerror 触发动态 createElement 绕过限制）
+    html = html.replace(/\x00JS(\d+)\x00/g, (_, idx) => {
+      const raw = scriptBlocks[parseInt(idx)] || '';
+      // 提取 <script> 标签内的代码
+      const codeMatch = raw.match(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/i);
+      if (!codeMatch || !codeMatch[1].trim()) return '';
+      // 把代码 base64 编码存进 data 属性，用 onerror 触发执行（img src="" 必然失败从而触发 onerror）
+      const encoded = btoa(unescape(encodeURIComponent(codeMatch[1])));
+      return `<img src="" style="display:none" data-script="${encoded}" onerror="(function(el){var s=document.createElement('script');s.textContent=decodeURIComponent(escape(atob(el.dataset.script)));el.parentNode.insertBefore(s,el);el.removeAttribute('onerror')})(this)">`;
+    });
 
     // v711：在 sanitize 之后恢复 HTML 沙箱 iframe——它的 srcdoc 内容不能被 sanitize 洗
     // （否则 srcdoc 里 AI 写的 onclick/script 会被删，iframe 内点不了）。iframe 有 sandbox 隔离，安全。
@@ -194,11 +203,7 @@ const Markdown = (() => {
     });
     // 无闭合的残段 <style ...> 直接删（避免把后续正文都吞进样式）
     s = s.replace(/<style\b[^>]*>/gi, '');
-    // 2. on* 内联事件属性 / javascript: 伪协议一律删除（innerHTML 注入的事件会执行，必须清洗）
-    // 删除所有 on* 内联事件属性（覆盖双引号、单引号、无引号三种写法）
-    s = s.replace(/\son[a-z0-9_-]+\s*=\s*"[^"]*"/gi, '');
-    s = s.replace(/\son[a-z0-9_-]+\s*=\s*'[^']*'/gi, '');
-    s = s.replace(/\son[a-z0-9_-]+\s*=\s*[^\s>]+/gi, '');
+    // 2. on* 内联事件属性已开放（用户自行负责），仅保留 javascript: 伪协议过滤
     // 删除 href/src 等属性里的 javascript: 伪协议
     s = s.replace(/(\b(?:href|src|xlink:href|formaction)\s*=\s*)(["']?)\s*javascript:[^"'>\s]*/gi, '$1$2');
     // 恢复被保护的 <style>（已加气泡作用域）

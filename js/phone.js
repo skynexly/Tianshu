@@ -2938,6 +2938,8 @@ function _renderHomeIcon(a) {
       if (e.button !== 0) return;
       const t = e.target;
       if (t && t.closest && t.closest('[contenteditable="true"]')) return;
+      // 关键：阻止原生图片拖拽/文本选择，否则它们会劫持 mousemove 导致拖动无反应
+      e.preventDefault();
       down = true; moved = false;
       startX = e.clientX;
       startScroll = pages.scrollLeft;

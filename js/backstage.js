@@ -558,9 +558,9 @@ const headFull = head + (n.onlineName ? `（网名：${n.onlineName}）` : '');
       }
     } catch(e) {}
     const settings = _getSettings();
-
     // 身份认知（如果选了角色，往最前面塞身份）
     let roleIdentityText = '';
+    let _roleDrawInfo = null;   // {name, desc} 选定角色的生图描述，用于生图注入
     if (settings.roleId && settings.roleType) {
       try {
         if (settings.roleType === 'card') {
@@ -570,6 +570,8 @@ const headFull = head + (n.onlineName ? `（网名：${n.onlineName}）` : '');
 if (c.aliases) roleIdentityText += `\n别称：${c.aliases}`;
 if (c.onlineName) roleIdentityText += `\n网名：${c.onlineName}`;
             if (c.detail) roleIdentityText += `\n\n${c.detail}`;
+            const dd = (c.drawDesc || c.drawPrompt || '').trim();
+            if (dd) _roleDrawInfo = { name: c.name, desc: dd };
           }
         } else if (settings.roleType === 'wv_npc') {
           const wvId = settings.roleSourceWvId;
@@ -591,6 +593,8 @@ if (c.onlineName) roleIdentityText += `\n网名：${c.onlineName}`;
 if (npc.aliases) roleIdentityText += `\n别称：${npc.aliases}`;
 if (npc.onlineName) roleIdentityText += `\n网名：${npc.onlineName}`;
                 if (npc.detail) roleIdentityText += `\n\n${npc.detail}`;
+                const dd = (npc.drawDesc || npc.drawPrompt || '').trim();
+                if (dd) _roleDrawInfo = { name: npc.name, desc: dd };
               }
             }
           }
@@ -598,6 +602,7 @@ if (npc.onlineName) roleIdentityText += `\n网名：${npc.onlineName}`;
       } catch(_) {}
     }
     if (roleIdentityText) systemParts.unshift(roleIdentityText);
+
 
     let backstageInstruction = '';
     if (settings.prompt) {
@@ -632,7 +637,28 @@ systemParts.push(TimeAwareness.buildPrompt(lastAssistantTs, lastUserTs));
 try {
 const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
 if (conv && conv.convImgGen) {
-systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念');
+let imgPrompt = '[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念';
+
+  // 生成任何角色的图片时，必须使用其生图描述，不可凭空编外貌
+  imgPrompt += '\n\n【生图外观铁律】\n- 生成任何角色的图片时，必须使用该角色的「生图描述」来刻画外貌，不可凭空编造长相/发色/身材/服饰。\n- 下方已附上的角色（你自己、对话对象）外观直接融进 [IMG:] 英文描述里。\n- 若要画其它未提供外观的角色，先调用 query_draw_desc 工具查询该角色的生图描述，再融进 [IMG:]；查不到就如实告诉用户该角色还没填生图描述。';
+
+  // 常驻注入：选定身份角色 + 用户面具 的生图描述（不用每次查工具）
+  const drawLines = [];
+  if (_roleDrawInfo && _roleDrawInfo.desc) {
+    drawLines.push(`- 你自己（${_roleDrawInfo.name}）的外观：\n${_roleDrawInfo.desc}`);
+  }
+  try {
+    const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+    const maskDraw = mask && (mask.drawPrompt || mask.drawDesc || '').trim();
+    if (mask && maskDraw) {
+      drawLines.push(`- 对话对象（用户面具「${mask.name || '用户'}」）的外观：\n${maskDraw}`);
+    }
+  } catch(_) {}
+  if (drawLines.length) {
+    imgPrompt += '\n\n【已提供的角色生图外观】\n' + drawLines.join('\n');
+  }
+
+  systemParts.push(imgPrompt);
 }
 } catch(e) {}
 
@@ -971,6 +997,11 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
       'list_event_settings','read_event_setting','add_event_setting','update_event_setting','delete_event_setting',
       'list_cards','read_card','update_card','undo_last_edit'].includes(name)) return bsSettings.toolsEdit;
       if (name === 'search_messages' || name === 'query_events' || name === 'query_relations') return bsSettings.toolsMainMemory;
+      if (name === 'query_draw_desc') {
+                // 只在对话开启了生图模式时才启用
+                const _c = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+                return !!(_c?.imgGen);
+              }
               return bsSettings.toolsMemory;
             });
           }

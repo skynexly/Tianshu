@@ -52,8 +52,54 @@ const Tools = (() => {
     return result;
   }
 
-
-  // ===== AI 编辑设定 helper（世界观/单人卡，可回滚） =====
+  // ===== 生图描述查询 helper =====
+  // 按名字/别名跨「可访问世界观 NPC + 可编辑单人卡 + 当前面具」搜角色的生图描述。
+  // 字段名不统一：单人卡/NPC 用 drawDesc，面具用 drawPrompt，做兼容。
+  async function _findDrawDesc(name) {
+    const key = String(name || '').trim().toLowerCase();
+    if (!key) return null;
+    const _nameHit = (n, aliases) => {
+      const nm = String(n || '').trim().toLowerCase();
+      if (nm && nm === key) return true;
+      const al = String(aliases || '').split(/[,，、\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+      return al.includes(key);
+    };
+    // 1) 世界观 NPC
+    try {
+      const wvs = await _getAccessibleWorldviews();
+      for (const { wv } of wvs) {
+        const pools = [];
+        pools.push(...(wv.globalNpcs || []));
+        (wv.regions || []).forEach(r => (r.factions || []).forEach(f => pools.push(...(f.npcs || []))));
+        for (const npc of pools) {
+          if (npc && _nameHit(npc.name, npc.aliases)) {
+            const dd = String(npc.drawDesc || npc.drawPrompt || '').trim();
+            return { name: npc.name || name, desc: dd, source: 'wv_npc' };
+          }
+        }
+      }
+    } catch(_) {}
+    // 2) 可编辑单人卡（主角卡 + 挂载常驻卡）
+    try {
+      const cards = await _listEditableCards();
+      for (const c of cards) {
+        const card = c.card || c;
+        if (card && _nameHit(card.name, card.aliases)) {
+          const dd = String(card.drawDesc || card.drawPrompt || '').trim();
+          return { name: card.name || name, desc: dd, source: 'card' };
+        }
+      }
+    } catch(_) {}
+    // 3) 当前面具（用户面具）
+    try {
+      const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+      if (mask && _nameHit(mask.name)) {
+        const dd = String(mask.drawPrompt || mask.drawDesc || '').trim();
+        return { name: mask.name || name, desc: dd, source: 'mask' };
+      }
+    } catch(_) {}
+    return null;
+  }
   const _clone = (v) => JSON.parse(JSON.stringify(v ?? null));
   function _currentConv() {
     try {
@@ -467,6 +513,13 @@ characters:{ type:'array', items:{type:'string'}, description:'在场角色' }
   const backstageDefinitions = [
     ...editDefinitions,
     { type:'function', function:{
+      name:'query_draw_desc',
+      description:'查询某个角色的「生图描述」（用于生成该角色图片时刻画外貌）。当你要画一个未在上下文中提供外观描述的角色时调用。会跨当前对话可访问的世界观NPC、单人卡、用户面具按名字/别名查找。返回该角色的生图描述文本；查不到角色或角色未填写生图描述都会说明。',
+      parameters:{ type:'object', properties:{
+        name:{ type:'string', description:'角色名称或别名' }
+      }, required:['name'] }
+    }},
+    { type:'function', function:{
       name:'query_backstage_notes',
       description:'查询 {{user}} 本人（现实中和你聊天的这个人）的记忆碎片（后台专属记忆库）。记的是现实里 ta 的偏好/情绪/事件，与主线剧情无关。注意：这和主线里被扮演角色的小纸条（query_mainline_notes）是两回事——这个查的是真实用户本人。',
       parameters:{ type:'object', properties:{
@@ -738,6 +791,14 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       const notes = await Memory.queryBackstageNotes({ tag:args.tag, keyword:args.keyword, limit:args.limit||5 });
       if (!notes.length) return OK({ result:'没有找到相关记忆。' });
       return OK({ result: notes.map(n => ({ id:n.id, tag:n.tag, detail:n.detail, time:n.time||'' })) });
+    },
+    async query_draw_desc(args) {
+      const name = args && String(args.name || '').trim();
+      if (!name) return ERR('缺少 name');
+      const hit = await _findDrawDesc(name);
+      if (!hit) return OK({ found:false, message:`没有找到名为「${name}」的角色（世界观NPC/单人卡/用户面具里都没匹配到）。` });
+      if (!hit.desc) return OK({ found:true, name:hit.name, drawDesc:'', message:`角色「${hit.name}」还没有填写生图描述，请如实告诉用户去角色卡/面具里补充。不要凭空编造 ta 的外貌。` });
+      return OK({ found:true, name:hit.name, drawDesc:hit.desc, message:`把这段生图描述融进 [IMG:] 的英文画面描述里，用来刻画「${hit.name}」的外貌。` });
     },
     async add_backstage_note(args) {
       if (!args.tag || !args.detail) return ERR('缺少 tag 或 detail');
