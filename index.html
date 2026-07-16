@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=159">
+<link rel="stylesheet" href="css/style.css?v=162">
 <link rel="stylesheet" href="css/phone.css?v1=405">
 <link rel="stylesheet" href="css/phone-fudge.css?v=48">
 <link rel="stylesheet" href="css/markdown.css">
@@ -2184,7 +2184,7 @@
 </div>
 
 <!-- 单人对话设置弹窗 -->
-<div id="imggen-modal" class="modal hidden">
+<div id="imggen-modal" class="modal hidden" style="z-index:400">
 <div class="modal-content" style="max-width:400px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
 <h3 style="margin:0;font-size:16px;color:var(--text)">生成图片</h3>
@@ -2193,6 +2193,18 @@
 <div style="margin-bottom:12px">
 <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">画面描述（英文效果更好）</label>
 <textarea id="imggen-prompt" rows="4" placeholder="描述你想生成的画面…&#10;留空则由 AI 根据当前剧情自动生成描述" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px;resize:vertical;font-family:inherit"></textarea>
+</div>
+<!-- AI 总结当前画面 -->
+<div style="margin-bottom:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary)">
+<label style="font-size:12px;color:var(--text);display:block;margin-bottom:6px;font-weight:600">AI 总结画面</label>
+<input id="imggen-summary-req" type="text" placeholder="可选：总结要求，如『聚焦女主表情』『整体氛围』" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px;margin-bottom:8px">
+<button id="imggen-summary-btn" onclick="Chat.summarizeSceneForImg()" style="width:100%;padding:8px;border:1px solid var(--accent);border-radius:6px;background:none;color:var(--accent);cursor:pointer;font-size:13px;font-weight:600">读最近对话，生成画面描述</button>
+<div style="font-size:11px;color:var(--text-secondary);margin-top:6px;line-height:1.5">调用「总结模型」（未配置则用主模型），读取最近对话后把场景总结成描述填入上方，会消耗一次 API。</div>
+</div>
+<!-- 角色外观勾选 -->
+<div id="imggen-char-block" style="margin-bottom:12px;display:none">
+<label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:6px">附加角色外观（勾选后把该角色的生图描述一并加入画面）</label>
+<div id="imggen-char-list" style="display:flex;flex-direction:column;gap:6px"></div>
 </div>
 <div style="display:flex;gap:12px;margin-bottom:12px">
 <div style="flex:1">
@@ -4307,7 +4319,7 @@ const GameLog = (() => {
 </script>
 <script src="js/db.js?v=15"></script>
 <script src="js/stickers.js?v=7"></script>
-<script src="js/utils.js?v=21"></script>
+<script src="js/utils.js?v=23"></script>
 <script src="js/markdown.js?v=12"></script>
 <script src="js/api.js?v=4"></script>
 <script src="js/time-awareness.js"></script>
@@ -4330,8 +4342,8 @@ const GameLog = (() => {
 <script src="js/character.js?v=18"></script>
 <script src="js/prompts.js?v=4"></script>
 <script src="js/conversations.js?v=12"></script>
-<script src="js/summary.js?v=2"></script>
-<script src="js/chat.js?v=108"></script>
+<script src="js/summary.js?v=3"></script>
+<script src="js/chat.js?v=116"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4339,10 +4351,10 @@ const GameLog = (() => {
 <script src="js/branch.js"></script>
 <script src="js/settings.js?v=14"></script>
 <script src="js/gaiden.js?v=3"></script>
-<script src="js/backstage.js?v=18"></script>
+<script src="js/backstage.js?v=23"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
-<script src="js/status_bar.js?v=28"></script>
+<script src="js/status_bar.js?v=31"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/watch-sfx.js?v=4"></script>
 <script src="js/worldvoice.js?v=23"></script>
@@ -4350,7 +4362,7 @@ const GameLog = (() => {
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
 <script src="js/app_icons.js?v=7"></script>
-<script src="js/phone.js?v1=1146"></script>
+<script src="js/phone.js?v1=1151"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -4370,7 +4382,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=22"></script>
-<script src="js/app.js?v=153"></script>
+<script src="js/app.js?v=154"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
@@ -4868,6 +4880,7 @@ if ('serviceWorker' in navigator) {
 <button onclick="Backstage.openPromptEdit()" class="btn-icon modal-corner-btn" title="编辑要求">
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil-line-icon lucide-pencil-line"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
 </button>
+<button id="backstage-fullscreen-btn" onclick="Backstage.toggleFullscreen()" class="btn-icon modal-corner-btn" title="全屏"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
 <button onclick="Backstage.minimize()" class="btn-icon modal-corner-btn min-btn" title="最小化"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M7 12h10"/></svg></button>
 </div>
 </div>

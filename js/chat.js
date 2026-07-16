@@ -406,6 +406,19 @@ const Chat = (() => {
   messages = allMsgs
     .filter(m => m.branchId === currentBranchId || (currentBranchId === 'main' && !m.branchId))
 .sort((a, b) => a.timestamp - b.timestamp);
+    // 迁移：历史通话记录曾以 hidden:false 写入主线，会渲染成 AI 气泡（不符预期）。
+    // 归位为 hidden:true + _callCtx:true —— 不显示气泡，但仍进 AI 上下文。
+    try {
+      const _callMsgsToFix = messages.filter(m =>
+        m && m.role === 'assistant' && !m._callCtx &&
+        (m.callContactId || (typeof m.id === 'string' && m.id.startsWith('msg_call_')))
+      );
+      for (const m of _callMsgsToFix) {
+        m.hidden = true;
+        m._callCtx = true;
+        try { await DB.put('messages', m); } catch(_) {}
+      }
+    } catch(_) {}
     roundCount = Math.floor(messages.filter(m => m.role === 'user').length);
     // v612：记忆提取游标按对话持久化，避免刷新/切窗口后从头重复提取
     try {
@@ -1299,7 +1312,53 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
 
     // 7a. 生图模式（对话设置里开关控制）
   if (convSettings.imgGen) {
-    systemParts.push('[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念');
+    let _imgPrompt = '[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念\n- 可选：在描述前用「尺寸 | 」指定画面尺寸（不写默认横图 1024x768）。尺寸可用比例词（1:1/16:9/9:16/4:3/3:4/3:2/2:3）、方向词（square/landscape/portrait）或直接写像素（如 1280x720，宽高各 64~2048）。例：竖构图人物立绘写 [IMG: 9:16 | a girl standing...]，方形头像写 [IMG: 1:1 | ...]。根据画面内容自行选择合适的横竖比例。';
+
+    // 命中角色生图外观注入：在场角色 + 用户面具（只注入填了生图描述的，没填就不发）
+    try {
+      const _drawLines = [];
+      const _seen = new Set();
+      // 在场 NPC：先取 present 名单，空则退回状态栏 npcs（持久数据）
+      if (typeof NPC !== 'undefined' && NPC.getByNames) {
+        let _presentNames = (NPC.getPresentNPCs ? NPC.getPresentNPCs() : []) || [];
+        if (!_presentNames.length) {
+          try {
+            const _sb = (typeof Conversations !== 'undefined') ? Conversations.getStatusBar() : null;
+            if (_sb && Array.isArray(_sb.npcs)) _presentNames = _sb.npcs.map(n => n && n.name).filter(Boolean);
+          } catch(_) {}
+        }
+        const _presentNpcs = NPC.getByNames(_presentNames);
+        for (const n of (_presentNpcs || [])) {
+          if (!n || !n.name || _seen.has(n.name)) continue;
+          const dd = ((n.drawDesc || n.drawPrompt || '')).trim();
+          if (dd) { _drawLines.push(`- 在场角色「${n.name}」的外观：\n${dd}`); _seen.add(n.name); }
+        }
+      }
+      // 单人卡对话主角色（存于 singleCards 表，不在 NPC 模块）
+      try {
+        const _conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+        if (_conv && _conv.isSingle && _conv.singleCharType === 'card' && _conv.singleCharId) {
+          const _card = await DB.get('singleCards', _conv.singleCharId);
+          const _cd = _card && ((_card.drawDesc || _card.drawPrompt) || '').trim();
+          if (_card && _card.name && _cd && !_seen.has(_card.name)) {
+            _drawLines.push(`- 在场角色「${_card.name}」的外观：\n${_cd}`);
+            _seen.add(_card.name);
+          }
+        }
+      } catch(_) {}
+      // 用户面具
+      try {
+        const _mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+        const _maskDraw = _mask && (_mask.drawPrompt || _mask.drawDesc || '').trim();
+        if (_mask && _maskDraw) _drawLines.push(`- 对话对象（用户面具「${_mask.name || '用户'}」）的外观：\n${_maskDraw}`);
+      } catch(_) {}
+      if (_drawLines.length) {
+        _imgPrompt += '\n\n【生图外观铁律】\n- 生成角色图片时，必须使用该角色的「生图描述」来刻画外貌，不可凭空编造长相/发色/身材/服饰。\n- 下方已附上的角色（在场角色、对话对象）外观直接融进 [IMG:] 英文描述里。\n- 未提供外观描述的角色，依据剧情设定合理刻画，不要编造关键特征。';
+        _imgPrompt += '\n\n【已提供的角色生图外观】\n' + _drawLines.join('\n');
+      }
+    } catch(_) {}
+
+    systemParts.push(_imgPrompt);
   }
 
 // 7b. 来电能力：角色可以主动给玩家打语音/视频电话（开关控制，默认开）
@@ -1438,7 +1497,7 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
     // v687.33：assistant 历史消息剥离格式代码块（省 token + 降噪），但保留最近 3 轮的原文
     // 避免 AI 看到"之前都没输出格式"就认为本轮也不需要
     const config = await API.getConfig();
-    const _visibleMsgs = messages.filter(m => !m.hidden || m.content === '<Continue the Chat/>' || m.content === '<PhoneDown/>');
+    const _visibleMsgs = messages.filter(m => !m.hidden || m._callCtx || m.content === '<Continue the Chat/>' || m.content === '<PhoneDown/>');
     // 找到最近 3 条 assistant 消息的索引（保留原文不剥离）
     const _recentAiIndices = new Set();
     {
@@ -1452,9 +1511,13 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
     }
 let historyForAPI = _visibleMsgs.map((m, idx) => ({
         role: m.role,
-        content: m.role === 'assistant' && !_recentAiIndices.has(idx)
-          ? _stripFormatBlocks(m.content)
-          : (m.contentForAPI || m.content)
+        content: (() => {
+          const _c = m.role === 'assistant' && !_recentAiIndices.has(idx)
+            ? _stripFormatBlocks(m.content)
+            : (m.contentForAPI || m.content);
+          // 清洗生图产物（手动生图提示词、[TSIMG]/[IMG] 标记）——用户没让 AI 生图，不该进上下文
+          try { return typeof _c === 'string' ? Utils.stripImgArtifacts(_c) : _c; } catch(_) { return _c; }
+        })()
       }));
       // 发请求时过滤 AI 历史里的 HTML（对话设置·输出·回复格式 开关控制，只动副本不动存档原文）
       if (convSettings.stripHistoryHtml) {
@@ -7390,6 +7453,8 @@ async function applyLorebooksToWorldview() {
     // 清空上次内容
     const p = document.getElementById('imggen-prompt');
     if (p) p.value = '';
+    const sreq = document.getElementById('imggen-summary-req');
+    if (sreq) sreq.value = '';
     const w = document.getElementById('imggen-width');
     if (w) w.value = '1024';
     const h = document.getElementById('imggen-height');
@@ -7400,7 +7465,130 @@ async function applyLorebooksToWorldview() {
     if (status) { status.style.display = 'none'; status.textContent = ''; }
     const btn = document.getElementById('imggen-submit');
     if (btn) { btn.disabled = false; btn.textContent = '生成'; }
+    const sbtn = document.getElementById('imggen-summary-btn');
+    if (sbtn) { sbtn.disabled = false; sbtn.textContent = '读最近对话，生成画面描述'; }
+    _renderImgGenCharList();
     document.getElementById('imggen-modal')?.classList.remove('hidden');
+  }
+
+  // 渲染附加角色外观勾选列表：在场角色（默认展开）+ 其他角色（折叠）
+  async function _renderImgGenCharList() {
+    const block = document.getElementById('imggen-char-block');
+    const list = document.getElementById('imggen-char-list');
+    if (!block || !list) return;
+    let presentNames = [];
+    let allNpcs = [];
+    try {
+      if (typeof NPC !== 'undefined') {
+        if (NPC.getPresentNPCs) presentNames = NPC.getPresentNPCs() || [];
+        if (NPC.getByRegion) allNpcs = NPC.getByRegion('all') || [];
+      }
+    } catch(_) {}
+    // fallback：present 名单为空时退回状态栏 npcs（持久数据）
+    if (!presentNames.length) {
+      try {
+        const _sb = (typeof Conversations !== 'undefined') ? Conversations.getStatusBar() : null;
+        if (_sb && Array.isArray(_sb.npcs)) presentNames = _sb.npcs.map(n => n && n.name).filter(Boolean);
+      } catch(_) {}
+    }
+    // 只保留有生图描述的
+    const hasDraw = (nn) => ((nn && (nn.drawDesc || nn.drawPrompt) || '')).trim();
+    const presentSet = new Set(presentNames);
+    const present = [];
+    const others = [];
+    const seen = new Set();
+    // 单人卡对话：把对话主角色（存于 singleCards 表，不在 NPC 模块）当作在场角色
+    try {
+      const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+      if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+        const card = await DB.get('singleCards', conv.singleCharId);
+        if (card && card.name && hasDraw(card) && !seen.has(card.name)) {
+          seen.add(card.name);
+          present.push(card);
+        }
+      }
+    } catch(_) {}
+    for (const nn of allNpcs) {
+      if (!nn || !nn.name || seen.has(nn.name)) continue;
+      if (!hasDraw(nn)) continue;
+      seen.add(nn.name);
+      // 在场判定：名字在 presentNames 里（含别名宽松匹配）
+      const isPresent = presentSet.has(nn.name) ||
+        presentNames.some(pn => (nn.aliases || '').includes(pn) || nn.name.includes(pn) || pn.includes(nn.name));
+      (isPresent ? present : others).push(nn);
+    }
+    const rowHtml = (nn) => {
+      const safe = Utils.escapeHtml(nn.name);
+      return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
+        <input type="checkbox" class="imggen-char-cb" data-name="${safe}" style="accent-color:var(--accent);flex-shrink:0">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safe}</span>
+      </label>`;
+    };
+    let html = '';
+    if (present.length) {
+      html += '<div style="font-size:11px;color:var(--text-secondary);margin:2px 0">在场角色</div>';
+      html += present.map(rowHtml).join('');
+    }
+    if (others.length) {
+      html += `<div style="margin-top:4px"><button type="button" id="imggen-char-more-btn" onclick="Chat._toggleImgGenMore()" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:2px 0">+ 其他角色（${others.length}）</button></div>`;
+      html += `<div id="imggen-char-more" style="display:none;flex-direction:column;gap:6px">${others.map(rowHtml).join('')}</div>`;
+    }
+    if (!present.length && !others.length) {
+      block.style.display = 'none';
+      list.innerHTML = '';
+      return;
+    }
+    block.style.display = 'block';
+    list.innerHTML = html;
+    // 暂存 name→desc 映射，提交时用
+    _imgGenCharDrawMap = {};
+    for (const nn of [...present, ...others]) {
+      _imgGenCharDrawMap[nn.name] = ((nn.drawDesc || nn.drawPrompt) || '').trim();
+    }
+  }
+
+  let _imgGenCharDrawMap = {};
+
+  function _toggleImgGenMore() {
+    const more = document.getElementById('imggen-char-more');
+    const btn = document.getElementById('imggen-char-more-btn');
+    if (!more) return;
+    const open = more.style.display !== 'none';
+    more.style.display = open ? 'none' : 'flex';
+    if (btn) btn.textContent = (open ? '+ ' : '− ') + btn.textContent.replace(/^[+−]\s*/, '');
+  }
+
+  // 读最近对话，调总结模型生成场景画面描述，填入描述框
+  async function summarizeSceneForImg() {
+    const sbtn = document.getElementById('imggen-summary-btn');
+    const promptEl = document.getElementById('imggen-prompt');
+    const reqEl = document.getElementById('imggen-summary-req');
+    const req = (reqEl?.value || '').trim();
+    // 收集最近对话（当前来源）
+    let recentMsgs = [];
+    try {
+      if (_imgGenSource === 'backstage' && typeof Backstage !== 'undefined' && Backstage.getMessages) {
+        recentMsgs = Backstage.getMessages() || [];
+      } else {
+        recentMsgs = messages || [];
+      }
+    } catch(_) {}
+    const usable = recentMsgs.filter(m => m && !m.hidden && (m.role === 'user' || m.role === 'assistant') && (m.content || '').trim());
+    if (usable.length === 0) { UI.showToast('还没有可总结的对话', 1800); return; }
+    const recent = usable.slice(-10).map(m => `[${m.role === 'user' ? '玩家' : 'AI'}]：${(m.content || '').replace(/```[\s\S]*?```/g, '').trim()}`).join('\n\n');
+    const sysPrompt = '你是生图提示词助手。根据下面最近的剧情对话，总结出「当前场景画面」的图像生成提示词。要求：\n- 只描述可视画面：环境、光线、氛围、在场角色的动作/姿态/表情/衣着，不要写剧情、对白、心理活动。\n- 用词具体、视觉化，适合直接喂给文生图模型。\n- 只输出提示词本身，不要解释、不要加引号或标题。' + (req ? `\n- 额外要求：${req}` : '');
+    if (sbtn) { sbtn.disabled = true; sbtn.textContent = '生成中…'; }
+    try {
+      const out = await API.summarize(recent, sysPrompt);
+      const text = (out || '').trim();
+      if (!text) throw new Error('未返回内容');
+      if (promptEl) promptEl.value = text;
+      UI.showToast('已生成画面描述');
+    } catch(e) {
+      UI.showToast('总结失败：' + (e.message || e), 2500);
+    } finally {
+      if (sbtn) { sbtn.disabled = false; sbtn.textContent = '读最近对话，生成画面描述'; }
+    }
   }
 
   async function submitImgGen() {
@@ -7411,8 +7599,21 @@ async function applyLorebooksToWorldview() {
     const status = document.getElementById('imggen-status');
     const btn = document.getElementById('imggen-submit');
 
-    if (!prompt) {
-      // 留空：让AI根据剧情生成描述——直接以用户消息形式发送指令
+    // 收集勾选角色的生图描述
+    let charAppend = '';
+    try {
+      const checked = document.querySelectorAll('#imggen-char-list .imggen-char-cb:checked');
+      const lines = [];
+      checked.forEach(cb => {
+        const nm = cb.getAttribute('data-name');
+        const dd = nm && _imgGenCharDrawMap[nm];
+        if (dd) lines.push(`【${nm}】${dd}`);
+      });
+      if (lines.length) charAppend = '\n\n画面中的角色外观：\n' + lines.join('\n');
+    } catch(_) {}
+
+    if (!prompt && !charAppend) {
+      // 留空且未勾角色：让AI根据剧情生成描述——直接以用户消息形式发送指令
       document.getElementById('imggen-modal')?.classList.add('hidden');
       const input = _imgGenSource === 'backstage'
         ? document.getElementById('backstage-input')
@@ -7428,21 +7629,22 @@ async function applyLorebooksToWorldview() {
       return;
     }
 
-    // 有描述：直接调生图API
+    // 有描述或有勾选角色：直接调生图API
+    const finalPrompt = (prompt || '当前场景') + charAppend;
     if (status) { status.style.display = 'block'; status.textContent = '正在生成图片…'; }
     if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
 
     try {
-      const images = await API.generateImage(prompt, {
+      const images = await API.generateImage(finalPrompt, {
         n: count,
         size: `${width}x${height}`
       });
       if (!images || images.length === 0) throw new Error('未返回图片');
 
       // 构建消息内容（图片存独立表，content 只放占位符 [TSIMG:id|desc]，markdown不解析）
-      let content = `[手动生图] ${prompt}\n\n`;
+      let content = `[手动生图] ${finalPrompt}\n\n`;
       for (let i = 0; i < images.length; i++) {
-        const imgId = await _saveDrawnImage(images[i], prompt);
+        const imgId = await _saveDrawnImage(images[i], finalPrompt);
         const safeDesc = `生成图片${i + 1}`;
         content += `[TSIMG:${imgId}|${safeDesc}]\n\n`;
       }
@@ -7502,10 +7704,11 @@ async function applyLorebooksToWorldview() {
 
     // 逐个生成
     for (let i = 0; i < matches.length; i++) {
-      const desc = matches[i][1].trim();
+      const parsed = Utils.parseImgTag(matches[i][1]);
+      const desc = parsed.desc;
       const ph = msgEl.querySelector(`[data-imggen-idx="${i}"]`);
       try {
-        const images = await API.generateImage(desc, { n: 1, size: '1024x768' });
+        const images = await API.generateImage(desc, { n: 1, size: parsed.size });
         if (images && images.length > 0) {
           // 存独立表，拿到引用ID
           const imgId = await _saveDrawnImage(images[0], desc);
@@ -7803,7 +8006,7 @@ openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
     _onConvBgPicked, _onConvBgClear,
     playVoiceForMessage, stopVoice,
     buildAIMessageHTML, appendMessage,
-    openImgGenModal, submitImgGen, _updateImgGenButtons,
+    openImgGenModal, submitImgGen, _updateImgGenButtons, summarizeSceneForImg, _toggleImgGenMore,
     resolveDrawnImagesInHTML, downloadImage, openImageLightbox,
     _onDiceToggle, _openDiceConfigModal, _closeDiceConfigModal, _saveDiceConfigModal, _toggleDiceRuleDropdown,
     // v687.23：MCP

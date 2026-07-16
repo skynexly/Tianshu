@@ -289,11 +289,24 @@ ${dialogue}
     document.getElementById('panel-summary').classList.add('active');
   }
 
+  // Markdown 渲染兜底：单个字段渲染抛错时降级为转义纯文本 + 提示，避免整页崩成空白
+  function _safeMd(text, fieldName) {
+    if (text == null || text === '') return '<p style="color:var(--text-secondary);font-size:13px">暂无</p>';
+    try {
+      return Markdown.render(text);
+    } catch (e) {
+      try { GameLog.log('error', `[Summary] 字段「${fieldName || '?'}」Markdown 渲染失败：${e && e.message}`); } catch(_) {}
+      const esc = (typeof Utils !== 'undefined' && Utils.escapeHtml) ? Utils.escapeHtml(String(text)) : String(text);
+      return `<p style="color:var(--text-secondary);font-size:12px;margin-bottom:6px">⚠ 此段格式渲染异常，已降级为纯文本</p><div style="white-space:pre-wrap;font-size:13px;line-height:1.6">${esc}</div>`;
+    }
+  }
+
   function renderSummaryView(data, conversationId, containerId) {
     const el = document.getElementById(containerId || 'summary-content');
     if (!el) return;
     _renderContainerId = containerId || 'summary-content';
     _editConvId = conversationId;
+   try {
 
     // 记住当前展开状态
     const expandedIds = new Set();
@@ -395,7 +408,7 @@ ${dialogue}
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
           </button>
         </div>
-        <div id="sf-majorEvents" class="summary-section-content collapsed">${data.majorEvents ? Markdown.render(data.majorEvents) : '<p style="color:var(--text-secondary);font-size:13px">暂无</p>'}</div>
+        <div id="sf-majorEvents" class="summary-section-content collapsed">${_safeMd(data.majorEvents, 'majorEvents')}</div>
       </div>
 
       <div class="summary-section">
@@ -405,7 +418,7 @@ ${dialogue}
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
           </button>
         </div>
-        <div id="sf-emotionTurns" class="summary-section-content collapsed">${data.emotionTurns ? Markdown.render(data.emotionTurns) : '<p style="color:var(--text-secondary);font-size:13px">暂无</p>'}</div>
+        <div id="sf-emotionTurns" class="summary-section-content collapsed">${_safeMd(data.emotionTurns, 'emotionTurns')}</div>
       </div>
 
       <div class="summary-section">
@@ -415,7 +428,7 @@ ${dialogue}
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
           </button>
         </div>
-        <div id="sf-playerState" class="summary-section-content collapsed">${data.playerState ? Markdown.render(data.playerState) : '<p style="color:var(--text-secondary);font-size:13px">暂无</p>'}</div>
+        <div id="sf-playerState" class="summary-section-content collapsed">${_safeMd(data.playerState, 'playerState')}</div>
       </div>
 
       <div class="summary-section">
@@ -425,7 +438,7 @@ ${dialogue}
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
           </button>
         </div>
-        <div id="sf-pending" class="summary-section-content collapsed">${data.pending ? Markdown.render(data.pending) : '<p style="color:var(--text-secondary);font-size:13px">暂无</p>'}</div>
+        <div id="sf-pending" class="summary-section-content collapsed">${_safeMd(data.pending, 'pending')}</div>
       </div>
     `;
 
@@ -438,6 +451,16 @@ ${dialogue}
         if (arrow) arrow.classList.add('expanded');
       }
     });
+   } catch (e) {
+     try { GameLog.log('error', `[Summary] 剧情总结渲染失败：${e && e.message}`); } catch(_) {}
+     const esc = (typeof Utils !== 'undefined' && Utils.escapeHtml) ? Utils.escapeHtml(String(e && e.message || e)) : '';
+     el.innerHTML = `<div style="padding:16px;color:var(--text-secondary);font-size:13px;line-height:1.7">
+       <p style="color:var(--danger);font-weight:600;margin-bottom:8px">⚠ 剧情总结渲染出错</p>
+       <p>这条对话的总结数据里有内容触发了渲染异常，已阻止页面崩溃。</p>
+       <p style="margin-top:8px;font-size:12px;opacity:0.8">错误：${esc}</p>
+       <p style="margin-top:8px;font-size:12px">可尝试重新触发一次剧情总结，或手动编辑修正对应字段。</p>
+     </div>`;
+   }
   }
 
   function _toggleSection(headerEl) {

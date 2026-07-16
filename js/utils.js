@@ -1214,5 +1214,60 @@ async function copyFromDataset(btn) {
     });
   }
 
-  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, fileToText, promptImageInput, promptAiAvatar, compressDataUrl, saveFile, pickFile };
+  // 解析 [IMG:] 标记内容，支持 AI 在描述前可选地指定尺寸：
+  //   [IMG: 描述]                → 默认横图 1024x768
+  //   [IMG: 16:9 | 描述]         → 比例关键词
+  //   [IMG: 1280x720 | 描述]     → 直接写像素
+  //   [IMG: portrait | 描述]     → 方向关键词
+  // 尺寸段必须出现在开头、且用 | 分隔；不认识就当描述的一部分、走默认尺寸。
+  // 返回 { size, desc }。
+  function parseImgTag(raw) {
+    const DEFAULT_SIZE = '1024x768';
+    const s = String(raw == null ? '' : raw).trim();
+    // 必须有 | 才尝试解析尺寸段（避免把普通描述里的冒号误判成比例）
+    const pipe = s.indexOf('|');
+    if (pipe === -1) return { size: DEFAULT_SIZE, desc: s };
+    const head = s.slice(0, pipe).trim().toLowerCase();
+    const rest = s.slice(pipe + 1).trim();
+    const size = _resolveImgSize(head);
+    if (!size) return { size: DEFAULT_SIZE, desc: s }; // 头部不是合法尺寸，整段当描述
+    return { size, desc: rest };
+  }
+  // 清洗发给 AI 的历史里的「生图产物」：手动生图提示词前缀、图片占位符、未处理的 [IMG:] 标记。
+  // 这些内容是给生图模型/前端渲染用的，对剧情理解是纯噪音，不该反复进上下文。
+  // 只用于构建 API 历史副本，不动存档原文。
+  function stripImgArtifacts(content) {
+    if (!content || typeof content !== 'string') return content;
+    let s = content;
+    // 1. 手动生图前缀段：以 [手动生图] 开头到该行结束（提示词整段），连同其后的空行一起去掉
+    s = s.replace(/\[手动生图\][^\n]*\n*/g, '');
+    // 2. 已渲染的图片占位符 [TSIMG:id|desc]
+    s = s.replace(/\[TSIMG:[^\]]*\]\n*/g, '');
+    // 3. 未被前端处理的原始生图标记 [IMG: ...]（含尺寸段）
+    s = s.replace(/\[IMG:[^\]]*\]\n*/g, '');
+    // 收敛多余空行
+    s = s.replace(/\n{3,}/g, '\n\n').trim();
+    return s;
+  }
+
+  // 把尺寸头（比例/方向/像素）归一成 "WxH"；无法识别返回 null。
+  function _resolveImgSize(head) {
+    if (!head) return null;
+    // 关键词/比例映射
+    const MAP = {
+      'square': '1024x1024', '1:1': '1024x1024',
+      'landscape': '1024x768', '4:3': '1024x768', '16:9': '1024x576', '3:2': '1024x683',
+      'portrait': '768x1024', '3:4': '768x1024', '9:16': '576x1024', '2:3': '683x1024'
+    };
+    if (MAP[head]) return MAP[head];
+    // 直接写像素：WxH（w/h 各 64~2048，避免离谱值）
+    const m = head.match(/^(\d{2,4})\s*[x×*]\s*(\d{2,4})$/);
+    if (m) {
+      const w = parseInt(m[1], 10), h = parseInt(m[2], 10);
+      if (w >= 64 && w <= 2048 && h >= 64 && h <= 2048) return `${w}x${h}`;
+    }
+    return null;
+  }
+
+  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, fileToText, promptImageInput, promptAiAvatar, compressDataUrl, saveFile, pickFile, parseImgTag, stripImgArtifacts };
 })();

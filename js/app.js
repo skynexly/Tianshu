@@ -224,13 +224,13 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v713.3';
-    const CHANGELOG = `○修复部分BUG、调整部分UI
-○增加按钮，可以取消角色主动挂断电话（手机聊天设置内）
-○新增通话时可在括号内描写动作
-○增加了用户气泡的继续剧情按钮
-○新增正则测试功能
-○增加了提示词批量全选按钮`;
+    const APP_VERSION = 'v713.4';
+    const CHANGELOG = `○优化手动生图，可总结场景并勾选生图描述
+○部分生图逻辑优化
+○新增观看直播马甲，主播私联时也只能联系正在使用的马甲
+○新增后台全屏模式
+○修复部分BUG
+○新增心动模拟可手动修改黑化值`;
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {

@@ -2143,6 +2143,18 @@ input[type="range"] {
   padding: 16px;
   animation: modalOverlayIn 0.15s ease;
 }
+/* ===== 后台频道全屏：铺满整个视口，去掉浮动窗边框圆角 ===== */
+#backstage-modal.backstage-fullscreen-mode {
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+  border: none !important;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: border-box;
+}
 .modal.closing {
   animation: modalOverlayOut 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
@@ -2216,16 +2228,14 @@ input[type="range"] {
 #regex-edit-modal #regex-pattern,
 #regex-edit-modal #regex-replacement { min-height: 90px; }
 /* 全屏下：内容区可滚动，底部按钮吸底固定 */
-#regex-edit-modal .modal-content { overflow: hidden; }
+#regex-edit-modal .modal-content { overflow: hidden; display: flex; flex-direction: column; }
 #regex-edit-modal .modal-content > h3 { flex-shrink: 0; }
 #regex-edit-modal .modal-content > .form-group,
 #regex-edit-modal .modal-content > div:not(.modal-actions) { flex-shrink: 0; }
 #regex-edit-modal .regex-edit-scroll {
   flex: 1;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+  -webkit-overflow-scrolling: touch;
   min-height: 0;
 }
 #regex-edit-modal .modal-actions {
