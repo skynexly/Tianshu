@@ -607,6 +607,7 @@ async function cancelEdit() {
         ${r.note ? `<p style="font-size:11px;color:var(--text-secondary);margin-top:4px;margin-bottom:0">${Utils.escapeHtml(r.note)}</p>` : ''}
       </div>
     `}).join('');
+    if (regexManageMode) _updateRegexSelectAllIcon();
   }
 
   function toggleRegexSelect(idx) {
@@ -649,6 +650,130 @@ async function cancelEdit() {
     regexSelectedIdxs.clear();
     await saveRegexRules(rules);
     renderRegexRules();
+  }
+
+  // 底栏「全选」图标态刷新
+  function _updateRegexSelectAllIcon() {
+    const iconEl = document.getElementById('regex-select-all-icon');
+    if (!iconEl) return;
+    const total = (_regexRulesCache || []).length;
+    const allSelected = total > 0 && regexSelectedIdxs.size >= total;
+    if (allSelected) {
+      iconEl.style.background = 'var(--accent)';
+      iconEl.style.border = '2px solid var(--accent)';
+      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    } else {
+      iconEl.style.background = '';
+      iconEl.style.border = '2px solid var(--text-secondary)';
+      iconEl.innerHTML = '';
+    }
+  }
+
+  async function toggleRegexSelectAll() {
+    const rules = await getRegexRules();
+    const allSelected = rules.length > 0 && regexSelectedIdxs.size >= rules.length;
+    if (allSelected) {
+      regexSelectedIdxs.clear();
+    } else {
+      regexSelectedIdxs.clear();
+      rules.forEach((_, i) => regexSelectedIdxs.add(i));
+    }
+    await renderRegexRules();
+  }
+
+  // 导出勾选的正则规则为 JSON 文件
+  async function exportSelectedRegex() {
+    if (regexSelectedIdxs.size === 0) { await UI.showAlert('提示', '请先勾选要导出的规则'); return; }
+    const rules = await getRegexRules();
+    const picked = rules.filter((_, i) => regexSelectedIdxs.has(i)).map(r => ({
+      pattern: r.pattern,
+      replacement: r.replacement ?? '',
+      flags: r.flags || 'g',
+      note: r.note || '',
+      scope: r.scope || 'all',
+      enabled: r.enabled !== false
+    }));
+    if (picked.length === 0) { UI.showToast('未找到可导出的规则'); return; }
+    const exportData = { _format: 'tianshu-regex', _version: 1, rules: picked };
+    try {
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const saved = await Utils.saveFile(blob, `正则规则_${picked.length}条_${new Date().toISOString().slice(0,10)}.json`);
+      if (saved) UI.showToast(`已导出 ${picked.length} 条规则`);
+    } catch(e) {
+      UI.showToast('导出失败：' + (e.message || e), 3000);
+    }
+  }
+
+  // 从 JSON 中抽取规则数组。兼容：
+  //  · 本家：纯数组 / {rules:[]} / {_format:'tianshu-regex',rules:[]}
+  //  · 酒馆(SillyTavern)：单个规则对象 或 数组，字段 findRegex/replaceString/scriptName/disabled
+  function _extractRegexArray(data) {
+    let arr = null;
+    if (Array.isArray(data)) arr = data;
+    else if (data && Array.isArray(data.rules)) arr = data.rules;
+    // 单个规则对象（本家 pattern / 酒馆 findRegex）也认，包成数组
+    else if (data && typeof data === 'object' && (typeof data.pattern === 'string' || typeof data.findRegex === 'string')) arr = [data];
+    if (!arr) return [];
+    const out = [];
+    for (const r of arr) {
+      if (!r || typeof r !== 'object') continue;
+      // pattern：本家 pattern 优先，其次酒馆 findRegex
+      let rawPattern = (typeof r.pattern === 'string' && r.pattern) ? r.pattern
+        : (typeof r.findRegex === 'string' ? r.findRegex : '');
+      if (!rawPattern) continue;
+      // flags：本家单独存；酒馆常写成 /xxx/gi 形式，需剥壳提取
+      let pattern = rawPattern;
+      let flags = (typeof r.flags === 'string' && r.flags) ? r.flags : '';
+      const m = rawPattern.match(/^\/(.*)\/([a-z]*)$/is);
+      if (m) { pattern = m[1]; if (!flags) flags = m[2]; }
+      if (!flags) flags = 'g';
+      // 校验正则合法性，非法的跳过
+      try { new RegExp(pattern, flags); } catch(_) { continue; }
+      // replacement：本家 replacement，其次酒馆 replaceString
+      const replacement = typeof r.replacement === 'string' ? r.replacement
+        : (typeof r.replaceString === 'string' ? r.replaceString : '');
+      // note：本家 note，其次酒馆 scriptName
+      const note = typeof r.note === 'string' ? r.note
+        : (typeof r.scriptName === 'string' ? r.scriptName : '');
+      // enabled：本家 enabled；酒馆用 disabled 取反
+      let enabled = true;
+      if (typeof r.enabled === 'boolean') enabled = r.enabled;
+      else if (typeof r.disabled === 'boolean') enabled = !r.disabled;
+      const scope = ['all','chat','backstage','phone'].includes(r.scope) ? r.scope : 'all';
+      out.push({ pattern, replacement, flags, note, scope, enabled });
+    }
+    return out;
+  }
+
+  // 导入正则规则（追加模式）。无参=点击触发文件选择器；传入 input 元素=读取所选文件。
+  async function importRegexRules(inputEl) {
+    if (!inputEl) {
+      const picker = document.getElementById('regex-import-picker');
+      if (picker) { picker.value = ''; picker.click(); }
+      return;
+    }
+    const file = inputEl.files && inputEl.files[0];
+    inputEl.value = '';
+    if (!file) return;
+    let data;
+    try {
+      const text = await Utils.fileToText(file);
+      data = JSON.parse(text);
+    } catch(e) {
+      await UI.showAlert('导入失败', '文件解析失败：' + (e.message || e));
+      return;
+    }
+    const incoming = _extractRegexArray(data);
+    if (incoming.length === 0) {
+      await UI.showAlert('导入失败', '未在文件中找到有效的正则规则');
+      return;
+    }
+    const rules = await getRegexRules();
+    const before = rules.length;
+    rules.push(...incoming);
+    await saveRegexRules(rules);
+    renderRegexRules();
+    UI.showToast(`已追加 ${rules.length - before} 条规则`);
   }
 
   const _regexScopeOptions = {
@@ -697,6 +822,7 @@ async function cancelEdit() {
     document.getElementById('regex-flags').value = 'g';
     document.getElementById('regex-note').value = '';
     _selectRegexScope('all', false);
+    _resetRegexTest();
     document.getElementById('regex-edit-modal').classList.remove('hidden');
   }
 
@@ -711,33 +837,136 @@ async function cancelEdit() {
     document.getElementById('regex-flags').value = r.flags || 'g';
     document.getElementById('regex-note').value = r.note || '';
     _selectRegexScope(r.scope || 'all', false);
+    _resetRegexTest();
     document.getElementById('regex-edit-modal').classList.remove('hidden');
   }
 
   async function saveRegex() {
-    const pattern = document.getElementById('regex-pattern').value.trim();
-    if (!pattern) { await UI.showAlert('提示', '正则表达式不能为空'); return; }
-    const flags = document.getElementById('regex-flags').value.trim() || 'g';
-    try { new RegExp(pattern, flags); } catch(e) { await UI.showAlert('提示', '正则语法错误：' + e.message); return; }
-    const scEl = document.getElementById('regex-scope');
-    const rule = {
-      pattern,
-      replacement: document.getElementById('regex-replacement').value,
-      flags,
-      note: document.getElementById('regex-note').value.trim(),
-      scope: (scEl && scEl.value) || 'all',
-      enabled: true
-    };
-    const rules = await getRegexRules();
-    if (editingRegexIdx >= 0 && editingRegexIdx < rules.length) {
-      rule.enabled = rules[editingRegexIdx].enabled !== false;
-      rules[editingRegexIdx] = rule;
-    } else {
-      rules.push(rule);
+    try {
+      // 去掉正则表达式里的换行（多行文本框里误敲回车会混入 \n/\r，导致匹配异常）。
+      // 替换字符串不清理——那里的换行可能是用户有意保留的。
+      const pattern = document.getElementById('regex-pattern').value.replace(/[\r\n]+/g, '').trim();
+      if (!pattern) { await UI.showAlert('提示', '正则表达式不能为空'); return; }
+      const flags = document.getElementById('regex-flags').value.trim() || 'g';
+      try { new RegExp(pattern, flags); } catch(e) { await UI.showAlert('提示', '正则语法错误：' + e.message); return; }
+      const scEl = document.getElementById('regex-scope');
+      const rule = {
+        pattern,
+        replacement: document.getElementById('regex-replacement').value,
+        flags,
+        note: document.getElementById('regex-note').value.trim(),
+        scope: (scEl && scEl.value) || 'all',
+        enabled: true
+      };
+      const rules = await getRegexRules();
+      if (editingRegexIdx >= 0 && editingRegexIdx < rules.length) {
+        rule.enabled = rules[editingRegexIdx].enabled !== false;
+        rules[editingRegexIdx] = rule;
+      } else {
+        rules.push(rule);
+      }
+      await saveRegexRules(rules);
+      closeRegexEdit();
+      await renderRegexRules();
+      UI.showToast('已保存');
+    } catch(e) {
+      UI.showToast('保存失败：' + (e.message || e), 3000);
     }
-    await saveRegexRules(rules);
-    closeRegexEdit();
-    renderRegexRules();
+  }
+
+  // ===== 正则测试区 =====
+  function _toggleRegexTest() {
+    const body = document.getElementById('regex-test-body');
+    const caret = document.getElementById('regex-test-caret');
+    if (!body) return;
+    const willShow = body.classList.contains('hidden');
+    body.classList.toggle('hidden');
+    if (caret) caret.style.transform = willShow ? 'rotate(180deg)' : '';
+    if (willShow) _runRegexTest();
+  }
+
+  function _runRegexTest() {
+    const resultEl = document.getElementById('regex-test-result');
+    if (!resultEl) return;
+    const pattern = (document.getElementById('regex-pattern').value || '');
+    const flags = (document.getElementById('regex-flags').value || 'g').trim() || 'g';
+    const replacement = document.getElementById('regex-replacement').value || '';
+    const text = document.getElementById('regex-test-input').value || '';
+
+    if (!pattern) { resultEl.innerHTML = '<span style="color:var(--text-secondary)">请先填写正则表达式</span>'; return; }
+    if (!text) { resultEl.innerHTML = '<span style="color:var(--text-secondary)">请在上方粘贴测试文本</span>'; return; }
+
+    let re;
+    try { re = new RegExp(pattern, flags); }
+    catch(e) {
+      resultEl.innerHTML = `<span style="color:var(--danger)">⚠ 正则语法错误：${Utils.escapeHtml(e.message)}</span>`;
+      return;
+    }
+
+    // 收集匹配（含捕获组）。无 g 标志时只匹配一次，避免死循环。
+    const matches = [];
+    const isGlobal = flags.includes('g');
+    try {
+      if (isGlobal) {
+        let m; let guard = 0;
+        while ((m = re.exec(text)) !== null) {
+          matches.push(m);
+          if (m.index === re.lastIndex) re.lastIndex++; // 防空匹配死循环
+          if (++guard > 5000) break;
+        }
+      } else {
+        const m = re.exec(text);
+        if (m) matches.push(m);
+      }
+    } catch(e) {
+      resultEl.innerHTML = `<span style="color:var(--danger)">⚠ 匹配出错：${Utils.escapeHtml(e.message)}</span>`;
+      return;
+    }
+
+    // 替换结果
+    let replaced;
+    try { replaced = text.replace(new RegExp(pattern, flags), replacement); }
+    catch(e) { replaced = null; }
+
+    let html = '';
+    // 匹配数
+    if (matches.length === 0) {
+      html += '<div style="color:var(--danger);margin-bottom:8px">✗ 未命中任何内容</div>';
+    } else {
+      html += `<div style="color:var(--accent);margin-bottom:8px">✓ 命中 ${matches.length} 处</div>`;
+      // 逐个匹配 + 捕获组
+      matches.forEach((m, i) => {
+        html += `<div style="border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:6px;background:var(--bg-tertiary)">`;
+        html += `<div style="color:var(--text-secondary);font-size:11px;margin-bottom:4px">匹配 ${i + 1}（全文 $0）</div>`;
+        html += `<div style="color:var(--text);word-break:break-all;white-space:pre-wrap;margin-bottom:${m.length > 1 ? '6px' : '0'}">${Utils.escapeHtml(m[0])}</div>`;
+        // 捕获组 $1 $2 …
+        for (let g = 1; g < m.length; g++) {
+          const val = m[g] == null ? '<i style="color:var(--text-secondary)">（未捕获）</i>' : Utils.escapeHtml(m[g]);
+          html += `<div style="display:flex;gap:6px;align-items:flex-start;margin-top:2px"><span style="color:var(--accent);font-size:11px;flex-shrink:0;font-weight:600">$${g}</span><span style="word-break:break-all;white-space:pre-wrap">${val}</span></div>`;
+        }
+        html += `</div>`;
+      });
+    }
+    // 替换后完整文本
+    html += `<div style="color:var(--text-secondary);font-size:11px;margin:8px 0 4px">替换后结果：</div>`;
+    if (replaced == null) {
+      html += `<div style="color:var(--danger)">替换出错</div>`;
+    } else {
+      html += `<div style="border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--bg-tertiary);color:var(--text);word-break:break-all;white-space:pre-wrap">${Utils.escapeHtml(replaced)}</div>`;
+    }
+    resultEl.innerHTML = html;
+  }
+
+  // 打开编辑弹窗时收起并清空测试区，避免上次残留
+  function _resetRegexTest() {
+    const body = document.getElementById('regex-test-body');
+    const caret = document.getElementById('regex-test-caret');
+    const input = document.getElementById('regex-test-input');
+    const result = document.getElementById('regex-test-result');
+    if (body) body.classList.add('hidden');
+    if (caret) caret.style.transform = '';
+    if (input) input.value = '';
+    if (result) result.innerHTML = '';
   }
 
   async function closeRegexEdit() {
@@ -1354,6 +1583,8 @@ else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; switchFn
     _toggleRegexScopeDropdown, _selectRegexScope,
     toggleRegex, removeRegex, renderRegexRules,
     toggleRegexSelect, toggleRegexManageMode, exitRegexManageMode, batchDeleteRegex,
+    toggleRegexSelectAll, exportSelectedRegex, importRegexRules,
+    _toggleRegexTest, _runRegexTest,
     getSummaryConfig, getMemoryConfig, getVisionConfig, getGaidenConfig, getWorldvoiceConfig, getBackstageConfig, getTtsConfig, getDrawConfig, getSuggestConfig,
     getDrawPrefix, setDrawPrefix, getDrawNegative, setDrawNegative,
     renderFuncPresetList, switchSummary, switchMemory, switchVision, switchGaiden, switchWorldvoice, switchBackstage, switchTts, switchDraw, switchSuggest,

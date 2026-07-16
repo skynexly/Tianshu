@@ -2196,6 +2196,42 @@ input[type="range"] {
 .modal-content.closing {
   animation: modalContentOut 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+/* 正则编辑弹窗：全屏，方便编辑长正则/替换串 */
+#regex-edit-modal { padding: 0; align-items: stretch; justify-content: stretch; }
+#regex-edit-modal .modal-content {
+  max-width: none;
+  width: 100%;
+  max-height: none;
+  height: 100vh;
+  height: 100dvh;
+  border: none;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  padding-top: max(16px, env(safe-area-inset-top, 16px));
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+}
+/* 全屏下让正则/替换两个多行框吃满可用高度 */
+#regex-edit-modal #regex-pattern,
+#regex-edit-modal #regex-replacement { min-height: 90px; }
+/* 全屏下：内容区可滚动，底部按钮吸底固定 */
+#regex-edit-modal .modal-content { overflow: hidden; }
+#regex-edit-modal .modal-content > h3 { flex-shrink: 0; }
+#regex-edit-modal .modal-content > .form-group,
+#regex-edit-modal .modal-content > div:not(.modal-actions) { flex-shrink: 0; }
+#regex-edit-modal .regex-edit-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+}
+#regex-edit-modal .modal-actions {
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+}
 @keyframes modalContentIn {
   from { opacity: 0; transform: scale(0.92); }
   to { opacity: 1; transform: scale(1); }
@@ -2334,6 +2370,22 @@ input[type="range"] {
   transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
 }
 .wv-gen-textarea { resize: vertical; line-height: 1.55; }
+/* 需求描述框的全屏展开按钮（右下角），配 Utils.openFullscreen 使用 */
+.wv-gen-fs-wrap { position: relative; width: 100%; }
+.wv-gen-fs-wrap > .wv-gen-textarea { padding-bottom: 30px; }
+.wv-gen-fs-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  padding: 2px;
+  line-height: 0;
+  cursor: pointer;
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+.wv-gen-fs-btn:hover { opacity: 1; }
 .wv-gen-input:focus, .wv-gen-textarea:focus {
   border-color: color-mix(in srgb, var(--accent) 74%, var(--border));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
@@ -2359,7 +2411,7 @@ input[type="range"] {
 .wv-gen-ref-lb-icon { width:16px; height:16px; flex:0 0 auto; color:var(--accent); }
 .wv-gen-ref-lb-btn:active { background:color-mix(in srgb, var(--accent) 12%, var(--bg-tertiary)); }
 .wv-gen-ref-lb-btn > span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.wv-gen-estimate { margin:10px 0 4px; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.55; color:var(--text-secondary); background:var(--bg-tertiary); border:1px solid var(--border); }
+.wv-gen-estimate { min-height:42px; box-sizing:border-box; margin:10px 0 4px; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.55; color:var(--text-secondary); background:var(--bg-tertiary); border:1px solid var(--border); }
 .wv-gen-estimate.warn { color:#e0a24e; border-color:rgba(224,162,78,0.4); background:rgba(224,162,78,0.08); }
 .wv-gen-option {
   margin-bottom: 12px;

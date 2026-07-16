@@ -3784,6 +3784,9 @@ showContextMenu(msgEl.dataset.id, e.clientX, e.clientY);
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg> 编辑剧情', action: () => editMessage(msgId) });
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> 回溯到此处', action: () => rollbackAndRestore(msgId) });
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg> 从此分支', action: () => createBranch(msgId) });
+      if (_isLatest) {
+        items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M10.029 4.285A2 2 0 0 0 7 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/><path d="M3 4v16"/></svg> 继续剧情', action: () => continueGenerate(msgId) });
+      }
       items.push({ sep: true });
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> 多选', action: () => enterMultiSelect(msgId) });
       items.push({ label: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 删除', action: () => deleteMessage(msgId), danger: true });
@@ -4265,7 +4268,7 @@ exitMultiSelect();
 
   async function continueGenerate(msgId) {
   const msg = messages.find(m => m.id === msgId);
-  if (!msg || msg.role !== 'assistant') return;
+  if (!msg) return;  // AI 气泡和用户气泡都可触发：本质是发一条隐式续写指令，与气泡归属无关
   // 用"<Continue the Chat/>"作为隐式指令发送
   const input = document.getElementById('chat-input');
   const original = input?.value || '';
@@ -4738,6 +4741,19 @@ if (parsed.relation && typeof StatusBar !== 'undefined') {
     const msg = messages.find(m => m.id === id);
     if (!msg) return;
     document.getElementById('msg-edit-content').value = msg.content;
+    // 仅当该消息带附加图片（contentForAPI 是多模态数组）时，显示「保留附加图片」勾选框
+    const keepRow = document.getElementById('msg-edit-keepimg-row');
+    const keepCb = document.getElementById('msg-edit-keepimg');
+    if (keepRow && keepCb) {
+      const hasImages = Array.isArray(msg.contentForAPI) &&
+        msg.contentForAPI.some(part => part && part.type === 'image_url');
+      if (hasImages) {
+        keepRow.classList.remove('hidden');
+        keepCb.checked = true;
+      } else {
+        keepRow.classList.add('hidden');
+      }
+    }
     document.getElementById('msg-edit-modal').classList.remove('hidden');
     document.getElementById('msg-edit-modal').dataset.editId = id;
   }
@@ -4748,6 +4764,21 @@ if (parsed.relation && typeof StatusBar !== 'undefined') {
 const msg = messages.find(m => m.id === id);
 if (msg) {
 msg.content = content;
+// 同步上下文字段 contentForAPI，避免编辑后 AI 仍读到旧内容
+try {
+  const keepRow = document.getElementById('msg-edit-keepimg-row');
+  const keepCb = document.getElementById('msg-edit-keepimg');
+  const showingKeep = keepRow && !keepRow.classList.contains('hidden');
+  if (showingKeep && keepCb && keepCb.checked && Array.isArray(msg.contentForAPI)) {
+    // 带附加图且选择保留：只更新多模态数组里的文本部分，图片保留
+    const textPart = msg.contentForAPI.find(p => p && p.type === 'text');
+    if (textPart) textPart.text = content;
+    else msg.contentForAPI.unshift({ type: 'text', text: content });
+  } else {
+    // 纯文本、或取消保留图片：清掉旧的 contentForAPI，上下文回退用新 content
+    delete msg.contentForAPI;
+  }
+} catch(_) { try { delete msg.contentForAPI; } catch(_) {} }
 // 清缓存让 renderAll 重新解析渲染
 try { delete msg._cachedFullHTML; delete msg._cachedPlainHTML; } catch(_) {}
 await DB.put('messages', msg);

@@ -180,6 +180,17 @@ const Utils = (() => {
       raw = raw.replace(thinkMatch[0], '').trim();
     }
 
+    // 展示型围栏（```html/svg/xml）先用占位符抽出保护——
+    // 否则下面"从底部往上找系统区代码块"的切分逻辑会把正文里的组件误当成底部系统区切走
+    // （bug：正文 + --- + 组件 结构时，组件从 body 丢失/被当纯文本显示成原样代码）。
+    // 切分完成、body 定型后再原样放回正文原位，交给 Markdown 渲染。
+    const _displayFences = [];
+    raw = raw.replace(/```(?:html|svg|xml)\s*\n[\s\S]*?```/gi, (m) => {
+      const idx = _displayFences.length;
+      _displayFences.push(m);
+      return `\x00HF${idx}\x00`;
+    });
+
     // 先把 ```status 代码块提取出来，并从 raw 里剥离（避免显示在气泡里）
     const statusMatch = raw.match(/```status\s*\n?([\s\S]*?)```/i);
     if (statusMatch) {
@@ -438,6 +449,11 @@ const Utils = (() => {
 
     // 正文
     result.body = bodyText;
+
+    // 恢复被保护的展示型围栏（```html/svg/xml）——放回正文原位，交给 Markdown 渲染。
+    if (_displayFences.length) {
+      result.body = result.body.replace(/\x00HF(\d+)\x00/g, (_, idx) => _displayFences[parseInt(idx)] || '');
+    }
 
     // 解析底部代码块
     if (bottomSection) {

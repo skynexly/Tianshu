@@ -334,12 +334,55 @@ const Prompts = (() => {
     }
 
     container.innerHTML = html;
+    if (promptManageMode) _updatePromptSelectAllIcon();
   }
 
   function togglePromptSelect(id) {
     if (promptSelectedIds.has(id)) promptSelectedIds.delete(id);
     else promptSelectedIds.add(id);
     render();
+  }
+
+  // 按当前分组+搜索筛选后的提示词列表（全选/图标刷新共用）
+  async function _getFilteredPrompts() {
+    let filtered = await getAll();
+    if (selectedGroup !== '全部') filtered = filtered.filter(p => p.group === selectedGroup);
+    if (searchQuery) {
+      filtered = filtered.filter(p =>
+        (p.name || '').toLowerCase().includes(searchQuery) ||
+        (p.content || '').toLowerCase().includes(searchQuery)
+      );
+    }
+    return filtered;
+  }
+
+  // 底栏「全选」图标态刷新
+  async function _updatePromptSelectAllIcon() {
+    const iconEl = document.getElementById('prompt-select-all-icon');
+    if (!iconEl) return;
+    const filtered = await _getFilteredPrompts();
+    const allSelected = filtered.length > 0 && filtered.every(p => promptSelectedIds.has(p.id));
+    if (allSelected) {
+      iconEl.style.background = 'var(--accent)';
+      iconEl.style.border = '2px solid var(--accent)';
+      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    } else {
+      iconEl.style.background = '';
+      iconEl.style.border = '2px solid var(--text-secondary)';
+      iconEl.innerHTML = '';
+    }
+  }
+
+  async function togglePromptSelectAll() {
+    const filtered = await _getFilteredPrompts();
+    const allSelected = filtered.length > 0 && filtered.every(p => promptSelectedIds.has(p.id));
+    if (allSelected) {
+      filtered.forEach(p => promptSelectedIds.delete(p.id));
+    } else {
+      filtered.forEach(p => promptSelectedIds.add(p.id));
+    }
+    await render();
+    _updatePromptSelectAllIcon();
   }
 
   function togglePromptManageMode() {
@@ -687,6 +730,7 @@ const Prompts = (() => {
 
   return { getAll, add, edit, saveEdit, closeEdit, remove, toggle, buildInjections, render, getGroups, switchGroup, search,
     togglePromptSelect, togglePromptManageMode, exitPromptManageMode, batchDeletePrompts,
+    togglePromptSelectAll,
     _togglePositionDropdown, _selectPosition, _toggleRoleDropdown, _selectRole, importPreset, exportPreset, toggleMenu,
     openConvOverrideModal, saveConvOverrides, resetConvOverrides, closeConvOverrideModal, _toggleOverride, _switchOverrideGroup, _editFromOverride };
 })();

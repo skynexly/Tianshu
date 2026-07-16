@@ -41,10 +41,12 @@ const Markdown = (() => {
     // 提取 <style>...</style> 整块保护，避免多行 CSS 被逐行处理拆成 <p>/<br>
     // （内容原样存起来，作用域限定由出口的 sanitize 统一处理）
     const styleBlocks = [];
+    // 占位符前后补换行，确保它「独占一行」——否则单行 HTML（如 <style>...</style><div>...）
+    // 抽走 style 后占位符与后续 <div> 同处一行，会被判为普通段落用 <p> 包住、后续结构丢失。
     processed = processed.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, (m) => {
       const idx = styleBlocks.length;
       styleBlocks.push(m);
-      return `\x00SB${idx}\x00`;
+      return `\n\x00SB${idx}\x00\n`;
     });
 
     // 提取 <script>...</script> 整块保护（避免多行脚本被逐行处理拆坏），最终一律丢弃。
@@ -52,7 +54,7 @@ const Markdown = (() => {
     processed = processed.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, (m) => {
       const idx = scriptBlocks.length;
       scriptBlocks.push(m);
-      return `\x00JS${idx}\x00`;
+      return `\n\x00JS${idx}\x00\n`;
     });
 
     // 提取行内代码

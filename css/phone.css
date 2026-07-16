@@ -4660,7 +4660,31 @@ align-self: start;
   white-space: pre-wrap;
   text-shadow: 0 1px 6px rgba(0,0,0,0.5);
 }
-/* 通话内容逐条渐隐浮上 */
+/* 玩家消息编辑入口：挂在最后一段上，绝对定位到右下角 */
+.phone-call-desc-card.has-edit,
+.phone-call-me-text.has-edit {
+  position: relative;
+}
+.phone-call-me-edit {
+  position: absolute;
+  right: -6px;
+  bottom: -18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.16);
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+  z-index: 2;
+}
+.phone-call-me-edit:active { transform: scale(0.88); }
+.phone-call-me-edit:hover { background: rgba(255,255,255,0.28); }
 @keyframes phoneCallFadeUp {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
@@ -4681,6 +4705,13 @@ align-self: start;
   display: flex;
   gap: 8px;
   align-items: center;
+}
+.phone-call-input-hint {
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: -8px;
+  letter-spacing: .02em;
 }
 .phone-call-input-row input {
   flex: 1;

@@ -39506,16 +39506,15 @@ ${wvPrompt}` },
             <div class="phone-moment-head">
               <div class="phone-moment-name">${Utils.escapeHtml(maskName)}</div>
               <div class="phone-moment-time">${Utils.escapeHtml(_formatPhoneTime(m.time || ''))}</div>
-<div class="phone-moment-text">${_phoneText(m.text || '')}</div>
- ${m.shareCard ? `<div class="phone-moment-share-card" style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;background:var(--bg-tertiary);display:flex;align-items:center;gap:8px;margin-top:8px">
-              </div>
-              <div class="phone-moment-text">${_phoneText(m.text || '')}</div>
+            </div>
+            <div class="phone-moment-text">${_phoneText(m.text || '')}</div>
+            ${m.shareCard ? `<div class="phone-moment-share-card" style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;background:var(--bg-tertiary);display:flex;align-items:center;gap:8px;margin-top:8px">
                 <div class="phone-moment-share-kind" style="flex-shrink:0;font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:1px 6px">${Utils.escapeHtml(m.shareCard.kind || '分享')}</div>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(m.shareCard.title || '')}</div>
-                ${m.shareCard.summary ? `<div style="font-size:11px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${Utils.escapeHtml(m.shareCard.summary)}</div>` : ''}
-              </div>
-            </div>` : ''}
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(m.shareCard.title || '')}</div>
+                  ${m.shareCard.summary ? `<div style="font-size:11px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${Utils.escapeHtml(m.shareCard.summary)}</div>` : ''}
+                </div>
+              </div>` : ''}
             ${m.image ? `<div class="phone-moment-image-wrap"><img src="${m.image}" class="phone-moment-image"></div>` : ''}
             ${m.imageDesc ? `<div class="phone-moment-image-desc">${_uiIcon('image', 13)}<span>${Utils.escapeHtml(m.imageDesc)}</span></div>` : ''}
             ${visibleHtml(m.visibleNpcs)}
@@ -47718,6 +47717,23 @@ async function _openChatSettings(contactId) {
       </div>
 
       <div style="margin-bottom:24px">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:500;letter-spacing:.04em">通话</div>
+        <div style="background:var(--bg-tertiary);border-radius:12px;overflow:hidden">
+          <div style="display:flex;align-items:center;padding:13px 14px">
+            <span style="flex:1;font-size:14px;color:var(--text)">允许角色主动挂断电话</span>
+            <label style="position:relative;width:44px;height:26px;cursor:pointer;flex-shrink:0">
+              <input id="chat-settings-call-hangup" type="checkbox" ${contact.allowCallHangup !== false ? 'checked' : ''} onchange="Phone._onChatSettingsCallHangupToggle()"
+                style="opacity:0;width:0;height:0;position:absolute">
+              <span id="chat-settings-call-hangup-track" style="position:absolute;inset:0;border-radius:13px;background:${contact.allowCallHangup !== false ? 'var(--accent)' : 'var(--border)'};transition:background .2s">
+                <span style="position:absolute;top:3px;left:${contact.allowCallHangup !== false ? '21px' : '3px'};width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding:0 4px">关闭后，角色在通话中不会主动挂电话（系统不再提示 AI 可以挂断），只能由你挂断</div>
+      </div>
+
+      <div style="margin-bottom:24px">
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:500;letter-spacing:.04em">视频通话立绘</div>
         <div style="background:var(--bg-tertiary);border-radius:12px;overflow:hidden;padding:14px">
           <div style="display:flex;gap:12px;align-items:center">
@@ -47764,6 +47780,17 @@ async function _openChatSettings(contactId) {
 function _onChatSettingsPhoneDownToggle() {
   const cb = document.getElementById('chat-settings-phone-down');
   const track = document.getElementById('chat-settings-phone-down-track');
+  const knob = track ? track.querySelector('span') : null;
+  if (!cb) return;
+  const on = cb.checked;
+  if (track) track.style.background = on ? 'var(--accent)' : 'var(--border)';
+  if (knob) knob.style.left = on ? '21px' : '3px';
+}
+
+// 通话主动挂断开关联动
+function _onChatSettingsCallHangupToggle() {
+  const cb = document.getElementById('chat-settings-call-hangup');
+  const track = document.getElementById('chat-settings-call-hangup-track');
   const knob = track ? track.querySelector('span') : null;
   if (!cb) return;
   const on = cb.checked;
@@ -47836,6 +47863,8 @@ async function _saveChatSettings(contactId) {
   contact.voiceEnabled = !!(voiceEnabledEl?.checked);
   contact.voiceId = (voiceIdEl?.value || '').trim();
   contact.allowPhoneDown = phoneDownEl ? !!(phoneDownEl.checked) : true;
+  const callHangupEl = document.getElementById('chat-settings-call-hangup');
+  contact.allowCallHangup = callHangupEl ? !!(callHangupEl.checked) : true;
   const callAutoPlayEl = document.getElementById('chat-settings-call-autoplay');
   if (callAutoPlayEl) contact.callAutoPlay = !!(callAutoPlayEl.checked);
   // 视频通话立绘：仅在用户改动过时写入（null 表示未改动）
@@ -48858,7 +48887,20 @@ function _startCall(contactId, mode) {
 function _callSendMessage(text) {
   if (!_activeCall) return;
   if (!text || !text.trim()) return;
-  _activeCall.rounds.push({ role: 'me', text: text.trim() });
+  // 把玩家输入里的括号动作转成明确标注（不带括号），避免 AI 有样学样用括号，
+  // 也让通话历史里动作/台词区分清晰。
+  const stored = _formatCallMeForAI(text.trim());
+  _activeCall.rounds.push({ role: 'me', text: stored });
+}
+
+// 把玩家通话输入格式化成给 AI 看的文本：括号动作 → 「（动作：xxx）」式标注但去掉原括号，
+// 台词原样。多段之间用换行连接。
+function _formatCallMeForAI(raw) {
+  const segs = _parseCallMeInput(raw);
+  const parts = segs.map(seg =>
+    seg.type === 'action' ? `【动作】${seg.text}` : seg.text
+  );
+  return parts.join('\n');
 }
 
 async function _callRequestReply() {
@@ -49066,7 +49108,17 @@ async function _callRequestReply() {
 
     // ⑦ 在场检测：NPC 此刻在玩家身边时，注入挂断进主线的规则提示
     // callDownInstruction 不再由系统自动检测在场，改为始终提供三种挂断标记让 AI 自行判断
-    const callDownInstruction = (contact.allowPhoneDown !== false)
+    // allowCallHangup === false 时，角色不允许主动挂断，整段挂断规则都不注入
+    const _allowCallHangup = contact.allowCallHangup !== false;
+    const callHangupInstruction = _allowCallHangup
+      ? `
+6. 如果角色想要主动结束这通电话，在回复的最末尾追加标记（仅标记，不要加其他文字）：
+   - [HANGUP]：正常挂断（说了再见、聊到了自然结尾、或有充分的告别理由）。角色不在玩家身边，或在身边但不需要转为线下互动时使用。
+   - [HANGUP:BUSY]：不方便接听而挂断（在开会、执行任务、在图书馆/安静场合、紧急情况等）。挂断后前端会自动触发一条线上消息，让角色补发文字解释原因（如"不好意思在开会，待会联系你"）。
+   - [HANGUP:PRESENT]：角色此刻就在玩家身边（同一空间/面对面），并且挂断后要转为线下面对面互动。前端会自动让玩家收起手机，转入线下场景。
+   三种标记前端都会在台词渲染完毕后自动挂断通话。`
+      : '';
+    const callDownInstruction = (_allowCallHangup && contact.allowPhoneDown !== false)
       ? `\n7. 【关于 HANGUP:PRESENT】如果你判断自己此刻就在玩家身边（同一空间/面对面/近距离），并且认为挂电话后应该转为线下互动，使用 [HANGUP:PRESENT]。前端会自动让玩家收起手机，转入你和玩家面对面的线下场景。如果你不在玩家身边、或者在身边但不需要转线下，使用普通的 [HANGUP] 即可。`
       : '';
 
@@ -49096,17 +49148,13 @@ ${sensoryRule}
    - 时间从【通话开始时间】起算，随对话自然推进（一般每段间隔几秒到一两分钟），台词段都要带时间标注。
    - 重要：描述段绝对不要加 > 前缀，台词段必须加 > 前缀，这是唯一的区分标识。
 3. 你只演「${contact.name}」这一方，但可以一次连续输出多段——像真人打电话那样，一句话没说完接着说、停顿后又补一句、自问自答。可以「描述段→台词段→描述段→台词段」交替。绝对不要替玩家说话、不要描写玩家的任何反应。
+   【关于玩家的动作】玩家的发言里，以「【动作】」开头的行是玩家此刻的动作/状态叙述（如"【动作】把手机贴到耳边，压低声音"），不是台词。你要把它当作玩家真实做出的行为来理解和回应，但同样不要替玩家续写动作。你自己输出时不要使用「【动作】」这种标注，也不要用括号包动作——你的描述段本来就不带 > 前缀，直接写叙述即可。
 4. 符合角色当下状态：先想这个角色此刻在哪、在做什么，据此决定接电话/视频的语气和反应（刚睡醒/在忙/在外面/独自一人）。
    【关于线下近况的知情范围】本提示词最开头的世界观资料里可能有「最近主线剧情」，那是玩家在线下经历的事。你扮演的角色【只知道其中自己亲身参与、在场目睹、或事后会被合理告知的部分】——先判断：这段剧情里「${contact.name}」到底在不在场、有没有参与？
    - 如果角色参与了/在场/事后理应知道：通话时可以自然提及、问起、关心或回应这些近况。
    - 如果角色没参与、不在场、也没有渠道得知：就当作完全不知道，不要提，更不要假装知道。绝不能凭空说出角色不可能知晓的线下细节，那会严重穿帮。
    - 拿不准时，宁可保守地当作不知道。
-5. 不要输出 JSON、不要用代码块、不要加任何前后缀说明，直接输出这段通话叙述正文。绝对禁止输出主线剧情才有的结构化内容：不要出现 \`\`\`relation、\`\`\`task 等代码块或任何键值对数据，不要在台词或描述末尾加 [时间] 时间戳标注。这里只是一通电话，只有声音的描述段和台词段。
-6. 如果角色想要主动结束这通电话，在回复的最末尾追加标记（仅标记，不要加其他文字）：
-   - [HANGUP]：正常挂断（说了再见、聊到了自然结尾、或有充分的告别理由）。角色不在玩家身边，或在身边但不需要转为线下互动时使用。
-   - [HANGUP:BUSY]：不方便接听而挂断（在开会、执行任务、在图书馆/安静场合、紧急情况等）。挂断后前端会自动触发一条线上消息，让角色补发文字解释原因（如"不好意思在开会，待会联系你"）。
-   - [HANGUP:PRESENT]：角色此刻就在玩家身边（同一空间/面对面），并且挂断后要转为线下面对面互动。前端会自动让玩家收起手机，转入线下场景。
-   三种标记前端都会在台词渲染完毕后自动挂断通话。${callDownInstruction}${callMomentsBlock}`;
+5. 不要输出 JSON、不要用代码块、不要加任何前后缀说明，直接输出这段通话叙述正文。绝对禁止输出主线剧情才有的结构化内容：不要出现 \`\`\`relation、\`\`\`task 等代码块或任何键值对数据，不要在台词或描述末尾加 [时间] 时间戳标注。这里只是一通电话，只有声音的描述段和台词段。${callHangupInstruction}${callDownInstruction}${callMomentsBlock}`;
 
     const apiMessages = [
       { role: 'system', content: systemPrompt },
@@ -49363,6 +49411,7 @@ async function _openCall(contactId, mode, opts) {
     </div>
     <div id="phone-call-messages" class="phone-call-msgs"></div>
     <div class="phone-call-bottom">
+      <div class="phone-call-input-hint">在括号内描写动作</div>
       <div class="phone-call-input-row">
         <input id="phone-call-input" type="text" placeholder="说些什么…" onkeydown="if(event.key==='Enter'){Phone._callDoSend()}">
         <button class="phone-call-send-btn" onclick="Phone._callDoSend()" title="发送">
@@ -49878,15 +49927,98 @@ function _callDoSend() {
 
   _callSendMessage(text);
 
-  // 渲染用户消息到通话区（右对齐纯文本，无气泡）
+  // 渲染用户消息到通话区（用存进 rounds 的规范文本，动作段=居中描述卡片、台词=右对齐）
+  // 只让最新一条玩家消息带编辑入口，先清掉之前的编辑按钮
+  _clearCallMeEditBtns();
   const list = document.getElementById('phone-call-messages');
   if (list) {
-    const el = document.createElement('div');
-    el.className = 'phone-call-me-text';
-    el.textContent = text;
-    list.appendChild(el);
+    const stored = _activeCall && _activeCall.rounds.length > 0
+      ? _activeCall.rounds[_activeCall.rounds.length - 1].text
+      : text;
+    _renderCallMeMessage(stored, true);
     list.scrollTop = list.scrollHeight;
   }
+}
+
+// 清掉通话区里所有玩家消息的编辑按钮（保证同时只有最新一条可编辑）
+function _clearCallMeEditBtns() {
+  const list = document.getElementById('phone-call-messages');
+  if (!list) return;
+  list.querySelectorAll('.phone-call-me-edit').forEach(b => b.remove());
+  list.querySelectorAll('.has-edit').forEach(e => e.classList.remove('has-edit'));
+}
+
+// 把存进 rounds 的玩家文本（【动作】开头=动作，其余=台词）拆回段，用于渲染。
+// 返回 [{ type:'action'|'speech', text }]
+function _parseCallMeStored(stored) {
+  const out = [];
+  const lines = String(stored || '').split('\n');
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    if (t.indexOf('【动作】') === 0) {
+      const inner = t.slice('【动作】'.length).trim();
+      if (inner) out.push({ type: 'action', text: inner });
+    } else {
+      out.push({ type: 'speech', text: t });
+    }
+  }
+  return out;
+}
+
+// 渲染一条玩家消息（stored=rounds 里存的文本）。withEdit=true 时给整条挂编辑入口。
+// 动作段=居中描述卡片；台词段=右对齐纯文本。
+function _renderCallMeMessage(stored, withEdit) {
+  const list = document.getElementById('phone-call-messages');
+  if (!list) return;
+  const segs = _parseCallMeStored(stored);
+  const els = [];
+  for (const seg of segs) {
+    const el = document.createElement('div');
+    el.className = seg.type === 'action' ? 'phone-call-desc-card' : 'phone-call-me-text';
+    el.textContent = seg.text;
+    els.push(el);
+    list.appendChild(el);
+  }
+  // 编辑按钮：挂在这条消息的最后一段元素上（长按/点击右下角小铅笔）
+  if (withEdit && els.length > 0) {
+    const lastEl = els[els.length - 1];
+    lastEl.classList.add('has-edit');
+    const editBtn = document.createElement('button');
+    editBtn.className = 'phone-call-me-edit';
+    editBtn.title = '编辑本轮';
+    editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+    editBtn.onclick = () => _callEditMeRound();
+    lastEl.appendChild(editBtn);
+  }
+}
+// 返回 [{ type:'action'|'speech', text }]，按原始顺序，已去掉外层括号、trim。
+function _parseCallMeInput(raw) {
+  const out = [];
+  const s = String(raw || '');
+  // 同时匹配中文全角括号（）和英文半角括号()
+  const re = /（([^）]*)）|\(([^)]*)\)/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    // 括号前的普通文字 = 台词
+    if (m.index > last) {
+      const speech = s.slice(last, m.index).trim();
+      if (speech) out.push({ type: 'speech', text: speech });
+    }
+    // 括号内 = 动作（滤掉括号本身，叙述卡片更干净，也避免 AI 学着用括号）
+    const inner = (m[1] != null ? m[1] : m[2] || '').trim();
+    if (inner) out.push({ type: 'action', text: inner });
+    last = re.lastIndex;
+  }
+  // 结尾剩余的普通文字 = 台词
+  if (last < s.length) {
+    const tail = s.slice(last).trim();
+    if (tail) out.push({ type: 'speech', text: tail });
+  }
+  // 完全没括号：整条当台词
+  if (out.length === 0) out.push({ type: 'speech', text: s.trim() });
+  return out;
 }
 
 // 解析 AI 通话回复：拆成「描述段」和「台词段（带时间）」
@@ -50239,15 +50371,88 @@ function _callSaveEdit() {
   if (list) list.innerHTML = '';
   _clearCallRenderTimers();
   _callLineSeq = 0;
-  for (const round of _activeCall.rounds) {
+  // 找最后一条玩家消息的索引，只给它挂编辑入口
+  let lastMeIdx = -1;
+  for (let i = _activeCall.rounds.length - 1; i >= 0; i--) {
+    if (_activeCall.rounds[i].role === 'me') { lastMeIdx = i; break; }
+  }
+  for (let ri = 0; ri < _activeCall.rounds.length; ri++) {
+    const round = _activeCall.rounds[ri];
     if (round.role === 'them') {
       _renderCallSegments(round.text, true);
     } else {
-      // 玩家消息
-      const el = document.createElement('div');
-      el.className = 'phone-call-line me';
-      el.innerHTML = `<div class="phone-call-line-text">${Utils.escapeHtml(round.text)}</div>`;
-      list.appendChild(el);
+      // 玩家消息：按存储格式（【动作】/台词）渲染，最后一条带编辑入口
+      _renderCallMeMessage(round.text, ri === lastMeIdx);
+    }
+  }
+  if (list) list.scrollTop = list.scrollHeight;
+  UI.showToast('已保存修改', 1200);
+}
+
+// 编辑玩家最后一轮通话内容：把存储格式（【动作】）还原成括号供编辑
+function _callEditMeRound() {
+  if (!_activeCall || _activeCall.rounds.length === 0) return;
+  let lastIdx = -1;
+  for (let i = _activeCall.rounds.length - 1; i >= 0; i--) {
+    if (_activeCall.rounds[i].role === 'me') { lastIdx = i; break; }
+  }
+  if (lastIdx < 0) { UI.showToast('没有可编辑的内容', 1200); return; }
+  // 存储格式 → 可读输入格式：【动作】xxx → （xxx）
+  const stored = _activeCall.rounds[lastIdx].text || '';
+  const editable = _parseCallMeStored(stored)
+    .map(seg => seg.type === 'action' ? `（${seg.text}）` : seg.text)
+    .join('\n');
+  const overlay = document.createElement('div');
+  overlay.id = 'phone-call-edit-overlay';
+  overlay.style.cssText = 'position:absolute;inset:0;z-index:65;display:flex;flex-direction:column;background:var(--bg);border-radius:inherit;padding:16px';
+  overlay.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <span style="font-size:15px;font-weight:600;color:var(--text)">编辑我的话</span>
+      <button onclick="document.getElementById('phone-call-edit-overlay')?.remove()" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;padding:4px">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">括号内为动作描写</div>
+    <textarea id="phone-call-edit-textarea" style="flex:1;min-height:0;width:100%;box-sizing:border-box;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;line-height:1.6;padding:12px;resize:none;outline:none;font-family:inherit">${Utils.escapeHtml(editable)}</textarea>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button onclick="document.getElementById('phone-call-edit-overlay')?.remove()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+      <button onclick="Phone._callSaveMeEdit()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+    </div>`;
+  const shell = document.querySelector('#phone-modal .phone-shell');
+  if (shell) shell.appendChild(overlay);
+  setTimeout(() => document.getElementById('phone-call-edit-textarea')?.focus(), 100);
+}
+
+// 保存编辑后的玩家通话内容
+function _callSaveMeEdit() {
+  if (!_activeCall) return;
+  const textarea = document.getElementById('phone-call-edit-textarea');
+  const newText = (textarea?.value || '').trim();
+  if (!newText) { UI.showToast('内容不能为空', 1200); return; }
+  // 输入（含括号）→ 存储格式（【动作】）
+  const stored = _formatCallMeForAI(newText);
+  for (let i = _activeCall.rounds.length - 1; i >= 0; i--) {
+    if (_activeCall.rounds[i].role === 'me') {
+      _activeCall.rounds[i].text = stored;
+      break;
+    }
+  }
+  document.getElementById('phone-call-edit-overlay')?.remove();
+  // 全量重渲染
+  const list = document.getElementById('phone-call-messages');
+  if (list) list.innerHTML = '';
+  _clearCallRenderTimers();
+  _callLineSeq = 0;
+  let lastMeIdx = -1;
+  for (let i = _activeCall.rounds.length - 1; i >= 0; i--) {
+    if (_activeCall.rounds[i].role === 'me') { lastMeIdx = i; break; }
+  }
+  for (let ri = 0; ri < _activeCall.rounds.length; ri++) {
+    const round = _activeCall.rounds[ri];
+    if (round.role === 'them') {
+      _renderCallSegments(round.text, true);
+    } else {
+      _renderCallMeMessage(round.text, ri === lastMeIdx);
     }
   }
   if (list) list.scrollTop = list.scrollHeight;
@@ -56668,11 +56873,11 @@ _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioH
     // 衣橱 App
     _wardrobeAddItem, _wardrobeRemoveItem, _wardrobeItemDetail, _wardrobePickPortrait, _wardrobeSaveSuit, _wardrobeOpenSuits, _wardrobeAiGenSuits, _switchWardrobeHomeTab, _wardrobeOpenMall, _wardrobeOpenInventory, _wardrobeMallSettings, _wardrobeMallToggleTag, _wardrobeMallRefresh, _wardrobeMallBuy, _wardrobeInvToggleTag, _wardrobeInvSearch, _wardrobeInvDelete, _wardrobeInvEdit, _wardrobeInvEditTag, _wardrobeInvWear, _wardrobeShowOrders,
     // 聊天 App
-  _switchChatTab, _showCreateGroupDialog, _createGroup, _groupDoSend, _groupRequestReply, _openGroupSettings, _groupSaveName, _groupSaveDesc, _toggleGroupVoiceMode, _playGroupVoice, _showGroupPhotoDetail, _groupCancelQuote, _openGroupRedPacketSend, _openGroupRedPacket, _groupPickAvatar, _groupRemoveMember, _groupAddContacts, _groupAddExtra, _groupEditExtra, _groupAiGenExtras, _groupDissolve, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _onChatSettingsCallAutoPlayToggle, _onChatSettingsPhoneDownToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
+  _switchChatTab, _showCreateGroupDialog, _createGroup, _groupDoSend, _groupRequestReply, _openGroupSettings, _groupSaveName, _groupSaveDesc, _toggleGroupVoiceMode, _playGroupVoice, _showGroupPhotoDetail, _groupCancelQuote, _openGroupRedPacketSend, _openGroupRedPacket, _groupPickAvatar, _groupRemoveMember, _groupAddContacts, _groupAddExtra, _groupEditExtra, _groupAiGenExtras, _groupDissolve, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _onChatSettingsCallAutoPlayToggle, _onChatSettingsPhoneDownToggle, _onChatSettingsCallHangupToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
   ingestChatMessages, getChatHistoryForNPCs, getCoReadForNPCs, _openStickerPickerForChat, _closeStickerPicker, _pickStickerForChat, _setChatStickerFilter,
     buildGroupListBlock, handleMainlineGroupChatTag, handleMainlineGroupCreateTag, _groupToggleAutoChat, _groupAutoChatTick, _userLiveGenWave,
   // 通话
-_openCall, _callSendMessage, _callRequestReply, _endCall, _callDoSend, _callDoRefresh, _callDoEnd, _callEditRound, _callSaveEdit,
+_openCall, _callSendMessage, _callRequestReply, _endCall, _callDoSend, _callDoRefresh, _callDoEnd, _callEditRound, _callSaveEdit, _callEditMeRound, _callSaveMeEdit,
 _chatPickCallPortrait, _chatClearCallPortrait, _showCallRecord,
     // 来电
     handleMainlineCallTag, _showIncomingCall,

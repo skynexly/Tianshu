@@ -3,6 +3,12 @@
  */
 const SingleCard = (() => {
   let _editingId = null;
+
+  // 给需求描述 textarea 包一层容器 + 右下角全屏展开按钮（配 Utils.openFullscreen）。
+  function _fsWrap(taHtml, id, title) {
+    const t = (title || '').replace(/'/g, "\\'");
+    return `<div class="wv-gen-fs-wrap">${taHtml}<button type="button" class="wv-gen-fs-btn" onclick="Utils.openFullscreen('${id}','${t}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div>`;
+  }
   
   // 管理模式
   let manageMode = false;
@@ -1137,11 +1143,11 @@ const SingleCard = (() => {
     body.innerHTML = `
       <div class="wv-gen-field">
         <label class="wv-gen-label">你想要什么样的角色卡？ *</label>
-        <textarea id="sc-gen-prompt" rows="4" placeholder="例如：高岭之花的剑道部学姐，外冷内热；或者毒舌但护短的便利店店长" class="wv-gen-textarea"></textarea>
+        ${_fsWrap(`<textarea id="sc-gen-prompt" rows="4" placeholder="例如：高岭之花的剑道部学姐，外冷内热；或者毒舌但护短的便利店店长" class="wv-gen-textarea"></textarea>`, 'sc-gen-prompt', '你想要什么样的角色卡')}
       </div>
       <div class="wv-gen-field">
         <label class="wv-gen-label">你想和 Ta 怎样相遇？（可选）</label>
-        <textarea id="sc-gen-meet" rows="3" placeholder="留空则由 AI 自由设计开场。例如：在深夜便利店打烊前撞见" class="wv-gen-textarea"></textarea>
+        ${_fsWrap(`<textarea id="sc-gen-meet" rows="3" placeholder="留空则由 AI 自由设计开场。例如：在深夜便利店打烊前撞见" class="wv-gen-textarea"></textarea>`, 'sc-gen-meet', '你想和 Ta 怎样相遇')}
       </div>
       <div class="wv-gen-field">
         <label class="wv-gen-label">设定字数（≤5000）</label>
