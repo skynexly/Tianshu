@@ -300,9 +300,11 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
               </div>
               <div style="background:var(--bg-tertiary);border:none;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;font-size:12px;line-height:1.6;color:var(--text-secondary)">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-                <div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-                  <span>skynex 交流群 <strong style="color:var(--text);font-weight:650;font-size:13px;letter-spacing:0.3px">739657680</strong></span>
-                  <button id="changelog-copy-group" type="button" style="padding:4px 12px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:11px;cursor:pointer;line-height:1.5;flex-shrink:0">复制群号</button>
+                <div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:8px">
+                  <span style="flex:1;min-width:0">skynex 交流群 <strong style="color:var(--text);font-weight:650;font-size:13px;letter-spacing:0.3px">739657680</strong></span>
+                  <button id="changelog-copy-group" type="button" title="复制群号" style="flex-shrink:0;width:24px;height:24px;padding:0;border:none;background:none;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  </button>
                 </div>
               </div>
             </div>
@@ -398,9 +400,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
                 ta.remove();
               } catch(_) {}
             }
-            copyGroupBtn.textContent = ok ? '已复制' : '复制失败';
             try { if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(ok ? '群号已复制' : '复制失败，请手动复制群号', 1600); } catch(_) {}
-            setTimeout(() => { if (copyGroupBtn) copyGroupBtn.textContent = '复制群号'; }, 1600);
           };
         }
         overlay.querySelector('#changelog-ok').onclick = () => {
