@@ -204,6 +204,14 @@ const NPC = (() => {
     return currentRegion;
   }
 
+  // 按 region key（id 或 name，同 parseRegionFromOutput 返回值）取该地区的背景图
+  // 找不到地区或没配背景图时返回空串
+  function getRegionBgImage(regionKey) {
+    if (!regionKey || regionKey === 'all') return '';
+    const reg = regionData.find(r => (r.id || r.name) === regionKey || r.name === regionKey);
+    return (reg && reg.bgImage) ? reg.bgImage : '';
+  }
+
   /**
    * 命中提及地区：扫文本里精确出现的地区全名/别名，返回 [提及的地区] 注入文本
    * - 大小写不敏感
@@ -387,7 +395,7 @@ const NPC = (() => {
   return {
     init, getByRegion, getByFaction, getByNames,
     formatQuickRef, formatForPrompt, formatPresentForPrompt,
-    parseRegionFromOutput, setRegion, getRegion,
+    parseRegionFromOutput, setRegion, getRegion, getRegionBgImage,
     formatMentionedForPrompt,
     setPresentNPCs, getPresentNPCs,
     filterByRegion, filterByFaction, renderNPCList, renderFactionList

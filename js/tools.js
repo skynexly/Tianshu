@@ -213,7 +213,7 @@ const Tools = (() => {
       if (isCurrent && typeof NPC !== 'undefined' && NPC.init) {
         const flatNpcs = [], flatFacs = [], flatRegions = [];
         (wv.regions || []).forEach(r => {
-          flatRegions.push({ id:r.id, name:r.name, summary:r.summary, detail:r.detail, aliases:r.aliases });
+          flatRegions.push({ id:r.id, name:r.name, summary:r.summary, detail:r.detail, aliases:r.aliases, bgImage:r.bgImage });
           (r.factions || []).forEach(f => {
             flatFacs.push({ ...f, regionName:r.name, regionId:r.id });
             (f.npcs || []).forEach(n => flatNpcs.push({ ...n, faction:f.name, regions:[r.id || r.name] }));

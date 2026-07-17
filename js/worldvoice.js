@@ -949,6 +949,11 @@ ${wvPrompt}`;
         _bookBlock += `\n剧情梗概：${_wr.synopsis}\n讨论可以聊到这些剧情，但【涉及具体情节时要贴合上面的真实内容，绝不能编造作品里没有的情节或乱给结局】。`;
       }
     }
+    // 若这条帖子来自「热搜专区」，注入这条热搜的词条 + 描述，让正文/评论围绕这个热搜话题展开
+    if (post._hotRef && post._hotRef.title) {
+      const _hr = post._hotRef;
+      _bookBlock += `\n\n## 这条帖子所在的热搜话题\n本帖出现在热搜「${_hr.title}」的专区里。正文和评论要贴合这个热搜话题的氛围（吃瓜/讨论/爆料/辟谣/对线/吐槽等）。${_hr.desc ? `\n热搜描述：${_hr.desc}` : ''}\n注意：这条帖子也可能是"蹭热度"或"误伤"（借词条说别的、或词条相同实为另一件事），如果预览里标题/摘要与热搜话题明显不符，就按预览本身的方向写，不要强行拉回热搜话题。`;
+    }
     const userPrompt = `${gameTime ? `## 当前游戏时间\n${gameTime}\n\n` : ''}## 帖子预览\n标题：${post.title}\n摘要：${post.summary}\n发帖人（楼主）：${post.username}\n发帖时间：${post.time || '未知'}\n标签：${(post.tags||[]).join('、')}${_bookBlock}${npcListStr3}\n\n请生成完整内容和评论区。注意：正文是以楼主"${post.username}"的口吻写的，语气和内容要符合这个角色的性格。评论区中如果楼主出现，必须是以作者身份回复读者（如答疑、补充），而不是以路人视角评论自己。`;
     const resp = await fetch(url, {
       method: 'POST',

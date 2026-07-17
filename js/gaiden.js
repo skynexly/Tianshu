@@ -193,8 +193,7 @@ const Gaiden = (() => {
               { role: 'user', content: userPrompt }
             ],
             stream: false,
-            temperature: 0.85,
-            max_tokens: 4096
+            temperature: 0.85
           }),
           signal: _abortCtrl?.signal
         });
@@ -345,8 +344,7 @@ const Gaiden = (() => {
         model,
         messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
         stream: false,
-        temperature: 0.85,
-        max_tokens: 4096
+        temperature: 0.85
       }),
       signal: _abortCtrl?.signal
     });
@@ -615,7 +613,7 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
           body: JSON.stringify({
             model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-            stream: false, temperature: 0.85, max_tokens: 4096
+            stream: false, temperature: 0.85
           }),
           signal: _abortCtrl?.signal
         });

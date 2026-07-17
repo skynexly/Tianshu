@@ -350,6 +350,11 @@ const Chat = (() => {
       if (typeof Theme !== 'undefined' && Theme.setConvBgOverride) {
         Theme.setConvBgOverride(_convForBg?.convBgImage || '');
       }
+      // 切对话时先清掉上一个对话残留的地区背景覆盖（立即，无动画），
+      // 避免串台。新对话的地区背景会在其世界观加载后、下一次 AI 解析到地区时恢复。
+      if (typeof Theme !== 'undefined' && Theme.setRegionBgOverride) {
+        Theme.setRegionBgOverride('', true);
+      }
     } catch(_) {}
     const container = document.getElementById('chat-messages');
 
@@ -500,6 +505,23 @@ const Chat = (() => {
     try { if (typeof Phone !== 'undefined' && Phone.reloadActionLog) Phone.reloadActionLog(); } catch(_) {}
     // 切换对话后，预热世界观初始住所（让 AI 在玩家没打开小屋 App 时也知道住所，避免剧情错位）
     try { if (typeof Phone !== 'undefined' && Phone.ensureInitialHouse) Phone.ensureInitialHouse(); } catch(_) {}
+    // 切换对话后，按该对话状态栏的 region 立即应用地区背景图（无动画，避免"进对话时背景卡一条才出现"）
+    // 不依赖 NPC 模块 regionData（那个要等 send 流程 init），直接从对话世界观 regions 里查
+    try {
+      if (typeof Theme !== 'undefined' && Theme.setRegionBgOverride) {
+        const _sb = Conversations.getStatusBar();
+        const _regionKey = (_sb && _sb.region) ? _sb.region : '';
+        let _regionBg = '';
+        if (_regionKey && _regionKey !== 'all') {
+          const _conv = Conversations.getList().find(c => c.id === conversationId);
+          const _wvId = _conv?.worldviewId || _conv?.singleWorldviewId || (_conv?.isSingle ? _conv?.singleCharSourceWvId : '');
+          const _wv = _wvId ? await DB.get('worldviews', _wvId) : (_conv?.isSingle ? null : await Worldview.getCurrent());
+          const _reg = (_wv?.regions || []).find(r => (r.id || r.name) === _regionKey || r.name === _regionKey);
+          if (_reg && _reg.bgImage) _regionBg = _reg.bgImage;
+        }
+        Theme.setRegionBgOverride(_regionBg, true);
+      }
+    } catch(_) {}
     // 切换对话后，刷新底部快速切换栏（不同世界观可见的面具不同）
     try { renderQuickSwitches(); } catch(_) {}
     // 异步加载 AI 头像，加载好后回填到已渲染的消息
@@ -711,7 +733,7 @@ const _recentStatusParts = [];
         if (singleWv) {
           const flatNpcs = [], flatFacs = [], flatRegions = [];
           (singleWv.regions || []).forEach(r => {
-            flatRegions.push({ id: r.id, name: r.name, summary: r.summary, detail: r.detail, aliases: r.aliases });
+            flatRegions.push({ id: r.id, name: r.name, summary: r.summary, detail: r.detail, aliases: r.aliases, bgImage: r.bgImage });
             (r.factions || []).forEach(f => {
               flatFacs.push({ ...f, regionName: r.name, regionId: r.id });
               (f.npcs || []).forEach(n => {
@@ -1137,7 +1159,7 @@ try {
         // v632.1：合并单人卡世界书的全图 NPC（独立于 currentWv，没绑主世界观也要跑）
         if (_shouldInjectLbNpc) {
           try {
-            const _card = await SingleCard.get(singleSettings.charId);
+            const _card = singleSettings?.charId ? await SingleCard.get(singleSettings.charId) : null;
             if (!isSingleConv || singleSettings?.charType !== "card" || (_card && _card.extEnabled !== false)) {
               const _hiddenWv = await _getCardLorebooksMerged(singleSettings?.charId, Conversations.getList().find(c => c.id === Conversations.getCurrent()));
               if (_hiddenWv && Array.isArray(_hiddenWv.globalNpcs) && _hiddenWv.globalNpcs.length > 0) {
@@ -1877,7 +1899,7 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
       // v632：单人卡的世界书注入（独立于 currentWv，没绑主世界观也要跑）
       if (isGameMode) { // v685：所有模式都聚合 conv/wv/card/常驻角色书
         try {
-          const _card = await SingleCard.get(singleSettings.charId);
+          const _card = singleSettings?.charId ? await SingleCard.get(singleSettings.charId) : null;
           if (!isSingleConv || singleSettings?.charType !== "card" || (_card && _card.extEnabled !== false)) {
             const _hiddenWv = await _getCardLorebooksMerged(singleSettings?.charId, (typeof Conversations !== 'undefined' && Conversations.getList) ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null);
             if (_hiddenWv) {
@@ -2933,7 +2955,15 @@ renderContent = renderContent.replace(/```mail_noreply[\s\S]*$/i, '');
 
             if (isGameMode) {
               const newRegion = NPC.parseRegionFromOutput(parsed);
-              if (newRegion !== NPC.getRegion()) NPC.setRegion(newRegion);
+              if (newRegion !== NPC.getRegion()) {
+                NPC.setRegion(newRegion);
+                // 地区背景图：进入配了背景图的地区时切换，没配则回落
+                try {
+                  if (typeof Theme !== 'undefined' && Theme.setRegionBgOverride) {
+                    Theme.setRegionBgOverride(NPC.getRegionBgImage(newRegion) || '');
+                  }
+                } catch(_) {}
+              }
 
               if (parsed.presentNPCs && parsed.presentNPCs.length > 0) {
                 NPC.setPresentNPCs(parsed.presentNPCs);
@@ -4251,6 +4281,12 @@ exitMultiSelect();
         if (typeof NPC !== 'undefined') {
           if (NPC.setRegion) NPC.setRegion(newRegion);
           if (NPC.setPresentNPCs) NPC.setPresentNPCs(Array.isArray(restored?.npcs) ? restored.npcs.map(n => n.name).filter(Boolean) : []);
+          // 地区背景图跟着回滚
+          try {
+            if (typeof Theme !== 'undefined' && Theme.setRegionBgOverride && NPC.getRegionBgImage) {
+              Theme.setRegionBgOverride(NPC.getRegionBgImage(newRegion) || '');
+            }
+          } catch(_) {}
         }
       } catch(_) {}
       // v687.33：手机数据恢复（skipPhone 时跳过，保护用户本轮手机操作）

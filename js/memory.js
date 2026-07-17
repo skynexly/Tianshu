@@ -986,7 +986,7 @@ ${dialogue}
         <button type="button" onclick="Memory.toggleScopeDropdown()" style="width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;box-sizing:border-box;text-align:left">
           ${activeAvatar}
           <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${Utils.escapeHtml(active.name)}${activeIsCurrent ? '<span style="font-size:11px;color:var(--text-secondary)"> · 当前面具</span>' : ''}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${Utils.escapeHtml(active.name)}${active.note ? `<span style="font-size:11px;color:var(--text-secondary)"> · ${Utils.escapeHtml(active.note)}</span>` : ''}${activeIsCurrent ? '<span style="font-size:11px;color:var(--text-secondary)"> · 当前面具</span>' : ''}</span>
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text-secondary);line-height:1.4">${Utils.escapeHtml(active.preview)}</span>
           </span>
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0;color:var(--text-secondary)"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
@@ -1001,7 +1001,7 @@ ${dialogue}
             return `<div class="custom-dropdown-item ${isActive ? 'active' : ''}" onclick="Memory.selectScope('${m.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 10px">
               ${avatar}
               <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${Utils.escapeHtml(m.name)}${isCurrent ? '<span style="font-size:11px;color:var(--text-secondary)"> · 当前</span>' : ''}</span>
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${Utils.escapeHtml(m.name)}${m.note ? `<span style="font-size:11px;color:var(--text-secondary)"> · ${Utils.escapeHtml(m.note)}</span>` : ''}${isCurrent ? '<span style="font-size:11px;color:var(--text-secondary)"> · 当前</span>' : ''}</span>
                 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text-secondary);line-height:1.4">${Utils.escapeHtml(m.preview)}</span>
               </span>
               ${isActive ? '<span style="font-size:11px;color:var(--accent);flex-shrink:0">已选</span>' : ''}

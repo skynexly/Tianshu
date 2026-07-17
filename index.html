@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=162">
+<link rel="stylesheet" href="css/style.css?v=163">
 <link rel="stylesheet" href="css/phone.css?v1=405">
 <link rel="stylesheet" href="css/phone-fudge.css?v=48">
 <link rel="stylesheet" href="css/markdown.css">
@@ -3623,6 +3623,15 @@ NPC
           <label>简介（速查表用）<textarea id="wv-reg-summary" class="auto-resize-textarea" rows="3" placeholder="一句话简介"></textarea></label>
 <label>完整设定（命中时发送）<div style="position:relative;width:100%"><textarea id="wv-reg-detail" class="auto-resize-textarea" rows="8" placeholder="地区的详细设定..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-reg-detail','完整设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
 <button type="button" onclick="WvGenerator.inlineFillRegion()" class="ai-action-btn" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>AI 填充本地区</button>
+          <label style="margin-top:12px;display:block">地区背景图<span style="font-size:11px;color:var(--text-secondary);font-weight:normal"> · 进入该地区时聊天界面自动切换到这张图</span>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+              <div id="wv-reg-bg-preview" style="width:96px;height:56px;border-radius:8px;overflow:hidden;background:var(--bg-tertiary);border:1px solid var(--border);flex-shrink:0"><div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:12px">未设置背景图</div></div>
+              <div style="display:flex;gap:6px">
+                <button type="button" onclick="Worldview.handleRegionBgUpload()" style="padding:6px 12px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">上传</button>
+                <button type="button" id="wv-reg-bg-clear" onclick="Worldview.clearRegionBg()" style="display:none;padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">清除</button>
+              </div>
+            </div>
+          </label>
         </form>
         <div style="padding-top:16px;margin-top:16px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -4326,11 +4335,11 @@ const GameLog = (() => {
 <script src="js/env-awareness.js"></script>
 <script src="js/mcp-client.js"></script>
 <script src="js/fab-drag.js?v=5"></script>
-<script src="js/memory.js?v=9"></script>
-<script src="js/tools.js?v=9"></script>
+<script src="js/memory.js?v=10"></script>
+<script src="js/tools.js?v=10"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=57"></script>
-<script src="js/worldview.js?v=104"></script>
+<script src="js/worldview.js?v=106"></script>
 <script src="js/npc_importer.js?v=2"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
@@ -4343,26 +4352,26 @@ const GameLog = (() => {
 <script src="js/prompts.js?v=4"></script>
 <script src="js/conversations.js?v=12"></script>
 <script src="js/summary.js?v=3"></script>
-<script src="js/chat.js?v=116"></script>
+<script src="js/chat.js?v=122"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
 <script src="js/tts.js"></script>
 <script src="js/branch.js"></script>
 <script src="js/settings.js?v=14"></script>
-<script src="js/gaiden.js?v=3"></script>
+<script src="js/gaiden.js?v=4"></script>
 <script src="js/backstage.js?v=23"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
 <script src="js/status_bar.js?v=31"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/watch-sfx.js?v=4"></script>
-<script src="js/worldvoice.js?v=23"></script>
+<script src="js/worldvoice.js?v=24"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
 <script src="js/app_icons.js?v=7"></script>
-<script src="js/phone.js?v1=1162"></script>
+<script src="js/phone.js?v1=1175"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -4374,7 +4383,7 @@ const GameLog = (() => {
 <script src="js/colorpicker.js?v=1"></script>
 <script src="data/tianshucheng-bg.js"></script>
   <script src="data/tutorial-script.js?v=2"></script>
-  <script src="js/theme.js?v=17"></script>
+  <script src="js/theme.js?v=19"></script>
   <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js?v=2"></script>
 <script src="data/builtin-heartsim.js?v=2"></script>
@@ -4382,7 +4391,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=22"></script>
-<script src="js/app.js?v=162"></script>
+<script src="js/app.js?v=163"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

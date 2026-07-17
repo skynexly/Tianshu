@@ -336,16 +336,50 @@ function apply(cfg) {
     });
   }
 
-  // 对话级背景图覆盖（优先级高于主题级 chatBgImage；空字符串/undefined 表示走主题级）
+  // 背景图优先级：地区级 > 对话级 > 主题级
+  // 地区级（_regionBgOverride）：进入配了背景图的世界观地区时临时覆盖，离开自动回落
+  // 对话级（_convBgOverride）：对话自己设的背景图
   let _convBgOverride = null;
+  let _regionBgOverride = null;
   function _resolveChatBgImage(themeBg) {
-    const url = (_convBgOverride !== null && _convBgOverride !== undefined) ? _convBgOverride : themeBg;
+    let url;
+    if (_regionBgOverride !== null && _regionBgOverride !== undefined) url = _regionBgOverride;
+    else if (_convBgOverride !== null && _convBgOverride !== undefined) url = _convBgOverride;
+    else url = themeBg;
     return url ? `url("${url}")` : 'none';
   }
   function setConvBgOverride(url) {
     _convBgOverride = (url == null || url === '') ? null : url;
     const cfg = load();
     document.documentElement.style.setProperty('--chat-bg-image', _resolveChatBgImage(cfg.chatBgImage));
+  }
+  // 地区级背景图覆盖：url 为空/null 表示清除地区覆盖，回落到对话级/主题级
+  // 带淡入淡出：先把背景层淡出，换图后再淡入
+  // immediate=true 时立即应用不走动画（用于切换对话等场景）
+  function setRegionBgOverride(url, immediate) {
+    const next = (url == null || url === '') ? null : url;
+    if (next === _regionBgOverride) return; // 没变化不重设，避免无谓重绘
+    _regionBgOverride = next;
+    const cfg = load();
+    const rootStyle = document.documentElement.style;
+    const applyImg = () => rootStyle.setProperty('--chat-bg-image', _resolveChatBgImage(cfg.chatBgImage));
+    if (immediate) {
+      rootStyle.setProperty('--chat-bg-opacity', '1');
+      applyImg();
+      return;
+    }
+    // 淡出 → 换图 → 淡入
+    rootStyle.setProperty('--chat-bg-opacity', '0');
+    setTimeout(() => {
+      applyImg();
+      // 强制重排后再恢复不透明，确保 transition 稳定触发（比单纯 rAF 更鲁棒）
+      try { void document.getElementById('main')?.offsetHeight; } catch(_) {}
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => rootStyle.setProperty('--chat-bg-opacity', '1'));
+      });
+    }, 400); // 与 CSS transition 时长一致
+    // 兜底：无论如何 900ms 后强制恢复不透明，防止某些 webview 下卡在透明态
+    setTimeout(() => { rootStyle.setProperty('--chat-bg-opacity', '1'); }, 900);
   }
 
   let _themeSwitchTimer = null;
@@ -1431,6 +1465,7 @@ setMsgFontSize,
     saveCustomPresetNow,
     exportCustomThemes, importCustomThemes, closeExportModal, toggleExportSelectAll, syncExportToggleState, confirmExportSelectedThemes,
     setConvBgOverride,
+    setRegionBgOverride,
     getPresetNames: () => Object.keys(PRESETS),
     getPreset: (name) => PRESETS[name] ? Object.assign({}, PRESETS[name]) : null,
     load,

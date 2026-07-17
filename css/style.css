@@ -216,6 +216,9 @@ button, input, select, textarea, option, label {
   user-select: none;
   -webkit-touch-callout: none;
   z-index: 0;
+  /* 地区切换背景时的淡入淡出：由 --chat-bg-opacity 驱动（默认1，切换瞬间设0再回1） */
+  opacity: var(--chat-bg-opacity, 1);
+  transition: opacity 0.4s ease;
 }
 body:has(#panel-chat.active) #main::before {
   background-image: var(--chat-bg-image, none);
