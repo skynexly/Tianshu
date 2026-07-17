@@ -38930,11 +38930,19 @@ ${wvPrompt}${_hitBlock}`;
     const pd = await _getPhoneData();
     if (!pd || !pd.myForumPosts || !pd.myForumPosts[index]) return;
     const p = pd.myForumPosts[index];
-    // 刷新面具头像/名字（面具可能已切换）
+    // 刷新面具头像/名字（面具可能已切换）；马甲态优先，避免把马甲名/空头像冲回真身
     if (!p.title && !p.content) {
-      const info = await _getMaskInfo();
-      p.username = info.username;
-      p.avatar = info.avatar;
+      const _alias = _forumActiveAliasName(pd);
+      if (_alias) {
+        p.username = _alias;
+        p.avatar = '';
+        p.viaAlias = true;
+      } else {
+        const info = await _getMaskInfo();
+        p.username = info.username;
+        p.avatar = info.avatar;
+        p.viaAlias = false;
+      }
     }
     _pushNav(() => _editForumPost(index));
     const body = document.getElementById('phone-body');
