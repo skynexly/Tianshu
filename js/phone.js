@@ -1405,7 +1405,159 @@ function _applyPhoneTheme(shell) {
   if (!shell) return;
   const t = _getPhoneTheme();
   PHONE_THEMES.forEach(name => shell.classList.toggle('phone-theme-' + name, name === t));
+  // 全局美化配色覆盖（在主题 class 之后应用，确保覆盖生效）
+  try { _applyPhoneSkin(shell); } catch(_) {}
 }
+
+// ===== 手机全局美化（全局配色，存 localStorage，所有对话共享）=====
+// enabled=false 时完全跟随界面主题（:root）；enabled=true 时用下面这套色覆盖 .phone-shell。
+const _PHONE_SKIN_KEY = 'tianshu_phone_global_skin';
+// 用户可自定义的 8 个主色（其余派生）
+const _PHONE_SKIN_COLOR_KEYS = ['bg', 'bgSecondary', 'bgTertiary', 'text', 'textSecondary', 'accent', 'border', 'decoration'];
+// 8 色对应的 CSS 变量名
+const _PHONE_SKIN_VAR_MAP = {
+  bg: '--bg', bgSecondary: '--bg-secondary', bgTertiary: '--bg-tertiary',
+  text: '--text', textSecondary: '--text-secondary', accent: '--accent',
+  border: '--border', decoration: '--decoration'
+};
+function _getPhoneSkin() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(_PHONE_SKIN_KEY) || '{}') || {}; } catch(_) {}
+  const colors = (saved.colors && typeof saved.colors === 'object') ? saved.colors : {};
+  const profile = (saved.profile && typeof saved.profile === 'object') ? saved.profile : {};
+  return {
+    enabled: !!saved.enabled,
+    colors,
+    // 全局美化的图文内容（开关开启时覆盖各对话的 pd 对应字段）
+    profile,
+    wallpaper: typeof saved.wallpaper === 'string' ? saved.wallpaper : '',
+    wallpaperOverlay: !!saved.wallpaperOverlay,
+    wallpaperOpacity: typeof saved.wallpaperOpacity === 'number' ? saved.wallpaperOpacity : 75,
+    dwExpressBg: typeof saved.dwExpressBg === 'string' ? saved.dwExpressBg : '',
+    anniImage: typeof saved.anniImage === 'string' ? saved.anniImage : ''
+  };
+}
+function _savePhoneSkin(skin) {
+  try { localStorage.setItem(_PHONE_SKIN_KEY, JSON.stringify(skin || {})); } catch(_) {}
+}
+// 全局美化是否开启（图文内容覆盖用）
+function _phoneSkinOn() {
+  try { return !!_getPhoneSkin().enabled; } catch(_) { return false; }
+}
+// 有效个人资料：开启全局则用 skin.profile 覆盖，未设的字段回落 pd
+function _effProfile(pd) {
+  const D = { name: 'Polaris', bio: 'The still point where all worlds turn.', note: 'In silentio vox maxima', avatar: '' };
+  const p = pd?.profile || {};
+  const base = {
+    name: typeof p.name === 'string' ? p.name : D.name,
+    bio: typeof p.bio === 'string' ? p.bio : D.bio,
+    note: typeof p.note === 'string' ? p.note : D.note,
+    avatar: typeof p.avatar === 'string' ? p.avatar : ''
+  };
+  if (!_phoneSkinOn()) return base;
+  const sp = _getPhoneSkin().profile || {};
+  return {
+    name: typeof sp.name === 'string' ? sp.name : base.name,
+    bio: typeof sp.bio === 'string' ? sp.bio : base.bio,
+    note: typeof sp.note === 'string' ? sp.note : base.note,
+    avatar: typeof sp.avatar === 'string' ? sp.avatar : base.avatar
+  };
+}
+// 有效壁纸配置：开启全局则用 skin，否则用 pd
+function _effWallpaper(pd) {
+  if (_phoneSkinOn()) {
+    const s = _getPhoneSkin();
+    return { wallpaper: s.wallpaper || '', overlay: !!s.wallpaperOverlay,
+      opacity: typeof s.wallpaperOpacity === 'number' ? s.wallpaperOpacity : 75 };
+  }
+  return { wallpaper: pd?.wallpaper || '', overlay: !!pd?.wallpaperOverlay,
+    opacity: typeof pd?.wallpaperOpacity === 'number' ? pd.wallpaperOpacity : 75 };
+}
+// 有效快递卡背景图
+function _effExpressBg(pd) {
+  return _phoneSkinOn() ? (_getPhoneSkin().dwExpressBg || '') : (pd?.dwExpressBg || '');
+}
+// 有效纪念日背景图（仅图片走全局，其余字段仍读 pd）
+function _effAnniImage(pd) {
+  return _phoneSkinOn() ? (_getPhoneSkin().anniImage || '') : (pd?.anniversary?.image || '');
+}
+// 读一份当前 :root 的 8 色快照（十六进制），用作首次开启时的默认配色
+function _snapshotRootColors() {
+  const out = {};
+  try {
+    const cs = getComputedStyle(document.documentElement);
+    _PHONE_SKIN_COLOR_KEYS.forEach(k => {
+      const v = (cs.getPropertyValue(_PHONE_SKIN_VAR_MAP[k]) || '').trim();
+      out[k] = _skinToHex(v) || '#888888';
+    });
+  } catch(_) {}
+  return out;
+}
+// 把 rgb/rgba/hex 归一成 #rrggbb（色环只认 hex）
+function _skinToHex(color) {
+  if (!color) return '';
+  const s = String(color).trim();
+  if (s[0] === '#') {
+    if (s.length === 4) return '#' + s[1] + s[1] + s[2] + s[2] + s[3] + s[3];
+    return s.slice(0, 7);
+  }
+  const m = s.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
+  if (m) {
+    const h = n => Math.max(0, Math.min(255, Math.round(parseFloat(n)))).toString(16).padStart(2, '0');
+    return '#' + h(m[1]) + h(m[2]) + h(m[3]);
+  }
+  return '';
+}
+// hex 调暗（复刻 theme.js 的 accent-dim 逻辑）
+function _skinDim(hex, factor) {
+  const h = _skinToHex(hex); if (!h) return hex;
+  const r = Math.round(parseInt(h.slice(1, 3), 16) * factor);
+  const g = Math.round(parseInt(h.slice(3, 5), 16) * factor);
+  const b = Math.round(parseInt(h.slice(5, 7), 16) * factor);
+  const c = n => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0');
+  return '#' + c(r) + c(g) + c(b);
+}
+// 把配色覆盖到 .phone-shell（enabled=false 时移除覆盖，回落 :root）
+function _applyPhoneSkin(shell) {
+  if (!shell) return;
+  const skin = _getPhoneSkin();
+  const st = shell.style;
+  // 需要覆盖的全部变量（8 主色 + 派生）
+  const allVars = ['--bg', '--bg-secondary', '--bg-tertiary', '--text', '--text-secondary',
+    '--accent', '--border', '--decoration', '--accent-dim', '--text-tertiary',
+    '--bg-solid', '--bg-secondary-solid', '--bg-tertiary-solid'];
+  if (!skin.enabled) {
+    allVars.forEach(v => st.removeProperty(v));
+    shell.classList.remove('phone-skin-on');
+    return;
+  }
+  const c = skin.colors || {};
+  const g = (k, fb) => _skinToHex(c[k]) || fb;
+  const bg = g('bg', '#0f0f0f');
+  const bgSecondary = g('bgSecondary', '#1a1a1a');
+  const bgTertiary = g('bgTertiary', '#222222');
+  const text = g('text', '#eeeeee');
+  const textSecondary = g('textSecondary', '#888888');
+  const accent = g('accent', '#c4a87c');
+  const border = g('border', '#333333');
+  const decoration = g('decoration', '#6b4c8a');
+  st.setProperty('--bg', bg);
+  st.setProperty('--bg-secondary', bgSecondary);
+  st.setProperty('--bg-tertiary', bgTertiary);
+  st.setProperty('--text', text);
+  st.setProperty('--text-secondary', textSecondary);
+  st.setProperty('--accent', accent);
+  st.setProperty('--border', border);
+  st.setProperty('--decoration', decoration);
+  // 派生：dim、三级文字、solid 版本
+  st.setProperty('--accent-dim', _skinDim(accent, 0.7));
+  st.setProperty('--text-tertiary', textSecondary);
+  st.setProperty('--bg-solid', bg);
+  st.setProperty('--bg-secondary-solid', bgSecondary);
+  st.setProperty('--bg-tertiary-solid', bgTertiary);
+  shell.classList.add('phone-skin-on');
+}
+
 
 // ===== 全屏显示手机（全局，存 localStorage）=====
 const _PHONE_FULLSCREEN_KEY = 'tianshu_phone_fullscreen';
@@ -1426,10 +1578,11 @@ function _applyWallpaper(pd) {
   if (!shell) return;
   _applyPhoneTheme(shell);
     const isFudge = _getPhoneTheme() === 'fudge';
-    const wallpaper = pd?.wallpaper || '';
+    const eff = _effWallpaper(pd);
+    const wallpaper = eff.wallpaper || '';
     // 实色主题（奶油软糖）：允许贴壁纸，但不使用遮罩（遮罩会把 --text 改白，污染图标/卡片配色）
-    const useOverlay = isFudge ? false : !!pd?.wallpaperOverlay;
-    const opacity = typeof pd?.wallpaperOpacity === 'number' ? Math.max(0, Math.min(100, pd.wallpaperOpacity)) : 75;
+    const useOverlay = isFudge ? false : !!eff.overlay;
+    const opacity = typeof eff.opacity === 'number' ? Math.max(0, Math.min(100, eff.opacity)) : 75;
     if (wallpaper) {
       shell.style.backgroundImage = useOverlay
         ? `linear-gradient(rgba(0,0,0,0.18), rgba(0,0,0,0.32)), url("${wallpaper}")`
@@ -1468,7 +1621,7 @@ function _applyWallpaper(pd) {
   }
 
   function _applyProfile(pd) {
-    const profile = _getProfile(pd);
+    const profile = _effProfile(pd);
     const nameEl = document.getElementById('phone-profile-name');
     const bioEl = document.getElementById('phone-profile-bio');
     const avatarEl = document.getElementById('phone-profile-avatar');
@@ -1523,6 +1676,15 @@ function _applyWallpaper(pd) {
     const value = raw || PROFILE_DEFAULT[field];   // 清空时回落到默认
     if (raw !== value) el.textContent = value;     // 视觉同步
     try {
+      // 开启全局美化：写进 skin.profile（所有对话共享）
+      if (_phoneSkinOn()) {
+        const skin = _getPhoneSkin();
+        skin.profile = skin.profile || {};
+        if (skin.profile[field] === value) return;
+        skin.profile[field] = value;
+        _savePhoneSkin(skin);
+        return;
+      }
       const pd = await _getPhoneData();
       if (!pd) return;
       pd.profile = pd.profile || { ...PROFILE_DEFAULT };
@@ -1545,6 +1707,16 @@ function _applyWallpaper(pd) {
     try {
       const dataUrl = await Utils.promptImageInput({ maxSize: 256, quality: 0.85, outputFormat: 'jpeg' });
       if (!dataUrl) return;
+      // 开启全局美化：头像写进 skin.profile（所有对话共享）
+      if (_phoneSkinOn()) {
+        const skin = _getPhoneSkin();
+        skin.profile = skin.profile || {};
+        skin.profile.avatar = dataUrl;
+        _savePhoneSkin(skin);
+        const pd0 = await _getPhoneData();
+        _applyProfile(pd0);
+        return;
+      }
       const pd = await _getPhoneData();
       if (!pd) return;
       pd.profile = pd.profile || { ...PROFILE_DEFAULT };
@@ -4000,9 +4172,10 @@ function _refreshAnniversaryCard() {
         el.innerHTML = `<div class="phone-anniversary-card-text" style="color:var(--text);font-size:12px;opacity:0.55">点击设置<br>纪念日</div>`;
         return;
     }
-    // 有背景图
-    if (anni.image) {
-      el.style.backgroundImage = `url("${anni.image}")`;
+    // 有背景图（仅背景图走全局美化，其余字段仍读 pd）
+    const anniImg = _effAnniImage(pd);
+    if (anniImg) {
+      el.style.backgroundImage = `url("${anniImg}")`;
     } else {
       el.style.backgroundImage = '';
     }
@@ -4164,7 +4337,7 @@ function _refreshDeliveryWidget() {
   }
 
   // 快递方卡（常驻，可设背景图，点击换图）
-  const dwBg = pd?.dwExpressBg || '';
+  const dwBg = _effExpressBg(pd);
   let expressInner = '';
   if (shopOrder) {
     const nu = _deliveryNumUnit(_getDeliveryRemaining(shopOrder));
@@ -4284,9 +4457,15 @@ async function _dwDoPickImage() {
   const dataUrl = await Utils.promptImageInput({ maxSize: 1080, quality: 0.85 });
   if (!dataUrl) return;
   const pd = await _getPhoneData();
-  if (!pd) return;
-  pd.dwExpressBg = dataUrl;
-  await _savePhoneData();
+  if (_phoneSkinOn()) {
+    const skin = _getPhoneSkin();
+    skin.dwExpressBg = dataUrl;
+    _savePhoneSkin(skin);
+  } else {
+    if (!pd) return;
+    pd.dwExpressBg = dataUrl;
+    await _savePhoneData();
+  }
   _refreshDeliveryWidget();
 }
 
@@ -4294,9 +4473,15 @@ async function _dwDoPickImage() {
 async function _dwDoClearBg() {
   document.getElementById('dw-bg-sheet')?.remove();
   const pd = await _getPhoneData();
-  if (!pd) return;
-  pd.dwExpressBg = '';
-  await _savePhoneData();
+  if (_phoneSkinOn()) {
+    const skin = _getPhoneSkin();
+    skin.dwExpressBg = '';
+    _savePhoneSkin(skin);
+  } else {
+    if (!pd) return;
+    pd.dwExpressBg = '';
+    await _savePhoneData();
+  }
   _refreshDeliveryWidget();
 }
 
@@ -6551,7 +6736,7 @@ async function _openAnniversaryEditor() {
       <div style="margin-bottom:16px">
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">背景图片</div>
         <div style="display:flex;gap:8px;align-items:center">
-          <div id="anni-img-preview" style="width:60px;height:60px;border-radius:10px;border:1px solid var(--border);background:var(--bg-tertiary);background-size:cover;background-position:center;${anni.image ? `background-image:url('${anni.image}')` : ''}"></div>
+          <div id="anni-img-preview" style="width:60px;height:60px;border-radius:10px;border:1px solid var(--border);background:var(--bg-tertiary);background-size:cover;background-position:center;${_effAnniImage(pd) ? `background-image:url('${_effAnniImage(pd)}')` : ''}"></div>
           <button type="button" onclick="Phone._anniPickImage()" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text);font-size:12px;cursor:pointer">选择图片</button>
           <button type="button" onclick="document.getElementById('anni-img-preview').style.backgroundImage='';Phone._anniTempImage=''" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text-secondary);font-size:12px;cursor:pointer">清除</button>
         </div>
@@ -6563,7 +6748,7 @@ async function _openAnniversaryEditor() {
       </div>
     </div>`;
   document.body.appendChild(mask);
-  _anniTempImage = anni.image || '';
+  _anniTempImage = _effAnniImage(pd) || '';
 }
 
 let _anniTempImage = '';
@@ -6586,7 +6771,15 @@ async function _anniSave() {
 
   const pd = await _getPhoneData();
   if (!pd) return;
-  pd.anniversary = { title, year, month, day, image: _anniTempImage || '' };
+  // 纪念日只有背景图走全局美化，其余字段（标题/日期）始终按对话存
+  if (_phoneSkinOn()) {
+    const skin = _getPhoneSkin();
+    skin.anniImage = _anniTempImage || '';
+    _savePhoneSkin(skin);
+    pd.anniversary = { title, year, month, day, image: '' };
+  } else {
+    pd.anniversary = { title, year, month, day, image: _anniTempImage || '' };
+  }
 
   // 同步到日历事项（type: holiday, repeat: yearly）
   pd.calendarEvents = pd.calendarEvents || [];
@@ -36695,121 +36888,139 @@ async function _openChatTransfer(contactId) {
 }
 
   // ===== 设置 App =====
+  let _settingsTab = 'general';  // 'general' 通用 | 'beauty' 美化
 function _renderSettings(pd) {
  const body = document.getElementById('phone-body');
  document.getElementById('phone-title').textContent = '设置';
  _applyWallpaper(pd);
- body.innerHTML = `
-<div class="phone-settings-page">
-  <div class="phone-settings-card">
-  <div class="phone-settings-title">主题</div>
-  <div class="phone-settings-desc">切换手机整体外观风格，全局生效（所有存档通用）。</div>
-  <div class="phone-theme-options" id="phone-theme-options">
-    <button type="button" class="phone-theme-option ${_getPhoneTheme() === 'glass' ? 'active' : ''}" onclick="Phone._onThemePick('glass')">
-      <span class="phone-theme-swatch phone-theme-swatch-glass"></span>
-      <span class="phone-theme-name">玻璃冰糖</span>
-    </button>
-          <button type="button" class="phone-theme-option ${_getPhoneTheme() === 'fudge' ? 'active' : ''}" onclick="Phone._onThemePick('fudge')">
-            <span class="phone-theme-swatch phone-theme-swatch-fudge"></span>
-            <span class="phone-theme-name">奶油软糖</span>
-          </button>
+
+ // ---- 美化 tab：主题 + 显示 + 壁纸 ----
+ const beautyCards = `
+   <div class="phone-settings-card">
+   <div class="phone-settings-title">主题</div>
+   <div class="phone-settings-desc">切换手机整体外观风格，全局生效（所有存档通用）。</div>
+   <div class="phone-theme-options" id="phone-theme-options">
+     <button type="button" class="phone-theme-option ${_getPhoneTheme() === 'glass' ? 'active' : ''}" onclick="Phone._onThemePick('glass')">
+       <span class="phone-theme-swatch phone-theme-swatch-glass"></span>
+       <span class="phone-theme-name">玻璃冰糖</span>
+     </button>
+           <button type="button" class="phone-theme-option ${_getPhoneTheme() === 'fudge' ? 'active' : ''}" onclick="Phone._onThemePick('fudge')">
+             <span class="phone-theme-swatch phone-theme-swatch-fudge"></span>
+             <span class="phone-theme-name">奶油软糖</span>
+           </button>
+   </div>
+   </div>
+   ${_phoneSkinCardHtml()}
+   <div class="phone-settings-card">
+   <div class="phone-settings-title">显示</div>
+   <div class="phone-settings-desc">开启后手机铺满整个屏幕（去掉手机边框留白），全局生效（所有存档通用）。</div>
+    <label class="circle-check-label" style="margin-top:0;padding:0">
+      <span class="circle-check-text" style="font-size:13px">全屏显示手机</span>
+      <span style="position:relative;display:inline-flex">
+        <input type="checkbox" id="phone-fullscreen" class="circle-check" ${_getPhoneFullscreen() ? 'checked' : ''} onchange="Phone._onToggleFullscreen(this.checked)">
+        <span class="circle-check-ui"></span>
+      </span>
+    </label>
+   </div>
+   <div class="phone-settings-card">
+   <div class="phone-settings-title">壁纸</div>
+  <div class="phone-settings-desc">上传一张图片作为当前对话的手机桌面壁纸。</div>
+  <button class="phone-settings-btn" onclick="Phone._onWallpaperPicked()">更换壁纸</button>
+  <button class="phone-settings-btn secondary" onclick="Phone._resetWallpaper()">恢复默认壁纸</button>
+  <label class="circle-check-label" style="margin-top:10px;padding:0">
+    <span class="circle-check-text" style="font-size:13px">壁纸遮罩<br><span style="font-size:11px;color:var(--text-secondary)">为深色壁纸添加半透明遮罩，让文字更清晰</span></span>
+    <span style="position:relative;display:inline-flex">
+      <input type="checkbox" id="phone-wallpaper-overlay" class="circle-check" ${_effWallpaper(pd).overlay ? 'checked' : ''} onchange="Phone._toggleWallpaperOverlay(this.checked)">
+      <span class="circle-check-ui"></span>
+    </span>
+  </label>
+  <div style="margin-top:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:13px;color:var(--text)">卡片不透明度</span>
+      <span id="phone-wallpaper-opacity-val" style="font-size:12px;color:var(--text-secondary)">${_effWallpaper(pd).opacity}%</span>
+    </div>
+    <input type="range" min="0" max="100" step="1" value="${_effWallpaper(pd).opacity}" oninput="Phone._onWallpaperOpacityChange(this.value)" onchange="Phone._saveWallpaperOpacity(this.value)" style="width:100%;accent-color:var(--accent)">
+    <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.4">调节卡片、顶栏、底栏的不透明度，让壁纸透出来（仅在有壁纸时生效）</div>
   </div>
   </div>
+ `;
+
+ // ---- 通用 tab：操作发送 + 世界观注入 + 世界书 + 回溯 ----
+ const generalCards = `
   <div class="phone-settings-card">
-  <div class="phone-settings-title">显示</div>
-  <div class="phone-settings-desc">开启后手机铺满整个屏幕（去掉手机边框留白），全局生效（所有存档通用）。</div>
+  <div class="phone-settings-title">本轮操作发送</div>
+  <div class="phone-settings-desc">把你在手机里的操作（发动态/下单/搜索等）作为背景行为告诉 AI，让剧情自然回应。关闭后本轮操作仅本地记录，不会发送给 AI。</div>
    <label class="circle-check-label" style="margin-top:0;padding:0">
-     <span class="circle-check-text" style="font-size:13px">全屏显示手机</span>
+     <span class="circle-check-text" style="font-size:13px">发送本轮手机操作</span>
      <span style="position:relative;display:inline-flex">
-       <input type="checkbox" id="phone-fullscreen" class="circle-check" ${_getPhoneFullscreen() ? 'checked' : ''} onchange="Phone._onToggleFullscreen(this.checked)">
+       <input type="checkbox" id="phone-send-actionlog" class="circle-check" ${pd?.sendActionLog !== false ? 'checked' : ''} onchange="Phone._toggleSendActionLog(this.checked)">
        <span class="circle-check-ui"></span>
      </span>
    </label>
-  </div>
-  <div class="phone-settings-card">
-  <div class="phone-settings-title">壁纸</div>
- <div class="phone-settings-desc">上传一张图片作为当前对话的手机桌面壁纸。</div>
- <button class="phone-settings-btn" onclick="Phone._onWallpaperPicked()">更换壁纸</button>
- <button class="phone-settings-btn secondary" onclick="Phone._resetWallpaper()">恢复默认壁纸</button>
- <label class="circle-check-label" style="margin-top:10px;padding:0">
-   <span class="circle-check-text" style="font-size:13px">壁纸遮罩<br><span style="font-size:11px;color:var(--text-secondary)">为深色壁纸添加半透明遮罩，让文字更清晰</span></span>
-   <span style="position:relative;display:inline-flex">
-     <input type="checkbox" id="phone-wallpaper-overlay" class="circle-check" ${pd?.wallpaperOverlay ? 'checked' : ''} onchange="Phone._toggleWallpaperOverlay(this.checked)">
-     <span class="circle-check-ui"></span>
-   </span>
- </label>
- <div style="margin-top:14px">
-   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-     <span style="font-size:13px;color:var(--text)">卡片不透明度</span>
-     <span id="phone-wallpaper-opacity-val" style="font-size:12px;color:var(--text-secondary)">${typeof pd?.wallpaperOpacity === 'number' ? pd.wallpaperOpacity : 75}%</span>
    </div>
-   <input type="range" min="0" max="100" step="1" value="${typeof pd?.wallpaperOpacity === 'number' ? pd.wallpaperOpacity : 75}" oninput="Phone._onWallpaperOpacityChange(this.value)" onchange="Phone._saveWallpaperOpacity(this.value)" style="width:100%;accent-color:var(--accent)">
-   <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.4">调节卡片、顶栏、底栏的不透明度，让壁纸透出来（仅在有壁纸时生效）</div>
+   <div class="phone-settings-card">
+   <div class="phone-settings-title">世界观设定注入</div>
+   <div class="phone-settings-desc">控制手机里的 AI 生成（电台/论坛/朋友圈/地图等）是否携带当前世界观自带的扩展设定。关掉能减少上下文体积。仅作用于世界观自带部分，挂载的世界书不受影响。</div>
+   <label class="circle-check-label" style="margin-top:0;padding:0">
+     <span class="circle-check-text" style="font-size:13px">节日设定<br><span style="font-size:11px;color:var(--text-secondary)">世界观里所有节日的完整内容</span></span>
+     <span style="position:relative;display:inline-flex">
+       <input type="checkbox" id="phone-inject-festival" class="circle-check" ${pd?.injectFestival !== false ? 'checked' : ''} onchange="Phone._toggleInject('injectFestival', this.checked)">
+       <span class="circle-check-ui"></span>
+     </span>
+   </label>
+   <label class="circle-check-label" style="margin-top:10px;padding:0">
+     <span class="circle-check-text" style="font-size:13px">常驻条目<br><span style="font-size:11px;color:var(--text-secondary)">世界观里的常驻知识设定</span></span>
+     <span style="position:relative;display:inline-flex">
+       <input type="checkbox" id="phone-inject-custom" class="circle-check" ${pd?.injectCustom !== false ? 'checked' : ''} onchange="Phone._toggleInject('injectCustom', this.checked)">
+       <span class="circle-check-ui"></span>
+     </span>
+   </label>
+   <label class="circle-check-label" style="margin-top:10px;padding:0">
+     <span class="circle-check-text" style="font-size:13px">动态条目<br><span style="font-size:11px;color:var(--text-secondary)">世界观里关键词触发的知识条目（手机场景会全量发）</span></span>
+     <span style="position:relative;display:inline-flex">
+       <input type="checkbox" id="phone-inject-knowledge" class="circle-check" ${pd?.injectKnowledge !== false ? 'checked' : ''} onchange="Phone._toggleInject('injectKnowledge', this.checked)">
+       <span class="circle-check-ui"></span>
+     </span>
+   </label>
+   </div>
+   <div class="phone-settings-card">
+   <div class="phone-settings-title">世界书</div>
+   <div class="phone-settings-desc">手机里的 AI 生成默认沿用主线挂载的世界书。这里可以单独关掉某本（只影响手机，不动主线），或为手机额外添加一本。</div>
+   <div id="phone-lorebook-list" style="margin-top:4px"><div style="font-size:12px;color:var(--text-secondary)">加载中…</div></div>
+   <button class="phone-settings-btn secondary" style="margin-top:10px" onclick="Phone._phoneLorebookAdd()">+ 添加世界书</button>
+   </div>
+   <div class="phone-settings-card">
+   <div class="phone-settings-title">回溯设置</div>
+   <div class="phone-settings-desc">剧情回溯时，默认连同小屋、衣橱一起回退。开启下面的开关后，回溯不会影响你布置好的小屋 / 搭配好的衣橱（含仓库、套装），但物流订单仍按剧情回退。</div>
+   <label class="circle-check-label" style="margin-top:0;padding:0">
+     <span class="circle-check-text" style="font-size:13px">回溯时保留小屋数据<br><span style="font-size:11px;color:var(--text-secondary)">住所布置 + 家具仓库不随回溯改变</span></span>
+     <span style="position:relative;display:inline-flex">
+       <input type="checkbox" id="phone-keep-cottage" class="circle-check" ${pd?.rollbackKeepCottage ? 'checked' : ''} onchange="Phone._toggleRollbackKeep('rollbackKeepCottage', this.checked)">
+       <span class="circle-check-ui"></span>
+     </span>
+   </label>
+   <label class="circle-check-label" style="margin-top:10px;padding:0">
+     <span class="circle-check-text" style="font-size:13px">回溯时保留衣橱数据<br><span style="font-size:11px;color:var(--text-secondary)">当前穿搭 + 立绘 + 已存套装不随回溯改变</span></span>
+     <span style="position:relative;display:inline-flex">
+       <input type="checkbox" id="phone-keep-wardrobe" class="circle-check" ${pd?.rollbackKeepWardrobe ? 'checked' : ''} onchange="Phone._toggleRollbackKeep('rollbackKeepWardrobe', this.checked)">
+       <span class="circle-check-ui"></span>
+     </span>
+   </label>
+   </div>
+ `;
+
+ body.innerHTML = `
+ <div class="phone-settings-shell" style="display:flex;flex-direction:column;height:100%">
+   <div class="phone-settings-page" style="flex:1;min-height:0;overflow-y:auto">
+   ${_settingsTab === 'beauty' ? beautyCards : generalCards}
+   </div>
+   <div class="phone-tabbar">
+     <div class="phone-tab ${_settingsTab === 'general' ? 'active' : ''}" onclick="Phone._switchSettingsTab('general')">通用</div>
+     <div class="phone-tab ${_settingsTab === 'beauty' ? 'active' : ''}" onclick="Phone._switchSettingsTab('beauty')">美化</div>
+   </div>
  </div>
- </div>
- <div class="phone-settings-card">
- <div class="phone-settings-title">本轮操作发送</div>
- <div class="phone-settings-desc">把你在手机里的操作（发动态/下单/搜索等）作为背景行为告诉 AI，让剧情自然回应。关闭后本轮操作仅本地记录，不会发送给 AI。</div>
-  <label class="circle-check-label" style="margin-top:0;padding:0">
-    <span class="circle-check-text" style="font-size:13px">发送本轮手机操作</span>
-    <span style="position:relative;display:inline-flex">
-      <input type="checkbox" id="phone-send-actionlog" class="circle-check" ${pd?.sendActionLog !== false ? 'checked' : ''} onchange="Phone._toggleSendActionLog(this.checked)">
-      <span class="circle-check-ui"></span>
-    </span>
-  </label>
-  </div>
-  <div class="phone-settings-card">
-  <div class="phone-settings-title">世界观设定注入</div>
-  <div class="phone-settings-desc">控制手机里的 AI 生成（电台/论坛/朋友圈/地图等）是否携带当前世界观自带的扩展设定。关掉能减少上下文体积。仅作用于世界观自带部分，挂载的世界书不受影响。</div>
-  <label class="circle-check-label" style="margin-top:0;padding:0">
-    <span class="circle-check-text" style="font-size:13px">节日设定<br><span style="font-size:11px;color:var(--text-secondary)">世界观里所有节日的完整内容</span></span>
-    <span style="position:relative;display:inline-flex">
-      <input type="checkbox" id="phone-inject-festival" class="circle-check" ${pd?.injectFestival !== false ? 'checked' : ''} onchange="Phone._toggleInject('injectFestival', this.checked)">
-      <span class="circle-check-ui"></span>
-    </span>
-  </label>
-  <label class="circle-check-label" style="margin-top:10px;padding:0">
-    <span class="circle-check-text" style="font-size:13px">常驻条目<br><span style="font-size:11px;color:var(--text-secondary)">世界观里的常驻知识设定</span></span>
-    <span style="position:relative;display:inline-flex">
-      <input type="checkbox" id="phone-inject-custom" class="circle-check" ${pd?.injectCustom !== false ? 'checked' : ''} onchange="Phone._toggleInject('injectCustom', this.checked)">
-      <span class="circle-check-ui"></span>
-    </span>
-  </label>
-  <label class="circle-check-label" style="margin-top:10px;padding:0">
-    <span class="circle-check-text" style="font-size:13px">动态条目<br><span style="font-size:11px;color:var(--text-secondary)">世界观里关键词触发的知识条目（手机场景会全量发）</span></span>
-    <span style="position:relative;display:inline-flex">
-      <input type="checkbox" id="phone-inject-knowledge" class="circle-check" ${pd?.injectKnowledge !== false ? 'checked' : ''} onchange="Phone._toggleInject('injectKnowledge', this.checked)">
-      <span class="circle-check-ui"></span>
-    </span>
-  </label>
-  </div>
-  <div class="phone-settings-card">
-  <div class="phone-settings-title">世界书</div>
-  <div class="phone-settings-desc">手机里的 AI 生成默认沿用主线挂载的世界书。这里可以单独关掉某本（只影响手机，不动主线），或为手机额外添加一本。</div>
-  <div id="phone-lorebook-list" style="margin-top:4px"><div style="font-size:12px;color:var(--text-secondary)">加载中…</div></div>
-  <button class="phone-settings-btn secondary" style="margin-top:10px" onclick="Phone._phoneLorebookAdd()">+ 添加世界书</button>
-  </div>
-  <div class="phone-settings-card">
-  <div class="phone-settings-title">回溯设置</div>
-  <div class="phone-settings-desc">剧情回溯时，默认连同小屋、衣橱一起回退。开启下面的开关后，回溯不会影响你布置好的小屋 / 搭配好的衣橱（含仓库、套装），但物流订单仍按剧情回退。</div>
-  <label class="circle-check-label" style="margin-top:0;padding:0">
-    <span class="circle-check-text" style="font-size:13px">回溯时保留小屋数据<br><span style="font-size:11px;color:var(--text-secondary)">住所布置 + 家具仓库不随回溯改变</span></span>
-    <span style="position:relative;display:inline-flex">
-      <input type="checkbox" id="phone-keep-cottage" class="circle-check" ${pd?.rollbackKeepCottage ? 'checked' : ''} onchange="Phone._toggleRollbackKeep('rollbackKeepCottage', this.checked)">
-      <span class="circle-check-ui"></span>
-    </span>
-  </label>
-  <label class="circle-check-label" style="margin-top:10px;padding:0">
-    <span class="circle-check-text" style="font-size:13px">回溯时保留衣橱数据<br><span style="font-size:11px;color:var(--text-secondary)">当前穿搭 + 立绘 + 已存套装不随回溯改变</span></span>
-    <span style="position:relative;display:inline-flex">
-      <input type="checkbox" id="phone-keep-wardrobe" class="circle-check" ${pd?.rollbackKeepWardrobe ? 'checked' : ''} onchange="Phone._toggleRollbackKeep('rollbackKeepWardrobe', this.checked)">
-      <span class="circle-check-ui"></span>
-    </span>
-  </label>
-  </div>
-  </div>
-  `;
-  _renderPhoneLorebookList(pd);
+ `;
+ if (_settingsTab === 'general') _renderPhoneLorebookList(pd);
  }
 
  // 渲染手机世界书列表：主线带来的（可开关）+ 手机单独加的（可开关/移除）
@@ -36940,32 +37151,44 @@ const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().fi
  }
 
 async function _onWallpaperPicked() {
-    const dataUrl = await Utils.promptImageInput({ maxSize: 1600, quality: 0.82 });
-    if (!dataUrl) return;
-    try {
-      const pd = await _getPhoneData();
-      if (!pd) return;
-      pd.wallpaper = dataUrl;
-      await _savePhoneData();
-      _applyWallpaper(pd);
-      _log('更换了手机壁纸');
-      UI.showToast('壁纸已更新');
-      _renderSettings(pd);
-    } catch(err) {
-      console.error('[Phone] 壁纸上传失败', err);
-      UI.showToast('壁纸上传失败');
- }
-}
-async function _resetWallpaper() {
-    const pd = await _getPhoneData();
-    if (!pd) return;
-    pd.wallpaper = '';
-    await _savePhoneData();
-    _applyWallpaper(pd);
-    _log('恢复了默认手机壁纸');
-    UI.showToast('已恢复默认壁纸');
-    _renderSettings(pd);
+     const dataUrl = await Utils.promptImageInput({ maxSize: 1600, quality: 0.82 });
+     if (!dataUrl) return;
+     try {
+       const pd = await _getPhoneData();
+       if (_phoneSkinOn()) {
+         const skin = _getPhoneSkin();
+         skin.wallpaper = dataUrl;
+         _savePhoneSkin(skin);
+       } else {
+         if (!pd) return;
+         pd.wallpaper = dataUrl;
+         await _savePhoneData();
+       }
+       _applyWallpaper(pd);
+       _log('更换了手机壁纸');
+       UI.showToast('壁纸已更新');
+       _renderSettings(pd);
+     } catch(err) {
+       console.error('[Phone] 壁纸上传失败', err);
+       UI.showToast('壁纸上传失败');
   }
+ }
+ async function _resetWallpaper() {
+     const pd = await _getPhoneData();
+     if (_phoneSkinOn()) {
+       const skin = _getPhoneSkin();
+       skin.wallpaper = '';
+       _savePhoneSkin(skin);
+     } else {
+       if (!pd) return;
+       pd.wallpaper = '';
+       await _savePhoneData();
+     }
+     _applyWallpaper(pd);
+     _log('恢复了默认手机壁纸');
+     UI.showToast('已恢复默认壁纸');
+     _renderSettings(pd);
+   }
 
   function _onThemePick(theme) {
     _setPhoneTheme(theme);
@@ -36973,17 +37196,199 @@ async function _resetWallpaper() {
     _getPhoneData().then(pd => { try { _renderSettings(pd); } catch(_) {} }).catch(() => {});
   }
 
+  // 切换设置页底部 tab（通用 / 美化）
+  function _switchSettingsTab(tab) {
+    if (_settingsTab === tab) return;
+    _settingsTab = (tab === 'beauty') ? 'beauty' : 'general';
+    _getPhoneData().then(pd => { try { _renderSettings(pd); } catch(_) {} }).catch(() => {});
+  }
+
+  // 全局美化配色卡片的中文标签
+  const _PHONE_SKIN_LABELS = {
+    bg: '主背景', bgSecondary: '次背景（顶栏/底栏）', bgTertiary: '卡片/输入框',
+    text: '主文字', textSecondary: '次文字', accent: '强调色',
+    border: '边框', decoration: '装饰色'
+  };
+  // 渲染「全局美化」卡片（总开关 + 8 个色项）
+  function _phoneSkinCardHtml() {
+    const skin = _getPhoneSkin();
+    const on = skin.enabled;
+    // 开着时用存的色；没存或某项缺失，用当前 :root 快照兜底展示
+    const snap = _snapshotRootColors();
+    const cur = k => _skinToHex((skin.colors || {})[k]) || snap[k] || '#888888';
+    const swatches = _PHONE_SKIN_COLOR_KEYS.map(k => {
+      const col = cur(k);
+      return `<div class="phone-skin-row" style="display:flex;align-items:center;justify-content:space-between;padding:7px 0">
+        <span style="font-size:13px;color:var(--text)">${_PHONE_SKIN_LABELS[k] || k}</span>
+        <button type="button" class="phone-skin-swatch" data-skin-key="${k}" onclick="Phone._onPhoneSkinPick('${k}', this)"
+          style="width:34px;height:24px;border-radius:6px;border:1px solid var(--border);background:${col};cursor:pointer;flex-shrink:0"></button>
+      </div>`;
+    }).join('');
+    return `
+   <div class="phone-settings-card">
+   <div class="phone-settings-title">全局美化</div>
+   <div class="phone-settings-desc">开启后，手机使用下面这套自定义配色（所有对话通用）；关闭则跟随界面主题。</div>
+    <label class="circle-check-label" style="margin-top:0;padding:0">
+      <span class="circle-check-text" style="font-size:13px">启用手机全局美化</span>
+      <span style="position:relative;display:inline-flex">
+        <input type="checkbox" id="phone-skin-enabled" class="circle-check" ${on ? 'checked' : ''} onchange="Phone._onPhoneSkinToggle(this.checked)">
+        <span class="circle-check-ui"></span>
+      </span>
+    </label>
+    <div id="phone-skin-colors" style="margin-top:12px;${on ? '' : 'display:none'}">
+      <div style="height:1px;background:var(--border);opacity:.6;margin-bottom:6px"></div>
+      ${swatches}
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="phone-settings-btn secondary" style="flex:1;min-width:90px" onclick="Phone._exportPhoneSkinColors()">导出配色</button>
+        <button class="phone-settings-btn secondary" style="flex:1;min-width:90px" onclick="Phone._importPhoneSkinColors()">导入配色</button>
+      </div>
+      <button class="phone-settings-btn secondary" style="margin-top:8px" onclick="Phone._resetPhoneSkinColors()">恢复默认配色</button>
+    </div>
+   </div>`;
+   }
+ // 导出配色：8 个 hex 打包成 JSON 文件下载（与界面主题导出一致）
+   async function _exportPhoneSkinColors() {
+     try {
+       const skin = _getPhoneSkin();
+       const src = (skin.colors && Object.keys(skin.colors).length) ? skin.colors : _snapshotRootColors();
+       const colors = {};
+       _PHONE_SKIN_COLOR_KEYS.forEach(k => { colors[k] = _skinToHex(src[k]) || '#888888'; });
+       const pkg = { _type: 'tianshu-phone-skin', _version: 1, colors };
+       const json = JSON.stringify(pkg, null, 2);
+       const blob = new Blob([json], { type: 'application/json' });
+       const saved = await Utils.saveFile(blob, `skynex-手机配色_${new Date().toLocaleDateString('zh-CN').replace(/\//g,'-')}.json`);
+       if (saved) UI.showToast('手机配色已导出', 2200);
+     } catch(e) {
+       console.warn('[PhoneSkin] 导出失败', e);
+       UI.showToast('导出失败', 1500);
+     }
+   }
+   // 导入配色：选 JSON 文件 → 校验 → 写进 skin.colors → 自动开启全局美化
+   async function _importPhoneSkinColors() {
+     try {
+       const file = await Utils.pickFile({ accept: '.json' });
+       if (!file) return;
+       const text = await Utils.fileToText(file);
+       let pkg;
+       try { pkg = JSON.parse(text); } catch(_) { UI.showToast('文件无法解析', 1800); return; }
+       // 兼容两种结构：{ _type, colors:{...} } 或直接 { bg, accent, ... }
+       const parsed = (pkg && pkg.colors && typeof pkg.colors === 'object') ? pkg.colors : pkg;
+       if (!parsed || typeof parsed !== 'object') { UI.showToast('文件内容无效', 1800); return; }
+       const hexRe = /^#[0-9a-fA-F]{6}$/;
+       const colors = {};
+       let got = 0;
+       _PHONE_SKIN_COLOR_KEYS.forEach(k => {
+         const h = _skinToHex(parsed[k]);
+         if (h && hexRe.test(h)) { colors[k] = h; got++; }
+       });
+       if (got === 0) { UI.showToast('文件里没有有效的配色', 1800); return; }
+       const skin = _getPhoneSkin();
+       // 未提供的项用当前快照补齐，避免缺色
+       const snap = _snapshotRootColors();
+       _PHONE_SKIN_COLOR_KEYS.forEach(k => { if (!colors[k]) colors[k] = snap[k] || '#888888'; });
+       skin.colors = colors;
+       skin.enabled = true;   // 导入后自动开启全局美化
+       _savePhoneSkin(skin);
+       _applyPhoneSkinToShell();
+       _getPhoneData().then(pd => { try { _renderSettings(pd); } catch(_) {} }).catch(() => {});
+       UI.showToast('配色已导入并启用', 1800);
+     } catch(e) {
+       console.warn('[PhoneSkin] 导入失败', e);
+       UI.showToast('导入失败', 1500);
+     }
+   }
+  function _onPhoneSkinToggle(on) {
+    const skin = _getPhoneSkin();
+    skin.enabled = !!on;
+    if (on && (!skin.colors || Object.keys(skin.colors).length === 0)) {
+      skin.colors = _snapshotRootColors();
+    }
+    if (on) {
+      // 首次开启：把当前对话的图文内容快照进 skin（仅在 skin 未设过该项时）
+      _getPhoneData().then(pd => {
+        try {
+          const s = _getPhoneSkin();
+          let dirty = false;
+          if (pd) {
+            if (!s.profile || Object.keys(s.profile).length === 0) {
+              s.profile = { ...(_getProfile(pd)) }; dirty = true;
+            }
+            if (!s.wallpaper && pd.wallpaper) { s.wallpaper = pd.wallpaper; dirty = true; }
+            if (s.wallpaperOverlay === false && pd.wallpaperOverlay) { s.wallpaperOverlay = true; dirty = true; }
+            if (typeof pd.wallpaperOpacity === 'number' && s.wallpaperOpacity === 75 && pd.wallpaperOpacity !== 75) { s.wallpaperOpacity = pd.wallpaperOpacity; dirty = true; }
+            if (!s.dwExpressBg && pd.dwExpressBg) { s.dwExpressBg = pd.dwExpressBg; dirty = true; }
+            if (!s.anniImage && pd.anniversary?.image) { s.anniImage = pd.anniversary.image; dirty = true; }
+          }
+          if (dirty) _savePhoneSkin(s);
+        } catch(_) {}
+        _applyPhoneSkinToShell();
+        try { _applyWallpaper(pd); } catch(_) {}
+        try { _applyProfile(pd); } catch(_) {}
+        try { _refreshDeliveryWidget(); } catch(_) {}
+        try { _refreshAnniversaryCard(); } catch(_) {}
+        try { _renderSettings(pd); } catch(_) {}
+      }).catch(() => {});
+      _savePhoneSkin(skin);
+      return;
+    }
+    _savePhoneSkin(skin);
+    _applyPhoneSkinToShell();
+    // 关闭：手机内容全部回落各对话 pd，刷新展示
+    _getPhoneData().then(pd => {
+      try { _applyWallpaper(pd); } catch(_) {}
+      try { _applyProfile(pd); } catch(_) {}
+      try { _refreshDeliveryWidget(); } catch(_) {}
+      try { _refreshAnniversaryCard(); } catch(_) {}
+      try { _renderSettings(pd); } catch(_) {}
+    }).catch(() => {});
+  }
+  // 点色块：调界面主题同款色环
+  function _onPhoneSkinPick(key, btnEl) {
+    if (typeof ColorPicker === 'undefined') return;
+    const skin = _getPhoneSkin();
+    const snap = _snapshotRootColors();
+    const init = _skinToHex((skin.colors || {})[key]) || snap[key] || '#888888';
+    ColorPicker.open(btnEl, init, 1, (hex) => {
+      if (!hex) return;
+      const s = _getPhoneSkin();
+      s.colors = s.colors || {};
+      s.colors[key] = hex;
+      _savePhoneSkin(s);
+      if (btnEl) btnEl.style.background = hex;
+      _applyPhoneSkinToShell();  // 实时预览
+    });
+  }
+  // 恢复默认配色（重新读一份当前 :root 快照）
+  function _resetPhoneSkinColors() {
+    const skin = _getPhoneSkin();
+    skin.colors = _snapshotRootColors();
+    _savePhoneSkin(skin);
+    _applyPhoneSkinToShell();
+    _getPhoneData().then(pd => { try { _renderSettings(pd); } catch(_) {} }).catch(() => {});
+  }
+  // 把配色应用到当前 shell（供交互实时调用）
+  function _applyPhoneSkinToShell() {
+    const shell = document.querySelector('#phone-modal .phone-shell');
+    if (shell) { try { _applyPhoneSkin(shell); } catch(_) {} }
+  }
+
   function _onToggleFullscreen(on) {
     _setPhoneFullscreen(!!on);
   }
 
-  async function _toggleWallpaperOverlay(checked) {
-    const pd = await _getPhoneData();
-    if (!pd) return;
-    pd.wallpaperOverlay = !!checked;
-    await _savePhoneData();
-    _applyWallpaper(pd);
-  }
+async function _toggleWallpaperOverlay(checked) {
+     const pd = await _getPhoneData();
+     if (_phoneSkinOn()) {
+       const skin = _getPhoneSkin();
+       skin.wallpaperOverlay = !!checked;
+       _savePhoneSkin(skin);
+     } else {
+       if (!pd) return;
+       pd.wallpaperOverlay = !!checked;
+       await _savePhoneData();
+     }
+     _applyWallpaper(pd);
+   }
 
   function _onWallpaperOpacityChange(val) {
     // 拖动实时预览：只更新 CSS 变量 + 显示数字，不写库
@@ -36997,12 +37402,19 @@ async function _resetWallpaper() {
     if (label) label.textContent = opacity + '%';
   }
 
-  async function _saveWallpaperOpacity(val) {
-const pd = await _getPhoneData();
-if (!pd) return;
-pd.wallpaperOpacity = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
-await _savePhoneData();
-}
+async function _saveWallpaperOpacity(val) {
+ const pd = await _getPhoneData();
+ const opacity = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
+ if (_phoneSkinOn()) {
+   const skin = _getPhoneSkin();
+   skin.wallpaperOpacity = opacity;
+   _savePhoneSkin(skin);
+ } else {
+   if (!pd) return;
+   pd.wallpaperOpacity = opacity;
+   await _savePhoneData();
+ }
+ }
 
 async function _toggleSendActionLog(checked) {
     const pd = await _getPhoneData();
@@ -57044,7 +57456,7 @@ buildHeartsimAppFavorForBackstage,
     buildLicenseEventPrompt, applyLicenseMarkers, _readingLicenseSetup,
     flushActionLogForBackstage,
     getSnapshotForRollback, restoreFromSnapshot,
-    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _toggleRollbackKeep, _onThemePick, _onToggleFullscreen, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
+    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _toggleRollbackKeep, _onThemePick, _switchSettingsTab, _onPhoneSkinToggle, _onPhoneSkinPick, _resetPhoneSkinColors, _exportPhoneSkinColors, _importPhoneSkinColors, _onToggleFullscreen, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
     // 个人资料卡
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
     // 手机 APP 图标自定义

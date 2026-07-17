@@ -104,6 +104,7 @@ const ColorPicker = (() => {
     const style = document.createElement('style');
     style.id = 'cp-style';
     style.textContent = `
+#cp-overlay { z-index: 100050; }
 #cp-popup.modal-content {
   max-width: 300px;
   width: 90vw;
