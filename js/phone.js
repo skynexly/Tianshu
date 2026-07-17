@@ -28298,7 +28298,16 @@ ${myNotesBlock}${oldBlock}
     try {
       if (typeof Settings !== 'undefined' && Settings.applyRegexSync) t = Settings.applyRegexSync(t, 'phone');
     } catch (_) {}
-    return window.Markdown ? Markdown.render(t) : (typeof Utils !== 'undefined' ? Utils.escapeHtml(t) : t);
+    return (typeof Markdown !== 'undefined' && Markdown.render) ? Markdown.render(t) : (typeof Utils !== 'undefined' ? Utils.escapeHtml(t) : t);
+  }
+
+  // 论坛正文换行修复：AI 输出的正文段落间常只有单个 \n，被 Markdown 当软换行（<br>）处理。
+  // 这里把 <br> 转 \n，再把单换行升级成段落分隔（\n\n），让 Markdown 每段都成独立 <p>。
+  function _forumBodyBreaks(s) {
+    let t = String(s == null ? '' : s).replace(/<br\s*\/?>/gi, '\n').replace(/\r\n/g, '\n');
+    // 把每个换行都升级为段落分隔，再把 3+ 连续换行压回 2 个，避免多空行膨胀
+    t = t.replace(/\n/g, '\n\n').replace(/\n{3,}/g, '\n\n');
+    return t;
   }
 
   // 纯文本展示型内容（朋友圈/私聊/评论等，非 Markdown）：只过正则 + HTML 转义，不改渲染方式。
@@ -38599,7 +38608,7 @@ async function _clearMomentsCover() {
     html += '</div>';
     html += '</div>';
     // 正文（支持 Markdown 渲染，和 AI 帖子一致）
-    html += '<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">' + _phoneMd(String(p.content || '').replace(/<br\s*\/?>/gi, '\n')) + '</div>';
+    html += '<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">' + _phoneMd(_forumBodyBreaks(p.content)) + '</div>';
     // 配图描述
     if (p.imageDesc) {
       html += '<div class="phone-moment-image-desc" style="margin-bottom:12px">' + _uiIcon('image', 13) + '<span>' + Utils.escapeHtml(p.imageDesc) + '</span></div>';
@@ -39436,7 +39445,7 @@ ${wvPrompt}`;
       </div>`;
       // 正文或骨架屏
       if (p._detailLoaded) {
-        html += `<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">${_phoneMd(String(p.fullContent||'').replace(/<br\s*\/?>/gi,'\n'))}</div>`;
+        html += `<div class="md-content phone-forum-detail-md" style="font-size:13px;line-height:1.8;color:var(--text);padding:0 0 16px 0;margin-bottom:0">${_phoneMd(_forumBodyBreaks(p.fullContent))}</div>`;
         if (p.tags?.length) html += `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px">${p.tags.map(t=>`<span style="font-size:10px;background:var(--bg-tertiary);color:var(--accent);padding:2px 8px;border-radius:10px">${Utils.escapeHtml(t)}</span>`).join('')}</div>`;
 html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secondary);padding:8px 0;border-top:1px solid var(--border);margin-bottom:12px">
         <span style="display:flex;align-items:center;gap:3px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> ${formatNum(p.views)}</span>

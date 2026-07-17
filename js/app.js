@@ -232,6 +232,19 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 ○新增手机全局美化，配色/壁纸/头像/签名等可全局共享，配色支持导入导出
 ○修复部分BUG
 ○新增心动模拟可手动修改黑化值`;
+    // 历史公告（最新在前），版本变旧后手动把上一版内容挪进来
+    const CHANGELOG_HISTORY = [
+      { version: 'v713.3', notes: `○修复部分BUG、调整部分UI
+○增加按钮，可以取消角色主动挂断电话（手机聊天设置内）
+○新增通话时可在括号内描写动作
+○增加了用户气泡的继续剧情按钮
+○新增正则测试功能
+○增加了提示词批量全选按钮` },
+      { version: 'v713.2', notes: `○调整了导入逻辑
+○新增正则作用域
+○新增了论坛、邮箱的马甲模式
+○优化部分UI、修复部分BUG` },
+    ];
     const SEEN_KEY = 'changelog_seen_version';
 
     function _showChangelog(opts) {
@@ -254,6 +267,19 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
         const greeting = safeName ? `欢迎回来，${safeName}` : '欢迎回来';
         const titleText = force ? '更新公告' : greeting;
 
+        // 生成历史公告折叠栏（第一条默认展开）
+        const historyHtml = CHANGELOG_HISTORY.map((h, i) => {
+          const open = i === 0;
+          const safeNotes = String(h.notes || '').replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+          return `<div class="changelog-hist-item" style="background:var(--bg-tertiary);border:none;border-radius:10px;overflow:hidden">
+            <button type="button" class="changelog-hist-head" data-idx="${i}" style="width:100%;padding:11px 14px;border:none;background:none;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;font-family:inherit">
+              <span>${h.version}</span>
+              <span class="changelog-hist-arrow" style="font-size:12px;color:var(--text-secondary);transition:transform .2s;transform:rotate(${open ? 90 : 0}deg)">›</span>
+            </button>
+            <div class="changelog-hist-body" style="white-space:pre-line;padding:${open ? '0 14px 12px' : '0 14px'};max-height:${open ? '400px' : '0'};overflow:hidden;transition:max-height .25s ease,padding .25s ease;color:var(--text-secondary);font-size:12px;line-height:1.9">${safeNotes}</div>
+          </div>`;
+        }).join('');
+
         const overlay = document.createElement('div');
         overlay.id = 'changelog-overlay';
         overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px;animation:sbFadeIn .25s ease-out';
@@ -262,22 +288,92 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
             <div style="font-size:16px;font-weight:650;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px">
               <span>${titleText}</span><span style="font-size:11px;color:var(--text-secondary);font-weight:400;border:1px solid var(--border);border-radius:999px;padding:1px 8px;line-height:1.6">${APP_VERSION}</span>
             </div>
+            <div id="changelog-main-view">
             <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;letter-spacing:0.5px">本次更新</div>
             <div style="height:1px;background:var(--border);opacity:.7;margin:0 0 14px"></div>
             <div style="white-space:pre-line;margin-bottom:18px;color:var(--text-secondary);font-size:12px;line-height:1.9">${CHANGELOG}</div>
-            <div style="background:var(--bg-secondary);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:18px;font-size:12px;line-height:1.7;color:var(--text-secondary)">
-              <div style="font-weight:600;color:var(--text);margin-bottom:4px">温馨提示</div>
-              <div>· 请及时存档，以免数据丢失</div>
-              <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-                <span>skynex交流群：<strong style="color:var(--text);font-weight:650">739657680</strong></span>
-                <button id="changelog-copy-group" type="button" style="padding:4px 10px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:11px;cursor:pointer;line-height:1.5">复制群号</button>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+              <div id="changelog-goto-profile" style="background:var(--bg-tertiary);border:none;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;font-size:12px;line-height:1.6;color:var(--text-secondary);cursor:pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                <span style="flex:1;min-width:0">请及时存档，以免数据丢失</span>
+                <span style="font-size:14px;color:var(--text-secondary);flex-shrink:0;line-height:1">›</span>
+              </div>
+              <div style="background:var(--bg-tertiary);border:none;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;font-size:12px;line-height:1.6;color:var(--text-secondary)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                <div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                  <span>skynex 交流群 <strong style="color:var(--text);font-weight:650;font-size:13px;letter-spacing:0.3px">739657680</strong></span>
+                  <button id="changelog-copy-group" type="button" style="padding:4px 12px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:11px;cursor:pointer;line-height:1.5;flex-shrink:0">复制群号</button>
+                </div>
               </div>
             </div>
-            <div style="display:flex;justify-content:flex-end">
+            </div>
+            <div id="changelog-history-view" style="display:none">
+              <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;letter-spacing:0.5px">历史公告</div>
+              <div style="height:1px;background:var(--border);opacity:.7;margin:0 0 14px"></div>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">${historyHtml}</div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <button id="changelog-history-toggle" type="button" style="padding:6px 4px;border:none;background:none;color:var(--text-secondary);font-size:12px;cursor:pointer;line-height:1.5;display:flex;align-items:center;gap:2px">查看历史公告<span style="font-size:14px;line-height:1">›</span></button>
               <button id="changelog-ok" style="padding:8px 24px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">${force ? '关闭' : '已阅'}</button>
             </div>
           </div>`;
         document.body.appendChild(overlay);
+        // 历史公告：切换主视图 / 历史视图
+        (function bindHistory(){
+          const mainView = overlay.querySelector('#changelog-main-view');
+          const histView = overlay.querySelector('#changelog-history-view');
+          const toggleBtn = overlay.querySelector('#changelog-history-toggle');
+          if (!mainView || !histView || !toggleBtn) return;
+          let showingHist = false;
+          const applyView = () => {
+            mainView.style.display = showingHist ? 'none' : '';
+            histView.style.display = showingHist ? '' : 'none';
+            toggleBtn.innerHTML = showingHist
+              ? '<span style="font-size:14px;line-height:1">‹</span>返回本次更新'
+              : '查看历史公告<span style="font-size:14px;line-height:1">›</span>';
+          };
+          toggleBtn.onclick = (e) => {
+            try { e.stopPropagation(); } catch(_) {}
+            showingHist = !showingHist;
+            applyView();
+          };
+          // 折叠栏展开/收起
+          histView.querySelectorAll('.changelog-hist-head').forEach(head => {
+            head.onclick = (e) => {
+              try { e.stopPropagation(); } catch(_) {}
+              const item = head.closest('.changelog-hist-item');
+              const body = item && item.querySelector('.changelog-hist-body');
+              const arrow = head.querySelector('.changelog-hist-arrow');
+              if (!body) return;
+              const isOpen = body.style.maxHeight && body.style.maxHeight !== '0px';
+              if (isOpen) {
+                body.style.maxHeight = '0';
+                body.style.padding = '0 14px';
+                if (arrow) arrow.style.transform = 'rotate(0deg)';
+              } else {
+                body.style.maxHeight = '400px';
+                body.style.padding = '0 14px 12px';
+                if (arrow) arrow.style.transform = 'rotate(90deg)';
+              }
+            };
+          });
+        })();
+        // 点存档提示卡 → 关公告 + 跳个人主页（存档入口）
+        const gotoProfileCard = overlay.querySelector('#changelog-goto-profile');
+        if (gotoProfileCard) {
+          gotoProfileCard.onclick = (e) => {
+            try { e.stopPropagation(); } catch(_) {}
+            try { localStorage.setItem(SEEN_KEY, APP_VERSION); } catch(_) {}
+            overlay.style.opacity = '0';
+            overlay.style.transition = 'opacity .2s';
+            setTimeout(() => {
+              overlay.remove();
+              try {
+                if (typeof Auth !== 'undefined' && Auth.openProfile) Auth.openProfile();
+              } catch(_) {}
+            }, 200);
+          };
+        }
         const copyGroupBtn = overlay.querySelector('#changelog-copy-group');
         if (copyGroupBtn) {
           copyGroupBtn.onclick = async (e) => {
