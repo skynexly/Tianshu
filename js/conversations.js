@@ -136,16 +136,13 @@ async function init() {
   // 背景：v706.1 的合并迁移误在本 init 之前执行，saveList 把空 list 写回，
   //       覆盖了 gameState.conversations，导致对话列表消失（messages 表未受损）。
   // 本函数扫描 messages 表里所有 conversationId，凡是当前 list 里没有对应对话的，
-  // 就从其消息反推重建一条对话（只新增，绝不删改现有对话）。带 flag 只跑一次。
+  // 就从其消息反推重建一条对话（只新增，绝不删改现有对话）。
+  // v715：去掉一次性 flag 硬锁，改成每次启动都扫描——逻辑本身幂等（已存在对话会跳过，
+  //       只补缺失的），这样万一 gameState.conversations 被异常覆盖，下次刷新能自动捞回。
   async function recoverOrphanConversations() {
     try {
-      const FLAG = 'recover_orphan_conversations_v1';
-      const flag = await DB.get('gameState', FLAG);
-      if (flag && flag.value) return;
-
       const allMsgs = await DB.getAll('messages');
       if (!Array.isArray(allMsgs) || allMsgs.length === 0) {
-        await DB.put('gameState', { key: FLAG, value: 1 });
         return;
       }
 
@@ -177,7 +174,6 @@ async function init() {
 
       const orphanIds = Object.keys(groups);
       if (orphanIds.length === 0) {
-        await DB.put('gameState', { key: FLAG, value: 1 });
         return;
       }
 
@@ -208,7 +204,6 @@ async function init() {
       }
       await saveList();
       try { renderList(); } catch(_) {}
-      await DB.put('gameState', { key: FLAG, value: 1 });
       console.log('[Recover] 自愈重建对话 ' + orphanIds.length + ' 个');
       try { if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已找回 ' + orphanIds.length + ' 个对话的聊天记录', 3000); } catch(_) {}
     } catch (e) {

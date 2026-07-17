@@ -43027,7 +43027,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px;flex-direction:row-reverse">
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${meAvatarInner}</div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;min-width:0;max-width:72%">
-        <div style="padding:8px 12px;border-radius:18px;border-bottom-right-radius:4px;font-size:14px;line-height:1.5;background:var(--accent);color:#fff;word-break:break-word">${quoteBlock}${_phoneText(m.text || '')}</div>
+        <div class="phone-chat-txt-mine" style="padding:8px 12px;border-radius:18px;border-bottom-right-radius:4px;font-size:14px;line-height:1.5;word-break:break-word">${quoteBlock}${_phoneText(m.text || '')}</div>
         ${footTag}
       </div>
     </div>`;
@@ -43035,7 +43035,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
   return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px">
     <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
     <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:72%">
-      <div style="padding:8px 12px;border-radius:18px;border-bottom-left-radius:4px;font-size:14px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);word-break:break-word">${quoteBlock}${_phoneText(m.text || '')}</div>
+      <div class="phone-chat-txt-char" style="padding:8px 12px;border-radius:18px;border-bottom-left-radius:4px;font-size:14px;line-height:1.5;word-break:break-word">${quoteBlock}${_phoneText(m.text || '')}</div>
       ${footTag}
     </div>
   </div>`;
@@ -47677,7 +47677,7 @@ function _renderChatThread(pd, contactId) {
         return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
           <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
           <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-            <div class="${mine ? 'phone-chat-txt-mine' : 'phone-chat-txt-char'}" style="max-width:100%;padding:8px 12px;border-radius:18px;${mine ? 'border-bottom-right-radius:4px' : 'border-bottom-left-radius:4px'};font-size:14px;line-height:1.5;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};word-break:break-word">${Utils.escapeHtml(m.text || '')}</div>
+            <div class="${mine ? 'phone-chat-txt-mine' : 'phone-chat-txt-char'}" style="max-width:100%;padding:8px 12px;border-radius:18px;${mine ? 'border-bottom-right-radius:4px' : 'border-bottom-left-radius:4px'};font-size:14px;line-height:1.5;word-break:break-word">${Utils.escapeHtml(m.text || '')}</div>
             ${time}
           </div>
         </div>`;

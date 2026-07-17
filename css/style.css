@@ -41,6 +41,10 @@ body.lite-mode .chat-messages.fading-out {
 }
 body.lite-mode .phone-shell::before { display: none !important; }
 
+/* 手机私聊/群聊 文字气泡默认底色（从内联样式移出，便于用户用美化覆盖，无需 !important） */
+.phone-chat-txt-mine { background: var(--accent); color: #fff; }
+.phone-chat-txt-char { background: var(--bg-tertiary); color: var(--text); }
+
 /* ===== 基础变量 ===== */
 :root {
   --bg: #0f0f0f;
