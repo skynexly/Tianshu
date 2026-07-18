@@ -435,7 +435,20 @@ async function init() {
     // v712：新建对话继承「上一个当前对话」的设置类字段（白名单）——用户懒得挨个调
     // 只沿用"设置"，不沿用剧情内容（世界观/事件链/属性/剧情引导/背景图各自独立）
     try {
-      const tpl = list.find(c => c.id === currentId);
+      // 模板对话：优先当前对话；无世界观等空态下 currentId 可能为空或指向别的世界观，
+      // 退回「本世界观最近用过的对话」，再退回「本世界观下任意对话」，保证无世界观也能继承设置。
+      let tpl = list.find(c => c.id === currentId && (c.worldviewId || '__default_wv__') === wvId);
+      if (!tpl) {
+        try {
+          const lastRecord = await DB.get('gameState', `lastWvConv_${wvId}`);
+          if (lastRecord?.value) {
+            tpl = list.find(c => c.id === lastRecord.value && (c.worldviewId || '__default_wv__') === wvId);
+          }
+        } catch(_) {}
+      }
+      if (!tpl) {
+        tpl = list.find(c => (c.worldviewId || '__default_wv__') === wvId && !c.isGaiden);
+      }
       if (tpl) {
         const INHERIT_KEYS = [
           'convStream', 'convGameMode', 'convFormat', 'convCustomFormat', 'convSuggestEnabled',

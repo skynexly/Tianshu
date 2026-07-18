@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=164">
 <link rel="stylesheet" href="css/phone.css?v1=405">
-<link rel="stylesheet" href="css/phone-fudge.css?v=48">
+<link rel="stylesheet" href="css/phone-fudge.css?v=51">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260707">
 </head>
@@ -1319,6 +1319,13 @@
         <div id="gaiden-input-area" style="overflow-y:auto;flex:1">
           <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">将读取当前窗口的全部上下文，根据你的要求生成番外故事。</p>
           <textarea id="gaiden-requirement" rows="5" placeholder="描述你想要的番外，例如：写一个角色们在现代世界相遇的番外…" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:12px;font-size:14px;resize:vertical;box-sizing:border-box"></textarea>
+          <div style="margin-top:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+              <span style="font-size:13px;color:var(--text);font-weight:600">挂世界书 <span style="font-size:11px;color:var(--text-secondary);font-weight:normal">（选填，给番外补充设定）</span></span>
+              <button type="button" onclick="Gaiden.openLorebookPicker()" style="background:var(--bg-tertiary);border:1px solid var(--accent);color:var(--accent);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0">选择世界书</button>
+            </div>
+            <div id="gaiden-lorebook-list"></div>
+          </div>
           <div id="gaiden-action-area" style="margin-top:12px">
             <button id="gaiden-send-btn" onclick="Gaiden.generate()" style="width:100%;background:var(--accent);color:#000;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:13px;touch-action:manipulation;-webkit-tap-highlight-color:transparent">发送</button>
           </div>
@@ -1373,6 +1380,7 @@
         <!-- 查看模式按钮 -->
       <div id="gaiden-view-actions" class="modal-actions" style="flex-shrink:0;margin-top:12px;padding-top:12px">
         <button onclick="Gaiden.remove(document.getElementById('gaiden-detail-modal').dataset.gaidenId)" style="flex:1;background:none;border:1px solid var(--danger);color:var(--danger)">删除</button>
+        <button id="gaiden-continue-saved-btn" onclick="Gaiden.openContinueModal(document.getElementById('gaiden-detail-modal').dataset.gaidenId)" style="flex:1;background:none;border:1px solid var(--accent);color:var(--accent)">续写</button>
         <button id="gaiden-enter-btn" onclick="Gaiden.enterWorldline(document.getElementById('gaiden-detail-modal').dataset.gaidenId)" style="flex:1">进入世界线</button>
         <button id="gaiden-edit-big-btn" class="hidden" onclick="Gaiden.startEdit()" style="flex:1">编辑</button>
       </div>
@@ -1385,6 +1393,48 @@
     </div>
 
     <!-- 番外设定弹窗（进入世界线时 / 聊天菜单中编辑） -->
+
+    <!-- 番外续写弹窗（收藏页对已保存番外续写） -->
+    <div id="gaiden-continue-modal" class="modal hidden" data-gaiden-id="">
+      <div class="modal-content" style="max-height:85vh;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
+          <h3 style="margin:0">续写番外</h3>
+          <button onclick="Gaiden.closeContinueModal()" class="btn-icon modal-corner-btn close-btn" title="关闭">×</button>
+        </div>
+        <div style="flex:1;overflow-y:auto">
+          <label style="font-size:13px;color:var(--text-secondary);margin-bottom:4px;display:block">续写指令 <span style="font-size:11px;opacity:0.7">（选填，比如"往悲剧方向写""引入新角色"）</span></label>
+          <textarea id="gaiden-continue-input" rows="4" placeholder="留空则顺着前文自然续写" style="width:100%;resize:vertical;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-size:13px;box-sizing:border-box"></textarea>
+          <p id="gaiden-continue-wv-hint" style="font-size:11px;color:var(--text-secondary);margin:8px 0 0"></p>
+          <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+            <label class="circle-check-label">
+              <span class="circle-check-text">带入当前世界观</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="gaiden-continue-wv" class="circle-check" checked>
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+            <label class="circle-check-label">
+              <span class="circle-check-text">带入当前角色</span>
+              <span style="position:relative;display:inline-flex">
+                <input type="checkbox" id="gaiden-continue-npc" class="circle-check" checked>
+                <span class="circle-check-ui"></span>
+              </span>
+            </label>
+          </div>
+          <div style="margin-top:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+              <span style="font-size:13px;color:var(--text);font-weight:600">挂世界书 <span style="font-size:11px;color:var(--text-secondary);font-weight:normal">（选填，给续写补充设定）</span></span>
+              <button type="button" onclick="Gaiden.openContinueLorebookPicker()" style="background:var(--bg-tertiary);border:1px solid var(--accent);color:var(--accent);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0">选择世界书</button>
+            </div>
+            <div id="gaiden-continue-lorebook-list"></div>
+          </div>
+        </div>
+        <div id="gaiden-continue-action-area" class="modal-actions" style="flex-shrink:0;margin-top:16px;padding-top:12px">
+          <button onclick="Gaiden.closeContinueModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
+          <button id="gaiden-continue-send-btn" onclick="Gaiden.continueSaved()" style="flex:1">开始续写</button>
+        </div>
+      </div>
+    </div>
 
     <!-- 对话设置面板（v687.17：modal → panel 全屏化 + 4 tab） -->
     <section id="panel-conv-settings" class="panel">
@@ -4339,7 +4389,7 @@ const GameLog = (() => {
 <script src="js/tools.js?v=10"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=57"></script>
-<script src="js/worldview.js?v=106"></script>
+<script src="js/worldview.js?v=107"></script>
 <script src="js/npc_importer.js?v=2"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
@@ -4350,7 +4400,7 @@ const GameLog = (() => {
 <script src="js/single_mode.js?v=4"></script>
 <script src="js/character.js?v=18"></script>
 <script src="js/prompts.js?v=4"></script>
-<script src="js/conversations.js?v=13"></script>
+<script src="js/conversations.js?v=15"></script>
 <script src="js/summary.js?v=3"></script>
 <script src="js/chat.js?v=122"></script>
 <script src="js/lib/html2canvas.min.js"></script>
@@ -4359,7 +4409,7 @@ const GameLog = (() => {
 <script src="js/tts.js"></script>
 <script src="js/branch.js"></script>
 <script src="js/settings.js?v=14"></script>
-<script src="js/gaiden.js?v=4"></script>
+<script src="js/gaiden.js?v=8"></script>
 <script src="js/backstage.js?v=23"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
@@ -4371,14 +4421,14 @@ const GameLog = (() => {
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
 <script src="js/app_icons.js?v=7"></script>
-<script src="js/phone.js?v1=1177"></script>
+<script src="js/phone.js?v1=1195"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
 <script src="js/ui.js?v=18"></script>
-<script src="js/data-mgr.js?v=21"></script>
+<script src="js/data-mgr.js?v=22"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/colorpicker.js?v=1"></script>
 <script src="data/tianshucheng-bg.js"></script>

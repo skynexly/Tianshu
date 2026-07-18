@@ -392,6 +392,29 @@
   padding: 14px !important;
   background: var(--bg) !important;
 }
+/* 热搜榜条目：与顶栏/详情页同一套配色——主文字色作底、背景色作字，避免壁纸把 --text 改白后看不清 */
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-hot-header {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-hot-item {
+  background: var(--text) !important;
+  border-radius: 16px;
+  padding: 12px 14px !important;
+  margin-bottom: 8px;
+}
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-hot-item .phone-forum-hot-title {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-hot-item .phone-forum-hot-desc {
+  color: color-mix(in srgb, var(--bg) 62%, transparent) !important;
+}
+/* 热搜专区页头部标题/描述：页面在 body 上（浅底），文字用主文字色系即可 */
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-hotzone-title {
+  color: var(--bg) !important;
+}
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-hotzone-desc {
+  color: color-mix(in srgb, var(--bg) 62%, transparent) !important;
+}
 /* 搜索 / 刷新 / 发帖按钮：胶囊形、去边框 */
 .phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-search-btn,
 .phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-refresh-btn,

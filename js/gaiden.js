@@ -6,6 +6,8 @@ const Gaiden = (() => {
   let currentDraft = null; // 正在生成/预览的番外
   let isGenerating = false;
   let _abortCtrl = null;
+  let _gaidenLorebookIds = []; // 本次生成番外挂载的世界书 id 列表
+  let _continueLorebookIds = []; // 收藏页续写时挂载的世界书 id 列表
 
   // ===== 状态条切换 =====
   function _showStatusBar(areaId, mode = 'generate') {
@@ -42,6 +44,66 @@ const Gaiden = (() => {
     if (!area) return;
     area.innerHTML = `<div style="font-size:12px;color:var(--danger);margin-bottom:8px">${Utils.escapeHtml(msg)}</div>
       <button id="${btnId}" onclick="${onclick}" style="width:100%;background:var(--accent);color:#000;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:13px">${label}</button>`;
+  }
+
+  // ===== 挂世界书 =====
+  // 打开世界书选择器（复用 LorebookUI 的通用选择器）
+  async function openLorebookPicker() {
+    if (typeof LorebookUI === 'undefined' || !LorebookUI.openBindPicker) {
+      UI.showToast('世界书模块未加载', 1500); return;
+    }
+    await LorebookUI.openBindPicker(_gaidenLorebookIds.slice(), (next) => {
+      _gaidenLorebookIds = Array.from(new Set(next || []));
+      _renderGaidenLorebookList();
+    });
+  }
+
+  // 渲染已选世界书列表（含解绑）
+  async function _renderGaidenLorebookList() {
+    const el = document.getElementById('gaiden-lorebook-list');
+    if (!el) return;
+    if (typeof LorebookUI === 'undefined' || !LorebookUI.renderBoundList) { el.innerHTML = ''; return; }
+    await LorebookUI.renderBoundList(el, _gaidenLorebookIds, (next) => {
+      _gaidenLorebookIds = Array.from(new Set(next || []));
+      _renderGaidenLorebookList();
+    });
+  }
+
+  // 把选中的世界书聚合成 prompt 文本（全量注入所有条目：知识条目 + 全图 NPC + 简介）
+  async function _buildLorebookPrompt(ids) {
+    const list = Array.isArray(ids) ? ids.filter(Boolean) : [];
+    if (!list.length || typeof Lorebook === 'undefined') return '';
+    const parts = [];
+    for (const id of list) {
+      let lb = null;
+      try { lb = await Lorebook.get(id); } catch(_) {}
+      if (!lb) continue;
+      const seg = [];
+      const name = (lb.name || '未命名世界书').trim();
+      seg.push(`### 世界书：${name}`);
+      if ((lb.description || '').trim()) seg.push(lb.description.trim());
+      // 知识条目（全量，不分常驻/动态，忽略 enabled=false）
+      const ks = (lb.knowledges || []).filter(k => k && k.enabled !== false && (k.content || '').trim());
+      if (ks.length) {
+        seg.push('【设定条目】');
+        ks.forEach(k => {
+          const kn = (k.name || '').trim();
+          seg.push(kn ? `- ${kn}：${k.content.trim()}` : `- ${k.content.trim()}`);
+        });
+      }
+      // 全图 NPC
+      const npcs = (lb.globalNpcs || []).filter(n => n && (n.name || '').trim());
+      if (npcs.length) {
+        seg.push('【相关角色】');
+        npcs.forEach(n => {
+          const head = n.aliases ? `${n.name}（${n.aliases}）` : n.name;
+          seg.push(n.detail ? `- ${head}：${n.detail.trim()}` : `- ${head}`);
+        });
+      }
+      if (seg.length > 1) parts.push(seg.join('\n'));
+    }
+    if (!parts.length) return '';
+    return `## 附加世界书设定\n\n${parts.join('\n\n')}`;
   }
 
   function _showResultActions() {
@@ -120,6 +182,8 @@ const Gaiden = (() => {
     document.getElementById('gaiden-result-area').classList.add('hidden');
     document.getElementById('gaiden-input-area').classList.remove('hidden');
     currentDraft = null;
+    _gaidenLorebookIds = [];
+    _renderGaidenLorebookList();
     _showResultActions();
     modal.classList.remove('hidden');
     // 关闭加号菜单
@@ -155,6 +219,8 @@ const Gaiden = (() => {
     const wvPrompt = Chat.getWorldviewPrompt() || '';
     const char = await Character.get();
     const charPrompt = char ? Character.formatForPrompt(char) : '';
+    // 挂载的世界书（用户在弹窗里选的）
+    const lorebookPrompt = await _buildLorebookPrompt(_gaidenLorebookIds);
 
     isGenerating = true;
     _abortCtrl = new AbortController();
@@ -178,6 +244,7 @@ const Gaiden = (() => {
         let userPrompt = '';
         if (wvPrompt) userPrompt += `## 世界观设定\n\n${wvPrompt}\n\n`;
         if (charPrompt) userPrompt += `## 用户角色设定\n\n${charPrompt}\n\n`;
+        if (lorebookPrompt) userPrompt += `${lorebookPrompt}\n\n`;
         userPrompt += `## 当前剧情上下文\n\n${contextText}\n\n## 番外要求\n\n${requirement}\n\n请创作番外故事。`;
 
         const resp = await fetch(url, {
@@ -216,6 +283,7 @@ const Gaiden = (() => {
           title: autoTitle,
           content: bodyContent,
           requirement: requirement,
+          lorebookIds: _gaidenLorebookIds.slice(),
           sourceConv: Conversations.getCurrent(),
           sourceConvName: Conversations.getCurrentName(),
           created: Date.now()
@@ -327,6 +395,13 @@ const Gaiden = (() => {
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) throw new Error('请先配置番外模型');
 
+    // 带入世界观 / 角色 / 挂载的世界书（与初次生成对齐，避免续写跑偏）
+    const wvPrompt = Chat.getWorldviewPrompt() || '';
+    let charPrompt = '';
+    try { const char = await Character.get(); charPrompt = char ? Character.formatForPrompt(char) : ''; } catch(_) {}
+    const lbIds = (savedItem && Array.isArray(savedItem.lorebookIds)) ? savedItem.lorebookIds : _gaidenLorebookIds;
+    const lorebookPrompt = await _buildLorebookPrompt(lbIds);
+
     const systemPrompt = `你是一位出色的故事续写作者。用户会给你一篇已经写好的番外故事前文，以及原始番外要求。
 请从前文的最后一句之后自然续写，不要重写标题，不要重复前文，不要输出任何元说明。
 要求：
@@ -335,7 +410,11 @@ const Gaiden = (() => {
 3. 直接输出续写正文
 4. 不要使用“续写如下”等说明文字`;
 
-    const userPrompt = `## 原始番外要求\n\n${requirement || savedItem.requirement || '无'}\n\n## 已完成番外前文\n\n${savedItem.content || ''}\n\n请从前文末尾继续写后续正文。`;
+    let userPrompt = '';
+    if (wvPrompt) userPrompt += `## 世界观设定\n\n${wvPrompt}\n\n`;
+    if (charPrompt) userPrompt += `## 用户角色设定\n\n${charPrompt}\n\n`;
+    if (lorebookPrompt) userPrompt += `${lorebookPrompt}\n\n`;
+    userPrompt += `## 原始番外要求\n\n${requirement || savedItem.requirement || '无'}\n\n## 已完成番外前文\n\n${savedItem.content || ''}\n\n请从前文末尾继续写后续正文。`;
 
     const resp = await fetch(url, {
       method: 'POST',
@@ -353,6 +432,192 @@ const Gaiden = (() => {
     const content = json.choices?.[0]?.message?.content || '';
     if (!content.trim()) throw new Error('AI返回了空内容');
     return _extractContinuationContent(content);
+  }
+
+  // ===== 收藏页：对已保存番外续写 =====
+
+  // 取当前世界观名（用于提示）
+  async function _getCurrentWorldviewName() {
+    try {
+      const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+      const wvId = conv?.worldviewId || '__default_wv__';
+      if (!wvId || wvId === '__default_wv__') return '默认世界观';
+      const wv = await DB.get('worldviews', wvId);
+      return wv?.name || '未知世界观';
+    } catch(_) { return '当前世界观'; }
+  }
+
+  // 打开续写弹窗
+  async function openContinueModal(id) {
+    const g = gaidenList.find(x => x.id === id);
+    if (!g) return;
+    if (isGenerating) { UI.showToast('正在生成中，请稍候'); return; }
+
+    const modal = document.getElementById('gaiden-continue-modal');
+    if (!modal) return;
+    modal.dataset.gaidenId = id;
+    document.getElementById('gaiden-continue-input').value = '';
+    document.getElementById('gaiden-continue-wv').checked = true;
+    document.getElementById('gaiden-continue-npc').checked = true;
+    // 默认沿用该番外生成时挂的世界书
+    _continueLorebookIds = Array.isArray(g.lorebookIds) ? g.lorebookIds.slice() : [];
+    _renderContinueLorebookList();
+    // 恢复发送按钮
+    _showContinueSendBtn();
+    // 世界观提示
+    const hintEl = document.getElementById('gaiden-continue-wv-hint');
+    if (hintEl) {
+      const wvName = await _getCurrentWorldviewName();
+      hintEl.textContent = `当前世界观：${wvName}（勾选带入时使用当前世界观与角色）`;
+    }
+    // 关闭详情弹窗
+    closeDetail();
+    modal.classList.remove('hidden');
+  }
+
+  function closeContinueModal() {
+    const modal = document.getElementById('gaiden-continue-modal');
+    const content = modal?.querySelector('.modal-content');
+    if (!modal) return;
+    modal.classList.add('closing');
+    if (content) content.classList.add('closing');
+    setTimeout(() => {
+      modal.classList.remove('closing');
+      if (content) content.classList.remove('closing');
+      modal.classList.add('hidden');
+    }, 220);
+  }
+
+  // 续写弹窗 · 挂世界书
+  async function openContinueLorebookPicker() {
+    if (typeof LorebookUI === 'undefined' || !LorebookUI.openBindPicker) {
+      UI.showToast('世界书模块未加载', 1500); return;
+    }
+    await LorebookUI.openBindPicker(_continueLorebookIds.slice(), (next) => {
+      _continueLorebookIds = Array.from(new Set(next || []));
+      _renderContinueLorebookList();
+    });
+  }
+
+  async function _renderContinueLorebookList() {
+    const el = document.getElementById('gaiden-continue-lorebook-list');
+    if (!el) return;
+    if (typeof LorebookUI === 'undefined' || !LorebookUI.renderBoundList) { el.innerHTML = ''; return; }
+    await LorebookUI.renderBoundList(el, _continueLorebookIds, (next) => {
+      _continueLorebookIds = Array.from(new Set(next || []));
+      _renderContinueLorebookList();
+    });
+  }
+
+  function _showContinueSendBtn() {
+    const area = document.getElementById('gaiden-continue-action-area');
+    if (!area) return;
+    area.innerHTML = `<button onclick="Gaiden.closeContinueModal()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
+      <button id="gaiden-continue-send-btn" onclick="Gaiden.continueSaved()" style="flex:1">开始续写</button>`;
+  }
+
+  // 执行续写：请求 API，把结果追加进这篇番外
+  async function continueSaved() {
+    if (isGenerating) return;
+    const modal = document.getElementById('gaiden-continue-modal');
+    const id = modal?.dataset.gaidenId;
+    const g = gaidenList.find(x => x.id === id);
+    if (!g) { UI.showToast('番外不存在'); return; }
+
+    const funcConfig = getGaidenConfig();
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先在设置→功能模型中配置番外模型'); return; }
+
+    const instruction = document.getElementById('gaiden-continue-input').value.trim();
+    const useWv = document.getElementById('gaiden-continue-wv').checked;
+    const useNpc = document.getElementById('gaiden-continue-npc').checked;
+
+    // 收集设定
+    const wvPrompt = useWv ? (Chat.getWorldviewPrompt() || '') : '';
+    let charPrompt = '';
+    if (useNpc) {
+      try { const char = await Character.get(); charPrompt = char ? Character.formatForPrompt(char) : ''; } catch(_) {}
+    }
+    const lorebookPrompt = await _buildLorebookPrompt(_continueLorebookIds);
+
+    isGenerating = true;
+    _abortCtrl = new AbortController();
+    // 按钮切成生成中状态
+    const area = document.getElementById('gaiden-continue-action-area');
+    if (area) area.innerHTML = `<button onclick="Gaiden.abort()" style="flex:1;background:none;border:1px solid var(--danger);color:var(--danger)">终止</button>`;
+
+    const systemPrompt = `你是一位出色的故事续写作者。用户会给你一篇已经写好的番外故事前文，以及原始要求、可选的世界观/角色设定、附加世界书设定和本次续写指令。
+请从前文的最后一句之后自然续写，不要重写标题，不要重复前文，不要输出任何元说明。
+要求：
+1. 保持角色性格和世界观一致
+2. 文风和前文协调
+3. 直接输出续写正文
+4. 不要使用“续写如下”等说明文字`;
+
+    let userPrompt = '';
+    if (wvPrompt) userPrompt += `## 世界观设定\n\n${wvPrompt}\n\n`;
+    if (charPrompt) userPrompt += `## 用户角色设定\n\n${charPrompt}\n\n`;
+    if (lorebookPrompt) userPrompt += `${lorebookPrompt}\n\n`;
+    userPrompt += `## 原始番外要求\n\n${g.requirement || '无'}\n\n## 已完成番外前文\n\n${g.content || ''}\n\n`;
+    if (instruction) userPrompt += `## 本次续写指令\n\n${instruction}\n\n`;
+    userPrompt += `请从前文末尾继续写后续正文。`;
+
+    const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : 3;
+    let lastError = null;
+    let addition = '';
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+            stream: false,
+            temperature: 0.85
+          }),
+          signal: _abortCtrl?.signal
+        });
+        if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
+        const json = await resp.json();
+        const content = json.choices?.[0]?.message?.content || '';
+        if (!content.trim()) throw new Error('AI返回了空内容');
+        addition = _extractContinuationContent(content);
+        lastError = null;
+        break;
+      } catch(e) {
+        if (e.name === 'AbortError') { isGenerating = false; _abortCtrl = null; _showContinueSendBtn(); return; }
+        lastError = e;
+        if (attempt < maxRetries) {
+          UI.showToast(`续写失败，正在重试（${attempt}/${maxRetries}）…`, 3000);
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      }
+    }
+
+    isGenerating = false;
+    _abortCtrl = null;
+
+    if (lastError || !addition.trim()) {
+      _showContinueSendBtn();
+      UI.showToast(`番外续写失败${lastError ? '：' + lastError.message : ''}`, 3500);
+      return;
+    }
+
+    // 追加进这篇番外并保存
+    g.content = _appendGaidenContent(g.content, addition);
+    g.updated = Date.now();
+    // 把本次挂的世界书记回番外（方便下次续写默认沿用）
+    g.lorebookIds = _continueLorebookIds.slice();
+    await saveList();
+    renderList();
+    closeContinueModal();
+    UI.showToast('续写已追加并保存', 2000);
+    // 重新打开详情看结果
+    viewDetail(g.id);
   }
 
   async function continueDraft() {
@@ -936,11 +1201,14 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
     if (editBtnEl) editBtnEl.style.display = '';
     const enterBtn = document.getElementById('gaiden-enter-btn');
     const editBigBtn = document.getElementById('gaiden-edit-big-btn');
-    // 只有番外显示"进入世界线"，其他类型都不显示
+    const continueSavedBtn = document.getElementById('gaiden-continue-saved-btn');
+    // 只有番外显示"进入世界线"和"续写"，其他类型都不显示
     if (g.type === 'gaiden' || !g.type) {
       if (enterBtn) enterBtn.classList.remove('hidden');
+      if (continueSavedBtn) continueSavedBtn.style.display = '';
     } else {
       if (enterBtn) enterBtn.classList.add('hidden');
+      if (continueSavedBtn) continueSavedBtn.style.display = 'none';
     }
     if (editBigBtn) editBigBtn.classList.add('hidden');
     modal.classList.remove('hidden');
@@ -1279,6 +1547,8 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
 
   return {
     init, ensureLoaded, reload, openGenerateModal, generate, rewrite, saveDraft, continueDraft, closeGenerateModal, abort,
+    openLorebookPicker,
+    openContinueModal, closeContinueModal, continueSaved, openContinueLorebookPicker,
     minimizeModal, restoreModal,
     renderList, viewDetail, viewWvPost, viewPhoneItem, closeDetail, enterWorldline, remove, addToList,
     startEdit, cancelEdit, saveEdit,

@@ -89,6 +89,13 @@ const DataMgr = (() => {
     _emit('singleCards', strip(await _safeGetAll('singleCards')));
     _emit('lorebooks', strip(await _safeGetAll('lorebooks')));
 
+    // 音乐库：只保留外链歌曲（纯文字：链接/歌词/元数据）。上传类（含 audioBlob/audioBuffer 二进制）
+    // 无法用 JSON 带走，直接跳过——避免序列化出无效的空 Blob 占位，也不误导用户以为能恢复。
+    const _musicExternal = (await _safeGetAll('musicTracks'))
+      .filter(t => t && t.source !== 'upload' && !t.audioBlob && !t.audioBuffer)
+      .map(t => { const c = { ...t }; delete c.audioBlob; delete c.audioBuffer; return c; });
+    _emit('musicTracks', strip(_musicExternal));
+
     if (mode === 'full') {
       await _emitArray('npcAvatars', await _safeGetAll('npcAvatars'));
       await _emitArray('drawnImages', await _safeGetAll('drawnImages'));
@@ -223,6 +230,11 @@ const DataMgr = (() => {
       for (const img of importedDrawnImages) await _safePut('drawnImages', img);
     }
     for (const lb of (data.lorebooks || [])) await _safePut('lorebooks', lb);
+    // 音乐库外链歌曲：合并导入（不清空 musicTracks，避免覆盖掉本机已有的上传歌曲）。
+    // 只写外链类，按 id 覆盖/新增；上传类本就不在存档里。
+    for (const mt of (data.musicTracks || [])) {
+      if (mt && mt.id && mt.source !== 'upload' && !mt.audioBlob && !mt.audioBuffer) await _safePut('musicTracks', mt);
+    }
     if (data.themeConfig) localStorage.setItem('themeConfig', data.themeConfig);
     if (data.themeCustomPresets) localStorage.setItem('themeCustomPresets', data.themeCustomPresets);
 
