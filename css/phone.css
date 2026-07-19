@@ -752,6 +752,19 @@
  margin-top: 2px;
 }
 .phone-map-result-address svg { opacity: .78; }
+.phone-map-region {
+ display: inline-flex;
+ align-items: center;
+ padding: 0 6px;
+ border-radius: 999px;
+ font-size: 10px;
+ font-weight: 600;
+ color: var(--text-secondary);
+ background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+ line-height: 1.5;
+ margin-right: 2px;
+ flex-shrink: 0;
+}
 .phone-map-result-desc {
  color: var(--text);
  font-size: 11px;
@@ -779,6 +792,184 @@
  color: var(--text-secondary);
  font-size: 10px;
  line-height: 1.3;
+}
+/* 地图卡·评分（头部右侧） */
+.phone-map-rating {
+ display: inline-flex;
+ align-items: center;
+ gap: 3px;
+ flex-shrink: 0;
+}
+.phone-map-rating-stars {
+ color: #f5a623;
+ font-size: 11px;
+ line-height: 1;
+ letter-spacing: -1px;
+}
+.phone-map-rating-num {
+ color: #f5a623;
+ font-size: 12px;
+ font-weight: 700;
+ line-height: 1;
+}
+/* 地图卡·分类 + 标签行 */
+.phone-map-tagrow {
+ display: flex;
+ flex-wrap: wrap;
+ align-items: center;
+ gap: 4px;
+ margin: 2px 0 4px;
+}
+.phone-map-cat {
+ display: inline-flex;
+ align-items: center;
+ padding: 1px 7px;
+ border-radius: 999px;
+ font-size: 10px;
+ font-weight: 600;
+ color: #fff;
+ background: var(--accent);
+ line-height: 1.5;
+}
+.phone-map-tag {
+ display: inline-flex;
+ align-items: center;
+ padding: 1px 7px;
+ border-radius: 999px;
+ font-size: 10px;
+ color: var(--accent);
+ background: color-mix(in srgb, var(--accent) 12%, transparent);
+ border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+ line-height: 1.5;
+}
+/* 地图卡·状态 + 营业时间行 */
+.phone-map-inforow {
+ display: flex;
+ flex-wrap: wrap;
+ align-items: center;
+ gap: 10px;
+ margin-top: 4px;
+}
+.phone-map-status {
+ display: inline-flex;
+ align-items: center;
+ gap: 4px;
+ font-size: 11px;
+ font-weight: 600;
+ line-height: 1.3;
+}
+.phone-map-status-dot {
+ width: 6px;
+ height: 6px;
+ border-radius: 50%;
+ flex-shrink: 0;
+}
+.phone-map-hours {
+ display: inline-flex;
+ align-items: center;
+ gap: 4px;
+ color: var(--text-secondary);
+ font-size: 11px;
+ line-height: 1.3;
+}
+.phone-map-hours svg { opacity: .75; }
+/* 地图卡·热评 */
+.phone-map-comment {
+ margin-top: 8px;
+ padding: 7px 9px;
+ border-radius: 8px;
+ background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
+ border: 1px solid var(--border);
+}
+.phone-map-comment-user {
+ display: flex;
+ align-items: center;
+ gap: 4px;
+ color: var(--text-secondary);
+ font-size: 10px;
+ font-weight: 600;
+ line-height: 1.3;
+ margin-bottom: 3px;
+}
+.phone-map-comment-user svg { opacity: .7; }
+.phone-map-comment-text {
+ color: var(--text);
+ font-size: 11px;
+ line-height: 1.5;
+}
+/* 地图卡·购买/预订区（商品信息 + 按钮） */
+.phone-map-buy-row {
+ display: flex;
+ align-items: center;
+ gap: 10px;
+ margin-top: 8px;
+ padding: 8px 10px;
+ border-radius: 10px;
+ background: color-mix(in srgb, var(--accent) 8%, transparent);
+ border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.phone-map-buy-info {
+ flex: 1;
+ min-width: 0;
+}
+.phone-map-buy-name {
+ display: flex;
+ align-items: center;
+ gap: 4px;
+ color: var(--text);
+ font-size: 12px;
+ font-weight: 600;
+ line-height: 1.4;
+}
+.phone-map-buy-name svg { opacity: .8; color: var(--accent); flex-shrink: 0; }
+.phone-map-buy-desc {
+ color: var(--text-secondary);
+ font-size: 10px;
+ line-height: 1.45;
+ margin-top: 2px;
+}
+.phone-map-buy-btn {
+ display: inline-flex;
+ align-items: center;
+ justify-content: center;
+ gap: 5px;
+ flex-shrink: 0;
+ padding: 8px 14px;
+ border-radius: 10px;
+ border: none;
+ background: var(--accent);
+ color: #fff;
+ font-size: 12px;
+ font-weight: 600;
+ line-height: 1;
+ cursor: pointer;
+ font-family: inherit;
+ transition: filter .15s, transform .15s;
+}
+.phone-map-buy-btn:hover { filter: brightness(1.06); }
+.phone-map-buy-btn:active { transform: scale(.98); }
+/* 地图卡·出行方案区（复用 buy-row 结构，用中性色区分于购买区） */
+.phone-map-transport-row {
+ background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
+ border-color: color-mix(in srgb, var(--text-secondary) 20%, transparent);
+}
+.phone-map-transport-row .phone-map-buy-name svg { color: var(--text-secondary); }
+.phone-map-transport-free {
+ flex-shrink: 0;
+ padding: 6px 12px;
+ font-size: 11px;
+ font-weight: 600;
+ color: var(--text-secondary);
+ white-space: nowrap;
+}
+.phone-shell.has-custom-wallpaper .phone-map-comment {
+ background: rgba(255, 255, 255, 0.08) !important;
+ border-color: rgba(255, 255, 255, 0.18) !important;
+}
+.phone-shell.has-custom-wallpaper .phone-map-comment-text,
+.phone-shell.has-custom-wallpaper .phone-map-hours,
+.phone-shell.has-custom-wallpaper .phone-map-status {
+ color: rgba(255, 255, 255, 0.9) !important;
 }
 /* 全部订单聚合页：来源徽章配色 */
 .phone-delivery-src-feiniao,
@@ -4783,6 +4974,9 @@ align-self: start;
 .phone-call-refresh-corner.spinning { pointer-events: none; }
 .phone-call-refresh-corner.spinning svg { animation: phoneCallSpin .8s linear infinite; }
 @keyframes phoneCallSpin { to { transform: rotate(360deg); } }
+/* 附近地图刷新按钮：点击旋转（纯图标，无边框底色） */
+#phone-map-near-refresh.spinning { pointer-events: none; }
+#phone-map-near-refresh.spinning svg { animation: phoneCallSpin .8s linear infinite; transform-origin: center; }
 
 /* ===== 阅读 App ===== */
 .phone-reading-home { padding: 14px 14px 24px; }

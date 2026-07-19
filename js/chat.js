@@ -1212,6 +1212,14 @@ try {
       } catch(_) {}
     }
 
+    // 4f. 附近地图（玩家在地图 APP 生成的周边固定地名，开了"同步到主线"才注入）
+    if (isGameMode && typeof Phone !== 'undefined' && Phone.buildNearbyMapForAI) {
+      try {
+        const nearbyMap = await Phone.buildNearbyMapForAI();
+        if (nearbyMap) systemParts.push(nearbyMap);
+      } catch(_) {}
+    }
+
     // 5. 相关记忆（方案B：关系按NPC名直接命中，事件按地点+关键词）
 // v627：人机恋场景下也启用——只要面具+记忆库里有内容就发
 {

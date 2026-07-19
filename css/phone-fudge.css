@@ -374,6 +374,19 @@
 }
 
 /* ============================================================
+   .phone-map-track-card 全局兜底适配（不限 App 作用域）
+   该卡片被地图轨迹/搜索记录、桃宝/饿了咪搜索记录、论坛搜索记录（独立页，
+   无 .phone-forum-app 作用域）等多处复用，样式应一致。统一在此兜底：
+   实色底 + 大圆角 + 去边框，任何 App 用它都自动适配 fudge，无需逐个作用域补。
+   ============================================================ */
+.phone-shell.phone-theme-fudge .phone-map-track-card {
+  border-radius: 18px;
+  background: var(--bg) !important;
+  padding: 14px;
+  border: none !important;
+}
+
+/* ============================================================
    论坛（风闻搬家）App 内部：圆角化（实色背景已由 fudge 默认提供）
    行内样式写死了 border-radius，需 !important 覆盖
    ============================================================ */
@@ -391,6 +404,28 @@
 .phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-post-card {
   padding: 14px !important;
   background: var(--bg) !important;
+}
+/* ============================================================
+   「我的」页入口卡（.phone-forum-mine-card：论坛的我的发帖/收藏/搜索记录、
+   地图的我的轨迹/搜索记录，跨 App 复用同一 class，故不限作用域）
+   内联 background:var(--bg-tertiary) / --bg-secondary 会被 phone.css 全局渐变
+   规则(特异性0,3,1)刷成半透明发虚，深底上文字看不清。
+   照钱包卡/心动卡做法：加属性选择器提特异性到(0,4,0)压过它，改实色浅底。
+   ============================================================ */
+.phone-shell.phone-theme-fudge .phone-forum-mine-card[style*="background:var(--bg-tertiary)"] {
+  background: var(--bg) !important;
+  border: none !important;
+}
+.phone-shell.phone-theme-fudge .phone-forum-mine-card .phone-forum-mine-icon[style*="background:var(--bg-secondary)"] {
+  background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
+}
+/* 全局偏好折叠卡（复用电台 .phone-radio-prefs，限定论坛作用域不影响电台本身） */
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-radio-prefs {
+  background: var(--bg) !important;
+  border: none !important;
+}
+.phone-shell.phone-theme-fudge .phone-forum-app .phone-radio-prefs .phone-radio-prefs-title {
+  color: var(--text) !important;
 }
 /* 热搜榜条目：与顶栏/详情页同一套配色——主文字色作底、背景色作字，避免壁纸把 --text 改白后看不清 */
 .phone-shell.phone-theme-fudge .phone-forum-app .phone-forum-hot-header {
@@ -512,6 +547,39 @@
 .phone-shell.phone-theme-fudge .phone-map-app #phone-map-searchhist-panel > div[style*="border-bottom"] {
   border-bottom: none !important;
 }
+
+/* ---- 附近 Tab：深色 body 上标题文字反色 + 卡片去边框大圆角 ---- */
+/* 位置主标题 / 同步标题：body 铺 var(--text) 深底，原 color:var(--text) 会看不清，反转为背景色 */
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-near-loc,
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-near-sync-title {
+  color: var(--bg) !important;
+}
+/* 副标题 / 同步说明 / 空态 / 图例：次级文字反色（用背景色的 65% 弱化，保持层次） */
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-near-sub,
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-near-sync-desc,
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-near-empty,
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-near-legend {
+  color: color-mix(in srgb, var(--bg) 65%, transparent) !important;
+}
+/* 同步开关卡：去边框 + 大圆角 + 实色底 + 加内边距（与结果卡同款处理） */
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-near-synccard {
+  border: none !important;
+  border-radius: 18px !important;
+  background: var(--bg) !important;
+  padding: 14px 16px !important;
+}
+/* 同步卡内的标题：卡片是浅底，文字用回主文字色（不跟随上面的反色） */
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-near-synccard .phone-map-near-sync-title {
+  color: var(--text) !important;
+}
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-near-synccard .phone-map-near-sync-desc {
+  color: var(--text-secondary) !important;
+}
+/* 方位图画布：去边框（渐变底自带层次，不需要描边） */
+.phone-shell.phone-theme-fudge .phone-map-app .phone-map-near-canvas {
+  border: none !important;
+}
+
 
 /* ============================================================
    好友圈 App：顶部封面 + 发动态编辑页 圆角化

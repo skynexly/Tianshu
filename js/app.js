@@ -224,16 +224,22 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v716';
-    const CHANGELOG = `○优化部分UI和交互
+    const APP_VERSION = 'v717';
+    const CHANGELOG = `○新增GitHub云端备份，大存档分片上传
+○地图APP升级，新增评论、打分、预定、出行字段，新增附近地图功能
+○世界观编辑→手机配置可以自定义地图APP设定
+○字体上传支持20MB＋
+○新增手机数据恢复备份
+○调整部分UI适配`;
+    // 历史公告（最新在前），版本变旧后手动把上一版内容挪进来
+    const CHANGELOG_HISTORY = [
+      { version: 'v716', notes: `○优化部分UI和交互
 ○修复一些BUG
 ○增加手机私聊的引用功能
 ○新增世界观编辑手机配置，为商城选择固定货币
 ○新增番外可挂世界书，可在收藏中续写
 ○新增手机数据可单独导出导入
-○新增手机主题配色可调整透明度`;
-    // 历史公告（最新在前），版本变旧后手动把上一版内容挪进来
-    const CHANGELOG_HISTORY = [
+○新增手机主题配色可调整透明度` },
       { version: 'v715', notes: `○调整了部分回溯逻辑
 ○部分交互优化
 ○新增论坛热搜榜
@@ -253,10 +259,6 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 ○增加了用户气泡的继续剧情按钮
 ○新增正则测试功能
 ○增加了提示词批量全选按钮` },
-      { version: 'v713.2', notes: `○调整了导入逻辑
-○新增正则作用域
-○新增了论坛、邮箱的马甲模式
-○优化部分UI、修复部分BUG` },
     ];
     const SEEN_KEY = 'changelog_seen_version';
 

@@ -88,6 +88,9 @@ const DataMgr = (() => {
     _emit('summaries', strip(await _safeGetAll('summaries')));
     _emit('singleCards', strip(await _safeGetAll('singleCards')));
     _emit('lorebooks', strip(await _safeGetAll('lorebooks')));
+    // 表情包（全局共享）：dataUrl 多为外链 URL，少数是 base64 小图，体积都不大，
+    // 三种模式都原样带走（不 strip），保证换设备/恢复后表情库完整。
+    _emit('stickers', await _safeGetAll('stickers'));
 
     // 音乐库：只保留外链歌曲（纯文字：链接/歌词/元数据）。上传类（含 audioBlob/audioBuffer 二进制）
     // 无法用 JSON 带走，直接跳过——避免序列化出无效的空 Blob 占位，也不误导用户以为能恢复。
@@ -230,6 +233,10 @@ const DataMgr = (() => {
       for (const img of importedDrawnImages) await _safePut('drawnImages', img);
     }
     for (const lb of (data.lorebooks || [])) await _safePut('lorebooks', lb);
+    // 表情包：合并导入（按 id 覆盖/新增），不清空本机现有表情库。
+    for (const stk of (data.stickers || [])) {
+      if (stk && stk.id) await _safePut('stickers', stk);
+    }
     // 音乐库外链歌曲：合并导入（不清空 musicTracks，避免覆盖掉本机已有的上传歌曲）。
     // 只写外链类，按 id 覆盖/新增；上传类本就不在存档里。
     for (const mt of (data.musicTracks || [])) {

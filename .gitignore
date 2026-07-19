@@ -19,3 +19,6 @@ docs/待办.md
 docs/disclaimer-draft.md
 .operit/
 data/tutorial_basic_draft.md
+
+# 单文件版打包产物, 不入库
+dist/

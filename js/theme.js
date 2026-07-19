@@ -560,9 +560,9 @@ if (label) label.textContent = (cfg.msgFontSize || 13.5) + 'px';
     if (slot < 1 || slot > 3) slot = 1;
     const file = input.files[0];
     if (!file) return;
-    // 限制 15MB
-    if (file.size > 15 * 1024 * 1024) {
-      UI.showToast('字体文件不能超过 15MB', 3000);
+    // 限制 30MB（给 20MB 字体留足 base64 膨胀余量）
+    if (file.size > 30 * 1024 * 1024) {
+      UI.showToast('字体文件不能超过 30MB', 3000);
       input.value = '';
       return;
     }

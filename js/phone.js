@@ -1147,6 +1147,39 @@ function _flushChatRoundLog() {
     }
     return true;
   }
+  // ===== 数据体量指纹（防丢核心 v2）=====
+  // 给 phoneData 算一个"用户数据体量"分数：数组元素数 + 非空字符串字段 + 有内容的对象。
+  // 用途：① 恢复判定不再只认"完全空白"，而是"当前体量比备份断崖式缩水"也触发恢复；
+  //       ② 写备份前防退化——新数据体量远低于现有备份时拒绝覆盖，保住好备份。
+  // 只统计"数量"，不碰具体内容，避免图片 dataURL 干扰、也不受字段增减影响。
+  function _phoneDataWeight(pd) {
+    if (!pd || typeof pd !== 'object') return 0;
+    let w = 0;
+    const seen = new WeakSet();
+    const walk = (v, depth) => {
+      if (depth > 6 || v === null || v === undefined) return;
+      if (Array.isArray(v)) {
+        w += v.length;
+        // 只递归前若干项，避免超大数组拖慢（元素数已计入权重）
+        for (let i = 0; i < v.length && i < 200; i++) walk(v[i], depth + 1);
+        return;
+      }
+      if (typeof v === 'object') {
+        if (seen.has(v)) return;
+        seen.add(v);
+        for (const k in v) {
+          const val = v[k];
+          if (val === null || val === undefined) continue;
+          if (typeof val === 'object') { walk(val, depth + 1); continue; }
+          if (typeof val === 'string') { if (val.length > 0) w += 1; continue; }
+          if (typeof val === 'number' || typeof val === 'boolean') { /* 标量不计，避免默认值刷分 */ }
+        }
+        return;
+      }
+    };
+    walk(pd, 0);
+    return w;
+  }
   async function _getPhoneData() {
     const convId = Conversations.getCurrent();
     if (!convId) return null;
@@ -1195,23 +1228,71 @@ function _flushChatRoundLog() {
       });
       if (migrated) Conversations.saveList().catch(() => {});
     }
-    // phoneData 防丢：如果当前数据仍是初始空白态、但备份里有用户数据，自动恢复
+    // phoneData 防丢（v2）：不再只认"完全空白态"。
+    //   触发恢复的两种情况：① 当前完全空白；② 当前体量比最佳备份断崖式缩水（部分丢失）。
+    //   备份改为滚动多版本，恢复时选"体量最大"的那份，避免被脏数据覆盖过的单点拖累。
     try {
-      const isEmptyState = _phoneDataIsPristine(conv.phoneData);
-      if (isEmptyState && convId) {
-        const backup = await DB.get('gameState', `phoneBackup_${convId}`);
-        if (backup && backup.value && typeof backup.value === 'object') {
-          const bk = backup.value;
-          if (!_phoneDataIsPristine(bk)) {
-            // 备份里有实质内容，恢复
-            conv.phoneData = bk;
+      if (convId) {
+        const backups = await _loadPhoneBackups(convId);
+        const best = _pickBestBackup(backups);
+        if (best && typeof best === 'object' && !_phoneDataIsPristine(best)) {
+          const curW = _phoneDataWeight(conv.phoneData);
+          const bkW = _phoneDataWeight(best);
+          const isEmptyState = _phoneDataIsPristine(conv.phoneData);
+          // 断崖式缩水阈值：当前体量不足最佳备份的 40%，且备份至少有一定体量（防误判小数据）
+          const collapsed = bkW >= 8 && curW < bkW * 0.4;
+          if (isEmptyState || collapsed) {
+            const restored = JSON.parse(JSON.stringify(best));
+            // 备份剥离过图片：把当前窗口还在的图片字段回填，避免恢复反而抹掉现有头像/壁纸/封面
+            try {
+              const cur = conv.phoneData || {};
+              if (cur.profile?.avatar) { restored.profile = restored.profile || {}; restored.profile.avatar = cur.profile.avatar; }
+              if (cur.momentsCover) restored.momentsCover = cur.momentsCover;
+              if (cur.wallpaper) restored.wallpaper = cur.wallpaper;
+            } catch(_) {}
+            conv.phoneData = restored;
             Conversations.saveList().catch(() => {});
-            console.warn('[Phone] phoneData 疑似被重置，已从备份恢复');
+            console.warn(`[Phone] phoneData 疑似丢失（当前体量${curW} / 备份${bkW}），已从备份恢复`);
           }
         }
       }
     } catch(_) {}
     return conv.phoneData;
+  }
+
+  // ===== 滚动备份读写（防丢核心 v2）=====
+  // 存储形态：gameState['phoneBackup_${convId}'] 现在存一个数组 [{ts, weight, data}]，最多 N 份。
+  // 兼容旧格式：旧版存的是单个 phoneData 对象（无 ts/weight/data），读取时自动包一层。
+  const _PHONE_BACKUP_MAX = 3;   // 保留最近 N 份滚动备份
+  async function _loadPhoneBackups(convId) {
+    try {
+      const rec = await DB.get('gameState', `phoneBackup_${convId}`);
+      const v = rec && rec.value;
+      if (!v) return [];
+      if (Array.isArray(v)) {
+        // 新格式：[{ts, weight, data}]
+        return v.filter(x => x && typeof x === 'object' && x.data && typeof x.data === 'object');
+      }
+      if (typeof v === 'object') {
+        // 旧格式：单个 phoneData 对象，包成一份
+        return [{ ts: 0, weight: _phoneDataWeight(v), data: v }];
+      }
+      return [];
+    } catch(_) { return []; }
+  }
+  // 从备份数组里挑"体量最大"的那份（并列时取最新）；返回 data 对象或 null。
+  function _pickBestBackup(backups) {
+    if (!Array.isArray(backups) || backups.length === 0) return null;
+    let best = null;
+    for (const b of backups) {
+      if (!b || !b.data) continue;
+      const w = (typeof b.weight === 'number') ? b.weight : _phoneDataWeight(b.data);
+      const ts = b.ts || 0;
+      if (!best || w > best._w || (w === best._w && ts > best._ts)) {
+        best = { data: b.data, _w: w, _ts: ts };
+      }
+    }
+    return best ? best.data : null;
   }
 
   // 同步读取（不补字段，仅用于渲染读数据）
@@ -1225,15 +1306,81 @@ function _flushChatRoundLog() {
 
   async function _savePhoneData() {
     try { await Conversations.saveList(); } catch(_) {}
-    // phoneData 整体备份：防止 conversations 数据回退/重置导致全部丢失
+    // phoneData 整体备份（v2）：滚动多版本 + 防退化保护。
+    //   防退化：新数据体量比"现有最佳备份"断崖式缩水时，不写入——保住好备份不被脏数据污染。
+    //   滚动：正常写入时追加一份带时间戳的快照，只保留最近 N 份（按体量+时间取优）。
     try {
       const convId = Conversations.getCurrent();
       const conv = convId && Conversations.getList().find(c => c.id === convId);
       const pd = conv?.phoneData;
       if (convId && pd && !_phoneDataIsPristine(pd)) {
-        await DB.put('gameState', { key: `phoneBackup_${convId}`, value: pd });
+        const curW = _phoneDataWeight(pd);
+        const backups = await _loadPhoneBackups(convId);
+        const best = _pickBestBackup(backups);
+        const bestW = best ? _phoneDataWeight(best) : 0;
+        // 防退化：新数据不足最佳备份的 40%、且备份有一定体量 → 判为可疑缩水，拒绝写入。
+        const degraded = bestW >= 8 && curW < bestW * 0.4;
+        if (!degraded) {
+          // 剥离图片再存，避免备份数组膨胀（图片沿用当前窗口，恢复时不依赖备份里的图）
+          let snap;
+          try { snap = JSON.parse(JSON.stringify(pd)); _stripSnapImages(snap); }
+          catch(_) { snap = pd; }
+          const entry = { ts: Date.now(), weight: curW, data: snap };
+          const next = Array.isArray(backups) ? backups.slice() : [];
+          next.push(entry);
+          // 保留最近 N 份：按时间排序，留最新的 N 个
+          next.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+          const trimmed = next.slice(0, _PHONE_BACKUP_MAX);
+          await DB.put('gameState', { key: `phoneBackup_${convId}`, value: trimmed });
+        } else {
+          console.warn(`[Phone] 备份跳过：当前体量${curW}远低于最佳备份${bestW}，疑似数据缩水，保护旧备份`);
+        }
       }
     } catch(_) {}
+  }
+
+  // 手动「恢复最近一次备份」：从滚动备份里挑体量最大的一份，二次确认后覆盖当前手机数据。
+  // 图片字段用当前窗口的值回填（备份剥离过图片），恢复后刷新到主屏。
+  async function _phoneRestoreLatestBackup() {
+    try {
+      const convId = Conversations.getCurrent();
+      if (!convId) { UI.showToast('没有当前对话', 1800); return; }
+      const conv = Conversations.getList().find(c => c.id === convId);
+      if (!conv) { UI.showToast('当前对话不存在', 1800); return; }
+      const backups = await _loadPhoneBackups(convId);
+      const best = _pickBestBackup(backups);
+      if (!best || _phoneDataIsPristine(best)) {
+        UI.showToast('没有可用的备份', 2000);
+        return;
+      }
+      const bkW = _phoneDataWeight(best);
+      const curW = _phoneDataWeight(conv.phoneData);
+      // 找这份备份的时间戳（用于确认文案）
+      let bestTs = 0;
+      for (const b of (backups || [])) {
+        if (b && b.data && _phoneDataWeight(b.data) === bkW) { bestTs = Math.max(bestTs, b.ts || 0); }
+      }
+      const tsText = bestTs ? new Date(bestTs).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '最近一次';
+      const ok = await UI.showConfirm('恢复最近一次备份',
+        `将用备份（${tsText}，约 ${bkW} 项数据）覆盖当前手机数据（约 ${curW} 项）。\n\n当前窗口的手机数据会被替换成备份内容，图片（头像/壁纸/封面）保持当前不变。\n\n确定恢复吗？`);
+      if (!ok) return;
+      const restored = JSON.parse(JSON.stringify(best));
+      try {
+        const cur = conv.phoneData || {};
+        if (cur.profile?.avatar) { restored.profile = restored.profile || {}; restored.profile.avatar = cur.profile.avatar; }
+        if (cur.momentsCover) restored.momentsCover = cur.momentsCover;
+        if (cur.wallpaper) restored.wallpaper = cur.wallpaper;
+      } catch(_) {}
+      conv.phoneData = restored;
+      await Conversations.saveList();
+      try { reloadActionLog(); } catch(_) {}
+      UI.showToast('已恢复最近一次备份', 2200);
+      // 刷新到主屏，让恢复的数据立即可见
+      try { goHome(); } catch(_) {}
+    } catch (e) {
+      console.warn('[Phone] _phoneRestoreLatestBackup failed', e);
+      UI.showToast('恢复失败，请重试', 2000);
+    }
   }
 
   function _defaultPhoneData() {
@@ -1253,6 +1400,9 @@ function _flushChatRoundLog() {
       npcMoments: [],            // [{npc, text, comments}] 刷新覆盖
  mapLastResults: [], // 上一次地图搜索结果，持久化
  mapLastQuery: '', // 上一次搜索关键词
+ mapNearbyPlaces: [], // 附近地图：[{name, desc, angle, dist}]
+ mapNearbyLoc: '', // 附近地图生成时的位置快照
+ mapNearbySync: false, // 附近地图是否同步给主线（默认关）
  wallpaper: '', // 用户自定义手机壁纸 DataURL
 wallpaperOverlay: false, // 壁纸遮罩（深色半透明层，适配深色壁纸）
 wallpaperOpacity: 75, // 卡片/底栏/顶栏不透明度（0-100，仅有壁纸时生效）
@@ -2859,7 +3009,11 @@ function _uiIcon(type, size = 16) {
  settings: `<svg ${common}><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path></svg>`,
   more: `<svg ${common}><circle cx="12" cy="5" r="2" fill="currentColor" stroke="none"></circle><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"></circle><circle cx="12" cy="19" r="2" fill="currentColor" stroke="none"></circle></svg>`,
  check: `<svg ${common}><polyline points="20 6 9 17 4 12"></polyline></svg>`,
- box: `<svg ${common}><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg>`
+ box: `<svg ${common}><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg>`,
+ clock: `<svg ${common}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+ quote: `<svg ${common}><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"></path><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"></path></svg>`,
+ ticket: `<svg ${common}><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path><path d="M13 5v2"></path><path d="M13 17v2"></path><path d="M13 11v2"></path></svg>`,
+ navigation: `<svg ${common}><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>`
  };
   return icons[type] || '';
 }
@@ -2940,7 +3094,7 @@ function _renderHomeIcon(a) {
       ];
       const apps = [
         { id: 'forum', icon: 'forum', name: _getForumName() },
- { id: 'map', icon: 'map', name: '地图' },
+ { id: 'map', icon: 'map', name: (_shopMeta?.map?.name || '地图') },
         { id: 'moments', icon: 'aperture', name: '好友圈' },
         { id: 'memo', icon: 'memo', name: '备忘录' },
       ];
@@ -9847,6 +10001,19 @@ ${contextBlock}
       }
     }
     return lines.join('\n');
+  }
+
+  // ===== 附近地图：每轮注入主线（仅当用户开启同步）=====
+  // 学小屋 getCottageLayoutForLocation 的模式：返回纯文本，关或无数据返回 ''
+  async function buildNearbyMapForAI() {
+    const pd = await _getPhoneData();
+    if (!pd) return '';
+    if (!pd.mapNearbySync) return '';                       // 开关默认关
+    const places = pd.mapNearbyPlaces;
+    if (!Array.isArray(places) || places.length === 0) return '';
+    const nloc = pd.mapNearbyLoc || '当前位置';
+    const nlist = places.map(p => `- ${p.name || ''}${p.desc ? '：' + p.desc : ''}`).join('\n');
+    return `【附近地图】玩家当前位置：${nloc}。附近有以下固定地点，涉及外出/约见/闲逛时优先使用这些真实地名，不要另编新地名：\n${nlist}`;
   }
 
   // ===== 家具商城 / 仓库 =====
@@ -37323,6 +37490,11 @@ function _renderSettings(pd) {
     <button class="phone-settings-btn secondary" style="margin-top:10px" onclick="Phone._phoneImportAll()">导入手机数据</button>
     <div class="phone-settings-desc" style="margin-top:8px;color:#c0392b">⚠️ 导入会完全覆盖当前窗口的手机数据，不可撤销，请先在新窗口导入。</div>
     </div>
+    <div class="phone-settings-card">
+    <div class="phone-settings-title">数据防丢 · 一键找回</div>
+    <div class="phone-settings-desc">系统会在后台自动为手机数据做滚动备份。如果发现数据莫名减少或丢失，点下面的按钮，把手机数据恢复到最近一次完好的备份（图片保持当前不变）。</div>
+    <button class="phone-settings-btn" style="margin-top:4px" onclick="Phone._phoneRestoreLatestBackup()">恢复最近一次备份</button>
+    </div>
   `;
 
  body.innerHTML = `
@@ -38831,8 +39003,8 @@ ${wvPrompt}${_echoForHot}`;
     const hc = Number(historyCount) || 0;
     const chevron = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="m9 18 6-6-6-6"/></svg>`;
     const card = (onclick, label, numText, iconSvg) => `
-      <div onclick="${onclick}" style="cursor:pointer;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;padding:14px 14px;display:flex;align-items:center;gap:12px;margin-bottom:10px">
-        <span style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;background:var(--bg-secondary);color:var(--accent);flex-shrink:0">${iconSvg}</span>
+      <div class="phone-forum-mine-card" onclick="${onclick}" style="cursor:pointer;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;padding:14px 14px;display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <span class="phone-forum-mine-icon" style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;background:var(--bg-secondary);color:var(--accent);flex-shrink:0">${iconSvg}</span>
         <div style="flex:1;min-width:0">
           <div style="font-size:14px;font-weight:600;line-height:1.2;color:var(--text)">${label}</div>
           <div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${numText}</div>
@@ -38874,11 +39046,11 @@ ${wvPrompt}${_echoForHot}`;
     const itemsHtml = list.length > 0
       ? list.slice(-30).reverse().map((s, idx) => {
           const realIdx = list.length - 1 - idx;
-          return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;gap:8px;align-items:center">
-            <span class="phone-search-history-item" style="flex:1;color:var(--text)">${_uiIcon('search', 13)} ${Utils.escapeHtml(s.query || '')}</span>
-            <span style="color:var(--text-secondary);font-size:10px;white-space:nowrap">${Utils.escapeHtml(_fmtHistoryTime(s.time))}</span>
-            <span onclick="Phone._shareForumSearch(${realIdx})" class="phone-share-mini" title="分享到主线">${_uiIcon('share', 13)}</span>
-            <span onclick="Phone._deleteForumSearch(${realIdx})" class="phone-share-mini" style="color:var(--error)" title="删除">${_uiIcon('trash', 13)}</span>
+          return `<div class="phone-map-track-card" style="position:relative;padding-right:56px">
+            <div class="phone-map-track-location">${_uiIcon('search', 12)} ${Utils.escapeHtml(s.query || '')}</div>
+            <div class="phone-map-track-time">${Utils.escapeHtml(_fmtHistoryTime(s.time))}</div>
+            <span onclick="Phone._shareForumSearch(${realIdx})" class="phone-share-mini" style="position:absolute;top:6px;right:30px" title="分享到主线">${_uiIcon('share', 13)}</span>
+            <span onclick="Phone._deleteForumSearch(${realIdx})" class="phone-share-mini" style="position:absolute;top:6px;right:8px;color:var(--error)" title="删除">${_uiIcon('trash', 13)}</span>
           </div>`;
         }).join('')
       : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">暂无搜索记录</p>';
@@ -38900,7 +39072,7 @@ ${wvPrompt}${_echoForHot}`;
     if (titleEl) titleEl.textContent = '搜索记录';
     const hr = document.getElementById('phone-header-right');
     if (hr) hr.innerHTML = '';
-    if (body) body.innerHTML = `<div style="flex:1;overflow-y:auto;padding:12px;height:100%;box-sizing:border-box">${_renderForumSearchHistoryList(pd.forumSearchHistory || [])}</div>`;
+    if (body) body.innerHTML = `<div class="phone-forum-searchhist-page" style="flex:1;overflow-y:auto;padding:12px;height:100%;box-sizing:border-box">${_renderForumSearchHistoryList(pd.forumSearchHistory || [])}</div>`;
   }
 
   // 删除单条搜索记录后，若正处在搜索记录列表页则局部重渲染
@@ -40491,37 +40663,14 @@ async function _likeForumPost(index) {
     UI.showToast('已发送', 1200);
   }
 
-  let _mapTab = 'search'; // 'search' | 'history' | 'searchhist'
+  let _mapTab = 'search'; // 'search' | 'nearby' | 'mine'
 
-  function _renderMap(pd) {
+  async function _renderMap(pd) {
     const body = document.getElementById('phone-body');
-    document.getElementById('phone-title').textContent = '地图';
+    document.getElementById('phone-title').textContent = (_shopMeta?.map?.name || '地图');
     const history = pd.locationHistory || [];
     const mapSearches = pd.mapSearchHistory || [];
-
-    const historyHtml = history.length > 0
-? history.slice(-30).reverse().map((h, idx) => {
-    const realIdx = history.length - 1 - idx;
-    return `
-<div class="phone-map-track-card" style="position:relative">
- <div class="phone-map-track-time">${Utils.escapeHtml(h.time || '')}</div>
- <div class="phone-map-track-location">${Utils.escapeHtml(h.location || '')}</div>
- <span onclick="event.stopPropagation();Phone._deleteLocationHistory(${realIdx})" class="phone-share-mini" style="position:absolute;top:6px;right:8px;color:var(--error)" title="删除">${_uiIcon('trash', 13)}</span>
-</div>`;
-  }).join('')
-: '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">暂无轨迹记录</p>';
-
-    const searchHistHtml = mapSearches.length > 0
-      ? mapSearches.slice(-30).reverse().map((s, idx) => {
-          const realIdx = mapSearches.length - 1 - idx;
-          return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;gap:8px;align-items:center">
-            <span class="phone-search-history-item" style="flex:1;color:var(--text)">${_uiIcon('search', 13)} ${Utils.escapeHtml(s.query || '')}</span>
-            <span style="color:var(--text-secondary);font-size:10px;white-space:nowrap">${Utils.escapeHtml(_fmtHistoryTime(s.time))}</span>
-            <span onclick="Phone._shareMapSearch(${realIdx})" class="phone-share-mini" title="分享到主线">${_uiIcon('share', 13)}</span>
-            <span onclick="Phone._deleteMapSearch(${realIdx})" class="phone-share-mini" style="color:var(--error)" title="删除">${_uiIcon('trash', 13)}</span>
-          </div>`;
-        }).join('')
-      : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">暂无搜索记录</p>';
+    const maskInfo = (_mapTab === 'mine') ? await _getMaskInfo() : null;
 
     body.innerHTML = `
       <div class="phone-map-app" style="display:flex;flex-direction:column;height:100%">
@@ -40535,21 +40684,17 @@ async function _likeForumPost(index) {
           </div>
           <div id="phone-map-results">${_renderMapResultsHtml(pd.mapLastResults || [])}</div>
         </div>
-<div id="phone-map-history-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_mapTab === 'history' ? 'block' : 'none'}">
-            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">共 ${history.length} 条轨迹</div>
-            ${historyHtml}
-          </div>
-          <div id="phone-map-searchhist-panel" style="flex:1;overflow-y:auto;padding:12px;display:${_mapTab === 'searchhist' ? 'block' : 'none'}">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-              <span style="font-size:11px;color:var(--text-secondary)">共 ${mapSearches.length} 条搜索记录</span>
-              ${mapSearches.length > 0 ? `<span onclick="Phone._shareAllMapSearches()" class="phone-share-text" title="全部分享到主线">${_uiIcon('share', 13)} 全部分享</span>` : ''}
-            </div>
-          ${searchHistHtml}
+        <div id="phone-map-nearby-panel" style="flex:1;overflow-y:auto;padding:0;display:${_mapTab === 'nearby' ? 'block' : 'none'}">
+          ${_renderMapNearbyPanel(pd)}
+        </div>
+        <div id="phone-map-mine-panel" style="flex:1;overflow-y:auto;padding:0 0 12px;display:${_mapTab === 'mine' ? 'block' : 'none'}">
+          ${_mapMineHeader(maskInfo, history.length)}
+          ${_mapMineEntryCards(history.length, mapSearches.length)}
         </div>
         <div class="phone-tabbar">
           <div class="phone-tab ${_mapTab === 'search' ? 'active' : ''}" onclick="Phone._switchMapTab('search')">搜索</div>
-          <div class="phone-tab ${_mapTab === 'searchhist' ? 'active' : ''}" onclick="Phone._switchMapTab('searchhist')">搜索记录</div>
-          <div class="phone-tab ${_mapTab === 'history' ? 'active' : ''}" onclick="Phone._switchMapTab('history')">轨迹</div>
+          <div class="phone-tab ${_mapTab === 'nearby' ? 'active' : ''}" onclick="Phone._switchMapTab('nearby')">附近</div>
+          <div class="phone-tab ${_mapTab === 'mine' ? 'active' : ''}" onclick="Phone._switchMapTab('mine')">我的</div>
         </div>
       </div>
     `;
@@ -40557,19 +40702,477 @@ async function _likeForumPost(index) {
     if (pd.mapLastResults?.length) _mapSearchResults = pd.mapLastResults;
   }
 
+  // ===== 附近地图（方位图 + 地名锚定）=====
+  // 数据：pd.mapNearbyPlaces = [{name, desc, angle(0-360方位角), dist(0.3-1相对远近)}]
+  //       pd.mapNearbyLoc    = 生成时的位置快照（region·location）
+  //       pd.mapNearbySync   = 是否同步给主线（默认 false）
+
+  // 渲染附近页：顶部（当前位置 + 刷新 + 同步开关）+ 中间方位图（或空态）
+  function _renderMapNearbyPanel(pd) {
+    let curLoc = '';
+    try { const sb = Conversations.getStatusBar() || {}; curLoc = [sb.region, sb.location].filter(Boolean).join('·'); } catch(_) {}
+    const places = Array.isArray(pd.mapNearbyPlaces) ? pd.mapNearbyPlaces : [];
+    const syncOn = !!pd.mapNearbySync;
+    const genLoc = pd.mapNearbyLoc || '';
+    const curLabel = curLoc || '未知位置';
+
+    const header = `
+      <div style="padding:14px 16px 4px">
+        <div style="display:flex;align-items:flex-start;gap:9px">
+          <span style="color:var(--accent);flex-shrink:0;margin-top:1px">${_uiIcon('map', 18)}</span>
+          <div style="flex:1;min-width:0">
+            <div class="phone-map-near-loc" style="font-size:14px;font-weight:600;color:var(--text);line-height:1.3">${Utils.escapeHtml(curLabel)}</div>
+            <div class="phone-map-near-sub" style="font-size:11px;color:var(--text-secondary);margin-top:3px">${places.length ? ('附近有 ' + places.length + ' 个地点') : '还没有附近地点'}</div>
+          </div>
+          <button id="phone-map-near-refresh" onclick="Phone._mapNearby()" title="刷新附近"
+                  style="flex-shrink:0;width:34px;height:34px;border:none;background:none;color:var(--accent);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0">
+            ${_uiIcon('refresh', 19)}
+          </button>
+        </div>
+        <div class="phone-map-near-synccard" style="display:flex;align-items:center;gap:10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;padding:11px 13px;margin-top:12px">
+          <div style="flex:1;min-width:0">
+            <div class="phone-map-near-sync-title" style="font-size:13px;font-weight:600;color:var(--text);line-height:1.2">同步附近地图到主线</div>
+            <div class="phone-map-near-sync-desc" style="font-size:11px;color:var(--text-secondary);margin-top:3px;line-height:1.4">开启后每轮发送以下地点，更换位置记得取消勾选或刷新</div>
+          </div>
+          <label style="position:relative;display:inline-flex;flex-shrink:0">
+            <input type="checkbox" class="circle-check" ${syncOn ? 'checked' : ''} onchange="Phone._toggleMapNearbySync(this.checked)">
+            <span class="circle-check-ui"></span>
+          </label>
+        </div>
+      </div>`;
+
+    if (!places.length) {
+      const empty = `
+        <div class="phone-map-near-empty" style="padding:40px 24px;text-align:center;color:var(--text-secondary)">
+          <div style="opacity:.5;margin-bottom:12px">${_uiIcon('map', 40)}</div>
+          <div style="font-size:13px;line-height:1.6">点上面的「刷新附近」<br>看看你现在所处位置周围有什么</div>
+        </div>`;
+      return header + empty;
+    }
+    return header + _renderMapNearbyCanvas(places, curLabel);
+  }
+
+  // 画方位图：竖长方形画布，中心=你在这里，地点用网格分区+抖动均匀散布（限制在安全区，绝不飞出）
+  function _renderMapNearbyCanvas(places, curLabel) {
+    const COLS = 4, ROWS = 5;          // 网格分区
+    const MARGIN = 12;                 // 安全区边距（%），点不会落在此范围外
+    const span = 100 - MARGIN * 2;     // 可用范围
+    const cellW = span / COLS, cellH = span / ROWS;
+    // 中心"你在这里"占据的格子（col 1-2 交界、row 2），这些格子不放地点
+    const centerCells = new Set(['1,2', '2,2', '1,1', '2,1']);
+    // 收集可用格子（row-major，排除中心格）
+    const cells = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (centerCells.has(c + ',' + r)) continue;
+        cells.push({ c, r });
+      }
+    }
+    // 打散格子顺序（确定性：基于固定步长跳选，让相邻 index 的点不挨在一起）
+    const ordered = [];
+    const step = 7;
+    const used = new Array(cells.length).fill(false);
+    let idx = 0;
+    for (let k = 0; k < cells.length; k++) {
+      while (used[idx]) idx = (idx + 1) % cells.length;
+      ordered.push(cells[idx]);
+      used[idx] = true;
+      idx = (idx + step) % cells.length;
+    }
+
+    const dots = places.map((p, i) => {
+      const cell = ordered[i % ordered.length];
+      // 格子中心 + 基于 index 的确定性抖动（±cell 的 25%）
+      const jx = ((i * 37) % 11 - 5) / 5 * (cellW * 0.25);
+      const jy = ((i * 53) % 11 - 5) / 5 * (cellH * 0.25);
+      let x = MARGIN + (cell.c + 0.5) * cellW + jx;
+      let y = MARGIN + (cell.r + 0.5) * cellH + jy;
+      x = Math.max(MARGIN, Math.min(100 - MARGIN, x));
+      y = Math.max(MARGIN, Math.min(100 - MARGIN, y));
+      // 颜色按远近区分：近的用主题色（醒目），远的用装饰色（低调），都走变量适配主题
+      const isNear = (Number(p.dist) || 0.5) < 0.6;
+      const color = isNear ? 'var(--accent)' : 'var(--decoration)';
+      const nameShort = _clipLogText(p.name || '地点', 6);
+      return `
+        <div class="phone-map-near-dot" style="position:absolute;left:${x.toFixed(1)}%;top:${y.toFixed(1)}%;transform:translate(-50%,-50%);cursor:pointer;z-index:2;display:flex;flex-direction:column;align-items:center;gap:2px"
+             onclick="Phone._mapNearbyClickMarker(${i})">
+          <span style="display:block;width:15px;height:15px;border-radius:50%;background:${color};border:2px solid var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.3)"></span>
+          <span style="white-space:nowrap;font-size:10px;color:var(--text);background:var(--bg);padding:1px 6px;border-radius:7px;box-shadow:0 1px 4px rgba(0,0,0,.18);max-width:78px;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(nameShort)}</span>
+        </div>`;
+    }).join('');
+
+    return `
+      <div style="padding:6px 16px 16px">
+        <div class="phone-map-near-canvas" style="position:relative;width:100%;max-width:min(100%, calc(72vh * 3 / 4));aspect-ratio:3/4;max-height:72vh;margin:0 auto;border-radius:16px;overflow:hidden;background:
+              radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 8%, var(--bg-secondary)) 0%, var(--bg-secondary) 70%);
+              border:1px solid var(--border)">
+          <div style="position:absolute;inset:0;background-image:
+              linear-gradient(color-mix(in srgb, var(--text) 6%, transparent) 1px, transparent 1px),
+              linear-gradient(90deg, color-mix(in srgb, var(--text) 6%, transparent) 1px, transparent 1px);
+              background-size:16.66% 12.5%"></div>
+          <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;display:flex;flex-direction:column;align-items:center;gap:2px">
+            <span style="display:block;width:16px;height:16px;border-radius:50%;background:var(--accent);border:3px solid var(--bg);box-shadow:0 0 0 6px color-mix(in srgb, var(--accent) 25%, transparent)"></span>
+            <span style="white-space:nowrap;font-size:10px;font-weight:600;color:var(--accent);margin-top:4px">你在这里</span>
+          </div>
+          ${dots}
+        </div>
+        <div class="phone-map-near-legend" style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px;font-size:11px;color:var(--text-secondary)">
+          <span style="display:inline-flex;align-items:center;gap:5px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--accent)"></span>较近</span>
+          <span style="display:inline-flex;align-items:center;gap:5px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--decoration)"></span>较远</span>
+          <span>点标记看介绍</span>
+        </div>
+      </div>`;
+  }
+
+  // 点击附近地点标记：弹出 name + desc 卡片
+  function _mapNearbyClickMarker(index) {
+    const pd = _getPhoneDataSync();
+    const places = pd && Array.isArray(pd.mapNearbyPlaces) ? pd.mapNearbyPlaces : [];
+    const p = places[index];
+    if (!p) return;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+    overlay.innerHTML = `
+      <div style="width:78%;max-width:320px;background:var(--bg);border-radius:16px;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.3)">
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:10px">${Utils.escapeHtml(p.name || '地点')}</div>
+        <div style="font-size:13px;line-height:1.7;color:var(--text-secondary)">${Utils.escapeHtml(p.desc || '暂无介绍')}</div>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button data-act="edit" style="flex:1;padding:9px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;font-size:14px;cursor:pointer">编辑</button>
+          <button data-act="ok" style="flex:1;padding:9px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer">知道了</button>
+        </div>
+      </div>`;
+    const close = () => { try { document.body.removeChild(overlay); } catch(_) {} };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('[data-act="ok"]').addEventListener('click', close);
+    overlay.querySelector('[data-act="edit"]').addEventListener('click', () => { close(); _mapNearbyEdit(index); });
+    document.body.appendChild(overlay);
+  }
+
+  // 编辑附近地点：弹出 name + desc 输入框，保存写回并重渲染
+  function _mapNearbyEdit(index) {
+    const pd = _getPhoneDataSync();
+    const places = pd && Array.isArray(pd.mapNearbyPlaces) ? pd.mapNearbyPlaces : [];
+    const p = places[index];
+    if (!p) return;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+    overlay.innerHTML = `
+      <div style="width:82%;max-width:340px;background:var(--bg);border-radius:16px;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.3)">
+        <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px">编辑地点</div>
+        <label style="display:block;font-size:11px;color:var(--text-secondary);margin-bottom:5px">地点名</label>
+        <input id="phone-map-near-edit-name" type="text" value="${Utils.escapeHtml(p.name || '')}"
+               style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:14px;font-family:inherit;margin-bottom:12px">
+        <label style="display:block;font-size:11px;color:var(--text-secondary);margin-bottom:5px">介绍</label>
+        <textarea id="phone-map-near-edit-desc" rows="3"
+                  style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:13px;line-height:1.6;font-family:inherit;resize:vertical">${Utils.escapeHtml(p.desc || '')}</textarea>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button data-act="cancel" style="flex:1;padding:9px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;font-size:14px;cursor:pointer">取消</button>
+          <button data-act="save" style="flex:1;padding:9px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+    const close = () => { try { document.body.removeChild(overlay); } catch(_) {} };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('[data-act="cancel"]').addEventListener('click', close);
+    overlay.querySelector('[data-act="save"]').addEventListener('click', async () => {
+      const nameEl = overlay.querySelector('#phone-map-near-edit-name');
+      const descEl = overlay.querySelector('#phone-map-near-edit-desc');
+      const newName = (nameEl.value || '').trim();
+      const newDesc = (descEl.value || '').trim();
+      if (!newName) { UI.showToast('地点名不能为空', 1800); return; }
+      const _pd = await _getPhoneData();
+      if (!_pd || !Array.isArray(_pd.mapNearbyPlaces) || !_pd.mapNearbyPlaces[index]) { close(); return; }
+      _pd.mapNearbyPlaces[index].name = newName;
+      _pd.mapNearbyPlaces[index].desc = newDesc;
+      await _savePhoneData();
+      close();
+      UI.showToast('已保存', 1200);
+      const body = document.getElementById('phone-body');
+      if (body) body.innerHTML = _renderMapNearbyPanel(_pd);
+    });
+    document.body.appendChild(overlay);
+    try { overlay.querySelector('#phone-map-near-edit-name').focus(); } catch(_) {}
+  }
+
+  // 切换「同步附近到主线」开关
+  async function _toggleMapNearbySync(checked) {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    pd.mapNearbySync = !!checked;
+    await _savePhoneData();
+    UI.showToast(checked ? '已开启：AI 将知道你附近有哪些地方' : '已关闭同步', 1800);
+  }
+
+  // 生成附近地点：AI 先判断当前位置类型，再生成 6-8 个贴合的周边地点
+  async function _mapNearby() {
+    const funcConfig = (typeof Settings !== 'undefined' && Settings.getWorldvoiceConfig) ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
+
+    let curLoc = '';
+    try { const sb = Conversations.getStatusBar() || {}; curLoc = [sb.region, sb.location].filter(Boolean).join('·'); } catch(_) {}
+    if (!curLoc) { UI.showToast('当前位置未知，无法生成附近', 2000); return; }
+
+    UI.showToast('正在勘察周边…', 1500);
+    // 刷新图标旋转动画（给按钮加 spinning，svg 旋转；成功后 header 重渲染换掉，失败在 catch 停）
+    const _refreshBtn = document.getElementById('phone-map-near-refresh');
+    if (_refreshBtn) _refreshBtn.classList.add('spinning');
+    const wvPrompt = await _buildFullContext();
+    const _regionInfo = _mapRegionBlock();
+    const _regionBlock = _regionInfo.block ? ('\n\n' + _regionInfo.block) : '';
+
+    try {
+      const raw = await _phoneJsonArrayWithRetry({
+        label: '附近地图', url, key, model,
+        temperature: 0.8,
+        max_tokens: 4096,
+        messages: [
+          { role: 'system', content: `你是世界观内的地图"附近"生成器。玩家当前所在位置：${curLoc}。当前时间：${_getGameTime() || '未知'}。
+
+任务：先在心里判断玩家当前位置是什么类型的地方（住宅区/商业街/学校/办公商务区/交通枢纽/景区/乡镇/自然郊野等），再生成 8-12 个符合这个环境的、近距离的周边地点。这些地点是玩家"环顾四周就能看到、走得到"的地方，用于锚定固定地名（避免剧情里同一个地方被叫成不同名字）。
+
+例如：在学校→教学楼、食堂、宿舍楼、图书馆、操场、校门口小吃街；在住宅小区→便利店、菜市场、社区公园、停车场、快递驿站；在商业街→奶茶店、书店、密室逃脱、猫咖、商场、影院。要贴合当前位置的实际类型，不要千篇一律。
+
+必须严格返回 JSON 数组，不能返回 Markdown，不能返回代码块，不能解释。返回内容必须以 [ 开头，以 ] 结尾。
+每个对象字段：
+{
+  "name":"地点名（具体、固定，如"三食堂""明德教学楼""巷口便利店"，不要用泛称如"某餐厅"）",
+  "desc":"1-2句话介绍这个地方是什么、有什么特点，简洁",
+  "angle":方位角（数字，0-360，0=正北在上方，90=正东，180=正南，270=正西；让地点分散在不同方向）,
+  "dist":相对远近（数字，0.3-1.0，0.3=很近就在旁边，1.0=周边较远处；让远近有层次）
+}
+
+要求：
+- 8-12 个地点，地名要具体固定、彼此不同。
+- angle 让地点尽量分散到各个方向，不要挤在一起。
+- dist 有近有远，形成层次。
+
+示例：
+[{"name":"三食堂","desc":"离宿舍最近的食堂，二楼的麻辣香锅很受欢迎，饭点人多。","angle":45,"dist":0.4},{"name":"东门小吃街","desc":"校门外的一条小吃街，烤苕皮、炸串、手抓饼都有，晚上最热闹。","angle":135,"dist":0.85}]
+
+${wvPrompt}${_regionBlock}` },
+          { role: 'user', content: `生成"${curLoc}"的附近地点` }
+        ]
+      });
+      const places = _normalizeNearbyPlaces(raw);
+      if (!places.length) { UI.showToast('没有生成到附近地点，请重试', 2000); return; }
+
+      const pd = await _getPhoneData();
+      if (!pd) return;
+      pd.mapNearbyPlaces = places;
+      pd.mapNearbyLoc = curLoc;
+      await _savePhoneData();
+      _log(`查看了地图"附近"，勘察${curLoc}周边，得到 ${places.length} 个地点：${_summarizeListForLog(places, p => _clipLogText(p.name || '', 16))}`);
+      // 重渲染附近页
+      if (_mapTab === 'nearby') {
+        const panel = document.getElementById('phone-map-nearby-panel');
+        if (panel) panel.innerHTML = _renderMapNearbyPanel(pd);
+      }
+      UI.showToast(`已勘察周边 ${places.length} 个地点`, 1800);
+    } catch (e) {
+      console.warn('[附近地图] 生成失败', e);
+      if (_refreshBtn) _refreshBtn.classList.remove('spinning');
+      UI.showToast('生成失败，请重试', 2000);
+    }
+  }
+
+  // 规范化附近地点：name 必填，desc/angle/dist 兜底
+  function _normalizeNearbyPlaces(raw) {
+    if (!Array.isArray(raw)) return [];
+    const out = [];
+    for (const r of raw) {
+      if (!r || typeof r !== 'object') continue;
+      const name = String(r.name || '').trim();
+      if (!name) continue;
+      let angle = Number(r.angle);
+      if (!Number.isFinite(angle)) angle = Math.random() * 360;
+      angle = ((angle % 360) + 360) % 360;
+      let dist = Number(r.dist);
+      if (!Number.isFinite(dist)) dist = 0.4 + Math.random() * 0.5;
+      dist = Math.max(0.28, Math.min(1, dist));
+      out.push({ name, desc: String(r.desc || '').trim(), angle, dist });
+      if (out.length >= 12) break;
+    }
+    return out;
+  }
+
+  // 地图「我的」页头部：面具头像 + 网名（照抄论坛 _forumMineHeader 的 class）
+  function _mapMineHeader(maskInfo, trackCount) {
+    const userName = (maskInfo && maskInfo.username) || '我';
+    const userAvatar = (maskInfo && maskInfo.avatar) || '';
+    const n = Number(trackCount) || 0;
+    const avaHtml = userAvatar
+      ? `<img class="phone-radio-mine-ava" src="${Utils.escapeHtml(userAvatar)}" alt="">`
+      : `<div class="phone-radio-mine-ava phone-radio-mine-ava-fallback">${Utils.escapeHtml((userName || '我')[0])}</div>`;
+    return `
+      <div class="phone-radio-mine-header">
+        ${avaHtml}
+        <div class="phone-radio-mine-header-info">
+          <div class="phone-radio-mine-header-name">${Utils.escapeHtml(userName)}</div>
+          <div class="phone-radio-mine-header-sub">探索者 · 去过 ${n} 个地方</div>
+        </div>
+      </div>`;
+  }
+
+  // 地图「我的」页：我的轨迹 / 搜索记录 两个横条入口卡（照抄论坛 _forumMineEntryCards）
+  function _mapMineEntryCards(trackCount, searchCount) {
+    const tc = Number(trackCount) || 0;
+    const sc = Number(searchCount) || 0;
+    const chevron = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="m9 18 6-6-6-6"/></svg>`;
+    const card = (onclick, label, numText, iconSvg) => `
+      <div class="phone-forum-mine-card" onclick="${onclick}" style="cursor:pointer;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;padding:14px 14px;display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <span class="phone-forum-mine-icon" style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;background:var(--bg-secondary);color:var(--accent);flex-shrink:0">${iconSvg}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;line-height:1.2;color:var(--text)">${label}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${numText}</div>
+        </div>
+        ${chevron}
+      </div>`;
+    const iconTrack = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
+    const iconSearch = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`;
+    return `<div style="margin:12px 16px 0">
+      ${card("Phone._mapOpenTrackList()", '我的轨迹', tc + ' 条', iconTrack)}
+      ${card("Phone._mapOpenSearchHistList()", '搜索记录', sc + ' 条', iconSearch)}
+    </div>`;
+  }
+
+  // 我的轨迹独立列表页
+  async function _mapOpenTrackList() {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    _pushNav(() => _mapOpenTrackList());
+    const body = document.getElementById('phone-body');
+    const titleEl = document.getElementById('phone-title');
+    if (titleEl) titleEl.textContent = '我的轨迹';
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = '';
+    const history = pd.locationHistory || [];
+    const historyHtml = history.length > 0
+      ? history.slice(-30).reverse().map((h, idx) => {
+          const realIdx = history.length - 1 - idx;
+          return `<div class="phone-map-track-card" style="position:relative;padding-right:34px">
+            <div class="phone-map-track-location">${_uiIcon('pin', 12)} ${Utils.escapeHtml(h.location || '')}</div>
+            <div class="phone-map-track-time">${Utils.escapeHtml(h.time || '')}</div>
+            <span onclick="Phone._deleteLocationHistory(${realIdx})" class="phone-share-mini" style="position:absolute;top:6px;right:8px;color:var(--error)" title="删除">${_uiIcon('trash', 13)}</span>
+          </div>`;
+        }).join('')
+      : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">暂无轨迹记录</p>';
+    if (body) body.innerHTML = `<div class="phone-map-app" style="flex:1;overflow-y:auto;padding:12px;height:100%;box-sizing:border-box">
+      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">共 ${history.length} 条轨迹</div>
+      ${historyHtml}
+    </div>`;
+  }
+
+  // 搜索记录独立列表页
+  async function _mapOpenSearchHistList() {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    _pushNav(() => _mapOpenSearchHistList());
+    const body = document.getElementById('phone-body');
+    const titleEl = document.getElementById('phone-title');
+    if (titleEl) titleEl.textContent = '搜索记录';
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = '';
+    const mapSearches = pd.mapSearchHistory || [];
+    const searchHistHtml = mapSearches.length > 0
+      ? mapSearches.slice(-30).reverse().map((s, idx) => {
+          const realIdx = mapSearches.length - 1 - idx;
+          return `<div class="phone-map-track-card" style="position:relative;padding-right:56px">
+            <div class="phone-map-track-location">${_uiIcon('search', 12)} ${Utils.escapeHtml(s.query || '')}</div>
+            <div class="phone-map-track-time">${Utils.escapeHtml(_fmtHistoryTime(s.time))}</div>
+            <span onclick="Phone._shareMapSearch(${realIdx})" class="phone-share-mini" style="position:absolute;top:6px;right:30px" title="分享到主线">${_uiIcon('share', 13)}</span>
+            <span onclick="Phone._deleteMapSearch(${realIdx})" class="phone-share-mini" style="position:absolute;top:6px;right:8px;color:var(--error)" title="删除">${_uiIcon('trash', 13)}</span>
+          </div>`;
+        }).join('')
+      : '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">暂无搜索记录</p>';
+    if (body) body.innerHTML = `<div class="phone-map-app" style="flex:1;overflow-y:auto;padding:12px;height:100%;box-sizing:border-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;color:var(--text-secondary)">共 ${mapSearches.length} 条搜索记录</span>
+        ${mapSearches.length > 0 ? `<span onclick="Phone._shareAllMapSearches()" class="phone-share-text" title="全部分享到主线">${_uiIcon('share', 13)} 全部分享</span>` : ''}
+      </div>
+      ${searchHistHtml}
+    </div>`;
+  }
+
   function _normalizeMapResults(results) {
+    const CATS = ['景点', '餐饮', '购物', '休闲', '公共', '自然', '其他'];
     return (Array.isArray(results) ? results : [])
       .map((r, idx) => {
         if (!r || typeof r !== 'object') return null;
         const name = r.name || r.title || r.place || r.shop || r.poi || `地点${idx + 1}`;
         const address = r.address || r.location || r.addr || r.area || '';
+        const region = String(r.region || r.district || '').trim();
         const desc = r.desc || r.description || r.summary || r.intro || r.reason || '';
         const distance = r.distance || r.range || r.dist || '';
+
+        // category：枚举校验，越界归「其他」
+        let category = String(r.category || r.type || '').trim();
+        if (!CATS.includes(category)) category = '其他';
+
+        // tags：数组化 + 清洗，最多 3 个
+        let tags = [];
+        if (Array.isArray(r.tags)) tags = r.tags;
+        else if (typeof r.tags === 'string') tags = r.tags.split(/[,，、\s]+/);
+        tags = tags.map(t => String(t || '').trim()).filter(Boolean).slice(0, 3);
+
+        const hours = String(r.hours || r.openHours || r.businessHours || '').trim();
+        const status = String(r.status || '').trim();
+
+        // rating：数字化，钳到 0-5
+        let rating = parseFloat(r.rating);
+        if (!Number.isFinite(rating)) rating = 0;
+        rating = Math.max(0, Math.min(5, rating));
+        rating = rating ? Number(rating.toFixed(1)) : 0;
+
+        // hotComment：结构兜底
+        let hotComment = null;
+        const hc = r.hotComment || r.comment || r.review;
+        if (hc && typeof hc === 'object' && (hc.text || hc.content)) {
+          hotComment = {
+            user: String(hc.user || hc.name || hc.username || '路人').trim(),
+            text: String(hc.text || hc.content || '').trim(),
+            likes: Math.max(0, parseInt(hc.likes, 10) || 0)
+          };
+        }
+
+        // purchasable：可购项，解析价格
+        let purchasable = null;
+        const p = r.purchasable || r.ticket || null;
+        if (p && typeof p === 'object') {
+          const price = parseFloat(String(p.price ?? '').replace(/[^0-9.]/g, ''));
+          if (Number.isFinite(price) && price > 0) {
+            purchasable = {
+              label: String(p.label || '立即购买').trim(),
+              itemName: String(p.itemName || p.name || (name + '·凭证')).trim(),
+              price: price,
+              desc: String(p.desc || p.description || '').trim()
+            };
+          }
+        }
+
+        // transport：出行方案，method 必填，price 可为 0（免费如步行）
+        let transport = null;
+        const tp = r.transport || r.travel || null;
+        if (tp && typeof tp === 'object' && (tp.method || tp.mode)) {
+          let tprice = parseFloat(String(tp.price ?? '').replace(/[^0-9.]/g, ''));
+          if (!Number.isFinite(tprice) || tprice < 0) tprice = 0;
+          transport = {
+            method: String(tp.method || tp.mode || '').trim(),
+            duration: String(tp.duration || tp.time || '').trim(),
+            price: tprice,
+            desc: String(tp.desc || tp.description || '').trim()
+          };
+        }
+
         return {
           name: String(name || '').trim(),
           address: String(address || '').trim(),
+          region,
           desc: String(desc || '').trim(),
-          distance: String(distance || '').trim()
+          distance: String(distance || '').trim(),
+          category, tags, hours, status, rating, hotComment, purchasable, transport
         };
       })
       .filter(r => r && r.name);
@@ -40598,7 +41201,7 @@ async function _likeForumPost(index) {
     if (index < 0 || index >= list.length) return;
     list.splice(index, 1);
     await _savePhoneData();
-    _renderMap(pd);
+    _mapOpenSearchHistList();
   }
 
   async function _deleteLocationHistory(index) {
@@ -40607,18 +41210,93 @@ async function _likeForumPost(index) {
     if (index < 0 || index >= list.length) return;
     list.splice(index, 1);
     await _savePhoneData();
-    _renderMap(pd);
+    _mapOpenTrackList();
+  }
+
+  // 营业状态 → 颜色点
+  function _mapStatusDot(status) {
+    if (!status) return '';
+    const open = status === '营业中' || status === '全天开放';
+    const color = open ? '#22c55e' : '#9ca3af';
+    return `<span class="phone-map-status" style="color:${color}"><span class="phone-map-status-dot" style="background:${color}"></span>${Utils.escapeHtml(status)}</span>`;
+  }
+
+  // 评分 → 半星条 + 数字
+  function _mapRatingStars(rating) {
+    if (!rating || rating <= 0) return '';
+    const full = Math.floor(rating);
+    const half = rating - full >= 0.5;
+    let stars = '';
+    for (let i = 0; i < 5; i++) {
+      if (i < full) stars += '★';
+      else if (i === full && half) stars += '⯪';
+      else stars += '☆';
+    }
+    return `<span class="phone-map-rating"><span class="phone-map-rating-stars">${stars}</span><span class="phone-map-rating-num">${rating.toFixed(1)}</span></span>`;
   }
 
   function _renderMapResultsHtml(results) {
     if (!results || results.length === 0) return '';
-    return results.map((r, ri) => `
+    return results.map((r, ri) => {
+      const tagPills = (r.tags && r.tags.length)
+        ? r.tags.map(t => `<span class="phone-map-tag">${Utils.escapeHtml(t)}</span>`).join('')
+        : '';
+      const catPill = r.category ? `<span class="phone-map-cat">${Utils.escapeHtml(r.category)}</span>` : '';
+      const metaLine = (catPill || tagPills) ? `<div class="phone-map-tagrow">${catPill}${tagPills}</div>` : '';
+      const hoursLine = r.hours ? `<span class="phone-map-hours">${_uiIcon('clock', 11)} ${Utils.escapeHtml(r.hours)}</span>` : '';
+      const statusEl = _mapStatusDot(r.status);
+      const infoRow = (hoursLine || statusEl) ? `<div class="phone-map-inforow">${statusEl}${hoursLine}</div>` : '';
+      const ratingEl = _mapRatingStars(r.rating);
+      const hc = r.hotComment;
+      const commentBlock = (hc && hc.text) ? `
+        <div class="phone-map-comment">
+          <div class="phone-map-comment-user">${_uiIcon('quote', 11)} ${Utils.escapeHtml(hc.user || '路人')}${hc.likes ? ` · ${_uiIcon('heart', 10)} ${hc.likes}` : ''}</div>
+          <div class="phone-map-comment-text">${Utils.escapeHtml(hc.text)}</div>
+        </div>` : '';
+      const p = r.purchasable;
+      const buyBlock = (p && p.price > 0)
+        ? `<div class="phone-map-buy-row">
+            <div class="phone-map-buy-info">
+              <div class="phone-map-buy-name">${_uiIcon('ticket', 12)} ${Utils.escapeHtml(p.itemName || '')}</div>
+              ${p.desc ? `<div class="phone-map-buy-desc">${Utils.escapeHtml(p.desc)}</div>` : ''}
+            </div>
+            <button type="button" onclick="Phone._mapBuyTicket(${ri})" class="phone-map-buy-btn" title="${Utils.escapeHtml(p.itemName || '')}">${Utils.escapeHtml(p.label || '立即购买')} · ${p.price}</button>
+          </div>`
+        : '';
+      // 出行方案：免费（步行等 price=0）纯展示；收费给"出发"按钮走购买链路
+      const tr = r.transport;
+      const trFree = tr && !(tr.price > 0);
+      const trMeta = tr ? [tr.duration, tr.desc].filter(Boolean).join(' · ') : '';
+      const transportBlock = tr
+        ? `<div class="phone-map-buy-row phone-map-transport-row">
+            <div class="phone-map-buy-info">
+              <div class="phone-map-buy-name">${_uiIcon('navigation', 12)} 到这里去 · ${Utils.escapeHtml(tr.method || '')}</div>
+              ${trMeta ? `<div class="phone-map-buy-desc">${Utils.escapeHtml(trMeta)}</div>` : ''}
+            </div>
+            ${trFree
+              ? `<span class="phone-map-transport-free">${Utils.escapeHtml(tr.method || '步行')}</span>`
+              : `<button type="button" onclick="Phone._mapBuyTransport(${ri})" class="phone-map-buy-btn" title="出发前往">出发 · ${tr.price}</button>`}
+          </div>`
+        : '';
+      // 地址行：地点所属大地区常驻显示为徽章（对标状态栏地区体系）
+      const regionBadge = r.region ? `<span class="phone-map-region">${Utils.escapeHtml(r.region)}</span>` : '';
+      const addrText = r.address || '';
+      const addressLine = (addrText || regionBadge)
+        ? `<div class="phone-map-result-address">${_uiIcon('pin', 12)}${regionBadge}<span>${Utils.escapeHtml(addrText)}</span></div>`
+        : '';
+      return `
       <div class="phone-map-result-card">
         <div class="phone-map-result-head">
           <div class="phone-map-result-name">${Utils.escapeHtml(r.name || '')}</div>
+          ${ratingEl}
         </div>
-        ${r.address ? `<div class="phone-map-result-address">${_uiIcon('pin', 12)}<span>${Utils.escapeHtml(r.address || '')}</span></div>` : ''}
+        ${metaLine}
+        ${addressLine}
+        ${infoRow}
         ${r.desc ? `<div class="phone-map-result-desc">${Utils.escapeHtml(r.desc || '')}</div>` : ''}
+        ${commentBlock}
+        ${buyBlock}
+        ${transportBlock}
         <div class="phone-map-result-foot">
           <div class="phone-map-result-foot-left">
             ${r.distance ? `<span class="phone-map-distance-pill">${_uiIcon('route', 11)} ${Utils.escapeHtml(r.distance)}</span>` : ''}
@@ -40628,7 +41306,8 @@ async function _likeForumPost(index) {
             <button type="button" onclick="Phone._shareMapResult(${ri})" class="phone-map-action-btn" title="分享到主线">${_uiIcon('share', 12)} 分享</button>
           </div>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   async function _switchMapTab(tab) {
@@ -40639,10 +41318,204 @@ async function _likeForumPost(index) {
 
   let _mapSearchResults = []; // 缓存搜索结果用于分享
 
+  // 当前所在地区详细档案块（命中才塞）：读状态栏大地点→小地点→匹配世界观地区→取该地区 detail+势力
+  // 照搬电台 _radioRegionBlock 的范式；includeNpc:false 因为 NPC 详情 _buildFullContext 已全量注入
+  // 返回 { block, regionName }：block 是注入文本，regionName 是命中的地区名（供异地标记）
+  function _mapRegionBlock() {
+    try {
+      if (typeof NPC === 'undefined' || !NPC.parseRegionFromOutput || !NPC.formatForPrompt) return { block: '', regionName: '' };
+      const sb = Conversations.getStatusBar() || {};
+      const regionText = String(sb.region || '').trim();
+      const locationText = String(sb.location || '').trim();
+      if (!regionText && !locationText) return { block: '', regionName: '' };
+      const matched = NPC.parseRegionFromOutput({ header: { region: regionText, location: locationText } });
+      if (!matched || matched === 'all') return { block: '', regionName: regionText || locationText };
+      const detail = NPC.formatForPrompt(matched, { includeNpc: false });
+      const regionName = regionText || locationText;
+      if (!detail) return { block: '', regionName };
+      const block = `【当前所在地区资料】\n以下是玩家当前所在地区「${regionName}」的详细设定。生成地点时优先落在这个地区里真实存在的街区、地标、机构上；如果用户的搜索意图明显指向其他地区或远行，也可以给出跨地区结果，并在距离和 region 字段上如实体现。\n${detail}`;
+      return { block, regionName };
+    } catch (_) { return { block: '', regionName: '' }; }
+  }
+
+  // 地图购票/预订：复用商城付款窗（扣款+选货币+校验），付款成功后直接进当前面具物品栏（不走物流）
+  async function _mapBuyTicket(index) {
+    const r = _mapSearchResults[index];
+    if (!r || !r.purchasable || !(r.purchasable.price > 0)) { UI.showToast('该地点暂无可购项', 1500); return; }
+    const p = r.purchasable;
+    const pd = await _getPhoneData();
+    if (!pd) return;
+
+    // 构造一个「商品」交给现成的付款确认弹窗（含选货币/余额校验/无货币退化）
+    const item = { name: p.itemName || (r.name + '·凭证'), price: p.price, shop: r.name || '', desc: p.desc || '' };
+    const payResult = await _shopPaymentConfirm(pd, item, '自己', 'map');
+    if (!payResult) return; // 取消
+
+    // 扣款（复用同款逻辑：校验余额→扣→写状态栏→记账）
+    let deducted = 0, deductedCurId = '', deductedCurName = '';
+    if (payResult.useCurrency && item.price) {
+      const priceNum = parseFloat(String(item.price).replace(/[^0-9.]/g, ''));
+      if (Number.isFinite(priceNum) && priceNum > 0) {
+        try {
+          const sb = Conversations.getStatusBar() || {};
+          sb.customAttrs = sb.customAttrs || {};
+          sb.customAttrs.global = sb.customAttrs.global || {};
+          const balance = _ensureCurrencyBalance(sb, payResult.currencyId);
+          if (balance < priceNum) {
+            UI.showToast(`${payResult.currencyName}余额不足（需要 ${priceNum}，当前 ${balance}）`, 2500);
+            return;
+          }
+          sb.customAttrs.global[payResult.currencyId] = balance - priceNum;
+          await Conversations.setStatusBar(sb);
+          if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
+          deducted = priceNum;
+          deductedCurId = payResult.currencyId;
+          deductedCurName = payResult.currencyName || '';
+        } catch (e) {
+          console.warn('[地图购票] 扣款失败', e);
+        }
+      }
+    }
+
+    // 直接进当前面具物品栏（不建订单、不走物流）
+    let maskId = '';
+    try { maskId = Character.getCurrentId(); } catch(_) {}
+    if (!maskId) { UI.showToast('当前没有激活的面具，无法收入物品栏', 2000); return; }
+    try {
+      const maskData = await DB.get('characters', maskId);
+      if (!maskData) { UI.showToast('面具数据读取失败', 1800); return; }
+      const inv = Array.isArray(maskData.inventory) ? maskData.inventory : [];
+      const effect = (p.desc || '') + (p.desc ? ' · ' : '') + '地图预订';
+      const idx = inv.findIndex(x => (x?.name || '').trim() === item.name);
+      if (idx >= 0) {
+        inv[idx].count = (inv[idx].count || 1) + 1;
+        if (effect && !inv[idx].effect) inv[idx].effect = effect;
+      } else {
+        inv.push({ name: item.name, count: 1, effect: effect });
+      }
+      maskData.inventory = inv;
+      await DB.put('characters', maskData);
+    } catch (e) {
+      console.warn('[地图购票] 收入物品栏失败', e);
+      UI.showToast('收取失败', 1500);
+      return;
+    }
+
+    // 记账（仅扣了绑定货币时）
+    if (deducted > 0 && deductedCurId) {
+      try {
+        pd.ledger = pd.ledger || [];
+        pd.ledger.push({
+          id: 'le_' + Utils.uuid().slice(0, 8),
+          time: _getGameTime() || '',
+          currencyId: deductedCurId,
+          amount: -deducted,
+          category: '出行',
+          note: item.name,
+          platform: '地图',
+          counterparty: r.name || '',
+          source: 'map',
+          editable: true,
+        });
+        await _savePhoneData();
+      } catch(_) {}
+    }
+
+    _log(`在地图购买了「${item.name}」（${r.name || ''}）${deducted > 0 ? `，前端已自动扣除 ${deducted} ${deductedCurName}，AI无需再处理此扣款` : ''}，已直接收入物品栏`);
+    UI.showToast(`已购买：${item.name}，可在物品栏查看`, 2400);
+  }
+
+  // 地图出行：购买"到某地"的车票/行程（复用商城付款窗），进物品栏 + 记账 + 写操作记录
+  async function _mapBuyTransport(index) {
+    const r = _mapSearchResults[index];
+    if (!r || !r.transport || !(r.transport.price > 0)) { UI.showToast('该出行方案无需购票', 1500); return; }
+    const tr = r.transport;
+    const pd = await _getPhoneData();
+    if (!pd) return;
+
+    const ticketName = `前往${r.name || '目的地'}·${tr.method || '车票'}`;
+    const item = { name: ticketName, price: tr.price, shop: r.name || '', desc: [tr.method, tr.duration, tr.desc].filter(Boolean).join(' · ') };
+    const payResult = await _shopPaymentConfirm(pd, item, '自己', 'map');
+    if (!payResult) return; // 取消
+
+    // 扣款
+    let deducted = 0, deductedCurId = '', deductedCurName = '';
+    if (payResult.useCurrency && item.price) {
+      const priceNum = parseFloat(String(item.price).replace(/[^0-9.]/g, ''));
+      if (Number.isFinite(priceNum) && priceNum > 0) {
+        try {
+          const sb = Conversations.getStatusBar() || {};
+          sb.customAttrs = sb.customAttrs || {};
+          sb.customAttrs.global = sb.customAttrs.global || {};
+          const balance = _ensureCurrencyBalance(sb, payResult.currencyId);
+          if (balance < priceNum) {
+            UI.showToast(`${payResult.currencyName}余额不足（需要 ${priceNum}，当前 ${balance}）`, 2500);
+            return;
+          }
+          sb.customAttrs.global[payResult.currencyId] = balance - priceNum;
+          await Conversations.setStatusBar(sb);
+          if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
+          deducted = priceNum;
+          deductedCurId = payResult.currencyId;
+          deductedCurName = payResult.currencyName || '';
+        } catch (e) {
+          console.warn('[地图出行] 扣款失败', e);
+        }
+      }
+    }
+
+    // 进当前面具物品栏
+    let maskId = '';
+    try { maskId = Character.getCurrentId(); } catch(_) {}
+    if (!maskId) { UI.showToast('当前没有激活的面具，无法收入物品栏', 2000); return; }
+    try {
+      const maskData = await DB.get('characters', maskId);
+      if (!maskData) { UI.showToast('面具数据读取失败', 1800); return; }
+      const inv = Array.isArray(maskData.inventory) ? maskData.inventory : [];
+      const effect = (item.desc || '') + (item.desc ? ' · ' : '') + '地图出行';
+      const idx = inv.findIndex(x => (x?.name || '').trim() === item.name);
+      if (idx >= 0) {
+        inv[idx].count = (inv[idx].count || 1) + 1;
+        if (effect && !inv[idx].effect) inv[idx].effect = effect;
+      } else {
+        inv.push({ name: item.name, count: 1, effect: effect });
+      }
+      maskData.inventory = inv;
+      await DB.put('characters', maskData);
+    } catch (e) {
+      console.warn('[地图出行] 收入物品栏失败', e);
+      UI.showToast('收取失败', 1500);
+      return;
+    }
+
+    // 记账
+    if (deducted > 0 && deductedCurId) {
+      try {
+        pd.ledger = pd.ledger || [];
+        pd.ledger.push({
+          id: 'le_' + Utils.uuid().slice(0, 8),
+          time: _getGameTime() || '',
+          currencyId: deductedCurId,
+          amount: -deducted,
+          category: '出行',
+          note: item.name,
+          platform: '地图',
+          counterparty: r.name || '',
+          source: 'map',
+          editable: true,
+        });
+        await _savePhoneData();
+      } catch(_) {}
+    }
+
+    _log(`在地图购买了前往「${r.name || ''}」的行程（${tr.method || '出行'}${tr.duration ? '，' + tr.duration : ''}）${deducted > 0 ? `，前端已自动扣除 ${deducted} ${deductedCurName}，AI无需再处理此扣款` : ''}，车票已收入物品栏`);
+    UI.showToast(`已购票：${item.name}，可在物品栏查看`, 2400);
+  }
+
   async function _shareMapResult(index) {
     const r = _mapSearchResults[index];
     if (!r) return;
-    const content = `地点：${r.name || ''}\n地址：${r.address || ''}\n描述：${r.desc || ''}${r.distance ? '\n距离：' + r.distance : ''}`;
+    const content = `地点：${r.name || ''}${r.category ? '（' + r.category + '）' : ''}${r.region ? '\n地区：' + r.region : ''}\n地址：${r.address || ''}\n描述：${r.desc || ''}${r.distance ? '\n距离：' + r.distance : ''}${(r.tags && r.tags.length) ? '\n标签：' + r.tags.join('、') : ''}${r.hours ? '\n营业时间：' + r.hours : ''}${r.status ? '\n状态：' + r.status : ''}${r.rating ? '\n评分：' + r.rating.toFixed(1) : ''}${(r.purchasable && r.purchasable.price > 0) ? '\n' + (r.purchasable.label || '购买') + '：' + r.purchasable.itemName + '（' + r.purchasable.price + '）' : ''}${r.transport ? '\n出行：' + (r.transport.method || '') + (r.transport.duration ? '（' + r.transport.duration + '）' : '') + (r.transport.price > 0 ? '，约 ' + r.transport.price : '') : ''}`;
 
     const choice = await new Promise(resolve => {
       const overlay = document.createElement('div');
@@ -40702,7 +41575,7 @@ async function _likeForumPost(index) {
       role: 'me',
       type: 'map_place',
       placeName: place.name || '',
-      placeAddress: place.address || '',
+      placeAddress: (place.region ? place.region + '·' : '') + (place.address || ''),
       placeDesc: place.desc || '',
       text: `[地点链接]${place.name || ''}`,
       time: gameTime,
@@ -40742,24 +41615,55 @@ async function _likeForumPost(index) {
       const wvPrompt = await _buildFullContext();
     let currentLoc = '';
     try { const sb = Conversations.getStatusBar(); currentLoc = [sb?.region, sb?.location].filter(Boolean).join('·'); } catch(_) {}
+    const _regionInfo = _mapRegionBlock();
+    const _regionBlock = _regionInfo.block ? ('\n\n' + _regionInfo.block) : '';
+    // 世界观自定义交通工具描述（写在世界观编辑→手机配置→地图里，只注入地图搜索）
+    let _mapTransportBlock = '';
+    try {
+      const _md = (_shopMeta?.map?.desc || '').trim();
+      if (_md) _mapTransportBlock = `\n\n【本世界的交通方式】${_md}\n（生成 transport 字段时，method 必须从上面这些交通方式里选，不要用现实世界的地铁/公交/高铁等，除非上面列出了。）`;
+    } catch(_) {}
 
     const rawResults = await _phoneJsonArrayWithRetry({
         label: '地图搜索', url, key, model,
         temperature: 0.75,
-        max_tokens: 4096,
+        max_tokens: 8192,
         messages: [
-          { role: 'system', content: `你是世界观内的地图搜索引擎。用户当前位置：${currentLoc || '未知'}。
+          { role: 'system', content: `你是世界观内的地图搜索引擎。用户当前位置：${currentLoc || '未知'}。当前时间：${_getGameTime() || '未知'}。
 
-任务：根据世界观和地点设定，生成4-6个与“${query}”相关的地点/店铺。
+任务：根据世界观和地点设定，生成4-6个与“${query}”相关的地点/店铺，像真实地图/点评类 App 的结果那样立体。
 
 必须严格返回 JSON 数组，不能返回 Markdown，不能返回代码块，不能解释。返回内容必须以 [ 开头，以 ] 结尾。
-每个对象只能使用以下字段：
-{"name":"地点名","address":"地址","desc":"一句话描述","distance":"距离描述"}
+每个对象使用以下字段：
+{
+  "name":"地点名",
+  "region":"该地点所属的世界观大地区名（对标状态栏的地区体系）。优先填玩家当前所在地区；若是跨地区/远行结果，则填该地点真实所属的地区名",
+  "address":"该地点在所属地区内的具体位置/街区/门牌，只写小地点，不要重复写地区名",
+  "desc":"2-3句话客观描述，像常规地图 App 的推荐语，介绍这个地方的特色/环境/招牌",
+  "distance":"距离描述，如 约800米、3.2公里",
+  "category":"地点性质，从以下 7 个里选且只选 1 个，原样填不要改字：景点、餐饮、购物、休闲、公共、自然、其他",
+  "tags":["气质/特色标签，自拟 1-3 个，每个简短如 2-6 字，如 避暑圣地、网红打卡、老字号、亲子友好"],
+  "hours":"营业/开放时间，如 09:00-22:00 或 全天开放；不适用则留空字符串",
+  "status":"营业状态，结合上面的当前时间判断，从以下里选：营业中、休息中、已打烊、全天开放；不适用留空",
+  "rating":评分（数字，保留一位小数，2.5 到 5.0 之间；要有差异化分布，不要每个都满分，有口碑好的也有一般的）,
+  "hotComment":{"user":"自拟一个像真实网友的网名","text":"一条高赞短评，30-60字，带个人色彩、有态度，与 rating 大致匹配（高分好评为主，低分可有吐槽）","likes":点赞数（整数，几十到几千）},
+  "purchasable":{"label":"购买动作文案，按地点性质自拟：景点/自然→购买门票；餐饮→套餐预订；购物→立即购买 或 预订；休闲（KTV/温泉/影院等）→预订。不适用则不要输出 purchasable 整个字段","itemName":"购买后进入物品栏的凭证名，如 XX景区·成人门票、XX餐厅·双人套餐券、XX酒店·标准间一晚","price":价格（数字，结合世界观消费水平；免费/无消费项则不输出 purchasable）,"desc":"一句话说明这张票/券是什么、能做什么"},
+  "transport":{"method":"从当前位置到这里的推荐交通方式，结合上面的距离和世界观自拟：很近→步行；市内→公交/地铁/打车；很远/跨地区→高铁/长途大巴/飞机等","duration":"预计耗时，如 约10分钟、1小时、3小时","price":车费（数字，结合距离和世界观消费水平；步行等免费则填 0）,"desc":"一句话方案说明，如 乘地铁3号线6站直达、打车约12公里"}
+}
+
+字段规则：
+- category 必须原样从 7 个枚举里选，不要自造。
+- hours/status/purchasable 按地点实际情况来：免费的公园、图书馆、纯地标、住宅区等没有消费项的地点，不要输出 purchasable 字段；也不必硬凑营业时间。
+- 只有真正需要购票/预订/消费的商业性地点（景点、餐厅、酒店、KTV、影院、需购物的店铺等）才输出 purchasable。
+- transport 每个地点都要输出（这是"怎么去"的方案）：近距离用步行且 price 填 0；有距离的按合理交通方式给出车费。交通方式要贴合世界观（现代都市可用地铁/公交/打车/高铁/飞机；古代/玄幻用马车/步行/传送等）。
+- rating 要真实差异化，不要扎堆高分。
 
 示例：
-[{"name":"示例地点","address":"示例街区","desc":"适合当前搜索的一句话描述。","distance":"约800米"}]
+[{"name":"云顶观景台","region":"翠屏区","address":"翠屏山顶","desc":"全城海拔最高的观景平台，视野开阔，是看日出和夜景的绝佳去处。山顶常年凉爽，夏季比城区低五六度。","distance":"约6公里","category":"景点","tags":["避暑圣地","观景"],"hours":"06:00-22:00","status":"营业中","rating":4.7,"hotComment":{"user":"山风记事","text":"傍晚上去正好，夕阳把整座城染成金色，风一吹整个人都清醒了。就是台阶有点多，穿双好走的鞋。","likes":286},"purchasable":{"label":"购买门票","itemName":"云顶观景台·成人门票","price":40,"desc":"当日有效，凭票登顶观景平台一次"},"transport":{"method":"打车","duration":"约20分钟","price":28,"desc":"沿滨江路直上山，约6公里"}}]
 
-${wvPrompt}` },
+【数量要求】必须返回 4-6 个地点，不得少于 4 个。地点要有差异（性质、距离、价位各不相同），不要都是同一类。
+
+${wvPrompt}${_regionBlock}${_mapTransportBlock}` },
           { role: 'user', content: `搜索附近：${query}` }
         ]
       });
@@ -56774,6 +57678,11 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
       deliveryMax: pa.wardrobe?.deliveryMax || 5,
       deliveryUnit: pa.wardrobe?.deliveryUnit || 'day',
       currencyIds: Array.isArray(pa.wardrobe?.currencyIds) ? pa.wardrobe.currencyIds : []
+    },
+    map: {
+      name: ((pa.map?.name) || '').trim(),
+      desc: ((pa.map?.desc) || '').trim(),
+      currencyIds: Array.isArray(pa.map?.currencyIds) ? pa.map.currencyIds : []
     }
   };
 } catch(_) {
@@ -58366,7 +59275,7 @@ async function buildHeartsimServiceChatForBackstage() {
 // ===== 对外接口 =====
   return {
     open, close, minimize, goHome, goBack, openApp, isOpen, syncFab,
-    setNotification, recordLocation,
+    setNotification, recordLocation, buildNearbyMapForAI,
     buildPhoneDataForAI, _buildFullContext, _parsePhoneJsonArray, _parsePhoneJsonObject, _phoneExtractContent, _radioEchoBlockForForum, _readingEchoBlockForForum, _videoEchoBlockForForum, _liveEchoBlockForForum, _radioDetailBlockForPost, _readingDetailBlockForPost,
 buildHeartsimAppFavorForBackstage,
       buildHeartsimServiceChatForBackstage,
@@ -58378,7 +59287,7 @@ buildHeartsimAppFavorForBackstage,
     getShootChainGenContext, getShootChainBriefForRuntime,
     buildLicenseEventPrompt, applyLicenseMarkers, _readingLicenseSetup,
     flushActionLogForBackstage,
-    getSnapshotForRollback, restoreFromSnapshot,
+    getSnapshotForRollback, restoreFromSnapshot, _phoneRestoreLatestBackup,
     _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _toggleRollbackKeep, _onThemePick, _switchSettingsTab, _onPhoneSkinToggle, _onPhoneSkinPick, _resetPhoneSkinColors, _exportPhoneSkinColors, _importPhoneSkinColors, _onToggleFullscreen, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
     // 个人资料卡
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
@@ -58443,9 +59352,11 @@ _openMomentVisibleModal, _closeMomentVisibleModal, _filterMomentVisibleOptions, 
 _onMomentsConfigCountChange, _onMomentsConfigImgChange, _onMomentsConfigStorageChange,
 _toggleMomentsAutoRefresh, _tickMomentsAutoRefresh,
     _switchMomentsTab, _collectNpcMoment, _likeNpcMoment, _commentNpcMoment, _refreshOneNpcMomentComments, _saveMomentImageToAlbum,
-    _mapSearch, _shareMapResult, _collectMapResult, _switchMapTab, _renderMapResultsHtml,
+    _mapSearch, _shareMapResult, _collectMapResult, _switchMapTab, _renderMapResultsHtml, _mapBuyTicket, _mapBuyTransport,
     _shareMapSearch, _shareAllMapSearches, _deleteMapSearch, _deleteLocationHistory,
-    _mapShareToChat,
+    _mapOpenTrackList, _mapOpenSearchHistList,
+     _mapNearby, _mapNearbyClickMarker, _mapNearbyEdit, _toggleMapNearbySync,
+     _mapShareToChat,
     // 外卖/网购
     _switchShopTab, _shopRefresh, _shopSearch, _shopRepeatSearch, _deleteShopSearch,
     _shopOpenCustomModal, _shopCloseCustomModal, _shopConfirmCustom,

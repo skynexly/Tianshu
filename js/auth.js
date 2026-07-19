@@ -584,8 +584,8 @@ const Auth = (() => {
             <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
           </div>
           <div class="auth-profile-item" id="auth-profile-cloud">
-            <div class="auth-profile-item-label">云备份（Supabase）</div>
-          <div class="auth-profile-item-value" id="auth-profile-cloud-status">${SupabaseBackup.isConfigured() ? '已配置' : '未配置'}</div>
+            <div class="auth-profile-item-label">云备份</div>
+          <div class="auth-profile-item-value" id="auth-profile-cloud-status">${(SupabaseBackup.isConfigured() || GithubBackup.isConfigured()) ? '已配置' : '未配置'}</div>
           <svg class="auth-profile-item-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </div>
       </div>
@@ -1045,6 +1045,19 @@ const Auth = (() => {
   //          okText, cancelText, danger }
   // 返回 Promise：confirm/alert → resolve(true/false)；prompt → resolve(string|null)
   // ===== 云备份（Supabase）面板 =====
+  // 当前云备份面板选中的后端：'supabase' | 'github'。记住上次选择。
+  function _getCbBackend() {
+    const v = localStorage.getItem('cloud_backup_backend');
+    return v === 'github' ? 'github' : 'supabase';
+  }
+  function _setCbBackend(v) {
+    localStorage.setItem('cloud_backup_backend', v === 'github' ? 'github' : 'supabase');
+  }
+  // 按当前后端返回对应模块
+  function _cbModule(backend) {
+    return backend === 'github' ? GithubBackup : SupabaseBackup;
+  }
+
   function openCloudBackup() {
     const existing = document.getElementById('cloud-backup-overlay');
     if (existing) existing.remove();
@@ -1052,56 +1065,25 @@ const Auth = (() => {
     const overlay = document.createElement('div');
     overlay.id = 'cloud-backup-overlay';
     overlay.className = 'modal';
-    overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;z-index:100000';
+    // 全屏：铺满整个视口，内部滚动
+    overlay.style.cssText = 'display:flex;align-items:stretch;justify-content:center;z-index:100000;padding:0';
 
-    const cfg = SupabaseBackup.getConfig();
+    let backend = _getCbBackend();
 
+    // 面板骨架：顶部标题栏 + tab，下面是可切换的内容区（配置/备份/列表）
     overlay.innerHTML = `
-      <div class="modal-content" style="max-width:440px;max-height:88vh;overflow-y:auto">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-          <h3 style="margin:0">云备份（Supabase）</h3>
-          <button type="button" id="cb-close" style="background:none;border:none;color:var(--text-secondary);font-size:22px;line-height:1;cursor:pointer;padding:0 4px">×</button>
+      <div class="modal-content" style="max-width:640px;width:100%;height:100%;max-height:100%;border-radius:0;display:flex;flex-direction:column;padding:0;overflow:hidden">
+        <div style="flex-shrink:0;padding:max(16px, env(safe-area-inset-top, 16px)) 18px 0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h3 style="margin:0">云备份</h3>
+            <button type="button" id="cb-close" style="background:none;border:none;color:var(--text-secondary);font-size:24px;line-height:1;cursor:pointer;padding:0 4px">×</button>
+          </div>
+          <div id="cb-tabs" style="display:flex;gap:8px;border-bottom:1px solid var(--border)">
+            <button type="button" class="cb-tab" data-backend="supabase" style="flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);padding:10px 0;cursor:pointer;font-size:14px;font-weight:600">Supabase</button>
+            <button type="button" class="cb-tab" data-backend="github" style="flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);padding:10px 0;cursor:pointer;font-size:14px;font-weight:600">GitHub</button>
+          </div>
         </div>
-        <p style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:0 0 14px">
-          用你自己的 Supabase 项目存/取存档。数据只保存在你自己的数据库里，skynex 不经手。
-          <a href="#" id="cb-guide" style="color:var(--accent);text-decoration:none">查看配置教程 ›</a>
-        </p>
-
-        <div class="auth-profile-section-title" style="margin-top:0">连接配置</div>
-        <div class="form-group" style="margin-bottom:8px">
-          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">Project URL</label>
-          <input type="text" id="cb-url" placeholder="https://xxxx.supabase.co" value="${_escape(cfg.url)}" style="width:100%" />
-        </div>
-        <div class="form-group" style="margin-bottom:8px">
-          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">anon key（公开密钥）</label>
-          <input type="password" id="cb-key" placeholder="eyJhbGci..." value="${_escape(cfg.key)}" style="width:100%" />
-        </div>
-        <div class="form-group" style="margin-bottom:8px">
-          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">备注（可选，标记这台设备/存档）</label>
-          <input type="text" id="cb-device" maxlength="40" placeholder="如：主力机" value="${_escape(cfg.device)}" style="width:100%" />
-        </div>
-        <div style="display:flex;gap:8px;margin-bottom:6px">
-          <button type="button" id="cb-test" style="flex:1;background:none;border:1px solid var(--border);color:var(--text);padding:9px;border-radius:8px;cursor:pointer;font-size:13px">测试连接</button>
-          <button type="button" id="cb-save" style="flex:1;background:var(--accent);color:#111;border:none;padding:9px;border-radius:8px;cursor:pointer;font-size:13px">保存配置</button>
-        </div>
-        <div id="cb-conn-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
-
-        <div class="auth-profile-section-title">备份到云端</div>
-        <p style="font-size:11px;color:var(--text-secondary);line-height:1.6;margin:0 0 8px">
-          单个备份压缩后需小于 50MB（Supabase 免费版限制），超出会上传失败。完整存档含生成图库，图片多时容易超限；可先用上方「图片存储管理」清理，或改用「轻量」（含头像）/「纯文字」。超大存档建议用页面底部的本地导出保存。
-        </p>
-        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px">
-          <button type="button" class="cb-backup-btn" data-mode="lite" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·轻量（含头像，不含图库）<span style="float:right;color:var(--text-secondary)">推荐</span></button>
-          <button type="button" class="cb-backup-btn" data-mode="text" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·纯文字（不含任何图片）</button>
-          <button type="button" class="cb-backup-btn" data-mode="full" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·完整（含全部图片，可能很大）</button>
-        </div>
-        <div id="cb-backup-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
-
-        <div class="auth-profile-section-title" style="display:flex;align-items:center;justify-content:space-between">
-          <span>云端备份列表</span>
-          <button type="button" id="cb-refresh" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0">刷新</button>
-        </div>
-        <div id="cb-list" style="font-size:13px;color:var(--text-secondary);padding:6px 0">未加载</div>
+        <div id="cb-body" style="flex:1;min-height:0;overflow-y:auto;padding:16px 18px 32px"></div>
       </div>
     `;
 
@@ -1113,6 +1095,7 @@ const Auth = (() => {
 
     const $ = (id) => overlay.querySelector(id);
     const setMsg = (el, text, ok) => {
+      if (!el) return;
       el.textContent = text || '';
       el.style.color = ok === true ? 'var(--accent)' : (ok === false ? 'var(--danger)' : 'var(--text-secondary)');
     };
@@ -1121,41 +1104,207 @@ const Auth = (() => {
     $('#cb-close').addEventListener('click', close);
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
-    $('#cb-guide').addEventListener('click', (e) => { e.preventDefault(); _showSupabaseGuide(); });
+    // 渲染指定后端的内容区（配置 + 备份 + 列表）
+    function renderBody() {
+      const mod = _cbModule(backend);
+      const cfg = mod.getConfig();
+      const body = $('#cb-body');
 
+      if (backend === 'supabase') {
+        body.innerHTML = _cbSupabaseBodyHtml(cfg);
+      } else {
+        body.innerHTML = _cbGithubBodyHtml(cfg);
+      }
+
+      // tab 高亮
+      overlay.querySelectorAll('.cb-tab').forEach(t => {
+        const on = t.dataset.backend === backend;
+        t.style.color = on ? 'var(--accent)' : 'var(--text-secondary)';
+        t.style.borderBottomColor = on ? 'var(--accent)' : 'transparent';
+      });
+
+      _bindCbBody(overlay, backend, setMsg);
+    }
+
+    overlay.querySelectorAll('.cb-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        backend = tab.dataset.backend;
+        _setCbBackend(backend);
+        renderBody();
+      });
+    });
+
+    renderBody();
+  }
+
+  // ===== Supabase 内容区 HTML =====
+  function _cbSupabaseBodyHtml(cfg) {
+    return `
+      <p style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:0 0 14px">
+        用你自己的 Supabase 项目存/取存档。数据只保存在你自己的数据库里，skynex 不经手。
+        <a href="#" id="cb-guide" style="color:var(--accent);text-decoration:none">查看配置教程 ›</a>
+      </p>
+      <div class="auth-profile-section-title" style="margin-top:0">连接配置</div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">Project URL</label>
+        <input type="text" id="cb-url" placeholder="https://xxxx.supabase.co" value="${_escape(cfg.url)}" style="width:100%" />
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">anon key（公开密钥）</label>
+        <input type="password" id="cb-key" placeholder="eyJhbGci..." value="${_escape(cfg.key)}" style="width:100%" />
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">备注（可选，标记这台设备/存档）</label>
+        <input type="text" id="cb-device" maxlength="40" placeholder="如：主力机" value="${_escape(cfg.device)}" style="width:100%" />
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <button type="button" id="cb-test" style="flex:1;background:none;border:1px solid var(--border);color:var(--text);padding:9px;border-radius:8px;cursor:pointer;font-size:13px">测试连接</button>
+        <button type="button" id="cb-save" style="flex:1;background:var(--accent);color:#111;border:none;padding:9px;border-radius:8px;cursor:pointer;font-size:13px">保存配置</button>
+      </div>
+      <div id="cb-conn-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
+
+      <div class="auth-profile-section-title">备份到云端</div>
+      <p style="font-size:11px;color:var(--text-secondary);line-height:1.6;margin:0 0 8px">
+        单个备份压缩后需小于 50MB（Supabase 免费版限制），超出会上传失败。完整存档含生成图库，图片多时容易超限；可先用上方「图片存储管理」清理，或改用「轻量」（含头像）/「纯文字」。超大存档建议改用 GitHub 云备份，或用上方的「导出存档」保存到本机。
+      </p>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px">
+        <button type="button" class="cb-backup-btn" data-mode="lite" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·轻量（含头像，不含图库）<span style="float:right;color:var(--text-secondary)">推荐</span></button>
+        <button type="button" class="cb-backup-btn" data-mode="text" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·纯文字（不含任何图片）</button>
+        <button type="button" class="cb-backup-btn" data-mode="full" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·完整（含全部图片，可能很大）</button>
+      </div>
+      <div id="cb-backup-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
+
+      <div class="auth-profile-section-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>云端备份列表</span>
+        <button type="button" id="cb-refresh" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0">刷新</button>
+      </div>
+      <div id="cb-list" style="font-size:13px;color:var(--text-secondary);padding:6px 0">未加载</div>
+    `;
+  }
+
+  // ===== GitHub 内容区 HTML =====
+  function _cbGithubBodyHtml(cfg) {
+    return `
+      <p style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:0 0 14px">
+        用你自己的 GitHub 仓库存/取存档，大存档会自动分片上传，纯文字上百 MB 也能传。数据只存在你自己的仓库里，skynex 不经手。
+        <a href="#" id="cb-guide" style="color:var(--accent);text-decoration:none">查看配置教程 ›</a>
+      </p>
+      <div class="auth-profile-section-title" style="margin-top:0">连接配置</div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">GitHub 用户名</label>
+        <input type="text" id="cb-owner" placeholder="如：yourname" value="${_escape(cfg.owner)}" style="width:100%" />
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">仓库名</label>
+        <input type="text" id="cb-repo" placeholder="如：tianshu-saves" value="${_escape(cfg.repo)}" style="width:100%" />
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">访问令牌（Token）</label>
+        <input type="password" id="cb-token" placeholder="github_pat_... 或 ghp_..." value="${_escape(cfg.token)}" style="width:100%" />
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">备注（可选，标记这台设备/存档）</label>
+        <input type="text" id="cb-device" maxlength="40" placeholder="如：主力机" value="${_escape(cfg.device)}" style="width:100%" />
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <button type="button" id="cb-test" style="flex:1;background:none;border:1px solid var(--border);color:var(--text);padding:9px;border-radius:8px;cursor:pointer;font-size:13px">测试连接</button>
+        <button type="button" id="cb-save" style="flex:1;background:var(--accent);color:#111;border:none;padding:9px;border-radius:8px;cursor:pointer;font-size:13px">保存配置</button>
+      </div>
+      <div id="cb-conn-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
+
+      <div class="auth-profile-section-title">备份到云端</div>
+      <p style="font-size:11px;color:var(--text-secondary);line-height:1.6;margin:0 0 8px">
+        备份会压缩后上传到仓库的 saves/ 目录。大存档会自动分片上传，纯文字上百 MB 也能传，无需担心单文件限制。仓库设为私有则只有你自己能看到。存档累积占空间，不用的可到 GitHub 仓库里手动删除。
+      </p>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px">
+        <button type="button" class="cb-backup-btn" data-mode="lite" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·轻量（含头像，不含图库）<span style="float:right;color:var(--text-secondary)">推荐</span></button>
+        <button type="button" class="cb-backup-btn" data-mode="text" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·纯文字（不含任何图片）</button>
+        <button type="button" class="cb-backup-btn" data-mode="full" style="width:100%;background:none;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left">备份·完整（含全部图片，可能很大）</button>
+      </div>
+      <div id="cb-backup-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
+
+      <div class="auth-profile-section-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>云端备份列表</span>
+        <button type="button" id="cb-refresh" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0">刷新</button>
+      </div>
+      <div id="cb-list" style="font-size:13px;color:var(--text-secondary);padding:6px 0">未加载</div>
+    `;
+  }
+
+  // 给内容区绑事件（配置保存/测试、备份、列表刷新），按后端走对应模块
+  function _bindCbBody(overlay, backend, setMsg) {
+    const $ = (id) => overlay.querySelector(id);
+    const mod = _cbModule(backend);
+
+    // 读当前表单里的配置
+    const readCfg = () => {
+      if (backend === 'supabase') {
+        return { a: $('#cb-url').value, b: $('#cb-key').value, dev: $('#cb-device').value };
+      }
+      return { a: $('#cb-owner').value, b: $('#cb-repo').value, c: $('#cb-token').value, dev: $('#cb-device').value };
+    };
+    const saveCfg = () => {
+      const f = readCfg();
+      if (backend === 'supabase') mod.setConfig(f.a, f.b, f.dev);
+      else mod.setConfig(f.a, f.b, f.c, f.dev);
+    };
+
+    // 教程
+    const guide = $('#cb-guide');
+    if (guide) guide.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (backend === 'supabase') _showSupabaseGuide();
+      else _showGithubGuide();
+    });
+
+    // 测试连接
     $('#cb-test').addEventListener('click', async () => {
-      const url = $('#cb-url').value.trim();
-      const key = $('#cb-key').value.trim();
       const msg = $('#cb-conn-msg');
+      const f = readCfg();
       setMsg(msg, '测试中…', null);
       try {
-        await SupabaseBackup.testConnection(url, key);
-        setMsg(msg, '连接成功，表和权限都正常', true);
+        if (backend === 'supabase') await mod.testConnection(f.a, f.b);
+        else await mod.testConnection(f.a, f.b, f.c);
+        setMsg(msg, '连接成功', true);
       } catch (err) {
         setMsg(msg, '失败：' + (err.message || err), false);
       }
     });
 
+    // 保存配置
     $('#cb-save').addEventListener('click', () => {
-      SupabaseBackup.setConfig($('#cb-url').value, $('#cb-key').value, $('#cb-device').value);
+      saveCfg();
       setMsg($('#cb-conn-msg'), '已保存配置', true);
       const st = document.getElementById('auth-profile-cloud-status');
-      if (st) st.textContent = SupabaseBackup.isConfigured() ? '已配置' : '未配置';
+      if (st) {
+        const anyOn = SupabaseBackup.isConfigured() || GithubBackup.isConfigured();
+        st.textContent = anyOn ? '已配置' : '未配置';
+      }
     });
 
+    // 备份
     overlay.querySelectorAll('.cb-backup-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const mode = btn.dataset.mode;
+        const modeSel = btn.dataset.mode;
         const msg = $('#cb-backup-msg');
-        // 备份前先把当前输入的配置存下来
-        SupabaseBackup.setConfig($('#cb-url').value, $('#cb-key').value, $('#cb-device').value);
-        if (!SupabaseBackup.isConfigured()) { setMsg(msg, '请先填写并保存配置', false); return; }
+        saveCfg();
+        if (!mod.isConfigured()) { setMsg(msg, '请先填写并保存配置', false); return; }
         overlay.querySelectorAll('.cb-backup-btn').forEach(b => b.disabled = true);
         setMsg(msg, '正在生成存档并上传…（完整存档可能较久）', null);
         try {
-          const row = await SupabaseBackup.backup(mode, $('#cb-device').value.trim(), (stage) => setMsg(msg, stage, null));
-          setMsg(msg, '备份成功' + (row && row.id ? '（#' + row.id + '）' : ''), true);
-          _loadCloudList(overlay);
+          const dev = $('#cb-device') ? $('#cb-device').value.trim() : '';
+          // 超大存档确认（仅 GitHub 的 backup 支持第 4 参；Supabase 忽略，不影响）
+          const confirmBig = async (sizeText) => {
+            return await _modal({
+              title: '存档很大',
+              desc: `当前存档约 ${sizeText}。备份过程会在手机内存里生成并压缩整份数据，超大存档可能导致卡顿甚至失败，低配手机风险更高。\n\n建议改用「轻量」/「纯文字」模式，或用数据页的「导出存档」保存到本机。仍要继续完整备份吗？`,
+              okText: '继续', cancelText: '取消', danger: true
+            });
+          };
+          const row = await mod.backup(modeSel, dev, (stage) => setMsg(msg, stage, null), confirmBig);
+          // GitHub 列目录接口有 CDN 缓存，刚上传的文件要过几秒才读得到；提示用户稍后刷新
+          setMsg(msg, backend === 'github' ? '备份成功（GitHub 列表有几秒延迟，稍后点刷新可见）' : '备份成功', true);
+          _loadCloudList(overlay, backend);
         } catch (err) {
           setMsg(msg, '备份失败：' + (err.message || err), false);
         } finally {
@@ -1164,19 +1313,22 @@ const Auth = (() => {
       });
     });
 
-    $('#cb-refresh').addEventListener('click', () => _loadCloudList(overlay));
+    // 刷新列表
+    $('#cb-refresh').addEventListener('click', () => _loadCloudList(overlay, backend));
 
     // 已配置则自动拉一次列表
-    if (SupabaseBackup.isConfigured()) _loadCloudList(overlay);
+    if (mod.isConfigured()) _loadCloudList(overlay, backend);
   }
 
-  async function _loadCloudList(overlay) {
+
+  async function _loadCloudList(overlay, backend) {
     const listEl = overlay.querySelector('#cb-list');
     if (!listEl) return;
+    const mod = _cbModule(backend);
     listEl.textContent = '加载中…';
     let rows;
     try {
-      rows = await SupabaseBackup.listBackups(20);
+      rows = await mod.listBackups(20);
     } catch (err) {
       listEl.innerHTML = `<span style="color:var(--danger)">加载失败：${_escape(err.message || String(err))}</span>`;
       return;
@@ -1190,14 +1342,20 @@ const Auth = (() => {
       const t = r.created_at ? new Date(r.created_at).toLocaleString() : '';
       const dev = r.device ? ('· ' + _escape(r.device)) : '';
       const sz = (typeof r.size === 'number' && r.size > 0) ? (' · ' + _fmtBytes(r.size)) : '';
+      // 分片备份（大存档）标记，让用户一眼看出这是超大存档
+      const partTag = (r.parts && r.parts > 1)
+        ? ` <span style="font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:0 4px;margin-left:2px">${r.parts}片</span>`
+        : '';
+      // Supabase 的 id 是数字，GitHub 的 id 是文件路径。编号只在 Supabase 显示。
+      const idTag = (typeof r.id === 'number' || /^\d+$/.test(String(r.id))) ? (' · #' + r.id) : '';
       return `
-        <div class="auth-profile-item" style="align-items:center" data-row-id="${r.id}">
+        <div class="auth-profile-item" style="align-items:center">
           <div style="flex:1;min-width:0">
-            <div style="font-size:13px;color:var(--text)">${_escape(modeLabel[r.mode] || r.mode || '存档')}${_escape(sz)} ${dev}</div>
-            <div style="font-size:11px;color:var(--text-secondary)">${_escape(t)} · #${r.id}</div>
+            <div style="font-size:13px;color:var(--text)">${_escape(modeLabel[r.mode] || r.mode || '存档')}${_escape(sz)}${partTag} ${dev}</div>
+            <div style="font-size:11px;color:var(--text-secondary)">${_escape(t)}${_escape(idTag)}</div>
           </div>
-          <button type="button" class="cb-restore" data-id="${r.id}" style="background:var(--accent);color:#111;border:none;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;margin-right:6px">恢复</button>
-          <button type="button" class="cb-del" data-id="${r.id}" style="background:none;border:1px solid var(--border);color:var(--text-secondary);padding:6px 10px;border-radius:7px;cursor:pointer;font-size:12px">删除</button>
+          <button type="button" class="cb-restore" data-id="${_escape(String(r.id))}" style="background:var(--accent);color:#111;border:none;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;margin-right:6px">恢复</button>
+          <button type="button" class="cb-del" data-id="${_escape(String(r.id))}" style="background:none;border:1px solid var(--border);color:var(--text-secondary);padding:6px 10px;border-radius:7px;cursor:pointer;font-size:12px">删除</button>
         </div>`;
     }).join('');
 
@@ -1212,7 +1370,7 @@ const Auth = (() => {
         if (!ok) return;
         btn.disabled = true; btn.textContent = '恢复中…';
         try {
-          await SupabaseBackup.restoreBackup(id);
+          await mod.restoreBackup(id);
           await _modal({ title: '恢复成功', desc: '数据已从云端恢复，页面将自动刷新。', okText: '好', cancelText: false });
           // reload 前兜底等一小会，确保落盘（importFromData 内已有 DB.flush，这里双保险）
           await new Promise(r => setTimeout(r, 150));
@@ -1231,8 +1389,8 @@ const Auth = (() => {
         if (!ok) return;
         btn.disabled = true;
         try {
-          await SupabaseBackup.deleteBackup(id);
-          _loadCloudList(overlay);
+          await mod.deleteBackup(id);
+          _loadCloudList(overlay, backend);
         } catch (err) {
           btn.disabled = false;
           await _modal({ title: '删除失败', desc: err.message || String(err), okText: '好', cancelText: false });
@@ -1303,7 +1461,7 @@ create policy "anon saves bucket"
           <p style="margin:0 0 10px;font-size:12px">把这两个填回上一页，点「测试连接」，变绿就成功了。</p>
 
           <p style="margin:10px 0 4px;color:var(--danger)"><b>注意事项</b></p>
-          <p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary)">· 单个备份压缩后需小于 <b>50MB</b>（免费版限制）。带图存档容易超，可先清理图片、改用轻量/纯文字，或超大存档用本地导出。</p>
+          <p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary)">· 单个备份压缩后需小于 <b>50MB</b>（免费版限制）。带图存档容易超，可先清理图片、改用轻量/纯文字，或超大存档改用 GitHub 云备份 / 用「导出存档」保存到本机。</p>
           <p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary)">· 每个人的 URL 和 key 都不一样，各存各的，互相看不到。</p>
           <p style="margin:0 0 4px;font-size:12px;color:var(--text-secondary)">· <b>关于安全：</b>anon key 设计成可公开，配合上面的策略，只有持 key 的人能读写你的备份——不把 key 发出去就只有你能访问。存档桶为私有，不会被公开。key 若泄露，去 Supabase 后台轮换即可。</p>
           <p style="margin:0;font-size:12px;color:var(--text-secondary)">· <b>别误点删项目：</b>项目设置里的 Delete project 是删掉整个数据库，和这里的操作无关，不要点。</p>
@@ -1330,6 +1488,52 @@ create policy "anon saves bucket"
       }
       setTimeout(() => { btn.textContent = '复制 SQL'; }, 2000);
     });
+  }
+
+  function _showGithubGuide() {
+    const existing = document.getElementById('cb-guide-overlay');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'cb-guide-overlay';
+    overlay.className = 'modal';
+    overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;z-index:100001';
+    overlay.innerHTML = `
+      <div class="modal-content" style="max-width:460px;max-height:88vh;overflow-y:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <h3 style="margin:0">GitHub 配置教程</h3>
+          <button type="button" id="cbg-close" style="background:none;border:none;color:var(--text-secondary);font-size:22px;line-height:1;cursor:pointer;padding:0 4px">×</button>
+        </div>
+        <div style="font-size:13px;color:var(--text);line-height:1.75">
+          <p style="margin:0 0 6px;color:var(--text-secondary);font-size:12px">GitHub 是免费的代码/文件托管服务，容量比 Supabase 宽松（单文件上限 100MB）。下面照做即可，全程约 5 分钟。</p>
+
+          <p style="margin:10px 0 4px"><b>第 1 步 · 注册并建仓库</b></p>
+          <p style="margin:0 0 6px;font-size:12px">打开 <a href="https://github.com" target="_blank" style="color:var(--accent)">github.com</a>，注册登录。</p>
+          <p style="margin:0 0 6px;font-size:12px">① 点右上角 <b>+ → New repository</b>。</p>
+          <p style="margin:0 0 6px;font-size:12px">② <b>Repository name</b> 用<b>英文</b>，比如 <code>tianshu-saves</code>。<b>别用中文</b>，中文仓库名会导致备份连接失败。</p>
+          <p style="margin:0 0 6px;font-size:12px">③ 选 <b>Private（私有）</b>——这样只有你自己能看到存档。</p>
+          <p style="margin:0 0 6px;font-size:12px">④ 勾选 <b>Add a README file</b>（让仓库非空，否则后续接口会 404）。</p>
+          <p style="margin:0 0 10px;font-size:12px">⑤ 点 <b>Create repository</b>。记住你的 <b>用户名</b> 和 <b>仓库名</b>，等下要填。</p>
+
+          <p style="margin:10px 0 4px"><b>第 2 步 · 生成访问令牌（Token）</b></p>
+          <p style="margin:0 0 6px;font-size:12px">打开 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" style="color:var(--accent)">令牌生成页</a>（Fine-grained token）。</p>
+          <p style="margin:0 0 6px;font-size:12px">① <b>Token name</b>：随便填，如 <code>tianshu</code>。</p>
+          <p style="margin:0 0 6px;font-size:12px">② <b>Expiration（有效期）</b>：建议选 <b>No expiration（永不过期）</b>，省得到期后备份失效。</p>
+          <p style="margin:0 0 6px;font-size:12px">③ <b>Repository access</b>：选 <b>Only select repositories</b>，然后选上你刚建的那个仓库。</p>
+          <p style="margin:0 0 6px;font-size:12px">④ <b>Permissions → Repository permissions</b>：找到 <b>Contents</b>，把它设为 <b>Read and write（读写）</b>。这一项是必须的。</p>
+          <p style="margin:0 0 6px;font-size:12px">⑤ 拉到底点 <b>Generate token</b>，页面会显示一长串 <code>github_pat_...</code>，<b>马上复制</b>（只显示这一次，刷新就没了）。</p>
+          <p style="margin:0 0 10px;font-size:12px">把 <b>用户名 / 仓库名 / Token</b> 填回上一页，点「测试连接」，变绿就成功了。</p>
+
+          <p style="margin:10px 0 4px;color:var(--danger)"><b>注意事项</b></p>
+          <p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary)">· <b>Token 是敏感凭证</b>，相当于你仓库的钥匙，<b>千万别发给别人、别贴到聊天里</b>。它只保存在你自己的设备上。</p>
+          <p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary)">· 万一 Token 泄露，去 <a href="https://github.com/settings/tokens" target="_blank" style="color:var(--accent)">令牌管理页</a> 删掉重新生成即可。</p>
+          <p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary)">· 仓库设为 <b>私有</b> 后，别人拿不到你的存档；即使公开，没有写权限的人也删不了、改不了。</p>
+          <p style="margin:0;font-size:12px;color:var(--text-secondary)">· 备份文件存在仓库的 <code>saves/</code> 目录，每次备份是一个新文件，可在这里的列表里管理。</p>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#cbg-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
   }
 
   function _modal(opts) {
