@@ -357,6 +357,7 @@ const Tools = (() => {
     { type:'function', function:{ name:'list_cards', description:'列出当前对话可编辑的单人卡（单人模式主角卡 + 对话级挂载的常驻角色卡）。修改前用来确认有哪些卡、各自的 id/名称。', parameters:{ type:'object', properties:{}, required:[] } }},
     { type:'function', function:{ name:'read_card', description:'读取单人卡的可编辑文本字段。当前对话只有一张可编辑卡时可不传 card；多张时用 card 指定名称或 id。', parameters:{ type:'object', properties:{ card:{ type:'string', description:'要读的卡名称或 id；只有一张卡时可省略' } }, required:[] } }},
     { type:'function', function:{ name:'update_card', description:'修改单人卡的 name/aliases/detail/firstMes/mesExample。仅在用户明确要求修改时使用；写入前会保存回滚快照。当前对话多张可编辑卡时必须用 card 指定改哪张。', parameters:{ type:'object', properties:{ card:{ type:'string', description:'要改的卡名称或 id（用于定位，不会被写入）；只有一张卡时可省略' }, name:{ type:'string', description:'新角色名' }, aliases:{ type:'string' }, detail:{ type:'string' }, firstMes:{ type:'string' }, mesExample:{ type:'string' } }, required:[] } }},
+ { type:'function', function:{ name:'create_card', description:'新建一张单人卡，并自动挂载到当前对话作为常驻角色（挂载后可用 list_cards/read_card 看到、update_card 继续改）。仅在用户明确要求新增角色时使用；可用 undo_last_edit 撤销（撤销＝删卡并摘除挂载）。', parameters:{ type:'object', properties:{ name:{ type:'string', description:'角色名（必填）' }, aliases:{ type:'string', description:'别名，逗号分隔，可空' }, detail:{ type:'string', description:'角色设定详情，可空（可稍后用 update_card 补）' }, firstMes:{ type:'string', description:'开场白，可空' }, mesExample:{ type:'string', description:'对话示例，可空' } }, required:['name'] } }},
     { type:'function', function:{ name:'read_gameplay_config', description:'读取当前世界观的「玩法配置」JSON。玩法配置涵盖：属性系统(gameplay.globalAttrs 全局属性 / gameplay.characterAttrs 角色属性模板)、任务系统(gameplay.taskSystem)、历法系统(gameplay.calendarSystem)，以及全部手机 App 配置(phoneApps：takeout/shop 商城、forum 论坛、radio 电台含分类与标签、video.liveCats 直播品类、reading 阅读等)。只读。改之前必须先 read 看清结构和数组下标，再用 update_gameplay_config 按路径精确修改。', parameters:{ type:'object', properties:{ section:{ type:'string', description:'要读的配置段点路径，例如 "gameplay"、"gameplay.taskSystem"、"gameplay.calendarSystem"、"phoneApps"、"phoneApps.radio"、"phoneApps.radio.categories"、"phoneApps.video.liveCats"。不传则返回 gameplay + phoneApps 全部。' } }, required:[] } }},
     { type:'function', function:{ name:'update_gameplay_config', description:'按点路径精确修改玩法配置里的某一个字段/数组元素。仅在用户明确要求修改玩法/手机配置/属性/任务/历法时使用；写入前会保存整份玩法快照，可用 undo_last_edit 回滚。用法：先 read_gameplay_config 看清结构与下标，再指定 path + value。电台标签玩法 plays 取值 ["mail","vote","request","call","lottery","divination"]，renewMode 取值 "unit"/"serial"/"free"；直播品类 plays 取值 ["call","pk","cart"]。安全限制：只能修改已存在的字段或往已存在的数组末尾追加(在 path 末尾用 "[]" 表示 push)，不能把数组/对象整体替换成基本类型。', parameters:{ type:'object', properties:{ path:{ type:'string', description:'点路径，根从 gameplay 或 phoneApps 开始。改字段例："phoneApps.radio.categories.0.tags.1.plays"、"gameplay.calendarSystem.daysPerWeek"。往数组追加例："phoneApps.video.liveCats.categories[]"。' }, value:{ description:'新值，类型需与目标匹配（字符串/数字/布尔/数组/对象）。追加(path 以 []结尾)时 value 是要 push 的新元素。' } }, required:['path','value'] } }},
     { type:'function', function:{ name:'list_event_settings', description:'列出当前世界观的剧情事件（w.events）：独立事件 + 事件链。返回每个事件的 id/name/triggerType/keys/completeKey/chainId/chainName，以及现有事件链汇总(chains)。修改前先用它定位 id 和 chainId。', parameters:{ type:'object', properties:{ chainId:{ type:'string', description:'只列某条事件链的节点；不传则列全部' } }, required:[] } }},
@@ -1223,6 +1224,31 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       if (typeof SingleCard !== 'undefined' && SingleCard.save) await SingleCard.save(got.card); else await DB.put('singleCards', got.card);
       return OK({ success:true, id:got.id, message:`单人卡「${got.card.name||got.id}」已修改；可用 undo_last_edit 回滚。` });
     },
+    async create_card(args) {
+      const name = (args && typeof args.name === 'string') ? args.name.trim() : '';
+      if (!name) return ERR('缺少角色名 name');
+      // 组卡对象（不带 id，SingleCard.save 会自动生成 sc_xxx + created）
+      const card = {
+        name,
+        aliases: (args && typeof args.aliases === 'string') ? args.aliases : '',
+        detail: (args && typeof args.detail === 'string') ? args.detail : '',
+        firstMes: (args && typeof args.firstMes === 'string') ? args.firstMes : '',
+        mesExample: (args && typeof args.mesExample === 'string') ? args.mesExample : ''
+      };
+      if (typeof SingleCard !== 'undefined' && SingleCard.save) await SingleCard.save(card);
+      else { card.id = 'sc_' + Utils.uuid(); card.created = Date.now(); await DB.put('singleCards', card); }
+      if (!card.id) return ERR('建卡失败');
+      // 自动挂载到当前对话作为常驻角色（结构对齐 attachedChars：{ type, id }）
+      const conv = _currentConv();
+      if (!conv) return ERR('当前没有可挂载的对话');
+      if (!Array.isArray(conv.attachedChars)) conv.attachedChars = [];
+      if (!conv.attachedChars.some(e => e && e.type === 'card' && e.id === card.id)) {
+        conv.attachedChars.push({ type: 'card', id: card.id });
+      }
+      await _saveConvs();
+      await _pushEditUndo({ type:'card_create', cardId:card.id, convId:conv.id, label:`新建单人卡:${card.name}` });
+      return OK({ success:true, id:card.id, name:card.name, message:`已新建单人卡「${card.name}」并挂载为当前对话的常驻角色；可用 update_card 继续补充设定，或 undo_last_edit 撤销（删卡并摘除挂载）。` });
+    },
     async read_gameplay_config(args) {
       const got = await _getWritableWorldview();
       if (!got) return ERR('当前没有可写入的世界观');
@@ -1324,7 +1350,16 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       } else if (u.type === 'card_update') {
         const before = _clone(u.before); if (!before) return ERR('缺少单人卡快照');
         if (typeof SingleCard !== 'undefined' && SingleCard.save) await SingleCard.save(before); else await DB.put('singleCards', before);
-      } else if (u.type === 'gameplay_config') {
+      } else if (u.type === 'card_create') {
+        // 撤销新建：删卡 + 摘除挂载
+        try {
+          if (typeof SingleCard !== 'undefined' && SingleCard.remove) await SingleCard.remove(u.cardId);
+          else await DB.del('singleCards', u.cardId);
+        } catch(_) {}
+        const c2 = (u.convId && typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === u.convId) : conv;
+        if (c2 && Array.isArray(c2.attachedChars)) {
+          c2.attachedChars = c2.attachedChars.filter(e => !(e && e.type === 'card' && e.id === u.cardId));
+        }
         const wv = await DB.get('worldviews', u.worldviewId); if (!wv) return ERR('找不到要回滚的世界观');
         if (u.before && typeof u.before === 'object') {
           wv.gameplay = _clone(u.before.gameplay) || {};

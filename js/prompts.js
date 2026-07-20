@@ -8,6 +8,9 @@ const Prompts = (() => {
   let searchQuery = ''; // 搜索关键词
   let promptManageMode = false;
   let promptSelectedIds = new Set();
+  // 当前编辑中的作用域集合（scopes）；空集合语义=全选（向下兼容老数据）
+  let _editScopes = new Set(['chat']);
+  const _ALL_SCOPES = ['chat', 'backstage', 'phone'];
 
   async function getAll() {
     const data = await DB.get('gameState', STORE_KEY);
@@ -44,7 +47,7 @@ const Prompts = (() => {
     editingId = null;
     showEditModal({
       name: '', group: '默认', enabled: true,
-      position: 'system_top', depth: 0, content: ''
+      position: 'system_top', depth: 0, content: '', scopes: ['chat']
     });
   }
 
@@ -62,12 +65,35 @@ const Prompts = (() => {
     document.getElementById('pe-group').value = data.group || '默认';
     document.getElementById('pe-depth').value = data.depth || 0;
     document.getElementById('pe-content').value = data.content || '';
+    // 作用域：老数据无 scopes 字段=全选（向下兼容）；新建默认 ['chat']
+    if (Array.isArray(data.scopes)) {
+      _editScopes = new Set(data.scopes.filter(s => _ALL_SCOPES.includes(s)));
+    } else {
+      _editScopes = new Set(_ALL_SCOPES); // 老数据兼容：全选
+    }
+    _renderScopeTags();
     // 设置自定义下拉菜单
     _selectRole(data.role || 'system', false);
     _selectPosition(data.position || 'system_top', false);
     modal.classList.remove('hidden');
   }
 
+  function _renderScopeTags() {
+    document.querySelectorAll('#pe-scope-tags .pe-scope-tag').forEach(btn => {
+      const sc = btn.getAttribute('data-scope');
+      btn.classList.toggle('active', _editScopes.has(sc));
+    });
+  }
+
+  function _toggleScope(sc) {
+    if (!_ALL_SCOPES.includes(sc)) return;
+    if (_editScopes.has(sc)) {
+      _editScopes.delete(sc);
+    } else {
+      _editScopes.add(sc);
+    }
+    _renderScopeTags();
+  }
   const _positionOptions = {
     system_top: { label: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> 系统顶部' },
     system_bottom: { label: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg> 系统底部' },
@@ -171,7 +197,8 @@ const Prompts = (() => {
       depth: parseInt(document.getElementById('pe-depth').value) || 0,
       // role 仅对 depth 位置有意义；顶部/底部本质是 system 提示拼接，强制 system
       role: _pos === 'depth' ? (document.getElementById('pe-role').value || 'system') : 'system',
-      content: document.getElementById('pe-content').value.trim()
+      content: document.getElementById('pe-content').value.trim(),
+      scopes: Array.from(_editScopes)
     };
 
     if (editingId) {
@@ -252,7 +279,7 @@ const Prompts = (() => {
     return out;
   }
 
-  async function buildInjections() {
+  async function buildInjections(sceneKind) {
     const list = await getAll();
     const overrides = await _getConvOverrides();
     const result = { systemTop: [], systemBottom: [], depths: {} };
@@ -260,12 +287,19 @@ const Prompts = (() => {
       // 对话覆盖优先，没有覆盖用全局值
       const isEnabled = overrides.hasOwnProperty(p.id) ? overrides[p.id] : p.enabled;
       if (!isEnabled || !p.content) continue;
+      // 作用域过滤：无 scopes 字段=全作用域（老数据兼容）；传了 sceneKind 才过滤
+      if (sceneKind && Array.isArray(p.scopes)) {
+        if (!p.scopes.includes(sceneKind)) continue;
+      }
       const content = await _resolveVars(p.content);
-      if (p.position === 'system_top') {
+      // phone 场景没有逐条对话消息结构：depth 降级为 system_bottom
+      let pos = p.position;
+      if (sceneKind === 'phone' && pos === 'depth') pos = 'system_bottom';
+      if (pos === 'system_top') {
         result.systemTop.push(content);
-      } else if (p.position === 'system_bottom') {
+      } else if (pos === 'system_bottom') {
         result.systemBottom.push(content);
-      } else if (p.position === 'depth') {
+      } else if (pos === 'depth') {
         const d = parseInt(p.depth) || 0;
         if (!result.depths[d]) result.depths[d] = [];
         // depth 注入支持 role（system/user/assistant），默认 system
@@ -314,6 +348,11 @@ const Prompts = (() => {
           ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg> 底部'
           : `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 深度${p.depth}`;
         const isSelected = promptSelectedIds.has(p.id);
+        const _scMap = { chat: '主线', backstage: '后台', phone: '手机聊天' };
+        const _scArr = Array.isArray(p.scopes) ? p.scopes : _ALL_SCOPES;
+        const scopeLabel = (_scArr.length === _ALL_SCOPES.length)
+          ? '全部'
+          : _scArr.map(s => _scMap[s]).filter(Boolean).join('/');
         html += `
           <div class="card" style="${p.enabled ? '' : 'opacity:0.4'};display:flex;flex-direction:column;gap:4px;padding:12px;background:var(--bg-tertiary);cursor:${promptManageMode ? 'default' : 'pointer'}" onclick="${promptManageMode ? `Prompts.togglePromptSelect('${p.id}')` : `Prompts.edit('${p.id}')`}">
             <div style="display:flex;align-items:center;gap:8px">
@@ -326,6 +365,7 @@ const Prompts = (() => {
 <span class="circle-check-ui"></span>
 </span>`}
               <h3 style="flex:1;margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(p.name)}</h3>
+              <span style="font-size:10px;color:var(--accent);background:rgba(0,0,0,0.2);padding:1px 6px;border-radius:8px;white-space:nowrap;flex-shrink:0">${scopeLabel}</span>
               <span style="font-size:11px;color:var(--text-secondary);white-space:nowrap;display:flex;align-items:center;gap:3px">${posLabel}</span>
             </div>
             <p style="margin:0;font-size:11px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml((p.content || '').substring(0, 80))}${(p.content || '').length > 80 ? '...' : ''}</p>
@@ -731,6 +771,6 @@ const Prompts = (() => {
   return { getAll, add, edit, saveEdit, closeEdit, remove, toggle, buildInjections, render, getGroups, switchGroup, search,
     togglePromptSelect, togglePromptManageMode, exitPromptManageMode, batchDeletePrompts,
     togglePromptSelectAll,
-    _togglePositionDropdown, _selectPosition, _toggleRoleDropdown, _selectRole, importPreset, exportPreset, toggleMenu,
+    _togglePositionDropdown, _selectPosition, _toggleRoleDropdown, _selectRole, _toggleScope, importPreset, exportPreset, toggleMenu,
     openConvOverrideModal, saveConvOverrides, resetConvOverrides, closeConvOverrideModal, _toggleOverride, _switchOverrideGroup, _editFromOverride };
 })();

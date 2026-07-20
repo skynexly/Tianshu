@@ -325,6 +325,12 @@ const Utils = (() => {
     raw = raw.replace(groupCreateBlockMatch[0], '').trim();
   }
 
+  // 好友申请标记：```friendrequest 块从正文剥离（前端单独检测，给被删联系人挂申请并强开手机）
+  const friendReqBlockMatch = raw.match(/```friendrequest\s*\n?([\s\S]*?)```/i);
+  if (friendReqBlockMatch) {
+    raw = raw.replace(friendReqBlockMatch[0], '').trim();
+  }
+
   // 邮件回信信号：```mail_reply 块从正文剥离（前端单独检测并后台生成回信）
   let mailReplyMatch;
   const mailReplyRe = /```mail_reply\s*\n?([\s\S]*?)```/gi;

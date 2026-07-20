@@ -633,7 +633,7 @@ const Chat = (() => {
     // 1. 剥离 <think>/<thinking> 思考链
     s = s.replace(/<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi, '');
     // 2. 剥离所有系统格式代码块（status/relation/task/tasks/custom-attrs/chat/phone-lock/homecoming/call/prison-all）
-  s = s.replace(/```(?:status|relation|tasks?|custom-attrs|chat|phone-lock|homecoming|call|prison-all)\s*\n?[\s\S]*?```/gi, '');
+  s = s.replace(/```(?:status|relation|tasks?|custom-attrs|chat|phone-lock|homecoming|call|prison-all|friendrequest)\s*\n?[\s\S]*?```/gi, '');
     // 3. 剥离"第X部分 — XXX："格式标签行
     s = s.replace(/^[ \t]*第[一二三四五六七八九十]+部分\s*[—\-－]\s*[^\n]*$/gm, '');
     // 4. 清理残留的孤儿分隔符和多余空行
@@ -1273,7 +1273,7 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
 }
 
     // 6. 自定义提示词注入（system_top和system_bottom）
-    const injections = await Prompts.buildInjections();
+    const injections = await Prompts.buildInjections('chat');
     if (injections.systemTop.length > 0) {
       systemParts.unshift(...injections.systemTop);
     }
@@ -1411,6 +1411,13 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
         ? '\n\n【触发已有群聊】当剧情里出现某个已有群会自然冒消息的契机（到饭点了、放假了、群里有人会就某件事开聊、发生了和这个群相关的事），可以输出一个 ```groupchat 块给出信号：\n```groupchat\n{"group":"群名（必须是上面列出的群之一）","topic":"此刻这个群大概会聊什么的简短描述"}\n```\n- group 必须精确匹配上面已有的群名之一，不要写不存在的群。\n- topic 只是给系统的软提示，描述这一刻群里大概的话题或氛围即可（如"周五下班，群里在约周末爬山"），不用写具体台词，系统会据此生成群消息。\n- 没有合适契机就不要输出，不必每轮都有。一条回复最多一个 ```groupchat 块。'
         : '';
       systemParts.push('[群聊能力]\n玩家手机里有微信式的群聊。当剧情发展到"某个群此刻该热闹起来"，或"玩家被拉进一个新群"时，你可以输出对应的代码块来让群聊在手机里发生。' + groupListSection + triggerSection + '\n\n【创建新群】当剧情出现"玩家被拉进一个新群"的情节（刚入职被拉进部门群、加入某个兴趣小组、亲友建了个家庭群等），可以输出一个 ```groupcreate 块来建群：\n```groupcreate\n{\n  "name":"群名",\n  "desc":"一句话群简介",\n  "members":["已知角色名"],\n  "extras":[{"name":"新成员名","persona":"这个新成员的简短人设，一两句"}],\n  "firstTopic":"建群后群里第一波消息大概聊什么（可选）"\n}\n```\n- members 填**剧情/资料里已经存在的角色**（玩家认识的真人），系统会把他们作为正式成员拉进群。\n- extras 填**这个群里新出现、之前没登场过的路人成员**（比如新同事、没见过的组长），给个名字和一两句人设即可，系统会把他们作为群内路人。一个新群通常有几个到十几个成员，按场景合理设定，别太多。\n- firstTopic 可选，填了的话建群后群里会立刻冒出第一波消息（比如欢迎新人）；不需要立刻热闹就留空。\n- 只在剧情确实发生"进新群"时才用，不要凭空建群。一条回复最多一个 ```groupcreate 块。\n\n以上群聊代码块都放在回复末尾，不在正文中穿插。');
+    }
+
+    // 7c'. 被删好友：只要存在被删除的联系人，每轮注入（不依赖开关，联系人被删本身就是状态）
+    if (typeof Phone !== 'undefined' && Phone.buildDeletedContactsBlock) {
+      let delBlock = '';
+      try { delBlock = Phone.buildDeletedContactsBlock({ callEnabled: convSettings.callEnabled, groupChatEnabled: convSettings.groupChatEnabled }); } catch(_) {}
+      if (delBlock && delBlock.trim()) systemParts.push(delBlock);
     }
 
     // 7d. 邮件·待回复：玩家寄出的信在等回音，由主线判断"何时回、谁回"
@@ -2625,6 +2632,8 @@ renderContent = renderContent.replace(/```mail_reply\s*[\s\S]*?```/gi, '');
 renderContent = renderContent.replace(/```mail_reply[\s\S]*$/i, '');
 renderContent = renderContent.replace(/```mail_noreply\s*[\s\S]*?```/gi, '');
 renderContent = renderContent.replace(/```mail_noreply[\s\S]*$/i, '');
+renderContent = renderContent.replace(/```friendrequest\s*[\s\S]*?```/gi, '');
+renderContent = renderContent.replace(/```friendrequest[\s\S]*$/i, '');
           renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
           contentEl.innerHTML = Markdown.render(renderContent, { streaming: true });
           if (convSettings.stream) contentEl.classList.add('streaming-cursor');
@@ -3026,6 +3035,16 @@ renderContent = renderContent.replace(/```mail_noreply[\s\S]*$/i, '');
         }
       }
     } catch(e) { console.warn('[Chat] 群聊标记处理失败', e); }
+
+    // 主线好友申请：检测 ```friendrequest 块，给被删联系人挂申请并强制打开手机窗口
+    try {
+      if (typeof Phone !== 'undefined' && Phone.handleMainlineFriendRequestTag
+        && /```friendrequest[\s\S]*?```/.test(fullContent)) {
+        setTimeout(() => {
+          try { Phone.handleMainlineFriendRequestTag(fullContent); } catch(_) {}
+        }, 3000);
+      }
+    } catch(e) { console.warn('[Chat] 好友申请标记处理失败', e); }
 
     // 主线邮件：检测 ```mail_reply 块，后台生成对方回信（无需开关，有待回信+信号即触发）
     try {
