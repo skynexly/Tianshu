@@ -160,6 +160,7 @@ var StatusBarTheme = (() => {
       realCss = realCss.replace(/\.sb-custom-attrs-section/g, '#sb-custom-attrs');
       realCss = realCss.replace(/\.sb-character-attrs-section/g, '#sb-character-attrs');
       realCss = realCss.replace(/\.sb-task-system-section/g, '#sb-task-system');
+      realCss = realCss.replace(/\.sb-status-components-section/g, '#sb-status-components');
       // 折叠态锁定基础款：剔除任何命中折叠态的规则
       realCss = _stripCollapsedRules(realCss);
       // 作用域兜底：把裸标签/通用选择器强制限定到状态栏内，防止泄漏改坏全局界面
@@ -567,6 +568,7 @@ var StatusBarTheme = (() => {
       fullCss = fullCss.replace(/#sb-custom-attrs\b/g, '.sb-custom-attrs-section');
       fullCss = fullCss.replace(/#sb-character-attrs\b/g, '.sb-character-attrs-section');
       fullCss = fullCss.replace(/#sb-task-system\b/g, '.sb-task-system-section');
+      fullCss = fullCss.replace(/#sb-status-components\b/g, '.sb-status-components-section');
       // .sb-expanded-scroll → .sb-root（Shadow 内的滚动容器）
       fullCss = fullCss.replace(/\.sb-expanded-scroll\b/g, '.sb-root');
       // .sb-expanded-overlay → :host（Shadow 宿主本身）
@@ -1039,8 +1041,18 @@ var StatusBarTheme = (() => {
         draft.messages[aiMsgIdx].content = fullContent;
         draft.messages[aiMsgIdx].loading = false;
         
-// 尝试从 AI 回复中提取 CSS
-            const extractedCss = _extractCssFromResponse(fullContent);
+// 尝试从 AI 回复中提取 CSS —— 先看有没有增量 patch，再看全量
+            let extractedCss = null;
+            const patchText = _extractCssPatchFromResponse(fullContent);
+            if (patchText !== null) {
+              // 增量编辑：把 patch 合并进当前 CSS
+              const merged = _applyCssPatch(draft.currentCss || theme.css || '', patchText);
+              if (merged !== null) extractedCss = merged;
+            }
+            if (extractedCss === null) {
+              // 无 patch 或 patch 无效，回退到全量提取
+              extractedCss = _extractCssFromResponse(fullContent);
+            }
             if (extractedCss !== null) {
               // ── 撤销历史：保存旧 CSS（最多5步）──
               if (!draft.cssHistory) draft.cssHistory = [];
@@ -1177,12 +1189,65 @@ var StatusBarTheme = (() => {
               &lt;div class="sb-character-attr-row"&gt;
                 &lt;span&gt;{属性名}&lt;/span&gt;&lt;b&gt;{值} / {最大值}&lt;/b&gt;
               &lt;/div&gt;
-              &lt;div class="sb-character-attr-bar"&gt;&lt;i style="width:{百分比}%"&gt;&lt;/i&gt;&lt;/div&gt;
+&lt;div class="sb-character-attr-bar"&gt;&lt;i style="width:{百分比}%"&gt;&lt;/i&gt;&lt;/div&gt;
             &lt;/div&gt;
           &lt;/div&gt;
         &lt;/div&gt;
       &lt;/div&gt;
     &lt;/div&gt;
+    
+      &lt;!-- 自定义状态栏组件（世界观可配置，玩家可自由增删；同类型会重复出现多个，共享同一套 class）--&gt;
+      &lt;div class="sb-status-components-section"&gt;
+        &lt;!-- 文本组件：标题 + 整段文字卡（同类型可有多个，靠 .sb-comp-text 之间的间距排布）--&gt;
+        &lt;div class="sb-comp-block sb-comp-text"&gt;
+          &lt;div class="sb-comp-title"&gt;{组件标题}&lt;/div&gt;
+          &lt;div class="sb-comp-textcard"&gt;{整段文字}&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class="sb-comp-block sb-comp-text"&gt;
+          &lt;div class="sb-comp-title"&gt;{另一个文本组件标题}&lt;/div&gt;
+          &lt;div class="sb-comp-textcard"&gt;{整段文字}&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;!-- 用户状态组件：描述玩家自身的属性，一个属性一个组件（如"声望""八卦"），可有多个 --&gt;
+        &lt;div class="sb-comp-block sb-comp-userrole"&gt;
+          &lt;div class="sb-comp-userrow"&gt;
+            &lt;div class="sb-comp-userrow-label"&gt;{属性标题}&lt;/div&gt;
+            &lt;div class="sb-comp-userrow-val"&gt;{值}&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class="sb-comp-block sb-comp-userrole"&gt;
+          &lt;div class="sb-comp-userrow"&gt;
+            &lt;div class="sb-comp-userrow-label"&gt;{另一个属性标题}&lt;/div&gt;
+            &lt;div class="sb-comp-userrow-val"&gt;{值}&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;!-- 数值组件：标题 + 数值（同类型可有多个，卡片相邻排布）--&gt;
+        &lt;div class="sb-comp-block sb-comp-number"&gt;
+          &lt;div class="sb-comp-numcard"&gt;
+            &lt;div class="sb-comp-numcard-name"&gt;{组件标题}&lt;/div&gt;
+            &lt;div class="sb-comp-numcard-val"&gt;{数值}&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class="sb-comp-block sb-comp-number"&gt;
+          &lt;div class="sb-comp-numcard"&gt;
+            &lt;div class="sb-comp-numcard-name"&gt;{另一个数值组件标题}&lt;/div&gt;
+            &lt;div class="sb-comp-numcard-val"&gt;{数值}&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;!-- 相关角色组件：标题 + 角色卡列表（一个角色一张卡，同一组件里可有多张卡；横滑时 .sb-comp-rolelist 带 .carousel）--&gt;
+        &lt;div class="sb-comp-block sb-comp-charrole"&gt;
+          &lt;div class="sb-comp-title"&gt;{组件标题}&lt;/div&gt;
+          &lt;div class="sb-comp-rolelist"&gt;
+            &lt;div class="sb-comp-rolecard"&gt;
+              &lt;div class="sb-comp-rolecard-name"&gt;{角色A}&lt;/div&gt;
+              &lt;div class="sb-comp-rolecard-val"&gt;{内容}&lt;/div&gt;
+            &lt;/div&gt;
+            &lt;div class="sb-comp-rolecard"&gt;
+              &lt;div class="sb-comp-rolecard-name"&gt;{角色B}&lt;/div&gt;
+              &lt;div class="sb-comp-rolecard-val"&gt;{内容}&lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
     
       &lt;!-- NPC 区域 --&gt;
       &lt;div class="sb-npcs-accordion"&gt;
@@ -1223,6 +1288,31 @@ var StatusBarTheme = (() => {
 &lt;/div&gt;
 \`\`\`
 
+## 🧩 自定义状态栏组件（用户常用标题称呼，你要按类型对应 class）
+状态栏里有一块「自定义组件区」（\`.sb-status-components-section\`），由玩家自由配置内容。它固定分四种类型，每种类型的所有组件**共享同一套 class**（改一处 = 改这一类的全部组件，无法单独只改其中某一个）。用户可能会用组件的标题（如"传闻卡片""声望""异能等级""心声"）来称呼它们——你需要根据它的内容特征判断属于下面哪一类，再改对应 class：
+
+- **文本组件**（一段叙述性文字，如"传闻""背景""日志"）
+  外层 \`.sb-comp-text\`；标题 \`.sb-comp-title\`；文字卡片 \`.sb-comp-textcard\`
+- **用户状态组件**（描述玩家自身的状态，如"声望""身份""好感"）
+  外层 \`.sb-comp-userrole\`；每行 \`.sb-comp-userrow\`；标题 \`.sb-comp-userrow-label\`；值 \`.sb-comp-userrow-val\`
+- **数值组件**（一个标签配一个数值，如"异能等级""金币""血量"）
+  外层 \`.sb-comp-number\`；卡片 \`.sb-comp-numcard\`；名称 \`.sb-comp-numcard-name\`；数值 \`.sb-comp-numcard-val\`
+- **相关角色组件**（按角色分卡的信息，如"心声""关系"，一个角色一张卡）
+  外层 \`.sb-comp-charrole\`；标题 \`.sb-comp-title\`；卡片列表 \`.sb-comp-rolelist\`（横滑时带 \`.carousel\`）；单卡 \`.sb-comp-rolecard\`；角色名 \`.sb-comp-rolecard-name\`；内容 \`.sb-comp-rolecard-val\`
+
+**重要提醒**：
+- 同类型组件共用一套 class，所以"把传闻改大、把八卦改小"这种**只改一个、不动同类其它**的需求做不到。如果用户提出，请明确告诉他：这一类组件是统一样式，改的是整类。
+- 文本组件和相关角色组件的标题都用 \`.sb-comp-title\`，改它会同时影响这两类的标题。
+- 这些组件可能某些世界观没配（区块为空不显示），写 CSS 不会报错，放心写。
+- **⚠️ 这些组件在当前模板下已经有预置样式**（拟态风：用户状态组件 \`.sb-comp-userrole\` 有主题色**虚线边框**+透明底+圆角；数值卡 \`.sb-comp-numcard\` 有圆角边框；角色卡 \`.sb-comp-rolecard\` 有卡片底+圆角。终端风：所有组件标题 \`.sb-comp-title\` 强制**大写**；用户状态标题 \`.sb-comp-userrow-label\` 大写，且左右有 \`> \` 和 \`_\` 两个**伪元素符号**）。这些预置样式的选择器都带了 \`body[data-sb-skin="${baseTemplate}"]\` 前缀，**特异性较高**。你要修改或清除它们（比如"去掉虚线边框""不要大写""去掉那个下划线符号"），**必须写同样带前缀的选择器，或加 !important**，否则会被预置样式盖回去、看起来"没生效"。
+  - 例1（去拟态风虚线边框）：\`body[data-sb-skin="neumorph"] .sb-comp-userrole { border: none; }\`
+  - 例2（终端风取消大写）：\`body[data-sb-skin="terminal"] .sb-comp-title { text-transform: none; }\`
+  - 例3（终端风去掉标题的 \`>\` \`_\` 符号，这是**伪元素**，必须专门清）：\`body[data-sb-skin="terminal"] .sb-comp-userrow-label::before, body[data-sb-skin="terminal"] .sb-comp-userrow-label::after { content: none !important; }\`
+  - 只写 \`.sb-comp-userrole { border:none }\` 这种不带前缀的低特异性规则会无效。
+- **同类型组件的单双数差异样式**：同一类型下若有多个组件（如两个数值组件），可用 \`.sb-comp-odd\`（第 1、3、5… 个）和 \`.sb-comp-even\`（第 2、4、6… 个）区分单双数，做交替样式。这两个 class 加在组件最外层（与 \`.sb-comp-number\` 等同级），序号是**该类型内部**的计数，不受其它类型干扰。
+  - 例（双数数值卡换个背景色）：\`.sb-comp-number.sb-comp-even .sb-comp-numcard { background: var(--bg-tertiary); }\`
+  - 例（单数文本卡描边、双数不描边）：\`.sb-comp-text.sb-comp-odd .sb-comp-textcard { border: 1px solid var(--accent); }\`
+
 ## 折叠态（顶部摘要条）— 禁止修改
 折叠态（顶部那一行时间/地点摘要）保持系统基础款，**请不要为它写任何 CSS**。
 不要使用以下选择器（写了也不会生效，会被系统过滤掉）：
@@ -1230,9 +1320,27 @@ var StatusBarTheme = (() => {
 .sb-clock-main / .sb-date-sub / .sb-weather-line / .sb-region-line / .sb-place-text / .sb-chevron
 你只需要美化展开态（上面那些卡片区域）。
 
-## 输出规则
-- CSS 代码放在 \`\`\`css 代码块中
-- 每次输出完整 CSS（不是追加片段），因为会整体替换
+## 输出规则（两种模式，按改动大小选一种）
+
+**模式 1：增量编辑（默认，优先用）** —— 用于局部微调，如改颜色、字号、间距、圆角、加/删某个元素的样式。
+用 \`\`\`css-patch 代码块，每行一条操作，只写要动的部分，不要重复其它没改的规则：
+\`\`\`css-patch
+[replace] 选择器 { 新的完整声明 }
+[add] 选择器 { 声明 }
+[delete] 选择器
+\`\`\`
+- \`[replace]\`：把这个选择器**已有的规则整块替换**成新声明（选择器不存在则等同新增）
+- \`[add]\`：**新增**一条规则（若选择器已存在，等同 replace）
+- \`[delete]\`：**删掉**这个选择器的整条规则（只写选择器，不带大括号）
+- ⚠️ **选择器必须和"当前自定义 CSS"里的写法完全一致**（含 \`body[data-sb-skin="..."]\` 前缀、空格），系统按选择器全文精确匹配。写错了会当成新增而不是替换。
+- 一次可以写多条操作。
+
+**模式 2：全量输出** —— 仅用于大改造（整体换风格、从零重做、大范围重排）。
+用 \`\`\`css 代码块，输出**完整** CSS（会整体替换现有的）。
+
+**怎么选**：用户说"把 X 改成 Y""调大一点""加个边框""去掉阴影"这类局部需求 → 用 **模式 1（css-patch）**。用户说"换个全新风格""重做""整体改成 XX 感觉" → 用 **模式 2（全量 css）**。拿不准就优先用模式 1。
+
+其它：
 - 可以用 ::before / ::after 伪元素添加装饰
 - 可以附带简短说明
 - 用户只是聊天时正常回答，不必强行输出 CSS
@@ -1263,9 +1371,117 @@ ${baseTemplate === 'neumorph' || baseTemplate === 'single-default' ? `- **⚠️
 ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'}`;
   }
 
+  // ── CSS 增量编辑（css-patch）─────────────────────────────────
+  // 把一段 CSS 解析成 [{selector, block, raw}]，selector 为规范化后的选择器全文（用于精确匹配）
+  function _parseCssRules(css) {
+    const rules = [];
+    if (!css) return rules;
+    let i = 0;
+    const n = css.length;
+    while (i < n) {
+      const braceOpen = css.indexOf('{', i);
+      if (braceOpen === -1) {
+        // 剩余无规则块（可能是纯注释/空白），作为“游离片段”保留
+        const tail = css.slice(i).trim();
+        if (tail) rules.push({ selector: null, block: null, raw: css.slice(i) });
+        break;
+      }
+      const selectorRaw = css.slice(i, braceOpen);
+      // 配对 }
+      let depth = 1, j = braceOpen + 1;
+      for (; j < n; j++) {
+        if (css[j] === '{') depth++;
+        else if (css[j] === '}') { depth--; if (depth === 0) break; }
+      }
+      const raw = css.slice(i, j + 1);
+      const selector = selectorRaw.replace(/\s+/g, ' ').trim();
+      rules.push({ selector, block: css.slice(braceOpen, j + 1), raw });
+      i = j + 1;
+    }
+    return rules;
+  }
+
+  // 从 patch 文本解析操作项：[replace]/[add]/[delete] 选择器 { ... }
+  // 返回 [{op, selector, body}]，op ∈ replace|add|delete
+  function _parseCssPatch(patchText) {
+    const ops = [];
+    if (!patchText) return ops;
+    // 定位每个 [op] 标记，逐个手动提取选择器与声明块（避免正则贪婪/非贪婪陷阱）
+    const tagRe = /\[(replace|add|delete)\]/gi;
+    const marks = [];
+    let mm;
+    while ((mm = tagRe.exec(patchText)) !== null) {
+      marks.push({ op: mm[1].toLowerCase(), start: mm.index, afterTag: tagRe.lastIndex });
+    }
+    for (let k = 0; k < marks.length; k++) {
+      const { op, afterTag } = marks[k];
+      const segEnd = (k + 1 < marks.length) ? marks[k + 1].start : patchText.length;
+      const seg = patchText.slice(afterTag, segEnd);
+      const braceOpen = seg.indexOf('{');
+      if (op === 'delete') {
+        // delete 只取选择器（到 { 或行尾/段尾为止，取更早的）
+        let sel = braceOpen === -1 ? seg : seg.slice(0, braceOpen);
+        sel = sel.split('\n')[0];
+        sel = sel.replace(/\s+/g, ' ').trim();
+        if (sel) ops.push({ op, selector: sel, body: '' });
+        continue;
+      }
+      // replace / add：选择器 = [op] 到 { 之间；body = 配对花括号内容
+      if (braceOpen === -1) continue; // 无声明块，跳过
+      const selector = seg.slice(0, braceOpen).replace(/\s+/g, ' ').trim();
+      if (!selector) continue;
+      // 配对花括号
+      let depth = 1, j = braceOpen + 1;
+      const n = seg.length;
+      for (; j < n; j++) {
+        if (seg[j] === '{') depth++;
+        else if (seg[j] === '}') { depth--; if (depth === 0) break; }
+      }
+      if (depth !== 0) continue; // 花括号不配对，跳过
+      const body = seg.slice(braceOpen, j + 1).trim();
+      if (!body) continue;
+      ops.push({ op, selector, body });
+    }
+    return ops;
+  }
+
+  // 把 patch 应用到 currentCss，返回合并后的完整 CSS。精确匹配选择器全文。
+  function _applyCssPatch(currentCss, patchText) {
+    const rules = _parseCssRules(currentCss);
+    const ops = _parseCssPatch(patchText);
+    if (!ops.length) return null;
+    // 建索引：selector → rules 数组下标（可能多条同名，取第一条命中）
+    const findIdx = (sel) => rules.findIndex(r => r.selector === sel);
+    ops.forEach(({ op, selector, body }) => {
+      const idx = findIdx(selector);
+      if (op === 'delete') {
+        if (idx !== -1) rules.splice(idx, 1);
+      } else if (op === 'replace') {
+        const newRaw = `${selector} ${body}`;
+        if (idx !== -1) rules[idx] = { selector, block: body, raw: newRaw };
+        else rules.push({ selector, block: body, raw: newRaw });
+      } else if (op === 'add') {
+        const newRaw = `${selector} ${body}`;
+        if (idx !== -1) rules[idx] = { selector, block: body, raw: newRaw }; // add 命中已存在则等同替换
+        else rules.push({ selector, block: body, raw: newRaw });
+      }
+    });
+    // 重新拼接
+    return rules.map(r => r.raw.trim()).filter(Boolean).join('\n\n');
+  }
+
+  // 提取 ```css-patch ... ``` 代码块内容；没有则返回 null
+  function _extractCssPatchFromResponse(text) {
+    if (!text) return null;
+    const match = text.match(/```\s*css-patch\b[ \t]*\n?([\s\S]*?)```/i);
+    if (match && match[1] && match[1].trim()) {
+      return match[1].trim();
+    }
+    return null;
+  }
+
   function _extractCssFromResponse(text) {
     if (!text) return null;
-    // 1) 优先匹配 ```css ... ``` 代码块（宽松：大小写、语言标记后的空格/换行都兼容）
     let match = text.match(/```\s*css\b[ \t]*\n?([\s\S]*?)```/i);
     if (match && match[1] && match[1].trim()) {
       return match[1].trim();
@@ -1472,6 +1688,55 @@ ${currentCss ? '```css\n' + currentCss + '\n```' : '（暂无，从零开始）'
                 <div class="sb-character-attr-row"><span>亲密度</span><b>88 / 100</b></div>
                 <div class="sb-character-attr-bar"><i style="width:88%"></i></div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 自定义状态栏组件 -->
+      <div class="sb-status-components-section">
+        <div class="sb-comp-block sb-comp-text sb-comp-odd">
+          <div class="sb-comp-title">传闻</div>
+          <div class="sb-comp-textcard">西区迷途酒吧最近换了新的驻唱，据说声音很有辨识度。</div>
+        </div>
+        <div class="sb-comp-block sb-comp-text sb-comp-even">
+          <div class="sb-comp-title">今日事件</div>
+          <div class="sb-comp-textcard">午后下了场短暂的雨，街角的猫躲进了便利店门口。</div>
+        </div>
+        <div class="sb-comp-block sb-comp-userrole sb-comp-odd">
+          <div class="sb-comp-userrow">
+            <div class="sb-comp-userrow-label">声望</div>
+            <div class="sb-comp-userrow-val">在西区小有名气，酒吧驻唱圈子里都认得你。</div>
+          </div>
+        </div>
+        <div class="sb-comp-block sb-comp-userrole sb-comp-even">
+          <div class="sb-comp-userrow">
+            <div class="sb-comp-userrow-label">八卦</div>
+            <div class="sb-comp-userrow-val">最近总有人在打听你和糯糯的关系。</div>
+          </div>
+        </div>
+        <div class="sb-comp-block sb-comp-number sb-comp-odd">
+          <div class="sb-comp-numcard">
+            <div class="sb-comp-numcard-name">异能等级</div>
+            <div class="sb-comp-numcard-val">Lv.3</div>
+          </div>
+        </div>
+        <div class="sb-comp-block sb-comp-number sb-comp-even">
+          <div class="sb-comp-numcard">
+            <div class="sb-comp-numcard-name">金币</div>
+            <div class="sb-comp-numcard-val">1280</div>
+          </div>
+        </div>
+        <div class="sb-comp-block sb-comp-charrole sb-comp-odd">
+          <div class="sb-comp-title">心声</div>
+          <div class="sb-comp-rolelist">
+            <div class="sb-comp-rolecard">
+              <div class="sb-comp-rolecard-name">糯糯</div>
+              <div class="sb-comp-rolecard-val">今天格外黏人，一直在你身边打转。</div>
+            </div>
+            <div class="sb-comp-rolecard">
+              <div class="sb-comp-rolecard-name">阿泽</div>
+              <div class="sb-comp-rolecard-val">表面冷淡，其实一直留意着你的动向。</div>
             </div>
           </div>
         </div>

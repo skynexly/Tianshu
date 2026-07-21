@@ -9614,7 +9614,7 @@ ${shipSection}
       const items = (outfit[p.key] || []).filter(it => it && it.name);
       if (!items.length) return '';
       const names = items.map(it => `${it.name}${it.desc ? '（' + it.desc + '）' : ''}`).join('、');
-      return `${p.name}：${names}`;
+      return `${p.key}: ${names}`;
     }).filter(Boolean);
 
     const mask = document.createElement('div');
@@ -9668,11 +9668,11 @@ ${shipSection}
       }
 
       // 拼生图 prompt
-      let basePrompt = '一张人物全身立绘。';
-      if (maskRef) basePrompt += `人物外观参考：${maskRef}。`;
-      if (partLines.length) basePrompt += `当前穿着 —— ${partLines.join('；')}。`;
-      basePrompt += '单人、站姿、完整展示服装细节、背景简洁。';
-      const drawPrompt = req ? `${basePrompt}\n\n额外要求：${req}` : basePrompt;
+      let basePrompt = 'full-body character illustration. ';
+      if (maskRef) basePrompt += `Character appearance reference: ${maskRef}. `;
+      if (partLines.length) basePrompt += `Current outfit: ${partLines.join('; ')}. `;
+      basePrompt += 'Solo character, standing pose, full outfit visible, simple background.';
+      const drawPrompt = req ? `${basePrompt}\n\nAdditional requirements: ${req}` : basePrompt;
 
       const goBtn = mask.querySelector('#wardrobe-img-go');
       const oldText = goBtn.textContent;
@@ -12056,12 +12056,12 @@ ${houseDataText}`;
         const roomId = target.slice(5);
         const room = rooms.find(r => r.id === roomId);
         if (!room) { UI.showToast('房间不存在', 1500); return; }
-        const itemLines = (room.items || []).map(it => `${catName[it.category] || ''}：${it.name || ''}${it.desc ? '（' + it.desc + '）' : ''}`).join('；');
-        basePrompt = `室内设计效果图，一个${room.name || '房间'}的实景照片。${room.desc ? room.desc + '。' : ''}${itemLines ? '空间内有：' + itemLines + '。' : ''}${house.styleDesc ? '整体风格：' + house.styleDesc + '。' : ''}写实、光线自然、布局合理，无人物。`;
+        const itemLines = (room.items || []).map(it => `${it.name || ''}${it.desc ? ' (' + it.desc + ')' : ''}`).join('; ');
+        basePrompt = `Photorealistic interior design visualization of ${room.name || 'a room'}. ${room.desc ? room.desc + '. ' : ''}${itemLines ? 'Items in the room: ' + itemLines + '. ' : ''}${house.styleDesc ? 'Overall style: ' + house.styleDesc + '. ' : ''}Realistic, natural lighting, sensible layout, no people.`;
       } else {
-        basePrompt = `一栋住宅的外观或整体氛围概念图。住所名称：${house.name || '我的小屋'}。${house.address ? '地址：' + house.address + '。' : ''}${house.styleDesc ? '整体风格：' + house.styleDesc + '。' : '温馨宜居的家。'}写实、光线自然、有生活气息，无人物。`;
+        basePrompt = `Exterior or overall atmosphere concept art of a residence. Residence name: ${house.name || 'my home'}. ${house.address ? 'Address: ' + house.address + '. ' : ''}${house.styleDesc ? 'Overall style: ' + house.styleDesc + '. ' : 'A warm, comfortable home. '}Realistic, natural lighting, lived-in atmosphere, no people.`;
       }
-      const drawPrompt = req ? `${basePrompt}\n\n额外要求：${req}` : basePrompt;
+      const drawPrompt = req ? `${basePrompt}\n\nAdditional requirements: ${req}` : basePrompt;
 
       const goBtn = mask.querySelector('#cottage-img-go');
       const oldText = goBtn.textContent;

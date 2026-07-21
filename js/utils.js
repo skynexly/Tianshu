@@ -533,7 +533,13 @@ const Utils = (() => {
       time: '', weather: '',
       scene: '',
       playerOutfit: '', playerPosture: '',
-      npcs: []  // [{name, outfit, posture}]
+      npcs: [],  // [{name, outfit, posture}]
+      // v719：自定义状态栏组件收集（通用，不依赖世界观定义；渲染层再按组件定义匹配）
+      customComponents: {
+        fields: {},      // { 标题: 值 }  文本/数值组件
+        charRoles: {},   // { 角色名: { 标题: 值 } }  相关角色组件
+        userRoles: {}    // { 面具名: { 标题: 值 } }  用户状态组件
+      }
     };
     if (!text) return result;
     const npcMap = {};  // name -> {outfit, posture}
@@ -558,6 +564,9 @@ const npcM = key.match(/^(?:NPC|角色)[\-·\s]+(.+?)[\-·\s]+(衣着|姿势|out
         npcMap[name][field] = val;
         continue;
       }
+      // v719：用户状态组件 用户角色-<面具名>-自定义标题（须先于下方内置"用户角色衣着/姿势"之外的兜底；
+      // 但内置衣着/姿势用宽松 .*衣着 匹配，这里排在其后不会误吞——先判内置，再判自定义）
+      // 先处理内置字段，命中就 continue，避免落到自定义收集
       if (/^地点|location|region/i.test(key)) {
         // 地点可能是"大地点｜小地点"或"大地点·小地点"或单纯一段
         const parts = val.split(/[｜|]/);
@@ -574,17 +583,43 @@ const npcM = key.match(/^(?:NPC|角色)[\-·\s]+(.+?)[\-·\s]+(衣着|姿势|out
             result.region = val;
           }
         }
+        continue;
       } else if (/^时间|time/i.test(key)) {
-        result.time = val;
+        result.time = val; continue;
       } else if (/^天气|weather/i.test(key)) {
-        result.weather = val;
+        result.weather = val; continue;
       } else if (/^场景|scene/i.test(key)) {
-        result.scene = val;
-      } else if (/^(玩家衣着|用户角色.*衣着|user.?outfit|player.?outfit)/i.test(key)) {
-result.playerOutfit = val;
-} else if (/^(玩家姿势|用户角色.*姿势|user.?posture|player.?posture)/i.test(key)) {
-        result.playerPosture = val;
+        result.scene = val; continue;
+      } else if (/^(玩家衣着|用户角色[\-·\s].*衣着|user.?outfit|player.?outfit)/i.test(key)) {
+        result.playerOutfit = val; continue;
+      } else if (/^(玩家姿势|用户角色[\-·\s].*姿势|user.?posture|player.?posture)/i.test(key)) {
+        result.playerPosture = val; continue;
       }
+      // === v719：自定义状态栏组件收集（内置字段都没命中才走到这里）===
+      // 用户状态组件：用户角色-<面具名>-标题
+      const userRoleM = key.match(/^用户角色[\-·\s]+(.+?)[\-·\s]+(.+)$/);
+      if (userRoleM) {
+        const maskName = userRoleM[1].trim();
+        const compTitle = userRoleM[2].trim();
+        if (maskName && compTitle) {
+          if (!result.customComponents.userRoles[maskName]) result.customComponents.userRoles[maskName] = {};
+          result.customComponents.userRoles[maskName][compTitle] = val;
+          continue;
+        }
+      }
+      // 相关角色组件：角色-<角色名>-标题（NPC- 兼容）
+      const charRoleM = key.match(/^(?:NPC|角色)[\-·\s]+(.+?)[\-·\s]+(.+)$/i);
+      if (charRoleM) {
+        const roleName = charRoleM[1].trim();
+        const compTitle = charRoleM[2].trim();
+        if (roleName && compTitle) {
+          if (!result.customComponents.charRoles[roleName]) result.customComponents.charRoles[roleName] = {};
+          result.customComponents.charRoles[roleName][compTitle] = val;
+          continue;
+        }
+      }
+      // 文本/数值组件：标题：值（普通单层 key）
+      result.customComponents.fields[key] = val;
     }
     result.npcs = Object.values(npcMap).filter(n => n.outfit || n.posture);
     return result;
@@ -613,6 +648,29 @@ result.playerOutfit = val;
         ? (Array.isArray(newStatus.npcs) ? newStatus.npcs : [])
         : (newStatus.npcs && newStatus.npcs.length ? newStatus.npcs : (oldStatus.npcs || []))
     };
+    // v719：自定义状态栏组件合并——本轮 AI 输出了 status 块就以新值为准（含空），否则沿用旧值。
+    // 逐字段浅合并：新块里没出现的组件字段，保留旧值（避免 AI 漏输出某个组件就丢数据）。
+    if (statusBlockPresent) {
+      const oldCC = oldStatus.customComponents || {};
+      const newCC = newStatus.customComponents || {};
+      const _mergeLayer = (oldLayer, newLayer, twoLevel) => {
+        oldLayer = oldLayer || {}; newLayer = newLayer || {};
+        if (!twoLevel) {
+          return Object.assign({}, oldLayer, newLayer);
+        }
+        const out = {};
+        const names = new Set([...Object.keys(oldLayer), ...Object.keys(newLayer)]);
+        names.forEach(nm => { out[nm] = Object.assign({}, oldLayer[nm] || {}, newLayer[nm] || {}); });
+        return out;
+      };
+      merged.customComponents = {
+        fields: _mergeLayer(oldCC.fields, newCC.fields, false),
+        charRoles: _mergeLayer(oldCC.charRoles, newCC.charRoles, true),
+        userRoles: _mergeLayer(oldCC.userRoles, newCC.userRoles, true)
+      };
+    } else {
+      merged.customComponents = oldStatus.customComponents || newStatus.customComponents || undefined;
+    }
     return merged;
   }
 
@@ -628,15 +686,46 @@ result.playerOutfit = val;
     if (status.season) lines.push('季节：' + status.season);
     if (status.weather) lines.push('天气：' + status.weather);
     if (status.scene) lines.push('场景：' + status.scene);
-    if (status.playerOutfit) lines.push('用户角色-{{user}}-衣着：' + status.playerOutfit);
-if (status.playerPosture) lines.push('用户角色-{{user}}-姿势：' + status.playerPosture);
-(status.npcs || []).forEach(n => {
-if (!n.name) return;
-if (n.outfit) lines.push(`角色-${n.name}-衣着：${n.outfit}`);
-if (n.posture) lines.push(`角色-${n.name}-姿势：${n.posture}`);
-    });
-    return lines.join('\n');
-  }
+if (status.playerOutfit) lines.push('用户角色-{{user}}-衣着：' + status.playerOutfit);
+ if (status.playerPosture) lines.push('用户角色-{{user}}-姿势：' + status.playerPosture);
+ (status.npcs || []).forEach(n => {
+ if (!n.name) return;
+ if (n.outfit) lines.push(`角色-${n.name}-衣着：${n.outfit}`);
+ if (n.posture) lines.push(`角色-${n.name}-姿势：${n.posture}`);
+     });
+     // v719：自定义状态栏组件序列化（保证注入上下文时 AI 能看到上一轮的自定义组件值，照抄不掉字段）
+     const cc = status.customComponents;
+     if (cc && typeof cc === 'object') {
+       // 文本/数值组件：标题：值
+       if (cc.fields && typeof cc.fields === 'object') {
+         Object.keys(cc.fields).forEach(title => {
+           const v = cc.fields[title];
+           if (v !== undefined && v !== null && String(v) !== '') lines.push(`${title}：${v}`);
+         });
+       }
+       // 相关角色组件：角色-<角色名>-标题：值
+       if (cc.charRoles && typeof cc.charRoles === 'object') {
+         Object.keys(cc.charRoles).forEach(roleName => {
+           const obj = cc.charRoles[roleName] || {};
+           Object.keys(obj).forEach(title => {
+             const v = obj[title];
+             if (v !== undefined && v !== null && String(v) !== '') lines.push(`角色-${roleName}-${title}：${v}`);
+           });
+         });
+       }
+       // 用户状态组件：用户角色-<面具名>-标题：值
+       if (cc.userRoles && typeof cc.userRoles === 'object') {
+         Object.keys(cc.userRoles).forEach(maskName => {
+           const obj = cc.userRoles[maskName] || {};
+           Object.keys(obj).forEach(title => {
+             const v = obj[title];
+             if (v !== undefined && v !== null && String(v) !== '') lines.push(`用户角色-${maskName}-${title}：${v}`);
+           });
+         });
+       }
+     }
+     return lines.join('\n');
+   }
 
   function escapeHtml(str) {
     const div = document.createElement('div');
@@ -1029,7 +1118,7 @@ async function copyFromDataset(btn) {
         generating = true;
         try {
           // 加画质后缀，提升头像出图质量
-          const fullPrompt = p + '，人物头像，半身像，正脸，高质量，精致细节';
+          const fullPrompt = p + ', portrait, upper body, front-facing, high quality, detailed';
           const images = await API.generateImage(fullPrompt, { size: '1024x1024', n: 1 });
           if (!images || !images.length) throw new Error('未返回图片');
           curDataUrl = images[0];

@@ -556,16 +556,33 @@ async function cancelEdit() {
     return sc === 'all' || sc === scene;
   }
 
+  // 判断一条规则的作用时机。timing 缺省='context'（向下兼容：老规则回写上下文）。
+  //   'context'：替换后回写 aiMsg.content，影响 AI 上下文（默认，与旧行为一致）
+  //   'display'：仅渲染时替换，不回写上下文，AI 记忆始终是原始输出
+  function regexRuleTiming(rule) {
+    return (rule && rule.timing === 'display') ? 'display' : 'context';
+  }
+
   // 对文本应用指定场景的正则规则（同步）。scene: 'chat'|'backstage'|'phone'
-  function applyRegexSync(text, scene) {
+  // timingFilter 可选：'context' | 'display' | null(全部)。
+  //   - 渲染出口应传 null 或不传（context + display 都要在显示层生效）
+  //   - 上下文回写出口应传 'context'（只跑影响上下文的规则）
+  function applyRegexSync(text, scene, timingFilter) {
     let out = String(text == null ? '' : text);
     const rules = getRegexRulesSync();
     for (const rule of rules) {
       if (rule.enabled === false) continue;
       if (!regexRuleInScope(rule, scene)) continue;
+      if (timingFilter && regexRuleTiming(rule) !== timingFilter) continue;
       try { out = out.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement ?? ''); } catch (_) {}
     }
     return out;
+  }
+
+  // 仅应用「display（仅显示）」时机的规则。供 chat 主线的渲染出口调用
+  // （因为 chat 主线的 context 规则已在 _onDone 回写进 content，渲染时只需补跑 display）。
+  function applyDisplayRegexSync(text, scene) {
+    return applyRegexSync(text, scene, 'display');
   }
 
   async function saveRegexRules(rules) {
@@ -603,6 +620,7 @@ async function cancelEdit() {
           <code style="flex:1;min-width:40px;font-size:12px;background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px;color:var(--text);word-break:break-all;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.replacement === '' ? '<i style="color:var(--text-secondary)">删除</i>' : Utils.escapeHtml(r.replacement)}</code>
           <span style="font-size:11px;color:var(--text-secondary);flex-shrink:0">${r.flags || 'g'}</span>
           ${(() => { const sc = r.scope || 'all'; const label = { all:'全部', chat:'主线', backstage:'后台', phone:'手机' }[sc] || '全部'; return `<span style="font-size:10px;color:var(--accent);background:rgba(0,0,0,0.2);padding:1px 6px;border-radius:8px;flex-shrink:0">${label}</span>`; })()}
+          ${r.timing === 'display' ? `<span style="font-size:10px;color:var(--text-secondary);background:rgba(0,0,0,0.2);padding:1px 6px;border-radius:8px;flex-shrink:0">仅显示</span>` : ''}
         </div>
         ${r.note ? `<p style="font-size:11px;color:var(--text-secondary);margin-top:4px;margin-bottom:0">${Utils.escapeHtml(r.note)}</p>` : ''}
       </div>
@@ -691,6 +709,7 @@ async function cancelEdit() {
       flags: r.flags || 'g',
       note: r.note || '',
       scope: r.scope || 'all',
+      timing: r.timing === 'display' ? 'display' : 'context',
       enabled: r.enabled !== false
     }));
     if (picked.length === 0) { UI.showToast('未找到可导出的规则'); return; }
@@ -740,7 +759,8 @@ async function cancelEdit() {
       if (typeof r.enabled === 'boolean') enabled = r.enabled;
       else if (typeof r.disabled === 'boolean') enabled = !r.disabled;
       const scope = ['all','chat','backstage','phone'].includes(r.scope) ? r.scope : 'all';
-      out.push({ pattern, replacement, flags, note, scope, enabled });
+      const timing = r.timing === 'display' ? 'display' : 'context';
+      out.push({ pattern, replacement, flags, note, scope, timing, enabled });
     }
     return out;
   }
@@ -814,6 +834,43 @@ async function cancelEdit() {
     }
   }
 
+  // v718：作用时机下拉
+  const _regexTimingOptions = {
+    context: { label: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg> 替换上下文（默认，影响AI记忆）' },
+    display: { label: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg> 仅显示（不影响AI记忆）' }
+  };
+
+  function _toggleRegexTimingDropdown() {
+    const dropdown = document.getElementById('regex-timing-dropdown');
+    if (!dropdown) return;
+    if (dropdown.classList.contains('hidden')) {
+      dropdown.classList.remove('closing');
+      dropdown.classList.remove('hidden');
+    } else {
+      if (dropdown.classList.contains('closing')) return;
+      dropdown.classList.add('closing');
+      setTimeout(() => { dropdown.classList.remove('closing'); dropdown.classList.add('hidden'); }, 120);
+    }
+  }
+
+  function _selectRegexTiming(value, closeDropdown = true) {
+    const inp = document.getElementById('regex-timing');
+    if (inp) inp.value = value;
+    const label = document.getElementById('regex-timing-label');
+    if (label && _regexTimingOptions[value]) label.innerHTML = _regexTimingOptions[value].label;
+    document.querySelectorAll('#regex-timing-dropdown .custom-dropdown-item').forEach(item => {
+      const isActive = item.getAttribute('onclick').includes(`'${value}'`);
+      item.classList.toggle('active', isActive);
+    });
+    if (closeDropdown) {
+      const dropdown = document.getElementById('regex-timing-dropdown');
+      if (dropdown && !dropdown.classList.contains('hidden') && !dropdown.classList.contains('closing')) {
+        dropdown.classList.add('closing');
+        setTimeout(() => { dropdown.classList.remove('closing'); dropdown.classList.add('hidden'); }, 120);
+      }
+    }
+  }
+
   function addRegex() {
     editingRegexIdx = -1;
     document.getElementById('regex-edit-title').textContent = '添加正则规则';
@@ -822,6 +879,7 @@ async function cancelEdit() {
     document.getElementById('regex-flags').value = 'g';
     document.getElementById('regex-note').value = '';
     _selectRegexScope('all', false);
+    _selectRegexTiming('context', false);
     _resetRegexTest();
     document.getElementById('regex-edit-modal').classList.remove('hidden');
   }
@@ -837,6 +895,7 @@ async function cancelEdit() {
     document.getElementById('regex-flags').value = r.flags || 'g';
     document.getElementById('regex-note').value = r.note || '';
     _selectRegexScope(r.scope || 'all', false);
+    _selectRegexTiming(r.timing === 'display' ? 'display' : 'context', false);
     _resetRegexTest();
     document.getElementById('regex-edit-modal').classList.remove('hidden');
   }
@@ -850,12 +909,14 @@ async function cancelEdit() {
       const flags = document.getElementById('regex-flags').value.trim() || 'g';
       try { new RegExp(pattern, flags); } catch(e) { await UI.showAlert('提示', '正则语法错误：' + e.message); return; }
       const scEl = document.getElementById('regex-scope');
+      const tmEl = document.getElementById('regex-timing');
       const rule = {
         pattern,
         replacement: document.getElementById('regex-replacement').value,
         flags,
         note: document.getElementById('regex-note').value.trim(),
         scope: (scEl && scEl.value) || 'all',
+        timing: (tmEl && tmEl.value === 'display') ? 'display' : 'context',
         enabled: true
       };
       const rules = await getRegexRules();
@@ -866,6 +927,8 @@ async function cancelEdit() {
         rules.push(rule);
       }
       await saveRegexRules(rules);
+      // v718：规则变更后清消息渲染缓存，让 display 效果立即刷新（缓存里可能是旧规则的渲染结果）
+      try { if (typeof Chat !== 'undefined' && Chat.clearRenderCache) Chat.clearRenderCache(); } catch(_) {}
       closeRegexEdit();
       await renderRegexRules();
       UI.showToast('已保存');
@@ -1579,8 +1642,9 @@ else if (type === 'tts') { list = ttsPresets; currentId = currentTtsId; switchFn
     toggleModelDropdown, selectModel,
     renderPresetList, renderQuickSwitch,
     togglePresetSelect, togglePresetManageMode, exitPresetManageMode, batchDeletePresets, batchClonePresets,
-    getRegexRules, getRegexRulesSync, applyRegexSync, addRegex, editRegex, saveRegex, closeRegexEdit,
+    getRegexRules, getRegexRulesSync, applyRegexSync, applyDisplayRegexSync, regexRuleInScope, regexRuleTiming, addRegex, editRegex, saveRegex, closeRegexEdit,
     _toggleRegexScopeDropdown, _selectRegexScope,
+    _toggleRegexTimingDropdown, _selectRegexTiming,
     toggleRegex, removeRegex, renderRegexRules,
     toggleRegexSelect, toggleRegexManageMode, exitRegexManageMode, batchDeleteRegex,
     toggleRegexSelectAll, exportSelectedRegex, importRegexRules,

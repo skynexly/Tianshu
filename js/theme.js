@@ -1119,6 +1119,12 @@ function toggleAiBubbleRender() {
       defaultCss: 'background: var(--accent);\ncolor: #fff;\npadding: 8px 12px;\nborder-radius: 18px;\nborder-bottom-right-radius: 4px;' },
     { key: 'quote',     label: '引号文本',       selector: '.md-content .quoted-text, .chat-msg .quoted-text', phone: false,
       defaultCss: 'border-bottom: 1.5px solid var(--border);' },
+    { key: 'itemCard',  label: '新获得物品卡片', selector: '.item-card',            phone: false,
+      defaultCss: 'background: var(--bg-tertiary);\nborder: 1px solid var(--border);\nborder-radius: 6px;\npadding: 8px 12px;' },
+    { key: 'npcTag',    label: '相关角色标签',   selector: '.npc-tag',              phone: false,
+      defaultCss: 'background: var(--bg-tertiary);\nborder: 1px solid var(--border);\nborder-radius: 4px;\ncolor: var(--decoration);\npadding: 2px 8px;' },
+    { key: 'blockquote', label: '引用块',         selector: '.md-content blockquote', phone: false,
+      defaultCss: 'border-left: 3px solid var(--accent);\nbackground: var(--bg-secondary);\npadding: 8px 12px;\nborder-radius: 4px;\ncolor: var(--text-secondary);' },
   ];
 
   // 可复制的主题变量清单（供用户拿去问 AI 时保持与主题联动）
@@ -1145,6 +1151,13 @@ function toggleAiBubbleRender() {
     '--msg-user-bg     主线用户气泡背景',
     '--msg-user-border 主线用户气泡边框',
     '--msg-user-text   主线用户气泡文字',
+    '',
+        '',
+    '除了气泡以外，还能自定义这些元素：',
+    '- 新获得物品卡片（.item-card）：AI输出新获得物品后渲染的卡片',
+    '- 相关角色标签（.npc-tag）：每条消息末尾显示的角色名标签',
+    '- 引号文本（.quoted-text）：正文中引号包裹的对话文字',
+    '- 引用块（blockquote）：正文中 > 开头的引用段落',
     '',
     '我想要的效果是：（在这里描述，比如：毛玻璃、圆角大一点、淡紫色半透明、加点阴影）',
   ].join('\n');
@@ -1275,7 +1288,7 @@ async function clearAllBubbleCss() {
     try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
   }
 
-  // 导出气泡样式：五类打包成一个 json 文件（带 _type 标识，防与主题文件混淆）
+  // 导出气泡样式：把所有已保存的气泡类型打包成一个 json 文件（带 _type 标识，防与主题文件混淆）
   async function exportBubbleCss() {
     const store = loadBubbleCss();
     if (!store || !Object.keys(store).length) { UI.showToast('还没有自定义气泡样式可导出', 2000); return; }
@@ -1303,7 +1316,7 @@ async function clearAllBubbleCss() {
         if (known.some(k => k in parsed)) css = parsed;
       }
       if (!css) { UI.showToast('不是有效的气泡样式文件', 2500); return; }
-      // 只保留已知的五类 key，过滤无关字段
+      // 只保留 BUBBLE_CSS_DEFS 里已知的 key，过滤无关字段
       const clean = {};
       for (const def of BUBBLE_CSS_DEFS) {
         if (typeof css[def.key] === 'string' && css[def.key].trim()) clean[def.key] = css[def.key].trim();

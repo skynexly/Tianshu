@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=165">
+<link rel="stylesheet" href="css/style.css?v=174">
 <link rel="stylesheet" href="css/phone.css?v1=412">
 <link rel="stylesheet" href="css/phone-fudge.css?v=57">
 <link rel="stylesheet" href="css/markdown.css">
@@ -221,6 +221,8 @@
             <!-- 自定义属性（拟态风格下显示） -->
             <div id="sb-custom-attrs" class="hidden"></div>
             <div id="sb-character-attrs" class="hidden"></div>
+            <!-- v719：自定义状态栏组件 -->
+            <div id="sb-status-components" class="hidden"></div>
 
             <!-- NPCS 二级折叠 -->
             <div class="sb-npcs-accordion">
@@ -3648,6 +3650,17 @@ NPC
             </div>
           </div>
 
+          <!-- v719：自定义状态栏组件 -->
+          <div style="margin-bottom:20px">
+            <div style="font-size:15px;font-weight:bold;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+              自定义状态栏组件
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;margin-bottom:12px">在状态栏下方额外显示自定义模块。选组件类型、填标题和给 AI 的输出要求，系统自动规范格式并渲染，样式跟随当前状态栏皮肤。</div>
+            <div id="wv-status-components-container"></div>
+            <button type="button" onclick="Worldview.addStatusComponent()" style="width:100%;margin-top:10px;padding:9px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px">+ 添加组件</button>
+          </div>
+
         </div>
     </div>
   </section>
@@ -4198,6 +4211,26 @@ NPC
           </div>
         </div>
       </div>
+      <div class="form-group"><span class="form-label">作用时机 <span style="font-size:11px;color:var(--text-secondary)">替换发生在上下文还是仅显示</span></span>
+        <div style="position:relative">
+          <input type="hidden" id="regex-timing" value="context">
+          <button type="button" class="custom-select-btn" onclick="Settings._toggleRegexTimingDropdown()">
+            <span id="regex-timing-label" style="display:flex;align-items:center;gap:6px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg> 替换上下文（默认，影响AI记忆）
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+          </button>
+          <div id="regex-timing-dropdown" class="custom-dropdown hidden">
+            <div class="custom-dropdown-item active" onclick="Settings._selectRegexTiming('context')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg> 替换上下文（默认，影响AI记忆）
+            </div>
+            <div class="custom-dropdown-item" onclick="Settings._selectRegexTiming('display')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg> 仅显示（不影响AI记忆）
+            </div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;line-height:1.5">「仅显示」：AI 的原始输出保留进上下文，只在界面上替换。适合让 AI 输出精简格式、界面渲染成花哨样式，且不会因为看到替换后的结果而掉格式。</div>
+      </div>
       <div class="form-group"><span class="form-label">备注（可选）</span><input type="text" id="regex-note" placeholder="如：过滤Gemini极其增殖"></div>
       <!-- 测试区（折叠） -->
       <div style="margin-top:8px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
@@ -4395,8 +4428,8 @@ const GameLog = (() => {
 <script src="js/memory.js?v=10"></script>
 <script src="js/tools.js?v=11"></script>
 <script src="js/npc.js"></script>
-<script src="js/statusbar_theme.js?v=57"></script>
-<script src="js/worldview.js?v=110"></script>
+<script src="js/statusbar_theme.js?v=66"></script>
+<script src="js/worldview.js?v=114"></script>
 <script src="js/npc_importer.js?v=2"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
@@ -4409,18 +4442,18 @@ const GameLog = (() => {
 <script src="js/prompts.js?v=6"></script>
 <script src="js/conversations.js?v=15"></script>
 <script src="js/summary.js?v=3"></script>
-<script src="js/chat.js?v=126"></script>
+<script src="js/chat.js?v=129"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
 <script src="js/tts.js"></script>
 <script src="js/branch.js"></script>
-<script src="js/settings.js?v=14"></script>
+<script src="js/settings.js?v=15"></script>
 <script src="js/gaiden.js?v=8"></script>
-<script src="js/backstage.js?v=25"></script>
+<script src="js/backstage.js?v=26"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
-<script src="js/status_bar.js?v=31"></script>
+<script src="js/status_bar.js?v=39"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/watch-sfx.js?v=4"></script>
 <script src="js/worldvoice.js?v=24"></script>
@@ -4435,13 +4468,13 @@ const GameLog = (() => {
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
 <script src="js/ui.js?v=18"></script>
-<script src="js/data-mgr.js?v=23"></script>
+<script src="js/data-mgr.js?v=24"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/github-backup.js?v=4"></script>
 <script src="js/colorpicker.js?v=1"></script>
 <script src="data/tianshucheng-bg.js"></script>
   <script src="data/tutorial-script.js?v=2"></script>
-  <script src="js/theme.js?v=20"></script>
+  <script src="js/theme.js?v=102"></script>
   <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js?v=2"></script>
 <script src="data/builtin-heartsim.js?v=2"></script>
@@ -4449,7 +4482,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=24"></script>
-<script src="js/app.js?v=165"></script>
+<script src="js/app.js?v=167"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

@@ -4219,6 +4219,289 @@ body[data-sb-skin="neumorph"] #sb-character-attrs {
   gap: 8px;
 }
 #sb-character-attrs.hidden { display: none !important; }
+
+/* ===== v719：自定义状态栏组件区（标准化 class + 两套皮肤适配，可被状态栏美化 CSS 命中） ===== */
+#sb-status-components.hidden { display: none !important; }
+#sb-status-components {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sb-comp-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---- 基础样式（终端风观感为底） ---- */
+.sb-comp-title {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: .1em;
+  opacity: .8;
+}
+/* 文本组件 / 用户状态组件：整段文字，右侧 accent 竖条，与场景块同调 */
+.sb-comp-textcard {
+  font-size: 13px;
+  line-height: 1.6;
+  letter-spacing: .05em;
+  color: var(--text);
+  padding: 10px 14px;
+  background: var(--status-card, var(--bg-tertiary));
+  border-right: 3px solid var(--accent);
+  margin: 0 -2px;
+  word-break: break-word;
+  white-space: pre-wrap;
+  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+}
+/* 数值组件：虚线引导 + 值靠右，与终端属性卡同调 */
+.sb-comp-numcard {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 2px;
+  font-family: var(--font-family, inherit);
+}
+.sb-comp-numcard-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.sb-comp-numcard::before {
+  content: '';
+  flex: 1 1 auto;
+  order: 1;
+  border-bottom: 1px dotted color-mix(in srgb, var(--text-secondary) 60%, transparent);
+  margin-bottom: 4px;
+}
+.sb-comp-numcard-name { order: 0; }
+.sb-comp-numcard-val {
+  order: 2;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+/* 用户状态组件：field 行式（标题独占一行 + 值带左竖条另起一行），与玩家衣着/姿势同调 */
+.sb-comp-userrow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 6px 0;
+}
+.sb-comp-userrow-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  opacity: .8;
+}
+.sb-comp-userrow-val {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  padding: 6px 12px;
+  border-left: 3px solid var(--accent);
+  word-break: break-word;
+  white-space: pre-wrap;
+  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+}
+/* 相关角色组件：终端风竖排列表 */
+.sb-comp-rolelist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 6px;
+}
+.sb-comp-rolecard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sb-comp-rolecard-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: .05em;
+}
+.sb-comp-rolecard-val {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  word-break: break-word;
+  white-space: pre-wrap;
+  font-family: var(--font-family, Georgia, "Times New Roman", "Noto Serif SC", serif);
+}
+.sb-comp-rolecard-empty {
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 12px;
+}
+/* 空值占位统一淡化 */
+.sb-comp-empty {
+  color: var(--text-secondary);
+  opacity: .7;
+  font-style: italic;
+}
+
+/* ---- 终端风：标题大写 ---- */
+body[data-sb-skin="terminal"] .sb-comp-title {
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+/* 终端风：用户状态标题加 > _ 前后缀 + 大写 */
+body[data-sb-skin="terminal"] .sb-comp-userrow-label {
+  text-transform: uppercase;
+}
+body[data-sb-skin="terminal"] .sb-comp-userrow-label::before { content: "> "; }
+body[data-sb-skin="terminal"] .sb-comp-userrow-label::after { content: "_"; }
+
+/* ---- 拟态风 / 单人卡 / 心动模拟：卡片圆角 + 柔和阴影 ---- */
+body[data-sb-skin="neumorph"] .sb-comp-title,
+body[data-skin="single-default"] .sb-comp-title,
+body[data-worldview="心动模拟"] .sb-comp-title {
+  color: var(--accent);
+  letter-spacing: .06em;
+  opacity: 1;
+  text-transform: none;
+}
+/* 文本 / 用户状态：拟态圆角卡 */
+body[data-sb-skin="neumorph"] .sb-comp-textcard,
+body[data-skin="single-default"] .sb-comp-textcard,
+body[data-worldview="心动模拟"] .sb-comp-textcard {
+  background: var(--status-card, var(--bg-tertiary));
+  border: 1px solid rgba(255,255,255,0.14);
+  border-right: 1px solid rgba(255,255,255,0.14);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin: 0;
+  box-shadow: var(--hs-shadow-neu, none);
+}
+/* 数值：拟态独立小卡（取消虚线，改成卡片竖排） */
+body[data-sb-skin="neumorph"] .sb-comp-numcard,
+body[data-skin="single-default"] .sb-comp-numcard,
+body[data-worldview="心动模拟"] .sb-comp-numcard {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 14px;
+  box-shadow: var(--hs-shadow-neu, none);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+body[data-sb-skin="neumorph"] .sb-comp-numcard:hover,
+body[data-skin="single-default"] .sb-comp-numcard:hover,
+body[data-worldview="心动模拟"] .sb-comp-numcard:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--hs-shadow-neu-hover);
+}
+body[data-sb-skin="neumorph"] .sb-comp-numcard::before,
+body[data-skin="single-default"] .sb-comp-numcard::before,
+body[data-worldview="心动模拟"] .sb-comp-numcard::before { display: none; }
+body[data-sb-skin="neumorph"] .sb-comp-numcard-val,
+body[data-skin="single-default"] .sb-comp-numcard-val,
+body[data-worldview="心动模拟"] .sb-comp-numcard-val {
+  font-size: 18px;
+  font-weight: 800;
+}
+/* 用户状态：横向铺满（单列），主题色虚线边框 + 透明底 */
+body[data-sb-skin="neumorph"] .sb-comp-userrole,
+body[data-skin="single-default"] .sb-comp-userrole,
+body[data-worldview="心动模拟"] .sb-comp-userrole {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+body[data-sb-skin="neumorph"] .sb-comp-userrow,
+body[data-skin="single-default"] .sb-comp-userrow,
+body[data-worldview="心动模拟"] .sb-comp-userrow {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  min-width: 0;
+  background: transparent;
+  border: 1px dashed var(--accent);
+  border-radius: 14px;
+  box-shadow: none;
+  transition: none;
+}
+body[data-sb-skin="neumorph"] .sb-comp-userrow:hover,
+body[data-skin="single-default"] .sb-comp-userrow:hover,
+body[data-worldview="心动模拟"] .sb-comp-userrow:hover {
+  transform: none;
+  box-shadow: none;
+}
+body[data-sb-skin="neumorph"] .sb-comp-userrow-label,
+body[data-skin="single-default"] .sb-comp-userrow-label,
+body[data-worldview="心动模拟"] .sb-comp-userrow-label {
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--accent);
+  opacity: 1;
+}
+body[data-sb-skin="neumorph"] .sb-comp-userrow-val,
+body[data-skin="single-default"] .sb-comp-userrow-val,
+body[data-worldview="心动模拟"] .sb-comp-userrow-val {
+  padding: 0;
+  border-left: none;
+}
+/* 相关角色：拟态横向滑动卡 */
+body[data-sb-skin="neumorph"] .sb-comp-rolelist,
+body[data-skin="single-default"] .sb-comp-rolelist,
+body[data-worldview="心动模拟"] .sb-comp-rolelist {
+  padding-left: 0;
+}
+body[data-sb-skin="neumorph"] .sb-comp-rolelist.carousel,
+body[data-skin="single-default"] .sb-comp-rolelist.carousel,
+body[data-worldview="心动模拟"] .sb-comp-rolelist.carousel {
+  flex-direction: row;
+  overflow-x: auto;
+  gap: 10px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+body[data-sb-skin="neumorph"] .sb-comp-rolelist.carousel::-webkit-scrollbar,
+body[data-skin="single-default"] .sb-comp-rolelist.carousel::-webkit-scrollbar,
+body[data-worldview="心动模拟"] .sb-comp-rolelist.carousel::-webkit-scrollbar { display: none; }
+body[data-sb-skin="neumorph"] .sb-comp-rolecard,
+body[data-skin="single-default"] .sb-comp-rolecard,
+body[data-worldview="心动模拟"] .sb-comp-rolecard {
+  padding: 10px 12px;
+  border: none;
+  border-radius: 14px;
+  background: var(--status-card);
+  box-shadow: none;
+  gap: 5px;
+}
+body[data-sb-skin="neumorph"] .sb-comp-rolelist.carousel .sb-comp-rolecard,
+body[data-skin="single-default"] .sb-comp-rolelist.carousel .sb-comp-rolecard,
+body[data-worldview="心动模拟"] .sb-comp-rolelist.carousel .sb-comp-rolecard {
+  flex: 0 0 82%;
+  min-width: 210px;
+  scroll-snap-align: start;
+}
+body[data-sb-skin="neumorph"] .sb-comp-rolecard-name,
+body[data-skin="single-default"] .sb-comp-rolecard-name,
+body[data-worldview="心动模拟"] .sb-comp-rolecard-name {
+  color: var(--accent);
+}
+body[data-sb-skin="neumorph"] .sb-comp-rolecard-val,
+body[data-skin="single-default"] .sb-comp-rolecard-val,
+body[data-worldview="心动模拟"] .sb-comp-rolecard-val {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
 body[data-sb-skin="neumorph"] .sb-character-attrs-title {
  font-size: 11px;
  line-height: 1;

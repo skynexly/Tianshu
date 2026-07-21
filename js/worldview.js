@@ -52,6 +52,7 @@ const Worldview = (() => {
       },
       statusBarSkin: 'terminal', // 状态栏风格：terminal=终端风格，neumorph=拟态风格
       gameplay: { globalAttrs: [], characterAttrs: [] }, // 玩法配置：属性定义/触发器/状态栏布局
+      statusComponents: [], // v719：自定义状态栏组件 [{id,type:'text'|'number'|'charRole'|'userRole',title,prompt}]
       startTime: '',         // 开场时间
       startPlot: '',         // 开场剧情
       startPlotRounds: 5,    // 开场剧情保留轮数
@@ -705,6 +706,14 @@ if (!isHidden && _currentExtSubtab === 'npc') {
     }
   }
 
+  // v719：状态栏皮肤/布局是否锁定。心动模拟有内置机制强绑状态栏，锁死；
+  // 天枢城放开，允许换皮肤和配置自定义组件。其余内置世界观沿用通用锁定。
+  function _isSkinLocked(w) {
+    if (!w) return false;
+    if (w.id === 'wv_tianshucheng') return false;
+    return _isBuiltinWorldview(w);
+  }
+
   function _getBuiltinSource(id) {
     try {
       if (!Array.isArray(window.__BUILTIN_WORLDVIEWS__)) return null;
@@ -727,10 +736,9 @@ function _applyStatusBarSkin(w) {
     if (window.StatusBarTheme && StatusBarTheme.clearPreview) StatusBarTheme.clearPreview();
     
     if (!w) { document.body.removeAttribute('data-sb-skin'); document.body.removeAttribute('data-skin'); return; }
-    // 内置世界观锁死
-    if (_isBuiltinWorldview(w)) {
-      if (w.id === 'wv_tianshucheng') document.body.setAttribute('data-sb-skin', 'terminal');
-      else document.body.removeAttribute('data-sb-skin');
+    // 皮肤锁定的内置世界观（心动模拟等）锁死；天枢城放开走下方自定义逻辑
+    if (_isSkinLocked(w)) {
+      document.body.removeAttribute('data-sb-skin');
       document.body.removeAttribute('data-skin');
       return;
     }
@@ -968,7 +976,7 @@ function _syncBuiltinRestoreButton(w) {
       w.phoneApps.forum.name = document.getElementById('wv-forum-name')?.value || '';
       w.phoneApps.forum.desc = document.getElementById('wv-forum-desc')?.value || '';
       const skinEl = document.getElementById('wv-statusbar-skin');
-    if (skinEl && !_isBuiltinWorldview(w)) w.statusBarSkin = skinEl.value || 'terminal';
+    if (skinEl && !_isSkinLocked(w)) w.statusBarSkin = skinEl.value || 'terminal';
       try { if (typeof _syncStartTimeHidden === 'function') _syncStartTimeHidden(); } catch(_) {}
       w.startTime = document.getElementById('wv-start-time')?.value || '';
       w.startPlot = document.getElementById('wv-start-plot')?.value || '';
@@ -1190,10 +1198,10 @@ const _tkN = document.getElementById('wv-takeout-name'); if (_tkN) _tkN.value = 
       const _skinLabel = document.getElementById('wv-statusbar-skin-label');
       const _skinOpt = _skinOptions.find(o => o.value === _skin.value);
       if (_skinLabel && _skinOpt) _skinLabel.textContent = _skinOpt.label;
-      // disabled 态：内置世界观禁止改
+      // disabled 态：皮肤锁定的内置世界观禁止改（天枢城已放开）
       const _skinBtn = document.getElementById('wv-statusbar-skin-btn');
       if (_skinBtn) {
-        if (_isBuiltinWorldview(w)) { _skinBtn.style.opacity = '0.5'; _skinBtn.style.pointerEvents = 'none'; }
+        if (_isSkinLocked(w)) { _skinBtn.style.opacity = '0.5'; _skinBtn.style.pointerEvents = 'none'; }
         else { _skinBtn.style.opacity = ''; _skinBtn.style.pointerEvents = ''; }
       }
     }
@@ -1235,6 +1243,8 @@ _populateThemeSelect(w.themeName || '');
 _renderGlobalNpcs(w.globalNpcs || []);
 // 玩法配置：自定义属性
 _renderGameplayAttrs(w);
+// v719：自定义状态栏组件
+_renderStatusComponentsEditor(w);
 // 历法系统卡片标签
 _updateCalendarCardLabel();
 // 手机配置卡片标签
@@ -2616,7 +2626,137 @@ function _renderGameplayAttrs(w) {
   _renderTaskSystem(w);
 }
 
-// ===== 任务系统编辑器 =====
+// ===== v719：自定义状态栏组件编辑器 =====
+function _statusCompTypeLabel(type) {
+  return { text: '文本组件', number: '数值组件', charRole: '相关角色组件', userRole: '用户状态组件' }[type] || '文本组件';
+}
+function _statusCompDesc(type) {
+  return {
+    text: '无属性自由文本，如今日传闻、小道消息',
+    number: '如境界、咖位、评级',
+    charRole: '需要与角色关联，如心声、情绪',
+    userRole: '需要与 user 关联，如风评、八卦'
+  }[type] || '无属性自由文本，如今日传闻、小道消息';
+}
+function _statusCompPlaceholder(type) {
+  switch (type) {
+    case 'text': return '例：描述角色当前的心理状态，一到两句话';
+    case 'number': return '例：输出当前修为境界，如「练气三层」「金丹初期」';
+    case 'charRole': return '例：输出该角色此刻没说出口的心声，一句话';
+    case 'userRole': return '例：输出用户当前身份的对外名声评价';
+    default: return '给 AI 的输出要求';
+  }
+}
+function _ensureStatusComponents(w) {
+  if (!Array.isArray(w.statusComponents)) w.statusComponents = [];
+  return w.statusComponents;
+}
+function _renderStatusComponentsEditor(w) {
+  if (!w) return;
+  const el = document.getElementById('wv-status-components-container');
+  if (!el) return;
+  const comps = _ensureStatusComponents(w);
+  if (!comps.length) {
+    el.innerHTML = '<div style="padding:12px;color:var(--text-secondary);font-size:12px;text-align:center;border:1px dashed var(--border);border-radius:8px">暂无自定义组件，点下方按钮添加</div>';
+    return;
+  }
+  el.innerHTML = comps.map((c, idx) => {
+    const type = c.type || 'text';
+    const title = Utils.escapeHtml(c.title || '');
+    const prompt = Utils.escapeHtml(c.prompt || '');
+    return `
+    <div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--bg-secondary);margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+        <div style="position:relative;flex:1;min-width:0">
+          <input type="hidden" id="wv-comp-type-${idx}" value="${type}">
+          <button type="button" id="wv-comp-type-btn-${idx}" class="custom-select-btn" style="font-size:13px;padding:8px 10px;width:100%" onclick="Worldview._toggleCompTypeDropdown(${idx}, event)">
+            <span id="wv-comp-type-label-${idx}" style="flex:1;text-align:left">${_statusCompTypeLabel(type)}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.7"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="wv-comp-type-dropdown-${idx}" class="custom-dropdown hidden" style="max-height:200px;overflow-y:auto"></div>
+        </div>
+        <button type="button" onclick="Worldview.deleteStatusComponent(${idx})" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--danger);font-size:12px;cursor:pointer;flex-shrink:0">删除</button>
+      </div>
+      <div id="wv-comp-type-desc-${idx}" style="font-size:11px;color:var(--text-secondary);margin:-4px 0 8px;line-height:1.4">${Utils.escapeHtml(_statusCompDesc(type))}</div>
+      <input type="text" value="${title}" placeholder="组件标题（如：心理状态 / 修为 / 心声）" oninput="Worldview.updateStatusComponent(${idx}, 'title', this.value)" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;margin-bottom:8px">
+      <textarea rows="2" placeholder="${Utils.escapeHtml(_statusCompPlaceholder(type))}" oninput="Worldview.updateStatusComponent(${idx}, 'prompt', this.value)" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;resize:vertical">${prompt}</textarea>
+    </div>`;
+  }).join('');
+}
+async function addStatusComponent() {
+  const w = window.__wvEditingCache;
+  if (!w) { UI.showToast('请先打开世界观编辑', 1500); return; }
+  const comps = _ensureStatusComponents(w);
+  comps.push({ id: 'sc_' + Utils.uuid().slice(0, 8), type: 'text', title: '', prompt: '' });
+  _renderStatusComponentsEditor(w);
+  await DB.put('worldviews', w);
+  await _syncRuntime(w);
+}
+async function updateStatusComponent(idx, field, value) {
+  const w = window.__wvEditingCache;
+  if (!w) return;
+  const comps = _ensureStatusComponents(w);
+  const c = comps[idx];
+  if (!c) return;
+  c[field] = value;
+  // 切换类型时刷新占位提示；标题/要求只写值不重渲染（避免打断输入）
+  if (field === 'type') _renderStatusComponentsEditor(w);
+  await DB.put('worldviews', w);
+  await _syncRuntime(w);
+}
+async function deleteStatusComponent(idx) {
+  const w = window.__wvEditingCache;
+  if (!w) return;
+  const comps = _ensureStatusComponents(w);
+  comps.splice(idx, 1);
+  _renderStatusComponentsEditor(w);
+  await DB.put('worldviews', w);
+  await _syncRuntime(w);
+}
+
+// 组件类型自定义下拉（替代原生 select，风格与状态栏皮肤选择一致）
+let _compTypeClickLock = 0;
+function _toggleCompTypeDropdown(idx, ev) {
+  if (ev) { try { ev.stopPropagation(); } catch(_) {} }
+  if (Date.now() < _compTypeClickLock) return;
+  const dropdown = document.getElementById('wv-comp-type-dropdown-' + idx);
+  if (!dropdown) return;
+  // 关闭其它已展开的组件类型下拉
+  document.querySelectorAll('.custom-dropdown').forEach(d => {
+    if (d !== dropdown && d.id && d.id.startsWith('wv-comp-type-dropdown-')) d.classList.add('hidden');
+  });
+  const isHidden = dropdown.classList.contains('hidden');
+  if (isHidden) {
+    const curVal = document.getElementById('wv-comp-type-' + idx)?.value || 'text';
+    const typeOpts = ['text', 'number', 'charRole', 'userRole'];
+    dropdown.innerHTML = typeOpts.map(t =>
+      `<div class="custom-dropdown-item${t === curVal ? ' active' : ''}" onclick="event.stopPropagation();Worldview._selectCompType(${idx}, '${t}', event)" style="flex-direction:column;align-items:flex-start;gap:2px">
+        <span style="font-size:13px">${_statusCompTypeLabel(t)}</span>
+        <span style="font-size:11px;color:var(--text-secondary);line-height:1.3">${Utils.escapeHtml(_statusCompDesc(t))}</span>
+      </div>`
+    ).join('');
+    dropdown.classList.remove('hidden');
+    setTimeout(() => {
+      document.addEventListener('click', function _close(e) {
+        if (!dropdown.contains(e.target) && !e.target.closest('#wv-comp-type-btn-' + idx)) {
+          dropdown.classList.add('hidden');
+          document.removeEventListener('click', _close);
+        }
+      });
+    }, 0);
+  } else {
+    dropdown.classList.add('hidden');
+  }
+}
+
+function _selectCompType(idx, val, ev) {
+  if (ev) { try { ev.stopPropagation(); ev.preventDefault(); } catch(_) {} }
+  _compTypeClickLock = Date.now() + 350;
+  const dropdown = document.getElementById('wv-comp-type-dropdown-' + idx);
+  if (dropdown) dropdown.classList.add('hidden');
+  // 走原有更新逻辑：会更新数据 + 因 type 变化重渲染整块（含 label / placeholder）
+  updateStatusComponent(idx, 'type', val);
+}
 
 function _defaultTaskPhase() {
   return {
@@ -5912,7 +6052,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
     w.phoneApps.forum.name = (document.getElementById('wv-forum-name')?.value || '').trim();
     w.phoneApps.forum.desc = (document.getElementById('wv-forum-desc')?.value || '').trim();
     const skinInput = document.getElementById('wv-statusbar-skin');
-    if (skinInput && !_isBuiltinWorldview(w)) w.statusBarSkin = skinInput.value || 'terminal';
+    if (skinInput && !_isSkinLocked(w)) w.statusBarSkin = skinInput.value || 'terminal';
     // 读取前强制从分字段同步 hidden，避免 oninput 时序遗漏导致存旧值
     try { if (typeof _syncStartTimeHidden === 'function') _syncStartTimeHidden(); } catch(_) {}
     w.startTime = document.getElementById('wv-start-time').value.trim();
@@ -9374,6 +9514,7 @@ aiGenerateTaskPhase,
     _editingRegionIdxForImporter,
     _editingFactionIdxForImporter,
     addGameplayAttr, updateGameplayAttr, deleteGameplayAttr, openGameplayAttrModal, closeGameplayAttrModal, saveGameplayAttrFromModal, deleteGameplayAttrFromModal, deleteGameplayCharacter, inheritCharAttrs, toggleGameplayCharPicker, renderGameplayCharPicker, selectGameplayCharacter,
+    addStatusComponent, updateStatusComponent, deleteStatusComponent, _toggleCompTypeDropdown, _selectCompType,
     addCurrency, updateCurrency, deleteCurrency, bindCurrencyToAttr, applyGeneratedCurrency,
     addTaskPhase, deleteTaskPhase, updateTaskPhase, addTaskType, deleteTaskType, updateTaskType, updateTaskPhaseReward,
     openTaskTypeModal, closeTaskTypeModal, saveTaskTypeFromModal, deleteTaskTypeFromModal, onTaskTypeRewardModeChange, openPhaseRewardModal,

@@ -119,6 +119,9 @@ const DataMgr = (() => {
     }
     _emit('themeConfig', themeConfig);
     _emit('themeCustomPresets', themePresets);
+    // 状态栏美化主题 + 自定义气泡 CSS（都是纯文本 CSS，任何模式都带走，避免换设备/恢复后丢失）
+    _emit('statusBarCustomThemes', localStorage.getItem('statusBarCustomThemes') || null);
+    _emit('tianshuBubbleCss', localStorage.getItem('tianshu_bubble_css') || null);
     parts.push('}');
 
     return parts.join('');
@@ -244,6 +247,9 @@ const DataMgr = (() => {
     }
     if (data.themeConfig) localStorage.setItem('themeConfig', data.themeConfig);
     if (data.themeCustomPresets) localStorage.setItem('themeCustomPresets', data.themeCustomPresets);
+    // 状态栏美化主题 + 自定义气泡 CSS 恢复
+    if (data.statusBarCustomThemes) localStorage.setItem('statusBarCustomThemes', data.statusBarCustomThemes);
+    if (data.tianshuBubbleCss) localStorage.setItem('tianshu_bubble_css', data.tianshuBubbleCss);
 
     // 落盘屏障：确保上面所有写事务真正 commit 到磁盘后再返回。
     // 否则调用方 location.reload() 会打断尚未提交的事务，导致靠后写入（如功能模型

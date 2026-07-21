@@ -86,7 +86,15 @@ container.innerHTML = messages.map(m => {
       const contentHtml = isUser
         ? Utils.escapeHtml(m.content)
         : (displayContent.trim()
-          ? thinkingHtml + Markdown.render(displayContent)
+          ? thinkingHtml + Markdown.render((function(){
+              // v718：后台渲染层补跑 display 时机的正则（仅显示，不影响上下文）
+              try {
+                if (typeof Settings !== 'undefined' && Settings.applyDisplayRegexSync) {
+                  return Settings.applyDisplayRegexSync(displayContent, 'backstage');
+                }
+              } catch(_) {}
+              return displayContent;
+            })())
           : (thinkingHtml || '<div class="typing-indicator"><span></span><span></span><span></span></div>'));
       // v687.7：工具使用尾巴（仅 AI 消息）
       const hasLog = !isUser && m.toolsLog && m.toolsLog.length > 0;
@@ -1095,12 +1103,14 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
           // v687.11：拼接工具调用前的内容
           fullContent = _priorContent ? (_priorContent + fullContent) : fullContent;
           // 正则替换规则（仅作用于 scope=all 或 backstage 的规则）
+          // v718：display 时机的规则不回写上下文，留待渲染出口实时替换。
           try {
             const regexRules = await Settings.getRegexRules();
             for (const rule of regexRules) {
               if (rule.enabled === false) continue;
               const _sc = rule.scope || 'all';
               if (_sc !== 'all' && _sc !== 'backstage') continue;
+              if (rule.timing === 'display') continue; // display 规则不回写上下文
               try { fullContent = fullContent.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement ?? ''); } catch(e) {}
             }
           } catch(_) {}

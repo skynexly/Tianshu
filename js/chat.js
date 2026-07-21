@@ -823,6 +823,13 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
     // 2. 输出格式 — 非文游模式或关闭回复格式时跳过
     if (isGameMode && convSettings.format) {
       systemParts.push(_getOutputFormatPrompt(convSettings.replyWordCount, convSettings.timeFormat));
+      // 2''. v719：自定义状态栏组件格式说明（紧贴第三部分 status 块规则，因为它属于 status 块的一部分）
+      if (typeof StatusBar !== 'undefined' && StatusBar.formatComponentsPrompt) {
+        try {
+          const componentsPrompt = await StatusBar.formatComponentsPrompt();
+          if (componentsPrompt) systemParts.push(componentsPrompt);
+        } catch(e) { console.warn('[Chat] 自定义状态栏组件注入失败', e); }
+      }
       // 线上消息气泡：用户开关开启 且 不是心动模拟（心动模拟世界观自带说明）
       if (convSettings.onlineChat && document.body.getAttribute('data-worldview') !== '心动模拟') {
         systemParts.push(ONLINE_CHAT_BLOCK_PROMPT);
@@ -2635,6 +2642,13 @@ renderContent = renderContent.replace(/```mail_noreply[\s\S]*$/i, '');
 renderContent = renderContent.replace(/```friendrequest\s*[\s\S]*?```/gi, '');
 renderContent = renderContent.replace(/```friendrequest[\s\S]*$/i, '');
           renderContent = renderContent.replace(/【玩家手机操作(?:记录|日志)[｜|]OOC】[\s\S]*?(?=\n\n|\n[^\n\-\d《「]|$)/g, '').trim();
+          // v718：流式渲染时补跑 display 时机的正则（仅显示，不影响上下文）。
+          // 流式内容可能不完整，用 try 包住，出错就渲染原文，等 _onDone 完整后 buildAIMessageHTML 会再正式跑一遍。
+          try {
+            if (typeof Settings !== 'undefined' && Settings.applyDisplayRegexSync) {
+              renderContent = Settings.applyDisplayRegexSync(renderContent, 'chat');
+            }
+          } catch(_) {}
           contentEl.innerHTML = Markdown.render(renderContent, { streaming: true });
           if (convSettings.stream) contentEl.classList.add('streaming-cursor');
           scrollToBottomIfFollowing();
@@ -2648,11 +2662,14 @@ renderContent = renderContent.replace(/```friendrequest[\s\S]*$/i, '');
           const _rawForEventScan = fullContent;
           try {
             // 正则替换规则（仅作用于 scope=all 或 chat 的规则）
+            // v718：只跑 timing=context 的规则回写上下文；timing=display 的规则不回写，
+            // 留待渲染出口（_onChunk / buildAIMessageHTML）实时替换，保证 AI 记忆是原始输出、不掉格式。
             const regexRules = await Settings.getRegexRules();
             for (const rule of regexRules) {
               if (rule.enabled === false) continue;
               const _sc = rule.scope || 'all';
               if (_sc !== 'all' && _sc !== 'chat') continue;
+              if (rule.timing === 'display') continue; // display 规则不回写上下文
               try {
                 const re = new RegExp(rule.pattern, rule.flags || 'g');
                 fullContent = fullContent.replace(re, rule.replacement ?? '');
@@ -2776,11 +2793,22 @@ renderContent = renderContent.replace(/```friendrequest[\s\S]*$/i, '');
               }
             } catch(_) {}
 
+            // v718：流式结束的最终定稿渲染，也要跑 display 时机的正则（仅显示，不改 fullContent/上下文）。
+            // 否则定稿这一刻 display 效果会消失（塌成残块），得手动切对话才恢复。
+            let _dispFull = fullContent;
+            try {
+              if (typeof Settings !== 'undefined' && Settings.applyDisplayRegexSync) {
+                _dispFull = Settings.applyDisplayRegexSync(fullContent, 'chat');
+              }
+            } catch(_) { _dispFull = fullContent; }
+            // 状态栏/NPC 等数据提取用「原始」fullContent 解析（parsed），避免 display 正则污染 status 块；
+            // 显示用 display 处理后的 _dispFull（parsedForRender）。
             const parsed = Utils.parseAIOutput(fullContent);
+            const parsedForRender = (_dispFull === fullContent) ? parsed : Utils.parseAIOutput(_dispFull);
             if (isGameMode && convSettings.format) {
-              renderParsedMessage(msgEl, parsed);
+              renderParsedMessage(msgEl, parsedForRender);
             } else {
-              contentEl.innerHTML = Markdown.render(fullContent);
+              contentEl.innerHTML = Markdown.render(_dispFull);
             }
 
             // 状态栏
@@ -4476,7 +4504,14 @@ exitMultiSelect();
       // 内容变化时（编辑/重写/流式追加）需要清掉缓存，由对应路径负责。
       let cachedHTML = msg._cachedFullHTML;
       if (cachedHTML == null) {
-        const parsed = Utils.parseAIOutput(msg.content);
+        // v718：display 时机的正则规则在渲染层实时替换（不改 msg.content，不影响上下文）。
+        let _dispContent = msg.content;
+        try {
+          if (typeof Settings !== 'undefined' && Settings.applyDisplayRegexSync) {
+            _dispContent = Settings.applyDisplayRegexSync(msg.content, 'chat');
+          }
+        } catch(_) { _dispContent = msg.content; }
+        const parsed = Utils.parseAIOutput(_dispContent);
         cachedHTML = buildAIMessageHTML(parsed, msg);
         try { msg._cachedFullHTML = cachedHTML; } catch(_) {}
       }
@@ -4484,7 +4519,14 @@ exitMultiSelect();
     } else {
       let cachedPlain = msg._cachedPlainHTML;
       if (cachedPlain == null) {
-        cachedPlain = `<div class="msg-body md-content">${Markdown.render(msg.content)}</div>`;
+        // v718：非气泡渲染模式也补跑 display 正则
+        let _dispPlain = msg.content;
+        try {
+          if (typeof Settings !== 'undefined' && Settings.applyDisplayRegexSync) {
+            _dispPlain = Settings.applyDisplayRegexSync(msg.content, 'chat');
+          }
+        } catch(_) { _dispPlain = msg.content; }
+        cachedPlain = `<div class="msg-body md-content">${Markdown.render(_dispPlain)}</div>`;
         try { msg._cachedPlainHTML = cachedPlain; } catch(_) {}
       }
       div.innerHTML = cachedPlain;
@@ -4671,7 +4713,7 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
       if (el.textContent && el.textContent.includes('[TSIMG:')) {
         resolveDrawnImagesInHTML(el).catch(_ => {});
       }
-    } catch(_) {}
+     } catch(_) {}
   }
 
   function renderAll() {
@@ -4682,6 +4724,12 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
     if (multiSelectMode) _applyMultiSelectUI();
     // 骰点系统：刷新 🎲 按钮显隐 + 历史气泡 v686
     try { _refreshDiceUI(); } catch(_) {}
+  }
+
+  // v718：清掉所有消息的渲染缓存并重渲染。供正则规则变更后调用，让 display 效果立即刷新。
+  function clearRenderCache() {
+    try { (messages || []).forEach(msg => { try { delete msg._cachedFullHTML; delete msg._cachedPlainHTML; } catch(_) {} }); } catch(_) {}
+    try { renderAll(); } catch(_) {}
   }
 
   function scrollToBottom() {
@@ -8053,7 +8101,7 @@ manualExtractMemory, manualSummary,
 enterMultiSelect, exitMultiSelect, toggleMultiSelect, selectAllMulti,
 multiExtractMemory, multiExportImage, isMultiSelectMode,
     setWorldVoiceAttach, hasPendingWorldVoice: () => !!pendingWorldVoice, collectMessage,
-    searchMessages, toggleSearchBar, renderQuickSwitches, renderAll,
+    searchMessages, toggleSearchBar, renderQuickSwitches, renderAll, clearRenderCache,
     scrollToBottom, updateScrollBtn,
     _toggleThink,
     generateSuggestions, _pickSuggestion, refreshSuggestions, _cancelSuggestConfirm, _okSuggestConfirm,
