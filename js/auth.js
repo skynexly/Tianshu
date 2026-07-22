@@ -88,6 +88,8 @@ const Auth = (() => {
     _refreshAccountCard();
     // 派发自定义事件，让别处可以监听
     try { window.dispatchEvent(new CustomEvent('auth:ready', { detail: _state })); } catch(_) {}
+    // 自动备份检查：延迟 8 秒避开启动高峰，到点且已配置 GitHub 才静默备份
+    try { setTimeout(() => { _checkAutoBackup(); }, 8000); } catch(_) {}
   }
 
   // 同步设置页顶部那张账号入口卡片
@@ -1058,6 +1060,40 @@ const Auth = (() => {
     return backend === 'github' ? GithubBackup : SupabaseBackup;
   }
 
+  // ===== 自动备份（仅 GitHub，应用内定时：打开并登录时检查是否到点）=====
+  function _getAutoBackupInterval() {
+    const v = parseInt(localStorage.getItem('github_auto_backup_interval'), 10);
+    return (v === 6 || v === 12 || v === 24) ? v : 0;
+  }
+  function _getAutoBackupMode() {
+    const v = localStorage.getItem('github_auto_backup_mode');
+    return (v === 'text' || v === 'full') ? v : 'lite';
+  }
+  function _getAutoBackupLast() {
+    const v = parseInt(localStorage.getItem('github_auto_backup_last'), 10);
+    return Number.isFinite(v) ? v : 0;
+  }
+  // 登录成功后延迟触发一次检查：到点且已配置 GitHub 才静默备份
+  async function _checkAutoBackup() {
+    try {
+      const hours = _getAutoBackupInterval();
+      if (hours <= 0) return;
+      if (typeof GithubBackup === 'undefined' || !GithubBackup.isConfigured()) return;
+      const last = _getAutoBackupLast();
+      const gap = hours * 60 * 60 * 1000;
+      if (last && (Date.now() - last) < gap) return;
+      const mode = _getAutoBackupMode();
+      const dev = (GithubBackup.getConfig().device || '') + (last ? '·自动' : '·自动·首次');
+      // 静默备份：无进度弹层，超大存档确认直接放行（自动场景不打扰用户）
+      await GithubBackup.backup(mode, dev, null, async () => true);
+      localStorage.setItem('github_auto_backup_last', String(Date.now()));
+      console.log('[Auth] 自动备份完成', mode);
+    } catch (e) {
+      // 自动备份失败静默吞掉，不打扰用户（下次打开会重试）
+      console.warn('[Auth] 自动备份失败', e);
+    }
+  }
+
   function openCloudBackup() {
     const existing = document.getElementById('cloud-backup-overlay');
     if (existing) existing.remove();
@@ -1223,6 +1259,30 @@ const Auth = (() => {
       </div>
       <div id="cb-backup-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
 
+      <div class="auth-profile-section-title">自动备份</div>
+      <p style="font-size:11px;color:var(--text-secondary);line-height:1.6;margin:0 0 8px">
+        打开 skynex 并登录后，若距上次自动备份超过所选间隔，会在后台静默备份一次到 GitHub。只在打开应用时触发，关掉网页不会备份。
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <div style="flex:1;position:relative">
+          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">备份间隔</label>
+          <button type="button" class="custom-select-btn" id="cb-auto-interval-btn" data-value="0">
+            <span id="cb-auto-interval-label">关闭</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:0.6"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="custom-dropdown hidden" id="cb-auto-interval-dropdown"></div>
+        </div>
+        <div style="flex:1;position:relative">
+          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">备份类型</label>
+          <button type="button" class="custom-select-btn" id="cb-auto-mode-btn" data-value="lite">
+            <span id="cb-auto-mode-label">轻量（含头像）</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:0.6"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="custom-dropdown hidden" id="cb-auto-mode-dropdown"></div>
+        </div>
+      </div>
+      <div id="cb-auto-msg" style="font-size:11px;min-height:14px;margin-bottom:10px;color:var(--text-secondary)"></div>
+
       <div class="auth-profile-section-title" style="display:flex;align-items:center;justify-content:space-between">
         <span>云端备份列表</span>
         <button type="button" id="cb-refresh" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0">刷新</button>
@@ -1315,6 +1375,94 @@ const Auth = (() => {
 
     // 刷新列表
     $('#cb-refresh').addEventListener('click', () => _loadCloudList(overlay, backend));
+
+    // 自动备份设置（仅 GitHub 后端有这两个下拉）
+    const autoIntervalBtn = $('#cb-auto-interval-btn');
+    const autoModeBtn = $('#cb-auto-mode-btn');
+    if (autoIntervalBtn && autoModeBtn) {
+      const INTERVAL_OPTS = [
+        { value: '0', label: '关闭' },
+        { value: '6', label: '每 6 小时' },
+        { value: '12', label: '每 12 小时' },
+        { value: '24', label: '每 24 小时' },
+      ];
+      const MODE_OPTS = [
+        { value: 'lite', label: '轻量（含头像）' },
+        { value: 'text', label: '纯文字' },
+        { value: 'full', label: '完整（含图片）' },
+      ];
+      const intervalLabel = $('#cb-auto-interval-label');
+      const intervalDrop = $('#cb-auto-interval-dropdown');
+      const modeLabel = $('#cb-auto-mode-label');
+      const modeDrop = $('#cb-auto-mode-dropdown');
+
+      // 初值
+      const curIv = String(_getAutoBackupInterval());
+      const curMode = _getAutoBackupMode();
+      autoIntervalBtn.dataset.value = curIv;
+      autoModeBtn.dataset.value = curMode;
+      intervalLabel.textContent = (INTERVAL_OPTS.find(o => o.value === curIv) || INTERVAL_OPTS[0]).label;
+      modeLabel.textContent = (MODE_OPTS.find(o => o.value === curMode) || MODE_OPTS[0]).label;
+
+      const renderAutoMsg = () => {
+        const iv = parseInt(autoIntervalBtn.dataset.value, 10) || 0;
+        const am = $('#cb-auto-msg');
+        if (!am) return;
+        if (iv <= 0) { am.textContent = '自动备份已关闭'; return; }
+        const last = _getAutoBackupLast();
+        am.textContent = last
+          ? `已开启 · 上次自动备份：${new Date(last).toLocaleString()}`
+          : '已开启 · 还没有自动备份过';
+      };
+
+      const closeDrop = (drop) => {
+        if (!drop || drop.classList.contains('hidden')) return;
+        drop.classList.add('closing');
+        setTimeout(() => { drop.classList.add('hidden'); drop.classList.remove('closing'); }, 120);
+      };
+      const openDrop = (drop, opts, curVal, onPick) => {
+        // 先关另一个
+        closeDrop(drop === intervalDrop ? modeDrop : intervalDrop);
+        drop.innerHTML = opts.map(o =>
+          `<div class="custom-dropdown-item${o.value === curVal ? ' active' : ''}" data-value="${o.value}">${o.label}</div>`
+        ).join('');
+        drop.classList.remove('hidden');
+        drop.querySelectorAll('.custom-dropdown-item').forEach(it => {
+          it.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onPick(it.dataset.value, it.textContent);
+            closeDrop(drop);
+          });
+        });
+      };
+
+      autoIntervalBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!intervalDrop.classList.contains('hidden')) { closeDrop(intervalDrop); return; }
+        openDrop(intervalDrop, INTERVAL_OPTS, autoIntervalBtn.dataset.value, (val, label) => {
+          autoIntervalBtn.dataset.value = val;
+          intervalLabel.textContent = label;
+          localStorage.setItem('github_auto_backup_interval', String(parseInt(val, 10) || 0));
+          renderAutoMsg();
+        });
+      });
+      autoModeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!modeDrop.classList.contains('hidden')) { closeDrop(modeDrop); return; }
+        openDrop(modeDrop, MODE_OPTS, autoModeBtn.dataset.value, (val, label) => {
+          autoModeBtn.dataset.value = val;
+          modeLabel.textContent = label;
+          localStorage.setItem('github_auto_backup_mode', (val === 'text' || val === 'full') ? val : 'lite');
+        });
+      });
+      // 点外面关下拉
+      overlay.addEventListener('click', (e) => {
+        if (!autoIntervalBtn.contains(e.target) && !intervalDrop.contains(e.target)) closeDrop(intervalDrop);
+        if (!autoModeBtn.contains(e.target) && !modeDrop.contains(e.target)) closeDrop(modeDrop);
+      });
+
+      renderAutoMsg();
+    }
 
     // 已配置则自动拉一次列表
     if (mod.isConfigured()) _loadCloudList(overlay, backend);

@@ -319,6 +319,17 @@ const Chat = (() => {
   /**
  * 加载对话历史
  */
+  // 按当前对话设置同步顶部虚拟状态栏显隐。
+  // 使用 inline display，避免 StatusBar.render 后又把隐藏类移除而重新显示。
+  function _syncTopbarVisibility(conversationId) {
+    try {
+      const convId = conversationId || Conversations.getCurrent();
+      const conv = Conversations.getList().find(c => c.id === convId);
+      const row = document.getElementById('topbar-row-status');
+      if (row) row.style.display = conv?.convHideTopbar ? 'none' : '';
+    } catch(_) {}
+  }
+
   // 设置聊天输入区可用性（无对话时禁用，避免发送报错）
   function _setChatInputEnabled(enabled) {
     const input = document.getElementById('chat-input');
@@ -336,6 +347,7 @@ const Chat = (() => {
   }
 
   async function loadHistory(conversationId) {
+    _syncTopbarVisibility(conversationId);
     // 切对话时清掉上一个对话残留的心动模拟开场动画状态
     try {
       if (typeof HeartSimIntro !== 'undefined' && HeartSimIntro.cancel) {
@@ -841,9 +853,9 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
       systemParts.push('【额外输出要求】\n' + convSettings.customFormat.trim());
     }
 
-    // 2b. 自定义属性：独立于「回复格式」开关（v681.2 解耦）
-    // 自定义属性已是独立的 custom-attrs 代码块，不依赖 status 块，所以只看 isGameMode
-    if (isGameMode) {
+    // 2b. 自定义属性与骰点：回复格式关闭时暂停整条状态栏玩法链
+    // 自定义属性是独立 custom-attrs 代码块，但其格式与数值状态均依赖状态栏玩法。
+    if (isGameMode && convSettings.format) {
       // v686.9：增加 attrsEnabled 开关，关闭则跳过数值系统注入（但骰点系统仍走）
       if (convSettings.attrsEnabled && typeof StatusBar !== 'undefined' && StatusBar.formatCustomAttrsFormatPrompt) {
         try {
@@ -927,8 +939,8 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
       } catch(e) {}
     }
 
-    // 2c. 自定义属性状态：独立于「回复格式」开关（v681.2 解耦）
-    if (isGameMode) {
+    // 2c. 自定义属性状态：回复格式关闭时不发送当前数值快照
+    if (isGameMode && convSettings.format) {
       if (typeof StatusBar !== 'undefined' && StatusBar.formatCustomAttrsStatePrompt) {
         try {
           const customAttrsStateText = await StatusBar.formatCustomAttrsStatePrompt();
@@ -941,7 +953,7 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
     // 2a. 首轮现实时间戳（兜底开场时间）— 非文游模式跳过
     try {
       const userMsgCount = messages.filter(m => m.role === 'user').length;
-      if (isGameMode && userMsgCount <= 1) {
+      if (isGameMode && convSettings.format && userMsgCount <= 1) {
         const now = new Date();
         const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
         const realTime = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -950,7 +962,7 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
     } catch(e) { console.warn('[Chat] 首轮现实时间注入失败', e); }
 
     // 2b. 开场时间和开场剧情（前N轮有效）— 非文游模式跳过 — 单人模式看 enableStartPlot
-    if (isGameMode && !isGaidenConv && !isSingleConv) {
+    if (isGameMode && convSettings.format && !isGaidenConv && !isSingleConv) {
       try {
         const wv = await Worldview.getCurrent();
         if (wv) {
@@ -966,7 +978,7 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
           }
         }
       } catch(e) { console.warn('[Chat] startPlot注入失败', e); }
-    } else if (isSingleConv && isGameMode && singleWv && singleSettings.enableStartPlot) {
+    } else if (isSingleConv && isGameMode && convSettings.format && singleWv && singleSettings.enableStartPlot) {
       try {
         const rounds = singleWv.startPlotRounds || 5;
         const userMsgCount = messages.filter(m => m.role === 'user').length;
@@ -1469,7 +1481,7 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
           // 未选择 / 旧数据兼容 / end 模式（end 模式下 gameMode 已关，理论上不走这段）
           systemParts.push('[心动模拟·已返航]\n玩家已结束心动模拟，从原本的世界醒来，回到了自己家中。后续剧情发生在玩家自己的家里：\n- 不再有任务系统、好感度系统、心动目标的概念；\n- 心动模拟APP仍在玩家手机里、客服历史也都还在，但服务已结束；\n- 玩家可能产生与心动模拟有关的回忆、错觉、梦境，请保持一种"刚结束的事其实没有完全结束"的微妙氛围，但不要主动制造惊吓，靠玩家追问或主动行为来推进；\n- 不要再在回复中输出 ```relation``` / ```task``` / ```chat``` / ```homecoming``` 等心动模拟专用代码块。');
         }
-      } else if (typeof StatusBar !== 'undefined' && StatusBar.hsFormatForPrompt) {
+      } else if (convSettings.format && typeof StatusBar !== 'undefined' && StatusBar.hsFormatForPrompt) {
         try {
           const hsStateText = StatusBar.hsFormatForPrompt();
         // v687.31：心动模拟累计状态改为最近上下文注入
@@ -1479,7 +1491,7 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
 
     // 8. 通用任务系统 prompt 注入（非心动模拟世界观）
     try {
-      if (typeof StatusBar !== 'undefined' && StatusBar.taskFormatForPrompt) {
+      if (convSettings.format && typeof StatusBar !== 'undefined' && StatusBar.taskFormatForPrompt) {
         const taskText = await StatusBar.taskFormatForPrompt();
         // v687.31：通用任务系统改为最近上下文注入
         if (taskText) _recentStatusParts.push(taskText);
@@ -1488,7 +1500,7 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
 
     // 8a. 心动模拟：通关后的"返航 marker"持续提示（直到 AI 实际触发为止）
       try {
-        if (!_hsHomecoming && typeof StatusBar !== 'undefined' && StatusBar.hsCheckClearCondition) {
+        if (convSettings.format && !_hsHomecoming && typeof StatusBar !== 'undefined' && StatusBar.hsCheckClearCondition) {
           const check = StatusBar.hsCheckClearCondition();
           if (check && check.passed) {
             _recentStatusParts.push('[心动模拟·返航触发协议]\n玩家已达成回家条件。返航分为两种情况：\n\n**独自返航**：当玩家在剧情里真正回到自己原本的世界、彻底从心动模拟中醒来后，请在该轮回复的最末尾追加一个空的 ```homecoming``` 代码块作为信号——前端识别到该信号后会接管展示返航过场动画。在那一轮之前请正常推进剧情，玩家可能还有未完成的事情想交代；不要在尚未真正"回到家中醒来"之前提前输出该 marker。\n\n**共同返航**：如果玩家通过心跳悦动059协助签署了心动目标认领协议，要带着某位心动目标一起离开，则在签署协议完成的那一轮回复末尾立即输出带 companion 的 homecoming 代码块：```homecoming\n{"companion":"角色名"}\n```\n前端会识别为"共同返航"，不触发返航动画，直接进入两人在现实世界的生活。不需要等到"回到家醒来"——签完协议就是触发点。\n\n如果上下文中存在过返航相关的剧情描写，但你没有找到实际输出过的 ```homecoming``` 代码块，说明玩家回溯了剧情，返航流程需要重新走一次——请当作之前的返航从未发生过，重新推进。');
@@ -6233,6 +6245,7 @@ if (!gp) return null;
       stream: conv?.convStream !== false,      // 默认开
       gameMode: conv?.convGameMode !== false,   // 默认开
       format: conv?.convFormat !== false,       // 默认开
+      hideTopbar: !!conv?.convHideTopbar,       // 默认关（隐藏状态栏）
       stripHistoryHtml: !!conv?.convStripHistoryHtml,    // 发请求时过滤 AI 历史里的 HTML（默认关）
       stripHtmlKeepText: conv?.convStripHtmlKeepText !== false,  // 过滤时保留文字（剥标签留内容，默认开）
       disableRetry: !!conv?.convDisableRetry,   // 默认关（关闭自动重试）
@@ -6640,7 +6653,9 @@ bgImage: conv?.convBgImage || '',
     const s = _getConvSettings();
     document.getElementById('cs-stream').checked = s.stream;
     document.getElementById('cs-gamemode').checked = s.gameMode;
-document.getElementById('cs-format').checked = s.format;
+    document.getElementById('cs-format').checked = s.format;
+    const htEl = document.getElementById('cs-hide-topbar');
+    if (htEl) htEl.checked = s.hideTopbar;
       const cfEl = document.getElementById('cs-custom-format');
       if (cfEl) cfEl.value = s.customFormat || '';
       const suggestEnEl = document.getElementById('cs-suggest-enabled');
@@ -6782,9 +6797,10 @@ document.getElementById('cs-format').checked = s.format;
   async function saveConvSettings() {
     const conv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
     if (!conv) return;
-    conv.convStream = document.getElementById('cs-stream').checked;
+conv.convStream = document.getElementById('cs-stream').checked;
     conv.convGameMode = document.getElementById('cs-gamemode').checked;
-conv.convFormat = document.getElementById('cs-format').checked;
+    conv.convFormat = document.getElementById('cs-format').checked;
+    conv.convHideTopbar = document.getElementById('cs-hide-topbar').checked;
     const cfSaveEl = document.getElementById('cs-custom-format');
     if (cfSaveEl) conv.convCustomFormat = cfSaveEl.value || '';
     const suggestSaveEl = document.getElementById('cs-suggest-enabled');
@@ -6904,6 +6920,7 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
       }
     } catch(_) {}
     await Conversations.saveList();
+    _syncTopbarVisibility();
     // v705.4：保存后留在设置页，方便继续调整；不再自动退回聊天
     // 更新加号菜单里的生图按钮可见性
     _updateImgGenButtons();
@@ -8097,9 +8114,9 @@ async function applyLorebooksToWorldview() {
     confirmPickMemories, removeAttach,
     setWorldview, getWorldviewPrompt, getHsHomecomingWorldSetting, getMessages, getBranchId, autoExtractMemory,
     isStreamingNow: () => isStreaming,
-manualExtractMemory, manualSummary,
-enterMultiSelect, exitMultiSelect, toggleMultiSelect, selectAllMulti,
-multiExtractMemory, multiExportImage, isMultiSelectMode,
+    manualExtractMemory, manualSummary,
+    enterMultiSelect, exitMultiSelect, toggleMultiSelect, selectAllMulti,
+    multiExtractMemory, multiExportImage, isMultiSelectMode,
     setWorldVoiceAttach, hasPendingWorldVoice: () => !!pendingWorldVoice, collectMessage,
     searchMessages, toggleSearchBar, renderQuickSwitches, renderAll, clearRenderCache,
     scrollToBottom, updateScrollBtn,
@@ -8110,7 +8127,7 @@ multiExtractMemory, multiExportImage, isMultiSelectMode,
     openDirectiveModal, closeDirectiveModal, saveDirective, clearDirective, _getConvSettings,
     isRetryDisabled,
     openEventManagerModal, closeEventManagerModal, resetEventState, switchEventManagerTab,
-openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
+    openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
     unbindConvLorebook, addConvLorebooks, applyLorebooksToWorldview,
     resetConvGameplay,
     _onVoiceEnabledChange, _onVoiceScopeAllChange,
@@ -8134,6 +8151,8 @@ openLorebookDisableModal, closeLorebookDisableModal, toggleLorebookDisable,
     // 叙述人称下拉
     _toggleNarrPersonDropdown, _selectNarrPerson,
     // 环境音模式下拉
-    _toggleAmbientModeDropdown, _selectAmbientMode
+    _toggleAmbientModeDropdown, _selectAmbientMode,
+    // 状态栏显隐同步（供conversations切对话时用）
+    syncTopbarVisibility: _syncTopbarVisibility
   };
 })();

@@ -5,6 +5,7 @@ const Conversations = (() => {
 let currentId = 'default';
   let list = [];       // { id, name, created, maskId?, branchMaskId?, folder?, pinned?, worldviewId? }
   let _initialized = false; // init 是否已完成加载——saveList 的前置守卫，防止 init 前空 list 覆盖 DB
+  let _userClearedAll = false; // 用户主动删光对话的标记：为 true 时允许 saveList 写入空 list，并在启动时跳过自愈重建
 let folders = [];    // { id, name, collapsed?, worldviewId? }
   let longPressTimer = null;
   const _avatarCache = {};  // { convId: avatarUrl } 单人对话头像缓存
@@ -64,7 +65,18 @@ let dragState = null;
 
 async function init() {
     const data = await DB.get('gameState', 'conversations');
-    list = (data?.value && data.value.length > 0) ? data.value : [{ id: 'default', name: '对话 1', created: Date.now() }];
+    // 用户主动清空标记（持久化）：区分"主动删光"与"异常丢失"
+    try {
+      const clearedRec = await DB.get('gameState', 'conversationsUserCleared');
+      _userClearedAll = !!(clearedRec && clearedRec.value);
+    } catch(_) { _userClearedAll = false; }
+    // 首次没有对话记录时才创建默认对话；已保存的空数组表示用户主动清空，应保持空态。
+    list = Array.isArray(data?.value) ? data.value : [{ id: 'default', name: '对话 1', created: Date.now() }];
+    // 有对话数据时清掉遗留的清空标记（避免误伤后续自愈）
+    if (list.length > 0 && _userClearedAll) {
+      _userClearedAll = false;
+      try { await DB.put('gameState', { key: 'conversationsUserCleared', value: 0 }); } catch(_) {}
+    }
     // list 已从 DB 加载完成，解锁 saveList（此后写入才安全）
     _initialized = true;
 
@@ -140,6 +152,8 @@ async function init() {
   // v715：去掉一次性 flag 硬锁，改成每次启动都扫描——逻辑本身幂等（已存在对话会跳过，
   //       只补缺失的），这样万一 gameState.conversations 被异常覆盖，下次刷新能自动捞回。
   async function recoverOrphanConversations() {
+    // 用户主动删光对话时不自愈——否则残留 messages 会被反推重建，空态无法保持
+    if (_userClearedAll) return;
     try {
       const allMsgs = await DB.getAll('messages');
       if (!Array.isArray(allMsgs) || allMsgs.length === 0) {
@@ -402,14 +416,22 @@ async function init() {
       return;
     }
     // 防护②：内存 list 为空、但 DB 里已存着非空对话数据时，拒绝"空覆盖非空"（几乎必为 bug）。
+    //   例外：用户主动删光对话（_userClearedAll）时放行，允许把空态持久化。
     if (!Array.isArray(list) || list.length === 0) {
-      try {
-        const existing = await DB.get('gameState', 'conversations');
-        if (existing?.value && Array.isArray(existing.value) && existing.value.length > 0) {
-          console.warn('[Conversations] saveList 被拦截：内存 list 为空但 DB 有非空对话，拒绝覆盖');
-          return;
-        }
-      } catch(_) {}
+      if (!_userClearedAll) {
+        try {
+          const existing = await DB.get('gameState', 'conversations');
+          if (existing?.value && Array.isArray(existing.value) && existing.value.length > 0) {
+            console.warn('[Conversations] saveList 被拦截：内存 list 为空但 DB 有非空对话，拒绝覆盖');
+            return;
+          }
+        } catch(_) {}
+      }
+    }
+    // 写入非空 list 时清掉"主动清空"标记（覆盖所有新增对话入口：create/addBranch/单人创建等）
+    if (Array.isArray(list) && list.length > 0 && _userClearedAll) {
+      _userClearedAll = false;
+      try { await DB.put('gameState', { key: 'conversationsUserCleared', value: 0 }); } catch(_) {}
     }
     await DB.put('gameState', { key: 'conversations', value: list });
     await DB.put('gameState', { key: 'lastConversation', value: currentId });
@@ -656,6 +678,15 @@ async function init() {
 
     await _updateTopbar();
 
+    // 同步状态栏显隐（根据对话设置）
+    try {
+      const conv = list.find(c => c.id === id);
+      const topbarRow = document.getElementById('topbar-row-status');
+      if (topbarRow) {
+        topbarRow.style.display = conv?.convHideTopbar ? 'none' : '';
+      }
+    } catch(_) {}
+
     // 切换到该对话绑定的面具
     const conv = list.find(c => c.id === id);
 
@@ -738,7 +769,6 @@ async function init() {
   }
 
   async function remove(id) {
-    if (list.length <= 1) { UI.showToast('至少保留一个对话', 1800); return; }
     const conv = list.find(c => c.id === id);
     if (!await UI.showConfirm('确认删除', `确定删除「${conv?.name || id}」？`)) return;
 
@@ -752,6 +782,11 @@ async function init() {
     // if (conv?.branchMaskId) { ... }
 
     list = list.filter(c => c.id !== id);
+    // 删光后置"主动清空"标记并持久化，让空态在刷新后保留、且不触发自愈重建
+    if (list.length === 0) {
+      _userClearedAll = true;
+      try { await DB.put('gameState', { key: 'conversationsUserCleared', value: 1 }); } catch(_) {}
+    }
     if (currentId === id) {
       // 优先在同一世界观下找下一个对话；找不到就进空态（currentId = null）
       const wv = conv?.worldviewId || '__default_wv__';

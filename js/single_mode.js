@@ -376,13 +376,14 @@ const SingleMode = (() => {
 
     // 新建模式
     const convId = 'conv_' + Utils.uuid().slice(0, 8);
+    const wvIdForInherit = wvId || '__default_wv__';
     const conv = {
       id: convId,
       name: '与 ' + charName,
       created: Date.now(),
       folder: null,
       // 挂世界观→该世界观；裸跑→默认世界观（容纳所有未分类对话）
-      worldviewId: wvId || '__default_wv__',
+      worldviewId: wvIdForInherit,
       presetId: Settings.getCurrentId(),
       isSingle: true,
       singleWorldviewId: wvId || '',
@@ -396,6 +397,41 @@ const SingleMode = (() => {
       singleEnableCustom: enableCustom,
       singleEnableKnowledge: enableKnowledge,
     };
+    // v712：单人对话也继承设置（与群像对话保持一致）
+    try {
+      const allConvs = Conversations.getList();
+      const currentId = Conversations.getCurrent();
+      let tpl = allConvs.find(c => c.id === currentId && (c.worldviewId || '__default_wv__') === wvIdForInherit);
+      if (!tpl) {
+        try {
+          const lastRecord = await DB.get('gameState', `lastWvConv_${wvIdForInherit}`);
+          if (lastRecord?.value) {
+            tpl = allConvs.find(c => c.id === lastRecord.value && (c.worldviewId || '__default_wv__') === wvIdForInherit);
+          }
+        } catch(_) {}
+      }
+      if (!tpl) {
+        tpl = allConvs.find(c => (c.worldviewId || '__default_wv__') === wvIdForInherit && !c.isGaiden);
+      }
+      if (tpl) {
+        const INHERIT_KEYS = [
+          'convStream', 'convGameMode', 'convFormat', 'convCustomFormat', 'convSuggestEnabled',
+          'convStripHistoryHtml', 'convStripHtmlKeepText', 'convDisableRetry', 'backstageEnabled',
+          'convTimeAware', 'convBatteryAware', 'convWeatherAware',
+          'convAmbientEnabled', 'convAmbientVolume', 'convAmbientMode',
+          'convOnlineChat', 'convImgGen', 'convCallEnabled', 'convCallFreq',
+          'convGroupChatEnabled', 'convNarrPerson',
+          'convToolsMemory', 'convToolsWorldview', 'convToolsEdit', 'convToolsHistory', 'convAutoExtract',
+          'convEventsEnabled', 'convTasksEnabled', 'convAttrsEnabled', 'convKnowledgeEnabled',
+          'convReplyWordCount', 'convTimeFormat',
+        ];
+        for (const k of INHERIT_KEYS) {
+          if (tpl[k] !== undefined) conv[k] = tpl[k];
+        }
+        if (tpl.convVoice) conv.convVoice = JSON.parse(JSON.stringify(tpl.convVoice));
+      }
+    } catch(_) {}
+
     // 初始化状态栏时间：从单人世界观读startTime，没有就用现实时间
     try {
       let initTime = '';

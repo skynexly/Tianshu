@@ -1313,6 +1313,20 @@ var StatusBarTheme = (() => {
   - 例（双数数值卡换个背景色）：\`.sb-comp-number.sb-comp-even .sb-comp-numcard { background: var(--bg-tertiary); }\`
   - 例（单数文本卡描边、双数不描边）：\`.sb-comp-text.sb-comp-odd .sb-comp-textcard { border: 1px solid var(--accent); }\`
 
+## 调整区块顺序（用 CSS order）
+展开态状态卡是纵向 flex 布局，各大区块都是它的 flex 子项，所以可以用 \`order\` 属性调整它们的上下顺序（不改内容，只换位置）。order 值越小越靠前，默认都是 0；想把某块提前就给负数，想放后就给正数。
+各区块选择器（注意用下面这些写法，不要用 id）：
+- 场景描写：\`.sb-scene-wrap\`
+- 玩家卡（用户衣着/姿势等）：\`.sb-player-card\`
+- 自定义属性区：\`.sb-custom-attrs-section\`
+- 角色属性区：\`.sb-character-attrs-section\`
+- 自定义组件区：\`.sb-status-components-section\`
+- 相关角色（NPC）区：\`.sb-npcs-accordion\`
+- 任务系统区：\`.sb-task-system-section\`
+- 例（把任务提到最前、NPC 提到属性前）：\`.sb-task-system-section { order: -10; } .sb-npcs-accordion { order: -5; }\`
+- 自定义组件之间也能用 order 换位置（配合 \`.sb-comp-odd\`/\`.sb-comp-even\` 可精确到单个组件），例：\`.sb-comp-number { order: -1; }\` 把数值组件整体提前。
+- 注意：标题栏和关闭按钮是固定的，不参与排序，别给它们写 order。
+
 ## 折叠态（顶部摘要条）— 禁止修改
 折叠态（顶部那一行时间/地点摘要）保持系统基础款，**请不要为它写任何 CSS**。
 不要使用以下选择器（写了也不会生效，会被系统过滤掉）：

@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=174">
-<link rel="stylesheet" href="css/phone.css?v1=412">
+<link rel="stylesheet" href="css/phone.css?v1=414">
 <link rel="stylesheet" href="css/phone-fudge.css?v=57">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260707">
@@ -1494,7 +1494,14 @@
               <span class="circle-check-ui"></span>
             </span>
           </label>
-          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px">关闭后不再发送内置回复格式提示词，AI回复仅做Markdown渲染</span>
+          <span style="font-size:12px;color:var(--text-secondary);margin-top:-12px;line-height:1.55">关闭后暂停全部状态栏及玩法状态同步（含属性、任务、骰点、心动模拟等），AI回复仅做Markdown渲染；重新开启后可恢复<br><span style="color:var(--danger,#c75b5b)">谨慎关闭：状态栏、地区命中、角色信息命中、相机、定位、货币系统、属性系统、任务系统等多种功能会失灵</span></span>
+          <label class="circle-check-label" style="margin-top:4px">
+            <span class="circle-check-text">隐藏状态栏<br><span style="font-size:11px;color:var(--text-secondary)">仅隐藏顶部虚拟状态栏（时间/地点/天气），不影响状态同步与功能运行；停用状态栏请先关闭回复格式</span></span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-hide-topbar" class="circle-check" style="position:absolute!important;opacity:0!important;pointer-events:none!important;width:0!important;height:0!important;margin:0!important;appearance:none!important;-webkit-appearance:none!important">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
           <div style="display:flex;flex-direction:column;gap:6px;margin-top:-4px">
             <span style="font-size:13px;color:var(--text)">自定义追加格式</span>
             <textarea id="cs-custom-format" rows="4" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:13px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;line-height:1.6"></textarea>
@@ -4428,7 +4435,7 @@ const GameLog = (() => {
 <script src="js/memory.js?v=10"></script>
 <script src="js/tools.js?v=11"></script>
 <script src="js/npc.js"></script>
-<script src="js/statusbar_theme.js?v=66"></script>
+<script src="js/statusbar_theme.js?v=67"></script>
 <script src="js/worldview.js?v=114"></script>
 <script src="js/npc_importer.js?v=2"></script>
 <script src="js/lorebook.js"></script>
@@ -4440,9 +4447,9 @@ const GameLog = (() => {
 <script src="js/single_mode.js?v=4"></script>
 <script src="js/character.js?v=18"></script>
 <script src="js/prompts.js?v=6"></script>
-<script src="js/conversations.js?v=15"></script>
+<script src="js/conversations.js?v=17"></script>
 <script src="js/summary.js?v=3"></script>
-<script src="js/chat.js?v=129"></script>
+<script src="js/chat.js?v=131"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4461,7 +4468,7 @@ const GameLog = (() => {
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
 <script src="js/app_icons.js?v=7"></script>
-<script src="js/phone.js?v1=1236"></script>
+<script src="js/phone.js?v1=1250"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -4481,8 +4488,8 @@ const GameLog = (() => {
 <script src="js/tianshucheng-fx.js"></script>
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
-<script src="js/auth.js?v=24"></script>
-<script src="js/app.js?v=167"></script>
+<script src="js/auth.js?v=26"></script>
+<script src="js/app.js?v=168"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

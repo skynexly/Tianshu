@@ -5397,6 +5397,45 @@ align-self: start;
   opacity: 1;
   pointer-events: auto;
 }
+/* 邮件线程左滑（合并 + 删除，仿书架 swipe） */
+.phone-email-swipe {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  margin-bottom: 10px;
+}
+.phone-email-swipe-content {
+  position: relative;
+  transition: transform 0.25s ease;
+  will-change: transform;
+  z-index: 1;
+}
+.phone-email-swipe-content.swiping { transition: none; }
+.phone-email-swipe-actions {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 160px;
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.phone-email-swipe.swiped .phone-email-swipe-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.phone-email-swipe-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.phone-email-swipe-btn.merge { background: var(--accent, #f60); }
+.phone-email-swipe-btn.del { background: var(--danger, #e5484d); border-radius: 0 14px 14px 0; }
 .phone-reading-shelf-card {
   display: flex; align-items: stretch; gap: 12px;
   background: var(--card-bg, rgba(255,255,255,0.06));
