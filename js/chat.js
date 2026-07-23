@@ -1085,8 +1085,43 @@ try {
         systemParts.push('【玩家当前居住地】\n' + hStr);
       }
     }
+    // 3a'. 玩家宠物：携带的发完整资料，在家的发简介
+    if (_pd && Array.isArray(_pd.pets) && _pd.pets.length) {
+      const carried = _pd.pets.filter(p => p && p.carried);
+      const athome = _pd.pets.filter(p => p && !p.carried);
+      // 携带中：完整资料（纯资料，不含状态，避免过时）
+      if (carried.length && typeof Phone._petProfileToText === 'function') {
+        const blocks = carried.map(p => Phone._petProfileToText(p)).filter(Boolean);
+        if (blocks.length) systemParts.push('【随身携带的宠物】（玩家此刻带在身边）\n' + blocks.join('\n\n'));
+      }
+      // 在家：简介版
+      const homeLines = athome.map(p => {
+        if (!p) return '';
+        const name = String(p.name || '未命名').trim();
+        const brief = String(p.brief || '').trim();
+        if (brief) return `· ${name}：${brief}`;
+        const bits = [];
+        if (p.gender) bits.push(String(p.gender).trim());
+        if (p.species) bits.push(String(p.species).trim());
+        if (p.age != null && p.age !== '') bits.push(`${p.age}岁`);
+        return bits.length ? `· ${name}（${bits.join('·')}）` : `· ${name}`;
+      }).filter(Boolean);
+      if (homeLines.length) systemParts.push('【玩家常驻宠物】（在家，未随身携带）\n' + homeLines.join('\n'));
+    }
   }
 } catch(_) {}
+
+// 3a''. 玩家住所详细布局（地点命中住所时注入，紧贴在当前居住地简介后）
+if (isGameMode) {
+  try {
+    const _sb = Conversations.getStatusBar() || {};
+    const _loc = String(_sb.location || '').trim();
+    if (_loc && typeof Phone !== 'undefined' && Phone.getCottageLayoutForLocation) {
+      const cottageLayout = await Phone.getCottageLayoutForLocation(_loc);
+      if (cottageLayout) systemParts.push(cottageLayout);
+    }
+  } catch(_) {}
+}
 
 // 3b. 世界观速查表（每轮发，所有地区/势力/NPC概要）— 番外模式下看 inheritNpc 开关 — 非文游模式跳过
     // v687.33：返航"继续日常"模式下全部跳过
@@ -1219,19 +1254,7 @@ try {
       } catch(e) { console.warn('[Chat] 提及地区注入失败', e); }
     }
 
-    // 4e. 住所布局（小地点命中玩家住所时，发送简化室内布局）
-    if (isGameMode) {
-      try {
-        const _sb = Conversations.getStatusBar() || {};
-        const _loc = String(_sb.location || '').trim();
-        if (_loc && typeof Phone !== 'undefined' && Phone.getCottageLayoutForLocation) {
-          const cottageLayout = await Phone.getCottageLayoutForLocation(_loc);
-          if (cottageLayout) systemParts.push(cottageLayout);
-        }
-      } catch(_) {}
-    }
-
-    // 4f. 附近地图（玩家在地图 APP 生成的周边固定地名，开了"同步到主线"才注入）
+    // 4e. 附近地图（玩家在地图 APP 生成的周边固定地名，开了"同步到主线"才注入）
     if (isGameMode && typeof Phone !== 'undefined' && Phone.buildNearbyMapForAI) {
       try {
         const nearbyMap = await Phone.buildNearbyMapForAI();

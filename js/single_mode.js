@@ -414,21 +414,8 @@ const SingleMode = (() => {
         tpl = allConvs.find(c => (c.worldviewId || '__default_wv__') === wvIdForInherit && !c.isGaiden);
       }
       if (tpl) {
-        const INHERIT_KEYS = [
-          'convStream', 'convGameMode', 'convFormat', 'convCustomFormat', 'convSuggestEnabled',
-          'convStripHistoryHtml', 'convStripHtmlKeepText', 'convDisableRetry', 'backstageEnabled',
-          'convTimeAware', 'convBatteryAware', 'convWeatherAware',
-          'convAmbientEnabled', 'convAmbientVolume', 'convAmbientMode',
-          'convOnlineChat', 'convImgGen', 'convCallEnabled', 'convCallFreq',
-          'convGroupChatEnabled', 'convNarrPerson',
-          'convToolsMemory', 'convToolsWorldview', 'convToolsEdit', 'convToolsHistory', 'convAutoExtract',
-          'convEventsEnabled', 'convTasksEnabled', 'convAttrsEnabled', 'convKnowledgeEnabled',
-          'convReplyWordCount', 'convTimeFormat',
-        ];
-        for (const k of INHERIT_KEYS) {
-          if (tpl[k] !== undefined) conv[k] = tpl[k];
-        }
-        if (tpl.convVoice) conv.convVoice = JSON.parse(JSON.stringify(tpl.convVoice));
+        // 复用群像同一套继承逻辑（单一真源，避免两处白名单不同步漏项）
+        Conversations.applyInheritedSettings(conv, tpl);
       }
     } catch(_) {}
 

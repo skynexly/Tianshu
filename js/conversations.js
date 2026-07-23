@@ -2,6 +2,31 @@
  * 多对话管理 — 文件夹 + 置顶 + 拖动排序
  */
 const Conversations = (() => {
+  // 新建/单人对话统一继承的「设置类」字段白名单（单一真源，避免群像与单人两处各写一份而漏项）。
+  // 只沿用"设置"，不沿用剧情内容（世界观/事件链/属性/剧情引导/背景图各自独立）。
+  const INHERIT_KEYS = [
+    'convStream', 'convGameMode', 'convFormat', 'convCustomFormat', 'convSuggestEnabled',
+    'convStripHistoryHtml', 'convStripHtmlKeepText', 'convDisableRetry', 'backstageEnabled',
+    'convTimeAware', 'convBatteryAware', 'convWeatherAware',
+    'convAmbientEnabled', 'convAmbientVolume', 'convAmbientMode',
+    'convOnlineChat', 'convImgGen', 'convCallEnabled', 'convCallFreq',
+    'convGroupChatEnabled', 'convNarrPerson',
+    'convToolsMemory', 'convToolsWorldview', 'convToolsEdit', 'convToolsHistory', 'convAutoExtract',
+    'convEventsEnabled', 'convTasksEnabled', 'convAttrsEnabled', 'convKnowledgeEnabled',
+    'convReplyWordCount', 'convTimeFormat',
+    'convHideTopbar',
+    'convConstraintEcho', 'convConstraintSublime', 'convConstraintGodView',
+    'convConstraintAbility', 'convConstraintAutonomy', 'convConstraintTimeFlow', 'convConstraintGender'
+  ];
+  // 把模板对话 tpl 的设置类字段应用到新对话 conv（就地修改 conv）。
+  function applyInheritedSettings(conv, tpl) {
+    if (!conv || !tpl) return;
+    for (const k of INHERIT_KEYS) {
+      if (tpl[k] !== undefined) conv[k] = tpl[k];
+    }
+    // convVoice 是对象，深拷贝避免共享引用
+    if (tpl.convVoice) conv.convVoice = JSON.parse(JSON.stringify(tpl.convVoice));
+  }
 let currentId = 'default';
   let list = [];       // { id, name, created, maskId?, branchMaskId?, folder?, pinned?, worldviewId? }
   let _initialized = false; // init 是否已完成加载——saveList 的前置守卫，防止 init 前空 list 覆盖 DB
@@ -472,24 +497,7 @@ async function init() {
         tpl = list.find(c => (c.worldviewId || '__default_wv__') === wvId && !c.isGaiden);
       }
       if (tpl) {
-        const INHERIT_KEYS = [
-          'convStream', 'convGameMode', 'convFormat', 'convCustomFormat', 'convSuggestEnabled',
-          'convStripHistoryHtml', 'convStripHtmlKeepText', 'convDisableRetry', 'backstageEnabled',
-          'convTimeAware', 'convBatteryAware', 'convWeatherAware',
-          'convAmbientEnabled', 'convAmbientVolume', 'convAmbientMode',
-          'convOnlineChat', 'convImgGen', 'convCallEnabled', 'convCallFreq',
-          'convGroupChatEnabled', 'convNarrPerson',
-          'convToolsMemory', 'convToolsWorldview', 'convToolsEdit', 'convToolsHistory', 'convAutoExtract',
-          'convEventsEnabled', 'convTasksEnabled', 'convAttrsEnabled', 'convKnowledgeEnabled',
-          'convReplyWordCount', 'convTimeFormat',
-          'convConstraintEcho', 'convConstraintSublime', 'convConstraintGodView',
-          'convConstraintAbility', 'convConstraintAutonomy', 'convConstraintTimeFlow', 'convConstraintGender'
-        ];
-        for (const k of INHERIT_KEYS) {
-          if (tpl[k] !== undefined) conv[k] = tpl[k];
-        }
-        // convVoice 是对象，深拷贝避免共享引用
-        if (tpl.convVoice) conv.convVoice = JSON.parse(JSON.stringify(tpl.convVoice));
+        applyInheritedSettings(conv, tpl);
       }
     } catch(_) {}
     // 无模板对话时的兜底：从 localStorage 继承「关闭自动重试」
@@ -1907,6 +1915,7 @@ const allArchives = await DB.getAll('archives');
     cleanupRecoveredBackstage,
     backupBeforeMigration, getPreMigrationBackupInfo, restorePreMigrationBackup,
     toggleCharFilter, pickCharFilter, refreshCharFilter,
+    applyInheritedSettings, INHERIT_KEYS,
     getList: () => list,
     setStreaming
   };

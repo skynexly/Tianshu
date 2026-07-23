@@ -1424,6 +1424,108 @@ function _flushChatRoundLog() {
     }
   }
 
+  // 简易文本输入弹窗：返回用户输入的字符串，取消返回 null。
+  function _phonePromptText(title, desc, placeholder) {
+    return new Promise(resolve => {
+      const mask = document.createElement('div');
+      mask.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+      mask.innerHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text)">
+          <div style="font-size:15px;font-weight:600;margin-bottom:10px">${Utils.escapeHtml(title || '')}</div>
+          <div style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin-bottom:14px">${Utils.escapeHtml(desc || '')}</div>
+          <input id="phone-prompt-input" type="text" placeholder="${Utils.escapeHtml(placeholder || '')}" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:16px">
+          <div style="display:flex;gap:10px">
+            <button id="phone-prompt-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+            <button id="phone-prompt-ok" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">确定</button>
+          </div>
+        </div>`;
+      document.body.appendChild(mask);
+      const input = mask.querySelector('#phone-prompt-input');
+      const close = val => { try { mask.remove(); } catch(_) {} resolve(val); };
+      mask.querySelector('#phone-prompt-cancel').onclick = () => close(null);
+      mask.querySelector('#phone-prompt-ok').onclick = () => close(input.value);
+      mask.addEventListener('click', e => { if (e.target === mask) close(null); });
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') close(input.value); });
+      setTimeout(() => { try { input.focus(); } catch(_) {} }, 50);
+    });
+  }
+
+  // 一键清空手机数据（全清，含图片）：清空前强制存一份带图片的完整备份，再重置为出厂态。
+  //   与滚动备份的"防退化"逻辑独立——这里直接 push 一份完整快照（不剥图、不受体量保护限制），
+  //   确保清空后仍能从「选择备份恢复」找回连头像/壁纸在内的全部数据。
+  async function _phoneResetAll() {
+    try {
+      const convId = Conversations.getCurrent();
+      if (!convId) { UI.showToast('没有当前对话', 1800); return; }
+      const conv = Conversations.getList().find(c => c.id === convId);
+      if (!conv) { UI.showToast('当前对话不存在', 1800); return; }
+      const pd = conv.phoneData;
+      if (!pd || _phoneDataIsPristine(pd)) { UI.showToast('手机已经是空白状态', 1800); return; }
+
+      const curW = _phoneDataWeight(pd);
+      // 第一道确认：说明后果
+      const ok1 = await UI.showConfirm('清空手机数据',
+        `将把当前对话的手机彻底重置为出厂状态，清除全部 App 数据（约 ${curW} 项）以及头像/壁纸/封面等图片。\n\n清空前会自动保存一份完整备份，可去「选择备份恢复」找回。\n\n确定继续吗？`);
+      if (!ok1) return;
+      // 第二道确认：要求输入确认词，防手滑
+      const word = await _phonePromptText('二次确认', '此操作不可直接撤销。请输入「清空」二字以确认执行：', '输入「清空」');
+      if (word == null) return;
+      if (String(word).trim() !== '清空') { UI.showToast('确认词不正确，已取消', 2000); return; }
+
+      // 清空前：把当前完整数据（含图片）存到独立的"清空前快照" key，供事后找回；
+      //   同时删掉滚动备份 key——否则 _getPhoneData 的防丢逻辑会检测到"数据变空白"，
+      //   自动用滚动备份把清空覆盖回去（清空就失效了）。
+      try {
+        const fullSnap = JSON.parse(JSON.stringify(pd));
+        await DB.put('gameState', { key: `phoneResetBackup_${convId}`, value: { ts: Date.now(), weight: curW, data: fullSnap } });
+        // 删掉滚动备份，避免自动恢复覆盖清空
+        try { await DB.del('gameState', `phoneBackup_${convId}`); } catch(_) {}
+        try { await DB.flush('gameState'); } catch(_) {}
+      } catch (e) {
+        console.warn('[Phone] 清空前备份失败', e);
+        const cont = await UI.showConfirm('备份失败', '清空前的自动备份没有成功保存，继续清空将无法找回。仍要继续吗？');
+        if (!cont) return;
+      }
+
+      // 执行清空：重置为默认结构
+      conv.phoneData = _defaultPhoneData();
+      await Conversations.saveList();
+      try { reloadActionLog(); } catch(_) {}
+      UI.showToast('手机数据已清空', 2200);
+      try { goHome(); } catch(_) {}
+    } catch (e) {
+      console.warn('[Phone] _phoneResetAll failed', e);
+      UI.showToast('清空失败，请重试', 2000);
+    }
+  }
+
+  // 恢复清空前的数据：从 phoneResetBackup_${convId} 读回上次清空前保存的完整快照（含图片）。
+  async function _phoneRestoreResetBackup() {
+    try {
+      const convId = Conversations.getCurrent();
+      if (!convId) { UI.showToast('没有当前对话', 1800); return; }
+      const conv = Conversations.getList().find(c => c.id === convId);
+      if (!conv) { UI.showToast('当前对话不存在', 1800); return; }
+      const rec = await DB.get('gameState', `phoneResetBackup_${convId}`);
+      const snap = rec && rec.value;
+      if (!snap || !snap.data || typeof snap.data !== 'object') { UI.showToast('没有可恢复的清空前数据', 2000); return; }
+      const bkW = (typeof snap.weight === 'number') ? snap.weight : _phoneDataWeight(snap.data);
+      const tsText = snap.ts ? new Date(snap.ts).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '上次清空前';
+      const curW = _phoneDataWeight(conv.phoneData);
+      const ok = await UI.showConfirm('恢复清空前的数据',
+        `将用「${tsText}」清空前保存的完整数据（约 ${bkW} 项，含头像/壁纸）覆盖当前手机数据（约 ${curW} 项）。\n\n确定恢复吗？`);
+      if (!ok) return;
+      conv.phoneData = JSON.parse(JSON.stringify(snap.data));
+      await Conversations.saveList();
+      try { reloadActionLog(); } catch(_) {}
+      UI.showToast('已恢复清空前的数据', 2200);
+      try { goHome(); } catch(_) {}
+    } catch (e) {
+      console.warn('[Phone] _phoneRestoreResetBackup failed', e);
+      UI.showToast('恢复失败，请重试', 2000);
+    }
+  }
+
   // 把某一份备份 data 覆盖到当前手机数据（图片字段用当前窗口回填）。供列表恢复与快捷恢复共用。
   async function _phoneApplyBackupData(bkData) {
     const convId = Conversations.getCurrent();
@@ -1678,6 +1780,7 @@ heartsimServiceMessages: [],
   emails: { threads: [] }, // 邮件会话（按通信对象聚合）。一条 {id, party:{name,source,avatar}, createdAt, updatedAt, letters:[{id, dir:'out'|'in', subject, body, gameTime, createdAt, read}]}
   // 小屋 App
   houses: [],            // 住所列表 [{id, name, address, styleDesc, isCurrent, rooms:[{id, name, slots:[{id, label, itemId}]}]}]
+  pets: [],              // 宠物列表 [{id, name, gender, age, ageMax, species, appearance, setting, customFields:[{label,value}], source, createdAt}]
   furnitureInventory: [],// 家具仓库 [{id, tag, name, desc, qty}]
       furnitureMallItems: [],// 家具商城当前展示的商品缓存 [{id, name, desc, price, tag}]
       furnitureOrders: [],   // 家具订单（走配送的）[{id, name, desc, tag, price, status, deliveryMinutes, orderGameTime, claimedToInv}]
@@ -2674,6 +2777,27 @@ function _isAppStillActive(appId) {
       }
     } catch(_) {}
 
+    // 3.2 玩家常驻宠物（简洁版，接在居住地之后）
+    if (!lite) try {
+      const _pd = await _getPhoneData();
+      const pets = (_pd && Array.isArray(_pd.pets)) ? _pd.pets : [];
+      if (pets.length) {
+        const petLines = pets.map(p => {
+          if (!p) return '';
+          const name = String(p.name || '未命名').trim();
+          const brief = String(p.brief || '').trim();
+          if (brief) return `· ${name}：${brief}`;
+          // 回退：性别·品种·年龄
+          const bits = [];
+          if (p.gender) bits.push(String(p.gender).trim());
+          if (p.species) bits.push(String(p.species).trim());
+          if (p.age != null && p.age !== '') bits.push(`${p.age}岁`);
+          return bits.length ? `· ${name}（${bits.join('·')}）` : `· ${name}`;
+        }).filter(Boolean);
+        if (petLines.length) parts.push('【玩家常驻宠物】\n' + petLines.join('\n'));
+      }
+    } catch(_) {}
+
     // 3.5 v617：当前对话绑定的单人卡主角（AI 扮演角色）
     // v687.33：返航 continue/epilogue 模式下跳过（单人卡主角不属于返航后的现实世界）
     // includeConvChars：电台/阅读预览在 lite 下也带上（受 castFilter 约束：disabled 不发，whitelist 需 id 命中）
@@ -3204,8 +3328,9 @@ function _uiIcon(type, size = 16) {
  box: `<svg ${common}><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg>`,
  clock: `<svg ${common}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
  quote: `<svg ${common}><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"></path><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"></path></svg>`,
- ticket: `<svg ${common}><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path><path d="M13 5v2"></path><path d="M13 17v2"></path><path d="M13 11v2"></path></svg>`,
- navigation: `<svg ${common}><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>`
+ticket: `<svg ${common}><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path><path d="M13 5v2"></path><path d="M13 17v2"></path><path d="M13 11v2"></path></svg>`,
+  plus: `<svg ${common}><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>`,
+  navigation: `<svg ${common}><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>`
  };
   return icons[type] || '';
 }
@@ -8487,6 +8612,9 @@ function _refreshCalBanner() {
       music:   `<svg ${common}><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
       box:     `<svg ${common}><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`,
       cart:    `<svg ${common}><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>`,
+      paw:     `<svg ${common}><circle cx="11" cy="4" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="20" cy="16" r="2"/><path d="M9 10a5 5 0 0 1 5 5v3.5a3.5 3.5 0 0 1-6.84 1.045Q6.52 17.48 4.46 16.84A3.5 3.5 0 0 1 5.5 10Z"/></svg>`,
+      shirt:   `<svg ${common}><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>`,
+      bowl:    `<svg ${common}><path d="M2 12h20"/><path d="M4 12a8 8 0 0 0 16 0"/><path d="M12 4c-1.5 0-2.5 1-2.5 2.5S10.5 9 12 9s2.5-1 2.5-2.5S13.5 4 12 4Z"/></svg>`,
     };
     return map[icon] || map.door;
   }
@@ -8539,6 +8667,11 @@ function _refreshCalBanner() {
 
   // 小屋首页底部 tab：'cottage' 小屋（住所列表）| 'mall' 商城
   let _cottageHomeTab = 'cottage';
+  // 宠物详情页「变化记录」当前页（从 0 开始），切换宠物时重置
+  let _petLogPage = 0;
+  let _petLogPetId = '';
+  // 详情页翻页时暂存的滚动位置（避免重渲染后跳回顶部）
+  let _petDetailScrollY = 0;
 
   // 小屋首页：住所列表 + 添加住所 / 商城，底部两 tab
   async function _renderCottage(pd) {
@@ -8583,6 +8716,7 @@ function _refreshCalBanner() {
 
     const mallHtml = `
       <div class="cottage-mall">
+        <div style="font-size:12px;font-weight:600;color:var(--text-secondary);letter-spacing:.5px;padding:0 2px 2px">家具</div>
         <div class="cottage-mall-card" onclick="Phone._cottageOpenMall()">
           <div class="cottage-mall-card-icon">${_cottageRoomSvg('cart')}</div>
           <div class="cottage-mall-card-text">
@@ -8597,19 +8731,77 @@ function _refreshCalBanner() {
             <div class="cottage-mall-card-desc">已购入但还没摆放的物件</div>
           </div>
         </div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-secondary);letter-spacing:.5px;padding:10px 2px 2px">宠物</div>
+        <div class="cottage-mall-card" onclick="Phone._petOpenMall()">
+          <div class="cottage-mall-card-icon">${_cottageRoomSvg('cart')}</div>
+          <div class="cottage-mall-card-text">
+            <div class="cottage-mall-card-name">宠物商城</div>
+            <div class="cottage-mall-card-desc">选购宠物、服装、用品与食品</div>
+          </div>
+        </div>
+        <div class="cottage-mall-card" onclick="Phone._petOpenClothes()">
+          <div class="cottage-mall-card-icon">${_cottageRoomSvg('shirt')}</div>
+          <div class="cottage-mall-card-text">
+            <div class="cottage-mall-card-name">宠物衣橱</div>
+            <div class="cottage-mall-card-desc">已购入的衣服，可给宠物穿上</div>
+          </div>
+        </div>
+        <div class="cottage-mall-card" onclick="Phone._petOpenFeeder()">
+          <div class="cottage-mall-card-icon">${_cottageRoomSvg('bowl')}</div>
+          <div class="cottage-mall-card-text">
+            <div class="cottage-mall-card-name">宠物喂食器</div>
+            <div class="cottage-mall-card-desc">食盆里的食物，刷新状态时被吃掉</div>
+          </div>
+        </div>
       </div>`;
+
+    // 宠物 tab：两列宠物卡片，点击进入单只宠物详情。
+    const pets = Array.isArray(pd.pets) ? pd.pets : [];
+    const petCards = pets.map(pet => {
+      const image = typeof pet.image === 'string' ? pet.image : '';
+      const thumbInner = image
+        ? `<div style="width:100%;height:100%;background:center/cover no-repeat url('${image.replace(/'/g, "\\'")}')"></div>`
+        : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-secondary)">${_cottageRoomSvg('paw')}</div>`;
+      return `
+        <div class="cottage-pet-card" onclick="Phone._petOpenDetail('${Utils.escapeHtml(pet.id)}')" style="border:1px solid var(--border);border-radius:12px;background:var(--bg);color:var(--text);padding:8px;text-align:left;cursor:pointer;min-width:0;position:relative">
+          <div style="width:100%;aspect-ratio:1;border-radius:9px;background:var(--bg-tertiary);overflow:hidden;position:relative">${thumbInner}
+            <span onclick="event.stopPropagation();Phone._petToggleCarry('${Utils.escapeHtml(pet.id)}')" title="${pet.carried ? '已携带，点击放下' : '携带此宠物'}" style="position:absolute;top:6px;right:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:${pet.carried ? 'var(--accent)' : 'rgba(0,0,0,.4)'};color:${pet.carried ? '#111' : '#fff'};cursor:pointer;backdrop-filter:blur(2px)">${_cottageRoomSvg('paw')}</span>
+          </div>
+          <div style="padding:9px 3px 2px;font-size:14px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(pet.name || '未命名宠物')}${pet.carried ? ' <span style="font-size:11px;color:var(--accent);font-weight:500">· 携带中</span>' : ''}</div>
+        </div>`;
+    }).join('');
+    const petHtml = `
+      <div class="cottage-pet" style="padding:16px">
+        ${pets.length ? `<div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:12px">轻点卡片右上角爪印可把宠物带在身边，携带的宠物会把完整资料带进剧情。</div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${petCards}</div>` : `
+          <div class="cottage-empty" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:48px 20px;color:var(--text-secondary)">
+            <div style="opacity:.5">${_cottageRoomSvg('paw')}</div>
+            <div>还没有宠物</div>
+            <div style="font-size:12px;opacity:.7">点击右上角加号添加第一只宠物吧</div>
+          </div>`}
+      </div>`;
+
+    const mainHtml = _cottageHomeTab === 'mall' ? mallHtml
+      : (_cottageHomeTab === 'pet' ? petHtml : cottageHtml);
 
     body.innerHTML = `
       <div class="phone-cottage-shell" style="display:flex;flex-direction:column;height:100%">
-        <div style="flex:1;min-height:0;overflow-y:auto">${_cottageHomeTab === 'mall' ? mallHtml : cottageHtml}</div>
+        <div style="flex:1;min-height:0;overflow-y:auto">${mainHtml}</div>
         <div class="phone-tabbar">
           <div class="phone-tab ${_cottageHomeTab === 'cottage' ? 'active' : ''}" onclick="Phone._switchCottageHomeTab('cottage')">小屋</div>
+          <div class="phone-tab ${_cottageHomeTab === 'pet' ? 'active' : ''}" onclick="Phone._switchCottageHomeTab('pet')">宠物</div>
           <div class="phone-tab ${_cottageHomeTab === 'mall' ? 'active' : ''}" onclick="Phone._switchCottageHomeTab('mall')">商城</div>
         </div>
       </div>`;
 
     const hr = document.getElementById('phone-header-right');
-    if (hr) hr.innerHTML = `<button class="phone-nav-btn" title="数据管理" onclick="Phone._cottageDataMenu()">${_uiIcon('settings', 18)}</button>`;
+    if (hr) {
+      if (_cottageHomeTab === 'pet') {
+        // 宠物 tab：右上角加号（添加宠物 / AI 生成宠物）
+        hr.innerHTML = `<button class="phone-nav-btn" title="添加宠物" onclick="Phone._petAddMenu()">${_uiIcon('plus', 20)}</button>`;
+      } else {
+        hr.innerHTML = `<button class="phone-nav-btn" title="数据管理" onclick="Phone._cottageDataMenu()">${_uiIcon('settings', 18)}</button>`;
+      }
+    }
   }
 
   // 切换小屋首页底部 tab
@@ -8618,6 +8810,2696 @@ function _refreshCalBanner() {
     _cottageHomeTab = tab;
     const pd = await _getPhoneData();
     _renderCottage(pd);
+  }
+
+  // 宠物 tab 加号菜单
+  function _petAddMenu() {
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:300px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">添加宠物</div>
+        <button id="pet-add-custom" style="width:100%;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">${_uiIcon('pen', 15)} 添加宠物</button>
+        <button id="pet-add-ai" style="width:100%;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">${_uiIcon('star', 15)} AI 生成宠物</button>
+        <button id="pet-add-template" style="width:100%;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">${_uiIcon('settings', 15)} 状态模板</button>
+        <button id="pet-add-refresh-all" style="width:100%;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">${_uiIcon('refresh', 15)} 刷新全部状态</button>
+        <button id="pet-add-undo-batch" style="width:100%;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">${_uiIcon('undo', 15)} 撤销最近批量刷新</button>
+        <button id="pet-add-close" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:13px;cursor:pointer;margin-top:4px">取消</button>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => { if (mask.parentNode) mask.remove(); };
+    mask.querySelector('#pet-add-close').onclick = close;
+    mask.querySelector('#pet-add-custom').onclick = () => { close(); _petOpenCreateModal(); };
+    mask.querySelector('#pet-add-ai').onclick = () => { close(); _petAiGenerate(); };
+    mask.querySelector('#pet-add-template').onclick = () => { close(); _petEditTemplate(); };
+    mask.querySelector('#pet-add-refresh-all').onclick = () => { close(); _petRefreshAllStatus(); };
+    mask.querySelector('#pet-add-undo-batch').onclick = () => { close(); _petUndoLastRefresh('batch'); };
+    _maskCloseOnBg(mask, close);
+  }
+
+  // 宠物 AI 生图弹窗：把性别/品种/服装/外貌拼进英文简单提示词 + 用户补充 → 生图 → 回调填入编辑页
+  // 全局正/负向提示词由 API.generateImage 自动拼接。
+  function _petGenImageDialog(info, onDone) {
+    const infoLines = [];
+    if (info.gender) infoLines.push(`性别：${info.gender}`);
+    if (info.species) infoLines.push(`品种：${info.species}`);
+    const _outfitTxt = _petOutfitText(info);
+    if (_outfitTxt) infoLines.push(`服装：${_outfitTxt}`);
+    if (info.appearance) infoLines.push(`外貌：${info.appearance}`);
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">AI 生成宠物图片</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">宠物资料（自动带入）</label>
+        <div style="font-size:13px;line-height:1.6;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;color:${infoLines.length ? 'var(--text)' : 'var(--text-secondary)'}">${infoLines.length ? infoLines.map(l => Utils.escapeHtml(l)).join('<br>') : '暂无资料，将仅按提示词生成'}</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">补充提示词（可选）</label>
+        <textarea id="pet-img-req" rows="3" placeholder="风格、构图、背景等，例如：卡通风格、纯色背景、坐姿" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:14px"></textarea>
+
+        <div id="pet-img-result" style="display:none;margin-bottom:14px">
+          <div id="pet-img-preview" style="width:100%;height:200px;border-radius:10px;background-size:cover;background-position:center;border:1px solid var(--border);margin-bottom:8px"></div>
+          <button id="pet-img-use" style="width:100%;padding:9px;border:1px solid var(--accent);border-radius:10px;background:none;color:var(--accent);font-size:13px;cursor:pointer">用这张图</button>
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button id="pet-img-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="pet-img-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => { if (mask.parentNode) mask.remove(); };
+    mask.querySelector('#pet-img-cancel').onclick = close;
+    _maskCloseOnBg(mask, close);
+
+    let _lastDataUrl = '';
+    mask.querySelector('#pet-img-use').onclick = () => {
+      if (_lastDataUrl && typeof onDone === 'function') onDone(_lastDataUrl);
+      close();
+    };
+
+    mask.querySelector('#pet-img-go').onclick = async () => {
+      const req = (mask.querySelector('#pet-img-req').value || '').trim();
+
+      // 简单英文提示词：只声明这是一只宠物 + 把资料塞进去，其他交给用户补充和全局词。
+      let basePrompt = 'A pet.';
+      const attrs = [];
+      if (info.gender) attrs.push(info.gender);
+      if (info.species) attrs.push(info.species);
+      if (attrs.length) basePrompt += ' ' + attrs.join(', ') + '.';
+      if (info.appearance) basePrompt += ` Appearance: ${info.appearance}.`;
+      if (_outfitTxt) basePrompt += ` Wearing: ${_outfitTxt}.`;
+      const drawPrompt = req ? `${basePrompt}\n\n${req}` : basePrompt;
+
+      const goBtn = mask.querySelector('#pet-img-go');
+      const oldText = goBtn.textContent;
+      goBtn.textContent = '生成中…';
+      goBtn.disabled = true;
+      try {
+        const images = await API.generateImage(drawPrompt, { n: 1, size: '1024x1024' });
+        if (!images || !images.length) throw new Error('没有返回图片');
+        const dataUrl = images[0];
+        // 存 drawnImages（进收藏图库）
+        const imageId = 'img_' + Utils.uuid();
+        await DB.put('drawnImages', { id: imageId, dataUrl, prompt: drawPrompt, createdAt: new Date().toISOString() });
+        _lastDataUrl = dataUrl;
+        const prev = mask.querySelector('#pet-img-preview');
+        prev.style.backgroundImage = `url('${dataUrl.replace(/'/g, "\\'")}')`;
+        mask.querySelector('#pet-img-result').style.display = '';
+        UI.showToast('生成成功，点「用这张图」应用', 2000);
+      } catch (e) {
+        console.error('[宠物AI生图]', e);
+        UI.showToast(`生成失败：${e.message || '未知错误'}`, 2600);
+      } finally {
+        goBtn.textContent = oldText;
+        goBtn.disabled = false;
+      }
+    };
+  }
+
+  // 新建 / 编辑宠物：手机内页，基础资料 + 可动态增删的自定义字段
+  async function _petOpenCreateModal(petId = '') {
+    const pd = await _getPhoneData();
+    const existing = petId && Array.isArray(pd.pets) ? pd.pets.find(p => p && p.id === petId) : null;
+    if (petId && !existing) { UI.showToast('未找到这只宠物', 1600); return; }
+    const isEditing = !!existing;
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    // 与家具商城、住所详情一致：压入手机导航栈；编辑保存后回到该宠物详情。
+    _pushNav(async () => isEditing ? _renderPetDetail(petId) : _renderCottage(await _getPhoneData()));
+    document.getElementById('phone-title').textContent = isEditing ? '编辑宠物' : '添加宠物';
+    _applyWallpaper(pd);
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = '';
+
+    body.innerHTML = `
+      <div class="phone-pet-create-page" style="height:100%;display:flex;flex-direction:column;color:var(--text)">
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:18px 16px 24px;box-sizing:border-box">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+            <div id="pet-image-preview" style="width:82px;height:82px;flex:none;border-radius:12px;border:1px solid var(--border);background:var(--bg-tertiary) center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:12px">暂无图片</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:13px">宠物图片</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap"><button id="pet-image-upload" type="button" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);font-size:12px;cursor:pointer">选择图片</button><button id="pet-image-ai" type="button" style="padding:7px 10px;border:1px solid var(--accent);border-radius:8px;background:none;color:var(--accent);font-size:12px;cursor:pointer">AI 生成</button><button id="pet-image-clear" type="button" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text-secondary);font-size:12px;cursor:pointer">清除</button></div>
+              <div style="font-size:11px;color:var(--text-secondary)">可上传本地图片</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <label style="font-size:13px">姓名 <span style="color:var(--danger,#e55)">*</span><input id="pet-name" type="text" maxlength="60" placeholder="宠物的名字" style="width:100%;box-sizing:border-box;margin-top:5px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px"></label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <label style="font-size:13px">性别<input id="pet-gender" type="text" maxlength="30" placeholder="可留空" style="width:100%;box-sizing:border-box;margin-top:5px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px"></label>
+              <label style="font-size:13px">品种<input id="pet-species" type="text" maxlength="80" placeholder="如：布偶猫" style="width:100%;box-sizing:border-box;margin-top:5px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px"></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <label style="font-size:13px">年龄<input id="pet-age" type="number" min="0" step="0.1" placeholder="可留空" style="width:100%;box-sizing:border-box;margin-top:5px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px"></label>
+              <label style="font-size:13px">年龄上限<input id="pet-age-max" type="number" min="0" step="0.1" placeholder="留空则无上限" style="width:100%;box-sizing:border-box;margin-top:5px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px"></label>
+            </div>
+            <label style="font-size:13px">服装（自带描述）<input id="pet-outfit" type="text" maxlength="500" placeholder="宠物自带的穿着，可留空" style="width:100%;box-sizing:border-box;margin-top:5px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px"></label>
+            ${isEditing ? `<div id="pet-worn-section">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="font-size:13px">穿上的衣服</span><button id="pet-worn-add" type="button" style="border:0;background:none;color:var(--accent);font-size:13px;cursor:pointer;padding:2px 0">+ 添加</button></div>
+              <div id="pet-worn-list" style="display:flex;flex-direction:column;gap:7px"></div>
+            </div>` : ''}
+            <label style="font-size:13px">外貌<textarea id="pet-appearance" maxlength="1000" rows="3" placeholder="描述宠物的外形、毛色、体态等" style="resize:vertical;width:100%;box-sizing:border-box;margin-top:5px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font:inherit;font-size:14px"></textarea></label>
+            <label style="font-size:13px">设定<textarea id="pet-setting" maxlength="3000" rows="4" placeholder="性格、来历、与角色的关系等" style="resize:vertical;width:100%;box-sizing:border-box;margin-top:5px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font:inherit;font-size:14px"></textarea></label>
+            <label style="font-size:13px">一句话简介<input id="pet-brief" type="text" maxlength="60" placeholder="发给主线的简洁画像，如：3岁的母橘猫，圆脸微胖，黏人好吃" style="width:100%;box-sizing:border-box;margin-top:5px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px"><span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.5">主线剧情会看到这句简介来认识这只宠物。留空则自动用「性别·品种·年龄」代替。</span></label>
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="font-size:13px">自定义字段</span><button id="pet-field-add" type="button" style="border:0;background:none;color:var(--accent);font-size:13px;cursor:pointer;padding:2px 0">+ 添加字段</button></div>
+              <div id="pet-custom-fields" style="display:flex;flex-direction:column;gap:7px"></div>
+            </div>
+          </div>
+          ${isEditing ? `<div style="margin-top:22px"><button id="pet-delete" type="button" style="width:100%;padding:11px;border:1px solid var(--danger,#e55);border-radius:9px;background:none;color:var(--danger,#e55);font-size:14px;cursor:pointer">删除这只宠物</button></div>` : ''}
+        </div>
+        <div style="display:flex;gap:10px;padding:12px 16px;border-top:1px solid var(--border);background:var(--bg);flex:none">
+          <button id="pet-create-cancel" type="button" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
+          <button id="pet-create-ok" type="button" style="flex:1;padding:10px;border:0;border-radius:9px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">${isEditing ? '保存修改' : '添加宠物'}</button>
+        </div>
+      </div>`;
+
+    // 编辑态回填：表单中的临时图片只有确认保存时才写回数据。
+    let pendingImage = isEditing && typeof existing.image === 'string' ? existing.image : '';
+    const setFieldValue = (selector, value) => {
+      const el = body.querySelector(selector);
+      if (el) el.value = value == null ? '' : String(value);
+    };
+    if (isEditing) {
+      setFieldValue('#pet-name', existing.name);
+      setFieldValue('#pet-gender', existing.gender);
+      setFieldValue('#pet-species', existing.species);
+      setFieldValue('#pet-age', existing.age);
+      setFieldValue('#pet-age-max', existing.ageMax);
+      setFieldValue('#pet-outfit', existing.outfit);
+      setFieldValue('#pet-appearance', existing.appearance);
+      setFieldValue('#pet-setting', existing.setting);
+      setFieldValue('#pet-brief', existing.brief);
+    }
+    const imagePreview = body.querySelector('#pet-image-preview');
+    const refreshImagePreview = () => {
+      if (pendingImage) {
+        imagePreview.style.backgroundImage = `url('${pendingImage.replace(/'/g, "\\'")}')`;
+        imagePreview.textContent = '';
+      } else {
+        imagePreview.style.backgroundImage = '';
+        imagePreview.textContent = '暂无图片';
+      }
+    };
+    body.querySelector('#pet-image-upload').onclick = async () => {
+      try {
+        const dataUrl = await Utils.promptImageInput({ maxSize: 1280, quality: 0.75 });
+        if (!dataUrl) return;
+        if (typeof dataUrl === 'string' && dataUrl.length > 2600000) {
+          UI.showToast('图片过大，请选择更小的图片', 2500); return;
+        }
+        pendingImage = dataUrl;
+        refreshImagePreview();
+      } catch (e) { UI.showToast('上传失败：' + (e.message || '未知错误'), 2200); }
+    };
+    body.querySelector('#pet-image-clear').onclick = () => { pendingImage = ''; refreshImagePreview(); };
+    const aiBtn = body.querySelector('#pet-image-ai');
+    if (aiBtn) aiBtn.onclick = () => {
+      const v = id => (body.querySelector(id)?.value || '').trim();
+      _petGenImageDialog({
+        gender: v('#pet-gender'),
+        species: v('#pet-species'),
+        outfit: v('#pet-outfit'),
+        appearance: v('#pet-appearance'),
+      }, (dataUrl) => { pendingImage = dataUrl; refreshImagePreview(); });
+    };
+    const fields = body.querySelector('#pet-custom-fields');
+    const addField = (field = null) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr) 28px;gap:7px;align-items:center';
+      row.innerHTML = `<input class="pet-custom-label" type="text" maxlength="40" placeholder="字段名" style="min-width:0;padding:8px 9px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:13px"><input class="pet-custom-value" type="text" maxlength="500" placeholder="内容" style="min-width:0;padding:8px 9px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:13px"><button type="button" title="删除字段" style="width:28px;height:28px;padding:0;border:0;border-radius:6px;background:none;color:var(--text-secondary);font-size:18px;cursor:pointer">×</button>`;
+      row.querySelector('.pet-custom-label').value = field?.label || '';
+      row.querySelector('.pet-custom-value').value = field?.value || '';
+      row.querySelector('button').onclick = () => row.remove();
+      fields.appendChild(row);
+    };
+    (isEditing && Array.isArray(existing.customFields) ? existing.customFields : []).forEach(addField);
+    refreshImagePreview();
+    body.querySelector('#pet-field-add').onclick = addField;
+
+    // 穿上的衣服（仅编辑态）：即时生效——穿一件扣衣橱库存、脱一件放回衣橱，直接 save。
+    if (isEditing) {
+      if (!Array.isArray(existing.wornClothes)) existing.wornClothes = [];
+      const wornList = body.querySelector('#pet-worn-list');
+      const renderWorn = () => {
+        const worn = existing.wornClothes || [];
+        wornList.innerHTML = worn.length
+          ? worn.map((w, i) => `
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary)">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;color:var(--text)">${Utils.escapeHtml(w.name || '未命名')}</div>
+                ${w.desc ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(w.desc)}</div>` : ''}
+              </div>
+              <button type="button" data-worn-off="${i}" title="脱下放回衣橱" style="width:26px;height:26px;flex:none;padding:0;border:0;border-radius:6px;background:none;color:var(--text-secondary);font-size:17px;cursor:pointer">×</button>
+            </div>`).join('')
+          : `<div style="font-size:11px;color:var(--text-secondary);padding:2px 2px 4px">还没穿衣服，点右上「+ 添加」从衣橱选或手动填写。</div>`;
+        wornList.querySelectorAll('[data-worn-off]').forEach(btn => {
+          btn.onclick = async () => {
+            const idx = Number(btn.getAttribute('data-worn-off'));
+            const w = existing.wornClothes[idx];
+            if (!w) return;
+            const pd2 = await _getPhoneData();
+            const tgt = (pd2.pets || []).find(p => p && p.id === petId);
+            if (!tgt || !Array.isArray(tgt.wornClothes)) return;
+            tgt.wornClothes.splice(idx, 1);
+            _addPetClothToWardrobe(pd2, { name: w.name, desc: w.desc }); // 脱下的一律放回衣橱
+            await _savePhoneData();
+            existing.wornClothes = tgt.wornClothes;
+            renderWorn();
+            UI.showToast(`已脱下「${w.name}」，放回衣橱`, 1400);
+          };
+        });
+      };
+      renderWorn();
+
+      // 添加：手动填写 / 从衣橱选
+      body.querySelector('#pet-worn-add').onclick = () => {
+        const mask = document.createElement('div');
+        mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px';
+        mask.innerHTML = `
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:300px;width:100%;color:var(--text)">
+            <div style="font-size:15px;font-weight:600;margin-bottom:14px">添加衣服</div>
+            <button id="worn-from-wardrobe" style="width:100%;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">${_uiIcon('shirt', 15)} 从衣橱选</button>
+            <button id="worn-manual" style="width:100%;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">${_uiIcon('pen', 15)} 手动填写</button>
+            <button id="worn-cancel" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:13px;cursor:pointer;margin-top:4px">取消</button>
+          </div>`;
+        document.body.appendChild(mask);
+        const closeMask = () => { if (mask.parentNode) mask.remove(); };
+        mask.querySelector('#worn-cancel').onclick = closeMask;
+        _maskCloseOnBg(mask, closeMask);
+        mask.querySelector('#worn-from-wardrobe').onclick = () => { closeMask(); _petWornPickFromWardrobe(petId, () => { renderWornReload(); }); };
+        mask.querySelector('#worn-manual').onclick = () => { closeMask(); _petWornManualAdd(petId, () => { renderWornReload(); }); };
+      };
+      // 穿衣后重新拉最新数据刷新列表
+      const renderWornReload = async () => {
+        const pd2 = await _getPhoneData();
+        const tgt = (pd2.pets || []).find(p => p && p.id === petId);
+        if (tgt) existing.wornClothes = Array.isArray(tgt.wornClothes) ? tgt.wornClothes : [];
+        renderWorn();
+      };
+    }
+
+    body.querySelector('#pet-create-cancel').onclick = () => goBack();
+    if (isEditing) {
+      const delBtn = body.querySelector('#pet-delete');
+      if (delBtn) delBtn.onclick = async () => {
+        const ok = await UI.showConfirm('删除宠物', `确定删除「${existing.name || '这只宠物'}」吗？资料和状态都会一并清除，不可恢复。`);
+        if (!ok) return;
+        const data = await _getPhoneData();
+        data.pets = (data.pets || []).filter(p => p && p.id !== petId);
+        await _savePhoneData();
+        UI.showToast('已删除', 1400);
+        // 宠物已删，编辑页和它的详情页都失效：回宠物列表（小屋页）重渲染。
+        // 栈结构通常是 [App列表, 小屋, 详情, 编辑]，删除后应停在小屋宠物页。
+        const appRoot = _navStack.length ? _navStack[0] : null;
+        _navStack = appRoot ? [appRoot] : [];
+        _cottageHomeTab = 'pet';
+        _isNavBack = true;
+        try {
+          const fresh = await _getPhoneData();
+          _pushNav(async () => _renderCottage(await _getPhoneData()));
+          _renderCottage(fresh);
+        } finally { _isNavBack = false; }
+      };
+    }
+    body.querySelector('#pet-create-ok').onclick = async () => {
+      const val = id => (body.querySelector(id).value || '').trim();
+      const name = val('#pet-name');
+      if (!name) { UI.showToast('请填写宠物姓名', 1600); body.querySelector('#pet-name').focus(); return; }
+      const ageRaw = val('#pet-age');
+      const ageMaxRaw = val('#pet-age-max');
+      const age = ageRaw === '' ? null : Number(ageRaw);
+      const ageMax = ageMaxRaw === '' ? null : Number(ageMaxRaw);
+      if ((age !== null && (!Number.isFinite(age) || age < 0)) || (ageMax !== null && (!Number.isFinite(ageMax) || ageMax < 0))) { UI.showToast('年龄需为不小于 0 的数字', 1800); return; }
+      if (age !== null && ageMax !== null && age > ageMax) { UI.showToast('年龄不能大于年龄上限', 1800); return; }
+      const customFields = [...fields.children].map(row => ({
+        label: (row.querySelector('.pet-custom-label').value || '').trim(),
+        value: (row.querySelector('.pet-custom-value').value || '').trim(),
+      })).filter(f => f.label || f.value);
+      const data = await _getPhoneData();
+      if (!Array.isArray(data.pets)) data.pets = [];
+      const updates = {
+        name, gender: val('#pet-gender'), species: val('#pet-species'), age, ageMax,
+        image: pendingImage, outfit: val('#pet-outfit'), appearance: val('#pet-appearance'),
+        setting: val('#pet-setting'), brief: val('#pet-brief'), customFields,
+      };
+      if (isEditing) {
+        const target = data.pets.find(p => p && p.id === petId);
+        if (!target) { UI.showToast('宠物资料已不存在', 1600); goBack(); return; }
+        Object.assign(target, updates);
+      } else {
+        data.pets.push({ id: _cottageGenId('pet'), ...updates, source: 'custom', createdAt: new Date().toISOString() });
+      }
+      await _savePhoneData();
+      UI.showToast(isEditing ? `已保存「${name}」的资料` : `已添加宠物「${name}」`, 1600);
+      goBack();
+    };
+  }
+
+  // 切换携带状态：携带的宠物会把完整资料发给主线（在家的只发简介）。
+  async function _petToggleCarry(petId) {
+    const pd = await _getPhoneData();
+    const pet = Array.isArray(pd.pets) ? pd.pets.find(p => p && p.id === petId) : null;
+    if (!pet) { UI.showToast('未找到这只宠物', 1600); return; }
+    pet.carried = !pet.carried;
+    await _savePhoneData();
+    // 不写操作日志：携带状态已通过「随身携带的宠物」注入块实时体现，反复横跳不留痕。
+    UI.showToast(pet.carried ? `已带上「${pet.name || '这只宠物'}」` : `已放下「${pet.name || '这只宠物'}」`, 1400);
+    _renderCottage(await _getPhoneData());
+  }
+
+  // 分享宠物当前状态：弹菜单选去向（主线挂载 / 聊天 / 好友圈），不再一点就挂主线。
+  async function _petShareStatus(petId) {
+    const pd = await _getPhoneData();
+    const pet = Array.isArray(pd.pets) ? pd.pets.find(p => p && p.id === petId) : null;
+    if (!pet) { UI.showToast('未找到这只宠物', 1600); return; }
+    _ensurePetTemplate(pd);
+    _migratePetStatus(pd, pet);
+    const tpl = pd.petStatusTemplate || { numeric: [], text: [] };
+    const parts = [];
+    (tpl.numeric || []).forEach(f => {
+      const max = (typeof f.max === 'number' && f.max > 0) ? f.max : 100;
+      const v = _petFieldValue(pet, f, true);
+      parts.push(`${f.label || '未命名'}：${v}/${max}`);
+    });
+    (tpl.text || []).forEach(f => {
+      const v = _petFieldValue(pet, f, false);
+      if (v) parts.push(`${f.label || '未命名'}：${v}`);
+    });
+    if (!parts.length) { UI.showToast('这只宠物还没有状态可分享', 1800); return; }
+    let curTime = '';
+    try { const sb = Conversations.getStatusBar(); curTime = (sb && sb.time) ? _formatPhoneTime(sb.time) : ''; } catch (_) {}
+    const when = pet.statusRefreshedAt ? `（状态更新于 ${pet.statusRefreshedAt}）` : (curTime ? `（截至 ${curTime}）` : '');
+    const petName = pet.name || '未命名';
+    const content = `宠物「${petName}」的当前状态${when}：\n${parts.join('\n')}`;
+
+    const choice = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.45)';
+      overlay.innerHTML = `
+        <div style="width:100%;max-width:420px;background:var(--bg);border-radius:20px 20px 0 0;padding:20px 20px 32px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <span style="font-size:16px;font-weight:600;color:var(--text)">分享「${Utils.escapeHtml(petName)}」的状态</span>
+            <button id="pet-share-cancel" style="background:none;border:none;color:var(--text-secondary);font-size:22px;cursor:pointer;line-height:1">×</button>
+          </div>
+          <button id="pet-share-main" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+            分享到主线
+          </button>
+          <button id="pet-share-chat" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            分享到聊天
+          </button>
+          <button id="pet-share-moments" style="width:100%;padding:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            分享到好友圈
+          </button>
+        </div>`;
+      const close = val => { if (overlay.parentNode) document.body.removeChild(overlay); resolve(val); };
+      overlay.querySelector('#pet-share-cancel').onclick = () => close(null);
+      overlay.querySelector('#pet-share-main').onclick = () => close('main');
+      overlay.querySelector('#pet-share-chat').onclick = () => close('chat');
+      overlay.querySelector('#pet-share-moments').onclick = () => close('moments');
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+      document.body.appendChild(overlay);
+    });
+
+    if (choice === 'main') {
+      _shareToMain('pet', `${petName}的状态`, content);
+    } else if (choice === 'chat') {
+      await _petStatusShareToChat(petName, parts.join('\n'), when);
+    } else if (choice === 'moments') {
+      await _shareToMoments('宠物', `${petName}的状态`, parts[0] || '', content);
+    }
+  }
+
+  // 宠物状态分享到聊天：选联系人 → 发一张 pet_status 卡片
+  async function _petStatusShareToChat(petName, statusText, statusTime) {
+    const pd = await _getPhoneData();
+    const targetId = await _shareTargetPicker(pd, '分享到');
+    if (!targetId) return;
+    const isGroup = _isGroupId(pd, targetId);
+    let gameTime = '';
+    try { const sb = Conversations.getStatusBar(); gameTime = _formatPhoneTime(sb?.time || ''); } catch(_) {}
+    if (!pd.chatThreads) pd.chatThreads = {};
+    if (!pd.chatThreads[targetId]) pd.chatThreads[targetId] = [];
+    const _msgId = 'petst_' + Date.now();
+    pd.chatThreads[targetId].push({
+      id: _msgId,
+      role: 'me',
+      type: 'pet_status',
+      petName: petName,
+      petStatusText: statusText,
+      petStatusTime: statusTime || '',
+      time: gameTime,
+      createdAt: Date.now()
+    });
+    await _savePhoneData();
+    if (!isGroup) {
+      const _ctName = (pd.chatContacts || []).find(c => c.id === targetId)?.name || targetId;
+      _addChatMessageToRoundLog(targetId, 'me', `分享了宠物「${petName}」的状态`, gameTime, _ctName, { msgId: _msgId });
+    }
+    UI.showToast('已发送', 1200);
+  }
+
+  // 宠物详情：资料卡可点击进入编辑，状态区暂只保留 UI 占位。
+  function _petOpenDetail(petId) {
+    // 导航栈约定：push 当前进入页自己的渲染函数，goBack 时才能正确回到上一层。
+    _pushNav(() => _renderPetDetail(petId));
+    _renderPetDetail(petId);
+  }
+function _petEdit(petId) {
+    _petOpenCreateModal(petId);
+  }
+
+  // 默认状态模板字段（每次调用生成新 id，供初始化和「恢复默认」复用）。
+  function _petDefaultTemplate() {
+    return {
+      numeric: [
+        { id: _cottageGenId('ptpl'), label: '清洁度', max: 100, desc: '距离上次刷新越久越低（灰尘、玩耍弄脏等）；如果这段时间玩家给它洗澡、梳毛、擦拭，则明显回升甚至回满。' },
+        { id: _cottageGenId('ptpl'), label: '饱食度', max: 100, desc: '随时间自然下降，越久没喂越低；如果这段时间玩家喂食、给零食、加猫粮，则回升，刚喂饱则接近满值。' },
+        { id: _cottageGenId('ptpl'), label: '心情值', max: 100, desc: '受陪伴、玩耍、环境影响：被陪玩、抚摸、带出门会升高；长期无人理会、环境脏乱、饿肚子会下降。' },
+      ],
+      text: [
+        { id: _cottageGenId('ptpl'), label: '所在位置', desc: '根据剧情、时间和小屋布置，判断宠物现在最可能待在哪个房间或角落（如客厅沙发、窗台、猫窝），用简短一句话描述。' },
+        { id: _cottageGenId('ptpl'), label: '当前状态', desc: '用一句话描述宠物此刻在做什么、是什么神态（如"蜷在窝里打盹""趴在窗边盯着鸟发呆"），贴合心情值和剧情。' },
+        { id: _cottageGenId('ptpl'), label: '近期行动轨迹', desc: '只写「从上次刷新到现在」这段观测期内，宠物陆陆续续做过的事情，一条条列出来（例如：在客厅疯狂跑酷、把纸巾盒拆了、蜷在猫窝睡了一下午、扒拉逗猫棒、蹭主人的腿、偷吃桌上的东西……）。写好几条，每条一个短句，用换行分隔。每次刷新都【完全覆盖重写】这一段，只反映最近这段时间发生的事，不要保留或追加上一次的旧内容。' },
+      ],
+    };
+  }
+
+  // 全局状态模板：定义字段结构（不含值）。返回是否有改动（用于决定存盘）。
+  function _ensurePetTemplate(pd) {
+    if (pd.petStatusTemplate && Array.isArray(pd.petStatusTemplate.numeric) && Array.isArray(pd.petStatusTemplate.text)) return false;
+    pd.petStatusTemplate = _petDefaultTemplate();
+    return true;
+  }
+
+  // 旧结构迁移：把 pet.status（每只独立字段）里的值按 label 搬进 pet.statusValues（对模板 id）。
+  function _migratePetStatus(pd, pet) {
+    let changed = false;
+    if (!pet.statusValues || typeof pet.statusValues !== 'object') { pet.statusValues = {}; changed = true; }
+    const tpl = pd.petStatusTemplate;
+    if (pet.status && (Array.isArray(pet.status.numeric) || Array.isArray(pet.status.text))) {
+      const oldNum = {}; (pet.status.numeric || []).forEach(f => { if (f && f.label) oldNum[f.label] = f.value; });
+      const oldText = {}; (pet.status.text || []).forEach(f => { if (f && f.label) oldText[f.label] = f.value; });
+      (tpl.numeric || []).forEach(f => { if (!(f.id in pet.statusValues) && f.label in oldNum) { pet.statusValues[f.id] = oldNum[f.label]; changed = true; } });
+      (tpl.text || []).forEach(f => { if (!(f.id in pet.statusValues) && f.label in oldText) { pet.statusValues[f.id] = oldText[f.label]; changed = true; } });
+      delete pet.status; changed = true; // 旧结构已迁移，清掉避免混淆
+    }
+    return changed;
+  }
+
+  // 取某宠物某字段的有效值：优先 statusValues，缺失给默认（数值=max，文本空）。
+  function _petFieldValue(pet, field, isNumeric) {
+    const v = pet.statusValues ? pet.statusValues[field.id] : undefined;
+    if (isNumeric) {
+      const max = (typeof field.max === 'number' && field.max > 0) ? field.max : 100;
+      let n = (typeof v === 'number') ? v : max;
+      if (!Number.isFinite(n)) n = max;
+      return Math.max(0, Math.min(max, n));
+    }
+    return (v == null) ? '' : String(v);
+  }
+
+  // 编辑状态值：手机内页，按模板字段逐一填值（数值/文本各自输入框）。
+  async function _petEditStatus(petId) {
+    const pd = await _getPhoneData();
+    const pet = Array.isArray(pd.pets) ? pd.pets.find(p => p && p.id === petId) : null;
+    if (!pet) { UI.showToast('未找到这只宠物', 1600); return; }
+    let changed = _ensurePetTemplate(pd);
+    changed = _migratePetStatus(pd, pet) || changed;
+    if (changed) await _savePhoneData();
+    const tpl = pd.petStatusTemplate || { numeric: [], text: [] };
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    _pushNav(() => _petEditStatus(petId));
+    document.getElementById('phone-title').textContent = '编辑状态值';
+    _applyWallpaper(pd);
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = '';
+
+    const inputStyle = 'padding:8px 9px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:13px;box-sizing:border-box';
+    const numRows = (tpl.numeric || []).map(f => {
+      const max = (typeof f.max === 'number' && f.max > 0) ? f.max : 100;
+      const cur = _petFieldValue(pet, f, true);
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:11px">
+        <label style="flex:1;font-size:13px;min-width:0">${Utils.escapeHtml(f.label || '未命名')}<span style="color:var(--text-secondary);font-size:11px"> /${max}</span>
+          <input data-fid="${Utils.escapeHtml(f.id)}" data-ftype="num" type="number" min="0" max="${max}" value="${cur}" style="display:block;width:100%;margin-top:5px;${inputStyle}">
+        </label></div>`;
+    }).join('');
+    const textRows = (tpl.text || []).map(f => {
+      const cur = _petFieldValue(pet, f, false);
+      return `<div style="margin-bottom:11px">
+        <label style="font-size:13px">${Utils.escapeHtml(f.label || '未命名')}
+          <textarea data-fid="${Utils.escapeHtml(f.id)}" data-ftype="txt" maxlength="500" rows="2" style="display:block;width:100%;margin-top:5px;resize:vertical;${inputStyle};font:inherit">${Utils.escapeHtml(cur)}</textarea>
+        </label></div>`;
+    }).join('');
+    const hasFields = (tpl.numeric || []).length || (tpl.text || []).length;
+    body.innerHTML = `
+      <div style="height:100%;display:flex;flex-direction:column;color:var(--text)">
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:18px 16px 24px;box-sizing:border-box">
+          ${hasFields ? `${numRows}${textRows}` : `<div style="font-size:13px;color:var(--text-secondary)">还没有字段，先通过 + 菜单→状态模板 添加</div>`}
+        </div>
+        <div style="display:flex;gap:10px;padding:12px 16px;border-top:1px solid var(--border);background:var(--bg);flex:none">
+          <button id="pev-cancel" type="button" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
+          <button id="pev-ok" type="button" style="flex:1;padding:10px;border:0;border-radius:9px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+    body.querySelector('#pev-cancel').onclick = () => goBack();
+    body.querySelector('#pev-ok').onclick = async () => {
+      const data = await _getPhoneData();
+      const target = Array.isArray(data.pets) ? data.pets.find(p => p && p.id === petId) : null;
+      if (!target) { UI.showToast('宠物已不存在', 1600); goBack(); return; }
+      if (!target.statusValues || typeof target.statusValues !== 'object') target.statusValues = {};
+      const tplNow = data.petStatusTemplate || { numeric: [], text: [] };
+      body.querySelectorAll('[data-fid]').forEach(el => {
+        const fid = el.dataset.fid;
+        const ftype = el.dataset.ftype;
+        if (ftype === 'num') {
+          const fDef = (tplNow.numeric || []).find(f => f.id === fid);
+          const max = fDef ? ((typeof fDef.max === 'number' && fDef.max > 0) ? fDef.max : 100) : 100;
+          let v = Number(el.value);
+          if (!Number.isFinite(v)) v = max;
+          target.statusValues[fid] = Math.max(0, Math.min(max, v));
+        } else {
+          target.statusValues[fid] = (el.value || '').trim();
+        }
+      });
+      await _savePhoneData();
+      UI.showToast('状态已保存', 1400);
+      goBack();
+    };
+  }
+
+  // 刷新撤销：只保存最近一笔刷新事务。状态版本用于防止撤销覆盖后续刷新/手动编辑。
+  function _petRefreshSnapshot(pet) {
+    return {
+      statusValues: JSON.parse(JSON.stringify((pet && pet.statusValues) || {})),
+      statusRefreshedAt: (pet && pet.statusRefreshedAt) || '',
+      statusLog: JSON.parse(JSON.stringify((pet && pet.statusLog) || [])),
+      refreshVersion: Number((pet && pet._refreshVersion) || 0)
+    };
+  }
+  function _petRestoreRefreshSnapshot(pet, snap) {
+    if (!pet || !snap) return;
+    pet.statusValues = JSON.parse(JSON.stringify(snap.statusValues || {}));
+    pet.statusRefreshedAt = snap.statusRefreshedAt || '';
+    pet.statusLog = JSON.parse(JSON.stringify(snap.statusLog || []));
+    pet._refreshVersion = Number(snap.refreshVersion || 0);
+  }
+  function _petRefundRefreshFood(pd, foods) {
+    (Array.isArray(foods) ? foods : []).forEach(x => {
+      if (!x || !x.name || !(x.count > 0)) return;
+      _addPetFoodToFeeder(pd, { name: x.name, desc: x.desc || '' }, x.count);
+    });
+  }
+  async function _petUndoLastRefresh(expectedType = '') {
+    const pd = await _getPhoneData();
+    const undo = pd.petRefreshUndo;
+    if (!undo || (expectedType && undo.type !== expectedType)) {
+      UI.showToast(expectedType === 'batch' ? '没有可撤销的最近批量刷新' : '没有可撤销的本次刷新', 1600);
+      return;
+    }
+    const targets = Array.isArray(undo.pets) ? undo.pets : [];
+    const changed = targets.every(x => {
+      const p = (pd.pets || []).find(v => v && v.id === x.petId);
+      return p && Number(p._refreshVersion || 0) === Number(x.afterVersion || 0);
+    });
+    if (!changed) {
+      UI.showToast('这次刷新后状态已有改动，不能直接撤销', 2000);
+      return;
+    }
+    const title = undo.type === 'batch' ? '撤销本批刷新' : '撤销本次刷新';
+    const ok = await UI.showConfirm(title, `将恢复刷新前的状态和变化记录，并退回${(undo.foods || []).reduce((n, x) => n + (x.count || 0), 0)}份已消耗食物。确定撤销？`);
+    if (!ok) return;
+    targets.forEach(x => {
+      const p = (pd.pets || []).find(v => v && v.id === x.petId);
+      _petRestoreRefreshSnapshot(p, x.before);
+    });
+    _petRefundRefreshFood(pd, undo.foods);
+    delete pd.petRefreshUndo;
+    await _savePhoneData();
+    UI.showToast(undo.type === 'batch' ? '已撤销本批刷新' : '已撤销本次刷新', 1600);
+    if (undo.type === 'single' && undo.pets[0]) _renderPetDetail(undo.pets[0].petId);
+    else _renderCottage(await _getPhoneData());
+  }
+
+  // 把当前住所序列化成文本（楼层/房间/布置），供刷新宠物状态时给 AI 参考环境。
+  function _petHouseToText(pd) {
+    try {
+      const houses = Array.isArray(pd.houses) ? pd.houses : [];
+      const house = houses.find(h => h && h.isCurrent) || houses[0];
+      if (!house) return '';
+      const lines = [];
+      lines.push(`住所：${house.name || '未命名'}${house.address ? '（' + house.address + '）' : ''}`);
+      if (house.styleDesc) lines.push(`整体风格：${house.styleDesc}`);
+      const rooms = Array.isArray(house.rooms) ? house.rooms : [];
+      const floors = Array.isArray(house.floors) ? house.floors : [];
+      const floorName = (num) => {
+        const fl = floors.find(x => x && x.num === num);
+        if (fl && fl.name) return fl.name;
+        return num > 0 ? `${num}层` : (num < 0 ? `地下${-num}层` : '默认层');
+      };
+      // 按楼层聚合房间
+      const byFloor = {};
+      rooms.forEach(r => {
+        const f = (typeof r.floor === 'number') ? r.floor : 1;
+        (byFloor[f] = byFloor[f] || []).push(r);
+      });
+      Object.keys(byFloor).map(Number).sort((a, b) => b - a).forEach(f => {
+        lines.push(`【${floorName(f)}】`);
+        byFloor[f].forEach(r => {
+          let line = `  · ${r.name || '未命名房间'}`;
+          if (r.desc) line += `：${r.desc}`;
+          const items = Array.isArray(r.items) ? r.items : [];
+          if (items.length) {
+            const itemStr = items.map(it => it.name || '').filter(Boolean).slice(0, 12).join('、');
+            if (itemStr) line += `（${itemStr}）`;
+          }
+          lines.push(line);
+        });
+      });
+      return lines.join('\n');
+    } catch (_) { return ''; }
+  }
+
+  // 一键刷新宠物状态：弹窗填可选互动 → 组装上下文（公用函数+时间+小屋+宠物资料+模板要求）→ AI 回填 → 写值+日志。
+  async function _petRefreshStatus(petId) {
+    const pd = await _getPhoneData();
+    const pet = Array.isArray(pd.pets) ? pd.pets.find(p => p && p.id === petId) : null;
+    if (!pet) { UI.showToast('未找到这只宠物', 1600); return; }
+    _ensurePetTemplate(pd);
+    const tpl = pd.petStatusTemplate || { numeric: [], text: [] };
+    if (!(tpl.numeric || []).length && !(tpl.text || []).length) {
+      UI.showToast('还没有状态字段，先去状态模板添加', 2000);
+      return;
+    }
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">刷新宠物状态</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">宠物互动（可选）</label>
+        <textarea id="pet-rf-req" rows="3" placeholder="简单描述这段时间和宠物的互动，例如：喂了罐头、梳了毛、带出去散步" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:8px"></textarea>
+        <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:16px">主线剧情里已经写过的互动，这里可以不用再填。AI 会结合剧情、时间流逝和小屋环境更新状态。</div>
+
+        <div style="display:flex;gap:10px">
+          <button id="pet-rf-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="pet-rf-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">刷新</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => { if (mask.parentNode) mask.remove(); };
+    mask.querySelector('#pet-rf-cancel').onclick = close;
+    _maskCloseOnBg(mask, close);
+    mask.querySelector('#pet-rf-go').onclick = async () => {
+      const userReq = (mask.querySelector('#pet-rf-req').value || '').trim();
+      close();
+      await _petDoRefreshStatus(petId, userReq);
+    };
+  }
+
+  // 实际调 AI 刷新
+  async function _petDoRefreshStatus(petId, userReq) {
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+    const pd = await _getPhoneData();
+    const pet = Array.isArray(pd.pets) ? pd.pets.find(p => p && p.id === petId) : null;
+    if (!pet) { UI.showToast('宠物已不存在', 1600); return; }
+    _ensurePetTemplate(pd);
+    _migratePetStatus(pd, pet);
+    const tpl = pd.petStatusTemplate || { numeric: [], text: [] };
+
+    UI.showToast('AI 正在更新状态…', 2000);
+
+    // 1. 手机公用完整上下文（关掉 NPC 详情，避免上百角色刷屏）
+    let fullCtx = '';
+    try {
+      fullCtx = await _buildFullContext({ castFilter: { mode: 'disabled' } }) || '';
+    } catch (_) {}
+
+    // 2. 时间信息
+    let curTime = '';
+    try { const sb = Conversations.getStatusBar(); curTime = (sb && sb.time) ? _formatPhoneTime(sb.time) : ''; } catch (_) {}
+    const lastTime = pet.statusRefreshedAt || '';
+    let timeBlock = '';
+    if (lastTime) {
+      timeBlock = `上次刷新时间：${lastTime}\n本次刷新时间：${curTime || '未知'}\n请根据两次刷新之间经过的时间，合理推算状态的自然变化。`;
+    } else {
+      timeBlock = `本次刷新时间：${curTime || '未知'}\n这是第一次刷新该宠物的状态，请根据当前情况给出合理的初始值。`;
+    }
+
+    // 3. 小屋配置全文
+    const houseText = _petHouseToText(pd);
+
+    // 4. 宠物资料全文
+    const petLines = [];
+    petLines.push(`名字：${pet.name || '未命名'}`);
+    if (pet.gender) petLines.push(`性别：${pet.gender}`);
+    if (pet.species) petLines.push(`品种：${pet.species}`);
+    if (pet.age != null && pet.age !== '') petLines.push(`年龄：${pet.age}${(pet.ageMax != null && pet.ageMax !== '') ? '/' + pet.ageMax : ''}`);
+    { const of = _petOutfitText(pet); if (of) petLines.push(`服装：${of}`); }
+    if (pet.appearance) petLines.push(`外貌：${pet.appearance}`);
+    if (pet.setting) petLines.push(`设定：${pet.setting}`);
+    (Array.isArray(pet.customFields) ? pet.customFields : []).forEach(f => {
+      if (f && f.label) petLines.push(`${f.label}：${f.value || ''}`);
+    });
+
+    // 5. 当前状态值 + 要填的字段（含生成要求 desc）
+    const numFields = (tpl.numeric || []).map(f => {
+      const max = (typeof f.max === 'number' && f.max > 0) ? f.max : 100;
+      const cur = _petFieldValue(pet, f, true);
+      return `- id="${f.id}"｜${f.label || '未命名'}（数值，范围 0~${max}，当前值 ${cur}）${f.desc ? '｜填写要求：' + f.desc : ''}`;
+    }).join('\n');
+    const textFields = (tpl.text || []).map(f => {
+      const cur = _petFieldValue(pet, f, false);
+      return `- id="${f.id}"｜${f.label || '未命名'}（文本，当前值：${cur || '（空）'}）${f.desc ? '｜填写要求：' + f.desc : ''}`;
+    }).join('\n');
+
+    // 5.5 喂食器食物清单（全局共享，宠物会吃）
+    const feederArr = Array.isArray(pd.petFeeder) ? pd.petFeeder.filter(x => (x.qty || 0) > 0) : [];
+    const feederLines = feederArr.map(f => `- ${f.name}（现有 ${f.qty} 份）${f.desc ? '：' + f.desc : ''}`).join('\n');
+
+    const sysPrompt = `你是一个宠物状态推演助手。请根据下面的世界观剧情、时间流逝、小屋环境、宠物资料和玩家补充的互动，更新这只宠物的各项状态，并给出每项变化的简短原因。请严格输出 JSON。
+
+${fullCtx ? fullCtx + '\n\n' : ''}【时间】
+${timeBlock}
+
+${houseText ? '【宠物所在小屋】\n' + houseText + '\n' : ''}
+【宠物资料】
+${petLines.join('\n')}
+
+${userReq ? '【玩家补充的近期互动】\n' + userReq + '\n（这是玩家手动补充的，如果主线剧情里已经体现过，不要重复叠加。）\n' : ''}
+${feederLines ? '【喂食器里的食物】（全局共享，宠物这段时间会从这里进食）\n' + feederLines + '\n' : '【喂食器】当前是空的，宠物没有可自动取食的食物。\n'}
+【需要更新的状态字段】
+${numFields ? '数值字段：\n' + numFields + '\n' : ''}${textFields ? '文本字段：\n' + textFields + '\n' : ''}
+更新规则：
+- 数值字段：给出 0 到该字段上限之间的整数，遵循每个字段的「填写要求」，结合时间流逝与互动合理增减，不要无理由剧烈跳动。
+- 文本字段：按「填写要求」写简短内容。注意"近期行动轨迹"这类字段要求【完全覆盖重写】，只写从上次刷新到现在这段时间发生的事，不要保留旧内容。
+- 进食判断：结合时间流逝和喂食器里的食物，合理判断这段时间宠物吃掉了哪些食物、各多少份，填进 consumed。份数不能超过喂食器现有份数。如果时间很短或喂食器为空，consumed 就留空数组。吃了东西的话，饱食度等相关状态也应相应上升，并在近期行动轨迹里体现（如"吃了两份三文鱼冻干"）。
+- changes 里为每个发生变化的字段写一句简短原因（为什么升/降/改成这样）。没变化的字段可以不放进 changes。
+
+严格输出如下 JSON（不要任何额外文字、不要 markdown），values 的 key 必须是上面给出的字段 id，consumed 里的 name 必须与喂食器食物名完全一致：
+{
+  "values": {
+    "字段id1": 数值或文本,
+    "字段id2": 数值或文本
+  },
+  "changes": [
+    { "id": "字段id1", "reason": "距离上次已过一天没喂，饱食度下降" }
+  ],
+  "consumed": [
+    { "name": "三文鱼冻干", "count": 2 }
+  ]
+}`;
+
+    let raw = '';
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model,
+          temperature: 0.7,
+          max_tokens: 4000,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: '请根据以上信息更新这只宠物的状态，输出 JSON。' }
+          ]
+        })
+      });
+      const data = await resp.json();
+      raw = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    } catch (e) {
+      console.error('[宠物状态刷新]', e);
+      UI.showToast('刷新失败，请重试', 2000);
+      return;
+    }
+
+    // 解析
+    let parsed;
+    try {
+      const text = String(raw || '').replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start < 0 || end < 0) throw new Error('无 JSON');
+      parsed = JSON.parse(text.slice(start, end + 1));
+    } catch (e) {
+      console.error('[宠物状态解析]', e, raw);
+      UI.showToast('AI 返回格式异常，请重试', 2000);
+      return;
+    }
+
+    const values = (parsed && typeof parsed.values === 'object' && parsed.values) ? parsed.values : {};
+    const changesArr = Array.isArray(parsed && parsed.changes) ? parsed.changes : [];
+    const reasonById = {};
+    changesArr.forEach(c => { if (c && c.id) reasonById[c.id] = String(c.reason || '').trim(); });
+
+    // 写回：逐字段校验，记录 from→to。
+    const data2 = await _getPhoneData();
+    const target = Array.isArray(data2.pets) ? data2.pets.find(p => p && p.id === petId) : null;
+    if (!target) { UI.showToast('宠物已不存在', 1600); return; }
+    if (!target.statusValues || typeof target.statusValues !== 'object') target.statusValues = {};
+    const tpl2 = data2.petStatusTemplate || { numeric: [], text: [] };
+
+    // 为本次单只刷新保存撤销快照；撤销会恢复该快照并退回下面实际扣除的食物。
+    const undoBefore = _petRefreshSnapshot(target);
+
+    const entries = [];
+    (tpl2.numeric || []).forEach(f => {
+      if (!(f.id in values)) return;
+      const max = (typeof f.max === 'number' && f.max > 0) ? f.max : 100;
+      const oldVal = _petFieldValue(target, f, true);
+      let v = Number(values[f.id]);
+      if (!Number.isFinite(v)) return;
+      v = Math.max(0, Math.min(max, Math.round(v)));
+      if (v !== oldVal) {
+        entries.push({ label: f.label || '未命名', from: oldVal, to: v, reason: reasonById[f.id] || '' });
+      }
+      target.statusValues[f.id] = v;
+    });
+    (tpl2.text || []).forEach(f => {
+      if (!(f.id in values)) return;
+      const oldVal = _petFieldValue(target, f, false);
+      const v = String(values[f.id] == null ? '' : values[f.id]).trim();
+      if (v !== oldVal) {
+        entries.push({ label: f.label || '未命名', from: oldVal, to: v, reason: reasonById[f.id] || '' });
+      }
+      target.statusValues[f.id] = v;
+    });
+
+    // 更新刷新时间 + 追加日志（保留最近 20 组）
+    let curTime2 = '';
+    try { const sb = Conversations.getStatusBar(); curTime2 = (sb && sb.time) ? _formatPhoneTime(sb.time) : ''; } catch (_) {}
+    target.statusRefreshedAt = curTime2 || target.statusRefreshedAt || '';
+    if (!Array.isArray(target.statusLog)) target.statusLog = [];
+    if (entries.length) {
+      target.statusLog.push({ time: curTime2 || '（时间未知）', entries });
+      if (target.statusLog.length > 20) target.statusLog = target.statusLog.slice(-20);
+    }
+
+    // 扣减喂食器食物（AI 返回的 consumed，按 name 匹配）
+    const consumedArr = Array.isArray(parsed && parsed.consumed) ? parsed.consumed : [];
+    const ateNotes = [];
+    const eatenFoods = [];
+    if (consumedArr.length && Array.isArray(data2.petFeeder)) {
+      consumedArr.forEach(cs => {
+        if (!cs || !cs.name) return;
+        const cnt = Math.max(0, Math.floor(Number(cs.count) || 0));
+        if (cnt <= 0) return;
+        const f = data2.petFeeder.find(x => x.name === cs.name);
+        if (!f) return;
+        const eaten = Math.min(cnt, f.qty || 0);
+        if (eaten <= 0) return;
+        f.qty -= eaten;
+        ateNotes.push(`${cs.name}×${eaten}`);
+        eatenFoods.push({ name: f.name, desc: f.desc || "", count: eaten });
+      });
+      data2.petFeeder = data2.petFeeder.filter(x => (x.qty || 0) > 0);
+    }
+
+    target._refreshVersion = Number(target._refreshVersion || 0) + 1;
+    data2.petRefreshUndo = {
+      type: 'single',
+      pets: [{ petId: target.id, before: undoBefore, afterVersion: target._refreshVersion }],
+      foods: eatenFoods,
+      createdAt: Date.now()
+    };
+
+    await _savePhoneData();
+    let toastMsg = entries.length ? `状态已更新（${entries.length} 项变化）` : '状态已是最新，无变化';
+    if (ateNotes.length) toastMsg += `；吃掉 ${ateNotes.join('、')}`;
+    UI.showToast(toastMsg, 2200);
+    _renderPetDetail(petId);
+  }
+
+  // 一只宠物的资料序列化成文本（供批量刷新拼进提示词）。
+  // 把宠物的服装描述合并成一句（自带 outfit 文本 + 从衣橱穿上的 wornClothes）
+  function _petOutfitText(pet) {
+    const parts = [];
+    if (pet && pet.outfit) parts.push(String(pet.outfit).trim());
+    if (pet && Array.isArray(pet.wornClothes)) {
+      pet.wornClothes.forEach(w => {
+        if (!w) return;
+        const n = String(w.name || '').trim();
+        const d = String(w.desc || '').trim();
+        if (n) parts.push(d ? `${n}（${d}）` : n);
+      });
+    }
+    return parts.filter(Boolean).join('；');
+  }
+
+  function _petProfileToText(pet) {
+    const lines = [];
+    lines.push(`名字：${pet.name || '未命名'}`);
+    if (pet.gender) lines.push(`性别：${pet.gender}`);
+    if (pet.species) lines.push(`品种：${pet.species}`);
+    if (pet.age != null && pet.age !== '') lines.push(`年龄：${pet.age}${(pet.ageMax != null && pet.ageMax !== '') ? '/' + pet.ageMax : ''}`);
+    { const of = _petOutfitText(pet); if (of) lines.push(`服装：${of}`); }
+    if (pet.appearance) lines.push(`外貌：${pet.appearance}`);
+    if (pet.setting) lines.push(`设定：${pet.setting}`);
+    (Array.isArray(pet.customFields) ? pet.customFields : []).forEach(f => {
+      if (f && f.label) lines.push(`${f.label}：${f.value || ''}`);
+    });
+    return lines.join('\n');
+  }
+
+  // 一键刷新全部（可勾选）：弹窗勾选宠物 + 可选互动 → 单次调用返回所有勾选宠物的新状态 → 各自写值+日志。
+  async function _petRefreshAllStatus() {
+    const pd = await _getPhoneData();
+    const pets = Array.isArray(pd.pets) ? pd.pets : [];
+    if (!pets.length) { UI.showToast('还没有宠物', 1600); return; }
+    _ensurePetTemplate(pd);
+    const tpl = pd.petStatusTemplate || { numeric: [], text: [] };
+    if (!(tpl.numeric || []).length && !(tpl.text || []).length) {
+      UI.showToast('还没有状态字段，先去状态模板添加', 2000);
+      return;
+    }
+
+    const petRows = pets.map(p => `
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:10px;cursor:pointer;user-select:none">
+        <span style="position:relative;display:inline-flex;flex-shrink:0">
+          <input type="checkbox" class="pet-rfa-pick circle-check" data-pid="${Utils.escapeHtml(p.id)}" checked>
+          <span class="circle-check-ui"></span>
+        </span>
+        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(p.name || '未命名宠物')}</span>
+      </label>`).join('');
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">刷新全部状态</div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label style="font-size:12px;color:var(--text-secondary)">选择要刷新的宠物</label>
+          <button id="pet-rfa-toggle" type="button" style="border:0;background:none;color:var(--accent);font-size:12px;cursor:pointer;padding:2px 0">全选/全不选</button>
+        </div>
+        <div style="margin-bottom:16px">${petRows}</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">宠物互动（可选）</label>
+        <textarea id="pet-rfa-req" rows="3" placeholder="简单描述这段时间和这些宠物的整体互动，例如：喂了它们、带出去玩、两只打了一架" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:8px"></textarea>
+        <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:16px">主线里写过的互动可以不填。AI 会一次性更新所有勾选的宠物，也可能体现它们之间的互动。</div>
+
+        <div style="display:flex;gap:10px">
+          <button id="pet-rfa-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="pet-rfa-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">刷新</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => { if (mask.parentNode) mask.remove(); };
+    mask.querySelector('#pet-rfa-cancel').onclick = close;
+    _maskCloseOnBg(mask, close);
+    mask.querySelector('#pet-rfa-toggle').onclick = () => {
+      const boxes = [...mask.querySelectorAll('.pet-rfa-pick')];
+      const allChecked = boxes.every(b => b.checked);
+      boxes.forEach(b => { b.checked = !allChecked; });
+    };
+    mask.querySelector('#pet-rfa-go').onclick = async () => {
+      const ids = [...mask.querySelectorAll('.pet-rfa-pick')].filter(b => b.checked).map(b => b.dataset.pid);
+      if (!ids.length) { UI.showToast('至少选一只宠物', 1600); return; }
+      const userReq = (mask.querySelector('#pet-rfa-req').value || '').trim();
+      close();
+      await _petDoRefreshAll(ids, userReq);
+    };
+  }
+
+  // 实际批量刷新：单次调用，一次返回所有勾选宠物的新状态。
+  async function _petDoRefreshAll(petIds, userReq) {
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+    const pd = await _getPhoneData();
+    _ensurePetTemplate(pd);
+    const tpl = pd.petStatusTemplate || { numeric: [], text: [] };
+    const pets = (Array.isArray(pd.pets) ? pd.pets : []).filter(p => p && petIds.includes(p.id));
+    if (!pets.length) { UI.showToast('没有可刷新的宠物', 1600); return; }
+    pets.forEach(p => _migratePetStatus(pd, p));
+
+    UI.showToast(`AI 正在更新 ${pets.length} 只宠物…`, 2200);
+
+    // 公用上下文（只组一次）
+    let fullCtx = '';
+    try { fullCtx = await _buildFullContext({ castFilter: { mode: 'disabled' } }) || ''; } catch (_) {}
+    let curTime = '';
+    try { const sb = Conversations.getStatusBar(); curTime = (sb && sb.time) ? _formatPhoneTime(sb.time) : ''; } catch (_) {}
+    const houseText = _petHouseToText(pd);
+
+    // 喂食器食物清单（全局共享）
+    const feederArr = Array.isArray(pd.petFeeder) ? pd.petFeeder.filter(x => (x.qty || 0) > 0) : [];
+    const feederLines = feederArr.map(f => `- ${f.name}（现有 ${f.qty} 份）${f.desc ? '：' + f.desc : ''}`).join('\n');
+
+    // 模板字段说明（所有宠物共用）
+    const numFieldDesc = (tpl.numeric || []).map(f => {
+      const max = (typeof f.max === 'number' && f.max > 0) ? f.max : 100;
+      return `- id="${f.id}"｜${f.label || '未命名'}（数值 0~${max}）${f.desc ? '｜填写要求：' + f.desc : ''}`;
+    }).join('\n');
+    const textFieldDesc = (tpl.text || []).map(f => {
+      return `- id="${f.id}"｜${f.label || '未命名'}（文本）${f.desc ? '｜填写要求：' + f.desc : ''}`;
+    }).join('\n');
+
+    // 每只宠物：资料 + 当前值 + 上次刷新时间
+    const petBlocks = pets.map((pet, i) => {
+      const numCur = (tpl.numeric || []).map(f => {
+        const max = (typeof f.max === 'number' && f.max > 0) ? f.max : 100;
+        return `  ${f.label}(id=${f.id})：${_petFieldValue(pet, f, true)}/${max}`;
+      }).join('\n');
+      const textCur = (tpl.text || []).map(f => {
+        const cur = _petFieldValue(pet, f, false);
+        return `  ${f.label}(id=${f.id})：${cur || '（空）'}`;
+      }).join('\n');
+      const last = pet.statusRefreshedAt ? `上次刷新：${pet.statusRefreshedAt}` : '（首次刷新）';
+      return `【宠物${i + 1}｜petId="${pet.id}"】${last}
+${_petProfileToText(pet)}
+当前状态值：
+${numCur}${numCur && textCur ? '\n' : ''}${textCur}`;
+    }).join('\n\n');
+
+    const sysPrompt = `你是一个宠物状态推演助手。请根据下面的世界观剧情、时间流逝、小屋环境和玩家补充的互动，一次性更新下面所有宠物的状态，并给出每项变化的简短原因。请严格输出 JSON。
+
+${fullCtx ? fullCtx + '\n\n' : ''}【时间】
+本次刷新时间：${curTime || '未知'}
+请对每只宠物，参考它各自的「上次刷新」时间推算这段时间的自然变化；标记「首次刷新」的宠物请给合理初始值。
+
+${houseText ? '【宠物所在小屋】\n' + houseText + '\n' : ''}
+【所有状态字段的填写要求】（所有宠物共用同一套字段）
+${numFieldDesc ? '数值字段：\n' + numFieldDesc + '\n' : ''}${textFieldDesc ? '文本字段：\n' + textFieldDesc + '\n' : ''}
+【需要更新的宠物】
+${petBlocks}
+
+${userReq ? '【玩家补充的近期互动】\n' + userReq + '\n（如果主线剧情里已经体现过，不要重复叠加。）\n' : ''}
+${feederLines ? '【喂食器里的食物】（全局共享，所有宠物这段时间会从这里进食）\n' + feederLines + '\n' : '【喂食器】当前是空的，宠物没有可自动取食的食物。\n'}
+更新规则：
+- 数值字段：给出 0 到该字段上限之间的整数，遵循填写要求，结合时间与互动合理增减，不要无理由剧烈跳动。
+- 文本字段：按填写要求写简短内容。注意"近期行动轨迹"这类字段要求【完全覆盖重写】，只写从上次刷新到现在这段时间发生的事，不要保留旧内容。
+- 如果多只宠物之间可能发生互动（打闹、抢食、结伴睡觉等），可以自然体现在它们各自的状态和变化原因里。
+- 进食判断：结合时间流逝和喂食器食物，判断所有宠物这段时间总共吃掉了哪些食物、各多少份（这是全局共享喂食器，不分具体哪只吃），填进顶层 consumed。份数不能超过喂食器现有份数。时间很短或喂食器为空则 consumed 留空数组。吃了东西的宠物饱食度等应相应上升，并在它们的近期行动轨迹里体现。
+- changes 里为每个发生变化的字段写一句简短原因。没变化的字段可不放进 changes。
+
+严格输出如下 JSON（不要任何额外文字、不要 markdown），petId 和字段 id 必须与上面给出的完全一致，consumed 里的 name 必须与喂食器食物名完全一致：
+{
+  "pets": [
+    {
+      "petId": "上面某只宠物的 petId",
+      "values": { "字段id": 数值或文本 },
+      "changes": [ { "id": "字段id", "reason": "变化原因" } ]
+    }
+  ],
+  "consumed": [
+    { "name": "三文鱼冻干", "count": 2 }
+  ]
+}`;
+
+    let raw = '';
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model,
+          temperature: 0.7,
+          max_tokens: 8000,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: '请一次性更新以上所有宠物的状态，输出 JSON。' }
+          ]
+        })
+      });
+      const data = await resp.json();
+      raw = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    } catch (e) {
+      console.error('[宠物批量刷新]', e);
+      UI.showToast('刷新失败，请重试', 2000);
+      return;
+    }
+
+    let parsed;
+    try {
+      const text = String(raw || '').replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start < 0 || end < 0) throw new Error('无 JSON');
+      parsed = JSON.parse(text.slice(start, end + 1));
+    } catch (e) {
+      console.error('[宠物批量解析]', e, raw);
+      UI.showToast('AI 返回格式异常，请重试', 2000);
+      return;
+    }
+
+    const petsResult = Array.isArray(parsed && parsed.pets) ? parsed.pets : [];
+    if (!petsResult.length) { UI.showToast('AI 没有返回结果', 2000); return; }
+
+    // 写回
+    const data2 = await _getPhoneData();
+    const tpl2 = data2.petStatusTemplate || { numeric: [], text: [] };
+    // 批量刷新事务：为本批宠物保存同一份刷新前快照。
+    const batchBefore = (Array.isArray(data2.pets) ? data2.pets : []).filter(p => p && petIds.includes(p.id)).map(p => ({ petId: p.id, before: _petRefreshSnapshot(p) }));
+    let curTime2 = '';
+    try { const sb = Conversations.getStatusBar(); curTime2 = (sb && sb.time) ? _formatPhoneTime(sb.time) : ''; } catch (_) {}
+
+    let updatedPets = 0, totalChanges = 0;
+    petsResult.forEach(pr => {
+      if (!pr || !pr.petId) return;
+      const target = (Array.isArray(data2.pets) ? data2.pets : []).find(p => p && p.id === pr.petId);
+      if (!target) return;
+      if (!target.statusValues || typeof target.statusValues !== 'object') target.statusValues = {};
+      const values = (pr.values && typeof pr.values === 'object') ? pr.values : {};
+      const reasonById = {};
+      (Array.isArray(pr.changes) ? pr.changes : []).forEach(c => { if (c && c.id) reasonById[c.id] = String(c.reason || '').trim(); });
+
+      const entries = [];
+      (tpl2.numeric || []).forEach(f => {
+        if (!(f.id in values)) return;
+        const max = (typeof f.max === 'number' && f.max > 0) ? f.max : 100;
+        const oldVal = _petFieldValue(target, f, true);
+        let v = Number(values[f.id]);
+        if (!Number.isFinite(v)) return;
+        v = Math.max(0, Math.min(max, Math.round(v)));
+        if (v !== oldVal) entries.push({ label: f.label || '未命名', from: oldVal, to: v, reason: reasonById[f.id] || '' });
+        target.statusValues[f.id] = v;
+      });
+      (tpl2.text || []).forEach(f => {
+        if (!(f.id in values)) return;
+        const oldVal = _petFieldValue(target, f, false);
+        const v = String(values[f.id] == null ? '' : values[f.id]).trim();
+        if (v !== oldVal) entries.push({ label: f.label || '未命名', from: oldVal, to: v, reason: reasonById[f.id] || '' });
+        target.statusValues[f.id] = v;
+      });
+
+      target.statusRefreshedAt = curTime2 || target.statusRefreshedAt || '';
+      if (!Array.isArray(target.statusLog)) target.statusLog = [];
+      if (entries.length) {
+        target.statusLog.push({ time: curTime2 || '（时间未知）', entries });
+        if (target.statusLog.length > 20) target.statusLog = target.statusLog.slice(-20);
+        totalChanges += entries.length;
+      }
+      updatedPets++;
+    });
+
+    // 扣减喂食器食物（全局 consumed，按 name 匹配）
+    const consumedArr = Array.isArray(parsed && parsed.consumed) ? parsed.consumed : [];
+    const ateNotes = [];
+    const eatenFoods = [];
+    if (consumedArr.length && Array.isArray(data2.petFeeder)) {
+      consumedArr.forEach(cs => {
+        if (!cs || !cs.name) return;
+        const cnt = Math.max(0, Math.floor(Number(cs.count) || 0));
+        if (cnt <= 0) return;
+        const f = data2.petFeeder.find(x => x.name === cs.name);
+        if (!f) return;
+        const eaten = Math.min(cnt, f.qty || 0);
+        if (eaten <= 0) return;
+        f.qty -= eaten;
+        ateNotes.push(`${cs.name}×${eaten}`);
+        eatenFoods.push({ name: f.name, desc: f.desc || "", count: eaten });
+      });
+      data2.petFeeder = data2.petFeeder.filter(x => (x.qty || 0) > 0);
+    }
+
+    batchBefore.forEach(x => {
+      const p = (data2.pets || []).find(v => v && v.id === x.petId);
+      if (p) { p._refreshVersion = Number(p._refreshVersion || 0) + 1; x.afterVersion = p._refreshVersion; }
+    });
+    data2.petRefreshUndo = { type: 'batch', pets: batchBefore, foods: eatenFoods, createdAt: Date.now() };
+
+    await _savePhoneData();
+    let toastMsg = updatedPets ? `已更新 ${updatedPets} 只宠物（${totalChanges} 项变化）` : '没有更新任何宠物';
+    if (ateNotes.length) toastMsg += `；吃掉 ${ateNotes.join('、')}`;
+    UI.showToast(toastMsg, 2200);
+    _renderCottage(await _getPhoneData());
+  }
+
+
+  // 模板编辑：手机内页，加/删/改字段结构（label/max/desc），改完对所有宠物生效。
+  async function _petEditTemplate() {
+    const pd = await _getPhoneData();
+    _ensurePetTemplate(pd);
+    const tpl = pd.petStatusTemplate;
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    _pushNav(async () => _renderCottage(await _getPhoneData()));
+    document.getElementById('phone-title').textContent = '状态模板';
+    _applyWallpaper(pd);
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = '';
+
+    const inputStyle = 'padding:8px 9px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:13px;box-sizing:border-box';
+    const descStyle = 'width:100%;padding:6px 9px;border:1px dashed var(--border);border-radius:8px;background:none;color:var(--text-secondary);font-size:12px;box-sizing:border-box';
+    body.innerHTML = `
+      <div style="height:100%;display:flex;flex-direction:column;color:var(--text)">
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:18px 16px 24px;box-sizing:border-box">
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">在这里添加/修改字段结构，对所有宠物生效。数值字段有名字 + 上限，文本字段只有名字。每个字段的「填写要求」会在刷新状态时告诉 AI 怎么填这个值。</div>
+          <button id="ptpl-reset" type="button" style="margin-bottom:16px;border:1px solid var(--border);background:none;color:var(--text-secondary);font-size:12px;cursor:pointer;padding:6px 12px;border-radius:8px">恢复默认字段</button>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:13px;font-weight:600">数值字段</span><button id="ptpl-add-num" type="button" style="border:0;background:none;color:var(--accent);font-size:13px;cursor:pointer;padding:2px 0">+ 添加数值</button></div>
+          <div id="ptpl-num" style="display:flex;flex-direction:column;gap:12px"></div>
+          <div style="height:16px"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:13px;font-weight:600">文本字段</span><button id="ptpl-add-text" type="button" style="border:0;background:none;color:var(--accent);font-size:13px;cursor:pointer;padding:2px 0">+ 添加文本</button></div>
+          <div id="ptpl-text" style="display:flex;flex-direction:column;gap:12px"></div>
+        </div>
+        <div style="display:flex;gap:10px;padding:12px 16px;border-top:1px solid var(--border);background:var(--bg);flex:none">
+          <button id="ptpl-cancel" type="button" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
+          <button id="ptpl-ok" type="button" style="flex:1;padding:10px;border:0;border-radius:9px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+
+    const numBox = body.querySelector('#ptpl-num');
+    const textBox = body.querySelector('#ptpl-text');
+    const addNum = (f = null) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+      row.innerHTML = `<div style="display:grid;grid-template-columns:minmax(0,1fr) 70px 28px;gap:7px;align-items:center"><input class="ptpl-num-label" type="text" maxlength="20" placeholder="字段名" style="min-width:0;${inputStyle}"><input class="ptpl-num-max" type="number" min="1" placeholder="上限" style="min-width:0;${inputStyle}"><button type="button" title="删除" style="width:28px;height:28px;padding:0;border:0;border-radius:6px;background:none;color:var(--text-secondary);font-size:18px;cursor:pointer">×</button></div><textarea class="ptpl-num-desc" rows="2" maxlength="300" placeholder="填写要求（告诉 AI 怎么填这个字段，可留空）" style="${descStyle};resize:vertical;line-height:1.5"></textarea>`;
+      row.querySelector('.ptpl-num-label').value = f?.label || '';
+      row.querySelector('.ptpl-num-max').value = (f && typeof f.max === 'number') ? f.max : 100;
+      row.querySelector('.ptpl-num-desc').value = f?.desc || '';
+      row.querySelector('button').onclick = () => row.remove();
+      row._existingId = f?.id || null;
+      numBox.appendChild(row);
+    };
+    const addText = (f = null) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+      row.innerHTML = `<div style="display:grid;grid-template-columns:minmax(0,1fr) 28px;gap:7px;align-items:center"><input class="ptpl-text-label" type="text" maxlength="20" placeholder="字段名" style="min-width:0;${inputStyle}"><button type="button" title="删除" style="width:28px;height:28px;padding:0;border:0;border-radius:6px;background:none;color:var(--text-secondary);font-size:18px;cursor:pointer">×</button></div><textarea class="ptpl-text-desc" rows="2" maxlength="300" placeholder="填写要求（告诉 AI 怎么填这个字段，可留空）" style="${descStyle};resize:vertical;line-height:1.5"></textarea>`;
+      row.querySelector('.ptpl-text-label').value = f?.label || '';
+      row.querySelector('.ptpl-text-desc').value = f?.desc || '';
+      row.querySelector('button').onclick = () => row.remove();
+      row._existingId = f?.id || null;
+      textBox.appendChild(row);
+    };
+    (tpl.numeric || []).forEach(addNum);
+    (tpl.text || []).forEach(addText);
+    body.querySelector('#ptpl-add-num').onclick = () => addNum();
+    body.querySelector('#ptpl-add-text').onclick = () => addText();
+    body.querySelector('#ptpl-reset').onclick = async () => {
+      const ok = await UI.showConfirm('恢复默认字段', '会用系统默认的 6 个字段（清洁度/饱食度/心情值/所在位置/当前状态/近期行动轨迹）替换当前模板结构，你自己加的字段会被清掉。宠物已有的状态值不受影响。确定恢复？');
+      if (!ok) return;
+      const def = _petDefaultTemplate();
+      numBox.innerHTML = '';
+      textBox.innerHTML = '';
+      def.numeric.forEach(addNum);
+      def.text.forEach(addText);
+      UI.showToast('已载入默认字段，记得点保存', 1800);
+    };
+    body.querySelector('#ptpl-cancel').onclick = () => goBack();
+    body.querySelector('#ptpl-ok').onclick = async () => {
+      const numeric = [...numBox.children].map(row => {
+        const label = (row.querySelector('.ptpl-num-label').value || '').trim();
+        if (!label) return null;
+        let max = Number(row.querySelector('.ptpl-num-max').value);
+        if (!Number.isFinite(max) || max <= 0) max = 100;
+        const id = row._existingId || _cottageGenId('ptpl');
+        return { id, label, max, desc: (row.querySelector('.ptpl-num-desc').value || '').trim() };
+      }).filter(Boolean);
+      const text = [...textBox.children].map(row => {
+        const label = (row.querySelector('.ptpl-text-label').value || '').trim();
+        if (!label) return null;
+        const id = row._existingId || _cottageGenId('ptpl');
+        return { id, label, desc: (row.querySelector('.ptpl-text-desc').value || '').trim() };
+      }).filter(Boolean);
+      const data = await _getPhoneData();
+      data.petStatusTemplate = { numeric, text };
+      await _savePhoneData();
+      UI.showToast('状态模板已保存', 1400);
+      goBack();
+    };
+  }
+
+  // ===== 宠物商城 + 服装 + 喂食器（占位页，后续逐步补全） =====
+
+  // 宠物商城四大类
+  const PET_MALL_CATS = [
+    { key: 'pet',     label: '宠物',   hint: '猫、狗、异宠等活体宠物' },
+    { key: 'clothes', label: '服装',   hint: '宠物穿的衣服、配饰' },
+    { key: 'supply',  label: '用品',   hint: '猫窝、玩具、猫爬架等，买后进家具仓库' },
+    { key: 'food',    label: '食品',   hint: '猫粮、罐头、零食等，买后进喂食器' },
+  ];
+  const PET_MALL_CAT_KEYS = PET_MALL_CATS.map(c => c.key);
+  let _petMallCat = 'pet';  // 当前选中的类型
+
+  // 宠物商城设置（复用家具那套开关，但独立存）
+  function _getPetMallSettings(pd) {
+    const def = { useWv: true, usePlot: true, useCurrency: true, useLogistics: true };
+    return Object.assign(def, (pd && pd.petMallSettings) || {});
+  }
+
+  // 宠物商城首页
+  async function _petOpenMall() {
+    _petMallCat = 'pet';
+    _pushNav(() => _renderPetMall());
+    _renderPetMall();
+  }
+
+  async function _renderPetMall() {
+    const pd = await _getPhoneData();
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    document.getElementById('phone-title').textContent = '宠物商城';
+    _applyWallpaper(pd);
+
+    const items = (pd.petMallItems && pd.petMallItems[_petMallCat]) ? pd.petMallItems[_petMallCat] : [];
+    const catObj = PET_MALL_CATS.find(c => c.key === _petMallCat) || PET_MALL_CATS[0];
+
+    const catChips = PET_MALL_CATS.map(c => `
+      <div class="cottage-mall-chip ${_petMallCat === c.key ? 'active' : ''}" onclick="Phone._petMallSwitchCat('${c.key}')">${c.label}</div>`).join('');
+
+    const itemsHtml = items.length
+      ? items.map((it, idx) => {
+        const isPet = _petMallCat === 'pet';
+        const metaLine = isPet
+          ? [it.species, it.gender, (it.age != null ? it.age + '岁' : '')].filter(Boolean).join(' · ')
+          : catObj.label;
+        const detailBtn = isPet
+          ? `<button type="button" onclick="Phone._petMallDetail(${idx})" class="phone-map-action-btn">${_uiIcon('search', 12)} 详情</button>`
+          : '';
+        return `
+        <div class="phone-map-result-card">
+          <div class="phone-map-result-head">
+            <div class="phone-map-result-name">${Utils.escapeHtml(it.name || '未命名')}</div>
+          </div>
+          <div class="phone-map-result-address">${_uiIcon('pin', 12)}<span>${Utils.escapeHtml(metaLine || catObj.label)}</span></div>
+          ${it.desc ? `<div class="phone-map-result-desc">${Utils.escapeHtml(it.desc)}</div>` : ''}
+          <div class="phone-map-result-foot">
+            <div class="phone-map-result-foot-left">
+              <span class="phone-map-distance-pill">¥ ${Utils.escapeHtml(String(it.price || '--'))}</span>
+            </div>
+            <div class="phone-map-result-actions">
+              ${detailBtn}
+              <button type="button" onclick="Phone._petMallBuy(${idx})" class="phone-map-action-btn">${_uiIcon('box', 12)} 购买</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('')
+      : `<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">选好分类，点刷新看看有什么好物</p>`;
+
+    body.innerHTML = `
+      <div class="phone-cottage-shop" style="display:flex;flex-direction:column;height:100%">
+        <div style="flex:1;overflow-y:auto;padding:12px">
+          <div class="phone-map-searchbar" style="margin-bottom:10px">
+            <div class="phone-map-search-input-wrap">
+              ${_uiIcon('search', 12)}
+              <input id="pet-mall-search" type="text" placeholder="搜索${catObj.label}（如：${_petMallSearchPlaceholder(_petMallCat)}）" oninput="Phone._syncSearchBtn('pet-mall-search','pet-mall-action-btn')" onkeydown="if(event.key==='Enter')Phone._petMallRefresh()">
+            </div>
+            <button id="pet-mall-action-btn" onclick="Phone._petMallRefresh()" class="phone-map-search-btn">${_uiIcon('refresh', 13)} 刷新</button>
+          </div>
+          <div class="cottage-mall-chips">${catChips}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin:8px 2px 4px;line-height:1.5">${catObj.hint}</div>
+          <div id="pet-mall-items">${itemsHtml}</div>
+        </div>
+      </div>`;
+
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = `<button class="phone-nav-btn" title="商城设置" onclick="Phone._petMallSettings()">${_uiIcon('settings', 18)}</button>`;
+  }
+
+  function _petMallSearchPlaceholder(cat) {
+    switch (cat) {
+      case 'pet': return '布偶猫、金毛、垂耳兔…';
+      case 'clothes': return '毛衣、小裙子、领结…';
+      case 'supply': return '猫爬架、狗窝、逗猫棒…';
+      case 'food': return '主食罐头、冻干、猫条…';
+      default: return '';
+    }
+  }
+
+  function _petMallSwitchCat(cat) {
+    if (!PET_MALL_CAT_KEYS.includes(cat)) return;
+    _petMallCat = cat;
+    _renderPetMall();
+  }
+
+  // 商城设置弹窗：世界观资料 / 主线剧情 / 货币 / 物流 开关（抄家具商城）
+  async function _petMallSettings() {
+    const pd = await _getPhoneData();
+    const s = _getPetMallSettings(pd);
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    const row = (key, label, desc) => `
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;cursor:pointer">
+        <span style="position:relative;display:inline-flex;margin-top:1px;flex-shrink:0">
+          <input type="checkbox" class="circle-check" data-key="${key}" ${s[key] ? 'checked' : ''}>
+          <span class="circle-check-ui"></span>
+        </span>
+        <div>
+          <div style="font-size:14px;color:var(--text)">${label}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${desc}</div>
+        </div>
+      </label>`;
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:8px">商城设置</div>
+        <div id="pet-mall-set-list">
+          ${row('useWv', '发送世界观基础资料', '刷新商品时参考世界观（基础设定+地区+节日），让商品贴合世界背景')}
+          ${row('usePlot', '发送近期主线剧情', '把最近约 10 轮主线对话作为参考，让商品贴合当前剧情')}
+          ${row('useCurrency', '使用货币', '购买时可从绑定货币里扣款，关闭则只能直接拿（不扣钱）')}
+          ${row('useLogistics', '启用物流系统', '购买时可选走订单配送，关闭则一律立即送达')}
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button id="pet-mall-set-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="pet-mall-set-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#pet-mall-set-cancel').onclick = () => document.body.removeChild(mask);
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
+    mask.querySelector('#pet-mall-set-save').onclick = async () => {
+      const next = {};
+      mask.querySelectorAll('#pet-mall-set-list input[type=checkbox]').forEach(cb => { next[cb.dataset.key] = cb.checked; });
+      const pd2 = await _getPhoneData();
+      pd2.petMallSettings = Object.assign(_getPetMallSettings(pd2), next);
+      await _savePhoneData();
+      document.body.removeChild(mask);
+      UI.showToast('已保存', 1200);
+    };
+  }
+
+  // 刷新商品：按当前类型 + 关键词调 AI 生成
+  async function _petMallRefresh() {
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    const input = document.getElementById('pet-mall-search');
+    const query = (input ? input.value : '').trim();
+
+    const mainConfig = await API.getConfig();
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+    const cat = _petMallCat;
+    const catObj = PET_MALL_CATS.find(c => c.key === cat) || PET_MALL_CATS[0];
+    const queryHint = query ? `用户的搜索关键词：「${query}」，生成的商品要尽量贴合这个需求。` : '';
+
+    // 按设置注入世界观资料 / 近期主线剧情
+    const mset = _getPetMallSettings(pd);
+    let contextBlock = '';
+    if (mset.useWv) {
+      const wv = await _buildWorldviewBlock();
+      if (wv) contextBlock += `\n以下是这个世界的设定资料，请让商品贴合这个世界观（不要照搬，融入即可）：\n${wv}\n`;
+    }
+    if (mset.usePlot) {
+      const plot = _buildRecentPlotBlock();
+      if (plot) contextBlock += `\n【最近主线剧情（供参考，让商品贴合当前情境，但不要出现人名/剧情）】\n${plot}\n`;
+    }
+
+    const container = document.getElementById('pet-mall-items');
+    if (container) container.innerHTML = _renderShopLoadingHtml();
+    UI.showToast(`正在刷新${catObj.label}…`, 1200);
+
+    // 各类型的商品定义（发给 AI 的具体要求）+ 返回字段模板
+    let catDef = '';
+    let jsonTpl = '[{"name":"商品名","desc":"商品描述","price":"纯数字"}]';
+    if (cat === 'pet') {
+      catDef = `本次生成「宠物」类商品——各种可购买的活体宠物（猫、狗、兔、鸟、异宠等）。每只宠物是一份完整档案，字段如下：
+- name：宠物名字（可爱好记的名字，不是品种，如"团子""可可""雪球"）
+- species：物种/品种（如"英短蓝猫""柯基犬""荷兰垂耳兔"）
+- gender：性别，如"公""母""公猫""母猫""无性别"等，贴合设定
+- age：年龄数字（幼体可小，纯数字，单位由 species 隐含）
+- ageMax：预期寿命数字，要大于等于 age
+- appearance：外貌描写，不少于 30 字，写毛色、花纹、体型、眼睛、特征等
+- setting：宠物设定/性格背景，不少于 50 字，写性格、习惯、喜好、来历等
+- brief：一句话简介，给主线剧情认识这只宠物用，格式「X岁的{性别}{品种}，八字内外貌，八字内性格」，例如"3岁的母橘猫，圆脸微胖，黏人好吃"
+- desc：一句话简介（用于商城橱窗展示，简短概括这只宠物）
+- price：纯数字字符串，活体宠物价格偏高（约 300~30000）`;
+      jsonTpl = '[{"name":"名字","species":"品种","gender":"性别","age":年龄数字,"ageMax":寿命数字,"appearance":"外貌30字+","setting":"设定50字+","brief":"X岁的母橘猫，圆脸微胖，黏人好吃","desc":"一句话简介","price":"纯数字"}]';
+    } else if (cat === 'clothes') {
+      catDef = `本次生成「宠物服装」类商品——给宠物穿的衣服和配饰。
+- name：服装名（如"针织毛衣""水手服套装""小铃铛领结"）
+- desc：一句话描述款式、颜色、材质、适合的宠物体型
+- price：纯数字字符串，约 20~800`;
+    } else if (cat === 'supply') {
+      catDef = `本次生成「宠物用品」类商品——器具、玩具、家居类的宠物日用品（如逗猫棒、激光笔、猫爬架、猫窝、狗窝、牵引绳、磨牙棒、慢食碗、鱼缸、饲养箱、保温灯等）。
+- name：用品名（如"羽毛逗猫棒""剑麻猫爬架""生态鱼缸套装"）
+- desc：一句话描述用途、材质、尺寸等
+- price：纯数字字符串，约 20~2000`;
+    } else if (cat === 'food') {
+      catDef = `本次生成「宠物食品」类商品——猫粮、狗粮、罐头、零食、冻干等。
+- name：食品名（如"三文鱼主食罐头""无谷冻干猫粮""洁齿磨牙棒"）
+- desc：一句话描述成分、口味、适口性等
+- price：纯数字字符串，约 10~600`;
+    }
+
+    const systemPrompt = `你是一个宠物用品网购平台的推荐引擎。请生成 8~12 个商品推荐。${queryHint}
+${contextBlock}
+${catDef}
+
+严格要求：商品信息中立客观，不出现任何人名、剧情、推荐理由。
+
+返回纯 JSON 数组，不要任何额外文字：
+${jsonTpl}`;
+
+    try {
+      const results = await _phoneJsonArrayWithRetry({
+        label: '宠物商城刷新', url, key, model,
+        temperature: 0.85, max_tokens: 5000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `请生成 8~12 条${catObj.label}商品推荐。` }
+        ]
+      });
+      const norm = (results || []).map(it => {
+        const base = {
+          id: _cottageGenId('petmall'),
+          name: String(it.name || '未命名').slice(0, 30),
+          cat,
+          desc: String(it.desc || '').slice(0, 200),
+          price: String(it.price || '--').replace(/[^\d.]/g, '') || '--',
+        };
+        if (cat === 'pet') {
+          // 宠物类：存完整资料字段，购买后可直接进宠物列表
+          let age = Number(it.age);
+          let ageMax = Number(it.ageMax);
+          if (!Number.isFinite(age) || age < 0) age = null;
+          if (!Number.isFinite(ageMax) || ageMax < 0) ageMax = null;
+          if (age !== null && ageMax !== null && age > ageMax) ageMax = age;
+          base.species = String(it.species || '').slice(0, 40);
+          base.gender = String(it.gender || '').slice(0, 20);
+          base.age = age;
+          base.ageMax = ageMax;
+          base.appearance = String(it.appearance || '').slice(0, 1000);
+          base.setting = String(it.setting || '').slice(0, 3000);
+          // 商城橱窗展示用 desc：没给就用 appearance 精简
+          if (!base.desc) base.desc = base.appearance.slice(0, 60);
+        }
+        return base;
+      }).slice(0, 12);
+      if (!pd.petMallItems || typeof pd.petMallItems !== 'object') pd.petMallItems = {};
+      pd.petMallItems[cat] = norm;
+      await _savePhoneData();
+      _log(`在宠物商城刷新了${catObj.label}推荐（${norm.length}条）`);
+      _renderPetMall();
+      UI.showToast('已刷新', 1200);
+    } catch (e) {
+      UI.showToast(`刷新失败：${e.message || '未知错误'}`, 2500);
+      _renderPetMall();
+    }
+  }
+
+  // 宠物详情卡：展示完整档案（品种/性别/年龄/外貌/设定），可直接购买
+  async function _petMallDetail(idx) {
+    const pd = await _getPhoneData();
+    const it = (pd.petMallItems && pd.petMallItems.pet) ? pd.petMallItems.pet[idx] : null;
+    if (!it) { UI.showToast('商品不存在', 1500); return; }
+
+    const rows = [];
+    if (it.species) rows.push(['品种', it.species]);
+    if (it.gender) rows.push(['性别', it.gender]);
+    if (it.age != null) rows.push(['年龄', `${it.age} 岁${it.ageMax != null ? ` / 预期 ${it.ageMax} 岁` : ''}`]);
+    const metaHtml = rows.map(([k, v]) => `
+      <div style="display:flex;gap:10px;font-size:13px;line-height:1.7">
+        <span style="color:var(--text-secondary);flex-shrink:0;width:44px">${k}</span>
+        <span style="color:var(--text)">${Utils.escapeHtml(String(v))}</span>
+      </div>`).join('');
+    const blockHtml = (title, text) => text ? `
+      <div style="margin-top:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">${title}</div>
+        <div style="font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap">${Utils.escapeHtml(text)}</div>
+      </div>` : '';
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="color:var(--accent)">${_cottageRoomSvg('paw')}</span>
+          <div style="font-size:17px;font-weight:600">${Utils.escapeHtml(it.name || '未命名')}</div>
+        </div>
+        <div style="font-size:13px;color:var(--accent);font-weight:600;margin-bottom:14px">¥ ${Utils.escapeHtml(String(it.price || '--'))}</div>
+        ${metaHtml}
+        ${blockHtml('外貌', it.appearance)}
+        ${blockHtml('设定', it.setting)}
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <button id="pet-detail-close" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">关闭</button>
+          <button id="pet-detail-buy" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">购买</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => { if (mask.parentNode) mask.remove(); };
+    mask.querySelector('#pet-detail-close').onclick = close;
+    _maskCloseOnBg(mask, close);
+    mask.querySelector('#pet-detail-buy').onclick = () => { close(); _petMallBuy(idx); };
+  }
+
+  // 购买：付款（启用货币才选）+ 扣款 + 记账，入库按类型分流（下一步接仓库）
+  async function _petMallBuy(idx) {
+    const pd = await _getPhoneData();
+    const cat = _petMallCat;
+    const item = (pd.petMallItems && pd.petMallItems[cat]) ? pd.petMallItems[cat][idx] : null;
+    if (!item) { UI.showToast('商品不存在', 1500); return; }
+    const catObj = PET_MALL_CATS.find(c => c.key === cat) || PET_MALL_CATS[0];
+    const priceNum = parseFloat(item.price);
+    const hasPrice = Number.isFinite(priceNum) && priceNum > 0;
+    const mset = _getPetMallSettings(pd);
+    const currencies = _getMallWalletCurrencyInfos('cottage');
+    if (mset.useCurrency && hasPrice) {
+      const limitIds = _getMallCurrencyIds('cottage');
+      if (limitIds.length && currencies.length === 0) {
+        const names = limitIds.map(id => { const d = _getGlobalAttrDefs().find(a => a.id === id); return d?.name || id; }).join('、');
+        UI.showToast(`本商城仅接受：${names}，请先在钱包绑定对应货币`, 2800);
+        return;
+      }
+    }
+    const showCur = mset.useCurrency && currencies.length > 0 && hasPrice;
+    // 物流开放给「用品」「服装」「食品」（用品→家具仓库，服装→宠物衣橱，食品→食品仓库，走统一订单系统分流）；宠物即时到手
+    const showShip = mset.useLogistics && (cat === 'supply' || cat === 'clothes' || cat === 'food');
+
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    const curSection = showCur ? `
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:6px">支付货币</label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+          ${currencies.map((c, i) => `
+          <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+            <input type="radio" name="pet-buy-cur" value="${Utils.escapeHtml(c.id)}" ${i === 0 ? 'checked' : ''} style="accent-color:var(--accent)">
+            <span style="flex:1;font-size:13px;color:var(--text)">${Utils.escapeHtml(c.name)}</span>
+            <span style="font-size:12px;color:var(--text-secondary)">余额 ${Utils.escapeHtml(String(c.balance))}</span>
+          </label>`).join('')}
+        </div>` : '';
+    const shipSection = showShip ? `
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:6px">到货方式</label>
+        <div id="pet-buy-ship" style="display:flex;gap:8px;margin-bottom:18px">
+          <div class="cottage-buy-ship-opt active" data-ship="instant" style="flex:1">立即送达</div>
+          <div class="cottage-buy-ship-opt" data-ship="order" style="flex:1">走订单配送</div>
+        </div>` : '';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px">购买「${Utils.escapeHtml(item.name)}」</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">价格 ¥ ${Utils.escapeHtml(String(item.price || '--'))}</div>
+${curSection}
+${shipSection}
+        <div style="display:flex;gap:10px">
+          <button id="pet-buy-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="pet-buy-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${showCur ? '确认支付' : '确认购买'}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#pet-buy-cancel').onclick = () => document.body.removeChild(mask);
+    _maskCloseOnBg(mask, () => document.body.removeChild(mask));
+
+    let _chosenShip = 'instant';
+    mask.querySelectorAll('.cottage-buy-ship-opt').forEach(opt => {
+      opt.onclick = () => {
+        mask.querySelectorAll('.cottage-buy-ship-opt').forEach(n => n.classList.remove('active'));
+        opt.classList.add('active');
+        _chosenShip = opt.dataset.ship;
+      };
+    });
+
+    mask.querySelector('#pet-buy-go').onclick = async () => {
+      if (showCur) {
+        const sel = mask.querySelector('input[name="pet-buy-cur"]:checked');
+        const curId = sel?.value || currencies[0].id;
+        const info = currencies.find(c => c.id === curId);
+        if (!info) { UI.showToast('货币不存在', 1500); return; }
+        try {
+          const sb = Conversations.getStatusBar() || {};
+          sb.customAttrs = sb.customAttrs || {};
+          sb.customAttrs.global = sb.customAttrs.global || {};
+          const balance = _ensureCurrencyBalance(sb, curId);
+          if (balance < priceNum) { UI.showToast(`${info.name}余额不足（需 ${priceNum}，当前 ${balance}）`, 2600); return; }
+          sb.customAttrs.global[curId] = balance - priceNum;
+          await Conversations.setStatusBar(sb);
+          if (typeof StatusBar !== 'undefined' && StatusBar.render) StatusBar.render(sb);
+        } catch (e) { UI.showToast('扣款失败', 1500); return; }
+        await _addLedgerEntry({
+          currencyId: curId,
+          amount: -Math.abs(priceNum),
+          category: '购物',
+          note: `购买${catObj.label}「${item.name}」`,
+          platform: '宠物商城',
+          source: 'pet_buy',
+          editable: true,
+        });
+      }
+
+      document.body.removeChild(mask);
+      // 入库分流（用品可走订单配送，其余即时）
+      await _petMallDeliver(cat, item, showCur ? priceNum : 0, showShip ? _chosenShip : 'instant');
+    };
+  }
+
+  // 购买入库分流：宠物→列表 / 服装→宠物服装 / 用品→家具仓库 / 食品→喂食器
+  // ship: 'instant' 立即入库 | 'order' 走订单配送（仅用品支持）
+  async function _petMallDeliver(cat, item, deducted, ship) {
+    const catObj = PET_MALL_CATS.find(c => c.key === cat) || PET_MALL_CATS[0];
+    const deductNote = deducted ? `（前端已自动扣除 ${deducted}，AI无需再处理此扣款）` : '';
+
+    if (cat === 'pet') {
+      const pd = await _getPhoneData();
+      if (!Array.isArray(pd.pets)) pd.pets = [];
+      pd.pets.push({
+        id: _cottageGenId('pet'),
+        name: String(item.name || '未命名').slice(0, 40),
+        gender: String(item.gender || '').slice(0, 20),
+        species: String(item.species || '').slice(0, 40),
+        age: (typeof item.age === 'number' && Number.isFinite(item.age)) ? item.age : null,
+        ageMax: (typeof item.ageMax === 'number' && Number.isFinite(item.ageMax)) ? item.ageMax : null,
+        image: '',
+        outfit: '',
+        appearance: String(item.appearance || '').slice(0, 1000),
+        setting: String(item.setting || '').slice(0, 3000),
+        brief: String(item.brief || '').slice(0, 60),
+        customFields: [],
+        source: 'mall',
+        createdAt: new Date().toISOString(),
+      });
+      await _savePhoneData();
+      _log(`在宠物商城买下了宠物「${item.name}」，已进入宠物列表${deductNote}`);
+      UI.showToast(`「${item.name}」已到家，去宠物页看看吧`, 2200);
+      return;
+    }
+
+    // 用品：进家具仓库（打「宠物用品」tag），可即时或走订单配送
+    if (cat === 'supply') {
+      const pd = await _getPhoneData();
+      if (ship === 'order') {
+        const cMeta = _shopMeta?.cottage || {};
+        const dMin = Math.max(1, parseInt(cMeta.deliveryMin) || 2);
+        const dMax = Math.max(dMin, parseInt(cMeta.deliveryMax) || 5);
+        const dUnit = cMeta.deliveryUnit || 'day';
+        const raw = dMin + Math.floor(Math.random() * (dMax - dMin + 1));
+        const minutes = dUnit === 'day' ? raw * 1440 : raw;
+        pd.furnitureOrders = pd.furnitureOrders || [];
+        pd.furnitureOrders.push({
+          id: _cottageGenId('forder'),
+          name: item.name, desc: item.desc, tag: '宠物用品', price: item.price,
+          status: 'delivering',
+          deliveryMinutes: minutes,
+          deliveryUnit: dUnit,
+          orderGameTime: _getGameTime() || '',
+          time: _getGameTime() || '',
+          furnitureBuy: true,
+          claimedToInv: false,
+          dest: 'furniture', // 显式标记去向
+        });
+        pd.furnitureOrders = pd.furnitureOrders.slice(-50);
+        await _savePhoneData();
+        const unitLabel = dUnit === 'day' ? '天' : '分钟';
+        _log(`在宠物商城下单用品「${item.name}」，约 ${raw} ${unitLabel}后送达家具仓库（宠物用品）${deductNote}`);
+        UI.showToast(`已下单，约 ${raw} ${unitLabel}后自动入库家具仓库`, 2600);
+      } else {
+        _addFurnitureToInventory(pd, { name: item.name, desc: item.desc, tag: '宠物用品' });
+        await _savePhoneData();
+        _log(`在宠物商城购买了用品「${item.name}」，已进入家具仓库（宠物用品）${deductNote}`);
+        UI.showToast(`「${item.name}」已收进家具仓库，可在小屋 → 商城 → 家具仓库里摆进房间`, 3000);
+      }
+      return;
+    }
+
+    // 服装：进宠物衣橱，可即时或走订单配送
+    if (cat === 'clothes') {
+      const pd = await _getPhoneData();
+      if (ship === 'order') {
+        const cMeta = _shopMeta?.cottage || {};
+        const dMin = Math.max(1, parseInt(cMeta.deliveryMin) || 2);
+        const dMax = Math.max(dMin, parseInt(cMeta.deliveryMax) || 5);
+        const dUnit = cMeta.deliveryUnit || 'day';
+        const raw = dMin + Math.floor(Math.random() * (dMax - dMin + 1));
+        const minutes = dUnit === 'day' ? raw * 1440 : raw;
+        pd.furnitureOrders = pd.furnitureOrders || [];
+        pd.furnitureOrders.push({
+          id: _cottageGenId('forder'),
+          name: item.name, desc: item.desc, tag: '宠物服装', price: item.price,
+          status: 'delivering',
+          deliveryMinutes: minutes,
+          deliveryUnit: dUnit,
+          orderGameTime: _getGameTime() || '',
+          time: _getGameTime() || '',
+          furnitureBuy: true,
+          claimedToInv: false,
+          dest: 'petClothes', // 到货进宠物衣橱
+        });
+        pd.furnitureOrders = pd.furnitureOrders.slice(-50);
+        await _savePhoneData();
+        const unitLabel = dUnit === 'day' ? '天' : '分钟';
+        _log(`在宠物商城下单服装「${item.name}」，约 ${raw} ${unitLabel}后送达宠物衣橱${deductNote}`);
+        UI.showToast(`已下单，约 ${raw} ${unitLabel}后自动入库宠物衣橱`, 2600);
+      } else {
+        _addPetClothToWardrobe(pd, { name: item.name, desc: item.desc });
+        await _savePhoneData();
+        _log(`在宠物商城购买了服装「${item.name}」，已进入宠物衣橱${deductNote}`);
+        UI.showToast(`「${item.name}」已收进宠物衣橱，可在宠物资料里穿上`, 3000);
+      }
+      return;
+    }
+
+    // 食品：进食品仓库，可即时或走订单配送
+    if (cat === 'food') {
+      const pd = await _getPhoneData();
+      if (ship === 'order') {
+        const cMeta = _shopMeta?.cottage || {};
+        const dMin = Math.max(1, parseInt(cMeta.deliveryMin) || 2);
+        const dMax = Math.max(dMin, parseInt(cMeta.deliveryMax) || 5);
+        const dUnit = cMeta.deliveryUnit || 'day';
+        const raw = dMin + Math.floor(Math.random() * (dMax - dMin + 1));
+        const minutes = dUnit === 'day' ? raw * 1440 : raw;
+        pd.furnitureOrders = pd.furnitureOrders || [];
+        pd.furnitureOrders.push({
+          id: _cottageGenId('forder'),
+          name: item.name, desc: item.desc, tag: '宠物食品', price: item.price,
+          status: 'delivering',
+          deliveryMinutes: minutes,
+          deliveryUnit: dUnit,
+          orderGameTime: _getGameTime() || '',
+          time: _getGameTime() || '',
+          furnitureBuy: true,
+          claimedToInv: false,
+          dest: 'petFood', // 到货进食品仓库
+        });
+        pd.furnitureOrders = pd.furnitureOrders.slice(-50);
+        await _savePhoneData();
+        const unitLabel = dUnit === 'day' ? '天' : '分钟';
+        _log(`在宠物商城下单食品「${item.name}」，约 ${raw} ${unitLabel}后送达食品仓库${deductNote}`);
+        UI.showToast(`已下单，约 ${raw} ${unitLabel}后自动入库食品仓库`, 2600);
+      } else {
+        _addPetFoodToStock(pd, { name: item.name, desc: item.desc });
+        await _savePhoneData();
+        _log(`在宠物商城购买了食品「${item.name}」，已进入食品仓库${deductNote}`);
+        UI.showToast(`「${item.name}」已收进食品仓库，可在喂食器里装填`, 3000);
+      }
+      return;
+    }
+
+    // 兜底
+    UI.showToast(`已购买「${item.name}」`, 2200);
+    _log(`在宠物商城购买了${catObj.label}「${item.name}」${deductNote}`);
+  }
+
+  // 加一件食品进食品仓库（同名+同描述则数量+1，否则新建）
+  function _addPetFoodToStock(pd, item) {
+    if (!Array.isArray(pd.petFood)) pd.petFood = [];
+    const nName = String(item.name || '未命名').slice(0, 30);
+    const nDesc = String(item.desc || '').slice(0, 200);
+    const exist = pd.petFood.find(x => x.name === nName && (x.desc || '') === nDesc);
+    if (exist) { exist.qty = (exist.qty || 1) + 1; return exist; }
+    const c = { id: _cottageGenId('petfood'), name: nName, desc: nDesc, qty: 1 };
+    pd.petFood.push(c);
+    return c;
+  }
+
+  // 加食物进喂食器（同名+同描述则份数累加，否则新建）
+  function _addPetFoodToFeeder(pd, item, add) {
+    if (!Array.isArray(pd.petFeeder)) pd.petFeeder = [];
+    const nName = String(item.name || '未命名').slice(0, 30);
+    const nDesc = String(item.desc || '').slice(0, 200);
+    const n = Math.max(1, parseInt(add) || 1);
+    const exist = pd.petFeeder.find(x => x.name === nName && (x.desc || '') === nDesc);
+    if (exist) { exist.qty = (exist.qty || 0) + n; return exist; }
+    const c = { id: _cottageGenId('petfeed'), name: nName, desc: nDesc, qty: n };
+    pd.petFeeder.push(c);
+    return c;
+  }
+
+  // 加一件衣服进宠物衣橱（同名+同描述则数量+1，否则新建）
+  function _addPetClothToWardrobe(pd, item) {
+    if (!Array.isArray(pd.petClothes)) pd.petClothes = [];
+    const nName = String(item.name || '未命名').slice(0, 30);
+    const nDesc = String(item.desc || '').slice(0, 200);
+    const exist = pd.petClothes.find(x => x.name === nName && (x.desc || '') === nDesc);
+    if (exist) { exist.qty = (exist.qty || 1) + 1; return exist; }
+    const c = { id: _cottageGenId('petcloth'), name: nName, desc: nDesc, qty: 1 };
+    pd.petClothes.push(c);
+    return c;
+  }
+
+  // 给宠物穿上一件衣服（写进 pet.wornClothes），即时 save。
+  async function _petWornPutOn(petId, cloth) {
+    const pd = await _getPhoneData();
+    const tgt = (pd.pets || []).find(p => p && p.id === petId);
+    if (!tgt) { UI.showToast('宠物资料已不存在', 1600); return false; }
+    if (!Array.isArray(tgt.wornClothes)) tgt.wornClothes = [];
+    tgt.wornClothes.push({ name: String(cloth.name || '未命名').slice(0, 30), desc: String(cloth.desc || '').slice(0, 200) });
+    await _savePhoneData();
+    return true;
+  }
+
+  // 手动填写一件衣服穿上（不占衣橱库存，脱下时会作为新衣服进衣橱）。
+  function _petWornManualAdd(petId, onDone) {
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">手动填写衣服</div>
+        <input id="worn-m-name" type="text" maxlength="30" placeholder="衣服名（如：红色针织毛衣）" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px">
+        <textarea id="worn-m-desc" rows="2" maxlength="200" placeholder="描述（颜色、款式等，可留空）" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font:inherit;font-size:14px;resize:vertical"></textarea>
+        <div style="display:flex;gap:10px">
+          <button id="worn-m-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
+          <button id="worn-m-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">穿上</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => { if (mask.parentNode) mask.remove(); };
+    mask.querySelector('#worn-m-cancel').onclick = close;
+    _maskCloseOnBg(mask, close);
+    mask.querySelector('#worn-m-ok').onclick = async () => {
+      const name = (mask.querySelector('#worn-m-name').value || '').trim();
+      if (!name) { UI.showToast('请填写衣服名', 1500); return; }
+      const desc = (mask.querySelector('#worn-m-desc').value || '').trim();
+      const ok = await _petWornPutOn(petId, { name, desc });
+      if (ok) { close(); UI.showToast(`已给宠物穿上「${name}」`, 1400); if (typeof onDone === 'function') onDone(); }
+    };
+  }
+
+  // 从衣橱选一件穿上：扣 1 库存，穿到宠物身上。
+  async function _petWornPickFromWardrobe(petId, onDone) {
+    const pd = await _getPhoneData();
+    const clothes = (Array.isArray(pd.petClothes) ? pd.petClothes : []).filter(c => (c.qty || 1) > 0);
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    const listHtml = clothes.length
+      ? clothes.map(c => `
+        <button type="button" data-cloth="${Utils.escapeHtml(c.id)}" style="width:100%;text-align:left;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);cursor:pointer">
+          <div style="font-size:13px">${Utils.escapeHtml(c.name || '未命名')}${(c.qty || 1) > 1 ? ` ×${c.qty}` : ''}</div>
+          ${c.desc ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(c.desc)}</div>` : ''}
+        </button>`).join('')
+      : `<div style="font-size:12px;color:var(--text-secondary);text-align:center;padding:16px 4px">衣橱空空的，先去宠物商城买衣服吧。</div>`;
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text);max-height:70vh;display:flex;flex-direction:column">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px;flex:none">从衣橱选（穿上扣 1 件）</div>
+        <div style="flex:1;overflow-y:auto;margin:-2px -2px 10px;padding:2px">${listHtml}</div>
+        <button id="worn-w-cancel" style="flex:none;width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">取消</button>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => { if (mask.parentNode) mask.remove(); };
+    mask.querySelector('#worn-w-cancel').onclick = close;
+    _maskCloseOnBg(mask, close);
+    mask.querySelectorAll('[data-cloth]').forEach(btn => {
+      btn.onclick = async () => {
+        const cid = btn.getAttribute('data-cloth');
+        const pd2 = await _getPhoneData();
+        const c = (pd2.petClothes || []).find(x => x.id === cid);
+        if (!c || (c.qty || 1) <= 0) { UI.showToast('这件衣服库存不足', 1500); return; }
+        // 先扣库存
+        if ((c.qty || 1) > 1) c.qty -= 1;
+        else pd2.petClothes = (pd2.petClothes || []).filter(x => x.id !== cid);
+        const tgt = (pd2.pets || []).find(p => p && p.id === petId);
+        if (!tgt) { UI.showToast('宠物资料已不存在', 1600); return; }
+        if (!Array.isArray(tgt.wornClothes)) tgt.wornClothes = [];
+        tgt.wornClothes.push({ name: c.name, desc: c.desc || '' });
+        await _savePhoneData();
+        close();
+        UI.showToast(`已给宠物穿上「${c.name}」`, 1400);
+        if (typeof onDone === 'function') onDone();
+      };
+    });
+  }
+
+  // 宠物衣橱：已购/回收的衣服列表（穿在宠物身上的不在这里，脱下才回来）
+  async function _petOpenClothes() {
+    _pushNav(() => _renderPetClothes());
+    _renderPetClothes();
+  }
+
+  async function _renderPetClothes() {
+    const pd = await _getPhoneData();
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    document.getElementById('phone-title').textContent = '宠物衣橱';
+    _applyWallpaper(pd);
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = '';
+
+    const clothes = Array.isArray(pd.petClothes) ? pd.petClothes : [];
+    const listHtml = clothes.length
+      ? clothes.map(c => `
+        <div class="phone-map-result-card">
+          <div class="phone-map-result-head">
+            <div class="phone-map-result-name">${Utils.escapeHtml(c.name || '未命名')}${(c.qty || 1) > 1 ? ` ×${c.qty}` : ''}</div>
+          </div>
+          <div class="phone-map-result-address">${_uiIcon('pin', 12)}<span>宠物服装</span></div>
+          ${c.desc ? `<div class="phone-map-result-desc">${Utils.escapeHtml(c.desc)}</div>` : ''}
+          <div class="phone-map-result-foot">
+            <div class="phone-map-result-foot-left"></div>
+            <div class="phone-map-result-actions">
+              <button type="button" onclick="Phone._petClothesEdit('${Utils.escapeHtml(c.id)}')" class="phone-map-action-btn">${_uiIcon('pen', 12)} 编辑</button>
+              <button type="button" onclick="Phone._petClothesDelete('${Utils.escapeHtml(c.id)}')" class="phone-map-action-btn">${_uiIcon('trash', 12)} 删除</button>
+            </div>
+          </div>
+        </div>`).join('')
+      : `<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">衣橱还是空的，去宠物商城买点衣服，或在宠物资料的服装里脱下的衣服会回到这里</p>`;
+
+    body.innerHTML = `
+      <div class="phone-cottage-shop" style="display:flex;flex-direction:column;height:100%">
+        <div style="flex:1;overflow-y:auto;padding:12px">
+          <div style="font-size:11px;color:var(--text-secondary);margin:2px 2px 10px;line-height:1.5">在宠物资料的「服装」里，可以把这些衣服穿到宠物身上（穿上从这里扣除，脱下放回）。</div>
+          <div id="pet-clothes-list">${listHtml}</div>
+        </div>
+      </div>`;
+  }
+
+  // 删除衣橱里一件衣服（数量>1 减一，否则移除）
+  async function _petClothesDelete(clothId) {
+    const pd = await _getPhoneData();
+    const c = (pd.petClothes || []).find(x => x.id === clothId);
+    if (!c) return;
+    const ok = await UI.showConfirm('删除衣服', `确定从衣橱删除「${c.name}」吗？`);
+    if (!ok) return;
+    if ((c.qty || 1) > 1) c.qty -= 1;
+    else pd.petClothes = (pd.petClothes || []).filter(x => x.id !== clothId);
+    await _savePhoneData();
+    _renderPetClothes();
+    UI.showToast('已删除', 1200);
+  }
+
+  // 编辑衣橱里一件衣服：改名字和描述。改后若与另一条同名同描述则合并数量。
+  async function _petClothesEdit(clothId) {
+    const pd = await _getPhoneData();
+    const c = (pd.petClothes || []).find(x => x.id === clothId);
+    if (!c) return;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">编辑衣服</div>
+        <input id="cloth-e-name" type="text" maxlength="30" placeholder="衣服名" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px">
+        <textarea id="cloth-e-desc" rows="2" maxlength="200" placeholder="描述（颜色、款式等，可留空）" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font:inherit;font-size:14px;resize:vertical"></textarea>
+        <div style="display:flex;gap:10px">
+          <button id="cloth-e-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
+          <button id="cloth-e-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#cloth-e-name').value = c.name || '';
+    mask.querySelector('#cloth-e-desc').value = c.desc || '';
+    const close = () => { if (mask.parentNode) mask.remove(); };
+    mask.querySelector('#cloth-e-cancel').onclick = close;
+    _maskCloseOnBg(mask, close);
+    mask.querySelector('#cloth-e-ok').onclick = async () => {
+      const name = (mask.querySelector('#cloth-e-name').value || '').trim();
+      if (!name) { UI.showToast('请填写衣服名', 1500); return; }
+      const desc = (mask.querySelector('#cloth-e-desc').value || '').trim();
+      const pd2 = await _getPhoneData();
+      const cur = (pd2.petClothes || []).find(x => x.id === clothId);
+      if (!cur) { close(); return; }
+      const nName = name.slice(0, 30);
+      const nDesc = desc.slice(0, 200);
+      // 找是否有另一条完全相同的（合并）
+      const dup = (pd2.petClothes || []).find(x => x.id !== clothId && x.name === nName && (x.desc || '') === nDesc);
+      if (dup) {
+        dup.qty = (dup.qty || 1) + (cur.qty || 1);
+        pd2.petClothes = (pd2.petClothes || []).filter(x => x.id !== clothId);
+      } else {
+        cur.name = nName;
+        cur.desc = nDesc;
+      }
+      await _savePhoneData();
+      close();
+      _renderPetClothes();
+      UI.showToast('已保存', 1200);
+    };
+  }
+
+  // 宠物喂食器：上层=喂食器现有食物（宠物会吃），下层=食品仓库（可装填进喂食器）
+  async function _petOpenFeeder() {
+    _pushNav(() => _petOpenFeeder());
+    _renderPetFeeder();
+  }
+
+  async function _renderPetFeeder() {
+    const pd = await _getPhoneData();
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    document.getElementById('phone-title').textContent = '宠物喂食器';
+    _applyWallpaper(pd);
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = '';
+
+    const feeder = Array.isArray(pd.petFeeder) ? pd.petFeeder : [];
+    const stock = Array.isArray(pd.petFood) ? pd.petFood : [];
+
+    const feederHtml = feeder.length
+      ? feeder.map(f => `
+        <div class="phone-map-result-card">
+          <div class="phone-map-result-head">
+            <div class="phone-map-result-name">${Utils.escapeHtml(f.name || '未命名')} <span style="color:var(--accent,#7ea885)">×${f.qty || 0}</span></div>
+          </div>
+          ${f.desc ? `<div class="phone-map-result-desc">${Utils.escapeHtml(f.desc)}</div>` : ''}
+          <div class="phone-map-result-foot">
+            <div class="phone-map-result-foot-left"></div>
+            <div class="phone-map-result-actions">
+              <button type="button" onclick="Phone._petFeederTakeBack('${Utils.escapeHtml(f.id)}')" class="phone-map-action-btn">取出放回仓库</button>
+            </div>
+          </div>
+        </div>`).join('')
+      : `<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin:12px 0">喂食器是空的，从下面的食品仓库装填食物，宠物才能吃到。</p>`;
+
+    const stockHtml = stock.length
+      ? stock.map(c => `
+        <div class="phone-map-result-card">
+          <div class="phone-map-result-head">
+            <div class="phone-map-result-name">${Utils.escapeHtml(c.name || '未命名')}${(c.qty || 1) > 1 ? ` ×${c.qty}` : ''}</div>
+          </div>
+          ${c.desc ? `<div class="phone-map-result-desc">${Utils.escapeHtml(c.desc)}</div>` : ''}
+          <div class="phone-map-result-foot">
+            <div class="phone-map-result-foot-left"></div>
+            <div class="phone-map-result-actions">
+              <button type="button" onclick="Phone._petFeederFill('${Utils.escapeHtml(c.id)}')" class="phone-map-action-btn">${_uiIcon('bowl', 12)} 装填</button>
+              <button type="button" onclick="Phone._petFoodEdit('${Utils.escapeHtml(c.id)}')" class="phone-map-action-btn">${_uiIcon('pen', 12)} 编辑</button>
+              <button type="button" onclick="Phone._petFoodDelete('${Utils.escapeHtml(c.id)}')" class="phone-map-action-btn">${_uiIcon('trash', 12)} 删除</button>
+            </div>
+          </div>
+        </div>`).join('')
+      : `<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin:12px 0">食品仓库空空的，去宠物商城买点食物吧。</p>`;
+
+    body.innerHTML = `
+      <div class="phone-cottage-shop" style="display:flex;flex-direction:column;height:100%">
+        <div style="flex:1;overflow-y:auto;padding:12px">
+          <div style="font-size:14px;font-weight:600;margin:2px 2px 8px">喂食器</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin:0 2px 10px;line-height:1.5">装进喂食器的食物，刷新宠物状态时 AI 会判断它们吃了多少并自动扣减。</div>
+          <div id="pet-feeder-list">${feederHtml}</div>
+          <div style="height:18px"></div>
+          <div style="font-size:14px;font-weight:600;margin:2px 2px 8px">食品仓库</div>
+          <div id="pet-food-list">${stockHtml}</div>
+        </div>
+      </div>`;
+  }
+
+  // 从食品仓库装填进喂食器：填份数，扣仓库、加喂食器
+  async function _petFeederFill(foodId) {
+    const pd = await _getPhoneData();
+    const c = (pd.petFood || []).find(x => x.id === foodId);
+    if (!c) return;
+    const maxN = c.qty || 1;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:300px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px">装填「${Utils.escapeHtml(c.name || '')}」</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">仓库现有 ${maxN} 份，选择装进喂食器的份数</div>
+        <input id="feeder-fill-n" type="number" min="1" max="${maxN}" value="${maxN}" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px">
+        <div style="display:flex;gap:10px">
+          <button id="feeder-fill-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
+          <button id="feeder-fill-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">装填</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => { if (mask.parentNode) mask.remove(); };
+    mask.querySelector('#feeder-fill-cancel').onclick = close;
+    _maskCloseOnBg(mask, close);
+    mask.querySelector('#feeder-fill-ok').onclick = async () => {
+      let n = parseInt(mask.querySelector('#feeder-fill-n').value);
+      if (!Number.isFinite(n) || n < 1) { UI.showToast('请填有效份数', 1500); return; }
+      const pd2 = await _getPhoneData();
+      const cur = (pd2.petFood || []).find(x => x.id === foodId);
+      if (!cur) { close(); return; }
+      n = Math.min(n, cur.qty || 1);
+      if ((cur.qty || 1) > n) cur.qty -= n;
+      else pd2.petFood = (pd2.petFood || []).filter(x => x.id !== foodId);
+      _addPetFoodToFeeder(pd2, { name: cur.name, desc: cur.desc }, n);
+      await _savePhoneData();
+      _log(`往喂食器里装填了 ${n} 份「${cur.name}」`);
+      close();
+      _renderPetFeeder();
+      UI.showToast(`已装填 ${n} 份「${cur.name}」`, 1600);
+    };
+  }
+
+  // 从喂食器取出全部，放回食品仓库
+  async function _petFeederTakeBack(feedId) {
+    const pd = await _getPhoneData();
+    const f = (pd.petFeeder || []).find(x => x.id === feedId);
+    if (!f) return;
+    const n = f.qty || 0;
+    pd.petFeeder = (pd.petFeeder || []).filter(x => x.id !== feedId);
+    for (let i = 0; i < n; i++) _addPetFoodToStock(pd, { name: f.name, desc: f.desc });
+    await _savePhoneData();
+    _renderPetFeeder();
+    UI.showToast(`已取出 ${n} 份「${f.name}」放回仓库`, 1600);
+  }
+
+  // 编辑食品仓库里一条食物
+  async function _petFoodEdit(foodId) {
+    const pd = await _getPhoneData();
+    const c = (pd.petFood || []).find(x => x.id === foodId);
+    if (!c) return;
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:320px;width:100%;color:var(--text)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:14px">编辑食物</div>
+        <input id="food-e-name" type="text" maxlength="30" placeholder="食物名" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px">
+        <textarea id="food-e-desc" rows="2" maxlength="200" placeholder="描述（口味、成分等，可留空）" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font:inherit;font-size:14px;resize:vertical"></textarea>
+        <div style="display:flex;gap:10px">
+          <button id="food-e-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
+          <button id="food-e-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#food-e-name').value = c.name || '';
+    mask.querySelector('#food-e-desc').value = c.desc || '';
+    const close = () => { if (mask.parentNode) mask.remove(); };
+    mask.querySelector('#food-e-cancel').onclick = close;
+    _maskCloseOnBg(mask, close);
+    mask.querySelector('#food-e-ok').onclick = async () => {
+      const name = (mask.querySelector('#food-e-name').value || '').trim();
+      if (!name) { UI.showToast('请填写食物名', 1500); return; }
+      const desc = (mask.querySelector('#food-e-desc').value || '').trim();
+      const pd2 = await _getPhoneData();
+      const cur = (pd2.petFood || []).find(x => x.id === foodId);
+      if (!cur) { close(); return; }
+      const nName = name.slice(0, 30);
+      const nDesc = desc.slice(0, 200);
+      const dup = (pd2.petFood || []).find(x => x.id !== foodId && x.name === nName && (x.desc || '') === nDesc);
+      if (dup) {
+        dup.qty = (dup.qty || 1) + (cur.qty || 1);
+        pd2.petFood = (pd2.petFood || []).filter(x => x.id !== foodId);
+      } else {
+        cur.name = nName; cur.desc = nDesc;
+      }
+      await _savePhoneData();
+      close();
+      _renderPetFeeder();
+      UI.showToast('已保存', 1200);
+    };
+  }
+
+  // 删除食品仓库里一条食物（数量>1 减一，否则移除）
+  async function _petFoodDelete(foodId) {
+    const pd = await _getPhoneData();
+    const c = (pd.petFood || []).find(x => x.id === foodId);
+    if (!c) return;
+    const ok = await UI.showConfirm('删除食物', `确定从食品仓库删除「${c.name}」吗？`);
+    if (!ok) return;
+    if ((c.qty || 1) > 1) c.qty -= 1;
+    else pd.petFood = (pd.petFood || []).filter(x => x.id !== foodId);
+    await _savePhoneData();
+    _renderPetFeeder();
+    UI.showToast('已删除', 1200);
+  }
+
+  // AI 生成宠物：填数量 + 要求 + 三个可选参考（世界观/主线10轮/面具）→ 生成 N 只 → 追加进宠物列表
+  function _petAiGenerate() {
+    const mask = document.createElement('div');
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    mask.innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:600;margin-bottom:16px">AI 生成宠物</div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">生成数量（1-10）</label>
+        <input id="pet-ai-count" type="number" min="1" max="10" value="3" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px">生成要求（可选）</label>
+        <textarea id="pet-ai-req" rows="3" placeholder="想要什么样的宠物，如：猫科、性格冷淡、会说话…" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:16px"></textarea>
+
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:14px;cursor:pointer;user-select:none">
+          <span style="position:relative;display:inline-flex;flex-shrink:0">
+            <input id="pet-ai-wv" type="checkbox" class="circle-check">
+            <span class="circle-check-ui"></span>
+          </span>
+          <span>参考世界观基础资料<br><span style="font-size:11px;color:var(--text-secondary)">含世界观基础、地区设定、节日，帮 AI 贴合世界观</span></span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:14px;cursor:pointer;user-select:none">
+          <span style="position:relative;display:inline-flex;flex-shrink:0">
+            <input id="pet-ai-ml" type="checkbox" class="circle-check">
+            <span class="circle-check-ui"></span>
+          </span>
+          <span>参考主线最近10轮对话<br><span style="font-size:11px;color:var(--text-secondary)">若主线中提到宠物，AI 会优先生成这些宠物</span></span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:18px;cursor:pointer;user-select:none">
+          <span style="position:relative;display:inline-flex;flex-shrink:0">
+            <input id="pet-ai-mask" type="checkbox" class="circle-check">
+            <span class="circle-check-ui"></span>
+          </span>
+          <span>发送面具信息作为参考<br><span style="font-size:11px;color:var(--text-secondary)">若面具设定中有宠物，AI 会优先生成这些宠物</span></span>
+        </label>
+
+        <div style="display:flex;gap:10px">
+          <button id="pet-ai-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
+          <button id="pet-ai-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const close = () => { if (mask.parentNode) mask.remove(); };
+    mask.querySelector('#pet-ai-cancel').onclick = close;
+    _maskCloseOnBg(mask, close);
+    mask.querySelector('#pet-ai-go').onclick = async () => {
+      const count = Math.min(10, Math.max(1, parseInt(mask.querySelector('#pet-ai-count').value) || 3));
+      const req = (mask.querySelector('#pet-ai-req').value || '').trim();
+      const useWv = !!mask.querySelector('#pet-ai-wv').checked;
+      const useMl = !!mask.querySelector('#pet-ai-ml').checked;
+      const useMask = !!mask.querySelector('#pet-ai-mask').checked;
+      close();
+      await _petAiDoGenerate({ count, req, useWv, useMl, useMask });
+    };
+  }
+
+  // 调 AI 生成宠物并追加进列表
+  async function _petAiDoGenerate(opts) {
+    const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
+    const mainConfig = await API.getConfig();
+    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const key = funcConfig.apiKey || mainConfig.apiKey;
+    const model = funcConfig.model || mainConfig.model;
+    if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
+
+    UI.showToast('AI 正在生成宠物…', 2000);
+
+    // 参考资料块
+    const refBlocks = [];
+
+    // 世界观（复用填充全屋逻辑：基础设定 + 地区 + 节日）
+    if (opts.useWv) {
+      const wvParts = [];
+      try {
+        const base = (typeof Chat !== 'undefined' && Chat.getWorldviewPrompt) ? (Chat.getWorldviewPrompt() || '') : '';
+        if (base.trim()) wvParts.push('【世界观基础设定】\n' + base.trim());
+      } catch (_) {}
+      try {
+        const wv = await Worldview.getCurrent();
+        if (wv) {
+          if (Array.isArray(wv.regions) && wv.regions.length) {
+            const regStr = wv.regions.map(r => {
+              let s = r.name || '未命名地区';
+              const d = (r.detail || r.summary || '').trim();
+              if (d) s += '：' + d;
+              return s;
+            }).filter(Boolean).join('\n');
+            if (regStr) wvParts.push('【地区设定】\n' + regStr);
+          }
+          if (Array.isArray(wv.festivals) && wv.festivals.length) {
+            const festStr = wv.festivals.filter(f => f.enabled !== false)
+              .map(f => `${f.name || ''}（${f.date || ''}）：${f.content || ''}`).join('\n');
+            if (festStr) wvParts.push('【节日设定】\n' + festStr);
+          }
+        }
+      } catch (_) {}
+      if (wvParts.length) refBlocks.push(wvParts.join('\n\n'));
+    }
+
+    // 主线最近10轮
+    if (opts.useMl) {
+      try {
+        const ml = _buildRecentPlotBlock();
+        if (ml && ml.trim()) refBlocks.push('【最近主线对话】\n' + ml.trim());
+      } catch (_) {}
+    }
+
+    // 面具
+    if (opts.useMask) {
+      try {
+        const m = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+        if (m) {
+          const parts = [];
+          if (m.name) parts.push('姓名：' + m.name);
+          if (m.onlineName && String(m.onlineName).trim()) parts.push('网名：' + String(m.onlineName).trim());
+          // 面具设定实际存在 background 字段（历史别名 description，二者兜底）
+          const bg = (m.background || m.description || '').trim();
+          if (bg) parts.push('设定：' + bg);
+          if (parts.length) refBlocks.push('【玩家面具设定】\n' + parts.join('\n'));
+        }
+      } catch (_) {}
+    }
+
+    const refText = refBlocks.length
+      ? '\n以下是参考资料，如果其中已经提到某些宠物（有名字或详细描述），请优先把这些宠物完整填写出来，不足数量再补充新宠物：\n\n' + refBlocks.join('\n\n') + '\n'
+      : '';
+
+    const sysPrompt = `你是一个角色设计师，为虚拟世界生成宠物角色的完整资料。请严格输出 JSON。
+${refText}${opts.req ? '\n用户额外要求：' + opts.req + '\n' : ''}
+要求：
+- 生成 ${opts.count} 只宠物。
+- **重要：如果上面的参考资料里已经出现过宠物（有名字或描述，比如面具设定中提到"养了一只叫XX的猫"、主线剧情里出现的宠物），必须优先把这些已有的宠物完整生成出来，名字/物种/特征都要和资料一致，不要另编新的。已有宠物不足 ${opts.count} 只时，再补充新宠物凑够数量。**
+- 每只宠物包含以下字段：
+  - name：宠物名字（简短）。
+  - gender：性别，如"公"/"母"/"公猫"/"母猫"/"无性别"等，贴合宠物设定。
+  - age：当前年龄（数字，单位不限，按宠物合理设定）。
+  - ageMax：预期寿命/年龄上限（数字，应大于等于 age）。
+  - species：品种/物种（如"英短蓝猫"、"柴犬"、"精怪狐狸"等）。
+  - appearance：外貌描述，不少于 30 字，写清毛色、体态、特征等。
+  - setting：性格、来历、习性等设定，不少于 50 字，要有性格和故事感。
+  - brief：一句话简介，给主线剧情认识这只宠物用，格式「X岁的{性别}{品种}，八字内外貌，八字内性格」，例如"3岁的母橘猫，圆脸微胖，黏人好吃"。
+  - outfit：服装/装扮，可留空字符串（多数宠物不穿衣服）。
+- 如果参考资料里已经出现过某些宠物，优先按资料把它们完整写出来。
+
+严格输出如下 JSON 格式（不要任何额外文字、不要 markdown）：
+{
+  "pets": [
+    {
+      "name": "煤球",
+      "gender": "公猫",
+      "age": 2,
+      "ageMax": 15,
+      "species": "英短蓝猫",
+      "appearance": "圆脸大眼，通体银蓝色短毛，鼻尖有一小撮黑，尾巴粗短，走起路来一摇一摆，像团会动的灰云。",
+      "setting": "性子懒，最爱趴在窗台晒太阳，偶尔追逐光点。对陌生人警惕，熟了之后会主动蹭腿讨摸。从小被主人从雨天的纸箱里捡回，格外黏人。",
+      "brief": "2岁的公英短，圆脸银蓝，慵懒黏人",
+      "outfit": ""
+    }
+  ]
+}`;
+
+    let raw = '';
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model,
+          temperature: 0.95,
+          max_tokens: 8000,
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: `请生成 ${opts.count} 只宠物的 JSON。` }
+          ]
+        })
+      });
+      const data = await resp.json();
+      raw = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    } catch (e) {
+      console.error('[宠物AI生成]', e);
+      UI.showToast('生成失败，请重试', 2000);
+      return;
+    }
+
+    // 解析 JSON
+    let parsed;
+    try {
+      const text = String(raw || '').replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start < 0 || end < 0) throw new Error('无 JSON');
+      parsed = JSON.parse(text.slice(start, end + 1));
+    } catch (e) {
+      console.error('[宠物AI解析]', e, raw);
+      UI.showToast('AI 返回格式异常，请重试', 2000);
+      return;
+    }
+
+    const petsArr = Array.isArray(parsed.pets) ? parsed.pets : [];
+    if (!petsArr.length) { UI.showToast('AI 没有返回宠物', 2000); return; }
+
+    const num = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    // 追加进宠物列表
+    const data2 = await _getPhoneData();
+    if (!Array.isArray(data2.pets)) data2.pets = [];
+    let added = 0;
+    petsArr.forEach(p => {
+      const name = String(p.name || '').trim();
+      if (!name) return;
+      let age = num(p.age);
+      let ageMax = num(p.ageMax);
+      if (age !== null && age < 0) age = null;
+      if (ageMax !== null && ageMax < 0) ageMax = null;
+      if (age !== null && ageMax !== null && age > ageMax) ageMax = age;
+      data2.pets.push({
+        id: _cottageGenId('pet'),
+        name: name.slice(0, 40),
+        gender: String(p.gender || '').slice(0, 20),
+        species: String(p.species || '').slice(0, 40),
+        age, ageMax,
+        image: '',
+        outfit: String(p.outfit || '').slice(0, 500),
+        appearance: String(p.appearance || '').slice(0, 1000),
+        setting: String(p.setting || '').slice(0, 3000),
+        brief: String(p.brief || '').slice(0, 60),
+        customFields: [],
+        source: 'ai',
+        createdAt: new Date().toISOString(),
+      });
+      added++;
+    });
+    if (!added) { UI.showToast('AI 没有返回有效宠物', 2000); return; }
+    await _savePhoneData();
+    UI.showToast(`已生成 ${added} 只宠物`, 1800);
+    _renderCottage(await _getPhoneData());
+  }
+
+
+  // 宠物变化记录翻页：切换宠物会在详情页自动重置页码。翻页保留滚动位置。
+  function _petLogPageTurn(petId, delta) {
+    if (_petLogPetId !== petId) {
+      _petLogPetId = petId;
+      _petLogPage = 0;
+    }
+    _petLogPage = Math.max(0, _petLogPage + (Number(delta) || 0));
+    try {
+      const sc = document.querySelector('.phone-pet-detail-page');
+      _petDetailScrollY = sc ? sc.scrollTop : 0;
+    } catch (_) { _petDetailScrollY = 0; }
+    _renderPetDetail(petId);
+  }
+
+  async function _renderPetDetail(petId) {
+    const pd = await _getPhoneData();
+    const pet = Array.isArray(pd.pets) ? pd.pets.find(p => p && p.id === petId) : null;
+    if (!pet) { UI.showToast('未找到这只宠物', 1600); goBack(); return; }
+    // 首次打开：补全局模板，迁移旧宠物的值。
+    let changed = _ensurePetTemplate(pd);
+    changed = _migratePetStatus(pd, pet) || changed;
+    if (changed) await _savePhoneData();
+    const body = document.getElementById('phone-body');
+    if (!body) return;
+    document.getElementById('phone-title').textContent = pet.name || '宠物详情';
+    _applyWallpaper(pd);
+    const hr = document.getElementById('phone-header-right');
+    if (hr) hr.innerHTML = '';
+
+    const image = typeof pet.image === 'string' ? pet.image : '';
+    // 主拍立得的照片区：有图铺满，无图放淡绿爪印。
+    const photoInner = image
+      ? `<div style="width:100%;height:100%;background:center/cover no-repeat url('${image.replace(/'/g, "\\'")}')"></div>`
+      : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--accent-soft,rgba(126,168,133,.16));color:var(--accent,#7ea885)">${_cottageRoomSvg('paw')}</div>`;
+
+    // 性别·品种·年龄：留空的项直接跳过，用「·」连接。
+    const ageText = (pet.age == null || pet.age === '')
+      ? ''
+      : `${pet.age}${(pet.ageMax == null || pet.ageMax === '') ? '' : `/${pet.ageMax}`}岁`;
+    const metaParts = [pet.gender, pet.species, ageText].map(v => (v == null ? '' : String(v).trim())).filter(Boolean);
+    const metaLine = metaParts.length
+      ? `<div style="font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${metaParts.map(v => Utils.escapeHtml(v)).join(' · ')}</div>`
+      : `<div style="font-size:13px;color:var(--text-secondary)">资料待完善</div>`;
+
+    const tpl = pd.petStatusTemplate || { numeric: [], text: [] };
+    const numCards = (tpl.numeric || []).map(f => {
+      const max = (typeof f.max === 'number' && f.max > 0) ? f.max : 100;
+      const val = _petFieldValue(pet, f, true);
+      const pct = Math.round(val / max * 100);
+      return `
+        <div style="border-radius:11px;padding:10px 11px;background:var(--bg-tertiary,rgba(126,168,133,.07))">
+          <div style="font-size:12px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(f.label || '未命名')}</div>
+          <div style="font-size:17px;font-weight:700;margin:3px 0 7px">${val}<span style="font-size:12px;font-weight:500;color:var(--text-secondary)">/${max}</span></div>
+          <div style="height:6px;border-radius:3px;background:var(--border);overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--accent,#7ea885);border-radius:3px"></div></div>
+        </div>`;
+    }).join('');
+    const numericHtml = numCards ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">${numCards}</div>` : '';
+    const textHtml = (tpl.text || []).map(f => {
+      const val = _petFieldValue(pet, f, false);
+      const empty = !val;
+      return `
+        <div style="border:1px dashed var(--border);border-radius:10px;padding:9px 11px">
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:3px">${Utils.escapeHtml(f.label || '未命名')}</div>
+          <div style="font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word${empty ? ';color:var(--text-secondary);opacity:.6' : ''}">${Utils.escapeHtml(empty ? '暂无' : val)}</div>
+        </div>`;
+    }).join('');
+    const textWrap = textHtml ? `<div style="display:flex;flex-direction:column;gap:8px">${textHtml}</div>` : '';
+    const statusEmpty = !(tpl.numeric || []).length && !(tpl.text || []).length;
+    const statusBody = statusEmpty
+      ? `<div style="font-size:12px;line-height:1.5;color:var(--text-secondary)">还没有状态字段，点 + 菜单→状态模板 添加</div>`
+      : `${numericHtml}${(numericHtml && textWrap) ? '<div style="height:12px"></div>' : ''}${textWrap}`;
+
+    // 变化记录：每次刷新一组，倒序展示（最新在上），每页 1 组。
+    const logArr = Array.isArray(pet.statusLog) ? pet.statusLog : [];
+    if (_petLogPetId !== pet.id) {
+      _petLogPetId = pet.id;
+      _petLogPage = 0;
+    }
+    const logPageSize = 1;
+    const totalPages = Math.max(1, Math.ceil(logArr.length / logPageSize));
+    _petLogPage = Math.max(0, Math.min(_petLogPage, totalPages - 1));
+    let logBlock = '';
+    if (logArr.length) {
+      const newestFirst = logArr.slice().reverse();
+      const pageGroups = newestFirst.slice(_petLogPage * logPageSize, (_petLogPage + 1) * logPageSize);
+      const groups = pageGroups.map(g => {
+        const entries = (Array.isArray(g.entries) ? g.entries : []).map(e => {
+          const from = (e.from == null || e.from === '') ? '—' : String(e.from);
+          const to = (e.to == null || e.to === '') ? '—' : String(e.to);
+          const arrow = `<span style="color:var(--text-secondary)">${Utils.escapeHtml(from)}</span> <span style="color:var(--text-secondary);opacity:.6">→</span> <span style="font-weight:600">${Utils.escapeHtml(to)}</span>`;
+          return `<div style="margin-bottom:6px">
+            <div style="font-size:12px">${Utils.escapeHtml(e.label || '')}：${arrow}</div>
+            ${e.reason ? `<div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-top:1px">${Utils.escapeHtml(e.reason)}</div>` : ''}
+          </div>`;
+        }).join('');
+        return `<div style="padding:9px 11px;border:1px dashed var(--border);border-radius:10px;margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:5px">${Utils.escapeHtml(g.time || '')}</div>
+          ${entries || '<div style="font-size:11px;color:var(--text-secondary)">无变化</div>'}
+        </div>`;
+      }).join('');
+      const pager = totalPages > 1 ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px">
+        <button type="button" onclick="Phone._petLogPageTurn('${Utils.escapeHtml(pet.id)}', -1)" ${_petLogPage <= 0 ? 'disabled' : ''} style="border:1px solid var(--border);border-radius:8px;background:var(--card,var(--bg));color:var(--text);padding:5px 10px;font-size:12px;cursor:${_petLogPage <= 0 ? 'default' : 'pointer'};opacity:${_petLogPage <= 0 ? '.5' : '1'}">上一页</button>
+        <span style="font-size:11px;color:var(--text-secondary)">第 ${_petLogPage + 1} 页 / 共 ${totalPages} 页</span>
+        <button type="button" onclick="Phone._petLogPageTurn('${Utils.escapeHtml(pet.id)}', 1)" ${_petLogPage >= totalPages - 1 ? 'disabled' : ''} style="border:1px solid var(--border);border-radius:8px;background:var(--card,var(--bg));color:var(--text);padding:5px 10px;font-size:12px;cursor:${_petLogPage >= totalPages - 1 ? 'default' : 'pointer'};opacity:${_petLogPage >= totalPages - 1 ? '.5' : '1'}">下一页</button>
+      </div>` : '';
+      logBlock = `<div style="margin-top:14px;padding:14px 16px;border:1px solid var(--border);border-radius:14px;background:var(--bg)">
+        <div style="font-size:14px;font-weight:600;margin-bottom:10px">变化记录</div>
+        ${groups}
+        ${pager}
+      </div>`;
+    }
+
+    body.innerHTML = `
+      <div class="phone-pet-detail-page" style="height:100%;overflow-y:auto;padding:16px;box-sizing:border-box;color:var(--text)">
+        <button type="button" class="cottage-pet-profile-card" onclick="Phone._petEdit('${Utils.escapeHtml(pet.id)}')" style="width:100%;display:flex;gap:18px;align-items:center;padding:16px 14px;border:1px solid var(--border);border-radius:16px;background:var(--bg);color:var(--text);text-align:left;cursor:pointer;box-sizing:border-box">
+          <div style="width:104px;height:112px;flex:none;position:relative">
+            <div style="position:absolute;left:6px;top:8px;width:82px;height:96px;background:var(--bg);border:1px solid var(--border);border-radius:3px;transform:rotate(-8deg);box-shadow:0 2px 6px rgba(0,0,0,.12)"></div>
+            <div style="position:absolute;left:14px;top:2px;width:84px;height:100px;background:#fff;border:1px solid var(--border);border-radius:3px;transform:rotate(5deg);box-shadow:0 3px 8px rgba(0,0,0,.16);padding:5px 5px 15px;box-sizing:border-box;overflow:hidden">
+              <div style="width:100%;height:100%;border-radius:2px;overflow:hidden">${photoInner}</div>
+            </div>
+          </div>
+          <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:7px">
+            <div style="font-size:22px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(pet.name || '未命名宠物')}</div>
+            ${metaLine}
+            <div style="font-size:12px;color:var(--accent,#7ea885);margin-top:2px">编辑资料 ›</div>
+          </div>
+        </button>
+        <div style="margin-top:18px;padding:14px 16px;border:1px solid var(--border);border-radius:14px;background:var(--bg)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:14px;font-weight:600">宠物状态</div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <button type="button" onclick="Phone._petRefreshStatus('${Utils.escapeHtml(pet.id)}')" title="刷新状态" style="border:0;background:none;color:var(--text-secondary);cursor:pointer;padding:2px;display:flex;align-items:center">${_uiIcon('refresh', 15)}</button>
+              ${pd.petRefreshUndo && pd.petRefreshUndo.type === 'single' && pd.petRefreshUndo.pets && pd.petRefreshUndo.pets[0] && pd.petRefreshUndo.pets[0].petId === pet.id ? `<button type="button" onclick="Phone._petUndoLastRefresh('single')" title="撤销本次刷新" style="border:0;background:none;color:var(--text-secondary);cursor:pointer;padding:2px;display:flex;align-items:center">${_uiIcon('undo', 15)}</button>` : ''}
+              <button type="button" onclick="Phone._petEditStatus('${Utils.escapeHtml(pet.id)}')" title="编辑状态" style="border:0;background:none;color:var(--text-secondary);cursor:pointer;padding:2px;display:flex;align-items:center">${_uiIcon('pen', 15)}</button>
+              <button type="button" onclick="Phone._petShareStatus('${Utils.escapeHtml(pet.id)}')" title="分享当前状态给剧情" style="border:0;background:none;color:var(--text-secondary);cursor:pointer;padding:2px;display:flex;align-items:center">${_uiIcon('share', 15)}</button>
+            </div>
+          </div>
+          ${statusBody}
+        </div>
+        ${(() => {
+          const of = _petOutfitText(pet);
+          if (!of) return '';
+          return `<div style="margin-top:14px;padding:14px 16px;border:1px solid var(--border);border-radius:14px;background:var(--bg)">
+            <div style="font-size:14px;font-weight:600;margin-bottom:8px">当前穿着</div>
+            <div style="font-size:13px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap;word-break:break-word">${Utils.escapeHtml(of)}</div>
+          </div>`;
+        })()}
+        ${logBlock}
+      </div>`;
+
+    // 翻页触发的重渲染：恢复之前暂存的滚动位置，避免跳回顶部
+    if (_petDetailScrollY > 0) {
+      const sc = body.querySelector('.phone-pet-detail-page');
+      if (sc) sc.scrollTop = _petDetailScrollY;
+      _petDetailScrollY = 0;
+    }
   }
 
   // 小屋数据管理菜单（导出 / 导入）
@@ -10172,22 +13054,25 @@ ${contextBlock}
     if (!house) return '';
     // 拼简化布局：楼层 → 房间名 → 物品名列表
     const floors = house.floors || [];
-    if (!floors.length && (!house.rooms || !house.rooms.length)) return '';
+    const rooms = house.rooms || [];
+    if (!floors.length && !rooms.length) return '';
     let lines = [`【玩家住所「${house.name}」室内布局】`];
     if (house.styleDesc) lines.push(`整体风格：${house.styleDesc}`);
     if (floors.length) {
       for (const f of floors.sort((a, b) => b.num - a.num)) {
         const floorLabel = f.num === 0 ? '地下层' : f.num === 1 ? '一层' : f.num + '层';
-        const roomNames = (f.rooms || []).map(r => r.name || '房间').join('、');
+        // 找出属于当前楼层的房间
+        const roomsOnFloor = rooms.filter(r => (r.floor || 1) === f.num);
+        const roomNames = roomsOnFloor.map(r => r.name || '房间').join('、');
         lines.push(`${floorLabel}：${roomNames || '（空）'}`);
-        for (const r of (f.rooms || [])) {
+        for (const r of roomsOnFloor) {
           const items = (r.items || []).map(it => it.name).filter(Boolean);
           if (items.length) lines.push(`  ${r.name || '房间'}：${items.join('、')}`);
         }
       }
     } else {
       // 兼容无楼层的旧数据
-      for (const r of (house.rooms || [])) {
+      for (const r of rooms) {
         const items = (r.items || []).map(it => it.name).filter(Boolean);
         lines.push(`${r.name || '房间'}：${items.length ? items.join('、') : '（空）'}`);
       }
@@ -10220,11 +13105,12 @@ ${contextBlock}
     { key: '灯具', cat: 'deco' },
     { key: '布艺', cat: 'deco' },
     { key: '软装摆件', cat: 'deco' },
+    { key: '宠物用品', cat: 'furniture' },
     { key: '未分类', cat: 'deco' },
   ];
   const FURNITURE_TAG_KEYS = FURNITURE_TAGS.map(t => t.key);
-  // 商城侧可选标签（不含"未分类"）
-  const FURNITURE_MALL_TAG_KEYS = FURNITURE_TAGS.filter(t => t.key !== '未分类').map(t => t.key);
+  // 商城侧可选标签（不含"未分类"和"宠物用品"——宠物用品由宠物商城供货）
+  const FURNITURE_MALL_TAG_KEYS = FURNITURE_TAGS.filter(t => t.key !== '未分类' && t.key !== '宠物用品').map(t => t.key);
   function _furnitureTagToCat(tag) {
     const t = FURNITURE_TAGS.find(x => x.key === tag);
     return t ? t.cat : 'deco';
@@ -10299,7 +13185,14 @@ ${contextBlock}
       if (!delivered) continue;
       o.status = 'delivered';
       o.claimedToInv = true;
-      _addFurnitureToInventory(pd, { name: o.name, desc: o.desc, tag: o.tag });
+      // dest: 'petClothes' → 宠物衣橱；'petFood' → 食品仓库；其余 → 家具仓库（默认）
+      if (o.dest === 'petClothes') {
+        _addPetClothToWardrobe(pd, { name: o.name, desc: o.desc });
+      } else if (o.dest === 'petFood') {
+        _addPetFoodToStock(pd, { name: o.name, desc: o.desc });
+      } else {
+        _addFurnitureToInventory(pd, { name: o.name, desc: o.desc, tag: o.tag });
+      }
       changed = true;
     }
     return changed;
@@ -37956,6 +40849,13 @@ function _renderSettings(pd) {
     <button class="phone-settings-btn" style="margin-top:8px" onclick="Phone._phoneShowBackupList()">选择备份恢复（多份可挑）</button>
     <button class="phone-settings-btn" style="margin-top:8px" onclick="Phone._phoneShowDiag()">查看诊断记录</button>
     </div>
+    <div class="phone-settings-card">
+    <div class="phone-settings-title">重置手机数据</div>
+    <div class="phone-settings-desc">把当前对话的手机彻底清空回出厂状态：联系人、私聊/群聊、朋友圈、论坛、书架、相册、小屋、宠物、衣橱、钱包、日历等<b>所有 App 数据连同头像/壁纸/封面</b>一并清除。清空前会自动存一份完整快照，可用下方「恢复清空前的数据」找回。</div>
+    <button class="phone-settings-btn" style="margin-top:4px;border-color:#c0392b;color:#c0392b" onclick="Phone._phoneResetAll()">清空手机数据</button>
+    <button class="phone-settings-btn secondary" style="margin-top:10px" onclick="Phone._phoneRestoreResetBackup()">恢复清空前的数据</button>
+    <div class="phone-settings-desc" style="margin-top:8px;color:#c0392b">⚠️ 此操作会清空全部数据且回到出厂态，不可直接撤销，请谨慎操作。</div>
+    </div>
   `;
 
  body.innerHTML = `
@@ -41061,7 +43961,7 @@ async function _likeForumPost(index) {
       const thread = (pd.chatThreads && pd.chatThreads[id]) || [];
       const lastMsg = thread.length ? thread[thread.length - 1] : null;
       if (!lastMsg) return '暂无消息';
-      const tmap = { location:'[位置]', voice:'[语音]', sticker:'[表情]', photo:'[图片]', real_image:'[图片]', product:'[商品链接]', shop_listing:'[商品]', forum_card:'[帖子摘要]', forum_detail:'[帖子详情]', video_card:'[影视分享]', book_card:'[书籍分享]', music_card:'[音乐分享]', mail_card:'[信件分享]', map_place:'[地点链接]', listen_invite:'[一起听邀请]', listen_end:'[已结束一起听]' };
+      const tmap = { location:'[位置]', voice:'[语音]', sticker:'[表情]', photo:'[图片]', real_image:'[图片]', product:'[商品链接]', shop_listing:'[商品]', forum_card:'[帖子摘要]', forum_detail:'[帖子详情]', video_card:'[影视分享]', book_card:'[书籍分享]', music_card:'[音乐分享]', mail_card:'[信件分享]', map_place:'[地点链接]', pet_status:'[宠物状态]', listen_invite:'[一起听邀请]', listen_end:'[已结束一起听]' };
       return tmap[lastMsg.type] || (lastMsg.text || '');
     };
     return await new Promise(resolve => {
@@ -43054,7 +45954,7 @@ ${playerReplyHint}
 
   // ===== 通用分享到主线 =====
   async function _shareToMain(type, title, content) {
-    // type: 'forum' | 'map' | 'moments' | 'memo' | 'shop'
+    // type: 'forum' | 'map' | 'moments' | 'memo' | 'shop' | 'pet'
     const typeLabel = type === 'forum' ? `${_getForumName()}内容`
       : type === 'map' ? '地点信息'
       : type === 'moments' ? '好友圈动态'
@@ -43066,6 +45966,7 @@ ${playerReplyHint}
     : type === 'live' ? '直播间'
     : type === 'reading' ? '书籍'
     : type === 'mail' ? '信件'
+    : type === 'pet' ? '宠物状态'
     : '手机内容';
     const hasPending = (typeof Chat !== 'undefined' && Chat.hasPendingWorldVoice) ? Chat.hasPendingWorldVoice() : false;
     const confirmMsg = hasPending
@@ -45023,6 +47924,7 @@ function _msgQuotePreview(m) {
     case 'photo': case 'real_image': return '[图片]' + (m.photoDesc ? ' ' + m.photoDesc : '');
     case 'location': return '[位置] ' + (m.location || '');
     case 'map_place': return '[地点] ' + (m.placeName || '');
+    case 'pet_status': return '[宠物状态] ' + (m.petName || '');
 case 'product': return '[商品] ' + (m.productName || '');
       case 'video_card': return '[影视] ' + (m.videoTitle || '') + (m.videoEp ? ' ' + m.videoEp : '');
       case 'book_card': return '[书籍] ' + (m.bookTitle || '') + (m.bookChapter ? ' ' + m.bookChapter : '');
@@ -45187,6 +48089,23 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
     </div>`;
   }
 
+if (m.type === 'pet_status') {
+    return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="pet_status" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+        <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+          <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8"><svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='var(--accent)' stroke='none'><circle cx='4.5' cy='9.5' r='2.5'/><circle cx='9' cy='5.5' r='2.5'/><circle cx='15' cy='5.5' r='2.5'/><circle cx='19.5' cy='9.5' r='2.5'/><path d='M17.34 14.86c-.87-1.02-1.6-1.89-2.48-2.91-.46-.54-1.05-1.08-1.75-1.32-.36-.13-.75-.13-1.11-.13s-.75 0-1.11.13c-.7.24-1.29.78-1.75 1.32-.88 1.02-1.61 1.89-2.48 2.91-1.31 1.31-2.92 2.76-2.62 4.79.29 1.02 1.02 2.03 2.33 2.32.73.15 3.06-.44 5.54-.44h.18c2.48 0 4.81.58 5.54.44 1.31-.29 2.04-1.31 2.33-2.32.31-2.04-1.3-3.49-2.62-4.79z'/></svg></div>
+          <div style="padding:10px 12px 10px">
+            <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.petName || '宠物')}的状态</div>
+            ${m.petStatusTime ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.petStatusTime)}</div>` : ''}
+          </div>
+        </div>
+        ${footTag}
+      </div>
+    </div>`;
+  }
+
+  
   // 地点卡片气泡（地图分享）
   if (m.type === 'map_place') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
@@ -46111,6 +49030,7 @@ async function _groupRequestReply(groupId) {
     if (m.type === 'book_card') return `${who}：${t}${q}分享了一本${m.bookKind || '书'}：${m.bookTitle || ''}${m.bookAuthor ? '（' + m.bookAuthor + '）' : ''}${m.bookChapter ? ' ' + m.bookChapter : ''}${m.bookShareText ? '\n' + m.bookShareText : ''}`;
     if (m.type === 'mail_card') return `${who}：${t}${q}分享了一封来自「${m.mailFrom || '某人'}」的信《${m.mailSubject || '无主题'}》${m.mailShareText ? '\n' + m.mailShareText : ''}`;
     if (m.type === 'map_place') return `${who}：${t}${q}发送了一条地点链接：${m.placeName || ''}${m.placeAddress ? '（' + m.placeAddress + '）' : ''}`;
+    if (m.type === 'pet_status') return `${who}：${t}${q}分享了宠物「${m.petName || ''}」的状态：\n${m.petStatusText || ''}`;
       if (m.type === 'red_packet') {
         const kindStr = m.rpKind === 'exclusive' ? `专属红包（只有${m.rpExclusiveTo || '指定的人'}能领）` : `拼手气红包（共${m.rpCount || 1}个）`;
         const claimedStr = (m.rpClaims && m.rpClaims.length) ? `，已被领取：${m.rpClaims.map(c => `${c.name}领了${c.amount}${m.rpCurrencyName || ''}`).join('、')}` : '，还没人领';
@@ -50214,7 +53134,24 @@ function _renderChatThread(pd, contactId) {
           </div>`;
         }
 
-        if (m.type === 'map_place') {
+if (m.type === 'pet_status') {
+    return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="pet_status" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+      <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+        <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+          <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8"><svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='var(--accent)' stroke='none'><circle cx='4.5' cy='9.5' r='2.5'/><circle cx='9' cy='5.5' r='2.5'/><circle cx='15' cy='5.5' r='2.5'/><circle cx='19.5' cy='9.5' r='2.5'/><path d='M17.34 14.86c-.87-1.02-1.6-1.89-2.48-2.91-.46-.54-1.05-1.08-1.75-1.32-.36-.13-.75-.13-1.11-.13s-.75 0-1.11.13c-.7.24-1.29.78-1.75 1.32-.88 1.02-1.61 1.89-2.48 2.91-1.31 1.31-2.92 2.76-2.62 4.79.29 1.02 1.02 2.03 2.33 2.32.73.15 3.06-.44 5.54-.44h.18c2.48 0 4.81.58 5.54.44 1.31-.29 2.04-1.31 2.33-2.32.31-2.04-1.3-3.49-2.62-4.79z'/></svg></div>
+          <div style="padding:10px 12px 10px">
+            <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.petName || '宠物')}的状态</div>
+            ${m.petStatusTime ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.petStatusTime)}</div>` : ''}
+          </div>
+        </div>
+        ${time}
+      </div>
+    </div>`;
+  }
+
+  
+    if (m.type === 'map_place') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
@@ -51010,7 +53947,24 @@ function _renderChatThreadWithSystem(pd, contactId) {
           </div>`;
         }
 
-    if (m.type === 'map_place') {
+if (m.type === 'pet_status') {
+    return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="pet_status" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+      <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
+        <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
+          <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8"><svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='var(--accent)' stroke='none'><circle cx='4.5' cy='9.5' r='2.5'/><circle cx='9' cy='5.5' r='2.5'/><circle cx='15' cy='5.5' r='2.5'/><circle cx='19.5' cy='9.5' r='2.5'/><path d='M17.34 14.86c-.87-1.02-1.6-1.89-2.48-2.91-.46-.54-1.05-1.08-1.75-1.32-.36-.13-.75-.13-1.11-.13s-.75 0-1.11.13c-.7.24-1.29.78-1.75 1.32-.88 1.02-1.61 1.89-2.48 2.91-1.31 1.31-2.92 2.76-2.62 4.79.29 1.02 1.02 2.03 2.33 2.32.73.15 3.06-.44 5.54-.44h.18c2.48 0 4.81.58 5.54.44 1.31-.29 2.04-1.31 2.33-2.32.31-2.04-1.3-3.49-2.62-4.79z'/></svg></div>
+          <div style="padding:10px 12px 10px">
+            <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.petName || '宠物')}的状态</div>
+            ${m.petStatusTime ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(m.petStatusTime)}</div>` : ''}
+          </div>
+        </div>
+        ${time}
+      </div>
+    </div>`;
+  }
+
+  
+        if (m.type === 'map_place') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
         <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
@@ -52240,6 +55194,7 @@ async function _chatRequestReply(contactId) {
     if (m.type === 'book_card') return `${who}：${t}分享了一本${m.bookKind || '书'}：${m.bookTitle || ''}${m.bookAuthor ? '（' + m.bookAuthor + '）' : ''}${m.bookChapter ? ' ' + m.bookChapter : ''}${m.bookShareText ? '\n' + m.bookShareText : ''}`;
     if (m.type === 'mail_card') return `${who}：${t}分享了一封来自「${m.mailFrom || '某人'}」的信《${m.mailSubject || '无主题'}》${m.mailShareText ? '\n' + m.mailShareText : ''}`;
     if (m.type === 'map_place') return `${who}：${t}发送了一条地点链接：${m.placeName || ''}${m.placeAddress ? '（' + m.placeAddress + '）' : ''}`;
+    if (m.type === 'pet_status') return `${who}：${t}分享了宠物「${m.petName || ''}」的状态：\n${m.petStatusText || ''}`;
       if (m.type === 'shop_listing') return `${who}：${t}发送了一条商品链接：${m.listingName || ''}（${m.listingPrice || 0} ${m.listingCurName || ''}）`;
       if (m.type === 'order') return `${who}：${t}发送了一条订单信息（${who}已购）：${m.orderName || ''}${m.orderPrice ? '（¥' + m.orderPrice + '）' : ''}${m.orderPlatform ? ' · ' + m.orderPlatform : ''}`;
       if (m.type === 'transfer') {
@@ -53195,6 +56150,7 @@ async function _callRequestReply() {
     else if (m.type === 'mail_card') body = `[分享信件]来自「${m.mailFrom || '某人'}」的信《${m.mailSubject || '无主题'}》${m.mailShareText ? '：' + m.mailShareText : ''}`;
       else if (m.type === 'forum_card' || m.type === 'forum_detail') body = `[分享帖子]${m.forumTitle || ''}`;
       else if (m.type === 'map_place') body = `[地点链接]${m.placeName || ''}${m.placeAddress ? '（' + m.placeAddress + '）' : ''}`;
+      else if (m.type === 'pet_status') body = `[宠物状态]${m.petName || ''}：${m.petStatusText || ''}`;
       else if (m.type === 'call_record') {
         const rs = Array.isArray(m.rounds) ? m.rounds : [];
         const cm = m.callMode === 'video' ? '视频通话' : '语音通话';
@@ -61266,7 +64222,7 @@ buildHeartsimAppFavorForBackstage,
     getShootChainGenContext, getShootChainBriefForRuntime,
     buildLicenseEventPrompt, applyLicenseMarkers, _readingLicenseSetup,
     flushActionLogForBackstage,
-    getSnapshotForRollback, restoreFromSnapshot, _phoneRestoreLatestBackup, _phoneShowBackupList, _phoneShowDiag,
+    getSnapshotForRollback, restoreFromSnapshot, _phoneRestoreLatestBackup, _phoneShowBackupList, _phoneShowDiag, _phoneResetAll, _phoneRestoreResetBackup,
     _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _toggleRollbackKeep, _onThemePick, _switchSettingsTab, _onPhoneSkinToggle, _onPhoneSkinPick, _resetPhoneSkinColors, _exportPhoneSkinColors, _importPhoneSkinColors, _onToggleFullscreen, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
     // 个人资料卡
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
@@ -61290,7 +64246,7 @@ _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioH
     _renderVideo, _switchVideoCat, _switchVideoHomeTab, _videoSearch, _syncSearchBtn, _videoGenList, _videoToggleWvRef, _videoToggleMainlineRef, _videoTogglePref, _videoTogglePrefsExpand, _videoToggleAliasEnabled, _videoAddAlias, _videoSetActiveAlias, _videoDeleteAlias, _videoOpenWork, _videoOpenAddMenu, _videoDeleteWork, _videoShareWork, _liveGenPreview, _liveEnterRoom, _liveUnfollowFromMine, _liveEnterFollowFeed, _exitLiveFollowFeed, _liveOpenRoomSettings,
     _readingGenToc, _readingGenMoreToc, _readingOpenToc, _readingReadChapter, _readingContinueAfterChapter, _readingOpenBookSettings, _readingSetCover, _readingClearCover, _readingRewriteLast, _readingRewriteChapter, _readingEditChapterText, _readingViewOutline, _readingEditAuthorStyle, _readingDeleteBook, _readingRewriteShort, _readingActionTap, _readingCollectGift, _readingRefreshComments, _readingSendComment, _deleteReadingComment, _readingEditAuthorNote, _readingTapPara, _readingCoReadSetup,
   // 小屋 App
-  _renderCottage, _cottageAddHouse, _cottageOpenHouse, _cottageEditHouse, _cottageSetCurrent, _switchCottageHomeTab, _cottageDataMenu, _phoneExportAll, _phoneImportAll, getCottageLayoutForLocation, _cottageOpenMall, _cottageOpenInventory, _cottageMallSettings, _cottageMallToggleTag, _cottageMallRefresh, _cottageMallBuy, _cottageInvToggleTag, _cottageInvSearch, _cottageInvDelete, _cottageInvEdit, _cottageInvEditTag, _cottageInvPick, _cottageShowOrders,
+  _renderCottage, _cottageAddHouse, _cottageOpenHouse, _cottageEditHouse, _cottageSetCurrent, _switchCottageHomeTab, _petAddMenu, _petOpenCreateModal, _petOpenDetail, _petEdit, _petEditStatus, _petRefreshStatus, _petOpenMall, _petMallSwitchCat, _petMallSettings, _petMallRefresh, _petMallDetail, _petMallBuy, _petToggleCarry, _petShareStatus, _petProfileToText, _petOpenClothes, _petClothesDelete, _petClothesEdit, _petOpenFeeder, _petFeederFill, _petFeederTakeBack, _petFoodEdit, _petFoodDelete, _petLogPageTurn, _petUndoLastRefresh, _cottageDataMenu, _phoneExportAll, _phoneImportAll, getCottageLayoutForLocation, _cottageOpenMall, _cottageOpenInventory, _cottageMallSettings, _cottageMallToggleTag, _cottageMallRefresh, _cottageMallBuy, _cottageInvToggleTag, _cottageInvSearch, _cottageInvDelete, _cottageInvEdit, _cottageInvEditTag, _cottageInvPick, _cottageShowOrders,
   _cottageToggleFloorMenu, _cottageSelectFloor, _cottageAddFloor, _cottageRenameFloor, _cottageDeleteFloor, _cottageAddRoom, _cottageOpenRoom,
   _cottageAddItem, _cottageEditItem, _cottageEditRoom, _cottageAiFill, _cottageAiFillRoom,
     // 衣橱 App
