@@ -1704,7 +1704,8 @@ sendActionLog: true, // v627：是否把本轮手机操作日志发送给 AI（�
 profile: {                // 主屏个人资料卡：用户可改的"网名 + 个性签名 + 头像"
   name: 'Polaris',
   bio: 'The still point where all worlds turn.',
-  avatar: ''              // DataURL 或 URL
+  avatar: '',             // DataURL 或 URL
+  avatarFrame: ''         // 我的头像框（DataURL/URL）：仅私聊/群聊里"我"的头像叠加显示，全局生效
 },
 album: [],                // 相册：[{id, mode, text, imageId, location, time, createdAt}]
                           // mode: 'shoot' 用户拍/手写 | 'ai_text' AI 生成的文字 | 'ai_image' AI 生成的图片
@@ -2184,6 +2185,72 @@ function _applyWallpaper(pd) {
     } catch(e) { console.warn('[Profile] avatar pick failed', e); UI.showToast('头像设置失败', 1500); }
   }
 
+  // ===== 我的头像框（全局，设置 → 手机图标）=====
+  // 头像框全局存储在 skin.profile.avatarFrame，仅私聊/群聊里"我"的头像叠加显示
+  async function _pickMyAvatarFrame() {
+    if (typeof Utils === 'undefined' || !Utils.promptImageInput) {
+      UI.showToast('图片输入组件未就绪', 1500); return;
+    }
+    try {
+      // 头像框建议保留透明通道 → 用 png
+      const dataUrl = await Utils.promptImageInput({ maxSize: 256, quality: 0.92, outputFormat: 'png' });
+      if (!dataUrl) return;
+      const skin = _getPhoneSkin();
+      skin.profile = skin.profile || {};
+      skin.profile.avatarFrame = dataUrl;
+      _savePhoneSkin(skin);
+      _renderMyAvatarFrame();
+      UI.showToast('头像框已设置', 1200);
+    } catch(e) { console.warn('[AvatarFrame] pick failed', e); UI.showToast('头像框设置失败', 1500); }
+  }
+
+  function _resetMyAvatarFrame() {
+    try {
+      const skin = _getPhoneSkin();
+      skin.profile = skin.profile || {};
+      if (!skin.profile.avatarFrame) { UI.showToast('还没有设置头像框', 1200); return; }
+      skin.profile.avatarFrame = '';
+      _savePhoneSkin(skin);
+      _renderMyAvatarFrame();
+      UI.showToast('已清除头像框', 1200);
+    } catch(e) { console.warn('[AvatarFrame] reset failed', e); }
+  }
+
+  // 拖动滑块调整头像框大小（实时预览 + 存全局）
+  function _onMyAvatarFrameScale(val) {
+    const n = Math.max(100, Math.min(220, parseInt(val, 10) || 150));
+    try {
+      const skin = _getPhoneSkin();
+      skin.profile = skin.profile || {};
+      skin.profile.avatarFrameScale = n;
+      _savePhoneSkin(skin);
+    } catch(_) {}
+    const label = document.getElementById('my-avatar-frame-scale-val');
+    if (label) label.textContent = n + '%';
+    _renderMyAvatarFrame();
+  }
+
+  // 渲染设置页里的头像框预览（一个圆形示意头像 + 叠加框）
+  function _renderMyAvatarFrame() {
+    const box = document.getElementById('my-avatar-frame-preview');
+    // 同步滑块与数值显示
+    const sc = _myAvatarFrameScale();
+    const slider = document.getElementById('my-avatar-frame-scale');
+    if (slider) slider.value = sc;
+    const label = document.getElementById('my-avatar-frame-scale-val');
+    if (label) label.textContent = sc + '%';
+    if (!box) return;
+    const frame = _myAvatarFrameUrl();
+    // 示意头像：用当前面具头像，没有则首字母
+    let meAva = ''; try { meAva = (typeof Character !== 'undefined' && Character.getAvatar) ? (Character.getAvatar() || '') : ''; } catch(_) {}
+    let meName = '我'; try { meName = (Character.get && Character.get()?.name) || '我'; } catch(_) {}
+    const inner = meAva
+      ? `<img src="${Utils.escapeHtml(meAva)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
+      : Utils.escapeHtml((meName || '我')[0]);
+    const frameLayer = frame ? `<img src="${Utils.escapeHtml(frame)}" alt="" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:${sc}%;height:${sc}%;object-fit:contain;pointer-events:none;z-index:2">` : '';
+    box.innerHTML = `<div style="width:56px;height:56px;border-radius:50%;position:relative;overflow:visible;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">${inner}${frameLayer}</div>`;
+  }
+
   // ===== 手机 APP 图标自定义（全局，设置 → 手机图标）=====
   // 渲染管理网格
   function renderAppIconList() {
@@ -2223,6 +2290,8 @@ function _applyWallpaper(pd) {
     }).join('');
     // 顺带渲染悬浮球（桌宠）区
     try { _renderFabIconList(); } catch(_) {}
+    // 顺带渲染我的头像框预览
+    try { _renderMyAvatarFrame(); } catch(_) {}
   }
 
   // 悬浮球（桌宠）：三个 fab 各自图标 + 全局尺寸
@@ -8573,6 +8642,48 @@ function _refreshCalBanner() {
     } catch(_) {}
   }
 
+  // 对外：进对话时预热初始宠物状态模板——若世界观配了初始模板且本对话还没有模板，则克隆并落盘。
+  // 让宠物一诞生就用作者设计的字段，而不是内置默认 6 项。已有模板的老对话不受影响。
+  async function ensureInitialPetTemplate() {
+    try {
+      const pd = await _getPhoneData();
+      if (!pd) return;
+      // 本对话已有有效模板结构 → 不覆盖
+      if (pd.petStatusTemplate && Array.isArray(pd.petStatusTemplate.numeric) && Array.isArray(pd.petStatusTemplate.text)) return;
+      try { await _loadShopMeta(); } catch(_) {}
+      const src = _shopMeta?.cottage?.initialPetTemplate;
+      if (!src || !Array.isArray(src.numeric) || !Array.isArray(src.text)) return;
+      // 克隆并为每个字段重新生成 id（避免跨对话/跨世界观 id 冲突）
+      const tpl = { numeric: [], text: [] };
+      src.numeric.forEach(f => { if (f && f.label) tpl.numeric.push({ id: _cottageGenId('ptpl'), label: f.label, max: f.max || 100, desc: f.desc || '' }); });
+      src.text.forEach(f => { if (f && f.label) tpl.text.push({ id: _cottageGenId('ptpl'), label: f.label, desc: f.desc || '' }); });
+      pd.petStatusTemplate = tpl;
+      await _savePhoneData();
+    } catch(_) {}
+  }
+
+  // 对外：进对话时预热初始论坛分区——若世界观配了默认分区且本对话还没有分区，则克隆并落盘。
+  // 让论坛一开始就用作者设计的分区（带描述），而不是内置默认 5 个。已有分区的老对话不受影响。
+  async function ensureInitialForumCategories() {
+    try {
+      const pd = await _getPhoneData();
+      if (!pd) return;
+      // 本对话已有分区 → 不覆盖
+      if (Array.isArray(pd.forumCategories) && pd.forumCategories.length > 0) return;
+      try { await _loadShopMeta(); } catch(_) {}
+      const src = _shopMeta?.forum?.defaultCategories;
+      if (!Array.isArray(src) || src.length === 0) return;
+      const cats = [];
+      src.forEach(c => {
+        if (typeof c === 'string') { const n = c.trim(); if (n) cats.push({ name: n.slice(0, 12), desc: '' }); }
+        else if (c && typeof c === 'object' && c.name) { const n = String(c.name).trim(); if (n) cats.push({ name: n.slice(0, 12), desc: String(c.desc || '') }); }
+      });
+      if (!cats.length) return;
+      pd.forumCategories = cats;
+      await _savePhoneData();
+    } catch(_) {}
+  }
+
   // 当前查看的楼层编号（整数：1=一层、2=二层、-1=地下一层），切住所时重置为 1
   let _cottageCurFloor = 1;
 
@@ -11445,9 +11556,9 @@ ${refText}${opts.req ? '\n用户额外要求：' + opts.req + '\n' : ''}
         </div>`;
       }).join('');
       const pager = totalPages > 1 ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px">
-        <button type="button" onclick="Phone._petLogPageTurn('${Utils.escapeHtml(pet.id)}', -1)" ${_petLogPage <= 0 ? 'disabled' : ''} style="border:1px solid var(--border);border-radius:8px;background:var(--card,var(--bg));color:var(--text);padding:5px 10px;font-size:12px;cursor:${_petLogPage <= 0 ? 'default' : 'pointer'};opacity:${_petLogPage <= 0 ? '.5' : '1'}">上一页</button>
+        <button type="button" onclick="Phone._petLogPageTurn('${Utils.escapeHtml(pet.id)}', -1)" ${_petLogPage <= 0 ? 'disabled' : ''} style="border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);padding:5px 10px;font-size:12px;cursor:${_petLogPage <= 0 ? 'default' : 'pointer'};opacity:${_petLogPage <= 0 ? '.5' : '1'}">上一页</button>
         <span style="font-size:11px;color:var(--text-secondary)">第 ${_petLogPage + 1} 页 / 共 ${totalPages} 页</span>
-        <button type="button" onclick="Phone._petLogPageTurn('${Utils.escapeHtml(pet.id)}', 1)" ${_petLogPage >= totalPages - 1 ? 'disabled' : ''} style="border:1px solid var(--border);border-radius:8px;background:var(--card,var(--bg));color:var(--text);padding:5px 10px;font-size:12px;cursor:${_petLogPage >= totalPages - 1 ? 'default' : 'pointer'};opacity:${_petLogPage >= totalPages - 1 ? '.5' : '1'}">下一页</button>
+        <button type="button" onclick="Phone._petLogPageTurn('${Utils.escapeHtml(pet.id)}', 1)" ${_petLogPage >= totalPages - 1 ? 'disabled' : ''} style="border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);padding:5px 10px;font-size:12px;cursor:${_petLogPage >= totalPages - 1 ? 'default' : 'pointer'};opacity:${_petLogPage >= totalPages - 1 ? '.5' : '1'}">下一页</button>
       </div>` : '';
       logBlock = `<div style="margin-top:14px;padding:14px 16px;border:1px solid var(--border);border-radius:14px;background:var(--bg)">
         <div style="font-size:14px;font-weight:600;margin-bottom:10px">变化记录</div>
@@ -41588,6 +41699,32 @@ async function _clearMomentsCover() {
     return out;
   }
 
+  // 论坛默认分区（带描述结构）。desc 用于给 AI 生成帖子时的分区基调提示。
+  const _DEFAULT_FORUM_CATS = [
+    { name: '热门', desc: '' },
+    { name: '情感', desc: '' },
+    { name: '校园', desc: '' },
+    { name: '都市', desc: '' },
+    { name: '娱乐', desc: '' },
+  ];
+  // 规范化论坛分区为对象数组 [{name,desc}]。兼容老数据（字符串数组）与空值。
+  function _forumCats(pd) {
+    const raw = (pd && Array.isArray(pd.forumCategories) && pd.forumCategories.length) ? pd.forumCategories : null;
+    if (!raw) return _DEFAULT_FORUM_CATS.map(c => ({ name: c.name, desc: c.desc || '' }));
+    const out = [];
+    raw.forEach(c => {
+      if (typeof c === 'string') { const n = c.trim(); if (n) out.push({ name: n, desc: '' }); }
+      else if (c && typeof c === 'object' && c.name) { const n = String(c.name).trim(); if (n) out.push({ name: n, desc: String(c.desc || '') }); }
+    });
+    return out.length ? out : _DEFAULT_FORUM_CATS.map(c => ({ name: c.name, desc: c.desc || '' }));
+  }
+  // 取某分区名对应的描述（用于注入）。查不到返回 ''。
+  function _forumCatDesc(pd, name) {
+    if (!name) return '';
+    const f = _forumCats(pd).find(c => c.name === name);
+    return f ? (f.desc || '') : '';
+  }
+
   async function _renderForum(pd) {
     const body = document.getElementById('phone-body');
     document.getElementById('phone-title').textContent = _getForumName();
@@ -41609,9 +41746,9 @@ async function _clearMomentsCover() {
     });
     const searchHistory = pd.forumSearchHistory || [];
 
-    // 分区数据（跟对话走，可增删）
-    const _cats = Array.isArray(pd.forumCategories) && pd.forumCategories.length
-      ? pd.forumCategories : ['热门', '情感', '校园', '都市', '娱乐'];
+    // 分区数据（跟对话走，可增删）；规范化为 [{name,desc}]，活跃分区仍用 name 字符串
+    const _catObjs = _forumCats(pd);
+    const _cats = _catObjs.map(c => c.name);
     const _activeCat = pd.forumActiveCategory || (_cats[0] || '热门');
     // 回写固化：老对话/兜底态下 forumActiveCategory 可能是 undefined，界面却高亮了兜底分区。
     // 必须把兜底值写回 pd，保证"界面高亮的分区"与"pd 记录的分区"永远一致，
@@ -41857,11 +41994,12 @@ ${wvPrompt}${_echoForHot}`;
     if (!cat) return;
     const pd = await _getPhoneData();
     if (!pd) return;
-    pd.forumCategories = Array.isArray(pd.forumCategories) && pd.forumCategories.length
-      ? pd.forumCategories : ['热门', '情感', '校园', '都市', '娱乐'];
-    if (pd.forumCategories.includes(cat)) { UI.showToast('该分区已存在', 1500); return; }
-    if (pd.forumCategories.length >= 20) { UI.showToast('分区最多 20 个', 1500); return; }
-    pd.forumCategories.push(cat);
+    // 规范化为对象数组（兼容老的字符串数组数据）
+    const cats = _forumCats(pd);
+    if (cats.some(c => c.name === cat)) { UI.showToast('该分区已存在', 1500); return; }
+    if (cats.length >= 20) { UI.showToast('分区最多 20 个', 1500); return; }
+    cats.push({ name: cat, desc: '' });
+    pd.forumCategories = cats;
     await _savePhoneData();
     _renderForum(pd);
   }
@@ -41872,15 +42010,14 @@ ${wvPrompt}${_echoForHot}`;
     if (!cat) return;
     const pd = await _getPhoneData();
     if (!pd) return;
-    const cats = Array.isArray(pd.forumCategories) && pd.forumCategories.length
-      ? pd.forumCategories : ['热门', '情感', '校园', '都市', '娱乐'];
+    const cats = _forumCats(pd);
     if (cats.length <= 1) { UI.showToast('至少保留一个分区', 1500); return; }
     if (!await UI.showConfirm('删除分区', `确定删除「${cat}」分区？该分区已生成的帖子也会一并清除。`)) return;
-    pd.forumCategories = cats.filter(c => c !== cat);
+    pd.forumCategories = cats.filter(c => c.name !== cat);
     if (pd.forumPostsByCat) delete pd.forumPostsByCat[cat];
     // 如果删的是当前分区，切到第一个分区
     if ((pd.forumActiveCategory || '热门') === cat) {
-      const first = pd.forumCategories[0] || '热门';
+      const first = (pd.forumCategories[0] && pd.forumCategories[0].name) || '热门';
       pd.forumActiveCategory = first;
       pd.cachedForumPosts = (pd.forumPostsByCat && Array.isArray(pd.forumPostsByCat[first])) ? pd.forumPostsByCat[first] : [];
     }
@@ -45158,7 +45295,8 @@ ${wvPrompt}${_regionBlock}${_mapTransportBlock}` },
                 </div>
               </div>` : ''}
             ${m.image ? `<div class="phone-moment-image-wrap"><img src="${m.image}" class="phone-moment-image"></div>` : ''}
-            ${m.imageDesc ? `<div class="phone-moment-image-desc">${_uiIcon('image', 13)}<span>${Utils.escapeHtml(m.imageDesc)}</span></div>` : ''}
+            ${m.imageId ? `<div class="phone-moment-image-wrap"><img class="phone-moment-image phone-moment-real-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="配图"></div>` : ''}
+            ${(m.imageDesc && !m.imageId) ? `<div class="phone-moment-image-desc">${_uiIcon('image', 13)}<span>${Utils.escapeHtml(m.imageDesc)}</span></div>` : ''}
             ${visibleHtml(m.visibleNpcs)}
           </div>
           <div class="phone-moment-actions">
@@ -45187,6 +45325,8 @@ ${wvPrompt}${_regionBlock}${_mapTransportBlock}` },
               </div>
               <div class="phone-moment-text">${Utils.escapeHtml(m.text || '')}</div>
               ${m.image ? `<div class="phone-moment-image-wrap" style="margin-top:8px;border-radius:8px;overflow:hidden;max-width:100%"><img src="${Utils.escapeHtml(m.image)}" style="width:100%;display:block;object-fit:cover;max-height:200px" loading="lazy" onerror="this.parentElement.style.display='none'"></div>` : ''}
+              ${(!m.image && m.imageId) ? `<div class="phone-moment-image-wrap" style="margin-top:8px;border-radius:8px;overflow:hidden;max-width:100%"><img class="phone-moment-real-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="配图" style="width:100%;display:block;object-fit:cover;max-height:200px" loading="lazy" onerror="this.parentElement.style.display='none'"></div>` : ''}
+              ${(!m.image && !m.imageId && m.imageDesc) ? `<div class="phone-moment-image-desc" style="margin-top:8px">${_uiIcon('image', 13)}<span>${Utils.escapeHtml(m.imageDesc)}</span></div>` : ''}
             </div>
           </div>
           <div class="phone-moment-actions">
@@ -45241,6 +45381,19 @@ ${wvPrompt}${_regionBlock}${_mapTransportBlock}` },
         if (_newList) _newList.scrollTop = _savedScrollTop;
       } catch(_) {}
     }
+
+    // 异步加载朋友圈动态的 AI 真图（imageId → drawnImages.dataUrl）
+    setTimeout(() => {
+      const imgs = document.querySelectorAll('.phone-moment-real-img[data-img-id]');
+      imgs.forEach(async (el) => {
+        const imgId = el.getAttribute('data-img-id');
+        if (!imgId) return;
+        try {
+          const doc = await DB.get('drawnImages', imgId);
+          if (doc && doc.dataUrl) el.src = doc.dataUrl;
+        } catch(_) {}
+      });
+    }, 50);
 
     // 缓存未命中：异步构建并回填头像/名字
     if (!cache) _buildMomentsCacheAndPatch(pd, convId);
@@ -46015,7 +46168,10 @@ ${playerReplyHint}
   async function _submitMoment() {
     try {
       const text = document.getElementById('phone-moment-text')?.value.trim() || '';
-      const imageDesc = document.getElementById('phone-moment-imgdesc')?.value.trim() || '';
+      const imgdescEl = document.getElementById('phone-moment-imgdesc');
+      const imageDesc = imgdescEl?.value.trim() || '';
+      // 选相册真图（ai_image）时暂存在 dataset 上的 imageId：发布后直接显示真图，文字描述仍注入给 AI
+      const imageId = imgdescEl?.dataset.imageId || null;
       // 正文和配图描述至少一个有内容即可发（支持纯图片描述发圈）
       if (!text && !imageDesc) { UI.showToast('请输入内容或配图描述', 1500); return; }
       const time = document.getElementById('phone-moment-time')?.value.trim() || '';
@@ -46029,6 +46185,8 @@ ${playerReplyHint}
         text,
         // image 字段已废弃（不再支持上传真图，节省内存）；旧档遗留的 image 仍能渲染
         imageDesc: imageDesc || null,
+        // imageId：选相册真图时引用 drawnImages 表的真图，渲染直接显示图片；imageDesc 仍给 AI
+        imageId: imageId || null,
         shareCard: _pendingShareCard || null,
         visibleNpcs,
         time,
@@ -47873,9 +48031,32 @@ function buildDeletedContactsBlock(opts) {
 }
 // 按发送者名取头像内层 html
 function _groupSenderAvatarInner(members, senderName) {
-  const m = members.find(x => x.name === senderName || x.displayName === senderName);
-  const initial = Utils.escapeHtml((senderName || '?')[0]);
-  if (m && m.avatar) return `<img src="${Utils.escapeHtml(m.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`;
+  const raw = (senderName || '').trim();
+  const initial = Utils.escapeHtml((raw || '?')[0]);
+  const _imgTag = (url) => `<img src="${Utils.escapeHtml(url)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`;
+  // 1. 精确匹配成员名/显示名
+  let m = members.find(x => x.name === raw || x.displayName === raw);
+  // 2. 宽松匹配：去掉空格后比对（AI 生成的 senderName 可能多/少空格）
+  if (!m) {
+    const norm = (s) => (s || '').replace(/\s+/g, '');
+    const nr = norm(raw);
+    if (nr) m = members.find(x => norm(x.name) === nr || norm(x.displayName) === nr);
+  }
+  if (m && m.avatar) return _imgTag(m.avatar);
+  // 3. 头像表兜底：即使成员对象匹配不上，只要名字能在最新头像 map 里命中就用（与私聊/成员列表同源）
+  try {
+    if (typeof _chatAvatarMap === 'object' && _chatAvatarMap) {
+      let ava = _chatAvatarMap[raw];
+      if (!ava) {
+        const norm = (s) => (s || '').replace(/\s+/g, '');
+        const nr = norm(raw);
+        const hitKey = Object.keys(_chatAvatarMap).find(k => norm(k) === nr && _chatAvatarMap[k]);
+        if (hitKey) ava = _chatAvatarMap[hitKey];
+      }
+      if (ava) return _imgTag(ava);
+    }
+  } catch(_) {}
+  // 4. 都取不到 → 首字母
   return initial;
 }
 
@@ -48052,6 +48233,24 @@ async function _showGroupPhotoDetail(groupId, msgId) {
   }
 }
 
+// 我的头像框：给"我"的头像内层内容叠一层装饰框（框覆盖在圆形头像上）
+// innerHtml 是圆内内容（img 或首字母）。头像框全局存储（skin.profile.avatarFrame），不随对话
+function _myAvatarFrameUrl() {
+  try { const sp = _getPhoneSkin().profile || {}; return typeof sp.avatarFrame === 'string' ? sp.avatarFrame : ''; } catch(_) { return ''; }
+}
+// 头像框缩放（百分比，100=贴合头像，>100 向外扩）。默认 150
+function _myAvatarFrameScale() {
+  try { const sp = _getPhoneSkin().profile || {}; const n = parseInt(sp.avatarFrameScale, 10); return (n >= 100 && n <= 300) ? n : 150; } catch(_) { return 150; }
+}
+function _wrapMeAvatar(innerHtml, frameUrl) {
+  const u = (frameUrl != null) ? frameUrl : _myAvatarFrameUrl();
+  if (!u) return innerHtml;
+  const sc = _myAvatarFrameScale();
+  // wrapper 是正常流内的 relative 定位块（非 absolute），撑满头像容器；
+  // 头像与框都塞进 wrapper，框以 wrapper 为定位祖先居中放大，绝不会飞到外层大容器
+  return `<span style="position:relative;display:block;width:100%;height:100%;border-radius:inherit;overflow:visible">${innerHtml}<img src="${Utils.escapeHtml(u)}" alt="" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:${sc}%;height:${sc}%;object-fit:contain;pointer-events:none;z-index:2"></span>`;
+}
+
 // 群单条气泡 HTML（供整页渲染和逐条动画共用）
 function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
   // system role：撤回/提示（居中灰条）
@@ -48071,7 +48270,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
   // 语音气泡
   if (m.type === 'voice') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0;max-width:70%">
         <div onclick="Phone._playGroupVoice('${groupId}','${m.id}')" style="padding:10px 14px;border-radius:18px;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer;${mine ? 'flex-direction:row-reverse' : ''}">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
@@ -48091,7 +48290,7 @@ function _groupBubbleHtml(m, members, groupId, meAvatarInner) {
 
 if (m.type === 'pet_status') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="pet_status" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8"><svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='var(--accent)' stroke='none'><circle cx='4.5' cy='9.5' r='2.5'/><circle cx='9' cy='5.5' r='2.5'/><circle cx='15' cy='5.5' r='2.5'/><circle cx='19.5' cy='9.5' r='2.5'/><path d='M17.34 14.86c-.87-1.02-1.6-1.89-2.48-2.91-.46-.54-1.05-1.08-1.75-1.32-.36-.13-.75-.13-1.11-.13s-.75 0-1.11.13c-.7.24-1.29.78-1.75 1.32-.88 1.02-1.61 1.89-2.48 2.91-1.31 1.31-2.92 2.76-2.62 4.79.29 1.02 1.02 2.03 2.33 2.32.73.15 3.06-.44 5.54-.44h.18c2.48 0 4.81.58 5.54.44 1.31-.29 2.04-1.31 2.33-2.32.31-2.04-1.3-3.49-2.62-4.79z'/></svg></div>
@@ -48109,7 +48308,7 @@ if (m.type === 'pet_status') {
   // 地点卡片气泡（地图分享）
   if (m.type === 'map_place') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8">
@@ -48129,7 +48328,7 @@ if (m.type === 'pet_status') {
   // 商品卡片气泡（桃宝/饿了咪分享）
   if (m.type === 'product') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:flex-start">
@@ -48155,7 +48354,7 @@ if (m.type === 'pet_status') {
   if (m.type === 'shop_listing') {
     const deliveryLabel = m.listingDelivery === 'express' ? '快递' : m.listingDelivery === 'errand' ? '跑腿' : '直接交付';
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="shop_listing" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:210px;height:90px;box-sizing:border-box;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;flex-direction:column;justify-content:center">
           <div style="padding:0 14px 6px;display:flex;align-items:center;gap:8px">
@@ -48179,7 +48378,7 @@ if (m.type === 'pet_status') {
   // 视频/影视分享气泡
   if (m.type === 'video_card') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           ${m.videoCover ? `<div style="width:100%;aspect-ratio:16/9;background:#000 center/cover no-repeat;background-image:url('${Utils.escapeHtml(m.videoCover)}')"></div>` : ''}
@@ -48200,7 +48399,7 @@ if (m.type === 'pet_status') {
 
   if (m.type === 'book_card') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:240px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;padding:12px;gap:10px;box-sizing:border-box">
           <div style="width:52px;height:72px;border-radius:6px;flex-shrink:0;background:var(--bg-secondary) center/cover no-repeat${m.bookCover ? `;background-image:url('${Utils.escapeHtml(m.bookCover)}')` : ''}"></div>
@@ -48222,7 +48421,7 @@ if (m.type === 'pet_status') {
   // 信件分享气泡
   if (m.type === 'mail_card') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="padding:12px 14px 10px">
@@ -48243,7 +48442,7 @@ if (m.type === 'pet_status') {
   if (m.type === 'forum_card' || m.type === 'forum_detail') {
     const isDetail = m.type === 'forum_detail';
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="padding:12px 14px 10px">
@@ -48273,7 +48472,7 @@ if (m.type === 'pet_status') {
       : `拼手气红包 · ${m.rpCount || 1} 个`;
     const statusText = allGone ? '已被领完' : (opened ? '点击查看领取详情' : '点击拆开红包');
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="red_packet" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div onclick="Phone._openGroupRedPacket('${groupId}','${m.id}')" style="width:230px;border-radius:14px;overflow:hidden;cursor:pointer;background:${allGone ? 'var(--bg-tertiary)' : '#d9433a'}">
           <div style="padding:14px 14px 12px;display:flex;align-items:center;gap:10px">
@@ -48296,7 +48495,7 @@ if (m.type === 'pet_status') {
   if (m.type === 'sticker') {
     const _sname = Utils.escapeHtml(m.stickerName || '表情');
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="sticker" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:100px;height:100px"><img data-sticker-id="${Utils.escapeHtml(m.stickerId || '')}" alt="${_sname}" title="${_sname}" style="width:100%;height:100%;object-fit:contain"></div>
         ${footTag}
@@ -48316,7 +48515,7 @@ if (m.type === 'pet_status') {
         ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="生成的图片" />`
         : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div>`;
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div class="phone-camera-polaroid" onclick="Phone._showGroupPhotoDetail('${groupId}', '${m.id}')" style="opacity:1;margin:0;width:150px;min-height:150px;transform:none;cursor:pointer">
           <div class="phone-camera-polaroid-frame" style="padding:8px 8px 28px">${innerHtml}</div>
@@ -48329,7 +48528,7 @@ if (m.type === 'pet_status') {
   // 位置气泡
   if (m.type === 'location') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div onclick="Phone._showChatLocationDetail('${Utils.escapeHtml(m.location || '')}','${Utils.escapeHtml(m.address || '')}')" style="width:200px;border-radius:14px;overflow:hidden;cursor:pointer;background:var(--bg-tertiary)">
           <div style="padding:12px 14px 8px;display:flex;align-items:center;gap:10px">
@@ -48352,7 +48551,7 @@ if (m.type === 'pet_status') {
   const quoteBlock = m.quote ? `<div style="font-size:11px;line-height:1.4;color:${mine ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)'};background:${mine ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)'};border-left:2px solid ${mine ? 'rgba(255,255,255,0.45)' : 'var(--accent)'};padding:3px 7px;border-radius:0 6px 6px 0;margin-bottom:5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word">${Utils.escapeHtml((m.quote.sender ? m.quote.sender + '：' : '') + (m.quote.preview || ''))}</div>` : '';
   if (mine) {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px;flex-direction:row-reverse">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${meAvatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${meAvatarInner}</div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;min-width:0;max-width:72%">
         <div class="phone-chat-txt-mine" style="padding:8px 12px;border-radius:18px;border-bottom-right-radius:4px;font-size:14px;line-height:1.5;word-break:break-word">${quoteBlock}${_phoneText(m.text || '')}</div>
         ${footTag}
@@ -48360,7 +48559,7 @@ if (m.type === 'pet_status') {
     </div>`;
   }
   return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px">
-    <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+    <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
     <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:72%">
       <div class="phone-chat-txt-char" style="padding:8px 12px;border-radius:18px;border-bottom-left-radius:4px;font-size:14px;line-height:1.5;word-break:break-word">${quoteBlock}${_phoneText(m.text || '')}</div>
       ${footTag}
@@ -48381,8 +48580,8 @@ function _renderGroupThread(pd, groupId) {
   try { meAvaUrl = (typeof Character !== 'undefined' && Character.getAvatar) ? (Character.getAvatar() || '') : ''; } catch(_) {}
   let meName = '我';
   try { meName = (Character.get && Character.get()?.name) || '我'; } catch(_) {}
-  const meInitial = Utils.escapeHtml((meName || '我')[0]);
-  const meAvatarInner = meAvaUrl ? `<img src="${Utils.escapeHtml(meAvaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : meInitial;
+   const meInitial = Utils.escapeHtml((meName || '我')[0]);
+   const meAvatarInner = _wrapMeAvatar(meAvaUrl ? `<img src="${Utils.escapeHtml(meAvaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : meInitial);
 
   const bubbles = msgs.length ? msgs.map(m => _groupBubbleHtml(m, members, groupId, meAvatarInner)).join('') : '<div style="padding:40px 24px;text-align:center;color:var(--text-secondary);font-size:13px;line-height:1.8">还没有消息<br><span style="font-size:11px">下方发消息，点刷新让群成员回复</span></div>';
 
@@ -49167,7 +49366,7 @@ ${histStr}
  8. **群红包**：群成员也可以发红包、领红包，但要符合人设和场景（过节、发工资、有喜事、起哄要红包等才发；克制、不熟、没钱的角色少发或不发）。
     - 发红包：在某条消息对象里加 \`redPacket\` 字段。拼手气：\`"redPacket":{"kind":"lucky","total":总金额数字,"count":个数,"blessing":"祝福语"}\`；专属某人：\`"redPacket":{"kind":"exclusive","to":"成员名或${myName}","amount":金额数字,"blessing":"祝福语"}\`。该条 text 可写一句话（如"发个红包大家乐呵乐呵"），也可留空。AI 发的红包不必真有钱，金额你来定。
     - 领红包：当群聊记录里有"还没人领"或"未抢完"的红包时，**群里气氛通常会一下子热闹起来，大家会争先恐后冒出来抢红包、刷屏接龙**（比如"抢到了！谢谢老板"、"手慢了又没抢到"、"红包来啦冲冲冲"、"@发红包的人 财源广进"等）。请让多个在线成员都积极响应，在各自消息对象里加 \`"grabRedPacket":true\` 来抢（会自动领取群里最近一个还没领完的红包，金额由系统分配，你不用填）。抢到后系统会在群里显示一条"XX领取了红包"的提示。除非某成员明显不在场或人设特别高冷，否则大多数人看到红包都会来抢一手，越多人抢越热闹。注意：拼手气红包按个数发完即止，专属红包只有指定的人能领；一条消息只能领一个红包，同一个人对同一个红包只能领一次。
- 9. 必须用以下 JSON 格式输出，放在 \`\`\`chat 代码块里，每条消息一个对象，npc 字段必须是上面列出的成员名之一。**每条消息都要填 time**，用游戏内时间格式（"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"）：从当前游戏时间开始往后排，按发言先后依次递增（同一时刻连发可相同，话题推进则晚几分钟），最新一条不要早于当前时间，也别跳到遥远未来：
+ 9. 必须用以下 JSON 格式输出，放在 \`\`\`chat 代码块里，每条消息一个对象，npc 字段必须是上面列出的成员名之一。text 只写这条消息的纯文本内容本身，绝对不要把整条 {"npc":...,"text":...,"time":...} 这样的 JSON 对象再嵌套塞进 text 字段里。**每条消息都要填 time**，用游戏内时间格式（"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"）：从当前游戏时间开始往后排，按发言先后依次递增（同一时刻连发可相同，话题推进则晚几分钟），最新一条不要早于当前时间，也别跳到遥远未来：
 \`\`\`chat
 [
   {"npc": "成员名", "text": "消息内容", "time": "${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"},
@@ -49207,12 +49406,14 @@ ${histStr}
     const meAvatarInner2 = (() => {
       let url = ''; try { url = (typeof Character !== 'undefined' && Character.getAvatar) ? (Character.getAvatar() || '') : ''; } catch(_) {}
       let nm = '我'; try { nm = (Character.get && Character.get()?.name) || '我'; } catch(_) {}
-      return url ? `<img src="${Utils.escapeHtml(url)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : Utils.escapeHtml((nm || '我')[0]);
+      const inner = url ? `<img src="${Utils.escapeHtml(url)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : Utils.escapeHtml((nm || '我')[0]);
+      return _wrapMeAvatar(inner);
     })();
     let appended = 0;
     let lastAiTime = '';   // 本轮 AI 给的最大时间（用于推进状态栏）
     let lastAiScore = -1;
-    for (const cm of chatArr) {
+    for (let cm of chatArr) {
+      cm = _unwrapChatMsgArtifact(cm);  // 主线格式兼容：AI 把整条 JSON 塞进 text 时去壳
       const sender = (cm.npc || '').trim();
       const rawText = (cm.text || '').trim();
       const hasRpAction = !!(cm.redPacket || cm.grabRedPacket);
@@ -49372,14 +49573,31 @@ ${histStr}
       }
     }
     await _savePhoneData();
-    // 游鱼购买：解析群成员输出的 youyu_buy 标记（以第一个为准，成交后商品自动下架）
+    // 游鱼购买：解析群成员输出的 youyu_buy 标记（可能多个成员各买一笔，逐个处理）
     try {
-      let buyData = (parsed && parsed.youyuBuy) ? parsed.youyuBuy : null;
-      if (!buyData) {
-        const ym = fullReply.match(/```youyu_buy\s*\n?([\s\S]*?)```/i);
-        if (ym) { try { buyData = JSON.parse(ym[1].trim()); } catch(_) {} }
+      const buyList = [];
+      // 结构化字段（单个或数组）
+      if (parsed && parsed.youyuBuy) {
+        if (Array.isArray(parsed.youyuBuy)) buyList.push(...parsed.youyuBuy);
+        else buyList.push(parsed.youyuBuy);
       }
-      if (buyData && buyData.id) await _youyuHandleBuy(buyData);
+      // 兜底：从原文扒所有 youyu_buy 代码块
+      const yms = [...fullReply.matchAll(/```youyu_buy\s*\n?([\s\S]*?)```/gi)];
+      for (const ym of yms) {
+        try {
+          const d = JSON.parse(ym[1].trim());
+          if (d && d.id) buyList.push(d);
+        } catch(_) {}
+      }
+      // 去重（同一 buyer+id 只处理一次，避免结构化字段和原文块重复）
+      const _seenBuy = new Set();
+      for (const b of buyList) {
+        if (!b || !b.id) continue;
+        const key = `${b.id}|${b.buyer || ''}|${b.count || 1}`;
+        if (_seenBuy.has(key)) continue;
+        _seenBuy.add(key);
+        await _youyuHandleBuy(b, { threadId: groupId, isGroup: true });
+      }
     } catch(_) {}
     // 有图片消息：整页重渲染一次，触发 ai_image 异步加载
     if (chatArr.some(cm => /^\[图片\]/.test((cm.text || '').trim()))) {
@@ -49576,7 +49794,7 @@ ${histStr}
 5. **同一个人可以连发好几条短消息**，像真人发微信那样。发几条、怎么断句由角色性格决定。
 6. 只写 NPC 成员发的内容，绝不替玩家（${myName}）发言，不写旁白。
 7. 消息可以是普通文字，也可以是特殊形式（写在 text 字段里）：语音 \`[语音]说的话\`、图片 \`[图片]画面描述\`、位置 \`[位置]地点名\`${stickerGroupSeg}。普通文字不加前缀，每人一轮最多一条特殊消息。
-8. 必须用以下 JSON 格式输出，放在 \`\`\`chat 代码块里，npc 字段必须是上面列出的成员名之一。**每条消息都要填 time**（格式"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"，从当前时间往后排）：
+8. 必须用以下 JSON 格式输出，放在 \`\`\`chat 代码块里，npc 字段必须是上面列出的成员名之一。text 只写这条消息的纯文本内容本身，绝对不要把整条 {"npc":...,"text":...,"time":...} 这样的 JSON 对象再嵌套塞进 text 字段里。**每条消息都要填 time**（格式"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"，从当前时间往后排）：
 \`\`\`chat
 [
   {"npc": "成员名", "text": "消息内容", "time": "${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"},
@@ -49621,7 +49839,8 @@ ${histStr}
     let added = 0;
     let lastAiTime = '', lastAiScore = -1;
     let firstSender = '', firstText = '';
-    for (const cm of chatArr) {
+    for (let cm of chatArr) {
+      cm = _unwrapChatMsgArtifact(cm);  // 主线格式兼容：AI 把整条 JSON 塞进 text 时去壳
       const sender = (cm.npc || '').trim();
       const rawText = (cm.text || '').trim();
       if (!rawText) continue;
@@ -50285,6 +50504,14 @@ async function _emailGenerateForgottenMail() {
   let fullCtx = '';
   try { fullCtx = await _buildFullContext({ npcBrief: true }); } catch(_) {}
 
+  // 该角色已有邮件线程的往来摘要——喂给模型做去重参照（剧情少时最容易重复）
+  let priorDigestBlock = '';
+  try {
+    const pdCur = await _getPhoneData();
+    const existThread = _emailThreads(pdCur).find(x => x && ((x.party && x.party.name) || '').trim() === name);
+    if (existThread) priorDigestBlock = _emailDigestBlock(existThread) || '';
+  } catch(_) {}
+
   const myName = (() => { try { return Character.get()?.name || '我'; } catch(_) { return '我'; } })();
   const nowDisp = _getGameTime() || '（当前时间未知）';
 
@@ -50293,7 +50520,7 @@ async function _emailGenerateForgottenMail() {
 
 【你想起的那些事】（下面按时间先后排列，越靠前的是越久远的往事）
 ${memoryBlock}
-
+${priorDigestBlock ? `\n【你以前写给 ta 的信都聊过什么】（务必避免重复——换个由头、换段往事、换种心境来写，别再重复下面这些内容）\n${priorDigestBlock}\n` : ''}
 【怎么写】
 - 以「${name}」的身份、口吻、说话习惯，主动给 {{user}} 写一封信。这不是回信，是你自己想写的。
 - 信的由头是"忽然想起了你们之间的往事"——可以从上面某段**比较久远**的记忆写起，那种隔了很久回头看的怅然、感慨最动人。带上你此刻的心境、想说的话。
@@ -50739,9 +50966,27 @@ async function _emailGenerateWorldAffair() {
   const myName = (() => { try { return Character.get()?.name || '我'; } catch(_) { return '我'; } })();
   const nowDisp = _getGameTime() || '（当前时间未知）';
 
+  // 最近的世间来信摘要（跨线程收集，affair 每封独立线程）——做去重参照，剧情少时最容易撞车
+  let priorAffairBlock = '';
+  try {
+    const pdCur = await _getPhoneData();
+    const affairs = _emailThreads(pdCur).filter(x => x && x.party && x.party.source === 'affair');
+    const digs = [];
+    affairs.forEach(t => {
+      (Array.isArray(t.digest) ? t.digest : []).forEach(d => { if (d && d.text) digs.push({ time: d.time || t.updatedAt || 0, text: d.text }); });
+    });
+    // 按时间取最近 8 条
+    digs.sort((a, b) => {
+      const ta = _gameTimeToMinutes(a.time), tb = _gameTimeToMinutes(b.time);
+      return (tb || 0) - (ta || 0);
+    });
+    const recent = digs.slice(0, 8);
+    if (recent.length) priorAffairBlock = recent.map(d => `· ${(d.text || '')}`).join('\n');
+  } catch(_) {}
+
   const systemPrompt = `${fullCtx ? fullCtx + '\n\n' : ''}【最近发生的剧情】
 ${recentPlot}
-
+${priorAffairBlock ? `\n【你最近已经收到过的世间来信】（务必避免和这些撞车——换个发件方、换个由头、换种事由，别再重复下面这些内容）\n${priorAffairBlock}\n` : ''}
 【任务】
 基于以上世界观和最近剧情，生成一封寄到 {{user}}（${myName}）信箱里的「世间来信」——就是这个世界里，一个人在过日子时会实实在在收到的公事、杂务、往来信件。此刻是 ${nowDisp}。
 
@@ -52915,9 +53160,9 @@ function _renderChatThread(pd, contactId) {
   let meName = '我';
   try { const mk = (typeof Character !== 'undefined' && Character.get) ? Character.get() : null; if (mk?.name) meName = mk.name; } catch(_) {}
   const meInitial = Utils.escapeHtml((meName || '我')[0]);
-  const meAvatarInner = meAvaUrl
+  const meAvatarInner = _wrapMeAvatar(meAvaUrl
     ? `<img src="${Utils.escapeHtml(meAvaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
-    : meInitial;
+    : meInitial);
   const bubbles = msgs.length
     ? msgs.map(m => {
         // system role：撤回/提示（居中灰条，不加头像不加气泡框）
@@ -52938,7 +53183,7 @@ function _renderChatThread(pd, contactId) {
           const rounds = Array.isArray(m.rounds) ? m.rounds.length : 0;
           const hangupByText = m.hangupBy === 'them' ? '对方挂断' : (m.hangupBy === 'me' ? '我方挂断' : '');
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="call_record" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
             <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0">
               <div onclick="Phone._showCallRecord('${contactId}','${m.id}')" style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-radius:18px;border-bottom-left-radius:4px;background:var(--bg-tertiary);cursor:pointer;min-width:160px">
                 ${callIcon}
@@ -52958,7 +53203,7 @@ function _renderChatThread(pd, contactId) {
           const chap = m.isShort ? '短篇' : `第${m.chapterIdx}章${m.chapterTitle ? ' · ' + Utils.escapeHtml(m.chapterTitle) : ''}`;
           const bookIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`;
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="coread_record" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
             <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0">
               <div style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-radius:18px;border-bottom-left-radius:4px;background:var(--bg-tertiary);min-width:160px">
                 ${bookIcon}
@@ -52975,7 +53220,7 @@ function _renderChatThread(pd, contactId) {
         // 语音气泡
         if (m.type === 'voice') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0;max-width:70%">
               <div onclick="Phone._playVoice('${m.id}')" style="padding:10px 14px;border-radius:18px;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer;${mine ? 'flex-direction:row-reverse' : ''}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
@@ -53001,7 +53246,7 @@ function _renderChatThread(pd, contactId) {
             ? `<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:${claimed ? 'var(--text-secondary)' : 'var(--accent)'};${claimed ? 'opacity:0.7' : 'cursor:pointer'}" ${claimed ? '' : `onclick="Phone._claimTransfer('${Utils.escapeHtml(contact.id)}','${m.id}')"`}>${claimed ? '已收取' : '点击收取'}</div>`
             : '';
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
                 <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
@@ -53021,7 +53266,7 @@ function _renderChatThread(pd, contactId) {
         // 位置气泡
         if (m.type === 'location') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div onclick="Phone._showChatLocationDetail('${Utils.escapeHtml(m.location || '')}','${Utils.escapeHtml(m.address || '')}')" style="width:200px;border-radius:14px;overflow:hidden;cursor:pointer;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px 8px;display:flex;align-items:center;gap:10px">
@@ -53043,7 +53288,7 @@ function _renderChatThread(pd, contactId) {
         // 订单气泡
         if (m.type === 'order') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div onclick="Phone._showOrderDetail('${Utils.escapeHtml(m.orderName || '')}','${Utils.escapeHtml(String(m.orderPrice || ''))}','${Utils.escapeHtml(m.orderShop || '')}','${Utils.escapeHtml(m.orderPlatform || '')}')" style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);cursor:pointer">
                 <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:8px">
@@ -53068,7 +53313,7 @@ function _renderChatThread(pd, contactId) {
         if (m.type === 'shop_listing') {
           const deliveryLabel = m.listingDelivery === 'express' ? '快递' : m.listingDelivery === 'errand' ? '跑腿' : '直接交付';
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="shop_listing" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;height:90px;box-sizing:border-box;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;flex-direction:column;justify-content:center">
                 <div style="padding:0 14px 6px;display:flex;align-items:center;gap:8px">
@@ -53094,7 +53339,7 @@ function _renderChatThread(pd, contactId) {
           const dLabel = m.sellDelivery === 'express' ? '快递' : m.sellDelivery === 'errand' ? '跑腿' : '即刻交付';
           const etaLabel = (m.sellDelivery !== 'instant' && m.sellEta) ? `${m.sellEta}${m.sellEtaUnit === 'day' ? '天' : '分钟'}达` : '';
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="sell_offer" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div ${mine ? '' : `onclick="Phone._showSellDetail(\'${Utils.escapeHtml(contact.id)}\',\'${m.id}\')"`} style="width:218px;height:112px;box-sizing:border-box;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;flex-direction:column;justify-content:space-between;padding:12px 0${mine ? '' : ';cursor:pointer'}">
                 <div style="padding:0 14px 6px;display:flex;align-items:center;gap:8px">
@@ -53120,7 +53365,7 @@ function _renderChatThread(pd, contactId) {
     // 好友圈动态气泡
         if (m.type === 'moment') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="moment" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="max-width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:10px 14px;display:flex;align-items:center;gap:8px">
@@ -53136,7 +53381,7 @@ function _renderChatThread(pd, contactId) {
 
 if (m.type === 'pet_status') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="pet_status" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8"><svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='var(--accent)' stroke='none'><circle cx='4.5' cy='9.5' r='2.5'/><circle cx='9' cy='5.5' r='2.5'/><circle cx='15' cy='5.5' r='2.5'/><circle cx='19.5' cy='9.5' r='2.5'/><path d='M17.34 14.86c-.87-1.02-1.6-1.89-2.48-2.91-.46-.54-1.05-1.08-1.75-1.32-.36-.13-.75-.13-1.11-.13s-.75 0-1.11.13c-.7.24-1.29.78-1.75 1.32-.88 1.02-1.61 1.89-2.48 2.91-1.31 1.31-2.92 2.76-2.62 4.79.29 1.02 1.02 2.03 2.33 2.32.73.15 3.06-.44 5.54-.44h.18c2.48 0 4.81.58 5.54.44 1.31-.29 2.04-1.31 2.33-2.32.31-2.04-1.3-3.49-2.62-4.79z'/></svg></div>
@@ -53153,7 +53398,7 @@ if (m.type === 'pet_status') {
   
     if (m.type === 'map_place') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8">
@@ -53176,7 +53421,7 @@ if (m.type === 'pet_status') {
             ? `<img src="${Utils.escapeHtml(m.musicCover)}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
             : `<div style="width:44px;height:44px;border-radius:8px;background:var(--bg-secondary);flex-shrink:0;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="var(--text-secondary)"><path d="M9 18V5l12-2v13M9 18c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3zM21 16c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3z"/></svg></div>`;
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="music_card" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:center">
@@ -53202,7 +53447,7 @@ if (m.type === 'pet_status') {
             ? `<img src="${Utils.escapeHtml(m.musicCover)}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
             : `<div style="width:44px;height:44px;border-radius:8px;background:var(--bg-secondary);flex-shrink:0;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="var(--text-secondary)"><path d="M9 18V5l12-2v13M9 18c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3zM21 16c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3z"/></svg></div>`;
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="listen_invite" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border)">
@@ -53225,7 +53470,7 @@ if (m.type === 'pet_status') {
         // 一起听·结束卡片
         if (m.type === 'listen_end') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="listen_end" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px;display:flex;align-items:center;gap:8px">
@@ -53241,7 +53486,7 @@ if (m.type === 'pet_status') {
         // 商品卡片气泡
         if (m.type === 'product') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:flex-start">
@@ -53267,7 +53512,7 @@ if (m.type === 'pet_status') {
         if (m.type === 'forum_card' || m.type === 'forum_detail') {
           const isDetail = m.type === 'forum_detail';
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px 10px">
@@ -53290,7 +53535,7 @@ if (m.type === 'pet_status') {
         // 视频/影视分享气泡
         if (m.type === 'video_card') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 ${m.videoCover ? `<div style="width:100%;aspect-ratio:16/9;background:#000 center/cover no-repeat;background-image:url('${Utils.escapeHtml(m.videoCover)}')"></div>` : ''}
@@ -53311,7 +53556,7 @@ if (m.type === 'pet_status') {
 
         if (m.type === 'book_card') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:240px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;padding:12px;gap:10px;box-sizing:border-box">
                 <div style="width:52px;height:72px;border-radius:6px;flex-shrink:0;background:var(--bg-secondary) center/cover no-repeat${m.bookCover ? `;background-image:url('${Utils.escapeHtml(m.bookCover)}')` : ''}"></div>
@@ -53333,7 +53578,7 @@ if (m.type === 'pet_status') {
         // 信件分享气泡
         if (m.type === 'mail_card') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px 10px">
@@ -53354,7 +53599,7 @@ if (m.type === 'pet_status') {
         if (m.type === 'sticker') {
           const _sname = Utils.escapeHtml(m.stickerName || '表情');
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="sticker" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:100px;height:100px"><img data-sticker-id="${Utils.escapeHtml(m.stickerId || '')}" alt="${_sname}" title="${_sname}" style="width:100%;height:100%;object-fit:contain"></div>
               ${time}
@@ -53374,7 +53619,7 @@ if (m.type === 'pet_status') {
               ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="生成的图片" />`
               : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div>`;
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div class="phone-camera-polaroid" onclick="Phone._showChatPhotoDetail('${contactId}', '${m.id}')" style="opacity:1;margin:0;width:150px;min-height:150px;transform:none;cursor:pointer">
                 <div class="phone-camera-polaroid-frame" style="padding:8px 8px 28px">${innerHtml}</div>
@@ -53385,7 +53630,7 @@ if (m.type === 'pet_status') {
         }
 
         return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-          <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+          <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
           <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
             <div class="${mine ? 'phone-chat-txt-mine' : 'phone-chat-txt-char'}" style="max-width:100%;padding:8px 12px;border-radius:18px;${mine ? 'border-bottom-right-radius:4px' : 'border-bottom-left-radius:4px'};font-size:14px;line-height:1.5;word-break:break-word">${m.quote ? `<div style="font-size:11px;line-height:1.4;color:${mine ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)'};background:${mine ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)'};border-left:2px solid ${mine ? 'rgba(255,255,255,0.45)' : 'var(--accent)'};padding:3px 7px;border-radius:0 6px 6px 0;margin-bottom:5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml((m.quote.sender || '') + '：' + (m.quote.preview || ''))}</div>` : ''}${Utils.escapeHtml(m.text || '')}</div>
             ${time}
@@ -53794,9 +54039,9 @@ function _renderChatThreadWithSystem(pd, contactId) {
   let meName = '我';
   try { const mk = (typeof Character !== 'undefined' && Character.get) ? Character.get() : null; if (mk?.name) meName = mk.name; } catch(_) {}
   const meInitial = Utils.escapeHtml((meName || '我')[0]);
-  const meAvatarInner = meAvaUrl
+  const meAvatarInner = _wrapMeAvatar(meAvaUrl
     ? `<img src="${Utils.escapeHtml(meAvaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
-    : meInitial;
+    : meInitial);
 
   const bubbles = msgs.map(m => {
     // system role：撤回/提示消息
@@ -53812,7 +54057,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
     // 语音气泡
     if (m.type === 'voice') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0;max-width:70%">
           <div onclick="Phone._playVoice('${m.id}')" style="padding:10px 14px;border-radius:18px;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer;${mine ? 'flex-direction:row-reverse' : ''}">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
@@ -53838,7 +54083,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
             ? `<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:${claimed ? 'var(--text-secondary)' : 'var(--accent)'};${claimed ? 'opacity:0.7' : 'cursor:pointer'}" ${claimed ? '' : `onclick="Phone._claimTransfer('${Utils.escapeHtml(contact.id)}','${m.id}')"`}>${claimed ? '已收取' : '点击收取'}</div>`
             : '';
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
                 <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
@@ -53858,7 +54103,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
     // 位置气泡
     if (m.type === 'location') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div onclick="Phone._showChatLocationDetail('${Utils.escapeHtml(m.location || '')}','${Utils.escapeHtml(m.address || '')}')" style="width:200px;border-radius:14px;overflow:hidden;cursor:pointer;background:var(--bg-tertiary)">
             <div style="padding:12px 14px 8px;display:flex;align-items:center;gap:10px">
@@ -53881,7 +54126,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
     // 订单气泡
     if (m.type === 'order') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div onclick="Phone._showOrderDetail('${Utils.escapeHtml(m.orderName || '')}','${Utils.escapeHtml(String(m.orderPrice || ''))}','${Utils.escapeHtml(m.orderShop || '')}','${Utils.escapeHtml(m.orderPlatform || '')}')" style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);cursor:pointer">
             <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:8px">
@@ -53907,7 +54152,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
       const dLabel = m.sellDelivery === 'express' ? '快递' : m.sellDelivery === 'errand' ? '跑腿' : '即刻交付';
       const etaLabel = (m.sellDelivery !== 'instant' && m.sellEta) ? `${m.sellEta}${m.sellEtaUnit === 'day' ? '天' : '分钟'}达` : '';
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="sell_offer" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div ${mine ? '' : `onclick="Phone._showSellDetail(\'${Utils.escapeHtml(contact.id)}\',\'${m.id}\')"`} style="width:218px;height:112px;box-sizing:border-box;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;flex-direction:column;justify-content:space-between;padding:12px 0${mine ? '' : ';cursor:pointer'}">
             <div style="padding:0 14px 6px;display:flex;align-items:center;gap:8px">
@@ -53933,7 +54178,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
     // 好友圈动态气泡
         if (m.type === 'moment') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="moment" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="max-width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:10px 14px;display:flex;align-items:center;gap:8px">
@@ -53949,7 +54194,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
 
 if (m.type === 'pet_status') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="pet_status" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8"><svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='var(--accent)' stroke='none'><circle cx='4.5' cy='9.5' r='2.5'/><circle cx='9' cy='5.5' r='2.5'/><circle cx='15' cy='5.5' r='2.5'/><circle cx='19.5' cy='9.5' r='2.5'/><path d='M17.34 14.86c-.87-1.02-1.6-1.89-2.48-2.91-.46-.54-1.05-1.08-1.75-1.32-.36-.13-.75-.13-1.11-.13s-.75 0-1.11.13c-.7.24-1.29.78-1.75 1.32-.88 1.02-1.61 1.89-2.48 2.91-1.31 1.31-2.92 2.76-2.62 4.79.29 1.02 1.02 2.03 2.33 2.32.73.15 3.06-.44 5.54-.44h.18c2.48 0 4.81.58 5.54.44 1.31-.29 2.04-1.31 2.33-2.32.31-2.04-1.3-3.49-2.62-4.79z'/></svg></div>
@@ -53966,7 +54211,7 @@ if (m.type === 'pet_status') {
   
         if (m.type === 'map_place') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8">
@@ -53986,7 +54231,7 @@ if (m.type === 'pet_status') {
     // 商品卡片气泡
     if (m.type === 'product') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:flex-start">
@@ -54011,7 +54256,7 @@ if (m.type === 'pet_status') {
     // 商品卡片气泡
     if (m.type === 'product') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:flex-start">
@@ -54037,7 +54282,7 @@ if (m.type === 'pet_status') {
     if (m.type === 'forum_card' || m.type === 'forum_detail') {
       const isDetail = m.type === 'forum_detail';
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             <div style="padding:12px 14px 10px">
@@ -54060,7 +54305,7 @@ if (m.type === 'pet_status') {
     // 视频/影视分享气泡
     if (m.type === 'video_card') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             ${m.videoCover ? `<div style="width:100%;aspect-ratio:16/9;background:#000 center/cover no-repeat;background-image:url('${Utils.escapeHtml(m.videoCover)}')"></div>` : ''}
@@ -54081,7 +54326,7 @@ if (m.type === 'pet_status') {
 
     if (m.type === 'book_card') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:240px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;padding:12px;gap:10px;box-sizing:border-box">
             <div style="width:52px;height:72px;border-radius:6px;flex-shrink:0;background:var(--bg-secondary) center/cover no-repeat${m.bookCover ? `;background-image:url('${Utils.escapeHtml(m.bookCover)}')` : ''}"></div>
@@ -54103,7 +54348,7 @@ if (m.type === 'pet_status') {
     // 信件分享气泡
     if (m.type === 'mail_card') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             <div style="padding:12px 14px 10px">
@@ -54136,7 +54381,7 @@ if (m.type === 'pet_status') {
       `;
       
       const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           ${photoHtml}
           ${time}
@@ -54146,7 +54391,7 @@ if (m.type === 'pet_status') {
     }
     
 const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-          <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${mine ? meAvatarInner : avatarInner}</div>
+          <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
           <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
             <div class="${mine ? 'phone-chat-txt-mine' : 'phone-chat-txt-char'}" style="max-width:100%;padding:8px 12px;border-radius:18px;${mine ? 'border-bottom-right-radius:4px' : 'border-bottom-left-radius:4px'};font-size:14px;line-height:1.5;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};word-break:break-word">${Utils.escapeHtml(m.text || '')}</div>
             ${time}
@@ -55137,7 +55382,7 @@ async function _chatRequestReply(contactId) {
       const el = document.createElement('div');
       el.id = 'phone-chat-typing';
       el.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:12px';
-      el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div><div style="padding:10px 14px;border-radius:14px;background:var(--bg-tertiary)"><div class="typing-indicator"><span></span><span></span><span></span></div></div>`;
+      el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div><div style="padding:10px 14px;border-radius:14px;background:var(--bg-tertiary)"><div class="typing-indicator"><span></span><span></span><span></span></div></div>`;
       list.appendChild(el);
       list.scrollTop = list.scrollHeight;
       return el;
@@ -55469,7 +55714,7 @@ ${histStr}
 2. 上面的主线剧情仅供参考，用来判断你和玩家此刻的关系与状态。**请先判断你（${contact.name}）在那些主线场景里是否在场**：如果你不在场，绝对不要主动提起主线里发生的事（你根本不知道）；只有你在场或事后理应知道的事，才能自然提及。
 3. 回复要符合角色当下的状态：**先想这个角色此刻正在做什么**——可能在忙、在睡、在外面。据此决定回复的语气和"时机感"：可能秒回，也可能像是过了一阵才回（在内容里自然体现，比如"刚看到""在忙刚回来"），不要每次都热情秒回。
 4. 你可以一次回复多条短消息（像真人发微信那样），也可以只回一条。
-5. **必须用以下 JSON 格式输出**，放在 \`\`\`chat 代码块里，每条消息一个对象，time 用游戏内时间（"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"格式，可比玩家发消息的时间稍晚一点）：${voiceInstruction}${phoneDownInstruction}
+5. **必须用以下 JSON 格式输出**，放在 \`\`\`chat 代码块里，每条消息一个对象，time 用游戏内时间（"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"格式，可比玩家发消息的时间稍晚一点）。text 只写这条消息的纯文本内容本身，绝对不要把整条 {"npc":...,"text":...,"time":...} 这样的 JSON 对象再嵌套塞进 text 字段里：${voiceInstruction}${phoneDownInstruction}
 ${voiceInstruction ? '8' : '7'}. 除了普通文字消息，你还可以发送以下特殊类型的消息（在对象里加 "type" 字段，**不要用纯文字描述这些行为**，必须使用 type 字段让前端渲染为卡片）：
    - **图片**：{"npc":"...", "type":"image", "desc":"对图片内容的描述（如：一张窗外的夕阳照片）", "time":"..."}
    - **位置**：{"npc":"...", "type":"location", "location":"地点名", "address":"详细地址（可选）", "time":"..."}
@@ -55588,7 +55833,7 @@ ${voiceInstruction ? '8' : '7'}. 除了普通文字消息，你还可以发送�
     // 游鱼购买标记处理（聊天内购买）
     try {
       if (parsed && parsed.youyuBuy) {
-        await _youyuHandleBuy(parsed.youyuBuy);
+        await _youyuHandleBuy(parsed.youyuBuy, { threadId: contactId, isGroup: false });
       }
     } catch(_) {}
 
@@ -55696,7 +55941,8 @@ ${voiceInstruction ? '8' : '7'}. 除了普通文字消息，你还可以发送�
     // 逐条延迟 append 气泡
     let _hasSpecialMsg = false; // 本轮是否出现了特殊卡片消息（图片/位置/订单/转账），用于全量重渲染
     for (let i = 0; i < chatArr.length; i++) {
-      const cm = chatArr[i];
+      let cm = chatArr[i];
+      cm = _unwrapChatMsgArtifact(cm);  // 主线格式兼容：AI 把整条 JSON 塞进 text 时去壳
       const cmType = (cm.type || '').trim();
       let text = (cm.text || '').trim();
 
@@ -55915,10 +56161,10 @@ ${voiceInstruction ? '8' : '7'}. 除了普通文字消息，你还可以发送�
         el.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;animation:fadeIn 0.3s ease-in;cursor:pointer';
         if (isVoiceMsg) {
           const waveHtml = `<div class="phone-chat-voice-wave" id="voice-wave-${msgId}" style="display:flex;align-items:center;gap:3px;opacity:0.7"><div style="width:3px;height:4px;background:currentColor;border-radius:2px"></div><div style="width:3px;height:8px;background:currentColor;border-radius:2px"></div><div style="width:3px;height:12px;background:currentColor;border-radius:2px"></div><div style="width:3px;height:8px;background:currentColor;border-radius:2px"></div><div style="width:3px;height:5px;background:currentColor;border-radius:2px"></div></div>`;
-          el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div><div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:70%"><div onclick="Phone._playVoice('${msgId}')" style="padding:10px 14px;border-radius:18px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>${waveHtml}</div><div style="margin-top:4px;padding:6px 10px;border-radius:8px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;max-width:100%;word-break:break-word">${Utils.escapeHtml(voiceDesc)}</div>${cmTime ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(cmTime)}</div>` : ''}</div>`;
+          el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div><div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:70%"><div onclick="Phone._playVoice('${msgId}')" style="padding:10px 14px;border-radius:18px;background:var(--bg-tertiary);color:var(--text);display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>${waveHtml}</div><div style="margin-top:4px;padding:6px 10px;border-radius:8px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;max-width:100%;word-break:break-word">${Utils.escapeHtml(voiceDesc)}</div>${cmTime ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(cmTime)}</div>` : ''}</div>`;
         } else {
           const _qb = quoteObj ? `<div style="font-size:11px;line-height:1.4;color:var(--text-secondary);background:rgba(0,0,0,0.06);border-left:2px solid var(--accent);padding:3px 7px;border-radius:0 6px 6px 0;margin-bottom:5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml((quoteObj.sender || '') + '：' + (quoteObj.preview || ''))}</div>` : '';
-          el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatarInner}</div><div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0"><div style="max-width:100%;padding:8px 12px;border-radius:18px;border-bottom-left-radius:4px;font-size:14px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);word-break:break-word">${_qb}${Utils.escapeHtml(text)}</div>${cmTime ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(cmTime)}</div>` : ''}</div>`;
+          el.innerHTML = `<div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div><div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0"><div style="max-width:100%;padding:8px 12px;border-radius:18px;border-bottom-left-radius:4px;font-size:14px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);word-break:break-word">${_qb}${Utils.escapeHtml(text)}</div>${cmTime ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${Utils.escapeHtml(cmTime)}</div>` : ''}</div>`;
         }
         list.appendChild(el);
         list.scrollTop = list.scrollHeight;
@@ -57402,6 +57648,38 @@ function _radioCallerAvatar() {
     return s.trim();
   }
 
+  // 主线格式兼容：AI 学了主线/朋友圈的 JSON 消息格式，把整条 {"npc":..,"text":..,"time":..} 当成一条聊天消息的
+  // text 正文吐出来（私聊/群聊气泡里就显示成一坨 JSON）。这里做去壳——识别 text 是否本身又是一条消息对象，
+  // 是则把内层的真实文本提出来，并把缺失的 npc/time/type 从内层回填。套了多层就逐层剥（限深防死循环）。
+  // 返回处理后的 cm（原地不改，返回浅拷贝）。非消息壳时原样返回。
+  function _unwrapChatMsgArtifact(cm) {
+    if (!cm || typeof cm !== 'object') return cm;
+    let out = cm;
+    for (let depth = 0; depth < 4; depth++) {
+      const t = (out.text || '').trim();
+      // 只在 text 明显是一个 JSON 对象（花括号包裹 + 含 npc/text/time/type 等英文键）时才尝试
+      if (!(t.startsWith('{') && t.endsWith('}') && /["'](npc|text|time|type)["']\s*[:：]/.test(t))) break;
+      let inner = null;
+      try { inner = JSON.parse(t); }
+      catch (_) {
+        // 容错：中文逗号、尾逗号
+        try { inner = JSON.parse(t.replace(/\uFF0C/g, ',').replace(/,\s*([}\]])/g, '$1')); } catch (_) { inner = null; }
+      }
+      if (!inner || typeof inner !== 'object' || Array.isArray(inner)) break;
+      // 内层必须带 text 或 type，才算一条真正的消息壳（否则可能是正常内容里恰好像 JSON）
+      if (!('text' in inner) && !('type' in inner)) break;
+      // 去壳：内层字段优先，外层作兜底
+      out = {
+        ...out,
+        ...inner,
+        npc: (inner.npc || out.npc || '').toString(),
+        time: (inner.time || out.time || '').toString(),
+        text: (inner.text != null ? inner.text : '').toString(),
+      };
+    }
+    return out;
+  }
+
   function _parseCallReply(raw) {
     const segs = [];
     if (!raw) return segs;
@@ -58298,10 +58576,20 @@ async function _cameraCollectCast() {
       });
     }
   } catch(_) {}
+  // 4) 挂载角色（常驻）：conv.attachedChars
+  try {
+    if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+      const attached = await AttachedChars.resolveAll();
+      (attached || []).forEach(a => {
+        if (a && a.name && !seen.has(a.name)) {
+          cast.push({ key: 'attached:' + a.name, roleTag: '常驻', name: a.name, desc: (a.drawDesc || '').trim() });
+          seen.add(a.name);
+        }
+      });
+    }
+  } catch(_) {}
   return cast;
 }
-
-// 渲染画面角色勾选列表。没有可选角色时整块隐藏。
 async function _cameraRenderCast(overlay) {
   const wrap = overlay.querySelector('#phone-camera-cast-wrap');
   const box = overlay.querySelector('#phone-camera-cast');
@@ -58537,10 +58825,14 @@ async function _openAlbumPickerForMoment() {
     const preview = text.length > 50 ? text.slice(0, 50) + '…' : text;
     const time = p.time || '';
     const location = p.location || '';
+    const isImage = p.mode === 'ai_image' && p.imageId;
+    const contentInner = isImage
+      ? `<img class="phone-album-pick-thumb" data-img-id="${Utils.escapeHtml(p.imageId)}" alt="配图" style="width:100%;height:100%;object-fit:cover;display:block">`
+      : Utils.escapeHtml(preview || '(空)');
     return `
       <div class="phone-camera-polaroid" onclick="Phone._pickAlbumForMoment('${p.id}')" style="opacity:1">
         <div class="phone-camera-polaroid-frame">
-          <div class="phone-camera-polaroid-content">${Utils.escapeHtml(preview || '(空)')}</div>
+          <div class="phone-camera-polaroid-content"${isImage ? ' style="padding:0;overflow:hidden"' : ''}>${contentInner}</div>
         </div>
         ${location ? `<div class="phone-camera-polaroid-loc">${Utils.escapeHtml(location)}</div>` : ''}
         ${time ? `<div class="phone-camera-polaroid-caption">${Utils.escapeHtml(time)}</div>` : ''}
@@ -58563,6 +58855,19 @@ async function _openAlbumPickerForMoment() {
   overlay.onclick = (e) => { if (e.target === overlay) _closeAlbumPicker(); };
   const shell = document.querySelector('#phone-modal .phone-shell');
   (shell || document.body).appendChild(overlay);
+
+  // 异步加载相册缩略图里的 AI 真图（imageId → drawnImages.dataUrl）
+  setTimeout(() => {
+    const thumbs = overlay.querySelectorAll('.phone-album-pick-thumb[data-img-id]');
+    thumbs.forEach(async (el) => {
+      const imgId = el.getAttribute('data-img-id');
+      if (!imgId) return;
+      try {
+        const doc = await DB.get('drawnImages', imgId);
+        if (doc && doc.dataUrl) el.src = doc.dataUrl;
+      } catch(_) {}
+    });
+  }, 50);
 }
 
 function _closeAlbumPicker() {
@@ -58577,6 +58882,13 @@ async function _pickAlbumForMoment(id) {
   const el = document.getElementById('phone-moment-imgdesc');
   if (el) {
     el.value = photo.text || '';
+    // 选到 AI 生成的真图（ai_image）时，把 imageId 暂存到 textarea 的 dataset，
+    // 发布时直接显示真图（文字仍给 AI）；选到非真图则清掉
+    if (photo.mode === 'ai_image' && photo.imageId) {
+      el.dataset.imageId = photo.imageId;
+    } else {
+      delete el.dataset.imageId;
+    }
     el.focus();
   }
   _closeAlbumPicker();
@@ -60552,8 +60864,9 @@ function _renderYouyuListingsHtml(listings) {
        ${l.effect ? `<div class="phone-map-result-desc">${Utils.escapeHtml(l.effect)}</div>` : ''}
        <div class="phone-map-result-foot">
          <div class="phone-map-result-foot-left">
-           <span class="phone-map-distance-pill">${Utils.escapeHtml(String(l.price || 0))} ${Utils.escapeHtml(curName)}</span>
-           ${l.fromInventory ? '<span class="phone-map-distance-pill">物品栏</span>' : ''}
+<span class="phone-map-distance-pill">${Utils.escapeHtml(String(l.price || 0))} ${Utils.escapeHtml(curName)}</span>
+            ${(l.count || 1) > 1 ? `<span class="phone-map-distance-pill">库存 ${l.count}</span>` : ''}
+            ${l.fromInventory ? '<span class="phone-map-distance-pill">物品栏</span>' : ''}
          </div>
        </div>
         <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap">
@@ -60793,9 +61106,11 @@ function _youyuRenderListModal() {
  const etaBlock = isDirect ? '' : `
    <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">${isExpress ? '预期时效（天，需大于 2）' : '预期时效（分钟）'}</label>
    <input id="youyu-l-minutes" type="number" inputmode="numeric" value="${Utils.escapeHtml(String(d.minutes || ''))}" oninput="Phone._youyuDraftSet('minutes', this.value)" placeholder="${isExpress ? '默认 2-5，可自填' : '例如 30'}" style="width:100%;box-sizing:border-box;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 10px;outline:none;margin-bottom:14px">`;
- const countBlock = d.fromInventory ? `
-   <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">数量（持有 ${d.maxCount}）</label>
-   <input id="youyu-l-count" type="number" inputmode="numeric" min="1" max="${d.maxCount}" value="${d.count || 1}" oninput="Phone._youyuDraftSet('count', this.value)" style="width:100%;box-sizing:border-box;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 10px;outline:none;margin-bottom:14px">` : '';
+const countBlock = d.fromInventory ? `
+    <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">数量（持有 ${d.maxCount}）</label>
+    <input id="youyu-l-count" type="number" inputmode="numeric" min="1" max="${d.maxCount}" value="${d.count || 1}" oninput="Phone._youyuDraftSet('count', this.value)" style="width:100%;box-sizing:border-box;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 10px;outline:none;margin-bottom:14px">` : `
+    <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">数量</label>
+    <input id="youyu-l-count" type="number" inputmode="numeric" min="1" value="${d.count || 1}" oninput="Phone._youyuDraftSet('count', this.value)" placeholder="默认 1" style="width:100%;box-sizing:border-box;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 10px;outline:none;margin-bottom:14px">`;
   let mask = document.getElementById('youyu-list-overlay');
   if (!mask) {
     mask = document.createElement('div');
@@ -60865,13 +61180,10 @@ async function _youyuConfirmListing() {
  const currencyId = document.getElementById('youyu-l-currency')?.value || d.currencyId || '';
  if (!currencyId) { UI.showToast('请选择收款货币', 1500); return; }
  const effect = (document.getElementById('youyu-l-effect')?.value || '').trim();
- // 数量
- let count = 1;
- if (d.fromInventory) {
-   count = parseInt(document.getElementById('youyu-l-count')?.value, 10) || 1;
-   if (count < 1) count = 1;
-   if (d.maxCount && count > d.maxCount) count = d.maxCount;
- }
+// 数量
+  let count = parseInt(document.getElementById('youyu-l-count')?.value, 10) || 1;
+  if (count < 1) count = 1;
+  if (d.fromInventory && d.maxCount && count > d.maxCount) count = d.maxCount;
  // 时效校验
  const isDirect = d.deliveryMode === 'direct';
  const isExpress = d.deliveryMode === 'express';
@@ -61004,7 +61316,7 @@ async function _youyuShareListing(listingId, target) {
   }
   const curInfos = _getWalletCurrencyInfos();
   const curName = (curInfos.find(c => c.id === l.currencyId)?.name) || '货币';
-  const content = `【{{user}}的小店在售商品】\n商品名：${l.name}\n售价：${l.price} ${curName}\n${l.effect ? '描述：' + l.effect + '\n' : ''}商品ID：${l.id}\n\n如果剧情中有角色想购买这件商品，请在回复末尾输出购买标记（不要复述本说明）：\n\`\`\`youyu_buy\n{"id":"${l.id}","buyer":"购买角色的名字","delivery":"direct或express或errand","eta":数字}\n\`\`\`\ndelivery：direct=当面/直接交付，express=快递，errand=跑腿；eta：express填天数、errand填分钟、direct可省略。\n角色不一定要买，根据剧情自然判断即可。如果角色决定购买，只需输出标记，金额将由前端自动计算入账，无需在回复中描写数值变动或交易细节。`;
+  const content = `【{{user}}的小店在售商品】\n商品名：${l.name}\n售价：${l.price} ${curName}\n库存：${l.count || 1} 件\n${l.effect ? '描述：' + l.effect + '\n' : ''}商品ID：${l.id}\n\n如果剧情中有角色想购买这件商品，请在回复末尾输出购买标记（不要复述本说明）：\n\`\`\`youyu_buy\n{"id":"${l.id}","buyer":"购买角色的名字","count":购买数量,"delivery":"direct或express或errand","eta":数字}\n\`\`\`\ncount：购买数量（默认1，可买多件，超过库存则按剩余库存成交）；delivery：direct=当面/直接交付，express=快递，errand=跑腿；eta：express填天数、errand填分钟、direct可省略。\n库存充足时可以有多个角色分别下单购买。角色不一定要买，根据剧情自然判断即可。如果角色决定购买，只需输出标记，金额将由前端自动计算入账，无需在回复中描写数值变动或交易细节。`;
   if (target === 'main') {
     await _shareToMain('shop', `小店商品：${l.name}`, content);
   } else {
@@ -61087,7 +61399,7 @@ async function _youyuSendToChat(listingId, contactId) {
 
   // 注入提示词到聊天上下文（下次该联系人聊天构建时读取）
   pd.youyuChatPrompts = pd.youyuChatPrompts || {};
-  const chatContent = `【{{user}}发来商品链接】\n商品名：${l.name}\n售价：${l.price} ${curName}\n${l.effect ? '描述：' + l.effect + '\n' : ''}商品ID：${l.id}\n\n如果你想购买这件商品，请在回复末尾输出购买标记（不要复述本说明）：\n\`\`\`youyu_buy\n{"id":"${l.id}","buyer":"你的角色名","delivery":"direct或express或errand","eta":数字}\n\`\`\`\ndelivery：direct=当面/直接交付，express=快递，errand=跑腿；eta：express填天数、errand填分钟、direct可省略。\n不一定要买，根据你的角色性格和剧情自然判断即可。`;
+  const chatContent = `【{{user}}发来商品链接】\n商品名：${l.name}\n售价：${l.price} ${curName}\n库存：${l.count || 1} 件\n${l.effect ? '描述：' + l.effect + '\n' : ''}商品ID：${l.id}\n\n如果你想购买这件商品，请在回复末尾输出购买标记（不要复述本说明）：\n\`\`\`youyu_buy\n{"id":"${l.id}","buyer":"你的角色名","count":购买数量,"delivery":"direct或express或errand","eta":数字}\n\`\`\`\ncount：购买数量（默认1，可买多件，超过库存则按剩余库存成交）；delivery：direct=当面/直接交付，express=快递，errand=跑腿；eta：express填天数、errand填分钟、direct可省略。\n不一定要买，根据你的角色性格和剧情自然判断即可。`;
   pd.youyuChatPrompts[contactId] = chatContent;
 
   // 标记已分享
@@ -61135,7 +61447,7 @@ async function _youyuSendToGroup(listingId, groupId) {
     ? `\n这是群主（${(() => { try { return Character.get()?.name || '群主'; } catch(_) { return '群主'; } })()}）在自己的粉丝群里卖东西，粉丝对群主的东西通常更热情、更愿意支持，可能会有人很快抢下，也可能有人捧场询问、彼此起哄。`
     : '';
   pd.youyuGroupPrompts = pd.youyuGroupPrompts || {};
-  const groupContent = `【玩家在群里分享了一件在售商品】\n商品名：${l.name}\n售价：${l.price} ${curName}\n${l.effect ? '描述：' + l.effect + '\n' : ''}商品ID：${l.id}${fanLine}\n\n群里任何一个成员都可以购买这件商品（这是闲置，只有一件，谁先下单归谁）。如果某个成员想买，请在回复末尾单独输出购买标记（不要复述本说明，也不要多个成员同时买——只能有一个成员成交）：\n\`\`\`youyu_buy\n{"id":"${l.id}","buyer":"购买成员的名字（必须是群成员之一）","delivery":"direct或express或errand","eta":数字}\n\`\`\`\ndelivery：direct=当面/直接交付，express=快递，errand=跑腿；eta：express填天数、errand填分钟、direct可省略。\n不一定有人买，根据成员性格和群氛围自然判断。如果没人想买就不要输出这个标记。`;
+  const groupContent = `【玩家在群里分享了一件在售商品】\n商品名：${l.name}\n售价：${l.price} ${curName}\n库存：${l.count || 1} 件\n${l.effect ? '描述：' + l.effect + '\n' : ''}商品ID：${l.id}${fanLine}\n\n群成员可以购买这件商品（库存 ${l.count || 1} 件，先下单先得，卖完为止）。如果某个成员想买，请在回复末尾单独输出购买标记（不要复述本说明）：\n\`\`\`youyu_buy\n{"id":"${l.id}","buyer":"购买成员的名字（必须是群成员之一）","count":购买数量,"delivery":"direct或express或errand","eta":数字}\n\`\`\`\ncount：购买数量（默认1，可买多件，超过剩余库存则按剩余成交）；delivery：direct=当面/直接交付，express=快递，errand=跑腿；eta：express填天数、errand填分钟、direct可省略。\n库存充足时可以有多个成员分别下单（每个成员各输出一个标记）；库存只有一件时只能一个成员成交。不一定有人买，根据成员性格和群氛围自然判断。如果没人想买就不要输出这个标记。`;
   pd.youyuGroupPrompts[groupId] = groupContent;
 
   // 标记已分享（纳入互斥）
@@ -61146,7 +61458,7 @@ async function _youyuSendToGroup(listingId, groupId) {
 }
 
 // AI 购买标记处理：校验商品→加钱→扣库存→生成订单→注入第二轮提示词
-async function _youyuHandleBuy(data) {
+async function _youyuHandleBuy(data, ctx) {
   if (!data || !data.id) return;
   const pd = await _getPhoneData();
   if (!pd) return;
@@ -61157,10 +61469,17 @@ async function _youyuHandleBuy(data) {
   const buyer = data.buyer || '未知';
   const delivery = data.delivery || l.deliveryMode || 'direct';
   const eta = parseInt(data.eta, 10) || 0;
-  const price = l.price || 0;
+  const unitPrice = l.price || 0;
   const currencyId = l.currencyId || '';
   const curInfos = _getWalletCurrencyInfos();
   const curName = (curInfos.find(c => c.id === currencyId)?.name) || '货币';
+
+  // 成交数量：AI 说买 N，有多少卖多少（不超库存），至少 1
+  const stock = l.count || 1;
+  let qty = parseInt(data.count, 10);
+  if (!Number.isFinite(qty) || qty < 1) qty = 1;
+  if (qty > stock) qty = stock;
+  const price = unitPrice * qty;
 
   // 1. 加钱到绑定货币
   try {
@@ -61178,14 +61497,14 @@ async function _youyuHandleBuy(data) {
     currencyId,
     amount: price,
     category: '收入',
-    note: `售出「${l.name}」给${buyer}`,
+    note: `售出「${l.name}」${qty > 1 ? ` ×${qty}` : ''}给${buyer}`,
     platform: '游鱼小店',
     counterparty: buyer,
     source: 'youyu',
   });
 
   // 3. 扣库存 & 清除分享标记
-  l.count = (l.count || 1) - 1;
+  l.count = stock - qty;
   delete l.sharedTo;
   if (l.count <= 0) {
     // 库存归零，自动下架
@@ -61196,8 +61515,8 @@ async function _youyuHandleBuy(data) {
   const orderTime = _getGameTime() || new Date().toLocaleString();
   const order = {
     id: 'order_' + Utils.uuid().slice(0, 8),
-    name: l.name,
-    items: [{ name: l.name, count: 1, effect: l.effect || '' }],
+    name: qty > 1 ? `${l.name} ×${qty}` : l.name,
+    items: [{ name: l.name, count: qty, effect: l.effect || '' }],
     buyer,
     youyuSell: true,
     youyuIncome: price,
@@ -61236,14 +61555,36 @@ async function _youyuHandleBuy(data) {
   const deliveryDesc = delivery === 'direct' ? '当面交付，已完成'
     : delivery === 'errand' ? `跑腿配送中，预计 ${order.deliveryMinutes} 分钟送达`
     : `快递配送中，预计 ${Math.round(order.deliveryMinutes / 1440)} 天送达`;
-  const confirmContent = `【游鱼小店·交易完成】${buyer}已购买「${l.name}」，支付 ${price} ${curName}。交付方式：${deliveryDesc}。\n此交易已由前端自动结算入账，无需在后续回复中重复描写金额变动。如果是配送订单，物品送达时系统会另行通知。`;
+  const confirmContent = `【游鱼小店·交易完成】${buyer}已购买「${l.name}」${qty > 1 ? ` ×${qty}` : ''}，支付 ${price} ${curName}${qty > 1 ? `（单价 ${unitPrice}）` : ''}。交付方式：${deliveryDesc}。\n此交易已由前端自动结算入账，无需在后续回复中重复描写金额变动。如果是配送订单，物品送达时系统会另行通知。`;
   // 5. 存入确认提示词（下次发消息时一次性注入）
   pd.youyuConfirmPrompts = pd.youyuConfirmPrompts || [];
   pd.youyuConfirmPrompts.push(confirmContent);
   await _savePhoneData();
 
   // 6. Toast 通知
-  UI.showToast(`${buyer} 购买了「${l.name}」，+${price} ${curName}`, 3000);
+  UI.showToast(`${buyer} 购买了「${l.name}」${qty > 1 ? ` ×${qty}` : ''}，+${price} ${curName}`, 3000);
+
+  // 6.5 会话内插一条成交灰条（撤回同款系统提示条），让聊天/群里能看到是谁买了
+  try {
+    if (ctx && ctx.threadId) {
+      const tipText = `${buyer} 购买了「${l.name}」${qty > 1 ? ` ×${qty}` : ''}`;
+      pd.chatThreads = pd.chatThreads || {};
+      pd.chatThreads[ctx.threadId] = pd.chatThreads[ctx.threadId] || [];
+      pd.chatThreads[ctx.threadId].push({
+        id: 'm_' + Utils.uuid().slice(0, 8),
+        role: 'system',
+        text: tipText,
+        time: '',
+        createdAt: Date.now()
+      });
+      await _savePhoneData();
+      // 当前正开着这个会话就重绘
+      try {
+        if (ctx.isGroup) { if (typeof _renderGroupThread === 'function') _renderGroupThread(pd, ctx.threadId); }
+        else { if (typeof _renderChatThread === 'function') _renderChatThread(pd, ctx.threadId); }
+      } catch(_) {}
+    }
+  } catch(_) {}
 
   // 7. 刷新游鱼页面
   if (_currentApp === 'youyu') _renderYouyu(pd);
@@ -62584,7 +62925,8 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
         },
         forum: {
       name: ((pa.forum?.name) || '').trim(),
-      desc: ((pa.forum?.desc) || '').trim()
+      desc: ((pa.forum?.desc) || '').trim(),
+      defaultCategories: Array.isArray(pa.forum?.defaultCategories) ? pa.forum.defaultCategories : null
     },
     radio: {
       name: ((pa.radio?.name) || '').trim(),
@@ -62605,6 +62947,7 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
       deliveryMax: pa.cottage?.deliveryMax || 5,
       deliveryUnit: pa.cottage?.deliveryUnit || 'day',
       initialHouse: pa.cottage?.initialHouse || null,
+      initialPetTemplate: pa.cottage?.initialPetTemplate || null,
       currencyIds: Array.isArray(pa.cottage?.currencyIds) ? pa.cottage.currencyIds : []
     },
     wardrobe: {
@@ -64215,7 +64558,7 @@ async function buildHeartsimServiceChatForBackstage() {
 buildHeartsimAppFavorForBackstage,
       buildHeartsimServiceChatForBackstage,
       buildNowPlayingForBackstage,
-    flushActionLog, peekActionLog, pushLog, reloadActionLog, reloadChatRoundLog, ensureInitialHouse, reloadShopMeta,
+    flushActionLog, peekActionLog, pushLog, reloadActionLog, reloadChatRoundLog, ensureInitialHouse, ensureInitialPetTemplate, ensureInitialForumCategories, _forumCatDesc, reloadShopMeta,
       migrateMergeSplitNpcIdentities: _migrateMergeSplitNpcIdentities,
       _npcNotesRetrieve, _npcNotesFormatForPrompt, showNpcNotesPanel, closeNpcNotesPage, _npcNotesSearch, _npcNoteEditStart, _npcNoteEditCancel, _npcNoteEditSave, _npcNoteDelOne, _npcNoteClearName,
     buildVideoEventPrompt, applyVideoEventMarkers,
@@ -64226,6 +64569,8 @@ buildHeartsimAppFavorForBackstage,
     _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _toggleRollbackKeep, _onThemePick, _switchSettingsTab, _onPhoneSkinToggle, _onPhoneSkinPick, _resetPhoneSkinColors, _exportPhoneSkinColors, _importPhoneSkinColors, _onToggleFullscreen, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
     // 个人资料卡
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
+    // 我的头像框
+    _pickMyAvatarFrame, _resetMyAvatarFrame, _renderMyAvatarFrame, _onMyAvatarFrameScale,
     // 手机 APP 图标自定义
     renderAppIconList, _pickAppIcon, _resetAppIcon,
     // 悬浮球（桌宠）图标 + 尺寸

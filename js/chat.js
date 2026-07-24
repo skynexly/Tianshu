@@ -305,7 +305,7 @@ const Chat = (() => {
 使用规则：
 1. 仅当剧情中确实出现"线上消息"时才输出此代码块。日常对话、面对面交流、电话通话等不要使用此格式。
 2. 没有线上消息的轮次完全不要输出 \`\`\`chat 块（不是输出空数组，是整个块都不要写）。
-3. text 用 NPC 实际发送的内容，简短自然，符合 IM 聊天习惯。
+3. text 用 NPC 实际发送的内容，简短自然，符合 IM 聊天习惯。text 只写这条消息的纯文本内容本身，绝对不要把整条 {"npc":...,"text":...,"time":...} 这样的 JSON 对象再嵌套塞进 text 字段里。
 4. time 只写时分（如"15:02"），前端会自动补上日期。参考状态栏的当前游戏时间来确定。
 5. npc 必须使用角色真名，与正文/status 中的名字一致。
 6. 当输出了 \`\`\`chat 块时，**消息的具体内容只写在 chat 块里，正文不要复述**。正文需要简短交代"发送/收到了消息"这个动作或场景本身（例如"她拿起手机，给他发了一条消息"/"手机震了一下，是来自{{NPC}}的消息"），但不要把消息原文也写进正文，避免一条消息出现两次。
@@ -517,6 +517,10 @@ const Chat = (() => {
     try { if (typeof Phone !== 'undefined' && Phone.reloadActionLog) Phone.reloadActionLog(); } catch(_) {}
     // 切换对话后，预热世界观初始住所（让 AI 在玩家没打开小屋 App 时也知道住所，避免剧情错位）
     try { if (typeof Phone !== 'undefined' && Phone.ensureInitialHouse) Phone.ensureInitialHouse(); } catch(_) {}
+    // 切换对话后，预热世界观初始宠物状态模板（让宠物诞生即用作者设计的字段）
+    try { if (typeof Phone !== 'undefined' && Phone.ensureInitialPetTemplate) Phone.ensureInitialPetTemplate(); } catch(_) {}
+    // 切换对话后，预热世界观初始论坛分区（让论坛开局即用作者设计的分区）
+    try { if (typeof Phone !== 'undefined' && Phone.ensureInitialForumCategories) Phone.ensureInitialForumCategories(); } catch(_) {}
     // 切换对话后，按该对话状态栏的 region 立即应用地区背景图（无动画，避免"进对话时背景卡一条才出现"）
     // 不依赖 NPC 模块 regionData（那个要等 send 流程 init），直接从对话世界观 regions 里查
     try {
@@ -620,8 +624,10 @@ const Chat = (() => {
             appendMessage(welcomeMsg);
           }
         };
-        // 1. 世界观 startMessage（系统旁白/铺垫）
-        const sm = wv && wv.startMessage;
+        // 1. 世界观 startMessage（系统旁白/铺垫）— 优先读对话固化的开场（多开场轮换）
+        const sm = (conv && conv.startOverride && ('startMessage' in conv.startOverride))
+          ? conv.startOverride.startMessage
+          : (wv && wv.startMessage);
         if (sm && sm.trim()) await _appendOpening(sm, { typing: true });
         // 2. 单人卡 firstMes（角色第一句话）
         if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
@@ -966,12 +972,17 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
       try {
         const wv = await Worldview.getCurrent();
         if (wv) {
-          const rounds = wv.startPlotRounds || 5;
+          // 多开场轮换：优先读对话固化的开场，读不到才回落世界观默认
+          const _cv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+          const _ov = (_cv && _cv.startOverride) ? _cv.startOverride : null;
+          const _sTime = _ov && ('startTime' in _ov) ? _ov.startTime : wv.startTime;
+          const _sPlot = _ov && ('startPlot' in _ov) ? _ov.startPlot : wv.startPlot;
+          const rounds = (_ov && _ov.startPlotRounds) || wv.startPlotRounds || 5;
           const userMsgCount = messages.filter(m => m.role === 'user').length;
           if (userMsgCount < rounds) {
             let startParts = [];
-            if (wv.startTime) startParts.push(`开场时间：${wv.startTime}。状态栏已初始化为此时间，第一轮时间写"+0min"即可（表示从此刻开始）。`);
-            if (wv.startPlot) startParts.push(`开场剧情指令：${wv.startPlot}`);
+            if (_sTime) startParts.push(`开场时间：${_sTime}。状态栏已初始化为此时间，第一轮时间写"+0min"即可（表示从此刻开始）。`);
+            if (_sPlot) startParts.push(`开场剧情指令：${_sPlot}`);
             if (startParts.length > 0) {
               systemParts.push(`【开场引导（前${rounds}轮生效）】\n${startParts.join('\n')}`);
             }
@@ -980,12 +991,16 @@ if (isSingleConv && isGameMode && !_skipNpcInjection) {
       } catch(e) { console.warn('[Chat] startPlot注入失败', e); }
     } else if (isSingleConv && isGameMode && convSettings.format && singleWv && singleSettings.enableStartPlot) {
       try {
-        const rounds = singleWv.startPlotRounds || 5;
+        const _cv = Conversations.getList().find(c => c.id === Conversations.getCurrent());
+        const _ov = (_cv && _cv.startOverride) ? _cv.startOverride : null;
+        const _sTime = _ov && ('startTime' in _ov) ? _ov.startTime : singleWv.startTime;
+        const _sPlot = _ov && ('startPlot' in _ov) ? _ov.startPlot : singleWv.startPlot;
+        const rounds = (_ov && _ov.startPlotRounds) || singleWv.startPlotRounds || 5;
         const userMsgCount = messages.filter(m => m.role === 'user').length;
         if (userMsgCount < rounds) {
           let startParts = [];
-          if (singleWv.startTime) startParts.push(`开场时间：${singleWv.startTime}。状态栏已初始化为此时间，第一轮时间写"+0min"即可（表示从此刻开始）。`);
-          if (singleWv.startPlot) startParts.push(`开场剧情指令：${singleWv.startPlot}`);
+          if (_sTime) startParts.push(`开场时间：${_sTime}。状态栏已初始化为此时间，第一轮时间写"+0min"即可（表示从此刻开始）。`);
+          if (_sPlot) startParts.push(`开场剧情指令：${_sPlot}`);
           if (startParts.length > 0) {
             systemParts.push(`【开场引导（前${rounds}轮生效）】\n${startParts.join('\n')}`);
           }
@@ -1418,6 +1433,17 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
           }
         }
       } catch(_) {}
+      // 挂载角色（常驻）：conv.attachedChars，只注入填了生图描述的
+      try {
+        if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+          const _attached = await AttachedChars.resolveAll();
+          for (const a of (_attached || [])) {
+            if (!a || !a.name || _seen.has(a.name)) continue;
+            const _ad = (a.drawDesc || '').trim();
+            if (_ad) { _drawLines.push(`- 常驻角色「${a.name}」的外观：\n${_ad}`); _seen.add(a.name); }
+          }
+        }
+      } catch(_) {}
       // 用户面具
       try {
         const _mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
@@ -1588,9 +1614,27 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
         }
       }
     }
+    // 图片阅后即焚：只有最近 2 条用户消息保留附加图（contentForAPI 多模态数组），
+    // 更早的历史用户消息剥掉图片、回退到纯文本 content（那句「[附加了N张图片]」占位），避免每轮重复烧 token
+    const _recentUserIndices = new Set();
+    {
+      let _uCount = 0;
+      for (let i = _visibleMsgs.length - 1; i >= 0 && _uCount < 2; i--) {
+        if (_visibleMsgs[i].role === 'user') {
+          _recentUserIndices.add(i);
+          _uCount++;
+        }
+      }
+    }
 let historyForAPI = _visibleMsgs.map((m, idx) => ({
         role: m.role,
         content: (() => {
+          // 用户消息：带附加图且不在最近 2 条内 → 剥图，回退纯文本 content
+          if (m.role === 'user' && !_recentUserIndices.has(idx)
+              && Array.isArray(m.contentForAPI)
+              && m.contentForAPI.some(p => p && p.type === 'image_url')) {
+            return m.content;
+          }
           const _c = m.role === 'assistant' && !_recentAiIndices.has(idx)
             ? _stripFormatBlocks(m.content)
             : (m.contentForAPI || m.content);
@@ -2316,6 +2360,8 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
     // 发消息前确保世界观初始住所已就位（幂等：已有住所秒返回），避免切对话后立刻发消息时住所还没克隆完
     if (text !== '<PhoneDown/>' && text !== '<Continue the Chat/>') {
       try { if (typeof Phone !== 'undefined' && Phone.ensureInitialHouse) await Phone.ensureInitialHouse(); } catch(_) {}
+      try { if (typeof Phone !== 'undefined' && Phone.ensureInitialPetTemplate) await Phone.ensureInitialPetTemplate(); } catch(_) {}
+      try { if (typeof Phone !== 'undefined' && Phone.ensureInitialForumCategories) await Phone.ensureInitialForumCategories(); } catch(_) {}
     }
 
     // 面具隔离引导（方案C）：普通用户消息、且本对话尚有非系统消息时，首次发言前询问
@@ -5840,28 +5886,34 @@ if (!gp) return null;
       const curMonth = curParsed.month;
       const curDay = curParsed.day;
 
-      // 解析用户填的时间（支持 "HH:mm" 或 "M月D日 HH:mm"）
-      function parseEventTime(str) {
+      // 解析用户填的时间（支持 "HH:mm"、"M月D日 HH:mm"、"M月D日"纯日期）
+      // isEnd：纯日期做结束时间时补到当天 23:59（否则补 00:00），保证"整天"区间成立
+      function parseEventTime(str, isEnd) {
         str = str.trim();
         // 完整格式：X月X日 HH:mm
         const full = str.match(/(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})/);
         if (full) return { month: parseInt(full[1]), day: parseInt(full[2]), hour: parseInt(full[3]), minute: parseInt(full[4]), hasDate: true };
+        // 纯日期：X月X日（无时分）——开始补 00:00，结束补 23:59
+        const dateOnly = str.match(/^(\d{1,2})月(\d{1,2})日$/);
+        if (dateOnly) return { month: parseInt(dateOnly[1]), day: parseInt(dateOnly[2]), hour: isEnd ? 23 : 0, minute: isEnd ? 59 : 0, hasDate: true };
         // 只有时分：HH:mm
         const hm = str.match(/^(\d{1,2}):(\d{2})$/);
         if (hm) return { month: 0, day: 0, hour: parseInt(hm[1]), minute: parseInt(hm[2]), hasDate: false };
         return null;
       }
 
-      const start = parseEventTime(startStr);
+      const start = parseEventTime(startStr, false);
       if (!start) return false;
-      const end = endStr ? parseEventTime(endStr) : null;
+      const end = endStr ? parseEventTime(endStr, true) : null;
 
       if (start.hasDate) {
         // 一次性时间触发：精确日期范围
-        const curVal = curMonth * 10000 + curDay * 100 + curParsed.hour * 60 + curParsed.minute;
-        const startVal = start.month * 10000 + start.day * 100 + start.hour * 60 + start.minute;
+        // 编码用足够大的进位避免串位：((月*100+日)*24+时)*60+分（分<60、时<24、日<100 各不溢出）
+        const enc = (mo, d, h, mi) => ((mo * 100 + d) * 24 + h) * 60 + mi;
+        const curVal = enc(curMonth, curDay, curParsed.hour, curParsed.minute);
+        const startVal = enc(start.month, start.day, start.hour, start.minute);
         if (end && end.hasDate) {
-          const endVal = end.month * 10000 + end.day * 100 + end.hour * 60 + end.minute;
+          const endVal = enc(end.month, end.day, end.hour, end.minute);
           return curVal >= startVal && curVal <= endVal;
         }
         return curVal >= startVal;
@@ -7648,6 +7700,14 @@ async function applyLorebooksToWorldview() {
     const present = [];
     const others = [];
     const seen = new Set();
+    // 用户面具（玩家自己）：有生图描述的当作在场角色
+    try {
+      const _mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+      if (_mask && _mask.name && hasDraw(_mask) && !seen.has(_mask.name)) {
+        seen.add(_mask.name);
+        present.push(_mask);
+      }
+    } catch(_) {}
     // 单人卡对话：把对话主角色（存于 singleCards 表，不在 NPC 模块）当作在场角色
     try {
       const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
@@ -7656,6 +7716,18 @@ async function applyLorebooksToWorldview() {
         if (card && card.name && hasDraw(card) && !seen.has(card.name)) {
           seen.add(card.name);
           present.push(card);
+        }
+      }
+    } catch(_) {}
+    // 挂载角色（常驻）：conv.attachedChars，有生图描述的当作在场角色
+    try {
+      if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+        const _attached = await AttachedChars.resolveAll();
+        for (const a of (_attached || [])) {
+          if (!a || !a.name || seen.has(a.name)) continue;
+          if (!hasDraw(a)) continue;
+          seen.add(a.name);
+          present.push(a);
         }
       }
     } catch(_) {}

@@ -463,6 +463,76 @@ async function init() {
     await DB.put('gameState', { key: 'convFolders', value: folders });
   }
 
+  // ===== 开场设定轮换（多开场预设） =====
+
+  // 组装候选池：世界观默认那套 + startPresets 全部，按内容去重
+  function _buildStartCandidates(wv) {
+    if (!wv) return [];
+    const list = [];
+    const _norm = (o) => JSON.stringify([o.startTime || '', o.startPlot || '', (o.startPlotRounds || ''), o.startMessage || '']);
+    const seen = new Set();
+    const push = (label, o) => {
+      // 三个内容字段全空的开场没意义，跳过
+      if (!o.startTime && !o.startPlot && !o.startMessage) return;
+      const key = _norm(o);
+      if (seen.has(key)) return;
+      seen.add(key);
+      list.push({
+        label: label,
+        startTime: o.startTime || '',
+        startPlot: o.startPlot || '',
+        startPlotRounds: o.startPlotRounds || 5,
+        startMessage: o.startMessage || ''
+      });
+    };
+    // 默认那套（世界观顶层字段）也算进候选池
+    push('默认开场', { startTime: wv.startTime, startPlot: wv.startPlot, startPlotRounds: wv.startPlotRounds, startMessage: wv.startMessage });
+    // 预设
+    if (Array.isArray(wv.startPresets)) {
+      wv.startPresets.forEach(p => {
+        if (p) push(p.label || '未命名开场', p);
+      });
+    }
+    return list;
+  }
+
+  // 弹选择器让玩家挑一套开场，返回选中的开场对象（含随机）。取消返回 undefined。
+  function _pickStartPreset(candidates) {
+    return new Promise((resolve) => {
+      const esc = (Utils && Utils.escapeHtml) ? Utils.escapeHtml : (s => String(s == null ? '' : s));
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box';
+      const panel = document.createElement('div');
+      panel.style.cssText = 'background:var(--bg-secondary,#1e1e1e);color:var(--text,#eee);border:1px solid var(--border,#333);border-radius:14px;max-width:400px;width:100%;max-height:80vh;overflow-y:auto;padding:18px 16px;box-sizing:border-box';
+      const cards = candidates.map((c, i) => {
+        const summary = (c.startPlot || c.startMessage || '').replace(/\s+/g, ' ').slice(0, 40);
+        const sub = `${c.startTime ? esc(c.startTime) + ' · ' : ''}${esc(summary) || '（无剧情/消息）'}`;
+        return `<div data-idx="${i}" class="_sp-pick" style="padding:11px 12px;margin-bottom:8px;border:1px solid var(--border,#333);border-radius:10px;background:var(--bg-tertiary,#2a2a2a);cursor:pointer">
+          <div style="font-size:14px;font-weight:600;color:var(--text,#eee);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.label || '未命名')}</div>
+          <div style="font-size:11px;color:var(--text-secondary,#999);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div>
+        </div>`;
+      }).join('');
+      panel.innerHTML = `
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px">选择开场</div>
+        <div style="font-size:12px;color:var(--text-secondary,#999);margin-bottom:14px">这个世界观配了多套开场，挑一套开始，或者随机。</div>
+        ${cards}
+        <button type="button" data-random="1" style="width:100%;padding:11px;margin-top:2px;border:1px dashed var(--accent,#d97706);border-radius:10px;background:none;color:var(--accent,#d97706);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="1.8"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="16" cy="8" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="8" cy="16" r="1.5" fill="currentColor"/><circle cx="16" cy="16" r="1.5" fill="currentColor"/></svg>随机</button>
+        <button type="button" data-cancel="1" style="width:100%;padding:9px;margin-top:8px;border:none;background:none;color:var(--text-secondary,#999);font-size:13px;cursor:pointer">取消</button>
+      `;
+      overlay.appendChild(panel);
+      document.body.appendChild(overlay);
+      const done = (val) => { try { document.body.removeChild(overlay); } catch(_) {} resolve(val); };
+      panel.querySelectorAll('._sp-pick').forEach(el => {
+        el.onclick = () => done(candidates[+el.getAttribute('data-idx')]);
+      });
+      panel.querySelector('[data-random]').onclick = () => {
+        done(candidates[Math.floor(Math.random() * candidates.length)]);
+      };
+      panel.querySelector('[data-cancel]').onclick = () => done(undefined);
+      overlay.onclick = (e) => { if (e.target === overlay) done(undefined); };
+    });
+  }
+
   // ===== 对话 CRUD =====
 
   let simpleInputCallback = null;
@@ -471,6 +541,23 @@ async function init() {
     const name = await UI.showSimpleInput('新建世界线', '新的世界线');
     if (!name) return;
     const wvId = _activeWorldviewId();
+    // 多开场轮换：若世界观配了多套开场，弹选择器让玩家挑一套（含随机）；1 套直接用不打扰；0 套无开场
+    let _startOverride = null;
+    try {
+      if (wvId && wvId !== '__default_wv__') {
+        const _wvForStart = await DB.get('worldviews', wvId);
+        const _cands = _buildStartCandidates(_wvForStart);
+        if (_cands.length >= 2) {
+          const picked = await _pickStartPreset(_cands);
+          if (picked === undefined) return; // 取消创建
+          _startOverride = { startTime: picked.startTime, startPlot: picked.startPlot, startPlotRounds: picked.startPlotRounds, startMessage: picked.startMessage };
+        } else if (_cands.length === 1) {
+          const only = _cands[0];
+          _startOverride = { startTime: only.startTime, startPlot: only.startPlot, startPlotRounds: only.startPlotRounds, startMessage: only.startMessage };
+        }
+        // 0 套：不设 startOverride，走世界观默认/现实时间兜底
+      }
+    } catch(_) {}
     const conv = {
       id: 'conv_' + Utils.uuid().slice(0, 8),
       name: name.trim(),
@@ -479,6 +566,7 @@ async function init() {
       worldviewId: wvId,
       presetId: Settings.getCurrentId()
     };
+    if (_startOverride) conv.startOverride = _startOverride;
     // v712：新建对话继承「上一个当前对话」的设置类字段（白名单）——用户懒得挨个调
     // 只沿用"设置"，不沿用剧情内容（世界观/事件链/属性/剧情引导/背景图各自独立）
     try {
@@ -513,8 +601,8 @@ async function init() {
         if (wv && Array.isArray(wv.defaultLorebookIds) && wv.defaultLorebookIds.length) {
           conv.lorebookIds = wv.defaultLorebookIds.slice();
         }
-        // 历法系统校验：有自定义历法但没填开场时间，阻止创建
-        if (wv?.gameplay?.calendarSystem && !wv.startTime) {
+        // 历法系统校验：有自定义历法但没填开场时间，阻止创建（固化开场带了时间也算通过）
+        if (wv?.gameplay?.calendarSystem && !wv.startTime && !(conv.startOverride && conv.startOverride.startTime)) {
           UI.showToast('该世界观已启用历法系统但未填写开场时间，请先去世界观编辑填写', 3000);
           return;
         }
@@ -523,7 +611,7 @@ async function init() {
           const now = new Date();
           const weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
           const fallbackTime = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-          let initTime = wv.startTime || fallbackTime;
+          let initTime = (conv.startOverride && conv.startOverride.startTime) || wv.startTime || fallbackTime;
           // 关键修复：把开场时间规范化成带完整日期的标准格式。
           // 否则若 startTime 是纯时间（如 "00:00"）或缺日期的格式，
           // parseAbsoluteTime 会返回 null，导致此后每轮增量都解析失败、

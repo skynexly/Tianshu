@@ -2415,7 +2415,7 @@ input[type="range"] {
 .wv-gen-option .wv-gen-help { margin-top:8px; }
 /* v711：势力生成 — 地区勾选列表 + 字数预估 */
 .wv-gen-region-list { display:flex; flex-direction:column; gap:2px; max-height:220px; overflow-y:auto; margin-top:6px; padding:4px; border:1px solid var(--border); border-radius:10px; background:var(--bg-tertiary); }
-.wv-gen-region-check { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; cursor:pointer; }
+.wv-gen-region-check { position:relative; display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; cursor:pointer; }
 .wv-gen-region-check:active { background:rgba(255,255,255,0.05); }
 .wv-gen-region-check input { width:16px; height:16px; accent-color:var(--accent); flex:0 0 auto; }
 .wv-gen-region-nm { flex:1; font-size:14px; color:var(--text); }
@@ -2894,6 +2894,7 @@ input[type="range"] {
   box-sizing: border-box;
 }
 .circle-check-label {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;

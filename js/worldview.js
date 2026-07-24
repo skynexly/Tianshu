@@ -5,6 +5,8 @@ const Worldview = (() => {
   let currentWorldviewId = null;
   let editingWorldviewId = null;
   let _editingCalRules = null; // 当前编辑世界观的历法缓存
+  let _startPresetsDraft = []; // 当前编辑世界观的多开场预设草稿
+  let _editingPresetId = null; // 正在编辑的预设 id（null=新建态）
   
   // 管理模式
   let manageMode = false;
@@ -982,6 +984,7 @@ function _syncBuiltinRestoreButton(w) {
       w.startPlot = document.getElementById('wv-start-plot')?.value || '';
       w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds')?.value) || 5;
       w.startMessage = document.getElementById('wv-start-message')?.value || '';
+      w.startPresets = Array.isArray(_startPresetsDraft) ? _startPresetsDraft.slice() : (Array.isArray(w.startPresets) ? w.startPresets : []);
       await DB.put('worldviews', w);
       // 同步到运行时（仅当编辑的是当前激活世界观才生效）
       await _syncRuntime(w);
@@ -1213,6 +1216,10 @@ const _tkN = document.getElementById('wv-takeout-name'); if (_tkN) _tkN.value = 
     document.getElementById('wv-start-plot').value = w.startPlot || '';
     document.getElementById('wv-start-plot-rounds').value = w.startPlotRounds ?? 5;
     document.getElementById('wv-start-message').value = w.startMessage || '';
+    // 多开场预设：载入草稿并渲染卡片列表
+    _startPresetsDraft = Array.isArray(w.startPresets) ? JSON.parse(JSON.stringify(w.startPresets)) : [];
+    _editingPresetId = null;
+    _renderStartPresetList();
     // 图片预览
     const previewEl = document.getElementById('wv-icon-image-preview');
     if (w.iconImage) {
@@ -6059,6 +6066,8 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
     w.startPlot = document.getElementById('wv-start-plot').value.trim();
     w.startPlotRounds = parseInt(document.getElementById('wv-start-plot-rounds').value) || 5;
     w.startMessage = document.getElementById('wv-start-message').value.trim();
+    // 多开场预设：写回草稿
+    w.startPresets = Array.isArray(_startPresetsDraft) ? _startPresetsDraft.slice() : [];
     // 绑定主题
     const themeInput = document.getElementById('wv-theme-binding');
     w.themeName = themeInput ? themeInput.value : (w.themeName || '');
@@ -7496,6 +7505,105 @@ async function pickDefaultTheme(value) {
     } catch(_) { el.textContent = ''; }
   }
 
+  // ===== 多开场预设 =====
+  // 读取当前开场设定 UI 里的一套内容
+  function _readStartFieldsFromUI() {
+    try { if (typeof _syncStartTimeHidden === 'function') _syncStartTimeHidden(); } catch(_) {}
+    return {
+      startTime: (document.getElementById('wv-start-time')?.value || '').trim(),
+      startPlot: (document.getElementById('wv-start-plot')?.value || '').trim(),
+      startPlotRounds: parseInt(document.getElementById('wv-start-plot-rounds')?.value) || 5,
+      startMessage: (document.getElementById('wv-start-message')?.value || '').trim(),
+    };
+  }
+  // 把一套开场内容填回 UI
+  function _writeStartFieldsToUI(p) {
+    const st = document.getElementById('wv-start-time'); if (st) st.value = p.startTime || '';
+    try { if (typeof _fillStartTimeFields === 'function') _fillStartTimeFields(p.startTime || ''); } catch(_) {}
+    const sp = document.getElementById('wv-start-plot'); if (sp) { sp.value = p.startPlot || ''; sp.style.height = 'auto'; sp.style.height = sp.scrollHeight + 'px'; }
+    const spr = document.getElementById('wv-start-plot-rounds'); if (spr) spr.value = p.startPlotRounds ?? 5;
+    const sm = document.getElementById('wv-start-message'); if (sm) { sm.value = p.startMessage || ''; sm.style.height = 'auto'; sm.style.height = sm.scrollHeight + 'px'; }
+    try { if (typeof _updateStartTimeWeekday === 'function') _updateStartTimeWeekday(); } catch(_) {}
+  }
+  // 清空开场设定 UI
+  function _clearStartFieldsUI() {
+    _writeStartFieldsToUI({ startTime: '', startPlot: '', startPlotRounds: 5, startMessage: '' });
+    const nameEl = document.getElementById('wv-startpreset-name'); if (nameEl) nameEl.value = '';
+  }
+  // 存为开场 / 更新当前编辑的预设
+  function _saveStartPreset() {
+    const nameEl = document.getElementById('wv-startpreset-name');
+    const name = (nameEl?.value || '').trim().slice(0, 20);
+    if (!name) { UI.showToast('先给这套开场起个名字', 1800); return; }
+    const fields = _readStartFieldsFromUI();
+    if (!fields.startTime && !fields.startPlot && !fields.startMessage) {
+      UI.showToast('开场内容是空的，先填上面的开场设定', 2200); return;
+    }
+    if (!Array.isArray(_startPresetsDraft)) _startPresetsDraft = [];
+    if (_editingPresetId) {
+      // 更新已有
+      const p = _startPresetsDraft.find(x => x.id === _editingPresetId);
+      if (p) { p.label = name; p.startTime = fields.startTime; p.startPlot = fields.startPlot; p.startPlotRounds = fields.startPlotRounds; p.startMessage = fields.startMessage; }
+      _editingPresetId = null;
+      UI.showToast('已更新开场', 1400);
+    } else {
+      if (_startPresetsDraft.length >= 20) { UI.showToast('开场最多 20 套', 1800); return; }
+      _startPresetsDraft.push({ id: 'sp_' + (Date.now().toString(36)) + Math.random().toString(36).slice(2, 6), label: name, startTime: fields.startTime, startPlot: fields.startPlot, startPlotRounds: fields.startPlotRounds, startMessage: fields.startMessage });
+      UI.showToast('已存为开场，上面已清空可继续填', 1800);
+    }
+    _clearStartFieldsUI();
+    _renderStartPresetList();
+    if (typeof _wvAutoSave === 'function') _wvAutoSave();
+  }
+  // 点卡片：填回 UI 编辑
+  function _editStartPreset(id) {
+    const p = (_startPresetsDraft || []).find(x => x.id === id);
+    if (!p) return;
+    _writeStartFieldsToUI(p);
+    const nameEl = document.getElementById('wv-startpreset-name'); if (nameEl) nameEl.value = p.label || '';
+    _editingPresetId = id;
+    _renderStartPresetList();
+    // 滚到开场设定区顶部方便编辑
+    try { document.getElementById('wv-start-plot')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(_) {}
+  }
+  // 删除预设
+  async function _delStartPreset(id) {
+    const p = (_startPresetsDraft || []).find(x => x.id === id);
+    if (!p) return;
+    if (!await UI.showConfirm('删除开场', `确定删除开场「${p.label || '未命名'}」？`)) return;
+    _startPresetsDraft = (_startPresetsDraft || []).filter(x => x.id !== id);
+    if (_editingPresetId === id) { _editingPresetId = null; _clearStartFieldsUI(); }
+    _renderStartPresetList();
+    if (typeof _wvAutoSave === 'function') _wvAutoSave();
+  }
+  // 渲染预设卡片列表
+  function _renderStartPresetList() {
+    const box = document.getElementById('wv-startpreset-list');
+    if (!box) return;
+    const arr = Array.isArray(_startPresetsDraft) ? _startPresetsDraft : [];
+    const saveBtn = document.getElementById('wv-startpreset-save');
+    if (saveBtn) saveBtn.textContent = _editingPresetId ? '✓ 更新此开场' : '＋ 存为开场';
+    if (!arr.length) {
+      box.innerHTML = `<div style="font-size:11px;color:var(--text-secondary);padding:2px 0">还没有存开场。</div>`;
+      return;
+    }
+    box.innerHTML = arr.map(p => {
+      const editing = p.id === _editingPresetId;
+      const summary = (p.startPlot || p.startMessage || '').replace(/\s+/g, ' ').slice(0, 24);
+      return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;padding:8px 10px;border:1px solid ${editing ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:var(--bg-tertiary)">
+        <div onclick="Worldview._editStartPreset('${p.id}')" style="flex:1;min-width:0;cursor:pointer">
+          <div style="font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(p.label || '未命名')}${editing ? ' <span style="font-size:10px;color:var(--accent);font-weight:normal">编辑中</span>' : ''}</div>
+          <div style="font-size:11px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.startTime ? _esc(p.startTime) + ' · ' : ''}${_esc(summary) || '（无剧情/消息）'}</div>
+        </div>
+        <button type="button" onclick="Worldview._delStartPreset('${p.id}')" style="flex-shrink:0;width:26px;height:26px;border:1px solid var(--border);border-radius:6px;background:none;color:#e0464b;cursor:pointer;font-size:14px;line-height:1">×</button>
+      </div>`;
+    }).join('');
+  }
+  // HTML 转义小工具
+  function _esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '"');
+  }
+
   // ===== 历法系统编辑器 =====
 
 function _ensureCalendarSystem(w) {
@@ -7944,6 +8052,100 @@ async function openPhoneAppsEditor() {
     if (st) { st.textContent = '未设置'; st.style.color = ''; }
     UI.showToast('已清除模板', 1200);
   };
+
+  // 初始宠物状态模板：回显状态
+  const petTplStatus = document.getElementById('pa-cottage-pettpl-status');
+  if (petTplStatus) {
+    const pt = ct.initialPetTemplate;
+    if (pt && (Array.isArray(pt.numeric) || Array.isArray(pt.text))) {
+      const n = (pt.numeric || []).length, t = (pt.text || []).length;
+      petTplStatus.textContent = `已设置：${n} 个数值字段 + ${t} 个文本字段`;
+      petTplStatus.style.color = 'var(--accent)';
+    } else {
+      petTplStatus.textContent = '未设置（用默认字段）';
+      petTplStatus.style.color = '';
+    }
+  }
+  // 宠物模板按钮事件
+  const petTplCopyBtn = document.getElementById('pa-cottage-pettpl-copy');
+  const petTplClearBtn = document.getElementById('pa-cottage-pettpl-clear');
+  if (petTplCopyBtn) petTplCopyBtn.onclick = async () => {
+    try {
+      if (typeof Phone === 'undefined' || !Phone._getPhoneData) { UI.showToast('手机模块未加载', 1500); return; }
+      const pd = await Phone._getPhoneData();
+      const tpl = pd?.petStatusTemplate;
+      if (!tpl || !Array.isArray(tpl.numeric) || !Array.isArray(tpl.text) || (tpl.numeric.length === 0 && tpl.text.length === 0)) {
+        UI.showToast('当前对话还没有配置宠物状态模板', 2500); return;
+      }
+      // 深拷贝，去掉 id（预热时会重新生成）
+      const clean = {
+        numeric: tpl.numeric.map(f => ({ label: f.label, max: f.max || 100, desc: f.desc || '' })),
+        text: tpl.text.map(f => ({ label: f.label, desc: f.desc || '' })),
+      };
+      const ww = await _getEditingWV();
+      if (!ww) return;
+      ww.phoneApps = ww.phoneApps || {};
+      ww.phoneApps.cottage = ww.phoneApps.cottage || {};
+      ww.phoneApps.cottage.initialPetTemplate = clean;
+      await _saveEditingWV(ww);
+      const st = document.getElementById('pa-cottage-pettpl-status');
+      if (st) { st.textContent = `已设置：${clean.numeric.length} 个数值字段 + ${clean.text.length} 个文本字段`; st.style.color = 'var(--accent)'; }
+      UI.showToast('已从当前对话复制宠物模板', 1600);
+    } catch(e) { UI.showToast('复制失败：' + (e.message || e), 2500); }
+  };
+  if (petTplClearBtn) petTplClearBtn.onclick = async () => {
+    const ww = await _getEditingWV();
+    if (!ww) return;
+    if (ww.phoneApps?.cottage) { delete ww.phoneApps.cottage.initialPetTemplate; await _saveEditingWV(ww); }
+    const st = document.getElementById('pa-cottage-pettpl-status');
+    if (st) { st.textContent = '未设置（用默认字段）'; st.style.color = ''; }
+    UI.showToast('已清除宠物模板', 1200);
+  };
+
+  // 论坛默认分区编辑器（加减字段：名字 + 描述）
+  const forumCatsList = document.getElementById('pa-forum-cats-list');
+  const forumCatAddBtn = document.getElementById('pa-forum-cat-add');
+  if (forumCatsList) {
+    // 初始数据：从世界观 forum.defaultCategories 读，兼容字符串数组
+    const rawCats = (fm && Array.isArray(fm.defaultCategories)) ? fm.defaultCategories : [];
+    const data = [];
+    rawCats.forEach(c => {
+      if (typeof c === 'string') { const n = c.trim(); if (n) data.push({ name: n, desc: '' }); }
+      else if (c && typeof c === 'object' && c.name) data.push({ name: String(c.name).trim(), desc: String(c.desc || '') });
+    });
+    forumCatsList._catData = data;
+    const renderRows = () => {
+      const arr = forumCatsList._catData;
+      if (!arr.length) {
+        forumCatsList.innerHTML = `<div style="font-size:11px;color:var(--text-secondary);padding:4px 0">未设置，将用系统默认分区。点下方添加。</div>`;
+        return;
+      }
+      forumCatsList.innerHTML = arr.map((c, i) => `
+        <div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:6px">
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <input type="text" class="pa-forum-cat-name" data-idx="${i}" value="${(c.name || '').replace(/"/g, '"')}" maxlength="12" placeholder="分区名（如 游戏）" style="width:100%;padding:5px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px">
+            <input type="text" class="pa-forum-cat-desc" data-idx="${i}" value="${(c.desc || '').replace(/"/g, '"')}" placeholder="分区说明（选填，告诉 AI 这个分区发什么）" style="width:100%;padding:5px 8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px">
+          </div>
+          <button type="button" class="pa-forum-cat-del" data-idx="${i}" style="flex-shrink:0;width:28px;height:28px;border:1px solid var(--border);border-radius:6px;background:none;color:#e0464b;cursor:pointer;font-size:15px;line-height:1">×</button>
+        </div>`).join('');
+      // 绑定：输入实时写回数据，删除按钮
+      forumCatsList.querySelectorAll('.pa-forum-cat-name').forEach(el => {
+        el.oninput = () => { const idx = +el.dataset.idx; if (arr[idx]) arr[idx].name = el.value; };
+      });
+      forumCatsList.querySelectorAll('.pa-forum-cat-desc').forEach(el => {
+        el.oninput = () => { const idx = +el.dataset.idx; if (arr[idx]) arr[idx].desc = el.value; };
+      });
+      forumCatsList.querySelectorAll('.pa-forum-cat-del').forEach(el => {
+        el.onclick = () => { const idx = +el.dataset.idx; arr.splice(idx, 1); renderRows(); };
+      });
+    };
+    renderRows();
+    if (forumCatAddBtn) forumCatAddBtn.onclick = () => {
+      if (forumCatsList._catData.length >= 20) { UI.showToast('分区最多 20 个', 1500); return; }
+      forumCatsList._catData.push({ name: '', desc: '' });
+      renderRows();
+    };
+  }
 }
 
 function _buildPhoneAppsEditorHTML(w) {
@@ -8071,6 +8273,11 @@ function _buildPhoneAppsEditorHTML(w) {
       <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">载体描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI内容画风、用户群、常见话题）</span></span>
       <textarea id="pa-forum-desc" class="auto-resize-textarea" rows="3" placeholder="例如：修真界主流信息载体，用户多为各派弟子，常见丹方/剑修吐槽/门派八卦" style="width:100%;padding:8px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:60px"></textarea>
     </label>
+    <div style="margin-top:12px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">默认分区 <span style="font-size:11px;color:var(--text-secondary)">（新对话论坛的初始分区。留空用系统默认：热门/情感/校园/都市/娱乐。描述会告诉 AI 该分区发什么）</span></span>
+      <div id="pa-forum-cats-list"></div>
+      <button type="button" id="pa-forum-cat-add" style="margin-top:6px;padding:6px 12px;font-size:12px;border:1px dashed var(--border);border-radius:6px;background:none;color:var(--accent);cursor:pointer;width:100%">＋ 添加分区</button>
+    </div>
   </div>
 
   <!-- 电台 -->
@@ -8213,6 +8420,15 @@ function _buildPhoneAppsEditorHTML(w) {
         <button type="button" id="pa-cottage-template-clear" style="padding:6px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:none;color:#e0464b;cursor:pointer">清除</button>
       </div>
     </div>
+    <div style="margin-top:14px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">初始宠物状态模板 <span style="font-size:11px;color:var(--text-secondary)">（玩家养宠物时，状态栏的字段结构。留空用系统默认 6 项）</span></span>
+      <div id="pa-cottage-pettpl-status" style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">未设置（用默认字段）</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" id="pa-cottage-pettpl-copy" style="padding:6px 12px;font-size:12px;border:1px solid var(--accent);border-radius:6px;background:none;color:var(--accent);cursor:pointer">从当前对话复制</button>
+        <button type="button" id="pa-cottage-pettpl-clear" style="padding:6px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:none;color:#e0464b;cursor:pointer">清除</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;line-height:1.5">先在某个对话的小屋→宠物→状态模板里配好字段，再回来点「从当前对话复制」。导出世界观分享给别人时会一起带走。</div>
+    </div>
     ${_curBlock('cottage', (_pa0.cottage || {}).currencyIds)}
 
   <!-- 衣橱 -->
@@ -8263,6 +8479,24 @@ async function closePhoneAppsEditor() {
     w.phoneApps.shop.deliveryUnit = getVal('pa-shop-deliveryUnit') || 'day';
     w.phoneApps.forum.name = getVal('pa-forum-name');
     w.phoneApps.forum.desc = getVal('pa-forum-desc');
+    // 默认分区（加减字段编辑器）：从容器 _catData 收集，过滤空名字，去重，限 20 个
+    {
+      const listEl = document.getElementById('pa-forum-cats-list');
+      const arr = (listEl && Array.isArray(listEl._catData)) ? listEl._catData : null;
+      if (arr) {
+        const seen = new Set();
+        const cats = [];
+        arr.forEach(c => {
+          const n = String(c && c.name || '').trim().slice(0, 12);
+          if (!n || seen.has(n)) return;
+          seen.add(n);
+          cats.push({ name: n, desc: String(c.desc || '').trim() });
+        });
+        // 有分区才存；清空则删掉配置（回落系统默认）
+        if (cats.length) w.phoneApps.forum.defaultCategories = cats.slice(0, 20);
+        else delete w.phoneApps.forum.defaultCategories;
+      }
+    }
     // 地图（name + desc；desc 写交通工具，注入地图搜索）
     w.phoneApps.map = w.phoneApps.map || {};
     w.phoneApps.map.name = getVal('pa-map-name');
@@ -9532,6 +9766,7 @@ _radioAddTag, _radioEditTag, _radioDeleteTag, _radioOpenTagEditor, _radioBackToC
     _calSetSeasonName, _calSetSeasonMonths, _calSetSeasonWeather, _calAddSeason, _calRemoveSeason, _calReset,
     _calSetPeriodName, _calSetPeriodHour, _calSetPeriodDesc, _calAddPeriod, _calRemovePeriod,
     _onStartTimeChange,
+    _saveStartPreset, _editStartPreset, _delStartPreset, _renderStartPresetList,
     _tryExitEdit,
     _getEditingWV, _saveEditingWV, _renderGlobalNpcs: _renderGlobalNpcs, _renderRegions: _renderRegions, _renderFactionCards: _renderFactionCards, _renderNPCCards: _renderNPCCards, _fillStartTimeFields,
 editLorebookDescription,

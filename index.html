@@ -10,9 +10,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=174">
-<link rel="stylesheet" href="css/phone.css?v1=414">
-<link rel="stylesheet" href="css/phone-fudge.css?v=57">
+<link rel="stylesheet" href="css/style.css?v=175">
+<link rel="stylesheet" href="css/phone.css?v1=415">
+<link rel="stylesheet" href="css/phone-fudge.css?v=65">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260707">
 </head>
@@ -3259,6 +3259,24 @@
           </span>
         </label>
         <div id="fab-icons-list" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(78px, 1fr));gap:16px"></div>
+        <!-- 我的头像框（仅私聊/群聊中「我」的头像生效） -->
+        <h3 style="color:var(--accent);font-size:14px;margin:26px 0 10px">我的头像框</h3>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6">给私聊、群聊里<b>我自己</b>的头像套一个装饰框，全局生效。建议上传中间透明的 PNG（透明部分会露出头像）。仅在聊天气泡的头像上显示。</div>
+        <div style="display:flex;align-items:center;gap:16px">
+          <div id="my-avatar-frame-preview" style="width:64px;height:64px;flex:none;position:relative;display:flex;align-items:center;justify-content:center"></div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button type="button" onclick="Phone._pickMyAvatarFrame()" style="padding:8px 14px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">上传头像框</button>
+            <button type="button" onclick="Phone._resetMyAvatarFrame()" style="padding:8px 14px;background:var(--bg-tertiary);color:var(--text-secondary);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">清除</button>
+          </div>
+        </div>
+        <div style="margin-top:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--text);margin-bottom:8px">
+            <span>头像框大小</span>
+            <span id="my-avatar-frame-scale-val" style="color:var(--text-secondary)">150%</span>
+          </div>
+          <input type="range" id="my-avatar-frame-scale" min="100" max="220" step="5" value="150" oninput="Phone._onMyAvatarFrameScale(this.value)" style="width:100%">
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">100% 贴合头像，数值越大框向外扩得越多</div>
+        </div>
       </div>
 
       <!-- Tab: 表情包管理 -->
@@ -3425,7 +3443,16 @@
 <label>保留轮数<input type="number" id="wv-start-plot-rounds" value="5" min="1" max="99" style="width:80px"></label>
 <label>开场第一条消息 <span style="font-size:11px;color:var(--text-secondary)">（新建对话时自动显示为AI气泡）</span><div style="position:relative;width:100%"><textarea id="wv-start-message" class="auto-resize-textarea" rows="6" placeholder="开启对话后自动发给用户的第一条消息..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-start-message','开场第一条消息')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
 <button type="button" onclick="WvGenerator.inlineOpening()" class="ai-action-btn" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>AI 生成开场</button>
-            
+
+            <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">多开场预设 <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（可选）</span></div>
+              <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:10px">给上面这套开场起个名，点「存为开场」存成一张卡片，然后清空上面接着填下一套。新建对话时若有多套（含上面当前这套），会让玩家选一套或随机。点已存的卡片可填回上面编辑。</div>
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+                <input type="text" id="wv-startpreset-name" placeholder="开场名字（如：校园线 / 酒馆偶遇）" maxlength="20" style="flex:1;min-width:0;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
+                <button type="button" id="wv-startpreset-save" onclick="Worldview._saveStartPreset()" style="flex-shrink:0;padding:8px 14px;border:1px solid var(--accent);border-radius:8px;background:none;color:var(--accent);cursor:pointer;font-size:12px;white-space:nowrap">＋ 存为开场</button>
+              </div>
+              <div id="wv-startpreset-list"></div>
+            </div>
             </div>
           </form>
         </div>
@@ -4436,20 +4463,20 @@ const GameLog = (() => {
 <script src="js/tools.js?v=11"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=67"></script>
-<script src="js/worldview.js?v=114"></script>
+<script src="js/worldview.js?v=117"></script>
 <script src="js/npc_importer.js?v=2"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
 <script src="js/conv_gameplay.js?v=15"></script>
 <script src="js/wv-generator.js?v=33"></script>
 <script src="js/single_card.js?v=18"></script>
-<script src="js/attached-chars.js?v=2"></script>
+<script src="js/attached-chars.js?v=3"></script>
 <script src="js/single_mode.js?v=7"></script>
 <script src="js/character.js?v=18"></script>
-<script src="js/prompts.js?v=6"></script>
-<script src="js/conversations.js?v=18"></script>
+<script src="js/prompts.js?v=7"></script>
+<script src="js/conversations.js?v=20"></script>
 <script src="js/summary.js?v=3"></script>
-<script src="js/chat.js?v=134"></script>
+<script src="js/chat.js?v=143"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4463,12 +4490,12 @@ const GameLog = (() => {
 <script src="js/status_bar.js?v=39"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/watch-sfx.js?v=4"></script>
-<script src="js/worldvoice.js?v=24"></script>
+<script src="js/worldvoice.js?v=25"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
 <script src="js/app_icons.js?v=7"></script>
-<script src="js/phone.js?v1=1303"></script>
+<script src="js/phone.js?v1=1322"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
@@ -4489,7 +4516,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=26"></script>
-<script src="js/app.js?v=169"></script>
+<script src="js/app.js?v=171"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

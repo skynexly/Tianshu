@@ -340,12 +340,17 @@ const userBan = banNames.length > 0
 let _catHint = '';
 try {
   let _cat = forcedCat;
+  let _catDesc = '';
+  const _pdForCat = (typeof Phone !== 'undefined' && Phone._getPhoneData) ? await Phone._getPhoneData() : null;
   if (_cat === undefined || _cat === null) {
-    const _pd = (typeof Phone !== 'undefined' && Phone._getPhoneData) ? await Phone._getPhoneData() : null;
-    _cat = _pd && _pd.forumActiveCategory;
+    _cat = _pdForCat && _pdForCat.forumActiveCategory;
   }
+  try { if (_pdForCat && _cat && typeof Phone !== 'undefined' && Phone._forumCatDesc) _catDesc = Phone._forumCatDesc(_pdForCat, _cat) || ''; } catch(_) {}
   if (_cat && _cat !== '热门') {
     _catHint = `\n\n【当前分区】用户正在浏览"${_cat}"分区，本次生成的帖子需要严格符合"${_cat}"分区的基调和话题范围。`;
+  }
+  if (_catDesc) {
+    _catHint += `\n【分区说明】"${_cat}"分区的定位：${_catDesc}。生成时请贴合这个定位。`;
   }
 } catch (_) {}
 const systemPrompt = `你是一个"${mediaType}"内容生成器。根据提供的世界观和当前剧情，生成${mediaType}上的帖子/动态。${mediaBrief}${userBan}${_catHint}

@@ -54,6 +54,7 @@ window.AttachedChars = (function() {
             name: card.name || '未命名',
             avatar: card.avatar || '',
             detail: card.detail || '',
+            drawDesc: (card.drawDesc || card.drawPrompt || '').trim(),
           });
         } else if (e.type === 'npc') {
           const wvId = e.sourceWvId;
@@ -83,6 +84,7 @@ window.AttachedChars = (function() {
             avatar: npc.avatar || '',
             detail: npc.detail || '',
             aliases: npc.aliases || '',
+            drawDesc: (npc.drawDesc || npc.drawPrompt || '').trim(),
           });
         }
       } catch(_) {}

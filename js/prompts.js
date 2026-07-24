@@ -341,6 +341,14 @@ const Prompts = (() => {
     if (filteredList.length === 0) {
       html = '<p style="color:var(--text-secondary);text-align:center;padding:20px">暂无提示词</p>';
     } else {
+      // 顶部「全开 / 全关」快捷行（作用于当前分组+搜索筛选出的提示词），管理模式下隐藏（那时顶部走批量删除）
+      if (!promptManageMode) {
+        html += `
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <button onclick="Prompts.toggleGroupAll(true)" style="flex:1;padding:7px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;cursor:pointer">全部开启</button>
+            <button onclick="Prompts.toggleGroupAll(false)" style="flex:1;padding:7px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;cursor:pointer">全部关闭</button>
+          </div>`;
+      }
       for (const p of filteredList) {
         const posLabel = p.position === 'system_top'
           ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> 顶部'
@@ -375,6 +383,18 @@ const Prompts = (() => {
 
     container.innerHTML = html;
     if (promptManageMode) _updatePromptSelectAllIcon();
+  }
+
+  // 主设置：把当前分组+搜索筛选出的提示词全部开启/关闭
+  async function toggleGroupAll(enable) {
+    const filtered = await _getFilteredPrompts();
+    if (!filtered.length) return;
+    const ids = new Set(filtered.map(p => p.id));
+    const list = await getAll();
+    list.forEach(p => { if (ids.has(p.id)) p.enabled = !!enable; });
+    await saveAll(list);
+    await render();
+    UI.showToast(enable ? `已开启 ${ids.size} 条` : `已关闭 ${ids.size} 条`, 1500);
   }
 
   function togglePromptSelect(id) {
@@ -538,7 +558,20 @@ const Prompts = (() => {
 
     container.innerHTML = `
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;flex-shrink:0">${tabsHtml}</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-shrink:0">
+        <button onclick="Prompts._overrideGroupAll(true)" style="flex:1;padding:6px;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-size:12px;cursor:pointer">全部开启</button>
+        <button onclick="Prompts._overrideGroupAll(false)" style="flex:1;padding:6px;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-size:12px;cursor:pointer">全部关闭</button>
+      </div>
       <div style="display:flex;flex-direction:column;gap:8px">${listHtml}</div>`;
+  }
+
+  // 对话覆盖弹窗：把当前分组的提示词在本对话内全部开启/关闭（只改临时覆盖态，保存时才落库）
+  async function _overrideGroupAll(enable) {
+    const list = await getAll();
+    const filtered = _overrideGroup === '全部' ? list : list.filter(p => p.group === _overrideGroup);
+    if (!filtered.length) return;
+    filtered.forEach(p => { _overrideTemp[p.id] = !!enable; });
+    _renderOverrideList(list);
   }
 
   let _overrideGroup = '全部';
@@ -770,7 +803,7 @@ const Prompts = (() => {
 
   return { getAll, add, edit, saveEdit, closeEdit, remove, toggle, buildInjections, render, getGroups, switchGroup, search,
     togglePromptSelect, togglePromptManageMode, exitPromptManageMode, batchDeletePrompts,
-    togglePromptSelectAll,
+    togglePromptSelectAll, toggleGroupAll,
     _togglePositionDropdown, _selectPosition, _toggleRoleDropdown, _selectRole, _toggleScope, importPreset, exportPreset, toggleMenu,
-    openConvOverrideModal, saveConvOverrides, resetConvOverrides, closeConvOverrideModal, _toggleOverride, _switchOverrideGroup, _editFromOverride };
+    openConvOverrideModal, saveConvOverrides, resetConvOverrides, closeConvOverrideModal, _toggleOverride, _switchOverrideGroup, _overrideGroupAll, _editFromOverride };
 })();

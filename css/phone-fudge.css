@@ -662,6 +662,24 @@
   padding: 12px 16px !important;
   background: var(--bg-secondary-solid, var(--bg-secondary)) !important;
 }
+/* 编辑/添加宠物页：页面铺深底，框外的标签/说明文字反转为背景色（否则同色隐形）。
+   输入框本身是白底深字，不反转，故 input/textarea 的文字色单独恢复。 */
+.phone-shell.phone-theme-fudge .phone-pet-create-page,
+.phone-shell.phone-theme-fudge .phone-pet-create-page label,
+.phone-shell.phone-theme-fudge .phone-pet-create-page span,
+.phone-shell.phone-theme-fudge .phone-pet-create-page div {
+  color: var(--bg) !important;
+}
+/* 图片区按钮（选择图片/AI生成/清除）：深底上反色文字 + 背景色描边，AI 生成保留强调色 */
+.phone-shell.phone-theme-fudge .phone-pet-create-page #pet-image-upload,
+.phone-shell.phone-theme-fudge .phone-pet-create-page #pet-image-clear {
+  color: var(--bg) !important;
+  border-color: color-mix(in srgb, var(--bg) 45%, transparent) !important;
+}
+.phone-shell.phone-theme-fudge .phone-pet-create-page input,
+.phone-shell.phone-theme-fudge .phone-pet-create-page textarea {
+  color: var(--text) !important;
+}
 /* 保存 / 收藏 / 分享 / 删除 按钮：胶囊形 + 去边框 */
 .phone-shell.phone-theme-fudge .phone-memo-save-btn,
 .phone-shell.phone-theme-fudge .phone-memo-action-btn {
@@ -803,6 +821,19 @@
   border: none !important;
   border-radius: 18px;
   padding: 14px;
+}
+/* 宠物列表卡：fudge 下用背景色（与手机整体底色一致），去边框大圆角 */
+.phone-shell.phone-theme-fudge .cottage-pet-card {
+  background: var(--bg) !important;
+  border: none !important;
+  border-radius: 18px;
+}
+/* fudge 是实色主题：宠物列表卡即使有壁纸也保持实色，压过 has-wallpaper 通配半透明规则
+   （宠物卡内联 background:var(--bg-tertiary)，会被 has-wallpaper 通配命中变半透明，这里用属性选择器提特异性覆盖回实色） */
+.phone-shell.phone-theme-fudge.has-wallpaper .cottage-pet-card[style*="background:var(--bg-tertiary)"],
+.phone-shell.phone-theme-fudge.has-wallpaper .cottage-pet-card[style*="background: var(--bg-tertiary)"] {
+  background-image: none !important;
+  background-color: var(--bg) !important;
 }
 /* 小屋/衣橱商城：搜索框 + 搜索按钮去边框 + 胶囊形 */
 .phone-shell.phone-theme-fudge .phone-cottage-shop .phone-map-search-input-wrap {
