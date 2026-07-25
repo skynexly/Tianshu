@@ -44,24 +44,56 @@ const WorldVoice = (() => {
   async function _getNpcListForForum() {
     try {
       const wv = await Worldview.getCurrent();
-      const npcs = [];
-      const _npcEntry = (n) => {
+      const seen = new Set();      // 去重键：本名
+      const mustNpcs = [];         // 必发池：常驻(globalNpcs)/挂载角色/单人卡主角，全量保留不参与抽样
+      const poolNpcs = [];         // 随机池：地区/势力 NPC + 世界书 NPC，超额随机抽样
+      const _npcLine = (n) => {
         if (!n || !n.name) return null;
         const username = (n.onlineName || '').trim() || n.name;
         let s = `- ${username}`;
         if (n.onlineName && n.name !== n.onlineName) s += `（即${n.name}）`;
         return s;
       };
-      // 世界观 NPC
-      if (wv && wv.regions) {
+      const _push = (arr, n) => {
+        if (!n || !n.name) return;
+        const key = String(n.name).trim();
+        if (!key || seen.has(key)) return;
+        const line = _npcLine(n);
+        if (!line) return;
+        seen.add(key);
+        arr.push(line);
+      };
+
+      // ===== 必发池（不占抽样额度，永远在场）=====
+      // 全图常驻 NPC（globalNpcs，不归属任何地区/势力）
+      if (wv && Array.isArray(wv.globalNpcs)) {
+        for (const n of wv.globalNpcs) _push(mustNpcs, n);
+      }
+      // 对话级挂载角色（拉郎/客串/常驻）
+      try {
+        if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+          const attached = await AttachedChars.resolveAll();
+          for (const c of (attached || [])) _push(mustNpcs, c);
+        }
+      } catch(_) {}
+      // 单人卡主角
+      try {
+        const convId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
+        const conv = convId ? Conversations.getList().find(c => c.id === convId) : null;
+        if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+          const card = await DB.get('singleCards', conv.singleCharId);
+          _push(mustNpcs, card);
+        }
+      } catch(_) {}
+
+      // ===== 随机池（超过上限时随机抽样）=====
+      // 世界观地区/势力 NPC
+      if (wv && Array.isArray(wv.regions)) {
         for (const region of wv.regions) {
           if (!region.factions) continue;
           for (const faction of region.factions) {
             if (!faction.npcs) continue;
-            for (const n of faction.npcs) {
-              const e = _npcEntry(n);
-              if (e) npcs.push(e);
-            }
+            for (const n of faction.npcs) _push(poolNpcs, n);
           }
         }
       }
@@ -78,26 +110,26 @@ const WorldVoice = (() => {
           const wv2 = wvId ? await DB.get('worldviews', wvId) : null;
           const lbs = await Lorebook.collectForChat({ conv, card, wv: wv2 });
           for (const lb of (lbs || [])) {
-            (lb.globalNpcs || []).forEach(n => {
-              if (!n || !n.name) return;
-              if (npcs.some(x => x.includes(`本名：${n.name}`))) return;
-              const e = _npcEntry(n); if (e) npcs.push(e);
-            });
+            (lb.globalNpcs || []).forEach(n => _push(poolNpcs, n));
           }
         }
       } catch(_) {}
-      // 单人卡（作为角色也可以出现在论坛）
-      try {
-        const convId = (typeof Conversations !== 'undefined') ? Conversations.getCurrent() : null;
-        const conv = convId ? Conversations.getList().find(c => c.id === convId) : null;
-        if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
-          const card = await DB.get('singleCards', conv.singleCharId);
-          if (card && card.name && !npcs.some(x => x.includes(`本名：${card.name}`))) {
-            const e = _npcEntry(card); if (e) npcs.push(e);
-          }
+
+      // ===== 合并：必发全进，随机池抽到总量 20 为止 =====
+      const LIMIT = 20;
+      let finalNpcs = mustNpcs.slice();
+      const remain = Math.max(0, LIMIT - finalNpcs.length);
+      if (remain > 0 && poolNpcs.length > 0) {
+        // Fisher-Yates 洗牌后取前 remain 个
+        const pool = poolNpcs.slice();
+        for (let i = pool.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const t = pool[i]; pool[i] = pool[j]; pool[j] = t;
         }
-      } catch(_) {}
-      if (npcs.length === 0) return '';
+        finalNpcs = finalNpcs.concat(pool.slice(0, remain));
+      }
+      if (finalNpcs.length === 0) return '';
+
       // 获取玩家名，在列表末尾提醒AI不要用玩家名
       let playerNote = '';
       try {
@@ -105,7 +137,7 @@ const WorldVoice = (() => {
         const pNames = [name, onlineName].filter(Boolean);
         if (pNames.length > 0) playerNote = `\n（注意："${pNames.join('"和"')}"是玩家本人，不在此列表中，不能作为发帖人或评论者）`;
       } catch(_) {}
-      return `\n\n## 有设定的角色（仅1-2条可以由以下角色发帖/评论，其余必须是路人。username 直接填"-"后面的名字）${playerNote}\n${npcs.join('\n')}`;
+      return `\n\n## 有设定的角色（仅1-2条可以由以下角色发帖/评论，其余必须是路人。username 直接填"-"后面的名字）${playerNote}\n${finalNpcs.join('\n')}`;
     } catch(_) { return ''; }
   }
 
@@ -338,6 +370,7 @@ const userBan = banNames.length > 0
 // 论坛分区倾向：非"热门"分区时，让本次生成严格贴合该分区基调
 // 分区优先用调用方显式传入的 forcedCat（消除内部异步读 pd 的时序/引用风险），回退才读 pd
 let _catHint = '';
+let _catStrictLine = '';
 try {
   let _cat = forcedCat;
   let _catDesc = '';
@@ -347,16 +380,14 @@ try {
   }
   try { if (_pdForCat && _cat && typeof Phone !== 'undefined' && Phone._forumCatDesc) _catDesc = Phone._forumCatDesc(_pdForCat, _cat) || ''; } catch(_) {}
   if (_cat && _cat !== '热门') {
-    _catHint = `\n\n【当前分区】用户正在浏览"${_cat}"分区，本次生成的帖子需要严格符合"${_cat}"分区的基调和话题范围。`;
-  }
-  if (_catDesc) {
-    _catHint += `\n【分区说明】"${_cat}"分区的定位：${_catDesc}。生成时请贴合这个定位。`;
+    _catHint = `\n\n========\n【本次分区（最高优先级，必须严格遵守）】\n用户当前正在浏览"${_cat}"分区。本次生成的【每一条】帖子都必须紧扣"${_cat}"这个主题${_catDesc ? `——该分区的定位是：${_catDesc}` : ''}。\n硬性要求：\n- 所有帖子的选题、标题、内容都要落在"${_cat}"的话题范围内，不允许混入其他分区的题材（例如"${_cat}"分区里不要出现明显属于其他分区的帖子）。\n- 分区是本次生成的第一筛选原则，优先级高于"日常/主线比例"等其他要求：先保证切题，再在切题的前提下安排日常与主线的比例。\n- 如果某个选题不属于"${_cat}"分区，就换一个属于该分区的选题，不要硬塞。\n========`;
+    _catStrictLine = `\n※ 本次是"${_cat}"分区，第 2、3 条要求里的所有帖子都必须先满足"属于${_cat}分区"这个前提，再谈日常/主线的比例。`;
   }
 } catch (_) {}
 const systemPrompt = `你是一个"${mediaType}"内容生成器。根据提供的世界观和当前剧情，生成${mediaType}上的帖子/动态。${mediaBrief}${userBan}${_catHint}
 
 要求：
-1. 生成8-10条帖子/动态预览
+1. 生成8-10条帖子/动态预览${_catStrictLine}
 2. 80%的内容与世界观有关但与主线剧情无直接关系（日常生态、社会话题、生活琐事；下方若提供了可呼应的电台/小说素材，那条呼应帖也算在这 80% 日常里）
 3. 20%的内容与主线正在发生的剧情有关联（但是从路人/旁观者视角，不会知道具体细节），只能涉及已经发生过的事件，不能透露或暗示尚未发生的剧情
 4. 绝大多数帖子的发帖人是虚构的路人用户（非NPC），用户名要符合世界观和${mediaType}的风格

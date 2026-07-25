@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css?v=175">
-<link rel="stylesheet" href="css/phone.css?v1=415">
+<link rel="stylesheet" href="css/phone.css?v1=416">
 <link rel="stylesheet" href="css/phone-fudge.css?v=65">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260707">
@@ -616,6 +616,16 @@
                   </label>
         <label>设定<div style="position:relative;width:100%"><textarea id="char-background" class="auto-resize-textarea" rows="8" placeholder="外貌、性格、背景等角色设定" style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('char-background','角色设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
         <label>生图描述（画头像/立绘时用，可选）<textarea id="char-drawPrompt" class="auto-resize-textarea" rows="3" placeholder="只写外观：发色瞳色、身材、常见穿着、画风等。填了生成头像/衣橱立绘时只用这段（+名字），不填则退回用设定。"></textarea></label>
+        <label>锁脸参考图（可选）
+          <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+            <div id="char-faceref-preview" onclick="Character.pickFaceRef()" style="width:56px;height:56px;border-radius:8px;border:1px dashed var(--border);background:var(--bg-tertiary);background-size:cover;background-position:center;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:11px;text-align:center;line-height:1.2">上传<br>参考图</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:11px;color:var(--text-secondary);line-height:1.4">上传一张角色的「官方脸」，生图时会照着这张脸锁定五官发型（需生图模型支持图生图，如 gpt-image）。</div>
+              <button type="button" id="char-faceref-remove" onclick="Character.removeFaceRef()" style="display:none;margin-top:4px;background:none;border:none;color:var(--danger,#e66);font-size:12px;cursor:pointer;padding:2px 0">移除参考图</button>
+            </div>
+          </div>
+          <input type="file" id="char-faceref-input" accept="image/*" onchange="Character.onFaceRefPicked(this)" style="display:none">
+        </label>
         <label>生日<div style="display:flex;gap:8px;align-items:flex-start">
           <div style="position:relative;flex:1">
             <input type="hidden" id="char-birth-month" value="">
@@ -2423,6 +2433,18 @@
         <span class="form-label">生图描述 <span style="font-size:11px;opacity:0.7;font-weight:normal">（画头像/立绘时用，可选）</span></span>
         <textarea id="sc-panel-drawdesc" placeholder="只写外观：发色瞳色、身材、常见穿着、画风等。填了生成头像时只用这段（+名字），不填则退回用详细设定。" rows="3" style="line-height:1.6;resize:vertical"></textarea>
       </div>
+      <!-- 锁脸参考图 -->
+      <div class="form-group">
+        <span class="form-label">锁脸参考图 <span style="font-size:11px;opacity:0.7;font-weight:normal">（可选）</span></span>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          <div id="sc-panel-faceref-preview" onclick="SingleCard.pickFaceRefPanel()" style="width:56px;height:56px;border-radius:8px;border:1px dashed var(--border);background:var(--bg-tertiary);background-size:cover;background-position:center;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:11px;text-align:center;line-height:1.2">上传<br>参考图</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:11px;color:var(--text-secondary);line-height:1.4">上传角色的「官方脸」，生图时照着锁定五官发型（需生图模型支持图生图，如 gpt-image）。</div>
+            <button type="button" id="sc-panel-faceref-remove" onclick="SingleCard.removeFaceRefPanel()" style="display:none;margin-top:4px;background:none;border:none;color:var(--danger,#e66);font-size:12px;cursor:pointer;padding:2px 0">移除参考图</button>
+          </div>
+        </div>
+        <input type="file" id="sc-panel-faceref-input" accept="image/*" onchange="SingleCard.onFaceRefPickedPanel(this)" style="display:none">
+      </div>
       <!-- 开场白 -->
       <div class="form-group">
         <span class="form-label">开场白 <span style="font-size:11px;opacity:0.7;font-weight:normal">（新建对话时角色的第一句话）</span></span>
@@ -3216,6 +3238,14 @@
       <div id="st-bubble-css" class="settings-tab-content" style="display:none">
         <h3 style="color:var(--accent);font-size:14px;margin-bottom:12px">自定义气泡 CSS</h3>
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.7">每个框预填了该气泡的默认样式，直接改就行——只写 CSS 声明（如 <code>background:#222;border-radius:16px</code>），不用写选择器和大括号。手机气泡会自动加 !important。<br>不会写？点「复制给 AI 的指令」，连同框里的默认样式一起发给 AI（DeepSeek 等）让它改，粘回来保存即可。</div>
+        <!-- 预设：存多套气泡样式，点一下切换 -->
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-size:12px;color:var(--text-secondary);font-weight:600">预设</span>
+            <button onclick="Theme.saveCurrentBubbleSlot()" style="font-size:11px;padding:4px 12px;background:none;border:1px solid var(--accent);border-radius:12px;color:var(--accent);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>存为预设</button>
+          </div>
+          <div id="bubble-slots-bar" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>
         <button onclick="Theme.copyThemeVars()" style="width:100%;padding:10px 0;font-size:13px;background:none;border:1px dashed var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg> 复制给 AI 的指令</button>
         <div id="bubble-css-list" style="display:flex;flex-direction:column;gap:16px"></div>
         <div style="display:flex;gap:10px;margin-top:20px">
@@ -3809,6 +3839,17 @@ NPC
 <label id="wv-npc-summary-label">简介（速查表用）<textarea id="wv-npc-summary" class="auto-resize-textarea" rows="3" placeholder="一句话简介"></textarea></label>
            <label>完整设定<div style="position:relative;width:100%"><textarea id="wv-npc-detail" class="auto-resize-textarea" rows="10" placeholder="角色详细设定..." style="padding-bottom:28px"></textarea><button type="button" onclick="Utils.openFullscreen('wv-npc-detail','完整设定')" style="position:absolute;bottom:10px;right:8px;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:2px;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></button></div></label>
  <label>生图描述（画头像/立绘时用）<textarea id="wv-npc-drawdesc" class="auto-resize-textarea" rows="3" placeholder="可选。只写外观：发色瞳色、身材、常见穿着、画风等。填了生成头像时只用这段（+名字），不填则退回用简介/完整设定。"></textarea></label>
+         <!-- 锁脸参考图 -->
+         <div class="form-group" style="margin-top:10px">
+           <span class="form-label">锁脸参考图 <span style="font-size:11px;opacity:0.7;font-weight:normal">（可选）</span></span>
+           <div style="display:flex;align-items:flex-start;gap:12px">
+             <div id="wv-npc-faceref-preview" onclick="Worldview._pickNpcFaceRef()" style="width:56px;height:56px;border-radius:8px;border:1px dashed var(--border);background:var(--bg-tertiary);background-size:cover;background-position:center;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:11px;text-align:center;line-height:1.2">上传<br>参考图</div>
+             <div style="flex:1;display:flex;flex-direction:column">
+               <button type="button" id="wv-npc-faceref-remove" onclick="Worldview._removeNpcFaceRef()" style="display:none;margin-top:4px;background:none;border:none;color:var(--danger,#e66);font-size:12px;cursor:pointer;padding:2px 0">移除参考图</button>
+             </div>
+           </div>
+           <input type="file" id="wv-npc-faceref-input" accept="image/*" onchange="Worldview._onNpcFaceRefPicked(this)" style="display:none">
+         </div>
  <button type="button" onclick="WvGenerator.inlineFillNpc()"
 <button type="button" onclick="WvGenerator.inlineFillNpc()" class="ai-action-btn" style="width:100%;padding:8px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>AI 填充本角色</button>
         </form>
@@ -4452,9 +4493,9 @@ const GameLog = (() => {
 </script>
 <script src="js/db.js?v=15"></script>
 <script src="js/stickers.js?v=7"></script>
-<script src="js/utils.js?v=24"></script>
+<script src="js/utils.js?v=28"></script>
 <script src="js/markdown.js?v=12"></script>
-<script src="js/api.js?v=5"></script>
+<script src="js/api.js?v=6"></script>
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
 <script src="js/mcp-client.js"></script>
@@ -4463,20 +4504,20 @@ const GameLog = (() => {
 <script src="js/tools.js?v=11"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=67"></script>
-<script src="js/worldview.js?v=117"></script>
+<script src="js/worldview.js?v=119"></script>
 <script src="js/npc_importer.js?v=2"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
 <script src="js/conv_gameplay.js?v=15"></script>
 <script src="js/wv-generator.js?v=33"></script>
-<script src="js/single_card.js?v=18"></script>
-<script src="js/attached-chars.js?v=3"></script>
+<script src="js/single_card.js?v=19"></script>
+<script src="js/attached-chars.js?v=4"></script>
 <script src="js/single_mode.js?v=7"></script>
-<script src="js/character.js?v=18"></script>
-<script src="js/prompts.js?v=7"></script>
+<script src="js/character.js?v=20"></script>
+<script src="js/prompts.js?v=10"></script>
 <script src="js/conversations.js?v=20"></script>
 <script src="js/summary.js?v=3"></script>
-<script src="js/chat.js?v=143"></script>
+<script src="js/chat.js?v=151"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4484,31 +4525,31 @@ const GameLog = (() => {
 <script src="js/branch.js"></script>
 <script src="js/settings.js?v=15"></script>
 <script src="js/gaiden.js?v=8"></script>
-<script src="js/backstage.js?v=26"></script>
+<script src="js/backstage.js?v=31"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
 <script src="js/status_bar.js?v=39"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/watch-sfx.js?v=4"></script>
-<script src="js/worldvoice.js?v=25"></script>
+<script src="js/worldvoice.js?v=26"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
 <script src="js/app_icons.js?v=7"></script>
-<script src="js/phone.js?v1=1322"></script>
+<script src="js/phone.js?v1=1334"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
 <script src="js/ui.js?v=18"></script>
-<script src="js/data-mgr.js?v=24"></script>
+<script src="js/data-mgr.js?v=25"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/github-backup.js?v=4"></script>
 <script src="js/colorpicker.js?v=1"></script>
 <script src="data/tianshucheng-bg.js"></script>
   <script src="data/tutorial-script.js?v=2"></script>
-  <script src="js/theme.js?v=102"></script>
+  <script src="js/theme.js?v=103"></script>
   <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js?v=2"></script>
 <script src="data/builtin-heartsim.js?v=2"></script>
@@ -4516,7 +4557,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=26"></script>
-<script src="js/app.js?v=171"></script>
+<script src="js/app.js?v=172"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">

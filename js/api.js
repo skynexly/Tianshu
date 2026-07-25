@@ -590,6 +590,121 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
   }
 
   /**
+   * 图生图 / 锁脸（OpenAI 兼容 /v1/images/edits）
+   * @param {string} prompt 文字提示词
+   * @param {string|string[]} refImages 参考图 dataURL（或数组，取首张传 image 字段）
+   * @param {object} options { n, size, signal, timeout, skipGlobalPrompt }
+   * 返回同 generateImage：dataURL 数组
+   */
+  async function generateImageEdit(prompt, refImages, options = {}) {
+    const drawConfig = Settings.getDrawConfig();
+    const mainConfig = await getConfig();
+    const url = (drawConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/images/edits';
+    const key = drawConfig.apiKey || mainConfig.apiKey;
+    const model = drawConfig.model || '';
+    if (!url || !key) throw new Error('请先在设置→功能模型→生图模型中配置 API');
+
+    const refs = Array.isArray(refImages) ? refImages.filter(Boolean) : (refImages ? [refImages] : []);
+    if (!refs.length) throw new Error('图生图缺少参考图');
+
+    // 全局正向提示词（负向词 edits 接口通常不支持，跳过）
+    let finalPrompt = prompt;
+    if (!options.skipGlobalPrompt) {
+      try {
+        const prefix = Settings.getDrawPrefix && Settings.getDrawPrefix();
+        if (prefix) finalPrompt = `${prompt}, ${prefix}`;
+      } catch(_) {}
+    }
+
+    // dataURL → Blob
+    const dataUrlToBlob = (dataUrl) => {
+      const [head, b64] = dataUrl.split(',');
+      const mime = (head.match(/data:([^;]+)/) || [])[1] || 'image/png';
+      const bin = atob(b64);
+      const len = bin.length;
+      const arr = new Uint8Array(len);
+      for (let i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: mime });
+    };
+
+    const form = new FormData();
+    form.append('prompt', finalPrompt);
+    form.append('n', String(options.n || 1));
+    if (options.size) form.append('size', options.size);
+    if (model) form.append('model', model);
+    form.append('response_format', 'b64_json');
+    // 多张参考图：OpenAI gpt-image 支持 image[] 传多张；单张也用 image[] 兼容大多数中转
+    refs.forEach((r, i) => {
+      const blob = dataUrlToBlob(r);
+      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+      form.append(refs.length > 1 ? 'image[]' : 'image', blob, `ref_${i}.${ext}`);
+    });
+
+    const timeout = options.timeout || 300000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    const mergedSignal = options.signal
+      ? (() => { options.signal.addEventListener('abort', () => controller.abort()); return controller.signal; })()
+      : controller.signal;
+
+    let resp;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${key}` }, // 不设 Content-Type，让浏览器带 boundary
+        body: form,
+        signal: mergedSignal
+      });
+    } catch(e) {
+      clearTimeout(timer);
+      if (e.name === 'AbortError') throw new Error(`图生图超时（${Math.round(timeout/1000)}秒无响应），可能是站点暂时不可用`);
+      throw e;
+    }
+    clearTimeout(timer);
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => resp.statusText);
+      throw new Error(`图生图失败: ${resp.status} ${errText.substring(0, 200)}`);
+    }
+
+    const json = await resp.json();
+    const rawList = (json.data || []).map(d => {
+      if (d.b64_json) return { type: 'b64', value: d.b64_json };
+      if (d.url) return { type: 'url', value: d.url };
+      return null;
+    }).filter(Boolean);
+
+    const images = [];
+    let fallbackFailures = 0;
+    for (const item of rawList) {
+      if (item.type === 'b64') {
+        images.push(`data:image/png;base64,${item.value}`);
+      } else {
+        try {
+          const imgResp = await fetch(item.value);
+          if (!imgResp.ok) throw new Error(`下载失败 ${imgResp.status}`);
+          const blob = await imgResp.blob();
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          images.push(dataUrl);
+        } catch(e) {
+          fallbackFailures++;
+          console.warn('[generateImageEdit] 图床下载失败:', item.value, e);
+          images.push(item.value);
+        }
+      }
+    }
+    if (fallbackFailures > 0 && fallbackFailures === rawList.length) {
+      try { UI.showToast(`图片下载失败（${fallbackFailures}张）：可能是网络环境无法访问图床，建议切 WiFi 重试`, 3500); } catch(_) {}
+    }
+    return images.filter(Boolean);
+  }
+
+  /**
    * v687.6：Unsplash 配图搜索
    * @param {string} query 英文关键词（必须英文，中文返回空）
    * @param {number} perPage 1~5，默认1
@@ -706,5 +821,5 @@ ${directionBlock}
     return items.slice(0, 5);
   }
 
-  return { getConfig, buildMessages, streamChat, streamChatWithTools, summarize, extractMemory, describeImage, fetchModelList, generate, generateImage, searchUnsplash, suggest };
+  return { getConfig, buildMessages, streamChat, streamChatWithTools, summarize, extractMemory, describeImage, fetchModelList, generate, generateImage, generateImageEdit, searchUnsplash, suggest };
 })();

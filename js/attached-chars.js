@@ -55,6 +55,7 @@ window.AttachedChars = (function() {
             avatar: card.avatar || '',
             detail: card.detail || '',
             drawDesc: (card.drawDesc || card.drawPrompt || '').trim(),
+            faceRef: card.faceRef || null,
           });
         } else if (e.type === 'npc') {
           const wvId = e.sourceWvId;
@@ -85,6 +86,7 @@ window.AttachedChars = (function() {
             detail: npc.detail || '',
             aliases: npc.aliases || '',
             drawDesc: (npc.drawDesc || npc.drawPrompt || '').trim(),
+            faceRef: npc.faceRef || null,
           });
         }
       } catch(_) {}

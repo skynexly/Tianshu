@@ -1175,13 +1175,16 @@ background: transparent !important;
 .phone-camera-album-empty-sub { font-size: 12px; opacity: .5; }
 /* 相册：拍立得网格 */
 .phone-camera-album-grid {
-  flex: 1;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 14px;
   padding: 14px 14px 18px;
-  overflow-y: auto;
   align-content: start;
+}
+/* 相册页跟随自身滚动（flex 嵌套下 grid 的 flex:1+overflow 在部分 WebView 里算不出高度，改由 page 层滚） */
+#phone-camera-album {
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .phone-camera-polaroid {
   display: flex;

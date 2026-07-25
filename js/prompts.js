@@ -128,9 +128,11 @@ const Prompts = (() => {
     // 深度行可见性
     const depthRow = document.getElementById('pe-depth-row');
     if (depthRow) depthRow.style.display = value === 'depth' ? '' : 'none';
-    // 注入角色行：仅 depth 位置可选 role（顶部/底部本质是 system 提示拼接）
+    // 注入角色行：仅「底部」和「深度」可选 role（顶部本质是拼进 system 大块，无法带其他角色）
     const roleRow = document.getElementById('pe-role-row');
-    if (roleRow) roleRow.style.display = value === 'depth' ? '' : 'none';
+    if (roleRow) roleRow.style.display = (value === 'system_bottom' || value === 'depth') ? '' : 'none';
+    // 顶部强制回落 system，避免残留 user/assistant
+    if (value === 'system_top') { _selectRole('system', false); }
     if (closeDropdown) {
       const dropdown = document.getElementById('pe-position-dropdown');
       if (dropdown && !dropdown.classList.contains('hidden') && !dropdown.classList.contains('closing')) {
@@ -195,8 +197,8 @@ const Prompts = (() => {
       enabled: true,
       position: _pos,
       depth: parseInt(document.getElementById('pe-depth').value) || 0,
-      // role 仅对 depth 位置有意义；顶部/底部本质是 system 提示拼接，强制 system
-      role: _pos === 'depth' ? (document.getElementById('pe-role').value || 'system') : 'system',
+      // role：仅 底部/深度 支持 user/assistant，顶部强制 system
+      role: (_pos === 'system_top') ? 'system' : (document.getElementById('pe-role').value || 'system'),
       content: document.getElementById('pe-content').value.trim(),
       scopes: Array.from(_editScopes)
     };
@@ -283,7 +285,19 @@ const Prompts = (() => {
     const list = await getAll();
     const overrides = await _getConvOverrides();
     const result = { systemTop: [], systemBottom: [], depths: {} };
-    for (const p of list) {
+    // 排序：先按分组出现顺序（分组第一次在 list 里出现的位置），同组内按 sortOrder（无则按原顺序兜底）
+    const _groupFirstIdx = {};
+    list.forEach((p, i) => { const g = p.group || ''; if (!(g in _groupFirstIdx)) _groupFirstIdx[g] = i; });
+    const _sorted = list.map((p, i) => ({ p, i })).sort((a, b) => {
+      const ga = _groupFirstIdx[a.p.group || ''] ?? 0;
+      const gb = _groupFirstIdx[b.p.group || ''] ?? 0;
+      if (ga !== gb) return ga - gb;
+      const sa = (typeof a.p.sortOrder === 'number') ? a.p.sortOrder : a.i;
+      const sb = (typeof b.p.sortOrder === 'number') ? b.p.sortOrder : b.i;
+      if (sa !== sb) return sa - sb;
+      return a.i - b.i;
+    }).map(x => x.p);
+    for (const p of _sorted) {
       // 对话覆盖优先，没有覆盖用全局值
       const isEnabled = overrides.hasOwnProperty(p.id) ? overrides[p.id] : p.enabled;
       if (!isEnabled || !p.content) continue;
@@ -295,10 +309,12 @@ const Prompts = (() => {
       // phone 场景没有逐条对话消息结构：depth 降级为 system_bottom
       let pos = p.position;
       if (sceneKind === 'phone' && pos === 'depth') pos = 'system_bottom';
+      // top/bottom 也支持 role（system/user/assistant），默认 system
+      const _tbRole = (p.role === 'user' || p.role === 'assistant') ? p.role : 'system';
       if (pos === 'system_top') {
-        result.systemTop.push(content);
+        result.systemTop.push({ content, role: _tbRole });
       } else if (pos === 'system_bottom') {
-        result.systemBottom.push(content);
+        result.systemBottom.push({ content, role: _tbRole });
       } else if (pos === 'depth') {
         const d = parseInt(p.depth) || 0;
         if (!result.depths[d]) result.depths[d] = [];
@@ -336,7 +352,8 @@ const Prompts = (() => {
         (p.content || '').toLowerCase().includes(searchQuery)
       );
     }
-
+    // 显示顺序与拼接顺序一致：分组出现顺序 + 组内 sortOrder
+    filteredList = _sortPrompts(filteredList);
     let html = '';
     if (filteredList.length === 0) {
       html = '<p style="color:var(--text-secondary);text-align:center;padding:20px">暂无提示词</p>';
@@ -349,7 +366,8 @@ const Prompts = (() => {
             <button onclick="Prompts.toggleGroupAll(false)" style="flex:1;padding:7px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;cursor:pointer">全部关闭</button>
           </div>`;
       }
-      for (const p of filteredList) {
+      for (let _pi = 0; _pi < filteredList.length; _pi++) {
+        const p = filteredList[_pi];
         const posLabel = p.position === 'system_top'
           ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> 顶部'
           : p.position === 'system_bottom'
@@ -375,6 +393,18 @@ const Prompts = (() => {
               <h3 style="flex:1;margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(p.name)}</h3>
               <span style="font-size:10px;color:var(--accent);background:rgba(0,0,0,0.2);padding:1px 6px;border-radius:8px;white-space:nowrap;flex-shrink:0">${scopeLabel}</span>
               <span style="font-size:11px;color:var(--text-secondary);white-space:nowrap;display:flex;align-items:center;gap:3px">${posLabel}</span>
+              ${!promptManageMode ? (() => {
+                const _prevSameGroup = _pi > 0 && (filteredList[_pi - 1].group || '') === (p.group || '');
+                const _nextSameGroup = _pi < filteredList.length - 1 && (filteredList[_pi + 1].group || '') === (p.group || '');
+                return `<span style="display:inline-flex;flex-direction:column;flex-shrink:0;gap:1px">
+                  <span onclick="event.stopPropagation();${_prevSameGroup ? `Prompts.movePrompt('${p.id}',-1)` : ''}" style="cursor:${_prevSameGroup ? 'pointer' : 'default'};opacity:${_prevSameGroup ? '0.7' : '0.2'};line-height:1;display:flex" title="上移">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                  </span>
+                  <span onclick="event.stopPropagation();${_nextSameGroup ? `Prompts.movePrompt('${p.id}',1)` : ''}" style="cursor:${_nextSameGroup ? 'pointer' : 'default'};opacity:${_nextSameGroup ? '0.7' : '0.2'};line-height:1;display:flex" title="下移">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </span>
+                </span>`;
+              })() : ''}
             </div>
             <p style="margin:0;font-size:11px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml((p.content || '').substring(0, 80))}${(p.content || '').length > 80 ? '...' : ''}</p>
           </div>`;
@@ -413,7 +443,46 @@ const Prompts = (() => {
         (p.content || '').toLowerCase().includes(searchQuery)
       );
     }
-    return filtered;
+    return _sortPrompts(filtered);
+  }
+
+  // 统一排序：先按分组出现顺序，同组内按 sortOrder（无则原顺序兜底）
+  function _sortPrompts(arr) {
+    const groupFirstIdx = {};
+    arr.forEach((p, i) => { const g = p.group || ''; if (!(g in groupFirstIdx)) groupFirstIdx[g] = i; });
+    return arr.map((p, i) => ({ p, i })).sort((a, b) => {
+      const ga = groupFirstIdx[a.p.group || ''] ?? 0;
+      const gb = groupFirstIdx[b.p.group || ''] ?? 0;
+      if (ga !== gb) return ga - gb;
+      const sa = (typeof a.p.sortOrder === 'number') ? a.p.sortOrder : a.i;
+      const sb = (typeof b.p.sortOrder === 'number') ? b.p.sortOrder : b.i;
+      if (sa !== sb) return sa - sb;
+      return a.i - b.i;
+    }).map(x => x.p);
+  }
+
+  // 上移/下移：在「同分组内」和相邻条目交换位置（改 sortOrder）
+  // dir = -1 上移，1 下移
+  async function movePrompt(id, dir) {
+    const list = await getAll();
+    const cur = list.find(p => p.id === id);
+    if (!cur) return;
+    // 同组条目按当前排序取出
+    const sameGroup = _sortPrompts(list.filter(p => (p.group || '') === (cur.group || '')));
+    // 懒初始化：确保同组每条都有连续 sortOrder
+    sameGroup.forEach((p, i) => { p.sortOrder = i; });
+    const idx = sameGroup.findIndex(p => p.id === id);
+    const target = idx + dir;
+    if (target < 0 || target >= sameGroup.length) {
+      // 已到边界，仍要把懒初始化的 sortOrder 落库
+      await saveAll(list);
+      return;
+    }
+    // 交换 sortOrder
+    const a = sameGroup[idx], b = sameGroup[target];
+    const tmp = a.sortOrder; a.sortOrder = b.sortOrder; b.sortOrder = tmp;
+    await saveAll(list);
+    await render();
   }
 
   // 底栏「全选」图标态刷新
@@ -646,7 +715,7 @@ const Prompts = (() => {
       // 通用预设兼容
       identifier: p.id,
       name: p.name,
-      role: (p.position === 'depth' && (p.role === 'user' || p.role === 'assistant')) ? p.role : 'system',
+      role: (p.role === 'user' || p.role === 'assistant') ? p.role : 'system',
       content: p.content,
       injection_position: p.position === 'depth' ? 1 : 0,
       injection_depth: p.depth || 0,
@@ -742,17 +811,9 @@ const Prompts = (() => {
         position = 'system_top';
       }
 
-      // 方向 A：depth 位置支持真实 role（不加前缀）；顶部/底部不支持 role，
-      // 遇到 user/assistant 内容退化为加前缀标记后按 system 处理。
+      // 现在所有位置（top/bottom/depth）都支持真实 role（user/assistant/system）
       let finalContent = content;
-      let finalRole = 'system';
-      if (position === 'depth' && (role === 'user' || role === 'assistant')) {
-        finalRole = role;
-      } else if (role === 'user') {
-        finalContent = `[用户输入] ${content}`;
-      } else if (role === 'assistant') {
-        finalContent = `[AI回复] ${content}`;
-      }
+      let finalRole = (role === 'user' || role === 'assistant') ? role : 'system';
 
       // 启用状态：优先用 prompt_order 的；其次看 enabled 字段；都没有默认 true
       let isEnabled = true;
@@ -803,7 +864,7 @@ const Prompts = (() => {
 
   return { getAll, add, edit, saveEdit, closeEdit, remove, toggle, buildInjections, render, getGroups, switchGroup, search,
     togglePromptSelect, togglePromptManageMode, exitPromptManageMode, batchDeletePrompts,
-    togglePromptSelectAll, toggleGroupAll,
+    togglePromptSelectAll, toggleGroupAll, movePrompt,
     _togglePositionDropdown, _selectPosition, _toggleRoleDropdown, _selectRole, _toggleScope, importPreset, exportPreset, toggleMenu,
     openConvOverrideModal, saveConvOverrides, resetConvOverrides, closeConvOverrideModal, _toggleOverride, _switchOverrideGroup, _overrideGroupAll, _editFromOverride };
 })();

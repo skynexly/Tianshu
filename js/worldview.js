@@ -2138,7 +2138,14 @@ return;
       const summary = g('wv-npc-summary'); if (summary) parts.push(summary);
       const detail = g('wv-npc-detail'); if (detail) parts.push(detail);
     }
-    const dataUrl = await Utils.promptAiAvatar(parts.join('，'), { maxSize: 256, quality: 0.85 });
+    // 取当前 NPC 的锁脸参考图（有则头像走 edits 锁脸）
+    let npcFaceRef = null;
+    try {
+      const w = await _getEditingWV();
+      const npc = _getEditingNpc(w);
+      npcFaceRef = (npc && npc.faceRef) ? npc.faceRef : null;
+    } catch(_) {}
+    const dataUrl = await Utils.promptAiAvatar(parts.join('，'), { maxSize: 256, quality: 0.85, faceRef: npcFaceRef });
     if (!dataUrl) return;
     try {
       if (typeof SingleCard !== 'undefined' && SingleCard.setNpcAvatar) {
@@ -2150,7 +2157,6 @@ return;
     await _refreshEditingNpcAvatar();
     UI.showToast('头像已更新', 1500);
   }
-
 
   async function _clearEditingNpcAvatar() {
     const npcId = await _currentEditNpcId();
@@ -2170,6 +2176,88 @@ return;
     await _refreshEditingNpcAvatar();
     UI.showToast('已删除', 1200);
   }
+
+  // ===== 锁脸参考图（NPC）=====
+  function _getEditingNpc(w) {
+    if (!w) return null;
+    if (_editGlobalNpcIdx >= 0) {
+      return w.globalNpcs?.[_editGlobalNpcIdx] || null;
+    }
+    if (_editRegionIdx >= 0 && _editFactionIdx >= 0 && _editNPCIdx >= 0) {
+      return w.regions?.[_editRegionIdx]?.factions?.[_editFactionIdx]?.npcs?.[_editNPCIdx] || null;
+    }
+    return null;
+  }
+
+  async function _updateNpcFaceRefPreview() {
+    const preview = document.getElementById('wv-npc-faceref-preview');
+    const removeBtn = document.getElementById('wv-npc-faceref-remove');
+    if (!preview) return;
+    const w = await _getEditingWV();
+    const npc = _getEditingNpc(w);
+    if (npc && npc.faceRef) {
+      preview.style.backgroundImage = `url(${npc.faceRef})`;
+      preview.textContent = '';
+      if (removeBtn) removeBtn.style.display = '';
+    } else {
+      preview.style.backgroundImage = '';
+      preview.innerHTML = '上传<br>参考图';
+      if (removeBtn) removeBtn.style.display = 'none';
+    }
+  }
+
+  function _pickNpcFaceRef() {
+    const input = document.getElementById('wv-npc-faceref-input');
+    if (input) input.click();
+  }
+
+  function _onNpcFaceRefPicked(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => { _processNpcFaceRef(e.target.result); };
+    reader.readAsDataURL(file);
+    input.value = '';
+  }
+
+  // 参考图保留原比例，最长边压到 768，控制体积
+  function _processNpcFaceRef(dataUrl) {
+    const img = new Image();
+    img.onload = async () => {
+      const maxEdge = 768;
+      let w = img.width, h = img.height;
+      if (Math.max(w, h) > maxEdge) {
+        const scale = maxEdge / Math.max(w, h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.88);
+      await _writeNpcFaceRef(compressedDataUrl);
+      await _updateNpcFaceRefPreview();
+    };
+    img.src = dataUrl;
+  }
+
+  async function _removeNpcFaceRef() {
+    await _writeNpcFaceRef(null);
+    await _updateNpcFaceRefPreview();
+  }
+
+  // 直接写进 npc 对象并落库（走 _getEditingWV 拿到的同一个 w）
+  async function _writeNpcFaceRef(dataUrl) {
+    // 先把表单当前值落库，避免用旧 w 覆盖未保存的编辑
+    try { await saveNPC(true); } catch(_) {}
+    const w = await _getEditingWV();
+    const npc = _getEditingNpc(w);
+    if (!npc) return;
+    npc.faceRef = dataUrl || null;
+    await _saveEditingWV(w);
+  }
+
 
   async function openNPCEdit(ni) {
     const w = await _getEditingWV();
@@ -2213,6 +2301,7 @@ if (wvNpcOnline1) wvNpcOnline1.value = npc.onlineName || '';
     UI.showPanel('wv-npc', 'forward');
     requestAnimationFrame(_attachWVNpcAutoSave);
     _refreshEditingNpcAvatar();
+    _updateNpcFaceRefPreview();
     const resizeNPCEdit = () => {
       ['wv-npc-summary', 'wv-npc-detail', 'wv-npc-drawdesc'].forEach(id => {
         const ta = document.getElementById(id);
@@ -3505,6 +3594,7 @@ function _editingFactionIdxForImporter() { return _editFactionIdx; }
     UI.showPanel('wv-npc', 'forward');
     requestAnimationFrame(_attachWVNpcAutoSave);
     _refreshEditingNpcAvatar();
+    _updateNpcFaceRefPreview();
     const resize = () => {
       ['wv-npc-summary', 'wv-npc-detail', 'wv-npc-drawdesc'].forEach(id => {
         const ta = document.getElementById(id);
@@ -5337,6 +5427,115 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
       if (btn) { btn.disabled = false; btn.textContent = '重试'; }
     } finally {
       _aiRadioCatAbort = null;
+    }
+  }
+
+  // ===== AI 生成论坛默认分区（编辑态，追加到 _catData） =====
+  let _aiForumCatAbort = null;
+
+  function aiGenerateForumCats() {
+    const html = `
+    <div id="ai-forumcat-gen-overlay" style="position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('ai-forumcat-gen-overlay')?.remove()">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成论坛分区</h3>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
+        <textarea id="ai-forumcat-gen-prompt" rows="3" placeholder="例如：侧重宗门八卦、或围绕都市生活" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
+        <label style="font-size:12px;color:var(--text-secondary);display:block;margin:12px 0 4px">生成数量（默认5，最多10）</label>
+        <input type="number" id="ai-forumcat-gen-count" value="5" min="1" max="10" oninput="if(this.value>10)this.value=10;if(this.value<1&&this.value!=='')this.value=1" style="width:80px;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px">
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">按世界观基调生成论坛分区（含分区名和说明），追加到当前分区列表。生成后可自行增删微调。</div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button onclick="document.getElementById('ai-forumcat-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
+          <button id="ai-forumcat-gen-btn" onclick="Worldview._doAiGenerateForumCats()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+        </div>
+        <div id="ai-forumcat-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  async function _doAiGenerateForumCats() {
+    const overlay = document.getElementById('ai-forumcat-gen-overlay');
+    const btn = document.getElementById('ai-forumcat-gen-btn');
+    const status = document.getElementById('ai-forumcat-gen-status');
+    const prompt = document.getElementById('ai-forumcat-gen-prompt')?.value?.trim() || '';
+    let count = parseInt(document.getElementById('ai-forumcat-gen-count')?.value) || 5;
+    count = Math.max(1, Math.min(10, count));
+
+    const listEl = document.getElementById('pa-forum-cats-list');
+    if (!listEl || !Array.isArray(listEl._catData)) {
+      if (status) { status.style.display = 'block'; status.textContent = '分区编辑器未就绪'; }
+      return;
+    }
+
+    const w = await _getEditingWV();
+    if (!w) { if (status) { status.style.display = 'block'; status.textContent = '请先选择世界观'; } return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (status) { status.style.display = 'block'; status.textContent = '正在生成论坛分区…'; }
+
+    try {
+      const settingText = w?.setting || '';
+      // 论坛 App 定位（名称 + 描述），让分区贴合
+      const forumName = (w.phoneApps?.forum?.name || '').trim();
+      const forumDesc = (w.phoneApps?.forum?.desc || '').trim();
+      // 已有分区名（编辑态 _catData）供去重
+      const existNames = listEl._catData.map(c => (c.name || '').trim()).filter(Boolean);
+
+      const sysPrompt = `你是一个文字冒险游戏的论坛版块设计师。请根据世界观设定，设计若干个论坛「分区」（版块）。
+
+分区是论坛最顶层的板块划分，类似贴吧的大区/论坛的板块，如"情感""校园""都市""娱乐""游戏"。玩家在论坛里按分区浏览帖子，每个分区下 AI 会生成对应主题的帖子。
+
+每个分区输出：
+- name：分区名称（2-6字，一个宽泛的板块名）
+- desc：这个分区发什么内容、什么调性（20-60字，告诉 AI 该分区该产出哪类帖子）
+
+要求：
+- 分区要贴合世界观题材，是这个世界的论坛会有的几个大板块。
+- 分区之间并列、不重叠，也不要和"已有分区"重名。
+- 保持宽泛：是大板块，不是具体话题。
+
+输出纯 JSON 数组，不要其他内容。格式示例：
+[{"name":"宗门情报","desc":"各大宗门的招收、比试、内幕消息，调性偏严肃八卦。"},{"name":"修真情感","desc":"道侣情缘、师徒纠葛、红尘牵挂等情感倾诉与讨论。"}]`;
+
+      const userMsg = `请为以下世界观设计 ${count} 个论坛分区。
+${prompt ? '\n## 用户额外需求\n' + prompt + '\n' : ''}
+## 论坛整体定位（分区要贴合这个论坛的名称和描述）
+论坛名称：${forumName || '（未命名）'}
+论坛描述：${forumDesc || '（未填写）'}
+## 已有分区（不要重复）
+${existNames.join('、') || '（无）'}
+## 世界观设定
+${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
+
+      _aiForumCatAbort = new AbortController();
+      const raw = await API.generate(sysPrompt, userMsg, { signal: _aiForumCatAbort.signal, maxTokens: 2000 });
+      let cleaned = raw.trim();
+      if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      const arr = JSON.parse(cleaned);
+      if (!Array.isArray(arr) || !arr.length) throw new Error('AI 返回的不是有效数组');
+
+      const existSet = new Set(existNames.map(n => n.toLowerCase()));
+      let added = 0;
+      for (const item of arr) {
+        if (!item || !item.name) continue;
+        const nm = String(item.name).trim().slice(0, 12);
+        if (!nm || existSet.has(nm.toLowerCase())) continue;
+        if (listEl._catData.length >= 20) break;
+        listEl._catData.push({ name: nm, desc: String(item.desc || '').trim() });
+        existSet.add(nm.toLowerCase());
+        added++;
+      }
+      if (added === 0) throw new Error('生成的分区都与已有分区重名');
+
+      if (typeof listEl._renderRows === 'function') listEl._renderRows();
+      overlay?.remove();
+      UI.showToast(`已生成 ${added} 个论坛分区`, 2200);
+    } catch(e) {
+      if (e.name === 'AbortError') { if (status) status.textContent = '已取消'; return; }
+      if (status) status.textContent = `生成失败：${e.message}`;
+      if (btn) { btn.disabled = false; btn.textContent = '重试'; }
+    } finally {
+      _aiForumCatAbort = null;
     }
   }
 
@@ -8140,6 +8339,7 @@ async function openPhoneAppsEditor() {
       });
     };
     renderRows();
+    forumCatsList._renderRows = renderRows;
     if (forumCatAddBtn) forumCatAddBtn.onclick = () => {
       if (forumCatsList._catData.length >= 20) { UI.showToast('分区最多 20 个', 1500); return; }
       forumCatsList._catData.push({ name: '', desc: '' });
@@ -8277,6 +8477,7 @@ function _buildPhoneAppsEditorHTML(w) {
       <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">默认分区 <span style="font-size:11px;color:var(--text-secondary)">（新对话论坛的初始分区。留空用系统默认：热门/情感/校园/都市/娱乐。描述会告诉 AI 该分区发什么）</span></span>
       <div id="pa-forum-cats-list"></div>
       <button type="button" id="pa-forum-cat-add" style="margin-top:6px;padding:6px 12px;font-size:12px;border:1px dashed var(--border);border-radius:6px;background:none;color:var(--accent);cursor:pointer;width:100%">＋ 添加分区</button>
+      <button type="button" onclick="Worldview.aiGenerateForumCats()" style="margin-top:6px;padding:8px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成分区</button>
     </div>
   </div>
 
@@ -9728,6 +9929,8 @@ aiGenerateTaskPhase,
     _doAiGenerateMediaApps,
     aiGenerateRadioCats,
     _doAiGenerateRadioCats,
+    aiGenerateForumCats,
+    _doAiGenerateForumCats,
     aiGenerateRadioTags,
     _doAiGenerateRadioTags,
     aiGenerateLiveCats,
@@ -9742,6 +9945,7 @@ aiGenerateTaskPhase,
     openNPCEdit, saveNPC, deleteNPC, exportCurrentNpc,
     addGlobalNpc, editGlobalNpc, backFromNpcEdit,
     _pickEditingNpcAvatar, _aiGenEditingNpcAvatar, _clearEditingNpcAvatar,
+    _pickNpcFaceRef, _onNpcFaceRefPicked, _removeNpcFaceRef,
     openNpcImporter,
     _bulkImportNpcs,
     _getEditingWVForImporter,

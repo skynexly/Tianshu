@@ -1261,6 +1261,8 @@ function toggleAiBubbleRender() {
         <textarea id="bubble-css-ta-${def.key}" placeholder="background:...; border-radius:...;" style="width:100%;min-height:150px;font-family:monospace;font-size:13px;line-height:1.6;padding:10px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:8px;resize:vertical;box-sizing:border-box">${Utils.escapeHtml(val)}</textarea>
       </div>`;
     }).join('');
+    // 同步渲染槽位区
+    try { renderBubbleSlots(); } catch(_) {}
   }
 
   function saveBubbleCss() {
@@ -1271,6 +1273,15 @@ function toggleAiBubbleRender() {
     }
     saveBubbleCssStore(store);
     applyBubbleCss();
+    // 若当前选中了某槽位，同步把改动写回该槽位（切到槽位→改→保存即更新）
+    try {
+      const ss = loadBubbleSlots();
+      if (ss.activeId) {
+        const slot = ss.slots.find(s => s.id === ss.activeId);
+        if (slot) { slot.css = store; saveBubbleSlotsStore(ss); }
+      }
+      renderBubbleSlots();
+    } catch(_) {}
     if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('气泡样式已应用', 1600);
     // 主线气泡重渲染，让某些依赖结构的样式立即可见
     try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
@@ -1284,6 +1295,12 @@ async function clearAllBubbleCss() {
       const ta = document.getElementById('bubble-css-ta-' + def.key);
       if (ta) ta.value = '';
     }
+    // 清空只影响当前生效内容，取消槽位高亮（槽位本身保留）
+    try {
+      const ss = loadBubbleSlots();
+      if (ss.activeId) { ss.activeId = ''; saveBubbleSlotsStore(ss); }
+      renderBubbleSlots();
+    } catch(_) {}
     if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已清空', 1400);
     try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
   }
@@ -1339,6 +1356,90 @@ async function clearAllBubbleCss() {
     }
   }
 
+
+  // ===== 气泡样式预设槽位（存多套，点一下切换）=====
+  const BUBBLE_SLOTS_KEY = 'tianshu_bubble_css_slots';
+  function loadBubbleSlots() {
+    try {
+      const raw = localStorage.getItem(BUBBLE_SLOTS_KEY);
+      const obj = raw ? JSON.parse(raw) : {};
+      const slots = Array.isArray(obj.slots) ? obj.slots : [];
+      return { slots, activeId: typeof obj.activeId === 'string' ? obj.activeId : '' };
+    } catch(_) { return { slots: [], activeId: '' }; }
+  }
+  function saveBubbleSlotsStore(obj) {
+    try { localStorage.setItem(BUBBLE_SLOTS_KEY, JSON.stringify(obj || { slots: [], activeId: '' })); } catch(_) {}
+  }
+  // 读当前 8 个 textarea 的值，打包成 css 对象（所见即所存）
+  function _collectBubbleTextareas() {
+    const css = {};
+    for (const def of BUBBLE_CSS_DEFS) {
+      const ta = document.getElementById('bubble-css-ta-' + def.key);
+      if (ta && ta.value.trim()) css[def.key] = ta.value.trim();
+    }
+    return css;
+  }
+  // 存当前编辑内容为一个新预设
+  async function saveCurrentBubbleSlot() {
+    const name = (typeof UI !== 'undefined' && UI.showSimpleInput)
+      ? await UI.showSimpleInput('保存气泡样式预设\n给这套样式起个名字', '')
+      : window.prompt('保存气泡样式预设\n给这套样式起个名字', '');
+    const nm = (name || '').trim();
+    if (!nm) return;
+    const store = loadBubbleSlots();
+    if (store.slots.length >= 20) { if (UI.showToast) UI.showToast('预设最多 20 个', 1600); return; }
+    const id = 'slot_' + (Utils.uuid ? Utils.uuid().slice(0, 8) : Date.now().toString(36));
+    store.slots.push({ id, name: nm, css: _collectBubbleTextareas() });
+    store.activeId = id;
+    saveBubbleSlotsStore(store);
+    renderBubbleSlots();
+    if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已存为预设「' + nm + '」', 1600);
+  }
+  // 切换预设：直接把该预设 css 灌进生效存储 + 刷新 textarea + 应用（不弹确认）
+  function switchBubbleSlot(id) {
+    const store = loadBubbleSlots();
+    const slot = store.slots.find(s => s.id === id);
+    if (!slot) return;
+    const css = (slot.css && typeof slot.css === 'object') ? slot.css : {};
+    saveBubbleCssStore(css);
+    store.activeId = id;
+    saveBubbleSlotsStore(store);
+    applyBubbleCss();
+    try { renderBubbleCssPanel(); } catch(_) {}
+    renderBubbleSlots();
+    try { if (typeof Chat !== 'undefined' && Chat.renderAll) Chat.renderAll(); } catch(_) {}
+    if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已切换到「' + slot.name + '」', 1400);
+  }
+  // 删除预设
+  async function deleteBubbleSlot(id) {
+    const store = loadBubbleSlots();
+    const slot = store.slots.find(s => s.id === id);
+    if (!slot) return;
+    const ok = await UI.showConfirm('删除预设', '删除气泡样式预设「' + slot.name + '」？当前正在应用的样式不受影响。');
+    if (!ok) return;
+    store.slots = store.slots.filter(s => s.id !== id);
+    if (store.activeId === id) store.activeId = '';
+    saveBubbleSlotsStore(store);
+    renderBubbleSlots();
+    if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('已删除', 1200);
+  }
+  // 渲染预设 chip 列表
+  function renderBubbleSlots() {
+    const bar = document.getElementById('bubble-slots-bar');
+    if (!bar) return;
+    const store = loadBubbleSlots();
+    if (!store.slots.length) {
+      bar.innerHTML = '<span style="font-size:12px;color:var(--text-secondary);opacity:.7">还没有保存的预设。调好下面的样式后点「存为预设」，之后点一下就能切换。</span>';
+      return;
+    }
+    bar.innerHTML = store.slots.map(s => {
+      const active = s.id === store.activeId;
+      return `<div style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:14px;font-size:12px;cursor:pointer;white-space:nowrap;background:${active ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${active ? '#fff' : 'var(--text-secondary)'};border:1px solid ${active ? 'var(--accent)' : 'var(--border)'}">
+        <span onclick="Theme.switchBubbleSlot('${s.id}')">${Utils.escapeHtml(s.name)}</span>
+        <span onclick="event.stopPropagation();Theme.deleteBubbleSlot('${s.id}')" style="opacity:.7;font-size:14px;line-height:1;margin-left:1px">×</span>
+      </div>`;
+    }).join('');
+  }
 
   // 把某一类气泡的框恢复成默认样式
   function resetBubbleCssField(defKey) {
@@ -1470,6 +1571,7 @@ async function clearAllBubbleCss() {
     applyPreset, handleBgImageUpload, clearBgImage, syncLabel,
     openPicker, toggleGlass, toggleAiBubbleRender, isAiBubbleRenderEnabled,
     renderBubbleCssPanel, saveBubbleCss, clearAllBubbleCss, resetBubbleCssField, copyThemeVars, applyBubbleCss, exportBubbleCss, importBubbleCss,
+    saveCurrentBubbleSlot, switchBubbleSlot, deleteBubbleSlot, renderBubbleSlots,
 toggleLite, isLiteMode, applyLiteMode,
     setFontMode, handleFontUpload, useFontSlot, clearFontSlot, openFontPanel,
 setMsgFontSize,

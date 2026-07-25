@@ -12848,8 +12848,13 @@ ${shipSection}
 
       // 取面具外观参考（优先生图描述，没填退回 background；不含名字/异能/物品）
       let maskRef = '';
+      let maskFaceRef = null;  // 面具锁脸参考图
       if (useMask) {
-        try { const ch = await Character.get(); maskRef = (ch && (ch.drawPrompt || ch.background)) ? String(ch.drawPrompt || ch.background).trim() : ''; } catch(_) {}
+        try {
+          const ch = await Character.get();
+          maskRef = (ch && (ch.drawPrompt || ch.background)) ? String(ch.drawPrompt || ch.background).trim() : '';
+          maskFaceRef = (ch && ch.faceRef) ? ch.faceRef : null;
+        } catch(_) {}
       }
 
       // 拼生图 prompt
@@ -12864,7 +12869,14 @@ ${shipSection}
       goBtn.textContent = '生成中…';
       goBtn.disabled = true;
       try {
-        const images = await API.generateImage(drawPrompt, { n: 1, size: '768x1024' });
+        // 有面具锁脸参考图 → 走 edits 图生图（锁脸指令只发 API，不进存档文本）
+        let images;
+        if (maskFaceRef) {
+          const apiPrompt = `Use the provided reference image to keep the character's facial features, hairstyle and overall likeness consistent. The camera angle, pose, expression and composition may vary freely unless the description explicitly requests otherwise.\n\n` + drawPrompt;
+          images = await API.generateImageEdit(apiPrompt, maskFaceRef, { size: '768x1024', n: 1 });
+        } else {
+          images = await API.generateImage(drawPrompt, { n: 1, size: '768x1024' });
+        }
         if (!images || !images.length) throw new Error('没有返回图片');
         const dataUrl = images[0];
 
@@ -41702,10 +41714,10 @@ async function _clearMomentsCover() {
   // 论坛默认分区（带描述结构）。desc 用于给 AI 生成帖子时的分区基调提示。
   const _DEFAULT_FORUM_CATS = [
     { name: '热门', desc: '' },
-    { name: '情感', desc: '' },
-    { name: '校园', desc: '' },
-    { name: '都市', desc: '' },
-    { name: '娱乐', desc: '' },
+    { name: '情感', desc: '恋爱、婚姻、暗恋、分手、亲情、友情、人际关系、情绪倾诉与情感求助，围绕人与人之间的感情展开' },
+    { name: '校园', desc: '学生党的日常：上课、考试、作业、社团、宿舍、师生同学关系、升学与校园生活琐事' },
+    { name: '都市', desc: '成年人的城市生活：职场、上班、租房、通勤、买房、加班、同事关系、生活成本与都市压力' },
+    { name: '娱乐', desc: '明星八卦、影视剧、综艺、音乐、游戏、动漫、追星、热门作品讨论与吃瓜' },
   ];
   // 规范化论坛分区为对象数组 [{name,desc}]。兼容老数据（字符串数组）与空值。
   function _forumCats(pd) {
@@ -48509,17 +48521,21 @@ if (m.type === 'pet_status') {
     // 优先用缩略图 imageThumb（识图后原图被焚，只剩缩略图）；老数据没缩略图时回落 imageBase64
     const _realSrc = m.imageThumb || m.imageBase64;
     const isRealImage = m.type === 'real_image' && _realSrc;
-    const innerHtml = isRealImage
-      ? `<img src="${Utils.escapeHtml(_realSrc)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px" />`
-      : isAiImage
-        ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="生成的图片" />`
-        : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div>`;
+    // 真实图片直接圆角小图，纯文字描述用拍立得框
+    let photoInner;
+    if (isRealImage) {
+      photoInner = `<div style="width:150px;border-radius:12px;overflow:hidden;background:var(--bg-tertiary)"><img src="${Utils.escapeHtml(_realSrc)}" style="width:100%;display:block" /></div>`;
+    } else if (isAiImage) {
+      photoInner = `<div style="width:150px;border-radius:12px;overflow:hidden;background:var(--bg-tertiary)"><img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" style="width:100%;display:block" alt="生成的图片" /></div>`;
+    } else {
+      photoInner = `<div class="phone-camera-polaroid" style="opacity:1;margin:0;width:150px;min-height:150px;transform:none;cursor:pointer">
+          <div class="phone-camera-polaroid-frame" style="padding:8px 8px 28px"><div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div></div>
+        </div>`;
+    }
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-        <div class="phone-camera-polaroid" onclick="Phone._showGroupPhotoDetail('${groupId}', '${m.id}')" style="opacity:1;margin:0;width:150px;min-height:150px;transform:none;cursor:pointer">
-          <div class="phone-camera-polaroid-frame" style="padding:8px 8px 28px">${innerHtml}</div>
-        </div>
+        <div onclick="Phone._showGroupPhotoDetail('${groupId}', '${m.id}')" style="cursor:pointer">${photoInner}</div>
         ${footTag}
       </div>
     </div>`;
@@ -49808,8 +49824,8 @@ ${histStr}
     try {
       if (typeof Prompts !== 'undefined' && Prompts.buildInjections) {
         const _inj = await Prompts.buildInjections('phone');
-        if (_inj.systemTop.length > 0) _grpTop = _inj.systemTop.join('\n\n') + '\n\n';
-        if (_inj.systemBottom.length > 0) _grpBottom = '\n\n' + _inj.systemBottom.join('\n\n');
+        if (_inj.systemTop.length > 0) _grpTop = _inj.systemTop.map(it => (it && typeof it === 'object') ? it.content : it).join('\n\n') + '\n\n';
+        if (_inj.systemBottom.length > 0) _grpBottom = '\n\n' + _inj.systemBottom.map(it => (it && typeof it === 'object') ? it.content : it).join('\n\n');
       }
     } catch(e) { console.warn('[Phone] 群聊提示词注入失败', e); }
 
@@ -53613,17 +53629,22 @@ if (m.type === 'pet_status') {
           // 优先用缩略图 imageThumb（识图后原图被焚，只剩缩略图）；老数据没缩略图时回落 imageBase64
           const _realSrc = m.imageThumb || m.imageBase64;
           const isRealImage = m.type === 'real_image' && _realSrc;
-          const innerHtml = isRealImage
-            ? `<img src="${Utils.escapeHtml(_realSrc)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px" />`
-            : isAiImage
-              ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="生成的图片" />`
-              : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div>`;
+          // 真实图片（本地真图 / AI 生成图）：直接显示圆角小图，不套拍立得框
+          // 纯文字描述（ai_text）：保留拍立得框
+          let photoInner;
+          if (isRealImage) {
+            photoInner = `<div style="width:150px;border-radius:12px;overflow:hidden;background:var(--bg-tertiary)"><img src="${Utils.escapeHtml(_realSrc)}" style="width:100%;display:block" /></div>`;
+          } else if (isAiImage) {
+            photoInner = `<div style="width:150px;border-radius:12px;overflow:hidden;background:var(--bg-tertiary)"><img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" style="width:100%;display:block" alt="生成的图片" /></div>`;
+          } else {
+            photoInner = `<div class="phone-camera-polaroid" style="opacity:1;margin:0;width:150px;min-height:150px;transform:none;cursor:pointer">
+                <div class="phone-camera-polaroid-frame" style="padding:8px 8px 28px"><div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div></div>
+              </div>`;
+          }
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
             <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-              <div class="phone-camera-polaroid" onclick="Phone._showChatPhotoDetail('${contactId}', '${m.id}')" style="opacity:1;margin:0;width:150px;min-height:150px;transform:none;cursor:pointer">
-                <div class="phone-camera-polaroid-frame" style="padding:8px 8px 28px">${innerHtml}</div>
-              </div>
+              <div onclick="Phone._showChatPhotoDetail('${contactId}', '${m.id}')" style="cursor:pointer">${photoInner}</div>
               ${time}
             </div>
           </div>`;
@@ -53744,6 +53765,19 @@ ${contact.deleted ? `
   `;
   const list = document.getElementById('phone-chat-msglist');
   if (list) list.scrollTop = list.scrollHeight;
+  // 异步加载 AI 虚拟图（ai_image）真图
+  setTimeout(() => {
+    const imgs = document.querySelectorAll('#phone-chat-msglist .phone-camera-polaroid-img[data-img-id]');
+    imgs.forEach(async (el) => {
+      const imgId = el.getAttribute('data-img-id');
+      if (!imgId) return;
+      try {
+        const doc = await DB.get('drawnImages', imgId);
+        if (doc && doc.dataUrl) el.src = doc.dataUrl;
+      } catch(_) {}
+      el.removeAttribute('data-img-id');
+    });
+  }, 50);
   // 异步加载表情图
   setTimeout(() => {
     const stks = document.querySelectorAll('#phone-chat-msglist img[data-sticker-id]');
@@ -54366,24 +54400,26 @@ if (m.type === 'pet_status') {
     }
 
     // 如果是照片气泡，渲染为图片样式
-    if (m.type === 'photo') {
-      const isImage = m.mode === 'ai_image' && m.imageId;
-      const innerHtml = isImage
-        ? `<img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" alt="生成的图片" />`
-        : `<div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div>`;
-      
-      const photoHtml = `
-        <div class="phone-camera-polaroid" onclick="Phone._showChatPhotoDetail('${contactId}', '${m.id}')" style="opacity:1;margin:0;width:160px;min-height:160px;transform:none">
-          <div class="phone-camera-polaroid-frame" style="padding:10px 10px 30px">
-            ${innerHtml}
-          </div>
-        </div>
-      `;
+    if (m.type === 'photo' || m.type === 'real_image') {
+      const isAiImage = m.mode === 'ai_image' && m.imageId;
+      const _realSrc = m.imageThumb || m.imageBase64;
+      const isRealImage = m.type === 'real_image' && _realSrc;
+      // 真实图片直接圆角小图，纯文字描述用拍立得框
+      let photoHtml;
+      if (isRealImage) {
+        photoHtml = `<div style="width:150px;border-radius:12px;overflow:hidden;background:var(--bg-tertiary)"><img src="${Utils.escapeHtml(_realSrc)}" style="width:100%;display:block" /></div>`;
+      } else if (isAiImage) {
+        photoHtml = `<div style="width:150px;border-radius:12px;overflow:hidden;background:var(--bg-tertiary)"><img class="phone-camera-polaroid-img" data-img-id="${Utils.escapeHtml(m.imageId)}" style="width:100%;display:block" alt="生成的图片" /></div>`;
+      } else {
+        photoHtml = `<div class="phone-camera-polaroid" style="opacity:1;margin:0;width:160px;min-height:160px;transform:none">
+            <div class="phone-camera-polaroid-frame" style="padding:10px 10px 30px"><div class="phone-camera-polaroid-content">${Utils.escapeHtml(m.photoDesc || '(空)')}</div></div>
+          </div>`;
+      }
       
       const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
         <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
-          ${photoHtml}
+          <div onclick="Phone._showChatPhotoDetail('${contactId}', '${m.id}')" style="cursor:pointer">${photoHtml}</div>
           ${time}
         </div>
       </div>`;
@@ -54405,6 +54441,19 @@ const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" dat
     list.innerHTML = bubbles || '<div style="padding:40px 24px;text-align:center;color:var(--text-secondary);font-size:13px;line-height:1.8">还没有消息</div>';
     list.scrollTop = list.scrollHeight;
   }
+  // 异步加载 AI 虚拟图（ai_image）真图
+  setTimeout(() => {
+    const imgs = document.querySelectorAll('#phone-chat-msglist .phone-camera-polaroid-img[data-img-id]');
+    imgs.forEach(async (el) => {
+      const imgId = el.getAttribute('data-img-id');
+      if (!imgId) return;
+      try {
+        const doc = await DB.get('drawnImages', imgId);
+        if (doc && doc.dataUrl) el.src = doc.dataUrl;
+      } catch(_) {}
+      el.removeAttribute('data-img-id');
+    });
+  }, 50);
   
   _bindChatThreadEvents(contactId);
 }
@@ -54802,6 +54851,23 @@ async function _openChatSettings(contactId) {
       </div>
 
       <div style="margin-bottom:24px">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:500;letter-spacing:.04em">聊天生图</div>
+        <div style="background:var(--bg-tertiary);border-radius:12px;overflow:hidden">
+          <div style="display:flex;align-items:center;padding:13px 14px">
+            <span style="flex:1;font-size:14px;color:var(--text)">发图片时真实生成</span>
+            <label style="position:relative;width:44px;height:26px;cursor:pointer;flex-shrink:0">
+              <input id="chat-settings-imggen" type="checkbox" ${contact.imgGenInChat === true ? 'checked' : ''} onchange="Phone._onChatSettingsImgGenToggle()"
+                style="opacity:0;width:0;height:0;position:absolute">
+              <span id="chat-settings-imggen-track" style="position:absolute;inset:0;border-radius:13px;background:${contact.imgGenInChat === true ? 'var(--accent)' : 'var(--border)'};transition:background .2s">
+                <span style="position:absolute;top:3px;left:${contact.imgGenInChat === true ? '21px' : '3px'};width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding:0 4px">开启后，角色在私聊里发图片会真实生成图片（自拍照会锁脸用本人参考图）。关闭则只显示文字描述</div>
+      </div>
+
+      <div style="margin-bottom:24px">
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:500;letter-spacing:.04em">通话</div>
         <div style="background:var(--bg-tertiary);border-radius:12px;overflow:hidden">
           <div style="display:flex;align-items:center;padding:13px 14px">
@@ -55004,6 +55070,17 @@ function _onChatSettingsCallHangupToggle() {
   if (knob) knob.style.left = on ? '21px' : '3px';
 }
 
+// 聊天生图开关联动
+function _onChatSettingsImgGenToggle() {
+  const cb = document.getElementById('chat-settings-imggen');
+  const track = document.getElementById('chat-settings-imggen-track');
+  const knob = track ? track.querySelector('span') : null;
+  if (!cb) return;
+  const on = cb.checked;
+  if (track) track.style.background = on ? 'var(--accent)' : 'var(--border)';
+  if (knob) knob.style.left = on ? '21px' : '3px';
+}
+
 // 语音开关联动显示音色 ID 输入框
 function _onChatSettingsVoiceToggle() {
     const cb = document.getElementById('chat-settings-voice-enabled');
@@ -55095,6 +55172,8 @@ async function _saveChatSettings(contactId) {
   contact.voiceEnabled = !!(voiceEnabledEl?.checked);
   contact.voiceId = (voiceIdEl?.value || '').trim();
   contact.allowPhoneDown = phoneDownEl ? !!(phoneDownEl.checked) : true;
+  const imgGenEl = document.getElementById('chat-settings-imggen');
+  contact.imgGenInChat = imgGenEl ? !!(imgGenEl.checked) : false;
   const callHangupEl = document.getElementById('chat-settings-call-hangup');
   contact.allowCallHangup = callHangupEl ? !!(callHangupEl.checked) : true;
   const callAutoPlayEl = document.getElementById('chat-settings-call-autoplay');
@@ -55498,6 +55577,16 @@ async function _chatRequestReply(contactId) {
     const phoneDownInstruction = canPhoneDown ? `
 7. 你（${contact.name}）此刻就在玩家身边。如果你有充分的理由让玩家放下手机面对面交流（比如想当面说话、有紧急或重要的事、觉得对方一直盯着手机该被打断了），可以在**最后一条消息**的对象里加上 "phoneDown": true 字段。这会让玩家收起手机，转入你和玩家面对面的线下剧情。注意：不要滥用，只在角色真的会这样做的时候才用；"phoneDown" 只能出现在最后一条消息上。` : '';
 
+    // 聊天生图：开关开时，图片 desc 写详细英文提示词，画风交给全局正负词
+    const imgGenImgLine = contact.imgGenInChat === true
+      ? `- **图片**：{"npc":"...", "type":"image", "desc":"这张图的英文生成提示词", "selfie":true或false, "ratio":"竖图/横图/方图", "time":"..."}
+   · **desc 要认真写、写详细**（用英文，50-150词），像专业生图提示词那样描写画面：主体是什么、在做什么、表情神态、姿态动作、服饰、场景环境、光线氛围、构图视角等，越具体生成质量越好。不要只写一句"a selfie"这种敷衍的短描述。
+   · **但不要写画风/风格/画质词**（如 anime style / high quality / masterpiece / 8k 等），画风由系统全局统一控制，你只管把画面内容写丰满。
+   · **selfie 字段**：默认这张图里有你自己（自拍、镜子里的你、你的照片等），系统会自动锁住你的长相。**只有当图里【完全没有你本人】时**（纯风景、食物、物品、宠物、给别人拍的照片等），才明确填 "selfie":false，避免系统误把你的脸套上去。有你自己就填 "selfie":true 或省略。
+   · **ratio 字段（可选）**：图片比例，可填 "9:16"/"portrait"（竖图，适合人像自拍）、"1:1"/"square"（方图）、"16:9"/"4:3"/"landscape"（横图，适合风景全景）。不填时——自拍默认竖图、风景默认横图。`
+      : `- **图片**：{"npc":"...", "type":"image", "desc":"对图片内容的描述（如：一张窗外的夕阳照片）", "time":"..."}`;
+
+
     const phoneDownExample = canPhoneDown ? `
 {"npc": "${contact.name}", "text": "别看手机了，看我", "time": "时间", "phoneDown": true}` : '';
 
@@ -55716,7 +55805,7 @@ ${histStr}
 4. 你可以一次回复多条短消息（像真人发微信那样），也可以只回一条。
 5. **必须用以下 JSON 格式输出**，放在 \`\`\`chat 代码块里，每条消息一个对象，time 用游戏内时间（"${gameTime || 'YYYY.MM.DD 星期X HH:mm'}"格式，可比玩家发消息的时间稍晚一点）。text 只写这条消息的纯文本内容本身，绝对不要把整条 {"npc":...,"text":...,"time":...} 这样的 JSON 对象再嵌套塞进 text 字段里：${voiceInstruction}${phoneDownInstruction}
 ${voiceInstruction ? '8' : '7'}. 除了普通文字消息，你还可以发送以下特殊类型的消息（在对象里加 "type" 字段，**不要用纯文字描述这些行为**，必须使用 type 字段让前端渲染为卡片）：
-   - **图片**：{"npc":"...", "type":"image", "desc":"对图片内容的描述（如：一张窗外的夕阳照片）", "time":"..."}
+   ${imgGenImgLine}
    - **位置**：{"npc":"...", "type":"location", "location":"地点名", "address":"详细地址（可选）", "time":"..."}
    - **订单**（为{{user}}购买物品时使用，如外卖、网购、跑腿代买等通过网络下单的内容）：{"npc":"...", "type":"order", "name":"商品名", "price":数字金额, "desc":"备注（可选）", "eta":数字, "etaUnit":"min或day", "time":"..."}
    · eta 是预计送达所需时间，etaUnit 为 "min"（分钟，用于跑腿/外卖等当天送达）或 "day"（天，用于网购快递）。例如外卖填 {"eta":30,"etaUnit":"min"}，快递填 {"eta":3,"etaUnit":"day"}。该物品会进入{{user}}手机里的物流系统，送达后系统会提示{{user}}收货，请勿在送达前描写{{user}}已收到。
@@ -55773,8 +55862,8 @@ ${voiceInstruction ? '8' : '7'}. 除了普通文字消息，你还可以发送�
     try {
       if (typeof Prompts !== 'undefined' && Prompts.buildInjections) {
         const _inj = await Prompts.buildInjections('phone');
-        if (_inj.systemTop.length > 0) _phTop = _inj.systemTop.join('\n\n') + '\n\n';
-        if (_inj.systemBottom.length > 0) _phBottom = '\n\n' + _inj.systemBottom.join('\n\n');
+        if (_inj.systemTop.length > 0) _phTop = _inj.systemTop.map(it => (it && typeof it === 'object') ? it.content : it).join('\n\n') + '\n\n';
+        if (_inj.systemBottom.length > 0) _phBottom = '\n\n' + _inj.systemBottom.map(it => (it && typeof it === 'object') ? it.content : it).join('\n\n');
       }
     } catch(e) { console.warn('[Phone] 私聊提示词注入失败', e); }
 
@@ -55970,16 +56059,107 @@ ${voiceInstruction ? '8' : '7'}. 除了普通文字消息，你还可以发送�
         continue;
       }
 
-      // 特殊卡片消息（图片/位置/订单/转账/出售）：不依赖 text，单独构造 thread 消息
+      // 私聊生图按名查 faceRef（扫面具→主角卡→挂载→NPC）
+async function _getContactFaceRef(charName) {
+  const nm = String(charName || '').trim();
+  if (!nm) return null;
+  // 1. 面具
+  try {
+    const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+    if (mask && mask.name === nm && mask.faceRef) return mask.faceRef;
+  } catch(_) {}
+  // 2. 主角卡
+  try {
+    const conv = (typeof Conversations !== 'undefined' && Conversations.getCurrent) ? Conversations.getCurrent() : null;
+    if (conv?.singleCharId) {
+      const card = await DB.get('singleCards', conv.singleCharId);
+      if (card && card.name === nm && card.faceRef) return card.faceRef;
+    }
+  } catch(_) {}
+  // 3. 挂载角色
+  try {
+    if (typeof AttachedChars !== 'undefined' && AttachedChars.getList) {
+      const attached = AttachedChars.getList() || [];
+      const hit = attached.find(a => a && a.name === nm);
+      if (hit?.faceRef) return hit.faceRef;
+    }
+  } catch(_) {}
+  // 4. 世界观 NPC（当前对话的世界观）
+  try {
+    if (typeof NPC !== 'undefined' && NPC.getByRegion) {
+      const npcs = NPC.getByRegion('all') || [];
+      const npc = npcs.find(n => n && n.name === nm);
+      if (npc?.faceRef) return npc.faceRef;
+    }
+  } catch(_) {}
+  return null;
+}
+
+// 特殊卡片消息（图片/位置/订单/转账/出售）：不依赖 text，单独构造 thread 消息
       if (cmType === 'image' || cmType === 'location' || cmType === 'order' || cmType === 'transfer' || cmType === 'sell' || cmType === 'moment' || cmType === 'sticker') {
         const msgId = 'm_' + Utils.uuid().slice(0, 8);
         const cmTime = (cm.time || '').trim();
         const baseMsg = { id: msgId, role: 'them', time: cmTime, fromMainline: false, roundId: aiRoundId };
         let logText = '';
-        if (cmType === 'image') {
+if (cmType === 'image') {
           const desc = (cm.desc || cm.text || '').trim() || '(图片)';
-          Object.assign(baseMsg, { type: 'photo', mode: 'ai_text', photoDesc: desc });
-          logText = `发送了一张图片：${desc}`;
+          // selfie 判断：AI 明确标 selfie:false 才当风景不锁脸；否则默认尝试锁脸
+          // （角色私聊发图，含自己的自拍是最常见场景，默认锁本人的脸更符合直觉）
+          const isSelfie = (cm.selfie === false) ? false : true;
+          // 开关开 且（自拍 || 普通生图）时真实生成，否则退回文字卡
+          const shouldGen = contact.imgGenInChat === true;
+          if (shouldGen) {
+            // 自拍：锁本人faceRef（contact.name），风景/食物：普通文生图
+            let faceRef = null;
+            if (isSelfie) {
+              faceRef = await _getContactFaceRef(contact.name);
+            }
+            console.log('[私聊生图] 联系人=' + contact.name + ' selfie=' + isSelfie + ' 拿到faceRef=' + (faceRef ? '是' : '否'));
+            const drawPrompt = desc;  // desc 是用户/AI写的内容描述（中文or英文）
+            // 尺寸：AI 可在 ratio 字段指定（如 "9:16"/"portrait"/"竖图"/"1024x768"）
+            // 没指定时——自拍默认竖图 9:16，风景默认横图 4:3
+            let imgSize = null;
+            if (cm.ratio) {
+              let r = String(cm.ratio).trim().toLowerCase();
+              // 中文比例词映射
+              if (r.includes('竖')) r = 'portrait';
+              else if (r.includes('横') || r.includes('全景')) r = 'landscape';
+              else if (r.includes('方')) r = 'square';
+              try { imgSize = Utils.resolveImgSize(r); } catch(_) {}
+            }
+            if (!imgSize) imgSize = faceRef ? '576x1024' : '1024x768';
+            try {
+              const images = faceRef
+                ? await API.generateImageEdit(
+                    `Use the provided reference image to keep the character's facial features, hairstyle and overall likeness consistent. The camera angle, pose, expression and composition may vary freely unless the description explicitly requests otherwise.\n\n` + drawPrompt,
+                    faceRef,
+                    { n: 1, size: imgSize }
+                  )
+                : await API.generateImage(drawPrompt, { n: 1, size: imgSize });
+              if (!images || images.length === 0) throw new Error('没有返回图片');
+              const dataUrl = images[0];
+              // 存 drawnImages（进收藏图库）
+              const imageId = 'img_' + Utils.uuid();
+              await DB.put('drawnImages', { id: imageId, dataUrl, prompt: drawPrompt, createdAt: new Date().toISOString() });
+              Object.assign(baseMsg, { type: 'photo', mode: 'ai_image', photoDesc: desc, imageId });
+              logText = `发送了一张图片：${desc}`;
+              // 特殊处理：图片消息生图成功后不走逐条动画，直接重渲染让缩略图正常加载
+              pd2.chatThreads[contactId].push(baseMsg);
+              _addChatMessageToRoundLog(contactId, 'them', logText, cmTime, contact.name, { msgId: baseMsg.id });
+              try { _renderChatThread(pd2, contactId); } catch(_) {}
+              _hasSpecialMsg = true; // 标记已整页渲染，跳过后面逐条
+              continue; // 跳过后面的逐条 push 和 delay
+            } catch (e) {
+              console.error('[私聊生图]', e);
+              // 生图失败：退回文字卡
+              Object.assign(baseMsg, { type: 'photo', mode: 'ai_text', photoDesc: desc });
+              logText = `发送了一张图片：${desc}`;
+            }
+          } else {
+            // 开关关：纯文字卡
+            Object.assign(baseMsg, { type: 'photo', mode: 'ai_text', photoDesc: desc });
+            logText = `发送了一张图片：${desc}`;
+          }
         } else if (cmType === 'location') {
           Object.assign(baseMsg, { type: 'location', location: (cm.location || '').trim(), address: (cm.address || '').trim() });
           logText = `发送了位置：${baseMsg.location}${baseMsg.address ? '（' + baseMsg.address + '）' : ''}`;
@@ -58542,7 +58722,7 @@ async function _cameraCollectCast() {
   try {
     const ch = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
     if (ch && ch.name) {
-      cast.push({ key: 'mask', roleTag: '我的面具', name: ch.name, desc: (ch.drawPrompt || '').trim() });
+      cast.push({ key: 'mask', roleTag: '我的面具', name: ch.name, desc: (ch.drawPrompt || '').trim(), faceRef: ch.faceRef || null });
       seen.add(ch.name);
     }
   } catch(_) {}
@@ -58553,7 +58733,7 @@ async function _cameraCollectCast() {
     if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
       const card = await SingleCard.get(conv.singleCharId);
       if (card && card.name && !seen.has(card.name)) {
-        cast.push({ key: 'card', roleTag: '主角', name: card.name, desc: (card.drawDesc || '').trim() });
+        cast.push({ key: 'card', roleTag: '主角', name: card.name, desc: (card.drawDesc || '').trim(), faceRef: card.faceRef || null });
         seen.add(card.name);
       }
     }
@@ -58570,7 +58750,7 @@ async function _cameraCollectCast() {
       const objs = NPC.getByNames(names) || [];
       objs.forEach(n => {
         if (n && n.name && !seen.has(n.name)) {
-          cast.push({ key: 'npc:' + n.name, roleTag: '在场', name: n.name, desc: (n.drawDesc || '').trim() });
+          cast.push({ key: 'npc:' + n.name, roleTag: '在场', name: n.name, desc: (n.drawDesc || '').trim(), faceRef: n.faceRef || null });
           seen.add(n.name);
         }
       });
@@ -58582,7 +58762,7 @@ async function _cameraCollectCast() {
       const attached = await AttachedChars.resolveAll();
       (attached || []).forEach(a => {
         if (a && a.name && !seen.has(a.name)) {
-          cast.push({ key: 'attached:' + a.name, roleTag: '常驻', name: a.name, desc: (a.drawDesc || '').trim() });
+          cast.push({ key: 'attached:' + a.name, roleTag: '常驻', name: a.name, desc: (a.drawDesc || '').trim(), faceRef: a.faceRef || null });
           seen.add(a.name);
         }
       });
@@ -58641,6 +58821,8 @@ async function _cameraAIDraw() {
 
   // 附上勾选角色的生图描述（只发有描述的；没描述的即使勾了也跳过）
   let castLines = [];
+  let _camFaceRefs = [];      // 勾选角色里带锁脸参考图的
+  let _camFaceNames = [];     // 对应名字，拼锁脸提示词用
   try {
     const overlay = document.getElementById('phone-camera-adjust-overlay');
     const cast = overlay?._cameraCast || [];
@@ -58648,10 +58830,24 @@ async function _cameraAIDraw() {
       const idx = parseInt(cb.dataset.idx, 10);
       const c = cast[idx];
       if (c && c.desc) castLines.push(`${c.name}：${c.desc}`);
+      if (c && c.faceRef) { _camFaceRefs.push(c.faceRef); _camFaceNames.push(c.name); }
     });
   } catch(_) {}
   if (castLines.length) {
     drawPrompt += `\n\n画面人物外观参考——\n${castLines.join('\n')}`;
+  }
+  // 锁脸：勾选角色带了参考图 → 给 API 提示词拼锁脸指令（不进显示/存档文本）+ 走图生图
+  let apiDrawPrompt = drawPrompt;
+  if (_camFaceRefs.length) {
+    let lockLine;
+    if (_camFaceNames.length > 1) {
+      const mapping = _camFaceNames.map((nm, i) => `reference image ${i + 1} = “${nm}”`).join('; ');
+      lockLine = `The provided reference images correspond to characters as follows: ${mapping}. Keep each person's facial features, hairstyle and overall likeness matching their own reference image. Do not blend or swap faces between characters. The camera angle, pose, expression and composition may vary freely unless the description explicitly requests otherwise.`;
+    } else {
+      const who = _camFaceNames[0];
+      lockLine = `Use the provided reference image to keep ${who ? '“' + who + '”' : 'the character'}'s facial features, hairstyle and overall likeness consistent. The camera angle, pose, expression and composition may vary freely unless the description explicitly requests otherwise.`;
+    }
+    apiDrawPrompt = lockLine + '\n\n' + drawPrompt;
   }
 
   // 确认预览：带了角色描述就提示已附上，否则沿用"模型不知外貌"的警告
@@ -58700,7 +58896,9 @@ async function _cameraAIDraw() {
 
     // 调生图 API
     el.value = `[拍摄中（${w}×${h}）…]`;
-    const images = await API.generateImage(drawPrompt, { n: 1, size: `${w}x${h}` });
+    const images = _camFaceRefs.length
+      ? await API.generateImageEdit(apiDrawPrompt, _camFaceRefs, { n: 1, size: `${w}x${h}` })
+      : await API.generateImage(apiDrawPrompt, { n: 1, size: `${w}x${h}` });
     if (!images || !images.length) throw new Error('没有返回图片');
     const dataUrl = images[0];
 
@@ -64597,7 +64795,7 @@ _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioH
     // 衣橱 App
     _wardrobeAddItem, _wardrobeRemoveItem, _wardrobeItemDetail, _wardrobePickPortrait, _wardrobeSaveSuit, _wardrobeOpenSuits, _wardrobeAiGenSuits, _switchWardrobeHomeTab, _wardrobeOpenMall, _wardrobeOpenInventory, _wardrobeMallSettings, _wardrobeMallToggleTag, _wardrobeMallRefresh, _wardrobeMallBuy, _wardrobeInvToggleTag, _wardrobeInvSearch, _wardrobeInvDelete, _wardrobeInvEdit, _wardrobeInvEditTag, _wardrobeInvWear, _wardrobeShowOrders,
     // 聊天 App
-  _switchChatTab, _onChatItemClick, _chatItemTouchStart, _chatItemTouchEnd, _showChatItemMenu, _toggleChatPin, _filterChatThreads, _filterChatContacts, _showCreateGroupDialog, _createGroup, _groupDoSend, _groupRequestReply, _openGroupSettings, _groupSaveName, _groupSaveDesc, _groupSaveFanSettings, _groupPickBg, _groupClearBg, _toggleGroupVoiceMode, _playGroupVoice, _showGroupPhotoDetail, _groupCancelQuote, _openGroupRedPacketSend, _openGroupRedPacket, _groupPickAvatar, _groupRemoveMember, _groupAddContacts, _groupAddExtra, _groupEditExtra, _groupAiGenExtras, _groupDissolve, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _chatCancelQuote, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _onChatSettingsCallAutoPlayToggle, _onChatSettingsPhoneDownToggle, _onChatSettingsCallHangupToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
+  _switchChatTab, _onChatItemClick, _chatItemTouchStart, _chatItemTouchEnd, _showChatItemMenu, _toggleChatPin, _filterChatThreads, _filterChatContacts, _showCreateGroupDialog, _createGroup, _groupDoSend, _groupRequestReply, _openGroupSettings, _groupSaveName, _groupSaveDesc, _groupSaveFanSettings, _groupPickBg, _groupClearBg, _toggleGroupVoiceMode, _playGroupVoice, _showGroupPhotoDetail, _groupCancelQuote, _openGroupRedPacketSend, _openGroupRedPacket, _groupPickAvatar, _groupRemoveMember, _groupAddContacts, _groupAddExtra, _groupEditExtra, _groupAiGenExtras, _groupDissolve, _addChatContact, _addChatContactByIdx, _openChatThread, _syncMainlineForContact, _chatSendMessage, _chatRequestReply, _showChatBubbleMenu, _chatCancelQuote, _toggleChatPlusMenu, _closeChatPlusMenu, _toggleChatVoiceMode, _chatDoSend, _chatSendVoice, _playVoice, _openChatSettings, _onChatSettingsVoiceToggle, _onChatSettingsCallAutoPlayToggle, _onChatSettingsPhoneDownToggle, _onChatSettingsCallHangupToggle, _onChatSettingsImgGenToggle, _saveChatSettings, _openChatLocationPicker, _confirmChatLocation, _showChatLocationDetail, _openAlbumPickerForChat, _pickAlbumForChat, _showChatPhotoDetail, _openImagePickerForChat, _onChatImagePicked,
   ingestChatMessages, getChatHistoryForNPCs, getCoReadForNPCs, _openStickerPickerForChat, _closeStickerPicker, _pickStickerForChat, _setChatStickerFilter,
     buildGroupListBlock, handleMainlineGroupChatTag, handleMainlineGroupCreateTag, _groupToggleAutoChat, _groupAutoChatTick, _userLiveGenWave,
     buildDeletedContactsBlock,

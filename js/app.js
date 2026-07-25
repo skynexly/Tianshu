@@ -224,8 +224,15 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v722';
-    const CHANGELOG = `○优化部分 UI 适配、Bug 修复
+    const APP_VERSION = 'v723';
+    const CHANGELOG = `○新增提示词支持排序，系统底部支持更换注入角色
+○新增角色生图参考图，生图时参考五官
+○新增手机私聊时允许生成图片（聊天设置内打开开关）
+○新增气泡CSS预设，保存预设后随时切换
+○部分机制优化`;
+    // 历史公告（最新在前），版本变旧后手动把上一版内容挪进来
+    const CHANGELOG_HISTORY = [
+      { version: 'v722', notes: `○优化部分 UI 适配、Bug 修复
 ○新增世界观可配置初始宠物状态模板
 ○新增世界观可配置论坛默认分区
 ○新增游鱼小铺商品设置数量
@@ -233,9 +240,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 ○新增好友圈渲染相册图片
 ○新增提示词分组全选/全不选
 ○新增世界观多开场设定切换
-○部分逻辑优化`;
-    // 历史公告（最新在前），版本变旧后手动把上一版内容挪进来
-    const CHANGELOG_HISTORY = [
+○部分逻辑优化` },
       { version: 'v721', notes: `●新增「宠物系统」（小屋 APP → 宠物）
 ○新增宠物商城、宠物衣橱、宠物喂食器
 ○宠物获取：手动填写、AI 生成、商城购买
@@ -273,13 +278,6 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 ○字体上传支持20MB＋
 ○新增手机数据恢复备份
 ○调整部分UI适配` },
-      { version: 'v716', notes: `○优化部分UI和交互
-○修复一些BUG
-○增加手机私聊的引用功能
-○新增世界观编辑手机配置，为商城选择固定货币
-○新增番外可挂世界书，可在收藏中续写
-○新增手机数据可单独导出导入
-○新增手机主题配色可调整透明度` },
     ];
     const SEEN_KEY = 'changelog_seen_version';
 

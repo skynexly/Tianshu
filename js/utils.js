@@ -1119,7 +1119,15 @@ async function copyFromDataset(btn) {
         try {
           // 加画质后缀，提升头像出图质量
           const fullPrompt = p + ', portrait, upper body, front-facing, high quality, detailed';
-          const images = await API.generateImage(fullPrompt, { size: '1024x1024', n: 1 });
+          // 传了参考图 → 走图生图锁脸（锁脸指令只发 API，不进 prompt 框）
+          const _faceRef = opts.faceRef;
+          const images = _faceRef
+            ? await API.generateImageEdit(
+                'Use the provided reference image to keep the same facial features, hairstyle and overall likeness. The angle, pose and expression may vary freely unless the description explicitly requests otherwise.\n\n' + fullPrompt,
+                _faceRef,
+                { size: '1024x1024', n: 1 }
+              )
+            : await API.generateImage(fullPrompt, { size: '1024x1024', n: 1 });
           if (!images || !images.length) throw new Error('未返回图片');
           curDataUrl = images[0];
           downloaded = false; // 新图未下载，重置拦截标记
@@ -1318,15 +1326,23 @@ async function copyFromDataset(btn) {
   // 返回 { size, desc }。
   function parseImgTag(raw) {
     const DEFAULT_SIZE = '1024x768';
-    const s = String(raw == null ? '' : raw).trim();
+    let s = String(raw == null ? '' : raw).trim();
+    let faceNames = [];
+    // 先剥离可选的 face= 段（可出现在最前面，用 | 与后续分隔）
+    // 形如 face=祁诺 或 face=祁诺,杜蘅焰
+    const faceMatch = s.match(/^face\s*=\s*([^|]*)\|?(.*)$/i);
+    if (faceMatch) {
+      faceNames = faceMatch[1].split(/[,，、]/).map(x => x.trim()).filter(Boolean);
+      s = faceMatch[2].trim();
+    }
     // 必须有 | 才尝试解析尺寸段（避免把普通描述里的冒号误判成比例）
     const pipe = s.indexOf('|');
-    if (pipe === -1) return { size: DEFAULT_SIZE, desc: s };
+    if (pipe === -1) return { size: DEFAULT_SIZE, desc: s, faceNames };
     const head = s.slice(0, pipe).trim().toLowerCase();
     const rest = s.slice(pipe + 1).trim();
     const size = _resolveImgSize(head);
-    if (!size) return { size: DEFAULT_SIZE, desc: s }; // 头部不是合法尺寸，整段当描述
-    return { size, desc: rest };
+    if (!size) return { size: DEFAULT_SIZE, desc: s, faceNames }; // 头部不是合法尺寸，整段当描述
+    return { size, desc: rest, faceNames };
   }
   // 清洗发给 AI 的历史里的「生图产物」：手动生图提示词前缀、图片占位符、未处理的 [IMG:] 标记。
   // 这些内容是给生图模型/前端渲染用的，对剧情理解是纯噪音，不该反复进上下文。
@@ -1364,5 +1380,5 @@ async function copyFromDataset(btn) {
     return null;
   }
 
-  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, fileToText, promptImageInput, promptAiAvatar, compressDataUrl, saveFile, pickFile, parseImgTag, stripImgArtifacts };
+  return { uuid, timestamp, formatDate, tokenize, matchScore, estimateTokens, parseAIOutput, mergeStatus, serializeStatus, escapeHtml, debounce, refreshAutoResizeTextareas, openFullscreen, closeFullscreen, copyFromDataset, readFileAsText, fileToText, promptImageInput, promptAiAvatar, compressDataUrl, saveFile, pickFile, parseImgTag, stripImgArtifacts, resolveImgSize: _resolveImgSize };
 })();

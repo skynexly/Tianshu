@@ -1328,15 +1328,30 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
     const _memPinnedCount = relatedMemories.filter(m => m.pinned).length;
     GameLog.log('info', `[记忆注入] 事件=${_eventCount}, 关系=${_relCount}, 固定=${_memPinnedCount}, 永久纸条=${_pinnedCount}, 重要纸条=${_importantNoteCount}, 普通纸条=${_normalNoteCount}, 角色记事本=${_npcNoteHitCount}, 共${relatedMemories.length + _pinnedCount + _noteCount}条`);
 }
-
-    // 6. 自定义提示词注入（system_top和system_bottom）
+// 6. 自定义提示词注入（system_top和system_bottom）
+    // 带 role(user/assistant) 的 top/bottom 不进 system 大块，改为独立消息（top→最前、bottom→末尾）
     const injections = await Prompts.buildInjections('chat');
+    const _injTopMsgs = [];   // 带 role 的 system_top 独立消息
+    const _injBottomMsgs = []; // 带 role 的 system_bottom 独立消息
     if (injections.systemTop.length > 0) {
-      systemParts.unshift(...injections.systemTop);
+      const _sysTop = [];
+      for (const it of injections.systemTop) {
+        const _c = (it && typeof it === 'object') ? it.content : it;
+        // 顶部强制 system（顶部拼进 system 大块，不支持独立角色）
+        _sysTop.push(_c);
+      }
+      if (_sysTop.length > 0) systemParts.unshift(..._sysTop);
     }
     if (injections.systemBottom.length > 0) {
-      systemParts.push(...injections.systemBottom);
+      const _sysBottom = [];
+      for (const it of injections.systemBottom) {
+        const _c = (it && typeof it === 'object') ? it.content : it;
+        const _r = (it && typeof it === 'object' && (it.role === 'user' || it.role === 'assistant')) ? it.role : 'system';
+        if (_r === 'system') _sysBottom.push(_c); else _injBottomMsgs.push({ role: _r, content: _c });
+      }
+      if (_sysBottom.length > 0) systemParts.push(..._sysBottom);
     }
+
 
     // 6.5 v687.34：AI行为约束（分层注入：深度0/深度3/system_bottom）— 非文游模式跳过整组叙述约束
     const _constraintDepth0 = [];
@@ -1399,7 +1414,7 @@ const relatedMemories = await Memory.retrieve(recentText, presentNPCs, currentLo
 
     // 7a. 生图模式（对话设置里开关控制）
   if (convSettings.imgGen) {
-    let _imgPrompt = '[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念\n- 可选：在描述前用「尺寸 | 」指定画面尺寸（不写默认横图 1024x768）。尺寸可用比例词（1:1/16:9/9:16/4:3/3:4/3:2/2:3）、方向词（square/landscape/portrait）或直接写像素（如 1280x720，宽高各 64~2048）。例：竖构图人物立绘写 [IMG: 9:16 | a girl standing...]，方形头像写 [IMG: 1:1 | ...]。根据画面内容自行选择合适的横竖比例。';
+    let _imgPrompt = '[生图能力]\n你拥有生成图片的能力。当用户要求你画图、生成插画、展示场景图等时，在回复中写 [IMG: English description of the image] 标记（描述必须用英文，50-200词，尽量详细描写画面构图、光影、风格）。前端会自动检测该标记并调用生图API生成图片。\n- 用户不要求时不要主动生成图片\n- 一条回复里可以有多个 [IMG:] 标记\n- 描述要具体，避免抽象概念\n- 可选：在描述前用「尺寸 | 」指定画面尺寸（不写默认横图 1024x768）。尺寸可用比例词（1:1/16:9/9:16/4:3/3:4/3:2/2:3）、方向词（square/landscape/portrait）或直接写像素（如 1280x720，宽高各 64~2048）。例：竖构图人物立绘写 [IMG: 9:16 | a girl standing...]，方形头像写 [IMG: 1:1 | ...]。根据画面内容自行选择合适的横竖比例。\n- **锁定角色长相**：想让某个角色保持固定长相（使用该角色的参考图）时，在描述最前面加 `face=角色名 | `。画多个角色时用逗号分隔，如 `face=祁诺,杜蘅焰 | `。角色名必须是下方「已提供的角色生图外观」列表中的准确名字，否则锁脸失效。尺寸段和 face 段顺序随意、都可选，如 `[IMG: face=祁诺 | 9:16 | a girl...]` 或 `[IMG: 9:16 | face=祁诺 | a girl...]`。';
 
     // 命中角色生图外观注入：在场角色 + 用户面具（只注入填了生图描述的，没填就不发）
     try {
@@ -1767,6 +1782,12 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
 
     const apiMessages = await API.buildMessages(historyForAPI, systemParts);
   try { GameLog.log('info', `[Chat] API消息构建完成: history=${historyForAPI.length}, systemParts=${systemParts.length}, apiMessages=${apiMessages.length}`); } catch(_) {}
+
+    // 带 role 的 system_bottom 独立消息注入
+    // 落点：system 大块之后、聊天历史之前（splice 到 index 1）
+    if (_injBottomMsgs.length > 0) {
+      apiMessages.splice(1, 0, ..._injBottomMsgs);
+    }
 
     // 深度注入（在对话历史中间插入）
     if (Object.keys(injections.depths).length > 0) {
@@ -7694,8 +7715,8 @@ async function applyLorebooksToWorldview() {
         if (_sb && Array.isArray(_sb.npcs)) presentNames = _sb.npcs.map(n => n && n.name).filter(Boolean);
       } catch(_) {}
     }
-    // 只保留有生图描述的
-    const hasDraw = (nn) => ((nn && (nn.drawDesc || nn.drawPrompt) || '')).trim();
+    // 保留有生图描述或有锁脸参考图的（只传了脸没写描述也能被勾选）
+    const hasDraw = (nn) => (((nn && (nn.drawDesc || nn.drawPrompt) || '')).trim() || (nn && nn.faceRef));
     const presentSet = new Set(presentNames);
     const present = [];
     const others = [];
@@ -7765,12 +7786,15 @@ async function applyLorebooksToWorldview() {
     list.innerHTML = html;
     // 暂存 name→desc 映射，提交时用
     _imgGenCharDrawMap = {};
+    _imgGenCharFaceMap = {};
     for (const nn of [...present, ...others]) {
       _imgGenCharDrawMap[nn.name] = ((nn.drawDesc || nn.drawPrompt) || '').trim();
+      if (nn.faceRef) _imgGenCharFaceMap[nn.name] = nn.faceRef;
     }
   }
 
   let _imgGenCharDrawMap = {};
+  let _imgGenCharFaceMap = {};
 
   function _toggleImgGenMore() {
     const more = document.getElementById('imggen-char-more');
@@ -7824,6 +7848,8 @@ async function applyLorebooksToWorldview() {
 
     // 收集勾选角色的生图描述
     let charAppend = '';
+    let _faceRefs = [];       // 勾选角色里带锁脸参考图的
+    let _faceRefNames = [];   // 对应名字，拼锁脸提示词用
     try {
       const checked = document.querySelectorAll('#imggen-char-list .imggen-char-cb:checked');
       const lines = [];
@@ -7831,6 +7857,8 @@ async function applyLorebooksToWorldview() {
         const nm = cb.getAttribute('data-name');
         const dd = nm && _imgGenCharDrawMap[nm];
         if (dd) lines.push(`【${nm}】${dd}`);
+        const fr = nm && _imgGenCharFaceMap[nm];
+        if (fr) { _faceRefs.push(fr); _faceRefNames.push(nm); }
       });
       if (lines.length) charAppend = '\n\n画面中的角色外观：\n' + lines.join('\n');
     } catch(_) {}
@@ -7853,21 +7881,40 @@ async function applyLorebooksToWorldview() {
     }
 
     // 有描述或有勾选角色：直接调生图API
-    const finalPrompt = (prompt || '当前场景') + charAppend;
+    const displayPrompt = (prompt || '当前场景') + charAppend;  // 显示/存档用，不含锁脸指令
+    let apiPrompt = displayPrompt;                              // 实际发 API 用
+    // 锁脸：勾选角色带了参考图 → 给 API 提示词拼锁脸指令（不进显示文本）+ 走图生图接口
+    if (_faceRefs.length) {
+      let lockLine;
+      if (_faceRefNames.length > 1) {
+        // 多角色：图文按序号一一对应，降低模型串脸
+        const mapping = _faceRefNames.map((nm, i) => `reference image ${i + 1} = “${nm}”`).join('; ');
+        lockLine = `The provided reference images correspond to characters as follows: ${mapping}. Keep each person's facial features, hairstyle and overall likeness matching their own reference image. Do not blend or swap faces between characters. The camera angle, pose, expression and composition may vary freely unless the description explicitly requests otherwise.`;
+      } else {
+        const who = _faceRefNames[0];
+        lockLine = `Use the provided reference image to keep ${who ? '“' + who + '”' : 'the character'}'s facial features, hairstyle and overall likeness consistent. The camera angle, pose, expression and composition may vary freely unless the description explicitly requests otherwise.`;
+      }
+      apiPrompt = lockLine + '\n\n' + displayPrompt;
+    }
     if (status) { status.style.display = 'block'; status.textContent = '正在生成图片…'; }
     if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
 
     try {
-      const images = await API.generateImage(finalPrompt, {
-        n: count,
-        size: `${width}x${height}`
-      });
+      const images = _faceRefs.length
+        ? await API.generateImageEdit(apiPrompt, _faceRefs, {
+            n: count,
+            size: `${width}x${height}`
+          })
+        : await API.generateImage(apiPrompt, {
+            n: count,
+            size: `${width}x${height}`
+          });
       if (!images || images.length === 0) throw new Error('未返回图片');
 
       // 构建消息内容（图片存独立表，content 只放占位符 [TSIMG:id|desc]，markdown不解析）
-      let content = `[手动生图] ${finalPrompt}\n\n`;
+      let content = `[手动生图] ${displayPrompt}\n\n`;
       for (let i = 0; i < images.length; i++) {
-        const imgId = await _saveDrawnImage(images[i], finalPrompt);
+        const imgId = await _saveDrawnImage(images[i], displayPrompt);
         const safeDesc = `生成图片${i + 1}`;
         content += `[TSIMG:${imgId}|${safeDesc}]\n\n`;
       }
@@ -7901,6 +7948,54 @@ async function applyLorebooksToWorldview() {
     }
   }
 
+  // 按角色名查 faceRef（AI 生图用）—— 扫面具/单人卡主角/挂载/NPC
+  async function _getFaceRefsByNames(names) {
+    const result = {};
+    if (!Array.isArray(names) || names.length === 0) return result;
+    const nameSet = new Set(names);
+    // 1) 用户面具
+    try {
+      const _mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
+      if (_mask && _mask.name && nameSet.has(_mask.name) && _mask.faceRef) {
+        result[_mask.name] = _mask.faceRef;
+      }
+    } catch(_) {}
+    // 2) 单人卡主角
+    try {
+      const conv = (typeof Conversations !== 'undefined') ? Conversations.getList().find(c => c.id === Conversations.getCurrent()) : null;
+      if (conv && conv.isSingle && conv.singleCharType === 'card' && conv.singleCharId) {
+        const card = await DB.get('singleCards', conv.singleCharId);
+        if (card && card.name && nameSet.has(card.name) && card.faceRef) {
+          result[card.name] = card.faceRef;
+        }
+      }
+    } catch(_) {}
+    // 3) 挂载角色
+    try {
+      if (typeof AttachedChars !== 'undefined' && AttachedChars.resolveAll) {
+        const _attached = await AttachedChars.resolveAll();
+        for (const a of (_attached || [])) {
+          if (a && a.name && nameSet.has(a.name) && a.faceRef) {
+            result[a.name] = a.faceRef;
+          }
+        }
+      }
+    } catch(_) {}
+    // 4) NPC（世界观）—— 复用 NPC.getByRegion，拿当前世界观所有 NPC
+    try {
+      let allNpcs = [];
+      if (typeof NPC !== 'undefined' && NPC.getByRegion) {
+        allNpcs = NPC.getByRegion('all') || [];
+      }
+      for (const nn of allNpcs) {
+        if (nn && nn.name && nameSet.has(nn.name) && nn.faceRef) {
+          result[nn.name] = nn.faceRef;
+        }
+      }
+    } catch(_) {}
+    return result;
+  }
+
   /**
    * 解析 AI 回复中的 [IMG: ...] 标记并替换为实际图片
    * 在 onDone 之后异步执行，不阻塞主流程
@@ -7931,7 +8026,28 @@ async function applyLorebooksToWorldview() {
       const desc = parsed.desc;
       const ph = msgEl.querySelector(`[data-imggen-idx="${i}"]`);
       try {
-        const images = await API.generateImage(desc, { n: 1, size: parsed.size });
+        // 锁脸：AI 用 face= 声明了角色 → 查这些角色的 faceRef，有则走图生图 edits
+        let images;
+        const faceMap = await _getFaceRefsByNames(parsed.faceNames || []);
+        const faceRefs = [];
+        const faceRefNames = [];
+        for (const nm of (parsed.faceNames || [])) {
+          if (faceMap[nm]) { faceRefs.push(faceMap[nm]); faceRefNames.push(nm); }
+        }
+        if (faceRefs.length) {
+          let lockLine;
+          if (faceRefNames.length > 1) {
+            const mapping = faceRefNames.map((nm, k) => `reference image ${k + 1} = “${nm}”`).join('; ');
+            lockLine = `The provided reference images correspond to characters as follows: ${mapping}. Keep each person's facial features, hairstyle and overall likeness matching their own reference image. Do not blend or swap faces between characters. The camera angle, pose, expression and composition may vary freely unless the description explicitly requests otherwise.`;
+          } else {
+            const who = faceRefNames[0];
+            lockLine = `Use the provided reference image to keep ${who ? '“' + who + '”' : 'the character'}'s facial features, hairstyle and overall likeness consistent. The camera angle, pose, expression and composition may vary freely unless the description explicitly requests otherwise.`;
+          }
+          const apiPrompt = lockLine + '\n\n' + desc;
+          images = await API.generateImageEdit(apiPrompt, faceRefs, { n: 1, size: parsed.size });
+        } else {
+          images = await API.generateImage(desc, { n: 1, size: parsed.size });
+        }
         if (images && images.length > 0) {
           // 存独立表，拿到引用ID
           const imgId = await _saveDrawnImage(images[0], desc);

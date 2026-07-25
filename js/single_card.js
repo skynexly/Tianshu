@@ -3,6 +3,7 @@
  */
 const SingleCard = (() => {
   let _editingId = null;
+  let _scPanelFaceRef = null; // 单人卡 panel 编辑态的锁脸参考图 dataURL
 
   // 给需求描述 textarea 包一层容器 + 右下角全屏展开按钮（配 Utils.openFullscreen）。
   function _fsWrap(taHtml, id, title) {
@@ -173,6 +174,7 @@ const SingleCard = (() => {
           if (extEl) card.extEnabled = extEl.checked;
           const avatarEl = document.querySelector('#sc-panel-avatar-preview img, #sc-panel-avatar-preview div');
           if (avatarEl) card.avatar = avatarEl.dataset.value || '';
+          card.faceRef = _scPanelFaceRef || null;
         } else {
           card.name = (document.getElementById('sc-edit-name')?.value || '').trim() || card.name;
           card.aliases = document.getElementById('sc-edit-aliases')?.value || '';
@@ -239,6 +241,8 @@ const SingleCard = (() => {
     if (panelOnline) panelOnline.value = card.onlineName || '';
     document.getElementById('sc-panel-detail').value = card.detail || '';
     { const dd = document.getElementById('sc-panel-drawdesc'); if (dd) dd.value = card.drawDesc || ''; }
+    _scPanelFaceRef = card.faceRef || null;
+    _updateFaceRefPreviewPanel();
     document.getElementById('sc-panel-firstmes').value = card.firstMes || '';
     document.getElementById('sc-panel-mesexample').value = card.mesExample || '';
     document.getElementById('sc-panel-creator').value = card.creator || '';
@@ -415,6 +419,64 @@ const SingleCard = (() => {
     _scAutoSave();
   }
 
+  // ===== 锁脸参考图（panel） =====
+  function _updateFaceRefPreviewPanel() {
+    const preview = document.getElementById('sc-panel-faceref-preview');
+    const removeBtn = document.getElementById('sc-panel-faceref-remove');
+    if (!preview) return;
+    if (_scPanelFaceRef) {
+      preview.style.backgroundImage = `url(${_scPanelFaceRef})`;
+      preview.textContent = '';
+      if (removeBtn) removeBtn.style.display = '';
+    } else {
+      preview.style.backgroundImage = '';
+      preview.innerHTML = '上传<br>参考图';
+      if (removeBtn) removeBtn.style.display = 'none';
+    }
+  }
+
+  function pickFaceRefPanel() {
+    const input = document.getElementById('sc-panel-faceref-input');
+    if (input) input.click();
+  }
+
+  function onFaceRefPickedPanel(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => { _processFaceRefPanel(e.target.result); };
+    reader.readAsDataURL(file);
+    input.value = '';
+  }
+
+  // 参考图不裁方，保留原比例，最长边压到 768，控制体积
+  function _processFaceRefPanel(dataUrl) {
+    const img = new Image();
+    img.onload = () => {
+      const maxEdge = 768;
+      let w = img.width, h = img.height;
+      if (Math.max(w, h) > maxEdge) {
+        const scale = maxEdge / Math.max(w, h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      _scPanelFaceRef = canvas.toDataURL('image/jpeg', 0.88);
+      _updateFaceRefPreviewPanel();
+      _scAutoSave();
+    };
+    img.src = dataUrl;
+  }
+
+  function removeFaceRefPanel() {
+    _scPanelFaceRef = null;
+    _updateFaceRefPreviewPanel();
+    _scAutoSave();
+  }
+
   // 从 panel 读字段并保存
   async function savePanelForm() {
     const name = document.getElementById('sc-panel-name').value.trim();
@@ -435,6 +497,8 @@ const SingleCard = (() => {
     card.onlineName = onlineName;
     card.detail = detail;
     card.avatar = avatar;
+    card.faceRef = _scPanelFaceRef || null;
+    card.drawDesc = (document.getElementById('sc-panel-drawdesc')?.value || '').trim();
     card.firstMes = firstMes;
     card.mesExample = mesExample;
     card.creator = creator;
@@ -561,7 +625,7 @@ const SingleCard = (() => {
 
   // AI 生成头像 —— panel 入口
   async function aiGenAvatarPanel() {
-    const dataUrl = await Utils.promptAiAvatar(_buildAvatarPrompt('sc-panel-'), { maxSize: 256, quality: 0.85 });
+    const dataUrl = await Utils.promptAiAvatar(_buildAvatarPrompt('sc-panel-'), { maxSize: 256, quality: 0.85, faceRef: _scPanelFaceRef || null });
     if (!dataUrl) return;
     const preview = document.getElementById('sc-panel-avatar-preview');
     preview.innerHTML = `<img src="${dataUrl}" data-value="${dataUrl}" style="width:80px;height:80px;border-radius:50%;object-fit:cover">`;
@@ -1406,6 +1470,7 @@ detail 是一段结构化的角色设定文本，用小标题分段组织。包�
     closeEditModal, saveFromModal, deleteCurrent, pickAvatar, aiGenAvatar,
     // v594 新 panel 入口
     closeEditPanel, savePanelForm, switchEditTab, toggleEditMoreMenu, closeEditMoreMenu, pickAvatarPanel, aiGenAvatarPanel,
+    pickFaceRefPanel, onFaceRefPickedPanel, removeFaceRefPanel,
     // v596 扩展设定跳转
 openCardExtEdit, restoreEditPanel,
 // v632 世界书绑定

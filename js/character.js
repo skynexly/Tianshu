@@ -9,6 +9,7 @@ const Character = (() => {
   let _loadedMaskId = null;  // 表单当前已完整加载的面具 id，写库前校验一致，防串号覆盖
 
   let currentAvatar = null; // 当前面具头像 dataURL 缓存
+  let currentFaceRef = null; // 当前面具锁脸参考图 dataURL 缓存（图生图用）
 
   let activeAvatar = null; // 当前使用的面具的头像（发送气泡时读取）
 
@@ -400,6 +401,7 @@ async function _getMasksForCurrentWv() {
         data.birthday = _readBirthdayFromForm();
         data.memoryScope = targetId;
         data.avatar = currentAvatar || null;
+        data.faceRef = currentFaceRef || null;
         if (editingMaskId !== targetId) return; // 中间切面具了→放弃
         await DB.put('characters', data);
         if (editingMaskId !== targetId) return; // save 后再检查
@@ -578,6 +580,8 @@ async function _getMasksForCurrentWv() {
     _renderBirthdaySelects(data?.birthday || null);
     currentAvatar = data?.avatar || null;
     updateAvatarPreview();
+    currentFaceRef = data?.faceRef || null;
+    updateFaceRefPreview();
     UI.showPanel('mask-edit');
     // 绑定自动保存
     requestAnimationFrame(_attachMaskAutoSave);
@@ -651,6 +655,65 @@ if (placeholder) placeholder.style.display = '';
     updateAvatarPreview();
   }
 
+  // ===== 锁脸参考图 =====
+  function updateFaceRefPreview() {
+    const preview = document.getElementById('char-faceref-preview');
+    const removeBtn = document.getElementById('char-faceref-remove');
+    if (!preview) return;
+    if (currentFaceRef) {
+      preview.style.backgroundImage = `url(${currentFaceRef})`;
+      preview.textContent = '';
+      if (removeBtn) removeBtn.style.display = '';
+    } else {
+      preview.style.backgroundImage = '';
+      preview.innerHTML = '上传<br>参考图';
+      if (removeBtn) removeBtn.style.display = 'none';
+    }
+  }
+
+  function pickFaceRef() {
+    const input = document.getElementById('char-faceref-input');
+    if (input) input.click();
+  }
+
+  function onFaceRefPicked(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => { _processFaceRefDataUrl(e.target.result); };
+    reader.readAsDataURL(file);
+    input.value = '';
+  }
+
+  // 参考图不裁方，保留原比例，最长边压到 768，控制 base64 体积
+  function _processFaceRefDataUrl(dataUrl) {
+    const img = new Image();
+    img.onload = () => {
+      const maxEdge = 768;
+      let w = img.width, h = img.height;
+      if (Math.max(w, h) > maxEdge) {
+        const scale = maxEdge / Math.max(w, h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      currentFaceRef = canvas.toDataURL('image/jpeg', 0.88);
+      updateFaceRefPreview();
+      try { _maskAutoSave(); } catch(_) {}
+    };
+    img.src = dataUrl;
+  }
+
+  function removeFaceRef() {
+    currentFaceRef = null;
+    updateFaceRefPreview();
+    try { _maskAutoSave(); } catch(_) {}
+  }
+
   // AI 生成头像：有生图描述就只用「名字 + 生图描述」，没填退回名字 + 设定
   async function aiGenAvatar() {
     const g = id => (document.getElementById(id)?.value || '').trim();
@@ -662,7 +725,7 @@ if (placeholder) placeholder.style.display = '';
     } else {
       const bg = g('char-background'); if (bg) parts.push(bg);
     }
-    const dataUrl = await Utils.promptAiAvatar(parts.join('，'), { maxSize: 256, quality: 0.85 });
+    const dataUrl = await Utils.promptAiAvatar(parts.join('，'), { maxSize: 256, quality: 0.85, faceRef: currentFaceRef || null });
     if (!dataUrl) return;
     _processAvatarDataUrl(dataUrl);
     // 立即触发自动保存，把新头像落库
@@ -681,6 +744,7 @@ if (placeholder) placeholder.style.display = '';
     data.birthday = _readBirthdayFromForm();
     data.memoryScope = editingMaskId;
     data.avatar = currentAvatar || null;
+    data.faceRef = currentFaceRef || null;
     await DB.put('characters', data);
 
     // 同步名字到列表
@@ -1877,6 +1941,7 @@ return {
   addAbility, removeAbility, editAbility, saveAbility, deleteAbility, closeAbilityEdit, closeAbilityModal,
   addItem, removeItem, editItem, saveItem, deleteItem, closeItemEdit, closeItemModal, moveItemToStorage, addItemDirect, removeItemByName, cloneMask, cloneMaskFrom, isolateMaskForConv, maskHasContent,
   onAvatarPicked, pickAvatar, removeAvatar, aiGenAvatar, searchMasks,
+  pickFaceRef, onFaceRefPicked, removeFaceRef,
     openAiGen, closeAiGen, runAiGen,
     clearBirthday, _toggleBirthDropdown, _selectBirth,
   toggleManageMode, toggleSelectAll, batchClone, batchDelete, deleteCurrent, _onCardClick, exitManageMode,
