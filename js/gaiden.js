@@ -197,7 +197,7 @@ const Gaiden = (() => {
 
     const funcConfig = getGaidenConfig();
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl).replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl);
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
 
@@ -390,7 +390,7 @@ const Gaiden = (() => {
   async function _requestGaidenContinuation(savedItem, requirement, areaId) {
     const funcConfig = getGaidenConfig();
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) throw new Error('请先配置番外模型');
@@ -526,7 +526,7 @@ const Gaiden = (() => {
 
     const funcConfig = getGaidenConfig();
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先在设置→功能模型中配置番外模型'); return; }
@@ -831,7 +831,7 @@ async function closeGenerateModal() {
 
     const funcConfig = getGaidenConfig();
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl).replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl);
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置番外模型'); return; }

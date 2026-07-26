@@ -279,6 +279,95 @@ ${dialogue}
     if (saved && typeof UI !== 'undefined' && UI.showToast) UI.showToast('已导出归档记录', 1800);
   }
 
+  // ===== 剧情总结 导出 / 导入 =====
+
+  // 导出当前对话的剧情总结为 JSON 文件（不含归档原文，只含总结数据）
+  async function _exportSummary() {
+    try {
+      const convId = _editConvId;
+      if (!convId) { UI.showToast('没有可导出的总结', 1800); return; }
+      const data = await get(convId);
+      const hasContent = (data.timeline && data.timeline.length) || (data.metNPCs && data.metNPCs.length)
+        || data.majorEvents || data.emotionTurns || data.playerState || data.pending;
+      if (!hasContent) { UI.showToast('当前总结是空的，没什么可导出', 2000); return; }
+      // 取对话名做文件名
+      let convName = '对话';
+      try {
+        const cl = await DB.get('gameState', 'conversationList');
+        const conv = (cl && cl.value ? cl.value : cl || []).find(c => c && c.id === convId);
+        if (conv && conv.name) convName = conv.name;
+      } catch(_) {}
+      const payload = {
+        __type: 'tianshu_story_summary',
+        __version: 1,
+        exportedAt: Date.now(),
+        convName,
+        summary: {
+          timeline: data.timeline || [],
+          metNPCs: data.metNPCs || [],
+          majorEvents: data.majorEvents || '',
+          emotionTurns: data.emotionTurns || '',
+          playerState: data.playerState || '',
+          pending: data.pending || ''
+        }
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+      const fnSafe = String(convName).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+      const saved = await Utils.saveFile(blob, `剧情总结_${fnSafe}_${new Date().toISOString().slice(0, 10)}.json`);
+      if (saved) UI.showToast('已导出剧情总结', 1800);
+    } catch (e) {
+      try { GameLog.log('error', `[Summary] 导出失败：${e && e.message}`); } catch(_) {}
+      await UI.showAlert('导出失败', String(e && e.message || e));
+    }
+  }
+
+  // 导入剧情总结（覆盖 / 合并当前对话）
+  async function _importSummary() {
+    try {
+      const convId = _editConvId;
+      if (!convId) { UI.showToast('请先打开一个对话的总结', 1800); return; }
+      const file = await Utils.pickFile({ accept: '.json,application/json' });
+      if (!file) return;
+      const text = await Utils.fileToText(file);
+      let payload = JSON.parse(text);
+      // 兼容：既支持带包装的导出格式，也支持直接是 summary 对象
+      const s = (payload && payload.summary) ? payload.summary : payload;
+      if (!s || typeof s !== 'object') throw new Error('文件格式不对');
+      const inTimeline = Array.isArray(s.timeline) ? s.timeline : [];
+      const inNPCs = Array.isArray(s.metNPCs) ? s.metNPCs : [];
+      const hasAny = inTimeline.length || inNPCs.length || s.majorEvents || s.emotionTurns || s.playerState || s.pending;
+      if (!hasAny) throw new Error('文件里没有可导入的总结内容');
+
+      // 确认导入（合并进当前对话）
+      const mode = await UI.showConfirm(
+        '导入剧情总结',
+        `检测到 ${inTimeline.length} 条时间流、${inNPCs.length} 位角色。\n\n将合并进当前对话：时间流 / 角色追加去重，重要事件/情感转折/玩家状态/未解决事项等字段用导入内容覆盖。\n\n确定导入？`
+      );
+      if (!mode) return;
+
+      const data = await get(convId);
+      // 时间流合并去重：date+event 前10字
+      const _sig = (t) => `${(t.date || '').trim()}|${String(t.event || '').trim().slice(0, 10)}`;
+      const existSig = new Set((data.timeline || []).map(_sig));
+      inTimeline.forEach(t => { if (t && t.event && !existSig.has(_sig(t))) { data.timeline.push({ date: t.date || '', event: t.event }); existSig.add(_sig(t)); } });
+      // 角色合并去重：按 name
+      const existName = new Set((data.metNPCs || []).map(n => (n.name || '').trim()));
+      inNPCs.forEach(n => { if (n && n.name && !existName.has((n.name || '').trim())) { data.metNPCs.push({ name: n.name, relationship: n.relationship || '' }); existName.add((n.name || '').trim()); } });
+      // 流动字段：导入内容非空则覆盖
+      if (s.majorEvents) data.majorEvents = s.majorEvents;
+      if (s.emotionTurns) data.emotionTurns = s.emotionTurns;
+      if (s.playerState) data.playerState = s.playerState;
+      if (s.pending) data.pending = s.pending;
+
+      await save(data);
+      renderSummaryView(data, convId, _renderContainerId);
+      UI.showToast(`已导入：+${inTimeline.length} 时间流、+${inNPCs.length} 角色`, 2500);
+    } catch (e) {
+      try { GameLog.log('error', `[Summary] 导入失败：${e && e.message}`); } catch(_) {}
+      await UI.showAlert('导入失败', '文件不是合法的剧情总结 JSON。\n\n' + (e && e.message || ''));
+    }
+  }
+
   // ===== UI =====
 
   let viewingArchiveId = null;
@@ -301,21 +390,10 @@ ${dialogue}
     }
   }
 
-  function renderSummaryView(data, conversationId, containerId) {
-    const el = document.getElementById(containerId || 'summary-content');
-    if (!el) return;
-    _renderContainerId = containerId || 'summary-content';
-    _editConvId = conversationId;
-   try {
-
-    // 记住当前展开状态
-    const expandedIds = new Set();
-    el.querySelectorAll('.summary-section-content').forEach(sec => {
-      if (!sec.classList.contains('collapsed') && sec.id) expandedIds.add(sec.id);
-    });
-
+  // 时间流内容 HTML（含底部添加/合并按钮）——全量重绘和局部重建共用
+  function _buildTimelineHtml(data) {
     const isMergingTimeline = _mergeMode === 'timeline';
-    const timelineHtml = (data.timeline || []).map((t, i) => `
+    return (data.timeline || []).map((t, i) => `
       <div class="summary-row${isMergingTimeline ? ' merge-selectable' : ''}${isMergingTimeline && _mergeSelected.has(i) ? ' merge-selected' : ''}" data-section="timeline" data-idx="${i}"${isMergingTimeline ? ` onclick="Summary._toggleMergeItem(${i})"` : ''}>
         ${isMergingTimeline ? `<div class="merge-checkbox">${_mergeSelected.has(i) ? '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="var(--accent)" stroke="var(--bg-primary)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m9 12 2 2 4-4" stroke="var(--bg-primary)" fill="none"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>'}</div>` : ''}
         <div class="summary-timeline-main" style="flex:1">
@@ -348,10 +426,13 @@ ${dialogue}
             </button>`)
         : ''}
       </div>`;
+  }
 
+  // 已相遇角色内容 HTML（含底部添加/合并按钮）——全量重绘和局部重建共用
+  function _buildNPCHtml(data) {
     const isMergingNPC = _mergeMode === 'npc';
-    const npcHtml = (data.metNPCs || []).map((n, i) => `
-      <div class="summary-row${isMergingNPC ? ' merge-selectable' : ''}${isMergingNPC && _mergeSelected.has(i) ? ' merge-selected' : ''}" style="flex-direction:column;align-items:stretch;gap:2px"${isMergingNPC ? ` onclick="Summary._toggleMergeItem(${i})"` : ''}>
+    return (data.metNPCs || []).map((n, i) => `
+      <div class="summary-row${isMergingNPC ? ' merge-selectable' : ''}${isMergingNPC && _mergeSelected.has(i) ? ' merge-selected' : ''}" data-section="npc" data-idx="${i}" style="flex-direction:column;align-items:stretch;gap:2px"${isMergingNPC ? ` onclick="Summary._toggleMergeItem(${i})"` : ''}>
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:6px">
             ${isMergingNPC ? `<div class="merge-checkbox">${_mergeSelected.has(i) ? '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="var(--accent)" stroke="var(--bg-primary)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m9 12 2 2 4-4" stroke="var(--bg-primary)" fill="none"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>'}</div>` : ''}
@@ -385,8 +466,72 @@ ${dialogue}
             </button>`)
         : ''}
       </div>`;
+  }
+
+  // 局部重建时间流 section，保留内滚区 scrollTop
+  async function _rerenderTimelineSection() {
+    const data = await get(_editConvId);
+    const cont = document.getElementById('summary-timeline');
+    if (!cont) { renderSummaryView(data, _editConvId, _renderContainerId); return; }
+    const st = cont.scrollTop;
+    cont.innerHTML = _buildTimelineHtml(data);
+    try {
+      const _max = cont.scrollHeight - cont.clientHeight;
+      cont.scrollTop = Math.min(st, Math.max(0, _max));
+    } catch(_) {}
+  }
+
+  // 局部重建已相遇角色 section，保留内滚区 scrollTop
+  async function _rerenderNPCSection() {
+    const data = await get(_editConvId);
+    const cont = document.getElementById('summary-npcs');
+    if (!cont) { renderSummaryView(data, _editConvId, _renderContainerId); return; }
+    const st = cont.scrollTop;
+    cont.innerHTML = _buildNPCHtml(data);
+    try {
+      const _max = cont.scrollHeight - cont.clientHeight;
+      cont.scrollTop = Math.min(st, Math.max(0, _max));
+    } catch(_) {}
+  }
+
+  function renderSummaryView(data, conversationId, containerId) {
+    const el = document.getElementById(containerId || 'summary-content');
+    if (!el) return;
+    _renderContainerId = containerId || 'summary-content';
+    _editConvId = conversationId;
+    // 记住滚动位置：找 el 最近的可滚动祖先，重绘后恢复，避免删除/合并后弹回顶部
+    let _scrollEl = null, _savedScrollTop = 0;
+    try {
+      let _p = el;
+      while (_p && _p !== document.body) {
+        const _oy = getComputedStyle(_p).overflowY;
+        if ((_oy === 'auto' || _oy === 'scroll') && _p.scrollHeight > _p.clientHeight) { _scrollEl = _p; break; }
+        _p = _p.parentElement;
+      }
+      if (_scrollEl) _savedScrollTop = _scrollEl.scrollTop;
+    } catch(_) {}
+   try {
+
+    // 记住当前展开状态
+    const expandedIds = new Set();
+    el.querySelectorAll('.summary-section-content').forEach(sec => {
+      if (!sec.classList.contains('collapsed') && sec.id) expandedIds.add(sec.id);
+    });
+
+    const timelineHtml = _buildTimelineHtml(data);
+
+    const npcHtml = _buildNPCHtml(data);
+
 
     el.innerHTML = `
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button onclick="Summary._exportSummary()" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>导出总结
+        </button>
+        <button onclick="Summary._importSummary()" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>导入总结
+        </button>
+      </div>
       <div class="summary-section">
 <div class="summary-section-header" onclick="Summary._toggleSection(this)">
 <span><svg class="folder-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> 时间流</span>
@@ -451,6 +596,13 @@ ${dialogue}
         if (arrow) arrow.classList.add('expanded');
       }
     });
+    // 恢复滚动位置（重绘后 DOM 高度可能变化，clamp 到合法范围）
+    if (_scrollEl && _savedScrollTop > 0) {
+      try {
+        const _max = _scrollEl.scrollHeight - _scrollEl.clientHeight;
+        _scrollEl.scrollTop = Math.min(_savedScrollTop, Math.max(0, _max));
+      } catch(_) {}
+    }
    } catch (e) {
      try { GameLog.log('error', `[Summary] 剧情总结渲染失败：${e && e.message}`); } catch(_) {}
      const esc = (typeof Utils !== 'undefined' && Utils.escapeHtml) ? Utils.escapeHtml(String(e && e.message || e)) : '';
@@ -666,7 +818,7 @@ ${dialogue}
     const data = await get(_editConvId);
     data.timeline.splice(idx, 1);
     await save(data);
-    renderSummaryView(data, _editConvId, _renderContainerId);
+    await _rerenderTimelineSection();
   }
 
   async function _deleteNPC(idx) {
@@ -674,7 +826,7 @@ ${dialogue}
     const data = await get(_editConvId);
     data.metNPCs.splice(idx, 1);
     await save(data);
-    renderSummaryView(data, _editConvId, _renderContainerId);
+    await _rerenderNPCSection();
   }
 
   // ===== 合并功能 =====
@@ -682,20 +834,55 @@ ${dialogue}
   async function _startMerge(type) {
     _mergeMode = type;
     _mergeSelected.clear();
-    const data = await get(_editConvId);
-    renderSummaryView(data, _editConvId, _renderContainerId);
+    if (type === 'timeline') await _rerenderTimelineSection();
+    else await _rerenderNPCSection();
   }
 
   async function _cancelMerge() {
+    const prev = _mergeMode;
     _mergeMode = null;
     _mergeSelected.clear();
-    const data = await get(_editConvId);
-    renderSummaryView(data, _editConvId, _renderContainerId);
+    if (prev === 'timeline') await _rerenderTimelineSection();
+    else if (prev === 'npc') await _rerenderNPCSection();
+    else { const data = await get(_editConvId); renderSummaryView(data, _editConvId, _renderContainerId); }
   }
 
   async function _toggleMergeItem(idx) {
-    if (_mergeSelected.has(idx)) _mergeSelected.delete(idx);
+    const selected = _mergeSelected.has(idx);
+    if (selected) _mergeSelected.delete(idx);
     else _mergeSelected.add(idx);
+    // 局部更新，不整表重绘（避免滚动位置丢失/闪烁）
+    try {
+      const el = document.getElementById(_renderContainerId || 'summary-content');
+      const section = _mergeMode === 'timeline' ? 'timeline' : 'npc';
+      const nowSel = _mergeSelected.has(idx);
+      const checkedSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="var(--accent)" stroke="var(--bg-primary)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m9 12 2 2 4-4" stroke="var(--bg-primary)" fill="none"/></svg>';
+      const uncheckedSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>';
+      if (el) {
+        // 定位当前 section 里对应 idx 的行（timeline 行有 data-section，npc 行没有，用 section 内序号兜底）
+        let row = el.querySelector(`.summary-row[data-section="${section}"][data-idx="${idx}"]`);
+        if (!row) {
+          // npc 行没有 data-section/data-idx，按合并可选行的顺序取第 idx 个
+          const rows = el.querySelectorAll('.summary-row.merge-selectable');
+          row = rows[idx];
+        }
+        if (row) {
+          row.classList.toggle('merge-selected', nowSel);
+          const cb = row.querySelector('.merge-checkbox');
+          if (cb) cb.innerHTML = nowSel ? checkedSvg : uncheckedSvg;
+        }
+        // 更新「确认合并 (N)」按钮的计数 / 禁用态
+        const mergeBtn = Array.from(el.querySelectorAll('button')).find(b => /确认合并/.test(b.textContent || ''));
+        if (mergeBtn) {
+          mergeBtn.innerHTML = mergeBtn.innerHTML.replace(/确认合并 \(\d+\)/, `确认合并 (${_mergeSelected.size})`);
+          const enough = _mergeSelected.size >= 2;
+          mergeBtn.disabled = !enough;
+          mergeBtn.style.opacity = enough ? '1' : '0.5';
+        }
+        return;
+      }
+    } catch(_) {}
+    // 兜底：局部更新失败才全量重绘
     const data = await get(_editConvId);
     renderSummaryView(data, _editConvId, _renderContainerId);
   }
@@ -831,6 +1018,7 @@ ${dialogue}
     _editField, _editTimeline, _editNPC, _addTimeline, _addNPC, _deleteTimeline, _deleteNPC,
     _toggleSection,
     _startMerge, _cancelMerge, _toggleMergeItem, _confirmMerge,
-    _viewArchive, _exportArchive, closeArchiveView
+    _viewArchive, _exportArchive, closeArchiveView,
+    _exportSummary, _importSummary
   };
 })();

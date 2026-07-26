@@ -11,6 +11,7 @@ const Prompts = (() => {
   // 当前编辑中的作用域集合（scopes）；空集合语义=全选（向下兼容老数据）
   let _editScopes = new Set(['chat']);
   const _ALL_SCOPES = ['chat', 'backstage', 'phone'];
+  const SELECTED_GROUP = '__selected__'; // 虚拟分组：已启用的提示词（只读预览，不排序）
 
   async function getAll() {
     const data = await DB.get('gameState', STORE_KEY);
@@ -21,14 +22,163 @@ const Prompts = (() => {
     await DB.put('gameState', { key: STORE_KEY, value: list });
   }
 
-  // 获取所有分组（去重）
+  // 获取所有分组（去重）：合并独立分组数组 + 各提示词已用到的 group
   async function getGroups() {
     const list = await getAll();
+    const stored = await getPromptGroups();
     const groups = new Set(['全部']);
+    stored.forEach(g => { if (g) groups.add(g); });
     list.forEach(p => {
       if (p.group) groups.add(p.group);
     });
     return Array.from(groups);
+  }
+
+  // 独立分组名数组（支持空组、重命名、删除）
+  async function getPromptGroups() {
+    const data = await DB.get('gameState', 'promptGroups');
+    return Array.isArray(data?.value) ? data.value : [];
+  }
+  async function savePromptGroups(groups) {
+    await DB.put('gameState', { key: 'promptGroups', value: groups });
+  }
+
+  function _isReservedPromptGroup(g) {
+    return g === '全部' || g === SELECTED_GROUP;
+  }
+
+  // 轻量底部选项弹层（无分割线），返回选中项 value 或 null
+  function _groupSheet(title, options) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center';
+      const btns = options.map((o, i) =>
+        `<button data-i="${i}" style="width:100%;padding:15px 16px;background:none;border:none;color:${o.danger ? 'var(--danger)' : 'var(--text)'};font-size:15px;cursor:pointer;text-align:center">${Utils.escapeHtml(o.label)}</button>`
+      ).join('');
+      overlay.innerHTML = `
+        <div style="background:var(--bg);width:100%;max-width:480px;border-radius:16px 16px 0 0;overflow:hidden;padding-bottom:env(safe-area-inset-bottom,0)">
+          <div style="padding:14px 16px 8px;font-size:13px;color:var(--text-secondary);text-align:center">${Utils.escapeHtml(title || '')}</div>
+          ${btns}
+          <button data-i="-1" style="width:100%;padding:15px 16px;margin-top:6px;background:var(--bg-tertiary);border:none;color:var(--text-secondary);font-size:15px;cursor:pointer;text-align:center">取消</button>
+        </div>`;
+      const close = (val) => { overlay.remove(); resolve(val); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { close(null); return; }
+        const b = e.target.closest('button[data-i]');
+        if (!b) return;
+        const idx = parseInt(b.dataset.i, 10);
+        close(idx < 0 ? null : options[idx].value);
+      });
+      document.body.appendChild(overlay);
+    });
+  }
+
+  // 新建分组（＋ Tab）
+  async function addPromptGroup() {
+    const name = await UI.showSimpleInput('新建分组', '');
+    if (!name || !name.trim()) return;
+    const g = name.trim();
+    if (_isReservedPromptGroup(g)) { UI.showToast('该名称被保留，请换一个'); return; }
+    const groups = await getPromptGroups();
+    // 已用到的 group 也算存在
+    const all = await getGroups();
+    if (all.includes(g)) { UI.showToast('分组已存在'); selectedGroup = g; await render(); return; }
+    groups.push(g);
+    await savePromptGroups(groups);
+    selectedGroup = g;
+    await render();
+  }
+
+  // 长按分组 Tab：重命名 / 删除
+  async function _onGroupTabLongPress(groupName) {
+    if (_isReservedPromptGroup(groupName)) return;
+    const action = await _groupSheet(`分组「${groupName}」`, [
+      { label: '重命名', value: 'rename' },
+      { label: '删除分组', value: 'delete', danger: true }
+    ]);
+    if (!action) return;
+    if (action === 'rename') {
+      const nn = await UI.showSimpleInput('重命名分组', groupName);
+      if (!nn || !nn.trim()) return;
+      const nname = nn.trim();
+      if (nname === groupName) return;
+      if (_isReservedPromptGroup(nname)) { UI.showToast('该名称被保留，请换一个'); return; }
+      const all = await getGroups();
+      if (all.includes(nname)) { UI.showToast('已有同名分组'); return; }
+      // 更新独立分组数组
+      const groups = await getPromptGroups();
+      const gi = groups.indexOf(groupName);
+      if (gi >= 0) groups[gi] = nname; else groups.push(nname);
+      await savePromptGroups(groups);
+      // 迁移该组下提示词
+      const list = await getAll();
+      let changed = false;
+      list.forEach(p => { if ((p.group || '默认') === groupName) { p.group = nname; changed = true; } });
+      if (changed) await saveAll(list);
+      if (selectedGroup === groupName) selectedGroup = nname;
+      await render();
+    } else if (action === 'delete') {
+      if (!await UI.showConfirm('删除分组', `确定删除分组「${groupName}」？\n\n该组下的提示词会退回「默认」，提示词本身不会被删除。`)) return;
+      const groups = await getPromptGroups();
+      await savePromptGroups(groups.filter(g => g !== groupName));
+      // 该组下提示词退回默认
+      const list = await getAll();
+      let changed = false;
+      list.forEach(p => { if ((p.group || '默认') === groupName) { p.group = '默认'; changed = true; } });
+      if (changed) await saveAll(list);
+      if (selectedGroup === groupName) selectedGroup = '全部';
+      await render();
+    }
+  }
+
+  // 长按计时器（分组 Tab）
+  let _groupLongPressTimer = null;
+  let _groupSuppressClick = false;
+  function _onGroupTabTouchStart(e, groupName) {
+    if (_isReservedPromptGroup(groupName)) return;
+    _groupLongPressTimer = setTimeout(() => {
+      _groupSuppressClick = true;
+      try { e?.preventDefault?.(); } catch(_) {}
+      _onGroupTabLongPress(groupName);
+      setTimeout(() => { _groupSuppressClick = false; }, 650);
+    }, 500);
+  }
+  function _onGroupTabTouchEnd() {
+    if (_groupLongPressTimer) { clearTimeout(_groupLongPressTimer); _groupLongPressTimer = null; }
+  }
+  function _onGroupTabClick(e, group) {
+    if (_groupSuppressClick) { _groupSuppressClick = false; try { e?.preventDefault?.(); e?.stopPropagation?.(); } catch(_) {} return; }
+    switchGroup(group);
+  }
+
+  // 批量移动选中提示词到某分组
+  async function moveSelectedToGroup() {
+    if (promptSelectedIds.size === 0) { UI.showToast('请先选择提示词'); return; }
+    const groups = await getPromptGroups();
+    // 合并已用到的 group（去掉保留名）
+    const all = (await getGroups()).filter(g => !_isReservedPromptGroup(g));
+    const merged = Array.from(new Set([...all, ...groups]));
+    const options = [
+      ...merged.map(g => ({ label: g, value: g })),
+      { label: '＋ 新建分组…', value: '__new__' }
+    ];
+    let target = await _groupSheet(`移动 ${promptSelectedIds.size} 条提示词到`, options);
+    if (!target) return;
+    if (target === '__new__') {
+      const name = await UI.showSimpleInput('新建分组', '');
+      if (!name || !name.trim()) return;
+      const g = name.trim();
+      if (_isReservedPromptGroup(g)) { UI.showToast('该名称被保留，请换一个'); return; }
+      if (!groups.includes(g)) { groups.push(g); await savePromptGroups(groups); }
+      target = g;
+    }
+    const list = await getAll();
+    list.forEach(p => { if (promptSelectedIds.has(p.id)) p.group = target; });
+    await saveAll(list);
+    const moved = promptSelectedIds.size;
+    selectedGroup = target;
+    exitPromptManageMode();
+    UI.showToast(`已移动 ${moved} 条提示词`);
   }
 
   // 切换分组
@@ -333,17 +483,35 @@ const Prompts = (() => {
     const list = await getAll();
     const groups = await getGroups();
 
-    // 渲染分组 Tab
+    // 渲染分组 Tab（「全部」后插入虚拟「已选」= 已启用的提示词，只读预览）
     let tabsHtml = '';
     groups.forEach(g => {
       const isActive = g === selectedGroup;
-      tabsHtml += `<button onclick="Prompts.switchGroup('${Utils.escapeHtml(g)}')" style="flex-shrink:0;padding:6px 14px;border-radius:var(--radius);font-size:12px;border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};background:${isActive ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isActive ? '#111' : 'var(--text-secondary)'};cursor:pointer">${Utils.escapeHtml(g)}</button>`;
+      const deletable = !_isReservedPromptGroup(g);
+      const esc = Utils.escapeHtml(g).replace(/'/g, "\\'");
+      const onclickAttr = deletable
+        ? `onclick="Prompts._onGroupTabClick(event,'${esc}')"`
+        : `onclick="Prompts.switchGroup('${esc}')"`;
+      const longPress = deletable
+        ? ` oncontextmenu="event.preventDefault();Prompts._onGroupTabLongPress('${esc}')" ontouchstart="Prompts._onGroupTabTouchStart(event,'${esc}')" ontouchend="Prompts._onGroupTabTouchEnd()" ontouchmove="Prompts._onGroupTabTouchEnd()"`
+        : '';
+      tabsHtml += `<button ${onclickAttr}${longPress} style="flex-shrink:0;padding:6px 14px;border-radius:var(--radius);font-size:12px;border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};background:${isActive ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isActive ? '#111' : 'var(--text-secondary)'};cursor:pointer;white-space:nowrap">${Utils.escapeHtml(g)}</button>`;
+      // 紧跟在「全部」后面插入「已选」
+      if (g === '全部') {
+        const selActive = selectedGroup === SELECTED_GROUP;
+        tabsHtml += `<button onclick="Prompts.switchGroup('${SELECTED_GROUP}')" style="flex-shrink:0;padding:6px 14px;border-radius:var(--radius);font-size:12px;border:1px solid ${selActive ? 'var(--accent)' : 'var(--border)'};background:${selActive ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${selActive ? '#111' : 'var(--text-secondary)'};cursor:pointer">✓ 已选</button>`;
+      }
     });
+    // ＋ 新建分组
+    tabsHtml += `<button onclick="Prompts.addPromptGroup()" style="flex-shrink:0;padding:6px 12px;border-radius:var(--radius);font-size:14px;border:1px dashed var(--border);background:none;color:var(--text-secondary);cursor:pointer">＋</button>`;
     tabsContainer.innerHTML = tabsHtml;
 
     // 根据选中分组和搜索关键词过滤
     let filteredList = list;
-    if (selectedGroup !== '全部') {
+    const _isSelectedView = selectedGroup === SELECTED_GROUP;
+    if (_isSelectedView) {
+      filteredList = filteredList.filter(p => p.enabled);
+    } else if (selectedGroup !== '全部') {
       filteredList = filteredList.filter(p => p.group === selectedGroup);
     }
     if (searchQuery) {
@@ -393,7 +561,7 @@ const Prompts = (() => {
               <h3 style="flex:1;margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(p.name)}</h3>
               <span style="font-size:10px;color:var(--accent);background:rgba(0,0,0,0.2);padding:1px 6px;border-radius:8px;white-space:nowrap;flex-shrink:0">${scopeLabel}</span>
               <span style="font-size:11px;color:var(--text-secondary);white-space:nowrap;display:flex;align-items:center;gap:3px">${posLabel}</span>
-              ${!promptManageMode ? (() => {
+              ${(!promptManageMode && !_isSelectedView) ? (() => {
                 const _prevSameGroup = _pi > 0 && (filteredList[_pi - 1].group || '') === (p.group || '');
                 const _nextSameGroup = _pi < filteredList.length - 1 && (filteredList[_pi + 1].group || '') === (p.group || '');
                 return `<span style="display:inline-flex;flex-direction:column;flex-shrink:0;gap:1px">
@@ -436,7 +604,8 @@ const Prompts = (() => {
   // 按当前分组+搜索筛选后的提示词列表（全选/图标刷新共用）
   async function _getFilteredPrompts() {
     let filtered = await getAll();
-    if (selectedGroup !== '全部') filtered = filtered.filter(p => p.group === selectedGroup);
+    if (selectedGroup === SELECTED_GROUP) filtered = filtered.filter(p => p.enabled);
+    else if (selectedGroup !== '全部') filtered = filtered.filter(p => p.group === selectedGroup);
     if (searchQuery) {
       filtered = filtered.filter(p =>
         (p.name || '').toLowerCase().includes(searchQuery) ||
@@ -483,6 +652,177 @@ const Prompts = (() => {
     const tmp = a.sortOrder; a.sortOrder = b.sortOrder; b.sortOrder = tmp;
     await saveAll(list);
     await render();
+  }
+
+  // ===== 拖拽排序模式（组内拖拽，复用面具排序那套触摸逻辑）=====
+  let promptSortMode = false;
+  let _sortList = [];          // 排序模式下的当前顺序（含所有提示词，已按分组+sortOrder排）
+  let _promptDragState = null;
+
+  async function enterPromptSortMode() {
+    promptSortMode = true;
+    // 退出可能开着的批量模式
+    if (promptManageMode) { promptManageMode = false; promptSelectedIds.clear(); }
+    const list = await getAll();
+    _sortList = _sortPrompts(list);
+    _renderPromptSortList();
+  }
+  function exitPromptSortMode() {
+    promptSortMode = false;
+    _sortList = [];
+    const bar = document.getElementById('prompt-sort-bar');
+    if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
+    const listEl = document.getElementById('prompts-list');
+    if (listEl) listEl.style.paddingBottom = '';
+    render();
+  }
+  // 把当前 _sortList 的顺序写回各条的 sortOrder（按分组分别赋连续序号），落库后退出
+  async function savePromptSortOrder() {
+    const list = await getAll();
+    // 按分组分别计数
+    const counter = {};
+    const orderMap = new Map();
+    for (const p of _sortList) {
+      const g = p.group || '';
+      counter[g] = (counter[g] || 0);
+      orderMap.set(p.id, counter[g]);
+      counter[g]++;
+    }
+    list.forEach(p => { if (orderMap.has(p.id)) p.sortOrder = orderMap.get(p.id); });
+    await saveAll(list);
+    exitPromptSortMode();
+    UI.showToast('排序已保存', 1500);
+  }
+
+  function _renderPromptSortList() {
+    const container = document.getElementById('prompts-list');
+    if (!container) return;
+    container.style.paddingBottom = '72px';
+    const bar = document.getElementById('prompt-sort-bar');
+    if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
+    // 分组 Tab 在排序模式下无意义，清掉（退出时 render 会重建）
+    const tabsContainer = document.getElementById('prompt-group-tabs');
+    if (tabsContainer) tabsContainer.innerHTML = '';
+
+    if (!_sortList.length) {
+      container.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:20px">暂无提示词</p>';
+      return;
+    }
+    let html = '';
+    let lastGroup = null;
+    for (let i = 0; i < _sortList.length; i++) {
+      const p = _sortList[i];
+      const g = p.group || '';
+      if (g !== lastGroup) {
+        html += `<div style="font-size:12px;color:var(--text-secondary);font-weight:600;margin:${lastGroup === null ? '4px' : '14px'} 0 6px;padding-left:2px">${Utils.escapeHtml(g || '未分组')}</div>`;
+        lastGroup = g;
+      }
+      html += `<div class="sort-item" data-sort-idx="${i}" data-id="${p.id}" data-group="${Utils.escapeHtml(g)}" style="display:flex;align-items:center;gap:8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;transition:transform 0.15s ease,opacity 0.15s ease">
+        <div class="sort-handle" style="display:flex;align-items:center;justify-content:center;width:24px;flex-shrink:0;cursor:grab;color:var(--text-secondary);font-size:18px;user-select:none;-webkit-user-select:none;touch-action:none">≡</div>
+        <div style="flex:1;overflow:hidden">
+          <h3 style="margin:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(p.name || '未命名')}</h3>
+        </div>
+      </div>`;
+    }
+    container.innerHTML = html;
+    _bindPromptSortDrag(container);
+  }
+
+  function _bindPromptSortDrag(container) {
+    const items = container.querySelectorAll('.sort-item');
+    items.forEach(item => {
+      const handle = item.querySelector('.sort-handle');
+      if (!handle) return;
+      handle.addEventListener('touchstart', e => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = item.getBoundingClientRect();
+        const placeholder = document.createElement('div');
+        placeholder.className = 'sort-placeholder';
+        placeholder.style.cssText = `height:${rect.height}px;margin-bottom:6px;border:2px dashed var(--accent);border-radius:var(--radius);background:transparent;box-sizing:border-box`;
+        item.style.position = 'fixed';
+        item.style.left = rect.left + 'px';
+        item.style.width = rect.width + 'px';
+        item.style.top = rect.top + 'px';
+        item.style.zIndex = '9999';
+        item.style.opacity = '0.9';
+        item.style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)';
+        item.style.pointerEvents = 'none';
+        item.style.transition = 'none';
+        item.parentNode.insertBefore(placeholder, item);
+        _promptDragState = {
+          item, placeholder, container,
+          idx: parseInt(item.dataset.sortIdx),
+          group: item.dataset.group || '',
+          startY: touch.clientY,
+          itemTop: rect.top,
+          scrollContainer: container.closest('.panel-content') || container.parentElement
+        };
+        document.addEventListener('touchmove', _onPromptSortTouchMove, { passive: false });
+        document.addEventListener('touchend', _onPromptSortTouchEnd);
+        document.addEventListener('touchcancel', _onPromptSortTouchEnd);
+      }, { passive: false });
+    });
+  }
+  function _onPromptSortTouchMove(e) {
+    if (!_promptDragState) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const dy = touch.clientY - _promptDragState.startY;
+    _promptDragState.item.style.top = (_promptDragState.itemTop + dy) + 'px';
+    const sc = _promptDragState.scrollContainer;
+    if (sc) {
+      const scRect = sc.getBoundingClientRect();
+      const edgeZone = 60, speed = 8;
+      if (touch.clientY < scRect.top + edgeZone) sc.scrollTop -= speed;
+      else if (touch.clientY > scRect.bottom - edgeZone) sc.scrollTop += speed;
+    }
+    const allItems = _promptDragState.container.querySelectorAll('.sort-item, .sort-placeholder');
+    const dragCenterY = _promptDragState.itemTop + dy + _promptDragState.item.offsetHeight / 2;
+    for (let i = 0; i < allItems.length; i++) {
+      const el = allItems[i];
+      if (el === _promptDragState.item) continue;
+      if (el.classList.contains('sort-placeholder')) continue;
+      // 组内限制：只和同分组的条目换位，跨组不动
+      if ((el.dataset.group || '') !== _promptDragState.group) continue;
+      const r = el.getBoundingClientRect();
+      const midY = r.top + r.height / 2;
+      const elIdx = parseInt(el.dataset.sortIdx);
+      if (dragCenterY < midY && elIdx < _promptDragState.idx) {
+        _promptDragState.container.insertBefore(_promptDragState.placeholder, el);
+        break;
+      } else if (dragCenterY > midY && elIdx > _promptDragState.idx) {
+        if (el.nextSibling) _promptDragState.container.insertBefore(_promptDragState.placeholder, el.nextSibling);
+        else _promptDragState.container.appendChild(_promptDragState.placeholder);
+      }
+    }
+  }
+  function _onPromptSortTouchEnd() {
+    if (!_promptDragState) return;
+    const { item, placeholder, container } = _promptDragState;
+    item.style.position = '';
+    item.style.left = '';
+    item.style.width = '';
+    item.style.top = '';
+    item.style.zIndex = '';
+    item.style.opacity = '';
+    item.style.boxShadow = '';
+    item.style.pointerEvents = '';
+    item.style.transition = '';
+    container.insertBefore(item, placeholder);
+    placeholder.remove();
+    // 根据 DOM 里 sort-item 的新顺序重建 _sortList
+    const domItems = Array.from(container.querySelectorAll('.sort-item'));
+    const newOrder = domItems.map(el => el.dataset.id);
+    const byId = new Map(_sortList.map(p => [p.id, p]));
+    const rebuilt = newOrder.map(id => byId.get(id)).filter(Boolean);
+    if (rebuilt.length === _sortList.length) _sortList = rebuilt;
+    _promptDragState = null;
+    document.removeEventListener('touchmove', _onPromptSortTouchMove);
+    document.removeEventListener('touchend', _onPromptSortTouchEnd);
+    document.removeEventListener('touchcancel', _onPromptSortTouchEnd);
+    // 重绘刷新序号/data-sort-idx（保证下次拖拽 idx 正确）
+    _renderPromptSortList();
   }
 
   // 底栏「全选」图标态刷新
@@ -572,26 +912,37 @@ const Prompts = (() => {
     _overrideTemp = { ...overrides };
     _overrideGroup = '全部';
 
-    _renderOverrideList(list);
+    await _renderOverrideList(list);
     document.getElementById('prompt-override-modal').classList.remove('hidden');
   }
 
-  function _renderOverrideList(list) {
+  async function _renderOverrideList(list) {
     const container = document.getElementById('prompt-override-list');
     if (!container) return;
 
-    // 收集分组
-    const groups = ['全部'];
-    const seen = new Set();
-    list.forEach(p => { if (p.group && !seen.has(p.group)) { seen.add(p.group); groups.push(p.group); } });
+    // 收集分组（与设置页 getGroups 一致，含独立分组数组）
+    const groups = await getGroups();
 
-    // 分组tabs
-    const tabsHtml = groups.map(g =>
-      `<button onclick="Prompts._switchOverrideGroup('${g}')" style="padding:4px 12px;border-radius:14px;border:1px solid ${g === _overrideGroup ? 'var(--accent)' : 'var(--border)'};background:${g === _overrideGroup ? 'var(--accent)' : 'transparent'};color:${g === _overrideGroup ? '#111' : 'var(--text-secondary)'};font-size:12px;cursor:pointer;white-space:nowrap">${Utils.escapeHtml(g)}</button>`
-    ).join('');
+    // 该对话最终生效状态（有覆盖用覆盖值，否则用全局 enabled）
+    const _effEnabled = (p) => _overrideTemp.hasOwnProperty(p.id) ? _overrideTemp[p.id] : p.enabled;
 
-    // 过滤
-    const filtered = _overrideGroup === '全部' ? list : list.filter(p => p.group === _overrideGroup);
+    // 分组tabs（「全部」后插入虚拟「已选」）
+    let tabsHtml = '';
+    groups.forEach(g => {
+      tabsHtml += `<button onclick="Prompts._switchOverrideGroup('${g}')" style="padding:4px 12px;border-radius:14px;border:1px solid ${g === _overrideGroup ? 'var(--accent)' : 'var(--border)'};background:${g === _overrideGroup ? 'var(--accent)' : 'transparent'};color:${g === _overrideGroup ? '#111' : 'var(--text-secondary)'};font-size:12px;cursor:pointer;white-space:nowrap">${Utils.escapeHtml(g)}</button>`;
+      if (g === '全部') {
+        const sa = _overrideGroup === SELECTED_GROUP;
+        tabsHtml += `<button onclick="Prompts._switchOverrideGroup('${SELECTED_GROUP}')" style="padding:4px 12px;border-radius:14px;border:1px solid ${sa ? 'var(--accent)' : 'var(--border)'};background:${sa ? 'var(--accent)' : 'transparent'};color:${sa ? '#111' : 'var(--text-secondary)'};font-size:12px;cursor:pointer;white-space:nowrap">✓ 已选</button>`;
+      }
+    });
+
+    // 过滤（统一走 _sortPrompts，保持与设置页显示顺序一致）
+    const _isSelView = _overrideGroup === SELECTED_GROUP;
+    const filtered = _sortPrompts(
+      _isSelView
+        ? list.filter(p => _effEnabled(p))
+        : (_overrideGroup === '全部' ? list : list.filter(p => p.group === _overrideGroup))
+    );
 
     let listHtml = '';
     if (filtered.length === 0) {
@@ -637,10 +988,13 @@ const Prompts = (() => {
   // 对话覆盖弹窗：把当前分组的提示词在本对话内全部开启/关闭（只改临时覆盖态，保存时才落库）
   async function _overrideGroupAll(enable) {
     const list = await getAll();
-    const filtered = _overrideGroup === '全部' ? list : list.filter(p => p.group === _overrideGroup);
+    const _eff = (p) => _overrideTemp.hasOwnProperty(p.id) ? _overrideTemp[p.id] : p.enabled;
+    const filtered = _overrideGroup === SELECTED_GROUP
+      ? list.filter(p => _eff(p))
+      : (_overrideGroup === '全部' ? list : list.filter(p => p.group === _overrideGroup));
     if (!filtered.length) return;
     filtered.forEach(p => { _overrideTemp[p.id] = !!enable; });
-    _renderOverrideList(list);
+    await _renderOverrideList(list);
   }
 
   let _overrideGroup = '全部';
@@ -648,7 +1002,7 @@ const Prompts = (() => {
   async function _switchOverrideGroup(group) {
     _overrideGroup = group;
     const list = await getAll();
-    _renderOverrideList(list);
+    await _renderOverrideList(list);
   }
 
   function _toggleOverride(id, checked) {
@@ -863,8 +1217,10 @@ const Prompts = (() => {
   }
 
   return { getAll, add, edit, saveEdit, closeEdit, remove, toggle, buildInjections, render, getGroups, switchGroup, search,
+    addPromptGroup, moveSelectedToGroup, _onGroupTabLongPress, _onGroupTabTouchStart, _onGroupTabTouchEnd, _onGroupTabClick,
     togglePromptSelect, togglePromptManageMode, exitPromptManageMode, batchDeletePrompts,
     togglePromptSelectAll, toggleGroupAll, movePrompt,
+    enterPromptSortMode, exitPromptSortMode, savePromptSortOrder,
     _togglePositionDropdown, _selectPosition, _toggleRoleDropdown, _selectRole, _toggleScope, importPreset, exportPreset, toggleMenu,
     openConvOverrideModal, saveConvOverrides, resetConvOverrides, closeConvOverrideModal, _toggleOverride, _switchOverrideGroup, _overrideGroupAll, _editFromOverride };
 })();

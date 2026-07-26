@@ -8,6 +8,11 @@ const Stickers = (() => {
   let _cache = null;
   // 管理界面当前的分类筛选：null=全部, ''=未分类, 其它=具体类别名
   let _filterCat = null;
+  // 批量管理模式
+  let _manageMode = false;
+  let _selectedIds = new Set();
+  // 名字搜索关键词
+  let _searchQuery = '';
 
   // 把选中的图片压成表情尺寸（保留透明通道，用 png）
   function _compressToSticker(dataUrl, maxSide = 240) {
@@ -110,10 +115,33 @@ const Stickers = (() => {
     const nm = String(name || '').trim();
     if (!nm) return;
     _saveCategories(getCategories().filter(c => c !== nm));
+    // 同步范围里也移除该类（未设置过则不动，仍是「全部」语义）
+    const sc = getSyncCats();
+    if (sc !== null && sc.includes(nm)) _saveSyncCats(sc.filter(c => c !== nm));
     try {
       const all = await DB.getAll('stickers');
       for (const s of (all || [])) {
         if ((s.category || '') === nm) { s.category = ''; await DB.put('stickers', s); }
+      }
+    } catch (_) {}
+    _cache = null;
+  }
+  // 重命名类别：改列表里的名字，并迁移该类下所有表情的 category
+  async function renameCategory(oldName, newName) {
+    const on = String(oldName || '').trim();
+    const nn = String(newName || '').trim();
+    if (!on || !nn || on === nn) return;
+    const arr = getCategories();
+    const i = arr.indexOf(on);
+    if (i >= 0) arr[i] = nn; else arr.push(nn);
+    _saveCategories(arr);
+    // 同步范围里的旧名字跟着改
+    const sc = getSyncCats();
+    if (sc !== null && sc.includes(on)) _saveSyncCats(sc.map(c => c === on ? nn : c));
+    try {
+      const all = await DB.getAll('stickers');
+      for (const s of (all || [])) {
+        if ((s.category || '') === on) { s.category = nn; await DB.put('stickers', s); }
       }
     } catch (_) {}
     _cache = null;
@@ -408,6 +436,8 @@ const Stickers = (() => {
     try {
       const sw = document.getElementById('stickers-sync-ai');
       if (sw) sw.checked = isSyncAI();
+      const scopeEl = document.getElementById('stickers-sync-scope-label');
+      if (scopeEl) scopeEl.textContent = _syncScopeLabel();
     } catch (_) {}
     _renderCatTabs();
     const wrap = document.getElementById('stickers-list');
@@ -416,42 +446,256 @@ const Stickers = (() => {
     // 按当前筛选过滤
     if (_filterCat === '') items = items.filter(s => !(s.category || '').trim());
     else if (_filterCat != null) items = items.filter(s => (s.category || '') === _filterCat);
+    // 名字搜索
+    if (_searchQuery) items = items.filter(s => (s.name || '').toLowerCase().includes(_searchQuery));
 
     if (!items.length) {
-      const tip = _filterCat == null ? '还没有表情，点上面的按钮添加'
-        : (_filterCat === '' ? '「未分类」里还没有表情' : `「${_esc(_filterCat)}」分类下还没有表情`);
+      const tip = _searchQuery ? `没有名字含「${_esc(_searchQuery)}」的表情`
+        : (_filterCat == null ? '还没有表情，点上面的按钮添加'
+        : (_filterCat === '' ? '「未分类」里还没有表情' : `「${_esc(_filterCat)}」分类下还没有表情`));
       wrap.innerHTML = `<div style="grid-column:1/-1;color:var(--text-secondary);font-size:13px;text-align:center;padding:24px 0">${tip}</div>`;
+      _updateSelectAllIcon();
       return;
     }
-    wrap.innerHTML = items.map(s => `
-      <div onclick="Stickers._openStickerMenu('${s.id}')" title="点击操作" style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer">
-        <div style="position:relative;width:100%;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--bg-tertiary);border:1px solid var(--border)">
-          <img src="${s.dataUrl}" alt="${_esc(s.name)}" style="width:100%;height:100%;object-fit:contain;pointer-events:none">
+    wrap.innerHTML = items.map(s => {
+      const checked = _selectedIds.has(s.id);
+      const onclickAttr = _manageMode
+        ? `Stickers._toggleSelect('${s.id}')`
+        : `Stickers._openStickerMenu('${s.id}')`;
+      return `
+      <div class="sticker-card" data-id="${s.id}" onclick="${onclickAttr}" title="${_manageMode ? '点击选择' : '点击操作'}" style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer">
+        <div class="sticker-thumb" style="position:relative;width:100%;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--bg-tertiary);border:1px solid ${_manageMode && checked ? 'var(--accent)' : 'var(--border)'}">
+          <img src="${s.dataUrl}" alt="${_esc(s.name)}" style="width:100%;height:100%;object-fit:contain;pointer-events:none${_manageMode && checked ? ';opacity:0.6' : ''}">
+          ${_manageMode ? `<span class="sticker-check" style="position:absolute;right:3px;top:3px;width:20px;height:20px;border-radius:50%;border:2px solid ${checked ? 'var(--accent)' : 'rgba(255,255,255,0.85)'};background:${checked ? 'var(--accent)' : 'rgba(0,0,0,0.35)'};display:flex;align-items:center;justify-content:center;pointer-events:none">${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>` : ''}
           ${(s.category || '').trim() ? `<div style="position:absolute;left:2px;bottom:2px;max-width:calc(100% - 8px);padding:1px 6px;border-radius:6px;background:rgba(0,0,0,0.5);color:#fff;font-size:10px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(s.category)}</div>` : ''}
         </div>
         <div style="font-size:12px;color:var(--text);text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(s.name)}</div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
+    _updateSelectAllIcon();
   }
 
-  // 渲染分类筛选 tab：全部 / 未分类 / 各类别 / ＋新类别
+  // ===== 批量管理模式 =====
+
+  // 当前筛选+搜索后的表情（全选/图标刷新共用）
+  async function _getFilteredStickers() {
+    let items = await list();
+    if (_filterCat === '') items = items.filter(s => !(s.category || '').trim());
+    else if (_filterCat != null) items = items.filter(s => (s.category || '') === _filterCat);
+    if (_searchQuery) items = items.filter(s => (s.name || '').toLowerCase().includes(_searchQuery));
+    return items;
+  }
+
+  function _onSearchInput(val) {
+    _searchQuery = String(val || '').trim().toLowerCase();
+    renderList();
+  }
+
+  function _toggleSelect(id) {
+    if (_selectedIds.has(id)) _selectedIds.delete(id);
+    else _selectedIds.add(id);
+    // 局部更新那一张卡，避免 200 张全量重绘
+    const card = document.querySelector(`.sticker-card[data-id="${id}"]`);
+    if (card) {
+      const checked = _selectedIds.has(id);
+      const box = card.querySelector('.sticker-thumb');
+      const img = card.querySelector('img');
+      const circle = card.querySelector('.sticker-check');
+      if (box) box.style.borderColor = checked ? 'var(--accent)' : 'var(--border)';
+      if (img) img.style.opacity = checked ? '0.6' : '';
+      if (circle) {
+        circle.style.borderColor = checked ? 'var(--accent)' : 'rgba(255,255,255,0.85)';
+        circle.style.background = checked ? 'var(--accent)' : 'rgba(0,0,0,0.35)';
+        circle.innerHTML = checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+      }
+    } else {
+      renderList();
+    }
+    _updateSelectAllIcon();
+    _updateManageBarCount();
+  }
+
+  function toggleManageMode() {
+    _manageMode = !_manageMode;
+    _selectedIds.clear();
+    const bar = document.getElementById('stickers-manage-bar');
+    const btn = document.getElementById('stickers-manage-btn');
+    const wrap = document.getElementById('stickers-list');
+    if (_manageMode) {
+      if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
+      if (btn) { btn.textContent = '退出'; btn.style.background = 'var(--accent)'; btn.style.color = 'var(--bg)'; btn.style.borderColor = 'var(--accent)'; }
+      if (wrap) wrap.style.paddingBottom = '64px';
+    } else {
+      if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
+      if (btn) { btn.textContent = '批量'; btn.style.background = 'var(--bg-tertiary)'; btn.style.color = 'var(--text)'; btn.style.borderColor = 'var(--border)'; }
+      if (wrap) wrap.style.paddingBottom = '';
+    }
+    renderList();
+  }
+
+  function exitManageMode() {
+    if (!_manageMode) return;
+    toggleManageMode();
+  }
+
+  async function _updateSelectAllIcon() {
+    const iconEl = document.getElementById('stickers-select-all-icon');
+    if (!iconEl) return;
+    const filtered = await _getFilteredStickers();
+    const allSelected = filtered.length > 0 && filtered.every(s => _selectedIds.has(s.id));
+    if (allSelected) {
+      iconEl.style.background = 'var(--accent)';
+      iconEl.style.border = '2px solid var(--accent)';
+      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    } else {
+      iconEl.style.background = '';
+      iconEl.style.border = '2px solid var(--text-secondary)';
+      iconEl.innerHTML = '';
+    }
+    _updateManageBarCount();
+  }
+
+  function _updateManageBarCount() {
+    const el = document.getElementById('stickers-selected-count');
+    if (el) el.textContent = _selectedIds.size ? `已选 ${_selectedIds.size}` : '全选';
+  }
+
+  async function toggleSelectAll() {
+    const filtered = await _getFilteredStickers();
+    const allSelected = filtered.length > 0 && filtered.every(s => _selectedIds.has(s.id));
+    if (allSelected) filtered.forEach(s => _selectedIds.delete(s.id));
+    else filtered.forEach(s => _selectedIds.add(s.id));
+    await renderList();
+  }
+
+  // 批量删除（逐条删，带进度提示）
+  async function batchRemove() {
+    if (!_selectedIds.size) { UI.showToast('请先选择表情', 1400); return; }
+    const n = _selectedIds.size;
+    const ok = await UI.showConfirm('批量删除', `确定删除选中的 ${n} 个表情？已发送到聊天记录里的会显示为占位。`);
+    if (!ok) return;
+    const ids = Array.from(_selectedIds);
+    let done = 0;
+    for (const id of ids) {
+      try { await DB.del('stickers', id); } catch (_) {}
+      done++;
+      if (done % 20 === 0) UI.showToast(`删除中 ${done}/${n}`, 800);
+    }
+    _cache = null;
+    _selectedIds.clear();
+    UI.showToast(`已删除 ${n} 个表情`, 1600);
+    exitManageMode();
+  }
+
+  // 批量移到分类
+  async function batchSetCategory() {
+    if (!_selectedIds.size) { UI.showToast('请先选择表情', 1400); return; }
+    const cat = await _promptCategory(`移动 ${_selectedIds.size} 个表情到`);
+    if (cat === undefined) return;
+    const ids = Array.from(_selectedIds);
+    const n = ids.length;
+    let done = 0;
+    for (const id of ids) {
+      try {
+        const item = await DB.get('stickers', id);
+        if (item) { item.category = String(cat || '').trim(); await DB.put('stickers', item); }
+      } catch (_) {}
+      done++;
+      if (done % 20 === 0) UI.showToast(`移动中 ${done}/${n}`, 800);
+    }
+    _cache = null;
+    _selectedIds.clear();
+    if (cat) _filterCat = cat;
+    UI.showToast(cat ? `已移动 ${n} 个到「${cat}」` : `已把 ${n} 个设为未分类`, 1600);
+    exitManageMode();
+  }
+
+  // 渲染分类筛选 tab：全部 / 未分类 / 各类别（长按可重命名/删除）/ ＋新类别
   function _renderCatTabs() {
     const bar = document.getElementById('stickers-cat-tabs');
     if (!bar) return;
     const cats = getCategories();
-    const tab = (label, val, extra) => {
+    const tab = (label, val, longPressName) => {
       const active = (val === _filterCat);
       const activeCss = active ? 'background:var(--accent);color:var(--bg);border-color:var(--accent)' : 'background:var(--bg-tertiary);color:var(--text);border-color:var(--border)';
-      return `<button onclick="Stickers._setFilter(${val == null ? 'null' : `'${_esc(String(val)).replace(/'/g, "\\'")}'`})" style="padding:5px 12px;border:1px solid;border-radius:999px;font-size:12px;cursor:pointer;font-family:inherit;${activeCss}">${_esc(label)}${extra || ''}</button>`;
+      const esc = longPressName ? _esc(longPressName).replace(/'/g, "\\'") : '';
+      const lp = longPressName
+        ? ` oncontextmenu="event.preventDefault();Stickers._onCatLongPress('${esc}')" ontouchstart="Stickers._onCatTouchStart(event,'${esc}')" ontouchend="Stickers._onCatTouchEnd()" ontouchmove="Stickers._onCatTouchEnd()"`
+        : '';
+      const onclickAttr = longPressName
+        ? `Stickers._onCatClick(event,'${esc}')`
+        : `Stickers._setFilter(${val == null ? 'null' : `'${_esc(String(val)).replace(/'/g, "\\'")}'`})`;
+      return `<button onclick="${onclickAttr}"${lp} style="padding:5px 12px;border:1px solid;border-radius:999px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;${activeCss}">${_esc(label)}</button>`;
     };
     let html = tab('全部', null) + tab('未分类', '');
-    for (const c of cats) {
-      const active = (c === _filterCat);
-      const del = active ? ` <span onclick="event.stopPropagation();Stickers._confirmRemoveCategory('${_esc(c).replace(/'/g, "\\'")}')" style="margin-left:4px;opacity:0.8">×</span>` : '';
-      html += tab(c, c, del);
-    }
+    for (const c of cats) html += tab(c, c, c);
     html += `<button onclick="Stickers._promptNewCategory()" style="padding:5px 12px;border:1px dashed var(--border);border-radius:999px;font-size:12px;cursor:pointer;font-family:inherit;background:none;color:var(--text-secondary)">＋新类别</button>`;
     bar.innerHTML = html;
+  }
+
+  // 分类 Tab 长按：重命名 / 删除
+  let _catLongPressTimer = null;
+  let _catSuppressClick = false;
+  function _onCatTouchStart(e, name) {
+    _catLongPressTimer = setTimeout(() => {
+      _catSuppressClick = true;
+      try { e?.preventDefault?.(); } catch (_) {}
+      _onCatLongPress(name);
+      setTimeout(() => { _catSuppressClick = false; }, 650);
+    }, 500);
+  }
+  function _onCatTouchEnd() {
+    if (_catLongPressTimer) { clearTimeout(_catLongPressTimer); _catLongPressTimer = null; }
+  }
+  function _onCatClick(e, name) {
+    if (_catSuppressClick) { _catSuppressClick = false; try { e?.preventDefault?.(); e?.stopPropagation?.(); } catch (_) {} return; }
+    _setFilter(name);
+  }
+  async function _onCatLongPress(name) {
+    const act = await _sheet(`类别「${name}」`, [
+      { label: '重命名', value: 'rename' },
+      { label: '删除类别', value: 'delete', danger: true }
+    ]);
+    if (!act) return;
+    if (act === 'rename') {
+      const nn = await _promptName('重命名类别', '类别名字', name);
+      if (nn === null) return;
+      const nm = String(nn || '').trim();
+      if (!nm || nm === name) return;
+      if (getCategories().includes(nm)) { UI.showToast('已有同名类别', 1500); return; }
+      await renameCategory(name, nm);
+      if (_filterCat === name) _filterCat = nm;
+      UI.showToast('已重命名', 1400);
+      renderList();
+    } else if (act === 'delete') {
+      await _confirmRemoveCategory(name);
+    }
+  }
+
+  // 轻量底部选项弹层（无分割线）
+  function _sheet(title, options) {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:100030;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center';
+      const btns = options.map((o, i) =>
+        `<button data-i="${i}" style="width:100%;padding:15px 16px;background:none;border:none;color:${o.danger ? 'var(--danger,#e55)' : 'var(--text)'};font-size:15px;cursor:pointer;text-align:center;font-family:inherit">${_esc(o.label)}</button>`
+      ).join('');
+      overlay.innerHTML = `
+        <div style="background:var(--bg);width:100%;max-width:480px;border-radius:16px 16px 0 0;overflow:hidden;padding-bottom:env(safe-area-inset-bottom,0)">
+          <div style="padding:14px 16px 8px;font-size:13px;color:var(--text-secondary);text-align:center">${_esc(title || '')}</div>
+          ${btns}
+          <button data-i="-1" style="width:100%;padding:15px 16px;margin-top:6px;background:var(--bg-tertiary);border:none;color:var(--text-secondary);font-size:15px;cursor:pointer;text-align:center;font-family:inherit">取消</button>
+        </div>`;
+      const close = (val) => { overlay.remove(); resolve(val); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { close(null); return; }
+        const b = e.target.closest('button[data-i]');
+        if (!b) return;
+        const idx = parseInt(b.dataset.i, 10);
+        close(idx < 0 ? null : options[idx].value);
+      });
+      document.body.appendChild(overlay);
+    });
   }
 
   function _setFilter(val) {
@@ -543,14 +787,117 @@ const Stickers = (() => {
   // 全量名字列表字符串（供提示词注入），空库返回 ''
   async function buildPromptNames() {
     const items = await list();
-    const names = items.map(s => (s.name || '').trim()).filter(Boolean);
+    const scope = getSyncCats();
+    // scope 为 null = 从未设置过 → 全部同步（老行为）
+    const filtered = (scope === null)
+      ? items
+      : items.filter(s => scope.includes((s.category || '').trim()));
+    const names = filtered.map(s => (s.name || '').trim()).filter(Boolean);
     return names.join('、');
+  }
+
+  // ===== 同步范围（哪些分类同步给 AI）=====
+  // localStorage 存分类名数组；'' 代表「未分类」。
+  // 键不存在 = 从未设置过 → 视为全部同步；存了空数组 = 主动全不选 → 不同步任何。
+  const _SYNC_CATS_KEY = 'stickers_sync_cats';
+
+  // 返回 null（未设置过）或字符串数组
+  function getSyncCats() {
+    try {
+      const raw = localStorage.getItem(_SYNC_CATS_KEY);
+      if (raw == null) return null;
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.filter(c => typeof c === 'string') : null;
+    } catch (_) { return null; }
+  }
+  function _saveSyncCats(arr) {
+    try { localStorage.setItem(_SYNC_CATS_KEY, JSON.stringify(arr)); } catch (_) {}
+  }
+
+  // 当前生效的同步分类集合（未设置过时返回「所有分类 + 未分类」）
+  function _effectiveSyncCats() {
+    const s = getSyncCats();
+    if (s !== null) return s;
+    return ['', ...getCategories()];
+  }
+
+  // 同步范围摘要文字（回填到设置行）
+  function _syncScopeLabel() {
+    const s = getSyncCats();
+    const all = ['', ...getCategories()];
+    if (s === null) return '全部';
+    if (!s.length) return '不同步';
+    const picked = s.filter(c => all.includes(c));
+    if (picked.length >= all.length) return '全部';
+    return picked.map(c => c === '' ? '未分类' : c).join('、');
+  }
+
+  // 打开同步范围多选弹窗
+  function openSyncScope() {
+    const cats = ['', ...getCategories()];
+    const cur = new Set(_effectiveSyncCats());
+    const overlay = document.createElement('div');
+    overlay.className = 'modal';
+    overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;z-index:100020';
+    const row = (c, i) => {
+      const label = c === '' ? '未分类' : c;
+      const on = cur.has(c);
+      return `<label data-i="${i}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:8px;cursor:pointer;font-size:14px;color:var(--text)">
+        <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(label)}</span>
+      </label>`;
+    };
+    overlay.innerHTML = `
+      <div class="modal-content" style="max-width:360px;width:calc(100% - 40px);position:relative;display:flex;flex-direction:column;max-height:76vh">
+        <h3 style="margin:0 0 6px;padding-right:28px">同步给角色的分类</h3>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6">只有勾选分类里的表情，名字才会写进提示词给 AI。全不选=不同步任何表情。</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button data-act="all" style="flex:1;padding:7px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-secondary);font-size:12px;cursor:pointer;font-family:inherit">全选</button>
+          <button data-act="none" style="flex:1;padding:7px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-secondary);font-size:12px;cursor:pointer;font-family:inherit">全不选</button>
+        </div>
+        <div id="stk-scope-rows" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:14px">${cats.map(row).join('')}</div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <button data-act="cancel" style="flex:1;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text-secondary);font-size:14px;cursor:pointer;font-family:inherit">取消</button>
+          <button data-act="save" style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:8px;color:var(--bg);font-size:14px;cursor:pointer;font-family:inherit;font-weight:600">保存</button>
+        </div>
+      </div>`;
+    const rerender = () => {
+      const box = overlay.querySelector('#stk-scope-rows');
+      if (box) box.innerHTML = cats.map(row).join('');
+    };
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) { overlay.remove(); return; }
+      const lab = e.target.closest('label[data-i]');
+      if (lab) {
+        const key = cats[parseInt(lab.dataset.i, 10)];
+        if (key === undefined) return;
+        if (cur.has(key)) cur.delete(key); else cur.add(key);
+        rerender();
+        return;
+      }
+      const b = e.target.closest('button[data-act]');
+      if (!b) return;
+      const act = b.dataset.act;
+      if (act === 'all') { cats.forEach(c => cur.add(c)); rerender(); return; }
+      if (act === 'none') { cur.clear(); rerender(); return; }
+      if (act === 'cancel') { overlay.remove(); return; }
+      if (act === 'save') {
+        _saveSyncCats(cats.filter(c => cur.has(c)));
+        overlay.remove();
+        UI.showToast('已保存同步范围', 1400);
+        renderList();
+      }
+    });
+    document.body.appendChild(overlay);
   }
 
   function _esc(s) {
     return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '"', "'": '&#39;' }[c]));
   }
 
-  return { list, get, add, remove, rename, pickAndAdd, pickBatchAndAdd, pickBatchUrlAndAdd, confirmRemove, renderList, _promptRename, isSyncAI, setSyncAI, findByName, buildPromptNames, getCategories, addCategory, removeCategory, setCategory, _setFilter, _openStickerMenu, _promptNewCategory, _confirmRemoveCategory };
+  return { list, get, add, remove, rename, pickAndAdd, pickBatchAndAdd, pickBatchUrlAndAdd, confirmRemove, renderList, _promptRename, isSyncAI, setSyncAI, findByName, buildPromptNames, getCategories, addCategory, removeCategory, renameCategory, setCategory, _setFilter, _openStickerMenu, _promptNewCategory, _confirmRemoveCategory,
+    toggleManageMode, exitManageMode, toggleSelectAll, batchRemove, batchSetCategory, _toggleSelect, _onSearchInput,
+    openSyncScope, getSyncCats,
+    _onCatLongPress, _onCatTouchStart, _onCatTouchEnd, _onCatClick };
 })();
 window.Stickers = Stickers;

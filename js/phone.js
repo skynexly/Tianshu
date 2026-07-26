@@ -105,7 +105,47 @@ let _hasNewNotif = false;
       Conversations.saveList && Conversations.saveList();
     } catch (_) {}
   }
-  // 按 ref 精确删除 npcNotes 派生记录（用户手动删评论时调用，连带清掉"角色行为档案"里的对应条目，
+  // 今日日程写入记事本（和 identity/important/minor 平级的 schedule 位，盖游戏日期）。
+  // items 为空数组 = 清掉该角色的日程。返回是否有变动。
+  function _npcNoteSetSchedule(npcName, items, gameDate) {
+    try {
+      const name = _resolveNpcRealName(String(npcName || '').trim());
+      if (!name) return false;
+      const s = _npcNotesStore();
+      if (!s) return false;
+      const { store } = s;
+      const list = (Array.isArray(items) ? items : [])
+        .map(it => ({ time: String((it && it.time) || '').trim(), text: String((it && it.text) || '').trim() }))
+        .filter(it => it.text).slice(0, 5);
+      if (list.length && gameDate) {
+        if (!store[name] || typeof store[name] !== 'object') store[name] = { identity: [], important: [], minor: [] };
+        store[name].schedule = { date: gameDate, items: list, updatedAt: Date.now() };
+        Conversations.saveList && Conversations.saveList();
+        return true;
+      } else if (!list.length) {
+        // 显式清空
+        if (store[name] && store[name].schedule) {
+          delete store[name].schedule;
+          Conversations.saveList && Conversations.saveList();
+          return true;
+        }
+      }
+      return false;
+    } catch (_) { return false; }
+  }
+  // 读取某角色当天有效的日程 {date, items} 或 null（日期不是今天返回 null）
+  function _npcNoteGetSchedule(npcName) {
+    try {
+      const name = _resolveNpcRealName(String(npcName || '').trim());
+      if (!name) return null;
+      const s = _npcNotesStore();
+      if (!s) return null;
+      const sc = s.store[name] && s.store[name].schedule;
+      if (!sc || !Array.isArray(sc.items) || !sc.items.length) return null;
+      if (!_gameDateEq(sc.date, _currentGameDate())) return null;
+      return sc;
+    } catch (_) { return null; }
+  }
   // 避免删了显示/原数组但下次构建上下文又把它发给 AI）。refList 是一组精确 ref 字符串。
   function _npcNoteRemoveByRefs(refList) {
     try {
@@ -127,7 +167,8 @@ let _hasNewNotif = false;
         // 三档全空则删键，避免残留空档
         if ((!entry.identity || !entry.identity.length) &&
             (!entry.important || !entry.important.length) &&
-            (!entry.minor || !entry.minor.length)) {
+            (!entry.minor || !entry.minor.length) &&
+            !entry.schedule) {
           delete store[name];
         }
       }
@@ -149,7 +190,8 @@ let _hasNewNotif = false;
         // 整个 NPC 三档都空了就删掉键，避免膨胀
         if ((!entry.identity || !entry.identity.length) &&
             (!entry.important || !entry.important.length) &&
-            (!entry.minor || !entry.minor.length)) {
+            (!entry.minor || !entry.minor.length) &&
+            !entry.schedule) {
           delete store[name];
         }
       }
@@ -198,6 +240,15 @@ let _hasNewNotif = false;
       });
       (entry.important || []).forEach(it => { if (it && it.text) lines.push(`  · ${it.text}`); });
       (entry.minor || []).forEach(it => { if (it && it.text) lines.push(`  · ${it.text}`); });
+      // 今日行程：仅当记事本里的日程日期==当前游戏日才注入（过期的一律不给）
+      try {
+        const sc = entry.schedule;
+        if (sc && Array.isArray(sc.items) && sc.items.length && _gameDateEq(sc.date, _currentGameDate())) {
+          const items = sc.items.filter(it => it && it.text)
+            .map(it => `${(it.time || '').trim()} ${it.text.trim()}`.trim()).join('；');
+          if (items) lines.push(`  · 今日行程：${items}`);
+        }
+      } catch(_) {}
       if (lines.length) blocks.push(`【${name}】\n${lines.join('\n')}`);
     }
     if (!blocks.length) return '';
@@ -269,13 +320,15 @@ let _hasNewNotif = false;
           rows.push(_npcNoteRowHtml(name, tier, i, it));
         });
       });
-      if (!rows.length) return '';
+      const schedHtml = _npcNoteScheduleRowHtml(name, entry.schedule);
+      if (!rows.length && !schedHtml) return '';
       return `<div style="margin-bottom:18px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;position:sticky;top:0;background:var(--bg);padding:2px 0;z-index:1">
           <div style="font-size:15px;font-weight:600;color:var(--text)">${esc(name)}</div>
           <span onclick="Phone._npcNoteClearName('${_npcNoteAttrEsc(name)}')" style="cursor:pointer;color:var(--text-secondary);font-size:11px" title="清空此角色">清空</span>
         </div>
         ${rows.join('')}
+        ${schedHtml}
       </div>`;
     }).join('');
   }
@@ -327,6 +380,45 @@ let _hasNewNotif = false;
     </div>`;
   }
 
+  // 今日行程展示行（只读，由 AI/日期自动管理；过期标灰）。有则返回 HTML，无则返回 ''
+  function _npcNoteScheduleRowHtml(name, sc) {
+    if (!sc || !Array.isArray(sc.items) || !sc.items.length) return '';
+    const esc = (window.Utils && Utils.escapeHtml) ? Utils.escapeHtml : (x => String(x == null ? '' : x));
+    const expired = !_gameDateEq(sc.date, _currentGameDate());
+    const color = expired ? 'var(--text-secondary)' : '#3a9d6e';
+    const label = expired ? '行程·已过期' : '今日行程';
+    const items = sc.items.filter(it => it && it.text).map(it => {
+      const t = esc(String(it.time || '').trim());
+      const txt = esc(String(it.text || '').trim());
+      return `<div style="display:flex;gap:8px;align-items:baseline;padding:2px 0">
+        <span style="font-size:11px;color:${color};font-weight:600;flex-shrink:0;min-width:36px">${t}</span>
+        <span style="font-size:12px;color:${expired ? 'var(--text-secondary)' : 'var(--text)'};line-height:1.6;word-break:break-word">${txt}</span>
+      </div>`;
+    }).join('');
+    if (!items) return '';
+    const tag = `<span style="flex-shrink:0;font-size:10px;color:${color};border:1px solid ${color};border-radius:4px;padding:1px 5px;margin-top:2px">${label}</span>`;
+    return `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0">
+      ${tag}
+      <div style="flex:1;min-width:0">${items}</div>
+      <span onclick="Phone._npcNoteClearSchedule('${_npcNoteAttrEsc(name)}')" style="flex-shrink:0;cursor:pointer;color:var(--text-secondary);font-size:15px;padding:0 2px;line-height:1.2" title="清除行程">×</span>
+    </div>`;
+  }
+  // 清除某角色的日程
+  function _npcNoteClearSchedule(name) {
+    const s = _npcNotesStore();
+    if (!s || !s.store[name]) return;
+    if (s.store[name].schedule) {
+      delete s.store[name].schedule;
+      // 若该角色三档全空且无日程，删键
+      const e = s.store[name];
+      if ((!e.identity || !e.identity.length) && (!e.important || !e.important.length) && (!e.minor || !e.minor.length) && !e.schedule) {
+        delete s.store[name];
+      }
+      Conversations.saveList && Conversations.saveList();
+      _renderNpcNotesPage();
+    }
+  }
+
   function _npcNoteEditStart(name, tier, idx) {
     _npcNoteEditing = { name, tier, idx };
     _renderNpcNotesPage();
@@ -373,7 +465,7 @@ let _hasNewNotif = false;
     const entry = s.store[name];
     if (entry && Array.isArray(entry[tier])) {
       entry[tier].splice(idx, 1);
-      if ((!entry.identity || !entry.identity.length) && (!entry.important || !entry.important.length) && (!entry.minor || !entry.minor.length)) {
+      if ((!entry.identity || !entry.identity.length) && (!entry.important || !entry.important.length) && (!entry.minor || !entry.minor.length) && !entry.schedule) {
         delete s.store[name];
       }
       Conversations.saveList && Conversations.saveList();
@@ -993,6 +1085,10 @@ async function _migrateMergeSplitNpcIdentities() {
             merged[realKey] = { identity: [], important: [], minor: [] };
           }
           const dst = merged[realKey];
+          // 日程 schedule 位（新功能）：取较新的一份，避免合并丢失
+          if (src.schedule && (!dst.schedule || (src.schedule.updatedAt || 0) > (dst.schedule.updatedAt || 0))) {
+            dst.schedule = src.schedule;
+          }
           ['identity', 'important', 'minor'].forEach(tier => {
             const arr = Array.isArray(src[tier]) ? src[tier] : [];
             arr.forEach(item => {
@@ -5844,7 +5940,7 @@ async function _refreshMusicComments(id) {
 
   const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
   const mainConfig = await API.getConfig();
-  const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+  const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
   const key = funcConfig.apiKey || mainConfig.apiKey;
   const model = funcConfig.model || mainConfig.model;
   if (!url || !key || !model) { UI.showToast('请先配置功能模型', 2000); return; }
@@ -9639,7 +9735,7 @@ function _petEdit(petId) {
   async function _petDoRefreshStatus(petId, userReq) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -9949,7 +10045,7 @@ ${numFields ? '数值字段：\n' + numFields + '\n' : ''}${textFields ? '文本
   async function _petDoRefreshAll(petIds, userReq) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -10405,7 +10501,7 @@ ${feederLines ? '【喂食器里的食物】（全局共享，所有宠物这段
 
     const mainConfig = await API.getConfig();
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -11273,7 +11369,7 @@ ${shipSection}
   async function _petAiDoGenerate(opts) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -12162,7 +12258,7 @@ ${refText}${opts.req ? '\n用户额外要求：' + opts.req + '\n' : ''}
 
     const mainConfig = await API.getConfig();
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -12964,7 +13060,7 @@ ${shipSection}
 
       const mainConfig = await API.getConfig();
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -13476,7 +13572,7 @@ ${contextBlock}
 
     const mainConfig = await API.getConfig();
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -14153,7 +14249,7 @@ ${shipSection}
   async function _cottageAiGenerate(mode, opts) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -15079,7 +15175,7 @@ category 只能是 decor/furniture/deco 三者之一。`;
       // 配置
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -16547,7 +16643,7 @@ async function _renderVideo(pd) {
   async function _videoGenMakeIntro(p) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return null; }
@@ -17562,7 +17658,7 @@ async function _renderVideo(pd) {
     const _direction = String(direction || '').trim();
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return false; }
@@ -18183,7 +18279,7 @@ ${_direction ? `\n【本次生成的推进方向（用户指定，请重点围�
     // 功能模型配置
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) {
@@ -19398,7 +19494,7 @@ ${itemFields}
     // 功能模型配置
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -20011,7 +20107,7 @@ let _liveRoomDanmuSticky = true; // 弹幕区是否吸底（用户手动上翻�
     if (!w) return null;
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return null; }
@@ -20416,7 +20512,7 @@ ${txt}
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return false; }
@@ -20761,7 +20857,7 @@ ${lines}
     if (!w) return null;
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return null; }
@@ -24072,7 +24168,7 @@ ${creatorLine}`;
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) {
@@ -24287,7 +24383,7 @@ ${realCastBlock}${styleBlock}${wvBlock}${mainlineBlock}${adaptBlock}${makeGuideB
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) {
@@ -24512,7 +24608,7 @@ ${realCastBlock}${wvBlock}${mainlineBlock}${adaptReviewBlock}${themeBlock}
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -24895,7 +24991,7 @@ async function _videoBuildAdaptBlock(work, catNoun) {
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return false; }
@@ -26171,7 +26267,7 @@ ${cats ? '题材：' + cats + '\n' : ''}${intro ? '简介：' + intro.slice(0, 3
 
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return null; }
@@ -26326,7 +26422,7 @@ const charNames = _videoBpCharNames(bp);
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) {
@@ -26746,7 +26842,7 @@ function _videoEpSynopsisHtml(script, bp, isAnime, themeSong) {
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -29390,7 +29486,7 @@ ${isOut
       try {
         const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
         const mainConfig = await API.getConfig();
-        const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+        const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
         const key = funcConfig.apiKey || mainConfig.apiKey;
         const model = funcConfig.model || mainConfig.model;
         if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -30177,7 +30273,7 @@ const searchBar = `
       // 提炼画像
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) return '';
@@ -30437,7 +30533,7 @@ ${cand.detail}
     // 功能模型配置
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return false; }
@@ -30610,7 +30706,7 @@ ${restRule}`;
 
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return false; }
@@ -31380,7 +31476,7 @@ ${progressHint}
 
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return null; }
@@ -31504,7 +31600,7 @@ ${shortCharRule}
 
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return null; }
@@ -31955,7 +32051,7 @@ ${foreshadowBlock}${endgameBlock}${(rewriteHint || '').trim() ? `\n【重写要�
   async function _readingGenCoReadNotes(bookId, idx, partnerReal, partnerName) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return false; }
@@ -33052,7 +33148,7 @@ ${lines.join('\n')}
   async function _readingGenChapterComments(bookId, idx) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return false; }
@@ -33517,7 +33613,7 @@ ${existing}
     // 功能模型配置
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) {
@@ -33831,7 +33927,7 @@ ${spec}
         if (hitWork) {
           const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
           const mainConfig = await API.getConfig();
-          const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+          const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
           const key = funcConfig.apiKey || mainConfig.apiKey;
           const model = funcConfig.model || mainConfig.model;
           if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -34539,7 +34635,7 @@ ${spec}
     // 功能模型配置
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) {
@@ -36539,7 +36635,7 @@ ${parts.join('\n\n')}`;
   async function _radioGenProgramBody(prog) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
@@ -36821,7 +36917,7 @@ ${_RADIO_FORMAT_SPEC}${callerBlock}`;
   async function _radioGenMailSegment(prog, mail, priorBody) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
@@ -37232,7 +37328,7 @@ if (input) { input.value = ''; input.style.height = 'auto'; }
   async function _radioGenCallReply(prog, rounds, batch) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
@@ -37323,7 +37419,7 @@ ${lastBatch}
   async function _radioGenCallSegment(prog, rounds, priorBody) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
@@ -37419,7 +37515,7 @@ ${_RADIO_NEXT_SPEC}`;
   async function _radioGenCallEnding(prog, rounds, priorBody, dialogBody) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { return ''; }
@@ -37763,7 +37859,7 @@ ${_RADIO_NEXT_SPEC}`;
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     let mainConfig = {};
     try { mainConfig = await API.getConfig(); } catch (_) { mainConfig = {}; }
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
@@ -37890,7 +37986,7 @@ ${resultLine}
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     let mainConfig = {};
     try { mainConfig = await API.getConfig(); } catch (_) { mainConfig = {}; }
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
@@ -38114,7 +38210,7 @@ shop: (_shopMeta?.radio?.name || '电台') + '抽奖',
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     let mainConfig = {};
     try { mainConfig = await API.getConfig(); } catch (_) { mainConfig = {}; }
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
@@ -38371,7 +38467,7 @@ ${taskBlock}
   async function _radioGenSongSegment(prog, song, priorBody) {
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return ''; }
@@ -40095,7 +40191,7 @@ async function _weekRunAiGen() {
   // 功能模型配置
   const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
   const mainConfig = await API.getConfig();
-  const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+  const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
   const key = funcConfig.apiKey || mainConfig.apiKey;
   const model = funcConfig.model || mainConfig.model;
   if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
@@ -41892,7 +41988,7 @@ async function _clearMomentsCover() {
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
@@ -42796,7 +42892,7 @@ ${wvPrompt}${_echoForHot}`;
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
@@ -43296,7 +43392,7 @@ ${wvPrompt}${_hitBlock}`;
 
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
@@ -43424,7 +43520,7 @@ ${wvPrompt}`;
 
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
@@ -43631,7 +43727,7 @@ ${wvPrompt}`;
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
@@ -44437,7 +44533,7 @@ async function _likeForumPost(index) {
   async function _mapNearby() {
     const funcConfig = (typeof Settings !== 'undefined' && Settings.getWorldvoiceConfig) ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
@@ -45134,7 +45230,7 @@ ${wvPrompt}${_regionBlock}` },
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) {
@@ -45612,7 +45708,7 @@ ${wvPrompt}${_regionBlock}${_mapTransportBlock}` },
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) {
@@ -46278,7 +46374,7 @@ ${playerReplyHint}
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
@@ -46459,7 +46555,7 @@ ${playerReplyHint}
     try {
       const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
       const mainConfig = await API.getConfig();
-      const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+      const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
       const key = funcConfig.apiKey || mainConfig.apiKey;
       const model = funcConfig.model || mainConfig.model;
       if (!url || !key || !model) {
@@ -46693,7 +46789,7 @@ ${fullCtx}`;
 
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) {
@@ -53199,7 +53295,7 @@ function _renderChatThread(pd, contactId) {
           const rounds = Array.isArray(m.rounds) ? m.rounds.length : 0;
           const hangupByText = m.hangupBy === 'them' ? '对方挂断' : (m.hangupBy === 'me' ? '我方挂断' : '');
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="call_record" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
             <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0">
               <div onclick="Phone._showCallRecord('${contactId}','${m.id}')" style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-radius:18px;border-bottom-left-radius:4px;background:var(--bg-tertiary);cursor:pointer;min-width:160px">
                 ${callIcon}
@@ -53219,7 +53315,7 @@ function _renderChatThread(pd, contactId) {
           const chap = m.isShort ? '短篇' : `第${m.chapterIdx}章${m.chapterTitle ? ' · ' + Utils.escapeHtml(m.chapterTitle) : ''}`;
           const bookIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`;
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="coread_record" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${avatarInner}</div>
             <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0">
               <div style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-radius:18px;border-bottom-left-radius:4px;background:var(--bg-tertiary);min-width:160px">
                 ${bookIcon}
@@ -53236,7 +53332,7 @@ function _renderChatThread(pd, contactId) {
         // 语音气泡
         if (m.type === 'voice') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0;max-width:70%">
               <div onclick="Phone._playVoice('${m.id}')" style="padding:10px 14px;border-radius:18px;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer;${mine ? 'flex-direction:row-reverse' : ''}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
@@ -53262,7 +53358,7 @@ function _renderChatThread(pd, contactId) {
             ? `<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:${claimed ? 'var(--text-secondary)' : 'var(--accent)'};${claimed ? 'opacity:0.7' : 'cursor:pointer'}" ${claimed ? '' : `onclick="Phone._claimTransfer('${Utils.escapeHtml(contact.id)}','${m.id}')"`}>${claimed ? '已收取' : '点击收取'}</div>`
             : '';
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
                 <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
@@ -53282,7 +53378,7 @@ function _renderChatThread(pd, contactId) {
         // 位置气泡
         if (m.type === 'location') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div onclick="Phone._showChatLocationDetail('${Utils.escapeHtml(m.location || '')}','${Utils.escapeHtml(m.address || '')}')" style="width:200px;border-radius:14px;overflow:hidden;cursor:pointer;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px 8px;display:flex;align-items:center;gap:10px">
@@ -53304,7 +53400,7 @@ function _renderChatThread(pd, contactId) {
         // 订单气泡
         if (m.type === 'order') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div onclick="Phone._showOrderDetail('${Utils.escapeHtml(m.orderName || '')}','${Utils.escapeHtml(String(m.orderPrice || ''))}','${Utils.escapeHtml(m.orderShop || '')}','${Utils.escapeHtml(m.orderPlatform || '')}')" style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);cursor:pointer">
                 <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:8px">
@@ -53329,7 +53425,7 @@ function _renderChatThread(pd, contactId) {
         if (m.type === 'shop_listing') {
           const deliveryLabel = m.listingDelivery === 'express' ? '快递' : m.listingDelivery === 'errand' ? '跑腿' : '直接交付';
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="shop_listing" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;height:90px;box-sizing:border-box;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;flex-direction:column;justify-content:center">
                 <div style="padding:0 14px 6px;display:flex;align-items:center;gap:8px">
@@ -53355,7 +53451,7 @@ function _renderChatThread(pd, contactId) {
           const dLabel = m.sellDelivery === 'express' ? '快递' : m.sellDelivery === 'errand' ? '跑腿' : '即刻交付';
           const etaLabel = (m.sellDelivery !== 'instant' && m.sellEta) ? `${m.sellEta}${m.sellEtaUnit === 'day' ? '天' : '分钟'}达` : '';
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="sell_offer" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div ${mine ? '' : `onclick="Phone._showSellDetail(\'${Utils.escapeHtml(contact.id)}\',\'${m.id}\')"`} style="width:218px;height:112px;box-sizing:border-box;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;flex-direction:column;justify-content:space-between;padding:12px 0${mine ? '' : ';cursor:pointer'}">
                 <div style="padding:0 14px 6px;display:flex;align-items:center;gap:8px">
@@ -53381,7 +53477,7 @@ function _renderChatThread(pd, contactId) {
     // 好友圈动态气泡
         if (m.type === 'moment') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="moment" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="max-width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:10px 14px;display:flex;align-items:center;gap:8px">
@@ -53397,7 +53493,7 @@ function _renderChatThread(pd, contactId) {
 
 if (m.type === 'pet_status') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="pet_status" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+      <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8"><svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='var(--accent)' stroke='none'><circle cx='4.5' cy='9.5' r='2.5'/><circle cx='9' cy='5.5' r='2.5'/><circle cx='15' cy='5.5' r='2.5'/><circle cx='19.5' cy='9.5' r='2.5'/><path d='M17.34 14.86c-.87-1.02-1.6-1.89-2.48-2.91-.46-.54-1.05-1.08-1.75-1.32-.36-.13-.75-.13-1.11-.13s-.75 0-1.11.13c-.7.24-1.29.78-1.75 1.32-.88 1.02-1.61 1.89-2.48 2.91-1.31 1.31-2.92 2.76-2.62 4.79.29 1.02 1.02 2.03 2.33 2.32.73.15 3.06-.44 5.54-.44h.18c2.48 0 4.81.58 5.54.44 1.31-.29 2.04-1.31 2.33-2.32.31-2.04-1.3-3.49-2.62-4.79z'/></svg></div>
@@ -53414,7 +53510,7 @@ if (m.type === 'pet_status') {
   
     if (m.type === 'map_place') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8">
@@ -53437,7 +53533,7 @@ if (m.type === 'pet_status') {
             ? `<img src="${Utils.escapeHtml(m.musicCover)}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
             : `<div style="width:44px;height:44px;border-radius:8px;background:var(--bg-secondary);flex-shrink:0;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="var(--text-secondary)"><path d="M9 18V5l12-2v13M9 18c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3zM21 16c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3z"/></svg></div>`;
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="music_card" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:center">
@@ -53463,7 +53559,7 @@ if (m.type === 'pet_status') {
             ? `<img src="${Utils.escapeHtml(m.musicCover)}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
             : `<div style="width:44px;height:44px;border-radius:8px;background:var(--bg-secondary);flex-shrink:0;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="var(--text-secondary)"><path d="M9 18V5l12-2v13M9 18c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3zM21 16c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3z"/></svg></div>`;
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="listen_invite" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border)">
@@ -53486,7 +53582,7 @@ if (m.type === 'pet_status') {
         // 一起听·结束卡片
         if (m.type === 'listen_end') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="listen_end" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px;display:flex;align-items:center;gap:8px">
@@ -53502,7 +53598,7 @@ if (m.type === 'pet_status') {
         // 商品卡片气泡
         if (m.type === 'product') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:flex-start">
@@ -53528,7 +53624,7 @@ if (m.type === 'pet_status') {
         if (m.type === 'forum_card' || m.type === 'forum_detail') {
           const isDetail = m.type === 'forum_detail';
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px 10px">
@@ -53551,7 +53647,7 @@ if (m.type === 'pet_status') {
         // 视频/影视分享气泡
         if (m.type === 'video_card') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 ${m.videoCover ? `<div style="width:100%;aspect-ratio:16/9;background:#000 center/cover no-repeat;background-image:url('${Utils.escapeHtml(m.videoCover)}')"></div>` : ''}
@@ -53572,7 +53668,7 @@ if (m.type === 'pet_status') {
 
         if (m.type === 'book_card') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:240px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;padding:12px;gap:10px;box-sizing:border-box">
                 <div style="width:52px;height:72px;border-radius:6px;flex-shrink:0;background:var(--bg-secondary) center/cover no-repeat${m.bookCover ? `;background-image:url('${Utils.escapeHtml(m.bookCover)}')` : ''}"></div>
@@ -53594,7 +53690,7 @@ if (m.type === 'pet_status') {
         // 信件分享气泡
         if (m.type === 'mail_card') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:12px 14px 10px">
@@ -53615,7 +53711,7 @@ if (m.type === 'pet_status') {
         if (m.type === 'sticker') {
           const _sname = Utils.escapeHtml(m.stickerName || '表情');
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="sticker" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:100px;height:100px"><img data-sticker-id="${Utils.escapeHtml(m.stickerId || '')}" alt="${_sname}" title="${_sname}" style="width:100%;height:100%;object-fit:contain"></div>
               ${time}
@@ -53642,7 +53738,7 @@ if (m.type === 'pet_status') {
               </div>`;
           }
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div onclick="Phone._showChatPhotoDetail('${contactId}', '${m.id}')" style="cursor:pointer">${photoInner}</div>
               ${time}
@@ -53651,7 +53747,7 @@ if (m.type === 'pet_status') {
         }
 
         return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-          <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+          <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
           <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
             <div class="${mine ? 'phone-chat-txt-mine' : 'phone-chat-txt-char'}" style="max-width:100%;padding:8px 12px;border-radius:18px;${mine ? 'border-bottom-right-radius:4px' : 'border-bottom-left-radius:4px'};font-size:14px;line-height:1.5;word-break:break-word">${m.quote ? `<div style="font-size:11px;line-height:1.4;color:${mine ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)'};background:${mine ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)'};border-left:2px solid ${mine ? 'rgba(255,255,255,0.45)' : 'var(--accent)'};padding:3px 7px;border-radius:0 6px 6px 0;margin-bottom:5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${Utils.escapeHtml((m.quote.sender || '') + '：' + (m.quote.preview || ''))}</div>` : ''}${Utils.escapeHtml(m.text || '')}</div>
             ${time}
@@ -53894,13 +53990,174 @@ function _bindChatThreadEvents(contactId) {
     e.preventDefault();
     _showChatBubbleMenu(contactId, bubble.dataset.msgId, bubble.dataset.role);
   });
+
+  // 点击对方头像 → 弹个人资料卡（me 自己的头像不弹）
+  list.addEventListener('click', (e) => {
+    const avatar = e.target.closest('.phone-chat-avatar');
+    if (!avatar) return;
+    const bubble = avatar.closest('.phone-chat-msg-bubble');
+    if (!bubble || bubble.dataset.role === 'me') return;
+    e.stopPropagation();
+    _showContactProfileCard(contactId);
+  });
+}
+
+// 取当前游戏日期 {year,month,day}，用于日程"是否今天"判断。取不到返回 null
+function _currentGameDate() {
+  try {
+    const sb = Conversations.getStatusBar() || {};
+    if (!sb.time || typeof Calendar === 'undefined' || !Calendar.parseAbsoluteTime) return null;
+    const t = Calendar.parseAbsoluteTime(sb.time);
+    if (!t || !t.year) return null;
+    return { year: t.year, month: t.month, day: t.day };
+  } catch (_) { return null; }
+}
+function _gameDateEq(a, b) {
+  return !!(a && b && a.year === b.year && a.month === b.month && a.day === b.day);
+}
+
+// 从当前对话的 npcNotes 里，提取某联系人最近的「在听/看/读」（评论类埋点，抠《作品名》）
+// 返回 { listening, watching, reading }，无则为空串
+function _extractContactMedia(contactName) {
+  const out = { listening: '', watching: '', reading: '' };
+  try {
+    const s = _npcNotesStore();
+    if (!s) return out;
+    const realName = _resolveNpcRealName(String(contactName || '').trim());
+    if (!realName) return out;
+    const entry = s.store[realName];
+    if (!entry) return out;
+    // kind → 目标字段
+    const kindMap = { music_comment: 'listening', video_review: 'watching', reading_comment: 'reading' };
+    // 收集所有档里的评论类条目，带排序权重（时间戳/轮次，越大越新）
+    const pool = [];
+    for (const tier of ['identity', 'important', 'minor']) {
+      const arr = Array.isArray(entry[tier]) ? entry[tier] : [];
+      for (const it of arr) {
+        if (!it || !kindMap[it.kind]) continue;
+        const txt = String(it.text || it.dynamic || it.statement || '');
+        const mm = txt.match(/《([^》]+)》/);
+        if (!mm) continue;
+        const ord = it.updatedAt || it.createdAt || (typeof it.round === 'number' ? it.round : 0);
+        pool.push({ field: kindMap[it.kind], title: mm[1], ord });
+      }
+    }
+    // 每个字段取 ord 最大（最新）的一条
+    for (const field of ['listening', 'watching', 'reading']) {
+      const cands = pool.filter(p => p.field === field);
+      if (!cands.length) continue;
+      cands.sort((a, b) => b.ord - a.ord);
+      out[field] = cands[0].title;
+    }
+  } catch (_) {}
+  return out;
+}
+
+// 显示对方的个人资料卡（点私聊头像弹出，只读）
+async function _showContactProfileCard(contactId) {
+  const pd = await _getPhoneData();
+  const contact = (pd.chatContacts || []).find(c => c.id === contactId);
+  if (!contact) return;
+  const card = contact.profileCard || {};
+  const avaUrl = _chatContactAvatar(contact);
+  const initial = Utils.escapeHtml((contact.name || '?')[0]);
+  const avatarInner = avaUrl
+    ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover">`
+    : `<span style="font-size:32px;font-weight:600;color:var(--bg)">${initial}</span>`;
+  const displayName = Utils.escapeHtml(contact.nickname || contact.name || '对方');
+  const bio = (card.bio || '').trim();
+  const status = (card.status || '').trim();
+
+  // 最近在听/看/读：前端从 npcNotes 评论埋点里自动提取（AI 不再填这三项）
+  const media = _extractContactMedia(contact.name);
+  const mediaRows = [
+    { key: 'listening', label: '最近在听', icon: 'M9 18V5l12-2v13' },
+    { key: 'watching', label: '最近在看', icon: 'M2 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z' },
+    { key: 'reading', label: '最近在读', icon: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20' },
+  ];
+  const mediaHtml = mediaRows
+    .filter(r => (media[r.key] || '').trim())
+    .map(r => `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="${r.icon}"/></svg>
+        <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">${r.label}</span>
+        <span style="font-size:13px;color:var(--text);word-break:break-word">《${Utils.escapeHtml((media[r.key] || '').trim())}》</span>
+      </div>`)
+    .join('');
+
+  // 共同群聊：前端算（群成员含该联系人）
+  const commonGroups = (Array.isArray(pd.chatGroups) ? pd.chatGroups : [])
+    .filter(g => g && Array.isArray(g.memberIds) && g.memberIds.includes(contactId) && g.name);
+  const commonGroupHtml = commonGroups.length
+    ? `<div style="display:flex;align-items:center;gap:8px;padding:8px 0">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">共同群聊</span>
+        <span style="font-size:13px;color:var(--text);word-break:break-word">${commonGroups.length} 个 · ${commonGroups.map(g => Utils.escapeHtml(g.name)).slice(0, 3).join('、')}${commonGroups.length > 3 ? ' 等' : ''}</span>
+      </div>`
+    : '';
+
+  // 今日日程：从角色记事本读（仅当日期==当前游戏日才有值），和主线注入共用一份数据
+  const _sched = _npcNoteGetSchedule(contact.name);
+  let scheduleHtml = '';
+  if (_sched && Array.isArray(_sched.items) && _sched.items.length) {
+    const rows = _sched.items.slice(0, 5).map(it => {
+      const t = Utils.escapeHtml(String(it.time || '').trim());
+      const txt = Utils.escapeHtml(String(it.text || '').trim());
+      if (!txt) return '';
+      return `<div style="display:flex;gap:10px;align-items:baseline;padding:5px 0">
+        <span style="font-size:12px;color:var(--accent);font-weight:600;flex-shrink:0;min-width:38px">${t}</span>
+        <span style="font-size:13px;color:var(--text);line-height:1.5;word-break:break-word">${txt}</span>
+      </div>`;
+    }).filter(Boolean).join('');
+    if (rows) {
+      scheduleHtml = `<div>
+        <div style="display:inline-block;font-size:11px;color:var(--text-secondary);letter-spacing:.04em;border:1px dashed var(--border);border-radius:999px;padding:3px 10px;margin-bottom:8px">今日日程</div>
+        ${rows}
+      </div>`;
+    }
+  }
+
+  const mask = document.createElement('div');
+  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
+  const hasAny = bio || status || mediaHtml || commonGroupHtml || scheduleHtml;
+  // 顶部背景：有自定义主页图用图（原图清晰），否则用装饰色渐变
+  const banner = (contact.profileBanner || '').trim();
+  const bannerBg = banner
+    ? `background-image:url('${String(banner).replace(/'/g, "\\'")}');background-size:cover;background-position:center`
+    : `background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 40%,#000))`;
+  mask.innerHTML = `
+    <div style="background:var(--bg);border-radius:18px;max-width:330px;width:100%;color:var(--text);overflow:hidden;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.28)">
+      <div style="overflow-y:auto">
+        <div style="position:relative">
+          <!-- 背景横幅：用 mask 让背景图自身丝滑淡出，直接露出卡片底色（不受主题色影响） -->
+          <div style="position:absolute;left:0;right:0;top:0;height:150px;overflow:hidden">
+            <div style="position:absolute;inset:0;${bannerBg};-webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 30%,rgba(0,0,0,0.85) 48%,rgba(0,0,0,0.5) 64%,rgba(0,0,0,0.2) 80%,rgba(0,0,0,0) 96%);mask-image:linear-gradient(to bottom,#000 0%,#000 30%,rgba(0,0,0,0.85) 48%,rgba(0,0,0,0.5) 64%,rgba(0,0,0,0.2) 80%,rgba(0,0,0,0) 96%)"></div>
+          </div>
+          <!-- 头像 + 名字 + 状态：叠在横幅下部 -->
+          <div style="position:relative;padding:84px 20px 0;display:flex;align-items:flex-end;gap:14px">
+            <div style="width:64px;height:64px;border-radius:50%;flex-shrink:0;box-shadow:0 2px 10px rgba(0,0,0,0.28)"><div style="width:100%;height:100%;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;overflow:hidden">${avatarInner}</div></div>
+            <div style="min-width:0;flex:1;padding-bottom:2px">
+              <div style="font-size:19px;font-weight:600;word-break:break-word;line-height:1.3">${displayName}</div>
+              ${status ? `<div style="margin-top:6px;overflow:hidden"><span style="float:left;width:7px;height:7px;border-radius:50%;background:#4caf50;margin-top:5px;margin-right:6px"></span><span style="display:block;font-size:12px;color:var(--text-secondary);line-height:1.45;word-break:break-word">${Utils.escapeHtml(status)}</span></div>` : ''}
+            </div>
+          </div>
+        </div>
+        <div style="padding:16px 20px 20px">
+          ${bio ? `<div style="background:var(--bg-tertiary);border-radius:12px;padding:12px 14px"><div style="font-size:13px;color:var(--text);line-height:1.6;word-break:break-word">${Utils.escapeHtml(bio)}</div></div>` : ''}
+          ${(mediaHtml || commonGroupHtml) ? `<div style="margin-top:${bio ? '14px' : '0'}">${mediaHtml}${commonGroupHtml}</div>` : ''}
+          ${scheduleHtml ? `<div style="margin-top:${(bio || mediaHtml || commonGroupHtml) ? '14px' : '0'}">${scheduleHtml}</div>` : ''}
+          ${!hasAny ? `<div style="text-align:center;font-size:12px;color:var(--text-secondary);opacity:0.7">TA 还没有填写资料</div>` : ''}
+        </div>
+      </div>
+    </div>`;
+  mask.addEventListener('click', () => document.body.removeChild(mask));
+  document.body.appendChild(mask);
 }
 
 // 显示气泡长按菜单
 async function _showChatBubbleMenu(contactId, msgId, role) {
   const pd = await _getPhoneData();
   if (!pd?.chatThreads?.[contactId]) return;
-  const thread = pd.chatThreads[contactId];
   const msg = thread.find(m => m.id === msgId);
   if (!msg) return;
 
@@ -54091,7 +54348,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
     // 语音气泡
     if (m.type === 'voice') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="voice" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0;max-width:70%">
           <div onclick="Phone._playVoice('${m.id}')" style="padding:10px 14px;border-radius:18px;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};display:flex;align-items:center;gap:10px;min-width:100px;cursor:pointer;${mine ? 'flex-direction:row-reverse' : ''}">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
@@ -54117,7 +54374,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
             ? `<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:${claimed ? 'var(--text-secondary)' : 'var(--accent)'};${claimed ? 'opacity:0.7' : 'cursor:pointer'}" ${claimed ? '' : `onclick="Phone._claimTransfer('${Utils.escapeHtml(contact.id)}','${m.id}')"`}>${claimed ? '已收取' : '点击收取'}</div>`
             : '';
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="transfer" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
                 <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
@@ -54137,7 +54394,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
     // 位置气泡
     if (m.type === 'location') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="location" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div onclick="Phone._showChatLocationDetail('${Utils.escapeHtml(m.location || '')}','${Utils.escapeHtml(m.address || '')}')" style="width:200px;border-radius:14px;overflow:hidden;cursor:pointer;background:var(--bg-tertiary)">
             <div style="padding:12px 14px 8px;display:flex;align-items:center;gap:10px">
@@ -54160,7 +54417,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
     // 订单气泡
     if (m.type === 'order') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="order" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div onclick="Phone._showOrderDetail('${Utils.escapeHtml(m.orderName || '')}','${Utils.escapeHtml(String(m.orderPrice || ''))}','${Utils.escapeHtml(m.orderShop || '')}','${Utils.escapeHtml(m.orderPlatform || '')}')" style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);cursor:pointer">
             <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:8px">
@@ -54186,7 +54443,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
       const dLabel = m.sellDelivery === 'express' ? '快递' : m.sellDelivery === 'errand' ? '跑腿' : '即刻交付';
       const etaLabel = (m.sellDelivery !== 'instant' && m.sellEta) ? `${m.sellEta}${m.sellEtaUnit === 'day' ? '天' : '分钟'}达` : '';
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="sell_offer" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div ${mine ? '' : `onclick="Phone._showSellDetail(\'${Utils.escapeHtml(contact.id)}\',\'${m.id}\')"`} style="width:218px;height:112px;box-sizing:border-box;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;flex-direction:column;justify-content:space-between;padding:12px 0${mine ? '' : ';cursor:pointer'}">
             <div style="padding:0 14px 6px;display:flex;align-items:center;gap:8px">
@@ -54212,7 +54469,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
     // 好友圈动态气泡
         if (m.type === 'moment') {
           return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="moment" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-            <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+            <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="max-width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
                 <div style="padding:10px 14px;display:flex;align-items:center;gap:8px">
@@ -54228,7 +54485,7 @@ function _renderChatThreadWithSystem(pd, contactId) {
 
 if (m.type === 'pet_status') {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="pet_status" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+      <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
       <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
         <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
           <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8"><svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='var(--accent)' stroke='none'><circle cx='4.5' cy='9.5' r='2.5'/><circle cx='9' cy='5.5' r='2.5'/><circle cx='15' cy='5.5' r='2.5'/><circle cx='19.5' cy='9.5' r='2.5'/><path d='M17.34 14.86c-.87-1.02-1.6-1.89-2.48-2.91-.46-.54-1.05-1.08-1.75-1.32-.36-.13-.75-.13-1.11-.13s-.75 0-1.11.13c-.7.24-1.29.78-1.75 1.32-.88 1.02-1.61 1.89-2.48 2.91-1.31 1.31-2.92 2.76-2.62 4.79.29 1.02 1.02 2.03 2.33 2.32.73.15 3.06-.44 5.54-.44h.18c2.48 0 4.81.58 5.54.44 1.31-.29 2.04-1.31 2.33-2.32.31-2.04-1.3-3.49-2.62-4.79z'/></svg></div>
@@ -54245,7 +54502,7 @@ if (m.type === 'pet_status') {
   
         if (m.type === 'map_place') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="map_place" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:200px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             <div style="height:52px;background:linear-gradient(135deg,var(--accent-dim,#c8d8f0) 0%,var(--bg-secondary,#e8edf5) 100%);display:flex;align-items:center;justify-content:center;opacity:0.8">
@@ -54265,7 +54522,7 @@ if (m.type === 'pet_status') {
     // 商品卡片气泡
     if (m.type === 'product') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:flex-start">
@@ -54290,7 +54547,7 @@ if (m.type === 'pet_status') {
     // 商品卡片气泡
     if (m.type === 'product') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="product" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:210px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             <div style="padding:12px 14px 10px;display:flex;gap:10px;align-items:flex-start">
@@ -54316,7 +54573,7 @@ if (m.type === 'pet_status') {
     if (m.type === 'forum_card' || m.type === 'forum_detail') {
       const isDetail = m.type === 'forum_detail';
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             <div style="padding:12px 14px 10px">
@@ -54339,7 +54596,7 @@ if (m.type === 'pet_status') {
     // 视频/影视分享气泡
     if (m.type === 'video_card') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             ${m.videoCover ? `<div style="width:100%;aspect-ratio:16/9;background:#000 center/cover no-repeat;background-image:url('${Utils.escapeHtml(m.videoCover)}')"></div>` : ''}
@@ -54360,7 +54617,7 @@ if (m.type === 'pet_status') {
 
     if (m.type === 'book_card') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:240px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary);display:flex;padding:12px;gap:10px;box-sizing:border-box">
             <div style="width:52px;height:72px;border-radius:6px;flex-shrink:0;background:var(--bg-secondary) center/cover no-repeat${m.bookCover ? `;background-image:url('${Utils.escapeHtml(m.bookCover)}')` : ''}"></div>
@@ -54382,7 +54639,7 @@ if (m.type === 'pet_status') {
     // 信件分享气泡
     if (m.type === 'mail_card') {
       return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="${m.type}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div style="width:220px;border-radius:14px;overflow:hidden;background:var(--bg-tertiary)">
             <div style="padding:12px 14px 10px">
@@ -54417,7 +54674,7 @@ if (m.type === 'pet_status') {
       }
       
       const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" data-type="photo" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-        <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+        <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
         <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
           <div onclick="Phone._showChatPhotoDetail('${contactId}', '${m.id}')" style="cursor:pointer">${photoHtml}</div>
           ${time}
@@ -54427,7 +54684,7 @@ if (m.type === 'pet_status') {
     }
     
 const bubbleHtml = `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="cursor:pointer;align-items:flex-end;display:flex;gap:8px;margin-bottom:12px${mine ? ';flex-direction:row-reverse' : ''}">
-          <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
+          <div class="phone-chat-avatar" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${mine ? meAvatarInner : avatarInner}</div>
           <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
             <div class="${mine ? 'phone-chat-txt-mine' : 'phone-chat-txt-char'}" style="max-width:100%;padding:8px 12px;border-radius:18px;${mine ? 'border-bottom-right-radius:4px' : 'border-bottom-left-radius:4px'};font-size:14px;line-height:1.5;background:${mine ? 'var(--accent);color:#fff' : 'var(--bg-tertiary);color:var(--text)'};word-break:break-word">${Utils.escapeHtml(m.text || '')}</div>
             ${time}
@@ -54769,6 +55026,7 @@ async function _openChatSettings(contactId) {
   // 重置立绘临时态（null=本次未改动）
   _chatTempCallPortrait = null;
   _chatTempBg = null;
+  _chatTempBanner = null;
 
   const body = document.getElementById('phone-body');
   if (!body) return;
@@ -54912,6 +55170,19 @@ async function _openChatSettings(contactId) {
         <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding:0 4px">仅这个对话生效，留空则跟随手机壁纸</div>
       </div>
 
+      <div style="margin-bottom:24px">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:500;letter-spacing:.04em">主页背景图</div>
+        <div style="background:var(--bg-tertiary);border-radius:12px;overflow:hidden;padding:14px">
+          <div style="display:flex;gap:12px;align-items:center">
+            <div id="chat-settings-banner-preview" style="width:96px;height:54px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);background-size:cover;background-position:center;flex-shrink:0;${(contact.profileBanner || '') ? `background-image:url('${Utils.escapeHtml(contact.profileBanner)}')` : ''}"></div>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
+              <button type="button" onclick="Phone._chatPickBanner()" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text);font-size:13px;cursor:pointer">选择图片</button>
+              <button type="button" onclick="Phone._chatClearBanner()" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text-secondary);font-size:13px;cursor:pointer">清除</button>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding:0 4px">点头像看资料卡时的顶部背景，留空则用装饰色。建议用横向的高清图。</div>
+      </div>
 
       <div style="margin-bottom:24px">
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:500;letter-spacing:.04em">上下文</div>
@@ -55159,6 +55430,32 @@ function _chatClearBg() {
   if (prev) prev.style.backgroundImage = '';
 }
 
+// 主页背景图：选择 / 清除（临时变量暂存，保存时落库）
+let _chatTempBanner = null; // null=未改动，''=已清除，string=新图
+async function _chatPickBanner() {
+  if (typeof Utils === 'undefined' || !Utils.promptImageInput) {
+    UI.showToast('图片输入组件未就绪', 1500); return;
+  }
+  try {
+    const dataUrl = await Utils.promptImageInput({ maxSize: 1280, quality: 0.85, outputFormat: 'jpeg' });
+    if (!dataUrl) return;
+    if (typeof dataUrl === 'string' && dataUrl.startsWith('data:') && dataUrl.length > 3200000) {
+      UI.showToast('图片过大（请控制在 3MB 内）', 2600); return;
+    }
+    _chatTempBanner = dataUrl;
+    const prev = document.getElementById('chat-settings-banner-preview');
+    if (prev) prev.style.backgroundImage = `url("${dataUrl.replace(/"/g, '\\"')}")`;
+  } catch (e) {
+    console.warn('[Chat] banner pick failed', e);
+    UI.showToast('图片处理失败', 1500);
+  }
+}
+function _chatClearBanner() {
+  _chatTempBanner = '';
+  const prev = document.getElementById('chat-settings-banner-preview');
+  if (prev) prev.style.backgroundImage = '';
+}
+
 // 保存聊天设置
 async function _saveChatSettings(contactId) {
   const nicknameEl = document.getElementById('chat-settings-nickname');
@@ -55185,6 +55482,10 @@ async function _saveChatSettings(contactId) {
   // 聊天背景：仅在用户改动过时写入
   if (_chatTempBg !== null) {
     contact.chatBg = _chatTempBg;
+  }
+  // 主页背景图：仅在用户改动过时写入
+  if (_chatTempBanner !== null) {
+    contact.profileBanner = _chatTempBanner;
   }
   const historyLimitEl = document.getElementById('chat-settings-history-limit');
   if (historyLimitEl) {
@@ -55847,6 +56148,36 @@ ${voiceInstruction ? '8' : '7'}. 除了普通文字消息，你还可以发送�
    - 不是每轮都要记，一次私聊通常最多记一两件真正值得延续的事。
 \`\`\`promise
 {"name":"周六桥头还书","content":"{{user}}和你约好这周六下午在城南桥头见面，届时把借走的《剑经》还给你。之后线下走到那个时间/地点时，请自然促成这场会面与还书。","finishRule":"双方在桥头碰面、书已归还即视为完成","completeKey":"__PROMISE_还书__"}
+\`\`\`
+
+   【更新个人资料】你（${contact.name}）在这个聊天软件上有一张个人资料卡（玩家点你头像能看到），你可以更新其中的：个性签名、当前状态、今日日程。（"最近在听/看/读""共同群聊"由系统自动生成，你不用管。）
+   你当前的资料卡是：${(() => {
+     const _c = contact.profileCard || {};
+     const _f = (v) => (v && String(v).trim()) ? String(v).trim() : '（空）';
+let _schStr = '（空）';
+      try {
+        // 日程存在角色记事本里（和主线共用），这里读原始值以便判断"过期"中间态
+        const _ns = _npcNotesStore();
+        const _realName = _resolveNpcRealName(contact.name);
+        const _sc = (_ns && _realName && _ns.store[_realName]) ? _ns.store[_realName].schedule : null;
+        const _gd = _currentGameDate();
+        if (_sc && Array.isArray(_sc.items) && _sc.items.length) {
+          if (_gameDateEq(_sc.date, _gd)) {
+            _schStr = _sc.items.map(it => `${it.time || ''} ${it.text || ''}`.trim()).join('；');
+          } else {
+            _schStr = '（是之前某天的，已过期。如果你今天有安排可以重新写一份，没有就发空数组清掉）';
+          }
+        }
+      } catch(_) {}
+     return `个性签名=${_f(_c.bio)}｜当前状态=${_f(_c.status)}｜今日日程=${_schStr}`;
+   })()}
+   你可以在 \`\`\`chat 块之后、单独再附加一个 \`\`\`profile 代码块来更新它——**只填这一轮你真的会改动的字段，没变的字段一律不要写**（不写就保持原样）。**如果某个字段现在还是"（空）"、而它本该有内容（尤其是个性签名），请择机把它补上。**
+   - 个性签名（bio）：你在社交软件上给自己写的一句话签名/标签，相对稳定，体现你的性格、心境或人设（如高冷的一句诗、中二的宣言、慵懒的碎念）。通常很久才换一次，多数轮次都不用动。
+   - 当前状态（status）：类似 QQ 的"在线/忙碌"的升级版，是此刻你正在干嘛的即兴一句话，口语、随性、有画面感（如"等老婆回复中""正在瘫成猫饼""搬砖ing，勿扰""刚睡醒，脑子还没开机"）。可以更新得勤一点，反映你眼下的处境和心情。
+   - 今日日程（schedule）：一个数组，最多 5 条，每条 {"time":"10:00","text":"前往咖啡厅赴约"}。这是你今天的公开行程安排，按角色性格来写——社牛的可以排满还带颜文字，高冷的可能根本不写。**重点：这是你作为一个独立的人、过着自己的生活的写照，请从你的职业、身份、爱好、日常出发来安排（如上班/接诊/训练/上课/巡逻/录音/赶稿/健身/出摊…），绝大多数行程都跟 {{user}} 没有关系，不要把日程写成"陪你""等你""想你"这类全部围着 {{user}} 转的内容。** 偶尔有和 {{user}} 相关的安排当然可以，但那应该是少数。这是**公开可见**的，不想让人知道的行程可以写得模糊、或干脆标"保密"。系统会自动记录日期，你不用填日期。行程有变时重写整个数组即可；跨天了、或今天没安排，就发空数组 [] 清掉旧的。**不是每个角色都要写，很多人不爱公开行程，留空很正常。**
+   - **更新频率取决于你的性格**：爱分享、情绪外露、话多的角色可以经常换签名、状态、日程；高冷、沉稳、不爱上网的角色可能很久都不动、甚至什么都不填。你需要清楚这是在社交软件上别人公开可见的模块，要考虑他人看见的影响。当然，{{user}}也能看到，因此你可以考虑利用你的签名、状态、日程等等进行一些暗示或明示。
+\`\`\`profile
+{"status":"等老婆回复中……","bio":"懒得想签名","schedule":[{"time":"09:30","text":"去医院接早班的诊"},{"time":"13:00","text":"食堂随便扒两口"},{"time":"19:00","text":"保密~"}]}
 \`\`\``
 
     // 游鱼商品提示词注入（一次性消费）
@@ -55963,6 +56294,47 @@ ${voiceInstruction ? '8' : '7'}. 除了普通文字消息，你还可以发送�
             _conv.eventStates[_evId] = 'active'; // 立即注入，不依赖状态栏/关键词
             try { await Conversations.saveList(); } catch(_) {}
             try { _log(`在手机私聊里记下了一件未了结的事：${_pname}`); } catch(_) {}
+          }
+        }
+      }
+    } catch(_) {}
+
+    // 更新个人资料卡：扫 ```profile 块，把 AI 填的字段写到 contact 上（只更新填了的，空的保持原样）
+    try {
+      const _prof = fullReply.match(/```profile\s*\n?([\s\S]*?)```/i);
+      if (_prof) {
+        let _pfobj = null;
+        try { _pfobj = JSON.parse(_prof[1].trim()); } catch(_) {}
+        if (_pfobj && typeof _pfobj === 'object') {
+          const _pfFields = ['bio', 'status'];
+          let _pfChanged = false;
+          contact.profileCard = contact.profileCard || {};
+          for (const _f of _pfFields) {
+            if (typeof _pfobj[_f] === 'string') {
+              const _v = _pfobj[_f].trim();
+              if (_v && contact.profileCard[_f] !== _v) {
+                contact.profileCard[_f] = _v;
+                _pfChanged = true;
+              }
+            }
+          }
+          // 今日日程：AI 填 schedule 数组，写进角色记事本（和身份档平级的 schedule 位，盖游戏日期）
+          // —— 这样主线剧情命中该角色时也能读到当天行程，私聊资料卡同样从记事本读
+          if (Array.isArray(_pfobj.schedule)) {
+            const _gd = _currentGameDate();
+            if (_npcNoteSetSchedule(contact.name, _pfobj.schedule, _gd)) {
+              // 记事本独立存盘（_npcNoteSetSchedule 内已 saveList），这里只标记有日志
+              try { _log(`${contact.name} 更新了今日行程`); } catch(_) {}
+            }
+            // 迁移：清掉旧版存在 profileCard 上的 schedule（避免两处并存）
+            if (contact.profileCard && contact.profileCard.schedule) {
+              delete contact.profileCard.schedule; _pfChanged = true;
+            }
+          }
+          if (_pfChanged) {
+            contact.profileCard.updatedAt = Date.now();
+            try { await _savePhoneData(); } catch(_) {}
+            try { _log(`${contact.name} 更新了个人资料卡`); } catch(_) {}
           }
         }
       }
@@ -58614,7 +58986,7 @@ async function _cameraAIWrite() {
   // 取功能模型配置（用 worldvoice 配置，和论坛/朋友圈一致）
   const funcConfig = (typeof Settings !== 'undefined' && Settings.getWorldvoiceConfig) ? Settings.getWorldvoiceConfig() : {};
   const mainConfig = await API.getConfig();
-  const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+  const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
   const key = funcConfig.apiKey || mainConfig.apiKey;
   const model = funcConfig.model || mainConfig.model;
   if (!url || !key || !model) {
@@ -60339,7 +60711,7 @@ ${personaStr}
     // API 配置
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 2000); _tomatoCompanion = null; return; }
@@ -63348,7 +63720,7 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
 
     const mainConfig = await API.getConfig();
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl).replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl);
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
@@ -63406,7 +63778,7 @@ ${fullCtx}`;
 
     const mainConfig = await API.getConfig();
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl).replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl);
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型'); return; }
@@ -64758,7 +65130,7 @@ buildHeartsimAppFavorForBackstage,
       buildNowPlayingForBackstage,
     flushActionLog, peekActionLog, pushLog, reloadActionLog, reloadChatRoundLog, ensureInitialHouse, ensureInitialPetTemplate, ensureInitialForumCategories, _forumCatDesc, reloadShopMeta,
       migrateMergeSplitNpcIdentities: _migrateMergeSplitNpcIdentities,
-      _npcNotesRetrieve, _npcNotesFormatForPrompt, showNpcNotesPanel, closeNpcNotesPage, _npcNotesSearch, _npcNoteEditStart, _npcNoteEditCancel, _npcNoteEditSave, _npcNoteDelOne, _npcNoteClearName,
+      _npcNotesRetrieve, _npcNotesFormatForPrompt, showNpcNotesPanel, closeNpcNotesPage, _npcNotesSearch, _npcNoteEditStart, _npcNoteEditCancel, _npcNoteEditSave, _npcNoteDelOne, _npcNoteClearName, _npcNoteClearSchedule,
     buildVideoEventPrompt, applyVideoEventMarkers,
     getShootChainGenContext, getShootChainBriefForRuntime,
     buildLicenseEventPrompt, applyLicenseMarkers, _readingLicenseSetup,
@@ -64801,7 +65173,7 @@ _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioH
     buildDeletedContactsBlock,
   // 通话
 _openCall, _callSendMessage, _callRequestReply, _endCall, _callDoSend, _callDoRefresh, _callDoEnd, _callEditRound, _callSaveEdit, _callEditMeRound, _callSaveMeEdit, _callSuggest, _callDoSuggest, _callPickSuggest,
-_chatPickCallPortrait, _chatClearCallPortrait, _chatPickBg, _chatClearBg, _showCallRecord,
+_chatPickCallPortrait, _chatClearCallPortrait, _chatPickBg, _chatClearBg, _chatPickBanner, _chatClearBanner, _showCallRecord,
     // 来电
     handleMainlineCallTag, _showIncomingCall,
     // 删好友 / 好友申请

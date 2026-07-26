@@ -305,7 +305,7 @@ const WorldVoice = (() => {
     if (isGenerating) return;
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先在设置→功能模型中配置模型'); return; }
@@ -601,7 +601,7 @@ function _renderLoadingSkeleton() {
 
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置模型'); return; }
@@ -910,7 +910,7 @@ ${wvPrompt}`;
     if (!post || post._detailLoaded) return post;
     const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
     const mainConfig = await API.getConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = API.buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl || '');
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) throw new Error('请先配置功能模型');

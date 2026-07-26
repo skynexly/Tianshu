@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=175">
+<link rel="stylesheet" href="css/style.css?v=176">
 <link rel="stylesheet" href="css/phone.css?v1=416">
 <link rel="stylesheet" href="css/phone-fudge.css?v=65">
 <link rel="stylesheet" href="css/markdown.css">
@@ -438,6 +438,7 @@
           </div>
 
           <div id="wv-tab-worldview" class="wv-tab active">
+            <div id="worldview-group-tabs" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px;-webkit-overflow-scrolling:touch"></div>
             <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
               <div style="position:relative;flex:1">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--text-secondary);pointer-events:none"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
@@ -902,6 +903,7 @@
           <div class="form-group"><span class="form-label">预设名称</span><input type="text" id="sp-name" placeholder="如：主力站"></div>
           <fieldset><legend>主模型</legend>
             <div class="form-group"><span class="form-label">API端点</span><input type="text" id="sp-api-url" placeholder="https://api.example.com/v1"></div>
+            <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin:-4px 0 8px;padding-left:2px">默认自动补全 <code>/chat/completions</code>。若中转站路径特殊，可直接填完整地址（含 <code>/chat/completions</code>），或在地址末尾加 <code>#</code> 强制按原样请求。</div>
             <div class="form-group"><span class="form-label">API Key</span>
               <div style="display:flex;gap:4px"><input type="password" id="sp-api-key" placeholder="sk-..." style="flex:1;min-width:0"><button type="button" id="sp-eye-1" onclick="Settings.toggleKeyVisibility('sp-eye-1','sp-api-key')" style="padding:4px 8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg></button></div>
               </div>
@@ -3017,6 +3019,9 @@
                   <div class="custom-dropdown-item" onclick="Prompts.toggleMenu();Prompts.togglePromptManageMode()">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> 批量选择
                   </div>
+                  <div class="custom-dropdown-item" onclick="Prompts.toggleMenu();Prompts.enterPromptSortMode()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg> 排序
+                  </div>
                   <div class="custom-dropdown-item" onclick="Prompts.toggleMenu();Prompts.importPreset()">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 导入
                   </div>
@@ -3229,7 +3234,7 @@
 </div>
 <div style="display:flex;gap:8px">
 <button type="button" onclick="Theme.resetDefaults()" style="flex:1;padding:10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);cursor:pointer;font-size:13px">恢复默认</button>
-<button type="button" onclick="Theme.saveForm()" style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:6px;color:#000;font-weight:600;cursor:pointer;font-size:13px">保存主题</button>
+<button type="button" onclick="Theme.saveForm()" style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:6px;color:var(--on-accent);font-weight:600;cursor:pointer;font-size:13px">保存主题</button>
 </div>
 
             </div>
@@ -3254,7 +3259,7 @@
         </div>
         <div style="display:flex;gap:10px;margin-top:20px">
           <button onclick="Theme.clearAllBubbleCss()" style="flex:1;padding:11px 0;font-size:13px;background:none;border:1px solid var(--border);border-radius:9px;color:var(--text-secondary);cursor:pointer">全部清空</button>
-          <button onclick="Theme.saveBubbleCss()" style="flex:2;padding:11px 0;font-size:13px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-weight:600;cursor:pointer">保存并应用</button>
+          <button onclick="Theme.saveBubbleCss()" style="flex:2;padding:11px 0;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:9px;font-weight:600;cursor:pointer">保存并应用</button>
         </div>
       </div>
 
@@ -3322,11 +3327,24 @@
             </span>
           </label>
           <span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:6px">勾选后，AI 也能在私聊和群聊里发这些表情</span>
+          <div onclick="Stickers.openSyncScope()" style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer">
+            <span style="font-size:13px;color:var(--text);flex-shrink:0">同步范围</span>
+            <span id="stickers-sync-scope-label" style="flex:1;min-width:0;font-size:12px;color:var(--text-secondary);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">全部</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-secondary);flex-shrink:0"><path d="m9 18 6-6-6-6"/></svg>
+          </div>
+          <span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:6px;line-height:1.5">表情多的时候只同步常用分类，能省不少提示词长度</span>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:16px">
           <button onclick="Stickers.pickAndAdd()" style="flex:1;padding:11px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">添加表情</button>
           <button onclick="Stickers.pickBatchAndAdd()" style="flex:1;padding:11px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">批量本地</button>
           <button onclick="Stickers.pickBatchUrlAndAdd()" style="flex:1;padding:11px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">批量URL</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+          <div style="position:relative;flex:1">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--text-secondary);pointer-events:none"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+            <input type="text" id="stickers-search" placeholder="搜索表情名..." oninput="Stickers._onSearchInput(this.value)" style="width:100%;box-sizing:border-box;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px 7px 32px;font-size:13px;outline:none;font-family:inherit">
+          </div>
+          <button type="button" id="stickers-manage-btn" onclick="Stickers.toggleManageMode()" style="flex-shrink:0;padding:7px 14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;cursor:pointer;font-family:inherit">批量</button>
         </div>
         <div id="stickers-cat-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
         <div id="stickers-list" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(84px, 1fr));gap:14px"></div>
@@ -3542,6 +3560,10 @@
 NPC
 </div>
       <div style="height:1px;background:var(--border);margin:4px 6px"></div>
+      <div onclick="Worldview.sortFromMenu()" id="wv-ext-add-menu-sort" style="display:none;padding:8px 10px;cursor:pointer;border-radius:6px;align-items:center;gap:8px;font-size:13px;color:var(--text)" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M11 18h2"/></svg>
+        <span id="wv-ext-add-menu-sort-label">排序当前列表</span>
+      </div>
       <div onclick="Worldview.exportExtended()" style="padding:8px 10px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
         导出扩展设定
@@ -3596,7 +3618,7 @@ NPC
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">每轮自动注入系统提示词，可单独开关。</div>
     <div id="wv-customs-container"></div>
     <button type="button" onclick="Worldview.importCustomsFromDoc()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">从文档导入（txt / word / pdf，用 --- 分段）</button>
-<button type="button" onclick="Worldview.addCustom()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加常驻条目</button>
+    <button type="button" onclick="Worldview.addCustom()" style="width:100%;padding:10px;background:none;border:2px dashed var(--border);color:var(--text-secondary);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px">+ 添加常驻条目</button>
   </div>
 
   <!-- 动态知识设定 -->
@@ -4492,19 +4514,19 @@ const GameLog = (() => {
 })();
 </script>
 <script src="js/db.js?v=15"></script>
-<script src="js/stickers.js?v=7"></script>
+<script src="js/stickers.js?v=9"></script>
 <script src="js/utils.js?v=28"></script>
 <script src="js/markdown.js?v=12"></script>
-<script src="js/api.js?v=6"></script>
+<script src="js/api.js?v=7"></script>
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
 <script src="js/mcp-client.js"></script>
 <script src="js/fab-drag.js?v=5"></script>
-<script src="js/memory.js?v=10"></script>
+<script src="js/memory.js?v=11"></script>
 <script src="js/tools.js?v=11"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=67"></script>
-<script src="js/worldview.js?v=119"></script>
+<script src="js/worldview.js?v=123"></script>
 <script src="js/npc_importer.js?v=2"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
@@ -4512,11 +4534,11 @@ const GameLog = (() => {
 <script src="js/wv-generator.js?v=33"></script>
 <script src="js/single_card.js?v=19"></script>
 <script src="js/attached-chars.js?v=4"></script>
-<script src="js/single_mode.js?v=7"></script>
+<script src="js/single_mode.js?v=8"></script>
 <script src="js/character.js?v=20"></script>
-<script src="js/prompts.js?v=10"></script>
-<script src="js/conversations.js?v=20"></script>
-<script src="js/summary.js?v=3"></script>
+<script src="js/prompts.js?v=15"></script>
+<script src="js/conversations.js?v=21"></script>
+<script src="js/summary.js?v=7"></script>
 <script src="js/chat.js?v=151"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
@@ -4524,32 +4546,32 @@ const GameLog = (() => {
 <script src="js/tts.js"></script>
 <script src="js/branch.js"></script>
 <script src="js/settings.js?v=15"></script>
-<script src="js/gaiden.js?v=8"></script>
+<script src="js/gaiden.js?v=9"></script>
 <script src="js/backstage.js?v=31"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
 <script src="js/status_bar.js?v=39"></script>
 <script src="js/ambient.js?v=1"></script>
 <script src="js/watch-sfx.js?v=4"></script>
-<script src="js/worldvoice.js?v=26"></script>
+<script src="js/worldvoice.js?v=27"></script>
 <script src="js/music.js?v=3"></script>
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
 <script src="js/app_icons.js?v=7"></script>
-<script src="js/phone.js?v1=1334"></script>
+<script src="js/phone.js?v1=1351"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
-<script src="js/ui.js?v=18"></script>
+<script src="js/ui.js?v=19"></script>
 <script src="js/data-mgr.js?v=25"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/github-backup.js?v=4"></script>
 <script src="js/colorpicker.js?v=1"></script>
 <script src="data/tianshucheng-bg.js"></script>
   <script src="data/tutorial-script.js?v=2"></script>
-  <script src="js/theme.js?v=103"></script>
+  <script src="js/theme.js?v=104"></script>
   <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js?v=2"></script>
 <script src="data/builtin-heartsim.js?v=2"></script>
@@ -4557,7 +4579,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=26"></script>
-<script src="js/app.js?v=172"></script>
+<script src="js/app.js?v=173"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
@@ -4661,6 +4683,9 @@ document.addEventListener('click', (e) => {
     </button>
     <button type="button" onclick="Worldview.copySelectedWorldviews()" title="复制" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+    </button>
+    <button type="button" onclick="Worldview.moveSelectedToGroup()" title="移到分组" style="padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
     </button>
     <button type="button" onclick="Worldview.deleteSelectedWorldviews()" title="删除" style="padding:8px;background:var(--danger);color:#fff;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
@@ -4838,8 +4863,31 @@ document.addEventListener('click', (e) => {
     全选
   </button>
   <div style="display:flex;gap:8px">
+    <button type="button" onclick="Prompts.moveSelectedToGroup()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer">移到分组</button>
     <button type="button" onclick="Prompts.exitPromptManageMode()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">退出</button>
     <button type="button" onclick="Prompts.batchDeletePrompts()" style="padding:6px 16px;font-size:13px;background:var(--danger);color:#fff;border:none;border-radius:6px;cursor:pointer">删除</button>
+  </div>
+</div>
+
+<!-- 表情包批量管理底栏 -->
+<div id="stickers-manage-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:100010;gap:12px">
+  <button type="button" onclick="Stickers.toggleSelectAll()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text);font-size:13px;cursor:pointer;padding:4px 0;flex-shrink:0;font-family:inherit">
+    <span id="stickers-select-all-icon" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease"></span>
+    <span id="stickers-selected-count">全选</span>
+  </button>
+  <div style="display:flex;gap:8px">
+    <button type="button" onclick="Stickers.batchSetCategory()" style="padding:6px 14px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;font-family:inherit">移到分类</button>
+    <button type="button" onclick="Stickers.exitManageMode()" style="padding:6px 14px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-family:inherit">退出</button>
+    <button type="button" onclick="Stickers.batchRemove()" style="padding:6px 14px;font-size:13px;background:var(--danger,#e55);color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit">删除</button>
+  </div>
+</div>
+
+<!-- 提示词排序模式底栏 -->
+<div id="prompt-sort-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:12px">
+  <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">拖动 ≡ 排序（限同分组内）</span>
+  <div style="display:flex;gap:8px">
+    <button type="button" onclick="Prompts.exitPromptSortMode()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">取消</button>
+    <button type="button" onclick="Prompts.savePromptSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存排序</button>
   </div>
 </div>
 
@@ -5036,13 +5084,12 @@ if ('serviceWorker' in navigator) {
 
 <!-- 手机悬浮按钮 -->
 <div id="phone-fab" class="hidden floating-fab" onclick="Phone.open()" title="手机">
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
   <span class="phone-notif-dot"></span>
 </div>
-
 <!-- 后台频道悬浮按钮 -->
 <div id="backstage-fab" class="hidden floating-fab" onclick="Backstage.toggle()" style="position:fixed;top:calc(50% - 48px);right:12px;width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);cursor:pointer;z-index:200">
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 </div>
 
 <!-- 后台频道窗口 -->
@@ -5565,7 +5612,7 @@ if ('serviceWorker' in navigator) {
     <h3 style="margin:0 0 12px 0;color:var(--text);font-size:16px">编辑 CSS</h3>
     <textarea id="sb-css-editor-textarea" style="flex:1;min-height:300px;padding:12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:monospace;resize:vertical"></textarea>
     <div style="display:flex;gap:8px;margin-top:16px">
-      <button onclick="StatusBarTheme.saveCssFromEditor()" style="flex:1;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">应用</button>
+      <button onclick="StatusBarTheme.saveCssFromEditor()" style="flex:1;padding:10px;background:var(--accent);color:var(--on-accent);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">应用</button>
       <button onclick="StatusBarTheme.closeCssEditor()" style="flex:1;padding:10px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;font-size:14px;cursor:pointer">取消</button>
     </div>
   </div>

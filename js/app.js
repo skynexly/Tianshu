@@ -224,14 +224,23 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v723';
-    const CHANGELOG = `○新增提示词支持排序，系统底部支持更换注入角色
+    const APP_VERSION = 'v724';
+    const CHANGELOG = `○新增提示词支持拖动排序
+○新增动态/常驻条目排序/拖动排序
+○新增表情包批量管理
+○新增表情包根据分组同步给角色
+○排序/删除等逻辑优化
+○API配置优化
+○部分BUG修复和UI调整
+○新增角色主页，点击头像查看角色状态、签名、行程（概率），随线上对话更新
+○线上对话内可更换角色主页背景图`;
+    // 历史公告（最新在前），版本变旧后手动把上一版内容挪进来
+    const CHANGELOG_HISTORY = [
+      { version: 'v723', notes: `○新增提示词支持排序，系统底部支持更换注入角色
 ○新增角色生图参考图，生图时参考五官
 ○新增手机私聊时允许生成图片（聊天设置内打开开关）
 ○新增气泡CSS预设，保存预设后随时切换
-○部分机制优化`;
-    // 历史公告（最新在前），版本变旧后手动把上一版内容挪进来
-    const CHANGELOG_HISTORY = [
+○部分机制优化` },
       { version: 'v722', notes: `○优化部分 UI 适配、Bug 修复
 ○新增世界观可配置初始宠物状态模板
 ○新增世界观可配置论坛默认分区
@@ -272,12 +281,6 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 ○新增提示词可选择作用域（主线/后台/手机聊天）
 ○新增论坛热搜词条内刷新按钮
 ○部分UI优化` },
-      { version: 'v717', notes: `○新增GitHub云端备份，大存档分片上传
-○地图APP升级，新增评论、打分、预定、出行字段，新增附近地图功能
-○世界观编辑→手机配置可以自定义地图APP设定
-○字体上传支持20MB＋
-○新增手机数据恢复备份
-○调整部分UI适配` },
     ];
     const SEEN_KEY = 'changelog_seen_version';
 

@@ -1468,10 +1468,18 @@ ${m.type !== 'relation' && m.participants?.length ? `<p style="margin:2px 0 0 0;
   }
 
   async function saveSortOrder() {
-    for (let i = 0; i < sortedList.length; i++) {
-      const m = sortedList[i];
-      m.sortOrder = i;
-      await DB.put('memories', m);
+    // 人际关系降序渲染，保存时需倒序赋值；事件升序渲染，正序赋值
+    if (currentTab === 'events') {
+      for (let i = 0; i < sortedList.length; i++) {
+        sortedList[i].sortOrder = i;
+        await DB.put('memories', sortedList[i]);
+      }
+    } else {
+      // relations：视觉顺序（从上到下）= sortOrder 从大到小，数组 0→len-1 映射到 sortOrder len-1→0
+      for (let i = 0; i < sortedList.length; i++) {
+        sortedList[i].sortOrder = sortedList.length - 1 - i;
+        await DB.put('memories', sortedList[i]);
+      }
     }
     exitSortMode();
   }

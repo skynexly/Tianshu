@@ -30,7 +30,6 @@ const API = (() => {
       return false;
     }
   }
-
   /**
    * 清理模型名（暂不清洗，中转站需要标记来路由）
    */
@@ -39,12 +38,39 @@ const API = (() => {
   }
 
   /**
+   * 构造 API 端点 URL。支持自定义路径的中转站：
+   * - baseUrl 以 '#' 结尾：去掉 '#'，把前面部分当完整 URL 原样使用（OneAPI/NewAPI 通用约定）
+   * - baseUrl 已经以目标 path 结尾（如 '/chat/completions'）：直接原样使用，不重复拼接
+   * - 否则：去掉尾部斜杠后拼上 path（兼容现有配置，默认行为不变）
+   * @param {string} baseUrl 用户填写的 API 地址
+   * @param {string} path 目标端点路径，需以 '/' 开头，如 '/chat/completions'
+   */
+  function buildApiUrl(baseUrl, path) {
+    let u = (baseUrl || '').trim();
+    if (!u) return '';
+    // '#' 结尾：强制原样（去掉末尾的 # 及其后内容）
+    if (u.endsWith('#')) return u.slice(0, -1).replace(/\/$/, '');
+    u = u.replace(/\/$/, '');
+    // 已经带了目标路径，不重复拼
+    if (path && u.endsWith(path)) return u;
+    return u + (path || '');
+  }
+
+  /**
+   * 便捷：构造 /chat/completions 端点
+   */
+  function buildChatUrl(baseUrl) {
+    return buildApiUrl(baseUrl, '/chat/completions');
+  }
+
+
+  /**
  * 发送聊天请求 — 自动选择流式/非流式
  */
 async function streamChat(messages, onChunk, onDone, onError, abortSignal, options) {
     const config = await getConfig();
     const overrideConfig = options?.overrideConfig;
-    const effectiveUrl = (overrideConfig?.apiUrl || config.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const effectiveUrl = buildChatUrl(overrideConfig?.apiUrl || config.apiUrl || '');
     const effectiveKey = overrideConfig?.apiKey || config.apiKey;
     const effectiveModel = cleanModelName(overrideConfig?.model || config.model);
     if (!effectiveKey || !effectiveUrl) {
@@ -305,7 +331,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
   async function summarize(content, summaryPrompt, options) {
     const mainConfig = await getConfig();
     const funcConfig = (options?.useMainModel) ? {} : Settings.getSummaryConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl).replace(/\/$/, '') + '/chat/completions';
+    const url = buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl);
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = cleanModelName(funcConfig.model || mainConfig.model);
 
@@ -368,7 +394,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
    * 获取模型列表
    */
   async function fetchModelList(apiUrl, apiKey) {
-    const url = apiUrl.replace(/\/$/, '') + '/models';
+    const url = buildApiUrl(apiUrl, '/models');
     const resp = await fetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}` }
     });
@@ -386,7 +412,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
   async function extractMemory(content, extractPrompt, options) {
     const mainConfig = await getConfig();
     const funcConfig = (options?.useMainModel) ? {} : Settings.getMemoryConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl).replace(/\/$/, '') + '/chat/completions';
+    const url = buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl);
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = cleanModelName(funcConfig.model || mainConfig.model);
 
@@ -420,7 +446,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
   async function describeImage(base64DataUrl, prompt) {
     const mainConfig = await getConfig();
     const funcConfig = Settings.getVisionConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl).replace(/\/$/, '') + '/chat/completions';
+    const url = buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl);
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = cleanModelName(funcConfig.model || mainConfig.model);
     if (!url || !key || !model) throw new Error('请先配置 API Key 和端点');
@@ -454,7 +480,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
    */
   async function generate(systemPrompt, userPrompt, options = {}) {
     const mainConfig = await getConfig();
-    const url = (mainConfig.apiUrl || '').replace(/\/$/, '') + '/chat/completions';
+    const url = buildChatUrl(mainConfig.apiUrl || '');
     const key = mainConfig.apiKey;
     const model = cleanModelName(mainConfig.model);
     if (!url || !key || !model) throw new Error('请先配置API');
@@ -495,7 +521,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
   async function generateImage(prompt, options = {}) {
     const drawConfig = Settings.getDrawConfig();
     const mainConfig = await getConfig();
-    const url = (drawConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/images/generations';
+    const url = buildApiUrl(drawConfig.apiUrl || mainConfig.apiUrl || '', '/images/generations');
     const key = drawConfig.apiKey || mainConfig.apiKey;
     const model = drawConfig.model || '';
     if (!url || !key) throw new Error('请先在设置→功能模型→生图模型中配置 API');
@@ -599,7 +625,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
   async function generateImageEdit(prompt, refImages, options = {}) {
     const drawConfig = Settings.getDrawConfig();
     const mainConfig = await getConfig();
-    const url = (drawConfig.apiUrl || mainConfig.apiUrl || '').replace(/\/$/, '') + '/images/edits';
+    const url = buildApiUrl(drawConfig.apiUrl || mainConfig.apiUrl || '', '/images/edits');
     const key = drawConfig.apiKey || mainConfig.apiKey;
     const model = drawConfig.model || '';
     if (!url || !key) throw new Error('请先在设置→功能模型→生图模型中配置 API');
@@ -734,7 +760,7 @@ async function streamChat(messages, onChunk, onDone, onError, abortSignal, optio
   async function suggest(recentMessages, charPrompt, directionHint) {
     const mainConfig = await getConfig();
     const funcConfig = Settings.getSuggestConfig();
-    const url = (funcConfig.apiUrl || mainConfig.apiUrl).replace(/\/$/, '') + '/chat/completions';
+    const url = buildChatUrl(funcConfig.apiUrl || mainConfig.apiUrl);
     const key = funcConfig.apiKey || mainConfig.apiKey;
     const model = funcConfig.model || mainConfig.model;
 
@@ -821,5 +847,5 @@ ${directionBlock}
     return items.slice(0, 5);
   }
 
-  return { getConfig, buildMessages, streamChat, streamChatWithTools, summarize, extractMemory, describeImage, fetchModelList, generate, generateImage, generateImageEdit, searchUnsplash, suggest };
+  return { getConfig, buildMessages, buildApiUrl, buildChatUrl, streamChat, streamChatWithTools, summarize, extractMemory, describeImage, fetchModelList, generate, generateImage, generateImageEdit, searchUnsplash, suggest };
 })();

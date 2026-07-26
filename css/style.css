@@ -54,6 +54,7 @@ body.lite-mode .phone-shell::before { display: none !important; }
   --text-secondary: #888;
   --accent: #c4a87c;
   --accent-dim: #8b7355;
+  --on-accent: #111;
   --decoration: #6b4c8a;
   --border: #333;
   --msg-user-bg: #1e2a1e;

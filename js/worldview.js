@@ -16,6 +16,10 @@ const Worldview = (() => {
   let sortedList = [];
   // 菜单
   let menuVisible = false;
+  // 分组（论坛分区式 Tab）：'__all__' 全部 / '__ungrouped__' 未分组 / 具体分组名
+  const WV_GROUP_ALL = '__all__';
+  const WV_GROUP_UNGROUPED = '__ungrouped__';
+  let _activeGroup = WV_GROUP_ALL;
   
   // ---------- 列表 CRUD ----------
   async function getWorldviewList() {
@@ -35,6 +39,147 @@ const Worldview = (() => {
   async function saveWorldviewList(list) {
     await DB.put('gameState', { key: 'worldviewList', value: list });
   }
+  // ---------- 分组（论坛分区式 Tab）----------
+  async function getWorldviewGroups() {
+    const data = await DB.get('gameState', 'worldviewGroups');
+    return Array.isArray(data?.value) ? data.value : [];
+  }
+  async function saveWorldviewGroups(groups) {
+    await DB.put('gameState', { key: 'worldviewGroups', value: groups });
+  }
+
+  // 保留名校验（不能作为用户自建分组名）
+  function _isReservedGroupName(g) {
+    return g === '全部' || g === '未分组' || g === WV_GROUP_ALL || g === WV_GROUP_UNGROUPED;
+  }
+
+  // 轻量底部选项弹层（项目无通用 actionSheet，这里自建），返回选中项的 value 或 null
+  function _groupSheet(title, options) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center';
+      const btns = options.map((o, i) =>
+        `<button data-i="${i}" style="width:100%;padding:15px 16px;background:none;border:none;color:${o.danger ? 'var(--danger)' : 'var(--text)'};font-size:15px;cursor:pointer;text-align:center">${Utils.escapeHtml(o.label)}</button>`
+      ).join('');
+      overlay.innerHTML = `
+        <div style="background:var(--bg);width:100%;max-width:480px;border-radius:16px 16px 0 0;overflow:hidden;padding-bottom:env(safe-area-inset-bottom,0)">
+          <div style="padding:14px 16px 8px;font-size:13px;color:var(--text-secondary);text-align:center">${Utils.escapeHtml(title || '')}</div>
+          ${btns}
+          <button data-i="-1" style="width:100%;padding:15px 16px;margin-top:6px;background:var(--bg-tertiary);border:none;color:var(--text-secondary);font-size:15px;cursor:pointer;text-align:center">取消</button>
+        </div>`;
+      const close = (val) => { overlay.remove(); resolve(val); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { close(null); return; }
+        const b = e.target.closest('button[data-i]');
+        if (!b) return;
+        const idx = parseInt(b.dataset.i, 10);
+        close(idx < 0 ? null : options[idx].value);
+      });
+      document.body.appendChild(overlay);
+    });
+  }
+
+  // 新建分组（＋ Tab）：输入名字，去重后追加，自动切到新分组
+  async function addWorldviewGroup() {
+    const name = await UI.showSimpleInput('新建分组', '');
+    if (!name || !name.trim()) return;
+    const g = name.trim();
+    if (_isReservedGroupName(g)) { UI.showToast('该名称被保留，请换一个'); return; }
+    const groups = await getWorldviewGroups();
+    if (groups.includes(g)) { UI.showToast('分组已存在'); _activeGroup = g; await renderWorldviewList(document.getElementById('worldview-search')?.value || ''); return; }
+    groups.push(g);
+    await saveWorldviewGroups(groups);
+    _activeGroup = g;
+    await renderWorldviewList(document.getElementById('worldview-search')?.value || '');
+  }
+
+  // 切换当前分组 Tab
+  async function switchWorldviewGroup(group) {
+    _activeGroup = group;
+    await renderWorldviewList(document.getElementById('worldview-search')?.value || '');
+  }
+
+  // 长按分组 Tab：重命名 / 删除（全部、未分组固定不可动）
+  async function _onGroupTabLongPress(groupName) {
+    if (groupName === WV_GROUP_ALL || groupName === WV_GROUP_UNGROUPED) return;
+    const action = await _groupSheet(`分组「${groupName}」`, [
+      { label: '重命名', value: 'rename' },
+      { label: '删除分组', value: 'delete', danger: true }
+    ]);
+    if (!action) return;
+    if (action === 'rename') {
+      const nn = await UI.showSimpleInput('重命名分组', groupName);
+      if (!nn || !nn.trim()) return;
+      const nname = nn.trim();
+      if (nname === groupName) return;
+      if (_isReservedGroupName(nname)) { UI.showToast('该名称被保留，请换一个'); return; }
+      const groups = await getWorldviewGroups();
+      if (groups.includes(nname)) { UI.showToast('已有同名分组'); return; }
+      // 更新分组名数组
+      const gi = groups.indexOf(groupName);
+      if (gi >= 0) groups[gi] = nname;
+      await saveWorldviewGroups(groups);
+      // 迁移该组下世界观的 group 字段
+      const list = await getWorldviewList();
+      let changed = false;
+      list.forEach(w => { if (w.group === groupName) { w.group = nname; changed = true; } });
+      if (changed) await saveWorldviewList(list);
+      if (_activeGroup === groupName) _activeGroup = nname;
+      await renderWorldviewList(document.getElementById('worldview-search')?.value || '');
+    } else if (action === 'delete') {
+      if (!await UI.showConfirm('删除分组', `确定删除分组「${groupName}」？\n\n该组下的世界观会退回「未分组」，世界观本身不会被删除。`)) return;
+      const groups = await getWorldviewGroups();
+      await saveWorldviewGroups(groups.filter(g => g !== groupName));
+      // 该组下世界观退回未分组
+      const list = await getWorldviewList();
+      let changed = false;
+      list.forEach(w => { if (w.group === groupName) { delete w.group; changed = true; } });
+      if (changed) await saveWorldviewList(list);
+      if (_activeGroup === groupName) _activeGroup = WV_GROUP_ALL;
+      await renderWorldviewList(document.getElementById('worldview-search')?.value || '');
+    }
+  }
+
+  // 长按计时器（分组 Tab）
+  let _groupLongPressTimer = null;
+  let _groupSuppressClick = false;
+  function _onGroupTabTouchStart(e, groupName) {
+    if (groupName === WV_GROUP_ALL || groupName === WV_GROUP_UNGROUPED) return;
+    _groupLongPressTimer = setTimeout(() => {
+      _groupSuppressClick = true;
+      try { e?.preventDefault?.(); } catch(_) {}
+      _onGroupTabLongPress(groupName);
+      setTimeout(() => { _groupSuppressClick = false; }, 650);
+    }, 500);
+  }
+  function _onGroupTabTouchEnd() {
+    if (_groupLongPressTimer) { clearTimeout(_groupLongPressTimer); _groupLongPressTimer = null; }
+  }
+  function _onGroupTabClick(e, group) {
+    if (_groupSuppressClick) { _groupSuppressClick = false; try { e?.preventDefault?.(); e?.stopPropagation?.(); } catch(_) {} return; }
+    switchWorldviewGroup(group);
+  }
+
+  // 渲染分组 Tab 行
+  async function _renderGroupTabs() {
+    const bar = document.getElementById('worldview-group-tabs');
+    if (!bar) return;
+    const groups = await getWorldviewGroups();
+    const tabDef = (key, label, deletable) => {
+      const active = _activeGroup === key;
+      const oncontext = deletable ? ` oncontextmenu="event.preventDefault();Worldview._onGroupTabLongPress('${Utils.escapeHtml(String(key)).replace(/'/g,"\\'")}')" ontouchstart="Worldview._onGroupTabTouchStart(event,'${Utils.escapeHtml(String(key)).replace(/'/g,"\\'")}')" ontouchend="Worldview._onGroupTabTouchEnd()" ontouchmove="Worldview._onGroupTabTouchEnd()"` : '';
+      const onclickAttr = deletable
+        ? `onclick="Worldview._onGroupTabClick(event,'${Utils.escapeHtml(String(key)).replace(/'/g,"\\'")}')"`
+        : `onclick="Worldview.switchWorldviewGroup('${key}')"`;
+      return `<button type="button" ${onclickAttr}${oncontext} style="flex-shrink:0;padding:6px 14px;border-radius:var(--radius);font-size:12px;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};background:${active ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${active ? '#111' : 'var(--text-secondary)'};cursor:pointer;white-space:nowrap">${Utils.escapeHtml(label)}</button>`;
+    };
+    let html = tabDef(WV_GROUP_ALL, '全部', false) + tabDef(WV_GROUP_UNGROUPED, '未分组', false);
+    groups.forEach(g => { html += tabDef(g, g, true); });
+    // ＋ 新建分组
+    html += `<button type="button" onclick="Worldview.addWorldviewGroup()" style="flex-shrink:0;padding:6px 12px;border-radius:var(--radius);font-size:14px;border:1px dashed var(--border);background:none;color:var(--text-secondary);cursor:pointer">＋</button>`;
+    bar.innerHTML = html;
+  }
+  
   
   // ---------- 默认数据模板 ----------
   function _defaultWorldview(id) {
@@ -306,6 +451,7 @@ if (!isHidden && _currentExtSubtab === 'npc') {
   
   async function renderWorldviewList(filter = '') {
     if (sortMode) { _renderSortList(); return; }
+    await _renderGroupTabs();
     const list = await getWorldviewList();
     const query = filter.trim().toLowerCase();
     const container = document.getElementById('worldview-list-container');
@@ -330,6 +476,9 @@ if (!isHidden && _currentExtSubtab === 'npc') {
       if (w.id === '__default_wv__') continue; // 无世界观不显示预览卡片
       if (w._hidden) continue; // v596：隐藏世界观（单人卡专属）不出现在列表
       if (query && !w.name.toLowerCase().includes(query)) continue;
+      // 分组过滤
+      if (_activeGroup === WV_GROUP_UNGROUPED) { if (w.group) continue; }
+      else if (_activeGroup !== WV_GROUP_ALL) { if (w.group !== _activeGroup) continue; }
       const checked = selectedIds.has(w.id);
       const iconHTML = w.iconImage
         ? `<img src="${w.iconImage}" style="width:48px;height:48px;border-radius:50%;object-fit:cover">`
@@ -470,6 +619,49 @@ if (!isHidden && _currentExtSubtab === 'npc') {
     UI.showToast(`已复制 ${copied} 个世界观` + (skippedHs > 0 ? '（心动模拟不支持复制）' : ''));
   }
   
+  // 批量移动选中的世界观到某个分组
+  async function moveSelectedToGroup() {
+    if (selectedIds.size === 0) { await UI.showAlert('提示', '请先选择世界观'); return; }
+    const groups = await getWorldviewGroups();
+    const options = [
+      { label: '移出分组（未分组）', value: WV_GROUP_UNGROUPED },
+      ...groups.map(g => ({ label: g, value: g })),
+      { label: '＋ 新建分组…', value: '__new__' }
+    ];
+    let target = await _groupSheet(`移动 ${selectedIds.size} 个世界观到`, options);
+    if (!target) return;
+    if (target === '__new__') {
+      const name = await UI.showSimpleInput('新建分组', '');
+      if (!name || !name.trim()) return;
+      const g = name.trim();
+      if (_isReservedGroupName(g)) { UI.showToast('该名称被保留，请换一个'); return; }
+      if (!groups.includes(g)) { groups.push(g); await saveWorldviewGroups(groups); }
+      target = g;
+    }
+    const list = await getWorldviewList();
+    list.forEach(w => {
+      if (selectedIds.has(w.id)) {
+        if (target === WV_GROUP_UNGROUPED) delete w.group;
+        else w.group = target;
+      }
+    });
+    await saveWorldviewList(list);
+    const moved = selectedIds.size;
+    selectedIds.clear();
+    manageMode = false;
+    const bar = document.getElementById('worldview-manage-bar-fixed');
+    if (bar) bar.classList.add('hidden');
+    const container = document.getElementById('worldview-list-container');
+    if (container) container.style.paddingBottom = '';
+    // 切到目标分组，方便看到结果
+    _activeGroup = (target === WV_GROUP_UNGROUPED) ? WV_GROUP_UNGROUPED : target;
+    // 复位管理按钮外观
+    const btn = document.getElementById('worldview-manage-btn');
+    if (btn) { btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 管理`; btn.style.background = 'none'; btn.style.color = 'var(--text-secondary)'; btn.style.border = '1px solid var(--border)'; }
+    await renderWorldviewList();
+    UI.showToast(`已移动 ${moved} 个世界观`);
+  }
+
   function _updateSelectAllIcon() {
     const iconEl = document.getElementById('worldview-select-all-icon');
     if (!iconEl) return;
@@ -1337,6 +1529,12 @@ _updatePhoneAppsLabel();
   let _currentExtSubtab = 'festival';
   function switchExtSubtab(subtab) {
     _currentExtSubtab = subtab;
+    // 离开常驻/动态时自动退出排序模式（避免列表状态残留）
+    if (_extSortMode && _extSortMode !== subtab) {
+      const prev = _extSortMode;
+      _extSortMode = null;
+      try { _rerenderExt(prev); } catch (_) {}
+    }
     document.querySelectorAll('.wv-ext-subtab-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.subtab === subtab);
     });
@@ -1388,6 +1586,14 @@ _updatePhoneAppsLabel();
     }
     const btn = e?.currentTarget || e?.target;
     const rect = btn?.getBoundingClientRect ? btn.getBoundingClientRect() : null;
+    // 「排序当前列表」只在常驻 / 动态子 tab 出现，文案随排序模式切换
+    const sortItem = document.getElementById('wv-ext-add-menu-sort');
+    if (sortItem) {
+      const sortable = (_currentExtSubtab === 'constant' || _currentExtSubtab === 'dynamic');
+      sortItem.style.display = sortable ? 'flex' : 'none';
+      const labelEl = document.getElementById('wv-ext-add-menu-sort-label');
+      if (labelEl) labelEl.textContent = (_extSortMode === _currentExtSubtab) ? '完成排序' : '排序当前列表';
+    }
     menu.classList.remove('hidden');
     if (rect) {
       const menuW = Math.max(menu.offsetWidth || 150, 150);
@@ -4010,18 +4216,210 @@ let knowledgesData = [];
     }
   }
 
+  // ---------- 常驻 / 动态条目排序（上下移 + 拖拽） ----------
+  // _extSortMode: null | 'constant' | 'dynamic'
+  let _extSortMode = null;
+  let _extDragState = null;
+
+  function _extListOf(type) {
+    return type === 'dynamic' ? knowledgesData : customsData;
+  }
+  function _extContainerOf(type) {
+    return document.getElementById(type === 'dynamic' ? 'wv-knowledges-container' : 'wv-customs-container');
+  }
+  function _rerenderExt(type) {
+    if (type === 'dynamic') _renderKnowledges(knowledgesData);
+    else _renderCustoms(customsData);
+  }
+
+  // 上/下移一位（dir: -1 上, 1 下）
+  function moveExtItem(type, idx, dir) {
+    const list = _extListOf(type);
+    const to = idx + dir;
+    if (!list || idx < 0 || idx >= list.length || to < 0 || to >= list.length) return;
+    const tmp = list[idx];
+    list[idx] = list[to];
+    list[to] = tmp;
+    _rerenderExt(type);
+    _wvExtAutoSave();
+  }
+
+  function toggleExtSortMode(type) {
+    _extSortMode = (_extSortMode === type) ? null : type;
+    // 进排序模式时清掉搜索过滤，避免隐藏行干扰拖拽
+    if (_extSortMode) {
+      const input = document.getElementById('wv-ext-search');
+      if (input && input.value) { input.value = ''; try { clearExtendedSearch(); } catch (_) {} }
+    }
+    _rerenderExt(type);
+    if (!_extSortMode) _wvExtAutoSave();
+  }
+
+  // 从 ＋ 菜单进入/退出当前子 tab 的排序模式
+  function sortFromMenu() {
+    const menu = document.getElementById('wv-ext-add-menu');
+    if (menu) menu.classList.add('hidden');
+    if (_currentExtSubtab !== 'constant' && _currentExtSubtab !== 'dynamic') return;
+    toggleExtSortMode(_currentExtSubtab);
+  }
+
+  // 排序模式列表（拖拽把手 + 上下移）
+  function _renderExtSortList(type) {
+    const container = _extContainerOf(type);
+    if (!container) return;
+    const list = _extListOf(type) || [];
+    if (!list.length) {
+      container.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:20px;font-size:13px">暂无条目</p>';
+      _updateExtCounts();
+      return;
+    }
+    const bannerHtml = `<div style="display:flex;align-items:center;gap:8px;background:var(--bg-tertiary);border:1px solid var(--accent);border-radius:8px;padding:8px 10px;margin-bottom:10px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M11 18h2"/></svg>
+      <span style="flex:1;font-size:12px;color:var(--text-secondary)">排序模式：按住 ≡ 拖动，或点箭头换位</span>
+      <button type="button" onclick="Worldview.toggleExtSortMode('${type}')" style="padding:4px 12px;background:var(--accent);border:none;color:#111;border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0">完成</button>
+    </div>`;
+    container.innerHTML = bannerHtml + list.map((it, i) => {
+      const enabled = it.enabled !== false;
+      const canUp = i > 0, canDown = i < list.length - 1;
+      return `<div class="ext-sort-item" data-sort-idx="${i}" style="display:flex;align-items:center;gap:8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px 8px 10px 10px;margin-bottom:6px;transition:transform 0.15s ease,opacity 0.15s ease">
+        <div class="ext-sort-handle" style="display:flex;align-items:center;justify-content:center;width:24px;flex-shrink:0;cursor:grab;color:var(--text-secondary);font-size:18px;user-select:none;-webkit-user-select:none;touch-action:none">≡</div>
+        <div style="flex:1;overflow:hidden">
+          <div style="font-size:13px;color:${enabled ? 'var(--text)' : 'var(--text-secondary)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(it.name || '未命名条目')}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
+          <span onclick="${canUp ? `Worldview.moveExtItem('${type}',${i},-1)` : ''}" style="cursor:${canUp ? 'pointer' : 'default'};opacity:${canUp ? '0.7' : '0.2'};line-height:1;display:flex;padding:2px" title="上移">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+          </span>
+          <span onclick="${canDown ? `Worldview.moveExtItem('${type}',${i},1)` : ''}" style="cursor:${canDown ? 'pointer' : 'default'};opacity:${canDown ? '0.7' : '0.2'};line-height:1;display:flex;padding:2px" title="下移">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+        </div>
+      </div>`;
+    }).join('');
+    _updateExtCounts();
+    _bindExtSortDrag(container, type);
+  }
+
+  function _bindExtSortDrag(container, type) {
+    const items = container.querySelectorAll('.ext-sort-item');
+    items.forEach(item => {
+      const handle = item.querySelector('.ext-sort-handle');
+      if (!handle) return;
+      handle.addEventListener('touchstart', e => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = item.getBoundingClientRect();
+        const placeholder = document.createElement('div');
+        placeholder.className = 'ext-sort-placeholder';
+        placeholder.style.cssText = `height:${rect.height}px;margin-bottom:6px;border:2px dashed var(--accent);border-radius:8px;background:transparent;box-sizing:border-box`;
+        item.style.position = 'fixed';
+        item.style.left = rect.left + 'px';
+        item.style.width = rect.width + 'px';
+        item.style.top = rect.top + 'px';
+        item.style.zIndex = '9999';
+        item.style.opacity = '0.9';
+        item.style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)';
+        item.style.pointerEvents = 'none';
+        item.style.transition = 'none';
+        item.parentNode.insertBefore(placeholder, item);
+        _extDragState = {
+          item, placeholder, container, type,
+          idx: parseInt(item.dataset.sortIdx),
+          startY: touch.clientY,
+          itemTop: rect.top,
+          scrollContainer: container.closest('.panel-content') || container.closest('.modal-body') || container.parentElement
+        };
+        document.addEventListener('touchmove', _onExtSortTouchMove, { passive: false });
+        document.addEventListener('touchend', _onExtSortTouchEnd);
+        document.addEventListener('touchcancel', _onExtSortTouchEnd);
+      }, { passive: false });
+    });
+  }
+
+  function _onExtSortTouchMove(e) {
+    if (!_extDragState) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const dy = touch.clientY - _extDragState.startY;
+    _extDragState.item.style.top = (_extDragState.itemTop + dy) + 'px';
+    const sc = _extDragState.scrollContainer;
+    if (sc) {
+      const scRect = sc.getBoundingClientRect();
+      const edgeZone = 60, speed = 8;
+      if (touch.clientY < scRect.top + edgeZone) sc.scrollTop -= speed;
+      else if (touch.clientY > scRect.bottom - edgeZone) sc.scrollTop += speed;
+    }
+    const allItems = _extDragState.container.querySelectorAll('.ext-sort-item');
+    const dragCenterY = _extDragState.itemTop + dy + _extDragState.item.offsetHeight / 2;
+    for (let i = 0; i < allItems.length; i++) {
+      const el = allItems[i];
+      if (el === _extDragState.item) continue;
+      const r = el.getBoundingClientRect();
+      const midY = r.top + r.height / 2;
+      const elIdx = parseInt(el.dataset.sortIdx);
+      if (dragCenterY < midY && elIdx < _extDragState.idx) {
+        _extDragState.container.insertBefore(_extDragState.placeholder, el);
+        break;
+      } else if (dragCenterY > midY && elIdx > _extDragState.idx) {
+        if (el.nextSibling) _extDragState.container.insertBefore(_extDragState.placeholder, el.nextSibling);
+        else _extDragState.container.appendChild(_extDragState.placeholder);
+      }
+    }
+  }
+
+  function _onExtSortTouchEnd() {
+    if (!_extDragState) return;
+    const { item, placeholder, container, type } = _extDragState;
+    item.style.position = '';
+    item.style.left = '';
+    item.style.width = '';
+    item.style.top = '';
+    item.style.zIndex = '';
+    item.style.opacity = '';
+    item.style.boxShadow = '';
+    item.style.pointerEvents = '';
+    item.style.transition = '';
+    container.insertBefore(item, placeholder);
+    placeholder.remove();
+    // 按 DOM 新顺序重排数据数组
+    const domItems = Array.from(container.querySelectorAll('.ext-sort-item'));
+    const oldList = _extListOf(type) || [];
+    const rebuilt = domItems.map(el => oldList[parseInt(el.dataset.sortIdx)]).filter(Boolean);
+    if (rebuilt.length === oldList.length) {
+      if (type === 'dynamic') knowledgesData = rebuilt;
+      else customsData = rebuilt;
+    }
+    _extDragState = null;
+    document.removeEventListener('touchmove', _onExtSortTouchMove);
+    document.removeEventListener('touchend', _onExtSortTouchEnd);
+    document.removeEventListener('touchcancel', _onExtSortTouchEnd);
+    _renderExtSortList(type);
+    _wvExtAutoSave();
+  }
+
+
   // ---------- 自定义设定渲染（只读卡片） ----------
   function _renderCustoms(customs) {
     customsData = customs || [];
     const container = document.getElementById('wv-customs-container');
     if (!container) return;
+    if (_extSortMode === 'constant') { _renderExtSortList('constant'); return; }
     container.innerHTML = customsData.map((c, i) => {
       const enabled = c.enabled !== false;
       const posLabel = _positionLabel(c.position || 'system_top', c.depth);
-      return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px 12px 12px 44px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editCustom(${i})">
+      const canUp = i > 0, canDown = i < customsData.length - 1;
+      return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px 40px 12px 44px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editCustom(${i})">
         <button type="button" onclick="event.stopPropagation();Worldview.toggleCustomEnabled(${i})" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;border:2px solid ${enabled ? 'var(--accent)' : 'var(--text-secondary)'};background:${enabled ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
           ${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
         </button>
+        <div style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2px">
+          <span onclick="event.stopPropagation();${canUp ? `Worldview.moveExtItem('constant',${i},-1)` : ''}" style="cursor:${canUp ? 'pointer' : 'default'};opacity:${canUp ? '0.7' : '0.2'};line-height:1;display:flex;padding:2px" title="上移">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+          </span>
+          <span onclick="event.stopPropagation();${canDown ? `Worldview.moveExtItem('constant',${i},1)` : ''}" style="cursor:${canDown ? 'pointer' : 'default'};opacity:${canDown ? '0.7' : '0.2'};line-height:1;display:flex;padding:2px" title="下移">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+        </div>
         <div style="font-size:14px;font-weight:bold;color:${enabled ? 'var(--accent)' : 'var(--text-secondary)'};margin-bottom:4px">${Utils.escapeHtml(c.name || '未命名条目')}</div>
         <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;display:flex;align-items:center;gap:4px">${_positionIcon(c.position || 'system_top')}<span>${posLabel}</span></div>
         ${c.content ? `<div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.content)}</div>` : ''}
@@ -4212,20 +4610,30 @@ document.getElementById('wv-custom-modal').classList.add('hidden');
 
 // ---------- 知识设定（关键词触发注入） ----------
 function _renderKnowledges(list) {
-knowledgesData = list || [];
-const container = document.getElementById('wv-knowledges-container');
-if (!container) return;
-container.innerHTML = knowledgesData.map((k, i) => {
-const enabled = k.enabled !== false;
-const keys = (k.keys || '').trim();
-const keyTags = keys
-? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(t)}</span>`).join('')
-: '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>';
-const posLabel = _positionLabel(k.position || 'system_top', k.depth);
-return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px 12px 12px 44px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editKnowledge(${i})">
+ knowledgesData = list || [];
+ const container = document.getElementById('wv-knowledges-container');
+ if (!container) return;
+ if (_extSortMode === 'dynamic') { _renderExtSortList('dynamic'); return; }
+ container.innerHTML = knowledgesData.map((k, i) => {
+ const enabled = k.enabled !== false;
+ const keys = (k.keys || '').trim();
+ const keyTags = keys
+ ? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(t)}</span>`).join('')
+ : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>';
+ const posLabel = _positionLabel(k.position || 'system_top', k.depth);
+ const canUp = i > 0, canDown = i < knowledgesData.length - 1;
+ return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px 40px 12px 44px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editKnowledge(${i})">
 <button type="button" onclick="event.stopPropagation();Worldview.toggleKnowledgeEnabled(${i})" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;border:2px solid ${enabled ? 'var(--accent)' : 'var(--text-secondary)'};background:${enabled ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
 ${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
 </button>
+<div style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2px">
+  <span onclick="event.stopPropagation();${canUp ? `Worldview.moveExtItem('dynamic',${i},-1)` : ''}" style="cursor:${canUp ? 'pointer' : 'default'};opacity:${canUp ? '0.7' : '0.2'};line-height:1;display:flex;padding:2px" title="上移">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+  </span>
+  <span onclick="event.stopPropagation();${canDown ? `Worldview.moveExtItem('dynamic',${i},1)` : ''}" style="cursor:${canDown ? 'pointer' : 'default'};opacity:${canDown ? '0.7' : '0.2'};line-height:1;display:flex;padding:2px" title="下移">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+  </span>
+</div>
 <div style="font-size:14px;font-weight:bold;color:${enabled ? 'var(--accent)' : 'var(--text-secondary)'};margin-bottom:4px">${Utils.escapeHtml(k.name || '未命名条目')}</div>
 <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;display:flex;align-items:center;gap:4px">${_positionIcon(k.position || 'system_top')}<span>${posLabel}</span></div>
 <div style="margin-bottom:6px">${keyTags}</div>
@@ -9908,6 +10316,14 @@ function _tryExitEdit() {
     deleteSelectedWorldviews,
     exportSelectedWorldviews,
     copySelectedWorldviews,
+    moveSelectedToGroup,
+    getWorldviewGroups,
+    addWorldviewGroup,
+    switchWorldviewGroup,
+    _onGroupTabLongPress,
+    _onGroupTabTouchStart,
+    _onGroupTabTouchEnd,
+    _onGroupTabClick,
     toggleSelectAll,
     toggleMenu,
     toggleSortMode, exitSortMode, saveSortOrder,
@@ -9915,6 +10331,7 @@ function _tryExitEdit() {
     switchEditTab,
 switchExtSubtab, filterExtended, clearExtendedSearch, toggleExtAddMenu, addFromMenu, toggleExtIoMenu, exportExtended, importExtended,
     toggleCustomEnabled, toggleKnowledgeEnabled, toggleFestivalEnabled,
+    moveExtItem, toggleExtSortMode, sortFromMenu,
     addEvent, editEvent, saveEventFromModal, deleteEventFromModal, closeEventModal, syncEventTriggerTypeUI, addEventAttrCondition, updateEventAttrCondition, removeEventAttrCondition,
     aiGenerateEvents, _doAiGenerateEvents, switchEventTab, addEventChain, addChainNode,
       aiGenerateGlobalAttrs, _doAiGenerateGlobalAttrs,

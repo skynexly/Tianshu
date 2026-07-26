@@ -164,6 +164,38 @@ const Theme = (() => {
     return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
   }
 
+  // 放在某个背景色之上时，该用深字还是浅字（WCAG 相对亮度）
+  // 阈值 0.25：所有内置主题的 accent 都落在深色前景一侧（与旧版硬编码 #111 一致），
+  // 只有真正的深色 accent（纯黑/深蓝等）才翻成白字
+  function fgOn(hex, threshold = 0.25) {
+    try {
+      let h = String(hex || '').trim();
+      // 支持 rgb()/rgba() 形式
+      const m = h.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
+      let r, g, b;
+      if (m) {
+        r = +m[1]; g = +m[2]; b = +m[3];
+      } else {
+        h = h.replace('#', '');
+        if (h.length === 3) h = h.split('').map(c => c + c).join('');
+        if (h.length < 6) return '#111';
+        r = parseInt(h.slice(0, 2), 16);
+        g = parseInt(h.slice(2, 4), 16);
+        b = parseInt(h.slice(4, 6), 16);
+      }
+      if ([r, g, b].some(v => !isFinite(v))) return '#111';
+      // sRGB 线性化后加权
+      const lin = v => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+      };
+      const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      return L > threshold ? '#111' : '#fff';
+    } catch (_) {
+      return '#111';
+    }
+  }
+
   // ── 存取 ──────────────────────────────────────────────────
   function load() {
     // 透明度类字段：旧存档可能没有，给安全默认（1=不透明）
@@ -235,6 +267,8 @@ function apply(cfg) {
     s.setProperty('--text-secondary', toRgba(cfg.textSecondary, cfg.textSecondaryOpacity ?? 1));
     s.setProperty('--accent',       cfg.accent);
     s.setProperty('--accent-dim',   dimColor(cfg.accent, 0.7));
+    // 强调色之上的前景色（文字/图标），按 accent 亮度自动取深/浅
+    s.setProperty('--on-accent',    fgOn(cfg.accent));
     s.setProperty('--decoration',   cfg.decoration);
     s.setProperty('--border',       toRgba(cfg.border, cfg.borderOpacity ?? 1));
     s.setProperty('--msg-ai-bg',    toRgba(cfg.aiBubbleBg,     cfg.aiBubbleOpacity));
@@ -465,7 +499,7 @@ _syncAllTriggers(cfg);
     document.querySelectorAll('.th-preset-btn').forEach(btn => {
       const isActive = btn.dataset.preset === name;
       btn.style.background = isActive ? 'var(--accent)' : 'var(--bg-tertiary)';
-      btn.style.color      = isActive ? '#111'          : 'var(--text)';
+      btn.style.color      = isActive ? 'var(--on-accent)'          : 'var(--text)';
       btn.style.fontWeight = isActive ? '600'           : '';
       btn.style.borderColor = isActive ? 'var(--accent)' : 'var(--border)';
     });
@@ -502,7 +536,7 @@ apply(cfg);
     document.querySelectorAll('.th-preset-btn').forEach(btn => {
       const isActive = btn.dataset.preset === DEFAULT_PRESET;
       btn.style.background = isActive ? 'var(--accent)' : 'var(--bg-tertiary)';
-      btn.style.color      = isActive ? '#111'          : 'var(--text)';
+      btn.style.color      = isActive ? 'var(--on-accent)'          : 'var(--text)';
       btn.style.fontWeight = isActive ? '600'           : '';
       btn.style.borderColor = isActive ? 'var(--accent)' : 'var(--border)';
     });
@@ -642,7 +676,7 @@ if (label) label.textContent = (cfg.msgFontSize || 13.5) + 'px';
       // "custom" 按钮在任何自定义槽激活时都高亮
       const isActive = (m === 'custom') ? isCustomMode : (m === mode);
       btn.style.background = isActive ? 'var(--accent)' : 'var(--bg-tertiary)';
-      btn.style.color = isActive ? '#111' : 'var(--text-secondary)';
+      btn.style.color = isActive ? 'var(--on-accent)' : 'var(--text-secondary)';
       btn.style.fontWeight = isActive ? '600' : '';
       btn.style.borderColor = isActive ? 'var(--accent)' : 'var(--border)';
     });
@@ -666,7 +700,7 @@ if (label) label.textContent = (cfg.msgFontSize || 13.5) + 'px';
         if (useBtn) {
           useBtn.textContent = isUsing ? '使用中' : (rec ? '使用' : '—');
           useBtn.style.background = isUsing ? 'var(--accent)' : 'var(--bg-tertiary)';
-          useBtn.style.color = isUsing ? '#111' : 'var(--text-secondary)';
+          useBtn.style.color = isUsing ? 'var(--on-accent)' : 'var(--text-secondary)';
           useBtn.disabled = !rec;
           useBtn.style.opacity = rec ? '1' : '.5';
         }
@@ -865,7 +899,7 @@ ${isEditing
       const safeName = escHtml(name);
       return `<label for="${safeId}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;cursor:pointer">
         <input id="${safeId}" type="checkbox" class="theme-export-check" value="${safeName}" checked onchange="Theme.syncExportToggleState()" style="position:absolute;opacity:0;pointer-events:none">
-        <span class="theme-export-check-ui" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex:0 0 20px;transition:all 0.15s ease;background:var(--accent);border-color:var(--accent)"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="theme-export-check-ui" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex:0 0 20px;transition:all 0.15s ease;background:var(--accent);border-color:var(--accent)"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
         <span style="font-size:13px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safeName}</span>
       </label>`;
     }).join('');
@@ -882,7 +916,7 @@ ${isEditing
     const checkbox = document.getElementById('theme-export-toggle-all');
     const ui = document.getElementById('theme-export-toggle-all-ui');
     if (!checkbox || !ui) return;
-    ui.innerHTML = checkbox.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+    ui.innerHTML = checkbox.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
     ui.style.background = checkbox.checked ? 'var(--accent)' : 'transparent';
     ui.style.borderColor = checkbox.checked ? 'var(--accent)' : 'var(--text-secondary)';
   }
@@ -895,7 +929,7 @@ ${isEditing
     checks.forEach(el => {
       const ui = el.parentElement ? el.parentElement.querySelector('.theme-export-check-ui') : null;
       if (!ui) return;
-      ui.innerHTML = el.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+      ui.innerHTML = el.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
       ui.style.background = el.checked ? 'var(--accent)' : 'transparent';
       ui.style.borderColor = el.checked ? 'var(--accent)' : 'var(--text-secondary)';
     });
@@ -1562,7 +1596,7 @@ async function clearAllBubbleCss() {
         const p = PRESETS[btn.dataset.preset];
         const isActive = !!(p && p.bg === cfg.bg && p.accent === cfg.accent && p.text === cfg.text);
         btn.style.background  = isActive ? 'var(--accent)' : 'var(--bg-tertiary)';
-        btn.style.color       = isActive ? '#111'          : 'var(--text)';
+        btn.style.color       = isActive ? 'var(--on-accent)'          : 'var(--text)';
         btn.style.fontWeight  = isActive ? '600'           : '';
         btn.style.borderColor = isActive ? 'var(--accent)' : 'var(--border)';
       });

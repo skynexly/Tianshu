@@ -601,6 +601,10 @@ if (scrollBtn && name !== 'chat') scrollBtn.classList.add('hidden');
     scope.querySelectorAll('.settings-tab-content').forEach(el => {
       el.style.display = el.id === tabId ? '' : 'none';
     });
+    // 离开表情包管理时退出批量模式，避免底栏残留
+    if (tabId !== 'st-stickers' && typeof Stickers !== 'undefined' && typeof Stickers.exitManageMode === 'function') {
+      try { Stickers.exitManageMode(); } catch (_) {}
+    }
   }
 
   function showSettingsOverview() {
@@ -614,6 +618,10 @@ if (overview) {
   overview.style.animation = 'tabContentFadeIn 0.28s ease';
 }
 if (contentArea) contentArea.style.display = 'none';
+// 回到概览时退出表情包批量模式，避免底栏残留
+if (typeof Stickers !== 'undefined' && typeof Stickers.exitManageMode === 'function') {
+  try { Stickers.exitManageMode(); } catch (_) {}
+}
 }
 
   function handleSettingsBack() {
@@ -629,6 +637,7 @@ if (contentArea) contentArea.style.display = 'none';
       }
     });
     if (typeof Prompts.exitPromptManageMode === 'function') Prompts.exitPromptManageMode();
+    if (typeof Stickers !== 'undefined' && typeof Stickers.exitManageMode === 'function') Stickers.exitManageMode();
 
     // 如果在子页面，返回概览
     if (contentArea && getComputedStyle(contentArea).display !== 'none') {

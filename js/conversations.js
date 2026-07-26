@@ -2004,6 +2004,8 @@ const allArchives = await DB.getAll('archives');
     backupBeforeMigration, getPreMigrationBackupInfo, restorePreMigrationBackup,
     toggleCharFilter, pickCharFilter, refreshCharFilter,
     applyInheritedSettings, INHERIT_KEYS,
+    buildStartCandidates: _buildStartCandidates,
+    pickStartPreset: _pickStartPreset,
     getList: () => list,
     setStreaming
   };

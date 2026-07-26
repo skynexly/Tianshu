@@ -419,10 +419,28 @@ const SingleMode = (() => {
       }
     } catch(_) {}
 
-    // 初始化状态栏时间：从单人世界观读startTime，没有就用现实时间
+    // 多开场轮换：若世界观配了多套开场，弹选择器让玩家挑一套（与群像模式一致）
+    try {
+      if (wvId && wvId !== '__default_wv__') {
+        const _wvForStart = await DB.get('worldviews', wvId);
+        const _cands = Conversations.buildStartCandidates(_wvForStart);
+        if (_cands.length >= 2) {
+          const picked = await Conversations.pickStartPreset(_cands);
+          if (picked === undefined) return; // 取消创建
+          conv.startOverride = { startTime: picked.startTime, startPlot: picked.startPlot, startPlotRounds: picked.startPlotRounds, startMessage: picked.startMessage };
+        } else if (_cands.length === 1) {
+          const only = _cands[0];
+          conv.startOverride = { startTime: only.startTime, startPlot: only.startPlot, startPlotRounds: only.startPlotRounds, startMessage: only.startMessage };
+        }
+        // 0 套：不设 startOverride，走世界观默认/现实时间兜底
+      }
+    } catch(_) {}
+
+    // 初始化状态栏时间：优先用选中开场的 startTime，再退世界观 startTime，最后现实时间
     try {
       let initTime = '';
-      if (wvId) {
+      if (conv.startOverride && conv.startOverride.startTime) initTime = conv.startOverride.startTime;
+      if (!initTime && wvId) {
         const swv = await DB.get('worldviews', wvId);
         if (swv?.startTime) initTime = swv.startTime;
       }
