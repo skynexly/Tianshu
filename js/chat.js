@@ -546,13 +546,14 @@ const Chat = (() => {
     _updateImgGenButtons();
     // 更新回复建议灯泡按钮可见性
     _updateSuggestBtn();
-    // 环境音：切换对话时恢复/关闭
+    // 环境音：切换对话时恢复/关闭（v726：读全局偏好，跨对话共享同一份设置）
     try {
       if (typeof Ambient !== 'undefined') {
-        const _conv = Conversations.getList()?.find(c => c.id === conversationId);
-        if (_conv?.convAmbientEnabled) {
-          Ambient.setVolume((_conv.convAmbientVolume ?? 50) / 100);
-          Ambient.setMode(_conv.convAmbientMode || 'loop');
+        const _ambP = _getAmbientPrefs();
+        if (_ambP.enabled) {
+          // 先定模式再给音量，silent 模式下 setVolume 会忽略，不会覆盖静音增益
+          Ambient.setMode(_ambP.mode || 'loop');
+          Ambient.setVolume((_ambP.volume ?? 50) / 100);
           Ambient.enable();
         } else {
           Ambient.disable();
@@ -1224,7 +1225,7 @@ if (isGameMode) {
             }
           }
         }
-        const gs = (_shouldInjectWvNpc && _wvForGlobal && _wvForGlobal.globalNpcs) ? _wvForGlobal.globalNpcs.slice() : [];
+        const gs = (_shouldInjectWvNpc && _wvForGlobal && _wvForGlobal.globalNpcs) ? _wvForGlobal.globalNpcs.slice().filter(n => n && n.enabled !== false) : [];
         // v632.1：合并单人卡世界书的全图 NPC（独立于 currentWv，没绑主世界观也要跑）
         if (_shouldInjectLbNpc) {
           try {
@@ -1235,6 +1236,7 @@ if (isGameMode) {
                 // 按 id（兜底 name）去重，避免和世界观自带的重复
                 const seen = new Set(gs.map(n => n.id || n.name));
                 for (const n of _hiddenWv.globalNpcs) {
+                  if (n && n.enabled === false) continue;
                   const key = n.id || n.name;
                   if (key && !seen.has(key)) {
                     gs.push(n);
@@ -6780,16 +6782,20 @@ bgImage: conv?.convBgImage || '',
     try {
       const conv = Conversations.getList()?.find(c => c.id === Conversations.getCurrent());
       const ambEl = document.getElementById('cs-ambient-enabled');
-      if (ambEl) ambEl.checked = !!conv?.convAmbientEnabled;
+      // v726：环境音三项改为读全局偏好（跨对话共享），不再读 conv 字段
+      const _ambPrefs = _getAmbientPrefs();
+      if (ambEl) ambEl.checked = !!_ambPrefs.enabled;
       const ambVolEl = document.getElementById('cs-ambient-volume');
-      if (ambVolEl) { ambVolEl.value = conv?.convAmbientVolume ?? 50; }
+      if (ambVolEl) { ambVolEl.value = _ambPrefs.volume; }
       const ambVolLabel = document.getElementById('cs-ambient-volume-label');
-      if (ambVolLabel) ambVolLabel.textContent = (conv?.convAmbientVolume ?? 50) + '%';
+      if (ambVolLabel) ambVolLabel.textContent = _ambPrefs.volume + '%';
       const ambModeEl = document.getElementById('cs-ambient-mode');
     if (ambModeEl) {
-      ambModeEl.value = conv?.convAmbientMode || 'loop';
+      ambModeEl.value = _ambPrefs.mode || 'loop';
       const ambModeLabel = document.getElementById('cs-ambient-mode-label');
-      if (ambModeLabel) ambModeLabel.textContent = ambModeEl.value === 'short' ? '触发短播（20-30秒）' : '持续循环';
+      const ambOpt = _AMBIENT_MODE_OPTIONS.find(o => o.value === ambModeEl.value);
+      if (ambModeLabel) ambModeLabel.textContent = ambOpt ? ambOpt.label : '持续循环';
+      _syncAmbientModeUI(ambModeEl.value);
     }
     } catch(_) {}
     const oc = document.getElementById('cs-online-chat');
@@ -6923,13 +6929,13 @@ const taEl = document.getElementById('cs-time-aware');
       if (waEl) conv.convWeatherAware = waEl.checked;
       const wcityEl = document.getElementById('cs-weather-city');
 if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
-    // 环境音设置保存
+    // 环境音设置保存（v726：改存全局偏好，跨对话共享；conv 字段一并保留写入以兼容旧读取点）
     const ambEnabledEl = document.getElementById('cs-ambient-enabled');
-    if (ambEnabledEl) conv.convAmbientEnabled = ambEnabledEl.checked;
+    if (ambEnabledEl) { conv.convAmbientEnabled = ambEnabledEl.checked; _setAmbientPrefs({ enabled: ambEnabledEl.checked }); }
     const ambVolumeEl = document.getElementById('cs-ambient-volume');
-    if (ambVolumeEl) conv.convAmbientVolume = parseInt(ambVolumeEl.value, 10) || 50;
+    if (ambVolumeEl) { const _v = parseInt(ambVolumeEl.value, 10) || 50; conv.convAmbientVolume = _v; _setAmbientPrefs({ volume: _v }); }
     const ambModeEl = document.getElementById('cs-ambient-mode');
-    if (ambModeEl) conv.convAmbientMode = ambModeEl.value;
+    if (ambModeEl) { conv.convAmbientMode = ambModeEl.value; _setAmbientPrefs({ mode: ambModeEl.value }); }
     const ocEl = document.getElementById('cs-online-chat');
     if (ocEl) conv.convOnlineChat = ocEl.checked;
     const igSaveEl = document.getElementById('cs-imggen');
@@ -8077,16 +8083,63 @@ async function applyLorebooksToWorldview() {
   }
 
   // ===== 环境音控制 =====
+  // v726：环境音设置改为跨对话全局共享（存 localStorage，全对话统一）。
+  // 环境音更像"播放器偏好"而不是某个故事的设定，没必要每个对话各存一份。
+  // 首次读取时若无全局值，从当前对话的旧 conv 字段迁移过来，避免用户设置突然被重置。
+  const _AMBIENT_GLOBAL_KEY = 'tianshu_ambient_prefs';
+  const _AMBIENT_PREFS_DEFAULT = { enabled: false, volume: 50, mode: 'loop' };
+  function _getAmbientPrefs() {
+    try {
+      const raw = localStorage.getItem(_AMBIENT_GLOBAL_KEY);
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (p && typeof p === 'object') return { ..._AMBIENT_PREFS_DEFAULT, ...p };
+      }
+    } catch(_) {}
+    // 无全局值：从当前对话旧字段迁移一次
+    try {
+      const convId = Conversations.getCurrent();
+      const conv = convId && Conversations.getList().find(c => c.id === convId);
+      if (conv && (conv.convAmbientEnabled !== undefined || conv.convAmbientMode !== undefined)) {
+        const migrated = {
+          enabled: !!conv.convAmbientEnabled,
+          volume: conv.convAmbientVolume ?? 50,
+          mode: conv.convAmbientMode || 'loop',
+        };
+        _setAmbientPrefs(migrated);
+        return migrated;
+      }
+    } catch(_) {}
+    return { ..._AMBIENT_PREFS_DEFAULT };
+  }
+  function _setAmbientPrefs(patch) {
+    try {
+      const cur = (() => {
+        try {
+          const raw = localStorage.getItem(_AMBIENT_GLOBAL_KEY);
+          const p = raw ? JSON.parse(raw) : null;
+          return (p && typeof p === 'object') ? p : {};
+        } catch(_) { return {}; }
+      })();
+      const next = { ..._AMBIENT_PREFS_DEFAULT, ...cur, ...(patch || {}) };
+      localStorage.setItem(_AMBIENT_GLOBAL_KEY, JSON.stringify(next));
+    } catch(_) {}
+  }
+
   function _onAmbientToggle() {
     const el = document.getElementById('cs-ambient-enabled');
     if (!el) return;
+    _setAmbientPrefs({ enabled: !!el.checked });
     if (el.checked) {
       const volEl = document.getElementById('cs-ambient-volume');
       const modeEl = document.getElementById('cs-ambient-mode');
       const vol = parseInt(volEl?.value || '50', 10) / 100;
+      const mode = modeEl?.value || 'loop';
+      // 先定模式再给音量：silent 模式下 setVolume 会自行忽略，避免覆盖静音增益
+      Ambient.setMode(mode);
       Ambient.setVolume(vol);
-      Ambient.setMode(modeEl?.value || 'loop');
       Ambient.enable();
+      _syncAmbientModeUI(mode);
     } else {
       Ambient.disable();
     }
@@ -8094,20 +8147,50 @@ async function applyLorebooksToWorldview() {
 
   function _onAmbientVolume(val) {
     const v = parseInt(val, 10) || 50;
+    _setAmbientPrefs({ volume: v });
     const label = document.getElementById('cs-ambient-volume-label');
     if (label) label.textContent = v + '%';
     if (typeof Ambient !== 'undefined') Ambient.setVolume(v / 100);
   }
 
   function _onAmbientMode(val) {
+    _setAmbientPrefs({ mode: val });
     if (typeof Ambient !== 'undefined') Ambient.setMode(val);
     const label = document.getElementById('cs-ambient-mode-label');
-    if (label) label.textContent = val === 'short' ? '触发短播（20-30秒）' : '持续循环';
+    const opt = _AMBIENT_MODE_OPTIONS.find(o => o.value === val);
+    if (label) label.textContent = opt ? opt.label : '持续循环';
+    _syncAmbientModeUI(val);
+  }
+
+  // 静音保活模式下：禁用音量、显示说明与实时状态
+  function _syncAmbientModeUI(mode) {
+    const isSilent = mode === 'silent';
+    const volRow = document.getElementById('cs-ambient-volume-row');
+    const volInput = document.getElementById('cs-ambient-volume');
+    if (volRow) volRow.style.opacity = isSilent ? '0.4' : '';
+    if (volInput) volInput.disabled = isSilent;
+    const hint = document.getElementById('cs-ambient-silent-hint');
+    if (hint) hint.classList.toggle('hidden', !isSilent);
+    const statusRow = document.getElementById('cs-ambient-status-row');
+    if (statusRow) statusRow.classList.toggle('hidden', !isSilent);
+    if (isSilent) _refreshAmbientStatus();
+  }
+
+  // 读 Ambient 实时状态，用来确认后台保活有没有断
+  function _refreshAmbientStatus() {
+    const el = document.getElementById('cs-ambient-status');
+    if (!el) return;
+    if (typeof Ambient === 'undefined') { el.textContent = '模块未加载'; return; }
+    const s = Ambient.getState();
+    const ok = s.enabled && s.ctxState === 'running' && s.activeNodes > 0;
+    el.textContent = `${s.ctxState} / 音源${s.activeNodes} / ${ok ? '保活中' : '未生效'}`;
+    el.style.color = ok ? 'var(--accent)' : 'var(--danger, #e06c6c)';
   }
 
   const _AMBIENT_MODE_OPTIONS = [
     { value: 'loop', label: '持续循环' },
-    { value: 'short', label: '触发短播（20-30秒）' }
+    { value: 'short', label: '触发短播（20-30秒）' },
+    { value: 'silent', label: '静音（防后台断连）' }
   ];
   function _toggleAmbientModeDropdown() {
     const dropdown = document.getElementById('cs-ambient-mode-dropdown');
@@ -8352,7 +8435,7 @@ async function applyLorebooksToWorldview() {
     _renderMcpList, _openMcpAddModal, _closeMcpAddModal, _onMcpAuthTypeChange, _saveMcpServer,
     _toggleMcpServer, _removeMcpServer, _rediscoverMcpServer,
     // 环境音控制
-    _onAmbientToggle, _onAmbientVolume, _onAmbientMode,
+    _onAmbientToggle, _onAmbientVolume, _onAmbientMode, _refreshAmbientStatus,
     // 时间格式下拉
     _toggleTimeFormatDropdown, _selectTimeFormat,
     // 气泡时间戳下拉

@@ -384,21 +384,39 @@ try {
     _catStrictLine = `\n※ 本次是"${_cat}"分区，第 2、3 条要求里的所有帖子都必须先满足"属于${_cat}分区"这个前提，再谈日常/主线的比例。`;
   }
 } catch (_) {}
+// v725：完整生成模式——条数 >0 时只生成这么多条，但每条连正文和评论区一起出，
+// 详情页不再额外请求（按次计费用户省钱）。0 = 关闭，保持原来的"预览 + 点开懒加载"。
+let _fullGenN = 0;
+try { _fullGenN = (typeof Phone !== 'undefined' && Phone._forumFullGenCount) ? await Phone._forumFullGenCount() : 0; } catch(_) {}
+const _isFullGen = _fullGenN > 0;
+const _countLine = _isFullGen ? `生成${_fullGenN}条帖子/动态，每条都要带完整正文和评论区` : '生成8-10条帖子/动态预览';
+const _countRef = _isFullGen ? `${_fullGenN}条` : '8-10条';
+// 完整模式追加的详情要求（规格与单帖详情生成保持一致）
+const _fullGenRules = _isFullGen ? `
+10. 【本次必须同时生成正文和评论区】每条帖子除预览字段外，还要给出 content（完整正文）和 detailComments（评论区），规格如下：
+  - content：帖子完整正文，以该帖楼主的口吻写。长度贴合${mediaType}的画风——该短的短、该长的长，不要一律写成千字小作文。分段用真实换行（段落之间空一行，写成 "第一段\\n\\n第二段"），不要用 <br> 之类的 HTML 标签
+  - detailComments：8-12条主楼评论，绝大多数评论者是虚构的路人用户（非NPC），仅允许1-2条由有设定的角色评论。风格多样（赞同、反对、吐槽、跑题等），长度自然，有人一句话有人写一段。评论者的用户名和说话风格要符合世界观和${mediaType}的氛围
+  - 评论时间必须晚于该帖的发帖时间、且不超过"当前游戏时间"；挖坟老帖的评论可以横跨较长时间（早期评论紧贴发帖时间，近期评论紧贴当前游戏时间）
+  - 【楼中楼】给其中 2-4 条「有讨论度」的主楼挂 replies（争议帖、高赞帖、有观点的帖），其余主楼不带 replies（或留空数组）。每条带 replies 的主楼配 2-5 条楼中楼，也是路人为主，最多一两条 NPC。楼中楼的 time 要晚于其所在主楼、且符合上面的时间规则。replyToName 留空=直接回复楼主，填某人网名=回复楼里那个人（让同一楼里几个人来回对线）。楼中楼只需 username/isNpc/content/time/likes/replyToName
+  - 评论区中如果楼主本人出现，必须是以作者身份回复读者（如答疑、补充），而不是以路人视角评论自己
+  - comments 字段（数字）仍然要填，表示该帖的评论总数展示值` : '';
 const systemPrompt = `你是一个"${mediaType}"内容生成器。根据提供的世界观和当前剧情，生成${mediaType}上的帖子/动态。${mediaBrief}${userBan}${_catHint}
 
 要求：
-1. 生成8-10条帖子/动态预览${_catStrictLine}
+1. ${_countLine}${_catStrictLine}
 2. 80%的内容与世界观有关但与主线剧情无直接关系（日常生态、社会话题、生活琐事；下方若提供了可呼应的电台/小说素材，那条呼应帖也算在这 80% 日常里）
 3. 20%的内容与主线正在发生的剧情有关联（但是从路人/旁观者视角，不会知道具体细节），只能涉及已经发生过的事件，不能透露或暗示尚未发生的剧情
 4. 绝大多数帖子的发帖人是虚构的路人用户（非NPC），用户名要符合世界观和${mediaType}的风格
 5. 每条帖子都是独立的原创帖/一楼，不是对其他帖子的回复。标题和摘要不能出现"回楼上""楼主""回复@"等评论区用语。帖子风格贴合${mediaType}的画风，长短皆可，有正经讨论也有水帖灌水，摘要长度不要千篇一律
 6. tags 风格也要贴合${mediaType}（论坛/贴吧偏普通词、微博偏"#话题#"、小红书偏"#标签"），无需统一形式
 7. 时间分布：80% 在当前游戏时间附近 7 天内（日常推荐流），可以有 20% 是置顶/热门/挖坟的更早老帖，time 可以更靠前；但评论时间永远不要超过当前游戏时间
-8. 8-10条帖子中仅允许1-2条（不能更多）由有设定的角色发帖，其余全部是路人。角色发帖时语气必须符合该角色性格，username 直接填该角色在列表中"-"后面的名字。角色的认知范围以当前剧情进度为准，不能提到还没发生的事。角色发布的帖子可以和主线有关，也可以完全和主线无关，可能是技术贴、求助帖、生活吐槽或者一切符合角色身份、职业、性格的帖子
-9. 返回纯JSON数组，不要包含任何其他文字
+8. ${_countRef}帖子中仅允许1-2条（不能更多）由有设定的角色发帖，其余全部是路人。角色发帖时语气必须符合该角色性格，username 直接填该角色在列表中"-"后面的名字。角色的认知范围以当前剧情进度为准，不能提到还没发生的事。角色发布的帖子可以和主线有关，也可以完全和主线无关，可能是技术贴、求助帖、生活吐槽或者一切符合角色身份、职业、性格的帖子
+9. 返回纯JSON数组，不要包含任何其他文字${_fullGenRules}
 
 JSON格式（严格遵循）：
-[{"id":"p1","username":"用户名","avatar_color":"#颜色","time":"YYYY.MM.DD 星期X HH:mm","title":"标题","summary":"摘要","tags":["标签1","标签2"],"views":数字,"likes":数字,"comments":数字}]
+${_isFullGen
+  ? `[{"id":"p1","username":"用户名","avatar_color":"#颜色","time":"YYYY.MM.DD 星期X HH:mm","title":"标题","summary":"摘要","tags":["标签1","标签2"],"views":数字,"likes":数字,"comments":数字,"content":"帖子完整正文","detailComments":[{"username":"用户名","avatar_color":"#颜色","content":"评论内容","time":"YYYY.MM.DD 星期X HH:mm","likes":数字,"replies":[{"username":"回复者网名","isNpc":false,"content":"楼中楼回复","time":"YYYY.MM.DD 星期X HH:mm","likes":数字,"replyToName":""}]}]}]`
+  : `[{"id":"p1","username":"用户名","avatar_color":"#颜色","time":"YYYY.MM.DD 星期X HH:mm","title":"标题","summary":"摘要","tags":["标签1","标签2"],"views":数字,"likes":数字,"comments":数字}]`}
 
 所有 time 都必须使用"YYYY.MM.DD 星期X HH:mm"格式，必须和当前游戏时间同一套写法，不要自己发明别的时间样式。
 
@@ -410,7 +428,9 @@ ${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}${readingEcho ? '\n\n' + readin
     if (recentMain) userPrompt += `## 最近剧情\n${recentMain}\n\n`;
     const npcListStr = await _getNpcListForForum();
     if (npcListStr) userPrompt += npcListStr + '\n\n';
-    userPrompt += `请生成${mediaType}内容。`;
+    userPrompt += _isFullGen
+      ? `请生成${mediaType}内容，共 ${_fullGenN} 条，每条都要带完整正文（content）和评论区（detailComments）。`
+      : `请生成${mediaType}内容。`;
 
 
     const maxRetries = (typeof Chat !== 'undefined' && Chat.isRetryDisabled && Chat.isRetryDisabled()) ? 1 : 3;
@@ -428,7 +448,9 @@ ${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}${readingEcho ? '\n\n' + readin
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
           body: JSON.stringify({
-            model, stream: false, temperature: 0.9, max_tokens: 16384,
+            // v725：不再写死 max_tokens——完整生成模式下一次要吐 N 篇正文+评论区，
+            // 固定 16384 会截断；交给模型自己的默认上限
+            model, stream: false, temperature: 0.9,
         messages: [
           { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
@@ -447,6 +469,32 @@ ${wvPrompt}${radioEcho ? '\n\n' + radioEcho : ''}${readingEcho ? '\n\n' + readin
           const jsonMatch = content.match(/\[[\s\S]*\]/);
           if (!jsonMatch) throw new Error('AI返回格式不正确');
           posts = JSON.parse(jsonMatch[0]);
+        }
+        // v725：完整生成模式——把随列表一起返回的正文/评论搬到详情字段，标记已加载，
+        // 这样点进详情页时 `if (!post._detailLoaded)` 分支直接跳过，不再发第二次请求。
+        // 只有真的两样都齐了才标记；缺失或残缺的那条退回懒加载（行为与关闭时一致）。
+        if (_isFullGen && Array.isArray(posts)) {
+          let _rnMap = null;
+          try { _rnMap = await _buildNpcRealNameMap(); } catch(_) {}
+          posts.forEach(p => {
+            if (!p || typeof p !== 'object') return;
+            const _body = String(p.content || '').trim();
+            const _cmts = Array.isArray(p.detailComments) ? p.detailComments : null;
+            // 列表卡片上的 comments 是数字（评论数展示值），不能被数组覆盖
+            if (Array.isArray(p.comments)) p.comments = p.comments.length;
+            delete p.detailComments;
+            delete p.content;
+            if (!_body || !_cmts || _cmts.length === 0) return;
+            p.fullContent = _body.replace(/<br\s*\/?>/gi, '\n');
+            p._comments = _cmts;
+            if (_rnMap) {
+              try {
+                _attachRealName(p, _rnMap);
+                p._comments.forEach(c => _attachRealName(c, _rnMap));
+              } catch(_) {}
+            }
+            p._detailLoaded = true;
+          });
         }
         await _savePosts();
         _hideLoadingHint();

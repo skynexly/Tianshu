@@ -3915,7 +3915,9 @@ document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-tom
     if (!phoneData) { UI.showToast('无法获取手机数据', 1500); return; }
 
     // push App 列表页到导航栈
-    const renderApp = () => {
+    // v726：邮箱列表页返回时用实时数据重渲，避免闭包捕获旧 phoneData 快照
+    //   导致"看过的信标了已读、退回列表红点/未读条还在"（read 已落库，但返回渲染读的是旧快照）。
+    const renderApp = async () => {
  switch (appId) {
  case 'settings': _renderSettings(phoneData); break;
  case 'wallet': _renderWallet(phoneData); break;
@@ -3932,7 +3934,10 @@ document.querySelector('#phone-modal .phone-shell')?.classList.remove('phone-tom
  case 'ledger': _renderLedger(phoneData); break;
  case 'radio': _renderRadio(phoneData); break;
       case 'reading': _renderReading(phoneData); break;
-          case 'email': _renderEmail(phoneData); break;
+          // v726：邮箱列表页每次渲染都重新拉最新 phoneData。
+          // 原本用闭包捕获的 phoneData 快照，看完信标了已读后返回列表，
+          // 渲染用的还是旧快照，导致"看过的邮件退出去还提示未读"。
+          case 'email': _renderEmail(await _getPhoneData()); break;
  case 'video': _renderVideo(phoneData); break;
  case 'cottage': _renderCottage(phoneData); break;
 	case 'wardrobe': _renderWardrobe(phoneData); break;
@@ -41569,12 +41574,61 @@ async function _clearMomentsCover() {
   // aliasEnabled：启用马甲；aliases：马甲列表 [{id, name}]；activeAliasId：当前启用的那一个（同时只启用一个）。
   // 启用且有生效马甲时，发帖/评论的 username 固化存马甲名、头像走默认色块，且给 AI 的 prompt 不带任何“玩家/用户本人”标记，
   // 改成中性“这条是 xx 发的，请积极回应”，让 NPC 认不出是用户本人（真匿名）。
-  const _FORUM_ALIAS_PREFS_DEFAULT = { aliasEnabled: false, aliases: [], activeAliasId: '' };
+  const _FORUM_ALIAS_PREFS_DEFAULT = { aliasEnabled: false, aliases: [], activeAliasId: '', fullGenCount: 0 };
   function _forumAliasPrefs(pd) {
     const p = (pd && pd.forumAliasPrefs && typeof pd.forumAliasPrefs === 'object') ? pd.forumAliasPrefs : {};
     const out = { ..._FORUM_ALIAS_PREFS_DEFAULT, ...p };
     if (!Array.isArray(out.aliases)) out.aliases = [];
+    out.fullGenCount = Math.max(0, Math.min(10, parseInt(out.fullGenCount) || 0));
     return out;
+  }
+  // v725：完整生成模式的条数（0=关闭，走原来的"预览+点开懒加载"）。
+  // >0 时刷新只生成这么多条帖子，且每条连正文和评论区一起出，点进详情不再额外请求。
+  // 供 WorldVoice.refresh 读取。
+  async function _forumFullGenCount() {
+    try {
+      const pd = await _getPhoneData();
+      return _forumAliasPrefs(pd).fullGenCount;
+    } catch(_) { return 0; }
+  }
+  async function _forumSetFullGenCount(val) {
+    const n = Math.max(0, Math.min(10, parseInt(val) || 0));
+    const pd = await _getPhoneData();
+    if (!pd.forumAliasPrefs || typeof pd.forumAliasPrefs !== 'object') pd.forumAliasPrefs = { ..._FORUM_ALIAS_PREFS_DEFAULT };
+    pd.forumAliasPrefs.fullGenCount = n;
+    await _savePhoneData();
+    _renderForum(await _getPhoneData());
+  }
+  // 重置论坛分区为世界观最新设定：清空本对话分区，重新从世界观克隆。
+  // 同名分区的帖子保留，消失分区下的帖子清除，避免孤儿帖子残留。
+  async function _forumResetCategories() {
+    if (!await UI.showConfirm('重置论坛分区', '将当前论坛分区重置为世界观里的最新设定。已消失分区下的帖子会被清除，同名分区的帖子保留。确定吗？')) return;
+    const pd = await _getPhoneData();
+    if (!pd) return;
+    // 清空分区，让 ensureInitialForumCategories 重新从世界观克隆
+    pd.forumCategories = [];
+    await _savePhoneData();
+    await ensureInitialForumCategories();
+    // 重读克隆后的最新分区
+    const pd2 = await _getPhoneData();
+    const newCats = _forumCats(pd2);
+    const newNames = new Set(newCats.map(c => c.name));
+    // 清掉消失分区下的帖子（同名保留）
+    if (pd2.forumPostsByCat && typeof pd2.forumPostsByCat === 'object') {
+      Object.keys(pd2.forumPostsByCat).forEach(k => {
+        if (!newNames.has(k)) delete pd2.forumPostsByCat[k];
+      });
+    }
+    // 当前激活分区若已不存在，归到第一个
+    const cur = pd2.forumActiveCategory || '热门';
+    if (!newNames.has(cur)) {
+      const first = (newCats[0] && newCats[0].name) || '热门';
+      pd2.forumActiveCategory = first;
+      pd2.cachedForumPosts = (pd2.forumPostsByCat && Array.isArray(pd2.forumPostsByCat[first])) ? pd2.forumPostsByCat[first] : [];
+    }
+    await _savePhoneData();
+    _renderForum(await _getPhoneData());
+    UI.showToast('分区已重置为世界观设定', 2000);
   }
   // 取当前生效的马甲名：启用开关开 + 有 activeAliasId 命中 → 返回该马甲名；否则返回 ''（表示用真身/面具）。
   function _forumActiveAliasName(pd) {
@@ -42598,6 +42652,20 @@ ${wvPrompt}${_echoForHot}`;
             </label>
           </div>
           ${aliasManage}
+          <div class="phone-radio-pref-row" style="border-top:1px solid var(--border)">
+            <div style="flex:1;min-width:0">
+              <div>刷新时生成完整帖子</div>
+              <div style="font-size:11px;color:var(--text-tertiary,#888);margin-top:2px;line-height:1.5">填 0 = 关闭（刷新出 8-10 条预览，点进帖子再生成正文和评论）。填 1-10 = 刷新只出这么多条，但每条连正文和评论区一起生成好，点进去不再消耗请求。按次计费时更省，但生成更慢，条数填多了 AI 可能写不完。</div>
+            </div>
+            <input type="number" min="0" max="10" step="1" value="${prefs.fullGenCount}" onchange="Phone._forumSetFullGenCount(this.value)" style="width:52px;flex-shrink:0;padding:6px 4px;text-align:center;font-size:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit">
+          </div>
+          <div class="phone-radio-pref-row">
+            <div style="flex:1;min-width:0">
+              <div>重置论坛分区</div>
+              <div style="font-size:11px;color:var(--text-tertiary,#888);margin-top:2px;line-height:1.5">在世界观里改了论坛分区后不会自动生效——本对话的分区是初始化时克隆的一份。点这里把它重置为世界观最新设定。同名分区的帖子保留，消失分区的帖子清除。</div>
+            </div>
+            <button onclick="Phone._forumResetCategories()" style="flex-shrink:0;padding:7px 14px;font-size:13px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--accent);font-family:inherit;cursor:pointer">重置</button>
+          </div>
         </div>
       </div>`;
   }
@@ -54158,6 +54226,9 @@ async function _showContactProfileCard(contactId) {
 async function _showChatBubbleMenu(contactId, msgId, role) {
   const pd = await _getPhoneData();
   if (!pd?.chatThreads?.[contactId]) return;
+  // v726：补回丢失的 thread 取值。原先只做了判空没赋值，
+  // 下面 thread.find 直接 ReferenceError，导致长按气泡菜单永远弹不出来。
+  const thread = pd.chatThreads[contactId];
   const msg = thread.find(m => m.id === msgId);
   if (!msg) return;
 
@@ -65194,6 +65265,7 @@ _chatPickCallPortrait, _chatClearCallPortrait, _chatPickBg, _chatClearBg, _chatP
  _feiniaoShowOrderDetail, _feiniaoDeleteOrder, _switchFeiniaoTab,
  _renderYouyu, _switchYouyuTab, _youyuAddListing, _youyuPickSource, _youyuPickFromInventory, _youyuPickInvItem, _youyuOpenListModal, _youyuRenderListModal, _youyuDraftSet, _youyuSetDelivery, _youyuConfirmListing, _youyuRemoveListing, _youyuShareListing, _youyuSendToChat, _youyuSendToGroup, _youyuHandleBuy, _youyuDeleteOrder, _youyuShowOrderDetail,
     _forumRefresh, _forumSearch, _forumSyncActionBtn, _forumSearchOrRefresh, _forumOpenAddMenu, _forumViewDetail, _forumViewRecommended, _forumViewCollected, _forumViewHotZone, _forumHotRefresh, _forumOpenHotZone, _forumHotZoneRefresh, _forumOpenMineList, _forumOpenSearchHistory, _removeForumCollected, _shareForumPost, _collectForumPost, _likeForumPost,
+    _forumFullGenCount, _forumSetFullGenCount, _forumResetCategories,
     _switchForumTab, _switchForumCategory, _addForumCategory, _deleteForumCategory, _shareForumSearch, _shareAllForumSearches, _deleteForumSearch,
     _forumToggleAliasEnabled, _forumToggleAliasPrefsExpand, _forumAddAlias, _forumSetActiveAlias, _forumDeleteAlias,
     _addForumPost, _editForumPost, _saveForumPost, _deleteForumPost, _viewMyForumPost, _collectMyForumPost, _likeMyForumPost, _sendMyForumComment, _sendForumComment, _refreshForumComment, _shareMyForumPost, _refreshMyForumPost,

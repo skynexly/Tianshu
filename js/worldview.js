@@ -278,7 +278,7 @@ function _defaultRegion() {
     return { id: 'fac_' + Utils.uuid().slice(0,8), name: '', summary: '', detail: '', npcs: [] };
   }
   function _defaultNPC() {
-  return { id: 'npc_' + Utils.uuid().slice(0,8), name: '', aliases: '', summary: '', detail: '' };
+  return { id: 'npc_' + Utils.uuid().slice(0,8), name: '', aliases: '', summary: '', detail: '', enabled: true };
 }
   function _defaultFestival() {
     return { id: 'fest_' + Utils.uuid().slice(0,8), name: '', date: '', yearly: true, content: '', keys: '', enabled: true };
@@ -1301,10 +1301,12 @@ function _syncBuiltinRestoreButton(w) {
   function clearEditReturnTo() {
     _editReturnTo = null;
   }
-  
   async function _loadEditForm(id) {
     const w = await _loadEditingDoc(id);
     if (!w) return;
+    // v725：收集填充/渲染期的异常，便于无控制台环境排查
+    const _loadFormErrors = [];
+    
     
     // 数据迁移（v581）：customs[] + knowledges[] → 统一 knowledges[]
     _migrateToKnowledges(w);
@@ -1320,17 +1322,25 @@ function _syncBuiltinRestoreButton(w) {
     }
 
     const isHidden = isHiddenWv(w);
-    document.getElementById('worldview-edit-title').textContent = isHidden ? '编辑世界书' : '编辑世界观';
-    _applyHiddenWvUI(isHidden);
+    const _titleEl = document.getElementById('worldview-edit-title');
+    if (_titleEl) _titleEl.textContent = isHidden ? '编辑世界书' : '编辑世界观';
+    try { _applyHiddenWvUI(isHidden); } catch(e) { console.warn('[Worldview] _applyHiddenWvUI 失败', e); _loadFormErrors.push('applyHiddenWvUI:' + (e && e.message ? e.message : e)); }
+    // v725：渲染各自独立 try，避免前面某处抛异常导致后面（尤其排在末位的 globalNpcs）永远不渲染
+    const _safeRender = (label, fn) => {
+      try { fn(); } catch(e) {
+        console.warn('[Worldview] 渲染失败: ' + label, e);
+        _loadFormErrors.push(label + ':' + (e && e.message ? e.message : e));
+      }
+    };
     if (isHidden) {
       // 隐藏世界观只用扩展 tab
       switchEditTab('special');
-      _renderFestivals(w.festivals || []);
-    _renderCustoms((w.knowledges || []).filter(k => !k.keywordTrigger));
-    _renderKnowledges((w.knowledges || []).filter(k => !!k.keywordTrigger));
-    _renderEvents(w.events || []);
-    // v632.1：世界书也要渲染全图 NPC（加载时漏了）
-    _renderGlobalNpcs(w.globalNpcs || []);
+      _safeRender('lb.festivals', () => _renderFestivals(w.festivals || []));
+      _safeRender('lb.customs', () => _renderCustoms((w.knowledges || []).filter(k => !k.keywordTrigger)));
+      _safeRender('lb.knowledges', () => _renderKnowledges((w.knowledges || []).filter(k => !!k.keywordTrigger)));
+      _safeRender('lb.events', () => _renderEvents(w.events || []));
+      // v632.1：世界书也要渲染全图 NPC（加载时漏了）
+      _safeRender('lb.globalNpcs', () => _renderGlobalNpcs(w.globalNpcs || []));
       
       // 自愈兜底：切主题后世界书编辑页（special tab）内容区可能高度为 0，强制清除隐藏状态
       requestAnimationFrame(() => {
@@ -1363,11 +1373,12 @@ function _syncBuiltinRestoreButton(w) {
     try {
     _syncBuiltinRestoreButton(w);
     
-    // 基础设定
-    document.getElementById('wv-name').value = w.name || '';
-    document.getElementById('wv-description').value = w.description || '';
+    // 基础设定（v725：全部判空，避免单个元素缺失就中断整条填充链）
+    const _setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    _setVal('wv-name', w.name || '');
+    _setVal('wv-description', w.description || '');
     // icon字段保留默认值（不再有emoji输入框）
-    document.getElementById('wv-setting').value = w.setting || '';
+    _setVal('wv-setting', w.setting || '');
     try { _renderCurrencies(w); } catch(_) {}
     const _pa = w.phoneApps || {};
     const _paTk = _pa.takeout || {};
@@ -1400,58 +1411,67 @@ const _tkN = document.getElementById('wv-takeout-name'); if (_tkN) _tkN.value = 
         else { _skinBtn.style.opacity = ''; _skinBtn.style.pointerEvents = ''; }
       }
     }
-    document.getElementById('wv-start-time').value = w.startTime || '';
+    _setVal('wv-start-time', w.startTime || '');
     // 缓存当前编辑世界观的历法规则（供开场时间星期计算用）
     _editingCalRules = w?.gameplay?.calendarSystem || null;
     // 回填分字段
-    _fillStartTimeFields(w.startTime || '');
-    document.getElementById('wv-start-plot').value = w.startPlot || '';
-    document.getElementById('wv-start-plot-rounds').value = w.startPlotRounds ?? 5;
-    document.getElementById('wv-start-message').value = w.startMessage || '';
+    try { _fillStartTimeFields(w.startTime || ''); } catch(e) { console.warn('[Worldview] _fillStartTimeFields 失败', e); }
+    _setVal('wv-start-plot', w.startPlot || '');
+    _setVal('wv-start-plot-rounds', w.startPlotRounds ?? 5);
+    _setVal('wv-start-message', w.startMessage || '');
     // 多开场预设：载入草稿并渲染卡片列表
-    _startPresetsDraft = Array.isArray(w.startPresets) ? JSON.parse(JSON.stringify(w.startPresets)) : [];
+    try {
+      _startPresetsDraft = Array.isArray(w.startPresets) ? JSON.parse(JSON.stringify(w.startPresets)) : [];
+    } catch(e) { _startPresetsDraft = []; console.warn('[Worldview] startPresets 解析失败', e); }
     _editingPresetId = null;
-    _renderStartPresetList();
+    try { _renderStartPresetList(); } catch(e) { console.warn('[Worldview] _renderStartPresetList 失败', e); }
     // 图片预览
     const previewEl = document.getElementById('wv-icon-image-preview');
-    if (w.iconImage) {
-      previewEl.innerHTML = `<img src="${w.iconImage}" style="width:64px;height:64px;object-fit:cover" data-value="${w.iconImage}">`;
-    } else {
-      previewEl.innerHTML = '<div id="wv-icon-placeholder" style="width:64px;height:64px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:36px;color:rgba(255,255,255,0.8)">✦</div>';
+    if (previewEl) {
+      if (w.iconImage) {
+        previewEl.innerHTML = `<img src="${w.iconImage}" style="width:64px;height:64px;object-fit:cover" data-value="${w.iconImage}">`;
+      } else {
+        previewEl.innerHTML = '<div id="wv-icon-placeholder" style="width:64px;height:64px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:36px;color:rgba(255,255,255,0.8)">✦</div>';
+      }
     }
     
+    // v725：以下渲染各自独立 try，一个失败不再连带后面的（此前 globalNpcs 排在最后，
+    // 前面任意一处抛异常都会导致常驻角色列表永远不渲染，表现为"加了看不到但剧情里有"）
     // 详细设定 — 渲染三级嵌套
-    _renderRegions(w.regions || []);
-    
+    _safeRender('regions', () => _renderRegions(w.regions || []));
     // 节日
-    _renderFestivals(w.festivals || []);
-    
-// 自定义设定（常驻条目：从 knowledges 中筛 keywordTrigger=false）
-    _renderCustoms((w.knowledges || []).filter(k => !k.keywordTrigger));
-    
+    _safeRender('festivals', () => _renderFestivals(w.festivals || []));
+    // 自定义设定（常驻条目：从 knowledges 中筛 keywordTrigger=false）
+    _safeRender('customs', () => _renderCustoms((w.knowledges || []).filter(k => !k.keywordTrigger)));
     // 知识设定（动态条目：从 knowledges 中筛 keywordTrigger=true）
-    _renderKnowledges((w.knowledges || []).filter(k => !!k.keywordTrigger));
-    
+    _safeRender('knowledges', () => _renderKnowledges((w.knowledges || []).filter(k => !!k.keywordTrigger)));
     // 事件设定
-    _renderEvents(w.events || []);
-    
+    _safeRender('events', () => _renderEvents(w.events || []));
     // 绑定主题下拉
-_populateThemeSelect(w.themeName || '');
-
+    _safeRender('themeSelect', () => _populateThemeSelect(w.themeName || ''));
     // 全图 NPC 渲染
-_renderGlobalNpcs(w.globalNpcs || []);
-// 玩法配置：自定义属性
-_renderGameplayAttrs(w);
-// v719：自定义状态栏组件
-_renderStatusComponentsEditor(w);
-// 历法系统卡片标签
-_updateCalendarCardLabel();
-// 手机配置卡片标签
-_updatePhoneAppsLabel();
+    _safeRender('globalNpcs', () => _renderGlobalNpcs(w.globalNpcs || []));
+    // 玩法配置：自定义属性
+    _safeRender('gameplayAttrs', () => _renderGameplayAttrs(w));
+    // v719：自定义状态栏组件
+    _safeRender('statusComponents', () => _renderStatusComponentsEditor(w));
+    // 历法系统卡片标签
+    _safeRender('calendarLabel', () => _updateCalendarCardLabel());
+    // 手机配置卡片标签
+    _safeRender('phoneAppsLabel', () => _updatePhoneAppsLabel());
     } catch (e) {
       // 数据填充中途出错也不影响内容区显示（已在前面先切到 basic tab）
       console.warn('[Worldview] _loadEditForm 填充部分字段失败', e);
+      _loadFormErrors.push('outer:' + (e && e.message ? e.message : e));
     }
+    // v725：把填充期的错误挂到面板 dataset，方便无控制台环境排查
+    try {
+      const _p = document.getElementById('panel-worldview-edit');
+      if (_p) {
+        if (_loadFormErrors.length) _p.dataset.loadFormErrors = _loadFormErrors.join(' | ');
+        else delete _p.dataset.loadFormErrors;
+      }
+    } catch(_) {}
 
  switchEditTab('basic');
 
@@ -3688,18 +3708,37 @@ let html;
 if (_globalNpcsCache.length === 0) {
   html = `<div style="text-align:center;color:var(--text-secondary);font-size:12px;padding:14px 0;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px">还没有常驻角色</div>`;
 } else {
-  html = _globalNpcsCache.map((n, i) => `
-    <div onclick="Worldview.editGlobalNpc(${i})" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer">
-      <div style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text)">
-        <span style="font-weight:600">${Utils.escapeHtml(n.name || '未命名')}</span>
-        ${n.aliases ? `<span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(n.aliases)}</span>` : ''}
+  html = _globalNpcsCache.map((n, i) => {
+    const enabled = n.enabled !== false;
+    return `
+    <div style="display:flex;align-items:center;gap:10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px">
+      <button type="button" onclick="event.stopPropagation();Worldview.toggleGlobalNpcEnabled(${i})" style="flex-shrink:0;width:24px;height:24px;border-radius:50%;border:2px solid ${enabled ? 'var(--accent)' : 'var(--text-secondary)'};background:${enabled ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0" title="${enabled ? '已启用（点击停用）' : '已停用（点击启用）'}">
+        ${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+      </button>
+      <div onclick="Worldview.editGlobalNpc(${i})" style="flex:1;overflow:hidden;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:6px;font-size:14px;color:${enabled ? 'var(--text)' : 'var(--text-secondary)'}">
+          <span style="font-weight:600">${Utils.escapeHtml(n.name || '未命名')}</span>
+          ${n.aliases ? `<span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(n.aliases)}</span>` : ''}
+        </div>
+        ${n.summary ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.summary)}</div>` : ''}
       </div>
-      ${n.summary ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.summary)}</div>` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 containers.forEach(c => { c.innerHTML = html; });
 }
+
+  // v688：常驻角色启用/停用开关（enabled !== false 兼容老数据）
+  async function toggleGlobalNpcEnabled(idx) {
+    const w = await _getEditingWV();
+    if (!w || !w.globalNpcs) return;
+    const npc = w.globalNpcs[idx];
+    if (!npc) return;
+    npc.enabled = (npc.enabled === false);  // false→true，其余（true/undefined）→false
+    await _saveEditingWV(w);
+    _renderGlobalNpcs(w.globalNpcs);
+  }
 
   async function addGlobalNpc() {
   const w = await _getEditingWV();
@@ -10360,7 +10399,7 @@ aiGenerateTaskPhase,
     openRegionEdit, saveRegion, deleteRegion, handleRegionBgUpload, clearRegionBg,
     openFactionEdit, saveFaction, deleteFaction,
     openNPCEdit, saveNPC, deleteNPC, exportCurrentNpc,
-    addGlobalNpc, editGlobalNpc, backFromNpcEdit,
+    addGlobalNpc, editGlobalNpc, toggleGlobalNpcEnabled, backFromNpcEdit,
     _pickEditingNpcAvatar, _aiGenEditingNpcAvatar, _clearEditingNpcAvatar,
     _pickNpcFaceRef, _onNpcFaceRefPicked, _removeNpcFaceRef,
     openNpcImporter,

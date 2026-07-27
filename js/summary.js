@@ -948,12 +948,28 @@ ${dialogue}
     viewingArchiveId = archiveId;
 
     const container = document.getElementById('archive-view');
+    // v726：归档查看改为气泡渲染（仅显示层，arch.messages 原文一字不动，导出仍是完整原文）。
+    //   ① 用主聊天同款 .chat-msg 气泡，user 靠右 / assistant 靠左，视觉和当时聊天一致。
+    //   ② AI 消息过一遍 Utils.parseAIOutput 取 body，剥掉 status/relation/task/chat 等结构化块，
+    //      这些块对人回看剧情没意义，只是噪音。剥离失败则回退显示原文，不至于空白。
     container.innerHTML = arch.messages.map(m => {
-      const role = m.role === 'user' ? '玩家' : m.role === 'assistant' ? 'AI' : '系统';
-      const bg = m.role === 'user' ? 'var(--msg-user-bg)' : m.role === 'assistant' ? 'var(--msg-ai-bg)' : 'transparent';
-      return `<div style="background:${bg};border-radius:8px;padding:10px 12px;margin-bottom:8px">
-        <div style="font-size:11px;color:var(--accent-dim);margin-bottom:4px">${role}</div>
-        <div class="md-content">${Markdown.render(m.content)}</div>
+      const isUser = m.role === 'user';
+      const isSystem = m.role !== 'user' && m.role !== 'assistant';
+      let text = m.content || '';
+      if (!isUser && !isSystem) {
+        try {
+          const parsed = Utils.parseAIOutput(text);
+          if (parsed && typeof parsed.body === 'string' && parsed.body.trim()) text = parsed.body;
+        } catch(_) {}
+      }
+      // 系统消息：居中灰条，不做气泡
+      if (isSystem) {
+        return `<div style="text-align:center;font-size:11px;color:var(--text-secondary);margin:10px 0">${Utils.escapeHtml(text)}</div>`;
+      }
+      return `<div style="display:flex;flex-direction:column;margin-bottom:10px;${isUser ? 'align-items:flex-end' : 'align-items:flex-start'}">
+        <div class="chat-msg ${isUser ? 'user' : 'assistant'}" style="max-width:88%">
+          <div class="md-content">${Markdown.render(text)}</div>
+        </div>
       </div>`;
     }).join('');
 

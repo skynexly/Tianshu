@@ -225,6 +225,29 @@
     }, duration * 1000 + 100);
   }
 
+  // ===== 静音保活模式 =====
+  // 用极小振幅（非 0）的持续音源，让浏览器/系统保持把本页判定为「正在播放音频」，
+  // 避免切后台被挂起导致请求中断。gain 设成真正的 0 会被静音检测判为不活跃，故用 1e-4。
+  const SILENT_GAIN = 0.0001;
+
+  function _startSilent() {
+    _stopAll();
+    _ensureContext();
+    if (_ctx.state === 'suspended') _ctx.resume();
+    _currentType = 'silent';
+    const ctx = _ctx;
+    const noise = _createNoise('white');
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = 1; // 实际衰减靠 masterGain，便于统一控制
+    noise.connect(gainNode);
+    gainNode.connect(_masterGain);
+    noise.start();
+    _activeNodes.push({ source: noise, nodes: [gainNode] });
+    // 不淡入，直接压到极小值并保持
+    _masterGain.gain.cancelScheduledValues(ctx.currentTime);
+    _masterGain.gain.setValueAtTime(SILENT_GAIN, ctx.currentTime);
+  }
+
   // ===== 播放指定类型 =====
   function _play(type) {
     _stopAll();
@@ -267,6 +290,7 @@
   // 切换天气（由 StatusBar.render 调用）
   function updateWeather(weatherStr) {
     if (!_enabled) return;
+    if (_mode === 'silent') return; // 静音保活模式：不随天气切换，保持音源不断
     const newType = _weatherToType(weatherStr);
     if (newType === _currentType && _activeNodes.length > 0) return; // 没变，不重复启动
     if (_mode === 'loop') {
@@ -281,6 +305,7 @@
     _enabled = true;
     _ensureContext();
     if (_ctx.state === 'suspended') _ctx.resume();
+    if (_mode === 'silent') { _startSilent(); return; }
     // 读当前天气并开始播放
     try {
       const sb = Conversations.getStatusBar();
@@ -305,6 +330,7 @@
   // 设置音量
   function setVolume(v) {
     _volume = Math.max(0, Math.min(1, parseFloat(v) || 0));
+    if (_mode === 'silent') return; // 静音保活模式忽略音量调节
     if (_masterGain && _ctx) {
       _masterGain.gain.cancelScheduledValues(_ctx.currentTime);
       _masterGain.gain.linearRampToValueAtTime(_volume, _ctx.currentTime + 0.3);
@@ -313,12 +339,34 @@
 
   // 设置模式
   function setMode(mode) {
-    _mode = (mode === 'short') ? 'short' : 'loop';
+    const next = (mode === 'short') ? 'short' : (mode === 'silent') ? 'silent' : 'loop';
+    const changed = next !== _mode;
+    _mode = next;
+    // 已经在播放中切模式：立刻按新模式重启，避免残留上一模式的音轨
+    if (changed && _enabled) {
+      if (_mode === 'silent') {
+        _startSilent();
+      } else {
+        try {
+          const sb = Conversations.getStatusBar();
+          const type = _weatherToType(sb?.weather || '');
+          if (_mode === 'loop') _play(type); else _playShort(type);
+        } catch(_) { _play('white'); }
+      }
+    }
   }
 
-  // 获取状态
+  // 获取状态（含音频上下文实时状态，便于排查后台保活是否生效）
   function getState() {
-    return { enabled: _enabled, mode: _mode, volume: _volume, currentType: _currentType };
+    return {
+      enabled: _enabled,
+      mode: _mode,
+      volume: _volume,
+      currentType: _currentType,
+      ctxState: _ctx ? _ctx.state : 'none',   // running / suspended / closed / none
+      gain: _masterGain ? _masterGain.gain.value : 0,
+      activeNodes: _activeNodes.length
+    };
   }
 
   // 暴露
@@ -330,4 +378,17 @@
     setMode,
     getState
   };
+
+  // 回到前台时，若 AudioContext 被系统挂起则尝试恢复
+  // （静音保活模式下尤其重要：被挂起后保活就失效了，回前台要重新拉起）
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !_enabled || !_ctx) return;
+    if (_ctx.state === 'suspended') {
+      _ctx.resume().catch(() => {});
+      // 音源也可能已被回收，静音模式下直接重建
+      if (_mode === 'silent' && _activeNodes.length === 0) {
+        try { _startSilent(); } catch (_) {}
+      }
+    }
+  });
 })();

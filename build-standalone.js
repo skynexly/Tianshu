@@ -22,7 +22,7 @@ const path = require('path');
 
 const ROOT = __dirname;
 const OUT_DIR = path.join(ROOT, 'dist');
-const OUT_FILE = path.join(OUT_DIR, '天枢城-单文件版.html');
+const OUT_FILE = path.join(OUT_DIR, 'skynex文件版.html');
 
 // 1x1 透明 PNG，占位用（避免 <img> 裂图 / 触发默认兜底）
 const BLANK_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
@@ -134,6 +134,25 @@ const injectHead = `<script data-inject="standalone-fetch-shim">
 
 // 插到 <head> 之后、第一个 <style>/<script> 之前，确保 shim 最早生效
 html = html.replace(/<head>/i, '<head>\n' + injectHead);
+
+// ============ 3.5 内联 img/ 之外的关键图片（开屏动画 / 登录 logo） ============
+// splash.gif 在 src/ 下、logo.png 在根目录，都不匹配 rewriteImgRefs 的 img/ 规则，
+// 内联脚本前它们既没被剥离也没被转 base64，file:// 下会死链裂图。这里精确替换带引号的引用。
+const EXTRA_INLINE = [
+  'src/splash.gif',
+  'logo.png',
+];
+for (const rel of EXTRA_INLINE) {
+  if (!exists(rel)) { console.warn('[extra-img] 跳过（不存在）:', rel); continue; }
+  let uri;
+  try { uri = fileToDataURI(rel); } catch { console.warn('[extra-img] 转码失败:', rel); continue; }
+  // 只替换带引号的完整引用：src="rel" / src='rel'，避免裸文件名误伤
+  const esc = rel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('(["\'])' + esc + '(\\?[^"\']*)?\\1', 'g');
+  const before = html;
+  html = html.replace(re, (m, q) => q + uri + q);
+  console.log('[extra-img] 内联:', rel, before === html ? '(无匹配)' : '✓');
+}
 
 // ============ 4. 去掉 Service Worker 注册 ============
 html = html.replace(/if\s*\(\s*['"]serviceWorker['"]\s+in\s+navigator\s*\)\s*\{[\s\S]*?navigator\.serviceWorker\.register\([^)]*\)[^}]*\}/gi,

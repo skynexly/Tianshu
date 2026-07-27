@@ -224,8 +224,18 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v724';
-    const CHANGELOG = `○新增提示词支持拖动排序
+    const APP_VERSION = 'v726';
+    const CHANGELOG = `○归档记录改为聊天气泡样式显示，隐藏代码块
+○论坛「我的」→全局偏好可设置条数，刷新时一次直接出完整正文＋评论区，填 0 则保持原有模式
+○在世界观改了论坛分区后，可在论坛「我的」→全局偏好点击重置同步
+○世界观内可单独停用某个常驻角色，无需删除
+○新增环境音静音保活模式
+○修复线上聊天气泡无法长按呼出菜单
+○离线版（文件版）已上线，可在设置→关于→离线版下载获取
+○其他BUG修复`;
+    // 历史公告（最新在前），版本变旧后手动把上一版内容挪进来
+    const CHANGELOG_HISTORY = [
+      { version: 'v724', notes: `○新增提示词支持拖动排序
 ○新增动态/常驻条目排序/拖动排序
 ○新增表情包批量管理
 ○新增表情包根据分组同步给角色
@@ -233,9 +243,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 ○API配置优化
 ○部分BUG修复和UI调整
 ○新增角色主页，点击头像查看角色状态、签名、行程（概率），随线上对话更新
-○线上对话内可更换角色主页背景图`;
-    // 历史公告（最新在前），版本变旧后手动把上一版内容挪进来
-    const CHANGELOG_HISTORY = [
+○线上对话内可更换角色主页背景图` },
       { version: 'v723', notes: `○新增提示词支持排序，系统底部支持更换注入角色
 ○新增角色生图参考图，生图时参考五官
 ○新增手机私聊时允许生成图片（聊天设置内打开开关）
@@ -273,14 +281,6 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 ○自定义状态栏组件现已接入状态栏美化，可直接修改 CSS
 ○优化状态栏美化助手输出逻辑，支持 CSS 局部增删改
 ○新增可自定义 CSS 的「新获得物品」卡片、相关角色标签、引用块` },
-      { version: 'v718', notes: `○新增删除好友机制，继续主线后被删除的角色可能会申请重新添加
-○新增粉丝群/付费入群功能，可绑定阅读、视频中的作品或直播间
-○新增手机对话可单独设置背景
-○新增私聊对话中，角色可能会将悬而未决的事项添加进对话级事件中，以便线下继续处理
-○新增搜索联系人/对话、置顶对话、删除对话
-○新增提示词可选择作用域（主线/后台/手机聊天）
-○新增论坛热搜词条内刷新按钮
-○部分UI优化` },
     ];
     const SEEN_KEY = 'changelog_seen_version';
 
@@ -458,5 +458,48 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
     // 暴露手动调用接口（右上角菜单按钮用）
     window.App = window.App || {};
     window.App.showChangelogManually = function() { _showChangelog({ force: true }); };
+
+    // ===== 离线版下载（关于卡片入口）=====
+    window.App.showOfflineDownload = function() {
+      if (document.getElementById('offline-dl-overlay')) return;
+      const SHARE_TEXT = '通过百度网盘分享的文件：skynex\n链接:https://pan.baidu.com/s/1tQBSHnV-th3X2WwzyvQHtQ?pwd=hrn2\n提取码:hrn2';
+      const overlay = document.createElement('div');
+      overlay.id = 'offline-dl-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:24px';
+      overlay.innerHTML = `
+        <div style="background:var(--bg-secondary,#1c1c1e);border-radius:14px;max-width:420px;width:100%;padding:20px;box-sizing:border-box">
+          <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:14px">离线版下载</div>
+          <div id="offline-dl-text" style="white-space:pre-line;font-size:13px;line-height:1.7;color:var(--text-secondary);background:var(--bg-tertiary,#2c2c2e);border-radius:10px;padding:12px 14px;margin-bottom:16px;word-break:break-all">${SHARE_TEXT}</div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button id="offline-dl-close" type="button" style="padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">关闭</button>
+            <button id="offline-dl-copy" type="button" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">复制</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.querySelector('#offline-dl-close').onclick = close;
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+      overlay.querySelector('#offline-dl-copy').onclick = async () => {
+        let ok = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(SHARE_TEXT);
+            ok = true;
+          }
+        } catch(_) {}
+        if (!ok) {
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = SHARE_TEXT;
+            ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+            document.body.appendChild(ta);
+            ta.focus(); ta.select();
+            ok = document.execCommand && document.execCommand('copy');
+            ta.remove();
+          } catch(_) {}
+        }
+        try { if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(ok ? '已复制' : '复制失败，请手动复制', 1600); } catch(_) {}
+      };
+    };
   } catch(_) {}
 })();
