@@ -574,7 +574,7 @@ if (scrollBtn && name !== 'chat') scrollBtn.classList.add('hidden');
     if (name === 'character') { Character.load(); if (typeof Character.exitManageMode === 'function') Character.exitManageMode(); }
     if (name === 'gaiden') { await Gaiden.ensureLoaded(); await Gaiden.reload(); Gaiden.renderList(); }
     if (name === 'worldview') { await Worldview.load(); if (typeof Worldview.switchWorldTab === 'function') Worldview.switchWorldTab('wv'); }
-    if (name === 'settings') { Settings.load(); Prompts.render(); }
+    if (name === 'settings') { Settings.load(); Prompts.resetView(); Prompts.render(); }
   }
 
   // 从侧边栏按钮点击时使用

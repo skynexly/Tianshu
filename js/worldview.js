@@ -4824,6 +4824,13 @@ function closeKnowledgeModal() {
       return `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(`${prefix}${c.attrName || '属性'} ${c.operator || '>='} ${c.value ?? 0}`)}</span>`;
     }).join('');
   }
+  function _eventTimeConditionSummary(ev) {
+    const start = (ev.triggerTimeStart || '').trim();
+    const end = (ev.triggerTimeEnd || '').trim();
+    if (!start && !end) return '<span style="font-size:11px;color:var(--danger)">未设置触发时间</span>';
+    const label = end ? `${start || '开场'} ~ ${end}` : `${start} 起`;
+    return `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(label)}</span>`;
+  }
   function _renderEvents(list) {
     eventsData = list || [];
     const container = document.getElementById('wv-events-container');
@@ -4885,10 +4892,10 @@ function closeKnowledgeModal() {
   function _wvEventCardHtml(ev, i, extraHtml = '') {
     const triggerType = ev.triggerType || 'keyword';
     const keys = (ev.keys || '').trim();
-    const keyTags = triggerType === 'attr' ? _eventAttrConditionSummary(ev) : (keys
+    const keyTags = triggerType === 'attr' ? _eventAttrConditionSummary(ev) : (triggerType === 'time' ? _eventTimeConditionSummary(ev) : (keys
       ? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${Utils.escapeHtml(t)}</span>`).join('')
-      : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>');
-    const modeLabel = triggerType === 'attr' ? '数值触发' : '关键词触发';
+      : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>'));
+    const modeLabel = triggerType === 'attr' ? '数值触发' : (triggerType === 'time' ? '时间触发' : '关键词触发');
     const chainLabel = ev.chainId ? `<span style="font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 6px">链#${Number(ev.chainIndex || 0) + 1}</span>` : '';
     const completeKey = ev.completeKey ? `<span style="font-size:11px;color:var(--text-secondary)">结束词：${Utils.escapeHtml(ev.completeKey)}</span>` : '<span style="font-size:11px;color:var(--danger)">未设置结束词</span>';
     return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editEvent(${i})">

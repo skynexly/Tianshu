@@ -8960,11 +8960,13 @@ white-space: nowrap;
 .phone-live-band.phone-live-band-ready .phone-live-band-text { font-weight: 700; color: #fff; }
 /* 全屏 loading 遮罩 */
 .phone-live-loading {
-  position: absolute; inset: 0; z-index: 9;
+  position: absolute; inset: 0; z-index: 99;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 14px;
   background: rgba(0,0,0,0.72);
   backdrop-filter: blur(2px);
+  /* 阻断底层 scroll-snap 滚动容器接管触摸，否则 WebView 里取消按钮的 tap 会被滚动吞掉 */
+  touch-action: none;
 }
 .phone-live-spinner {
   width: 34px; height: 34px; border-radius: 50%;
@@ -8974,6 +8976,17 @@ white-space: nowrap;
 }
 @keyframes phone-live-spin { to { transform: rotate(360deg); } }
 .phone-live-loading-text { font-size: 13px; color: rgba(255,255,255,0.85); }
+.phone-live-loading-cancel {
+  margin-top: 6px;
+  padding: 7px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.9);
+  font-size: 13px;
+  cursor: pointer;
+}
+.phone-live-loading-cancel:active { background: rgba(255,255,255,0.18); }
 /* 空态 */
 .phone-live-empty {
   height: 100%;

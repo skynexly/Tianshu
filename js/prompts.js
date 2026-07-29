@@ -187,10 +187,18 @@ const Prompts = (() => {
     await render();
   }
 
-  // 搜索
+  // 搜索（render 会自行以搜索框实际值为准，这里只触发重渲染）
   async function search(query) {
-    searchQuery = query.toLowerCase();
+    searchQuery = (query || '').trim().toLowerCase();
     await render();
+  }
+
+  // 复位视图状态：分组回「全部」、清空搜索框与搜索关键词（进入面板时调用，避免状态残留）
+  function resetView() {
+    selectedGroup = '全部';
+    searchQuery = '';
+    const _searchInput = document.getElementById('prompt-search');
+    if (_searchInput) _searchInput.value = '';
   }
 
   async function add() {
@@ -480,6 +488,9 @@ const Prompts = (() => {
     const container = document.getElementById('prompts-list');
     const tabsContainer = document.getElementById('prompt-group-tabs');
     if (!container || !tabsContainer) return;
+    // 以搜索框 DOM 实际值为准同步 searchQuery，避免变量残留导致列表莫名"缩水"
+    const _searchInput = document.getElementById('prompt-search');
+    searchQuery = _searchInput ? (_searchInput.value || '').trim().toLowerCase() : '';
     const list = await getAll();
     const groups = await getGroups();
 
@@ -1216,7 +1227,7 @@ const Prompts = (() => {
     menu.classList.add('hidden');
   }
 
-  return { getAll, add, edit, saveEdit, closeEdit, remove, toggle, buildInjections, render, getGroups, switchGroup, search,
+  return { getAll, add, edit, saveEdit, closeEdit, remove, toggle, buildInjections, render, resetView, getGroups, switchGroup, search,
     addPromptGroup, moveSelectedToGroup, _onGroupTabLongPress, _onGroupTabTouchStart, _onGroupTabTouchEnd, _onGroupTabClick,
     togglePromptSelect, togglePromptManageMode, exitPromptManageMode, batchDeletePrompts,
     togglePromptSelectAll, toggleGroupAll, movePrompt,

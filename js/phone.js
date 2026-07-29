@@ -3185,19 +3185,42 @@ function _extractJsonArrayText(content) {
     throw new Error('返回格式不正确');
   }
 
-  // 带超时的 fetch：默认 90 秒。超时会 abort 请求并抛出可识别的超时错误，
-  // 避免中转站 hold 住非流式大请求不返回时无限挂起（直播/商城等大批量生成场景）。
+  // fetch 封装：不再设超时（有的 thinking 模型十几分钟才回也正常）。
+  // 改为暴露一个全局可 abort 的 controller，配合 loading 遮罩上的「取消」按钮让用户主动中止。
+  // 用户主动取消时抛出带 __phoneGenCancelled 标记的错误，重试循环识别后不再重试。
+  let _phoneGenAbortCtrl = null;   // 当前进行中的请求 controller
+  let _phoneGenCancelled = false;  // 用户是否主动取消
+
+  // 供 loading 遮罩的取消按钮调用：中止当前手机 AI 生成请求
+  function cancelPhoneGen() {
+    _phoneGenCancelled = true;
+    try { if (_phoneGenAbortCtrl) _phoneGenAbortCtrl.abort(); } catch (_) {}
+    try { GameLog.log('info', '[手机生成] 用户主动取消了当前生成请求'); } catch(_) {}
+  }
+
   async function _phoneFetchWithTimeout(url, options, timeoutMs) {
-    const ms = Number.isFinite(timeoutMs) ? timeoutMs : 90000;
+    // timeoutMs 参数保留兼容旧调用，但不再据此设超时（除非显式传一个有限值）
     const ctrl = new AbortController();
-    const timer = setTimeout(() => { try { ctrl.abort(); } catch (_) {} }, ms);
+    _phoneGenAbortCtrl = ctrl;
+    const timer = Number.isFinite(timeoutMs) ? setTimeout(() => { try { ctrl.abort(); } catch (_) {} }, timeoutMs) : null;
     try {
       return await fetch(url, { ...options, signal: ctrl.signal });
     } catch (e) {
-      if (e && e.name === 'AbortError') throw new Error(`请求超时（${Math.round(ms / 1000)}秒未响应）`);
+      if (e && e.name === 'AbortError') {
+        if (_phoneGenCancelled) {
+          const err = new Error('已取消生成');
+          err.__phoneGenCancelled = true;
+          throw err;
+        }
+        // 只有显式传了有限 timeoutMs 才可能走到这里；否则视为请求被外部中断
+        throw new Error(Number.isFinite(timeoutMs)
+          ? `请求超时（${Math.round(timeoutMs / 1000)}秒未响应）`
+          : '请求被中断');
+      }
       throw e;
     } finally {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
+      if (_phoneGenAbortCtrl === ctrl) _phoneGenAbortCtrl = null;
     }
   }
 
@@ -3251,6 +3274,7 @@ function _extractJsonArrayText(content) {
         try { GameLog.log('info', `[手机生成] ${label} 解析成功，得到 ${Array.isArray(parsed) ? parsed.length : 0} 条`); } catch(_) {}
         return parsed;
       } catch(e) {
+        if (e && e.__phoneGenCancelled) { throw e; }  // 用户主动取消：不重试，直接抛给上层
         lastError = e.message || String(e);
         console.error(`[Phone] ${label} attempt ${attempt} failed:`, e, lastContent ? { content: lastContent } : '');
         try {
@@ -3328,6 +3352,7 @@ function _extractJsonArrayText(content) {
         try { GameLog.log('info', `[手机生成] ${label} 解析成功（对象，字段数 ${parsedObj && typeof parsedObj === 'object' ? Object.keys(parsedObj).length : 0}）`); } catch(_) {}
         return parsedObj;
       } catch(e) {
+        if (e && e.__phoneGenCancelled) { throw e; }  // 用户主动取消：不重试，直接抛给上层
         lastError = e.message || String(e);
         console.error(`[Phone] ${label} attempt ${attempt} failed:`, e, lastContent ? { content: lastContent } : '');
         try {
@@ -3382,6 +3407,7 @@ function _extractJsonArrayText(content) {
         try { GameLog.log('info', `[手机生成] ${label} 成功，正文 ${content.length} 字`); } catch(_) {}
         return content;
       } catch(e) {
+        if (e && e.__phoneGenCancelled) { throw e; }  // 用户主动取消：不重试，直接抛给上层
         lastError = e.message || String(e);
         console.error(`[Phone] ${label} attempt ${attempt} failed:`, e);
         try { GameLog.log('error', `[手机生成] ${label} attempt ${attempt}/${maxRetries} 失败: ${lastError}`); } catch(_) {}
@@ -19592,7 +19618,8 @@ ${itemFields}
     const model = funcConfig.model || mainConfig.model;
     if (!url || !key || !model) { UI.showToast('请先配置功能模型', 1800); return; }
 
-    // 进入生成中：在直播页盖一层全屏 loading 遮罩（转圈 + 文案）
+    // 进入生成中：先复位取消标记，再盖一层全屏 loading 遮罩（转圈 + 文案 + 取消按钮）
+    _phoneGenCancelled = false;
     _liveShowLoading(true);
 
     // 世界观背景注入（无条件发）：基础设定 + 地区势力速查 + 节日 + 知识，不含 NPC。
@@ -19707,6 +19734,11 @@ ${presetRules}
       });
     } catch (e) {
       _liveShowLoading(false);
+      if (e && e.__phoneGenCancelled) {
+        UI.showToast('已取消生成', 1500);
+        _renderVideo(pd);
+        return;
+      }
       try { GameLog.log('error', `[直播] 生成请求最终失败，本次刷新中止: ${e.message || e}`); } catch(_) {}
       UI.showToast('直播间生成失败：' + (e.message || '请重试'), 2000);
       _renderVideo(pd);
@@ -19815,8 +19847,20 @@ ${presetRules}
       if (!mask) {
         mask = document.createElement('div');
         mask.className = 'phone-live-loading';
-        mask.innerHTML = `<div class="phone-live-spinner"></div><div class="phone-live-loading-text">正在加载中…</div>`;
+        mask.innerHTML = `<div class="phone-live-spinner"></div><div class="phone-live-loading-text">正在加载中…</div><button type="button" class="phone-live-loading-cancel">取消</button>`;
         feed.appendChild(mask);
+        // 遮罩自身吞掉触摸/点击，避免穿透到底层 scroll-snap 容器
+        mask.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
+        const cancelBtn = mask.querySelector('.phone-live-loading-cancel');
+        if (cancelBtn) {
+          const doCancel = (e) => {
+            try { e.preventDefault(); e.stopPropagation(); } catch(_) {}
+            try { cancelPhoneGen(); } catch(_) {}
+          };
+          // 同时绑 click 与 touchend：WebView 里 scroll 容器有时吞掉 click，touchend 兜底
+          cancelBtn.addEventListener('click', doCancel);
+          cancelBtn.addEventListener('touchend', doCancel, { passive: false });
+        }
       }
     } else if (mask) {
       mask.remove();
@@ -23132,10 +23176,12 @@ ${_allowGift
       : esc(avaChar);
 
     // 进间生成：一整轮实况（loading → 生成 → 失败则退出，不建 overlay）
+    _phoneGenCancelled = false;
     _liveShowLoading(true);
     let room = null;
     try { room = await _liveGenRoom(w); } catch (_) { room = null; }
     _liveShowLoading(false);
+    if (_phoneGenCancelled) { UI.showToast('已取消进入', 1500); return; }
     if (!room) { UI.showToast('直播间连接失败，请稍后重试', 1800); return; }
 
     // 背景：优先用户设的壁纸 cover，没有就用 NPC 头像铺底，都没有则纯渐变
@@ -30108,14 +30154,28 @@ const searchBar = `
     mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px';
     _maskCloseOnBg(mask, () => { if (mask.dataset.busy !== '1') mask.remove(); });
 
-    // 加载态：生成期间留在弹窗里显示进度，禁背景关闭，无取消
+    // 加载态：生成期间留在弹窗里显示进度，禁背景关闭；提供取消按钮中止生成
     const renderLoading = (text) => {
       mask.dataset.busy = '1';
       mask.innerHTML = `
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:300px;width:100%;padding:36px 24px;display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--text)">
           <div style="width:34px;height:34px;border:3px solid color-mix(in srgb, var(--accent) 22%, transparent);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite"></div>
           <div id="rd-gen-loading-text" style="font-size:13px;color:var(--text-secondary);text-align:center;line-height:1.6">${text || '正在生成…'}</div>
+          <button type="button" id="rd-gen-loading-cancel" style="margin-top:2px;padding:7px 22px;border-radius:999px;border:1px solid var(--border);background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">取消</button>
         </div>`;
+      const cancelBtn = mask.querySelector('#rd-gen-loading-cancel');
+      if (cancelBtn) {
+        // 同时绑 click 与 touchend：WebView 里滚动容器有时吞掉 click，touchend 兜底
+        const doCancel = (e) => {
+          try { e.preventDefault(); e.stopPropagation(); } catch(_) {}
+          try { cancelPhoneGen(); } catch(_) {}
+          mask.dataset.busy = '';
+          try { mask.remove(); } catch(_) {}
+          UI.showToast('已取消生成', 1500);
+        };
+        cancelBtn.addEventListener('click', doCancel);
+        cancelBtn.addEventListener('touchend', doCancel, { passive: false });
+      }
     };
     const setLoadingText = (text) => {
       const el = mask.querySelector('#rd-gen-loading-text');
@@ -30294,8 +30354,10 @@ const searchBar = `
           // 短篇：已生成过则直接进阅读；否则一次性生成完整正文
           if (bk && bk.content && bk.content.trim()) { mask.remove(); _readingOpenShort(bookId); return; }
           renderLoading('正在加载…');
+          _phoneGenCancelled = false;
           const onProgress = (t) => setLoadingText(t);
           const text = await _readingGenShortStory(bookId, onProgress);
+          if (_phoneGenCancelled) return; // 用户已取消（遮罩已由取消按钮移除）
           if (text) {
             mask.remove();
             _readingOpenShort(bookId);
@@ -30309,8 +30371,10 @@ const searchBar = `
         if (bk && bk.blueprint) { mask.remove(); _readingOpenToc(bookId); return; }
         // 进入加载态，串行生成蓝图 → 目录
         renderLoading('正在铺设故事蓝图…');
+        _phoneGenCancelled = false;
         const onProgress = (t) => setLoadingText(t);
         const ok = await _readingGenLongBook(bookId, onProgress);
+        if (_phoneGenCancelled) return; // 用户已取消（遮罩已由取消按钮移除）
         if (ok) {
           mask.remove();
           _readingOpenToc(bookId);
@@ -31449,29 +31513,52 @@ ${progressHint}
       }
       if (action === 'gen-blueprint') {
         if (draft.hasBlueprint && !confirm('重新生成会按当前简介覆盖现有蓝图，确定？')) return;
-        btn.disabled = true; const old = btn.textContent; btn.textContent = '正在生成蓝图…';
+        // 生成中把按钮变成「取消生成」（超时已取消，必须给用户中止手段）
+        const old = btn.textContent;
+        btn.textContent = '取消生成（点此中止）';
+        btn.setAttribute('data-generating', '1');
+        _phoneGenCancelled = false;
+        const onCancelClick = (e) => {
+          try { e.preventDefault(); e.stopPropagation(); } catch(_) {}
+          try { cancelPhoneGen(); } catch(_) {}
+        };
+        btn.addEventListener('click', onCancelClick, { capture: true });
         await syncToBook();
         const ok = await _readingGenBlueprint(bookId);
+        btn.removeEventListener('click', onCancelClick, { capture: true });
+        btn.removeAttribute('data-generating');
+        if (_phoneGenCancelled) { btn.textContent = old; UI.showToast('已取消生成', 1500); return; }
         if (ok) {
           const pd3 = await _getPhoneData();
           const bk = (pd3.readingBooks || []).find(b => b && b.id === bookId);
           draft = loadDraft(bk);
           UI.showToast('蓝图已生成，可逐项编辑', 1800);
           render();
-        } else { btn.disabled = false; btn.textContent = old; UI.showToast('生成失败，请重试', 1800); }
+        } else { btn.textContent = old; UI.showToast('生成失败，请重试', 1800); }
         return;
       }
       if (action === 'gen-toc') {
-        btn.disabled = true; const old = btn.textContent; btn.textContent = '正在排目录…';
+        const old = btn.textContent;
+        btn.textContent = '取消生成（点此中止）';
+        btn.setAttribute('data-generating', '1');
+        _phoneGenCancelled = false;
+        const onCancelClick = (e) => {
+          try { e.preventDefault(); e.stopPropagation(); } catch(_) {}
+          try { cancelPhoneGen(); } catch(_) {}
+        };
+        btn.addEventListener('click', onCancelClick, { capture: true });
         await syncToBook();
         const ok = await _readingGenToc(bookId);
+        btn.removeEventListener('click', onCancelClick, { capture: true });
+        btn.removeAttribute('data-generating');
+        if (_phoneGenCancelled) { btn.textContent = old; UI.showToast('已取消生成', 1500); return; }
         if (ok) {
           const pd3 = await _getPhoneData();
           const bk = (pd3.readingBooks || []).find(b => b && b.id === bookId);
           draft = loadDraft(bk);
           UI.showToast('目录已更新', 1500);
           render();
-        } else { btn.disabled = false; btn.textContent = old; UI.showToast('生成失败或已排满', 1800); }
+        } else { btn.textContent = old; UI.showToast('生成失败或已排满', 1800); }
         return;
       }
     });
@@ -33677,12 +33764,13 @@ ${existing}
   async function _readingRefreshComments(bookId, idx) {
     const mask = document.createElement('div');
     mask.className = 'phone-mask';
-    mask.style.cssText = 'position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.55)';
+    mask.style.cssText = 'position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.55);touch-action:none';
     mask.innerHTML = `
       <div style="width:34px;height:34px;border:3px solid rgba(255,255,255,0.25);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite"></div>
       <div style="margin-top:14px;color:#fff;font-size:13px">正在加载…</div>`;
     const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
     shell.appendChild(mask);
+    mask.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
     await _readingGenChapterComments(bookId, idx);
     mask.remove();
     _renderReadingComments(bookId, idx);
@@ -33693,13 +33781,30 @@ ${existing}
   async function _readingContinueAfterChapter(bookId, idx) {
     const mask = document.createElement('div');
     mask.className = 'phone-mask';
-    mask.style.cssText = 'position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.55)';
+    mask.style.cssText = 'position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.55);touch-action:none';
     mask.innerHTML = `
       <div style="width:34px;height:34px;border:3px solid rgba(255,255,255,0.25);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite"></div>
-      <div style="margin-top:14px;color:#fff;font-size:13px">正在规划后续章节…</div>`;
+      <div style="margin-top:14px;color:#fff;font-size:13px">正在规划后续章节…</div>
+      <button type="button" id="rd-continue-cancel" style="margin-top:16px;padding:7px 22px;border-radius:999px;border:1px solid rgba(255,255,255,0.35);background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);font-size:13px;cursor:pointer">取消</button>`;
     const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
     shell.appendChild(mask);
+    // 遮罩吞掉滑动，避免穿透到底层正文滚动容器
+    mask.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
+    const cancelBtn = mask.querySelector('#rd-continue-cancel');
+    if (cancelBtn) {
+      // 同时绑 click 与 touchend：WebView 里滚动容器有时吞掉 click，touchend 兜底
+      const doCancel = (e) => {
+        try { e.preventDefault(); e.stopPropagation(); } catch(_) {}
+        try { cancelPhoneGen(); } catch(_) {}
+        try { mask.remove(); } catch(_) {}
+        UI.showToast('已取消生成', 1500);
+      };
+      cancelBtn.addEventListener('click', doCancel);
+      cancelBtn.addEventListener('touchend', doCancel, { passive: false });
+    }
+    _phoneGenCancelled = false;
     const ok = await _readingGenToc(bookId);
+    if (_phoneGenCancelled) return; // 用户已取消（遮罩已由取消按钮移除）
     mask.remove();
     if (!ok) { UI.showToast('续写章节失败，请重试', 1800); return; }
     await _readingReadChapter(bookId, idx + 1);
@@ -65378,7 +65483,7 @@ _renderRadio, _radioOpenCategory, _radioOpenRandom, _radioRefresh, _switchRadioH
     // 阅读 App
     _renderReading, _switchReadingHomeTab, _switchReadingDiscoverType, _readingToggleWvRef, _readingToggleMainlineRef, _readingOpenBook, _readingImportEbook, _readingOpenAddMenu, _readingShowWriteSetup, _readingEditOutline, _readingSearch, _readingTogglePref, _readingSavePref, _readingSetMapping, _readingTogglePrefsExpand,
     _renderEmail, _switchEmailHomeTab, _emailCompose, _openEmail, _emailReply, _openEmailLetter, _emailEditLetter, _emailShareLetter, _emailShowDigest, _emailMergePick, _emailDeleteThread, _emailMergeThread, _emailTogglePref, _emailTogglePrefsExpand, _emailToggleAliasEnabled, _emailToggleAliasPrefsExpand, _emailAddAlias, _emailSetActiveAlias, _emailDeleteAlias, handleMainlineMailTag, handleMainlineMailNoReply, buildPendingMailForAI, _forgottenMailTick, _worldAffairMailTick, _festivalMailTick, _staffMailTick, _birthdayMailTick,
-    _renderVideo, _switchVideoCat, _switchVideoHomeTab, _videoSearch, _syncSearchBtn, _videoGenList, _videoToggleWvRef, _videoToggleMainlineRef, _videoTogglePref, _videoTogglePrefsExpand, _videoToggleAliasEnabled, _videoAddAlias, _videoSetActiveAlias, _videoDeleteAlias, _videoOpenWork, _videoOpenAddMenu, _videoDeleteWork, _videoShareWork, _liveGenPreview, _liveEnterRoom, _liveUnfollowFromMine, _liveEnterFollowFeed, _exitLiveFollowFeed, _liveOpenRoomSettings,
+    _renderVideo, _switchVideoCat, _switchVideoHomeTab, _videoSearch, _syncSearchBtn, _videoGenList, _videoToggleWvRef, _videoToggleMainlineRef, _videoTogglePref, _videoTogglePrefsExpand, _videoToggleAliasEnabled, _videoAddAlias, _videoSetActiveAlias, _videoDeleteAlias, _videoOpenWork, _videoOpenAddMenu, _videoDeleteWork, _videoShareWork, _liveGenPreview, cancelPhoneGen, _liveEnterRoom, _liveUnfollowFromMine, _liveEnterFollowFeed, _exitLiveFollowFeed, _liveOpenRoomSettings,
     _readingGenToc, _readingGenMoreToc, _readingOpenToc, _readingReadChapter, _readingContinueAfterChapter, _readingOpenBookSettings, _readingSetCover, _readingClearCover, _readingRewriteLast, _readingRewriteChapter, _readingEditChapterText, _readingViewOutline, _readingEditAuthorStyle, _readingDeleteBook, _readingRewriteShort, _readingActionTap, _readingCollectGift, _readingRefreshComments, _readingSendComment, _deleteReadingComment, _readingEditAuthorNote, _readingTapPara, _readingCoReadSetup,
   // 小屋 App
   _renderCottage, _cottageAddHouse, _cottageOpenHouse, _cottageEditHouse, _cottageSetCurrent, _switchCottageHomeTab, _petAddMenu, _petOpenCreateModal, _petOpenDetail, _petEdit, _petEditStatus, _petRefreshStatus, _petOpenMall, _petMallSwitchCat, _petMallSettings, _petMallRefresh, _petMallDetail, _petMallBuy, _petToggleCarry, _petShareStatus, _petProfileToText, _petOpenClothes, _petClothesDelete, _petClothesEdit, _petOpenFeeder, _petFeederFill, _petFeederTakeBack, _petFoodEdit, _petFoodDelete, _petLogPageTurn, _petUndoLastRefresh, _cottageDataMenu, _phoneExportAll, _phoneImportAll, getCottageLayoutForLocation, _cottageOpenMall, _cottageOpenInventory, _cottageMallSettings, _cottageMallToggleTag, _cottageMallRefresh, _cottageMallBuy, _cottageInvToggleTag, _cottageInvSearch, _cottageInvDelete, _cottageInvEdit, _cottageInvEditTag, _cottageInvPick, _cottageShowOrders,

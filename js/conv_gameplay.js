@@ -281,12 +281,20 @@ const ConvGameplay = (() => {
     }).join('');
   }
 
+  function _timeConditionSummary(ev) {
+    const start = (ev.triggerTimeStart || '').trim();
+    const end = (ev.triggerTimeEnd || '').trim();
+    if (!start && !end) return '<span style="font-size:11px;color:var(--danger)">未设置触发时间</span>';
+    const label = end ? `${start || '开场'} ~ ${end}` : `${start} 起`;
+    return `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${_esc(label)}</span>`;
+  }
+
   function _eventCardHtml(ev, i, extraHtml = '') {
     const triggerType = ev.triggerType || 'keyword';
     const keys = (ev.keys || '').trim();
-    const keyTags = triggerType === 'attr' ? _attrConditionSummary(ev) : (keys
+    const keyTags = triggerType === 'attr' ? _attrConditionSummary(ev) : (triggerType === 'time' ? _timeConditionSummary(ev) : (keys
       ? keys.split(/[,，\s]+/).filter(Boolean).map(t => `<span style="display:inline-block;font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 6px;border-radius:4px;margin-right:4px;margin-top:2px">${_esc(t)}</span>`).join('')
-      : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>');
+      : '<span style="font-size:11px;color:var(--danger)">未设置关键词</span>'));
     const modeLabel = triggerType === 'attr' ? '数值触发' : (triggerType === 'time' ? '时间触发' : '关键词触发');
     const chainLabel = ev.chainId ? `<span style="font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 6px">链#${Number(ev.chainIndex || 0) + 1}</span>` : '';
     const completeKey = ev.completeKey ? `<span style="font-size:11px;color:var(--text-secondary)">结束词：${_esc(ev.completeKey)}</span>` : '<span style="font-size:11px;color:var(--danger)">未设置结束词</span>';
