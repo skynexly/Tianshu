@@ -31,6 +31,7 @@ let pendingImages = [];   // [{base64, name, type}]
     toolsWorldview: conv?.backstageToolsWorldview !== false, // 默认开（只读）
     toolsEdit: !!conv?.backstageToolsEdit,               // 默认关（AI 编辑设定/单人卡，高风险）
     toolsMainMemory: conv?.backstageToolsMainMemory !== false, // 默认开（主线记忆查询，只读）
+    toolsPhoneInfo: !!conv?.backstageToolsPhoneInfo,   // 默认关（手机信息查询：小屋/衣橱，只读）
     crossWindow: !!conv?.backstageCrossWindow,  // 默认关：纸条只在当前对话内可见
     roleId: conv?.backstageRoleId || '',           // 身份认知，空=自由
     roleType: conv?.backstageRoleType || '',       // 'card' | 'wv_npc'
@@ -900,6 +901,13 @@ let imgPrompt = '[生图能力]\n你拥有生成图片的能力。当用户要�
 - query_relations：按角色名查人际关系
 - search_messages：按关键词搜被归档的旧消息（很久以前发生的、已经从上下文里剥离的对话）`);
       }
+      if (bsSettings.toolsPhoneInfo) {
+        guideParts.push(`【手机信息查询工具】
+当剧情涉及 {{user}} 的家、房间陈设、家具、宠物或穿着打扮时，可以查 {{user}} 手机里的真实数据，据实引用而不要编造。目前支持两个 App：
+- query_cottage：查「小屋」App——住所（名字/地址/风格）、各房间已布置的家具、家具仓库里买了还没摆的家具、养的宠物。可传 section（all/houses/inventory/pets）和 name 精确查某个住所或宠物。
+- query_wardrobe：查「衣橱」App——今日穿搭（当前穿在身上的各部位）、已保存的套装、衣橱仓库里存着的服装单品。可传 section（all/outfit/suits/inventory）。
+（目前手机信息查询只覆盖小屋和衣橱这两个 App，其它 App 暂不支持。）`);
+      }
       if (guideParts.length > 0) {
         systemParts.push(guideParts.join('\n\n'));
       }
@@ -1099,6 +1107,7 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
       'list_event_settings','read_event_setting','add_event_setting','update_event_setting','delete_event_setting',
       'list_cards','read_card','update_card','create_card','undo_last_edit'].includes(name)) return bsSettings.toolsEdit;
       if (name === 'search_messages' || name === 'query_events' || name === 'query_relations') return bsSettings.toolsMainMemory;
+      if (name === 'query_cottage' || name === 'query_wardrobe') return bsSettings.toolsPhoneInfo;
       if (name === 'query_draw_desc') {
                 // 只在对话开启了生图模式时才启用
                 const _c = Conversations.getList().find(c => c.id === Conversations.getCurrent());
@@ -1728,6 +1737,8 @@ await DB.del('messages', m.id);
     if (toolsEditEl) toolsEditEl.checked = settings.toolsEdit;
     const toolsMmEl = document.getElementById('backstage-tools-mainmemory');
     if (toolsMmEl) toolsMmEl.checked = settings.toolsMainMemory;
+    const toolsPiEl = document.getElementById('backstage-tools-phoneinfo');
+    if (toolsPiEl) toolsPiEl.checked = settings.toolsPhoneInfo;
     const crossEl = document.getElementById('backstage-cross-window');
     if (crossEl) crossEl.checked = settings.crossWindow;
     // 身份认知
@@ -1945,6 +1956,8 @@ return String(s == null ? '' : s).replace(/[&<>"']/g, c => map[c]);
     if (toolsEditSaveEl) conv.backstageToolsEdit = toolsEditSaveEl.checked;
     const toolsMmEl = document.getElementById('backstage-tools-mainmemory');
     if (toolsMmEl) conv.backstageToolsMainMemory = toolsMmEl.checked;
+    const toolsPiEl = document.getElementById('backstage-tools-phoneinfo');
+    if (toolsPiEl) conv.backstageToolsPhoneInfo = toolsPiEl.checked;
     const crossEl = document.getElementById('backstage-cross-window');
     if (crossEl) conv.backstageCrossWindow = crossEl.checked;
     // 身份认知

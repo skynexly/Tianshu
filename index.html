@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=176">
-<link rel="stylesheet" href="css/phone.css?v1=416">
+<link rel="stylesheet" href="css/style.css?v=178">
+<link rel="stylesheet" href="css/phone.css?v1=417">
 <link rel="stylesheet" href="css/phone-fudge.css?v=65">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260707">
@@ -2705,6 +2705,23 @@
       </div>
     </section>
 
+    <!-- 归档记录面板（全屏 panel，参照对话设置） -->
+    <section id="panel-archive-list" class="panel">
+      <div class="panel-content">
+        <button class="btn-icon" onclick="UI.showPanel('chat', 'back')" style="width:fit-content;padding:8px 12px;display:flex;align-items:center;margin-bottom:8px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:4px;color:var(--accent)"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+          <div style="min-width:0">
+            <h2 style="margin:0 0 4px;font-size:24px;color:var(--text)">归档记录</h2>
+            <p style="font-size:12px;color:var(--text-secondary);margin:0">总结后被移出窗口的聊天记录原文。</p>
+          </div>
+        </div>
+        <div id="modal-archive-list"></div>
+      </div>
+    </section>
+
     <!-- 番外面板 -->
 <section id="panel-gaiden" class="panel">
 <div class="panel-content">
@@ -3277,6 +3294,11 @@
       <div id="st-appicons" class="settings-tab-content" style="display:none">
         <h3 style="color:var(--accent);font-size:14px;margin-bottom:16px">手机/悬浮球图标</h3>
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6">自定义世界观手机里各 APP 的桌面图标，全局生效（所有对话通用）。点图标更换（支持本地图片 / 图片链接），点右上角 × 恢复默认。</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px">
+          <button type="button" onclick="Phone._exportPhoneSkin()" style="flex:1;padding:9px 0;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">导出装扮</button>
+          <button type="button" onclick="Phone._importPhoneSkin()" style="flex:1;padding:9px 0;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">导入装扮</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:14px;line-height:1.5">导出/导入手机图标、悬浮球图标、我的头像框这一整套装扮，方便单独备份或分享（全量存档里也带，轻量/纯文字存档不带）。</div>
         <label class="circle-check-label" style="margin-bottom:14px">
           <span class="circle-check-text">去边框（异形图标）<br><span style="font-size:11px;color:var(--text-secondary)">开启后自定义图标去掉底框/阴影，完整显示透明或异形图标</span></span>
           <span style="position:relative;display:inline-flex">
@@ -4229,22 +4251,7 @@ NPC
       </div>
     </div>
   </div>
-
-  <!-- 归档列表弹窗 -->
-    <div id="archive-list-modal" class="modal hidden">
-      <div class="modal-content" style="max-height:80vh;display:flex;flex-direction:column">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
-        <h3 style="margin:0;display:flex;align-items:center;gap:8px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-          归档记录
-        </h3>
-        <button onclick="Summary.closeArchiveListModal()" class="btn-icon modal-corner-btn close-btn" title="关闭">×</button>
-      </div>
-        <div id="modal-archive-list" style="overflow-y:auto;flex:1"></div>
-      </div>
-    </div>
-
-    <!-- 归档查看弹窗 -->
+  <!-- 归档查看弹窗 -->
     <div id="archive-view-modal" class="modal hidden">
     <div class="modal-content" style="max-height:none;height:94vh;width:96vw;max-width:96vw;display:flex;flex-direction:column">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
@@ -4526,30 +4533,30 @@ const GameLog = (() => {
 <script src="js/db.js?v=15"></script>
 <script src="js/stickers.js?v=9"></script>
 <script src="js/utils.js?v=28"></script>
-<script src="js/markdown.js?v=12"></script>
+<script src="js/markdown.js?v=13"></script>
 <script src="js/api.js?v=7"></script>
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
 <script src="js/mcp-client.js"></script>
 <script src="js/fab-drag.js?v=5"></script>
-<script src="js/memory.js?v=11"></script>
-<script src="js/tools.js?v=11"></script>
+<script src="js/memory.js?v=12"></script>
+<script src="js/tools.js?v=13"></script>
 <script src="js/npc.js"></script>
 <script src="js/statusbar_theme.js?v=67"></script>
-<script src="js/worldview.js?v=125"></script>
+<script src="js/worldview.js?v=129"></script>
 <script src="js/npc_importer.js?v=2"></script>
 <script src="js/lorebook.js"></script>
 <script src="js/lorebook_ui.js?v=1"></script>
 <script src="js/conv_gameplay.js?v=15"></script>
-<script src="js/wv-generator.js?v=33"></script>
+<script src="js/wv-generator.js?v=34"></script>
 <script src="js/single_card.js?v=19"></script>
 <script src="js/attached-chars.js?v=4"></script>
 <script src="js/single_mode.js?v=8"></script>
 <script src="js/character.js?v=20"></script>
 <script src="js/prompts.js?v=15"></script>
 <script src="js/conversations.js?v=21"></script>
-<script src="js/summary.js?v=8"></script>
-<script src="js/chat.js?v=154"></script>
+<script src="js/summary.js?v=9"></script>
+<script src="js/chat.js?v=159"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4557,10 +4564,10 @@ const GameLog = (() => {
 <script src="js/branch.js"></script>
 <script src="js/settings.js?v=15"></script>
 <script src="js/gaiden.js?v=9"></script>
-<script src="js/backstage.js?v=31"></script>
+<script src="js/backstage.js?v=32"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
-<script src="js/status_bar.js?v=39"></script>
+<script src="js/status_bar.js?v=40"></script>
 <script src="js/ambient.js?v=2"></script>
 <script src="js/watch-sfx.js?v=4"></script>
 <script src="js/worldvoice.js?v=28"></script>
@@ -4568,14 +4575,14 @@ const GameLog = (() => {
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
 <script src="js/app_icons.js?v=7"></script>
-<script src="js/phone.js?v1=1354"></script>
+<script src="js/phone.js?v1=1360"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
-<script src="js/ui.js?v=19"></script>
-<script src="js/data-mgr.js?v=25"></script>
+<script src="js/ui.js?v=20"></script>
+<script src="js/data-mgr.js?v=26"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/github-backup.js?v=4"></script>
 <script src="js/colorpicker.js?v=1"></script>
@@ -4584,12 +4591,12 @@ const GameLog = (() => {
   <script src="js/theme.js?v=104"></script>
   <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js?v=2"></script>
-<script src="data/builtin-heartsim.js?v=2"></script>
+<script src="data/builtin-heartsim.js?v=3"></script>
 <script src="js/tianshucheng-fx.js"></script>
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=26"></script>
-<script src="js/app.js?v=175"></script>
+<script src="js/app.js?v=177"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
@@ -5334,6 +5341,14 @@ if ('serviceWorker' in navigator) {
 </span>
 </label>
 <span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 查询主线已记录的事件/人际关系，按关键词搜归档历史消息（只读）。</span>
+<label class="circle-check-label" style="margin-top:16px">
+<span class="circle-check-text">手机信息查询工具</span>
+<span style="position:relative;display:inline-flex">
+<input type="checkbox" id="backstage-tools-phoneinfo" class="circle-check">
+<span class="circle-check-ui"></span>
+</span>
+</label>
+<span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 查询你手机里的信息（只读）。目前仅支持「小屋」App（住所/房间布置/家具仓库/宠物）和「衣橱」App（今日穿搭/套装/衣橱仓库），其它 App 暂不支持。</span>
     <div class="modal-actions" style="margin-top:16px">
       <button onclick="Backstage.closePromptEdit()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
       <button onclick="Backstage.savePrompt()" style="flex:1;touch-action:manipulation;-webkit-tap-highlight-color:transparent">保存</button>

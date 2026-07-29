@@ -1485,14 +1485,15 @@ ${_stepIntro('message', '第 5 步 · 开场剧情', '生成开场时间、剧�
         avatar: ''
       };
       if (!npc.region || !wv.regions.length) {
-        // 全图角色
+        // 全图角色（常驻角色）：不生成简介
+        npcObj.summary = '';
         wv.globalNpcs.push(npcObj);
       } else {
         // 找到对应地区和势力
         const reg = wv.regions.find(r => r.name === npc.region);
-        if (!reg) { wv.globalNpcs.push(npcObj); continue; }
+        if (!reg) { npcObj.summary = ''; wv.globalNpcs.push(npcObj); continue; }
         const fac = npc.faction ? reg.factions.find(f => f.name === npc.faction) : reg.factions[0];
-        if (fac) { fac.npcs.push(npcObj); } else { (reg.factions[0] || { npcs: wv.globalNpcs }).npcs.push(npcObj); }
+        if (fac) { fac.npcs.push(npcObj); } else { const arr = (reg.factions[0] || { npcs: wv.globalNpcs }).npcs; if (arr === wv.globalNpcs) npcObj.summary = ''; arr.push(npcObj); }
       }
     }
 

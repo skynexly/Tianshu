@@ -645,6 +645,7 @@ ${dialogue}
         </div>
         <div class="card-actions">
 <button onclick="Summary._viewArchive('${a.id}')" style="display:flex;align-items:center;justify-content:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg> 查看</button>
+<button onclick="Summary._restoreArchiveToNewConv('${a.id}','${Utils.escapeHtml(convName)}')" style="display:flex;align-items:center;justify-content:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> 还原到新对话</button>
 <button onclick="Summary._exportArchive('${a.id}','${Utils.escapeHtml(convName)}')" style="display:flex;align-items:center;justify-content:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg> 导出</button>
 <button onclick="Summary._deleteArchive('${a.id}','${conversationId}','${(containerId || 'archive-list').replace(/'/g, '')}')" style="display:flex;align-items:center;justify-content:center;gap:4px;color:var(--error)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg> 删除</button>
 </div>
@@ -924,19 +925,11 @@ ${dialogue}
   function showArchiveListModal() {
     const cid = Conversations.getCurrent();
     renderArchiveList(cid, 'modal-archive-list');
-    document.getElementById('archive-list-modal').classList.remove('hidden');
+    UI.showPanel('archive-list', 'forward');
   }
 
   function closeArchiveListModal() {
-    const modal = document.getElementById('archive-list-modal');
-    modal.classList.add('closing');
-    const content = modal.querySelector('.modal-content');
-    if (content) content.classList.add('closing');
-    setTimeout(() => {
-      modal.classList.remove('closing');
-      if (content) content.classList.remove('closing');
-      modal.classList.add('hidden');
-    }, 150);
+    UI.showPanel('chat', 'back');
   }
 
   // ===== 归档查看 =====
@@ -980,6 +973,60 @@ ${dialogue}
     const all = await DB.getAll('archives');
     const arch = all.find(a => a.id === archiveId);
     if (arch) exportArchive(arch, convName);
+  }
+
+  // ===== 归档还原到新对话 =====
+  // 只还原聊天记录原文到一个全新对话，继承世界观/单人卡/世界书绑定，
+  // 但不带状态栏/手机/总结/记忆（这些当前对话早已记了新东西，带过去只会串）。
+  async function _restoreArchiveToNewConv(archiveId, convName) {
+    const all = await DB.getAll('archives');
+    const arch = all.find(a => a.id === archiveId);
+    if (!arch) { UI.showToast('归档不存在', 1800); return; }
+    if (!arch.messages || arch.messages.length === 0) { UI.showToast('该归档没有可还原的消息', 1800); return; }
+    const dateStr = new Date(arch.archivedAt).toLocaleString();
+    const ok = await UI.showConfirm(
+      '还原到新对话',
+      `将这段归档的 ${arch.messages.length} 条聊天记录还原到一个新对话（不影响当前对话）。\n\n新对话只带聊天记录原文，不带状态栏、手机数据、剧情总结和记忆（这些当前对话已经是新的了）。\n\n归档时间：${dateStr}\n\n确定继续吗？`
+    );
+    if (!ok) return;
+
+    try {
+      const newConvId = 'conv_' + Utils.uuid().slice(0, 8);
+      // 面具：克隆当前面具给新对话用（否则新对话没有可用面具）
+      const oldMaskId = (typeof Character !== 'undefined' && Character.getCurrentId) ? Character.getCurrentId() : null;
+      const newMaskId = 'mask_' + Utils.uuid().slice(0, 8);
+      try { if (oldMaskId && Character.cloneMask) await Character.cloneMask(newMaskId); } catch(_) {}
+
+      // 1. 写入归档消息到新对话（branchId=main，parentId 顺序链起来）
+      let parentId = null;
+      for (const m of arch.messages) {
+        const msg = {
+          id: Utils.uuid(),
+          role: m.role,
+          content: m.content || '',
+          conversationId: newConvId,
+          branchId: 'main',
+          parentId,
+          timestamp: m.timestamp || Utils.timestamp()
+        };
+        await DB.put('messages', msg);
+        parentId = msg.id;
+      }
+
+      // 2. 注册新对话：继承世界观/单人卡/世界书绑定，但状态栏/手机传空 override（不继承当前对话的运行时状态）
+      const emptyStatus = { region: '', location: '', time: '', weather: '', scene: '', playerOutfit: '', playerPosture: '', npcs: [] };
+      const branchName = `${convName || '对话'} · 归档还原 ${new Date(arch.archivedAt).toISOString().slice(0, 10)}`;
+      await Conversations.addBranch(newConvId, branchName, newMaskId, {
+        statusOverride: emptyStatus,
+        phoneOverride: {}
+      });
+
+      UI.showToast('已还原到新对话', 2000);
+      GameLog.log('info', `[Archive] 归档 ${archiveId} 还原到新对话 ${newConvId}（${arch.messages.length} 条）`);
+    } catch(e) {
+      GameLog.log('error', `[Archive] 还原失败：${e && e.message}`);
+      UI.showToast('还原失败：' + (e && e.message || '未知错误'), 3000);
+    }
   }
 
   async function closeArchiveView() {
@@ -1034,7 +1081,7 @@ ${dialogue}
     _editField, _editTimeline, _editNPC, _addTimeline, _addNPC, _deleteTimeline, _deleteNPC,
     _toggleSection,
     _startMerge, _cancelMerge, _toggleMergeItem, _confirmMerge,
-    _viewArchive, _exportArchive, closeArchiveView,
+    _viewArchive, _exportArchive, _restoreArchiveToNewConv, closeArchiveView,
     _exportSummary, _importSummary
   };
 })();

@@ -269,6 +269,18 @@ knowledges: []  // v581：customs 已合并到 knowledges，按 keywordTrigger �
       } catch (_) {}
       s = s ? `${s}\n\n${extra.join('\n')}` : extra.join('\n');
     }
+    // v726：手机聊天 App 自定义名称+描述
+    try {
+      const chatApp = w.phoneApps?.chat || {};
+      const chatName = (chatApp.name || '').trim();
+      const chatDesc = (chatApp.desc || '').trim();
+      if (chatName || chatDesc) {
+        const chatLines = ['【手机聊天软件】'];
+        if (chatName) chatLines.push(`聊天软件名称：${chatName}`);
+        if (chatDesc) chatLines.push(`关于此聊天软件：${chatDesc}`);
+        s = s ? `${s}\n\n${chatLines.join('\n')}` : chatLines.join('\n');
+      }
+    } catch (_) {}
     return s;
   }
 function _defaultRegion() {
@@ -1153,10 +1165,11 @@ function _syncBuiltinRestoreButton(w) {
       w.description = document.getElementById('wv-description')?.value || '';
       w.setting = document.getElementById('wv-setting')?.value || '';
       // 货币改为多货币（currencies 数组），由 add/update/deleteCurrency 实时保存，这里不覆盖
-      w.phoneApps = w.phoneApps || { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' } };
+      w.phoneApps = w.phoneApps || { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' }, chat: { name: '', desc: '' } };
       w.phoneApps.takeout = w.phoneApps.takeout || { name: '', desc: '' };
       w.phoneApps.shop = w.phoneApps.shop || { name: '', desc: '' };
       w.phoneApps.forum = w.phoneApps.forum || { name: '', desc: '' };
+      w.phoneApps.chat = w.phoneApps.chat || { name: '', desc: '' };
       w.phoneApps.takeout.name = document.getElementById('wv-takeout-name')?.value || '';
       w.phoneApps.takeout.desc = document.getElementById('wv-takeout-desc')?.value || '';
       w.phoneApps.takeout.deliveryMin = document.getElementById('wv-takeout-deliveryMin')?.value || '';
@@ -1169,6 +1182,7 @@ function _syncBuiltinRestoreButton(w) {
       w.phoneApps.shop.deliveryUnit = document.getElementById('wv-shop-deliveryUnit')?.value || 'day';
       w.phoneApps.forum.name = document.getElementById('wv-forum-name')?.value || '';
       w.phoneApps.forum.desc = document.getElementById('wv-forum-desc')?.value || '';
+      // chat 不在主编辑页表单里，只由手机配置 overlay 维护（照衣橱的路子，避免主 save 用空值覆盖）
       const skinEl = document.getElementById('wv-statusbar-skin');
     if (skinEl && !_isSkinLocked(w)) w.statusBarSkin = skinEl.value || 'terminal';
       try { if (typeof _syncStartTimeHidden === 'function') _syncStartTimeHidden(); } catch(_) {}
@@ -3720,7 +3734,6 @@ if (_globalNpcsCache.length === 0) {
           <span style="font-weight:600">${Utils.escapeHtml(n.name || '未命名')}</span>
           ${n.aliases ? `<span style="font-size:11px;color:var(--text-secondary)">${Utils.escapeHtml(n.aliases)}</span>` : ''}
         </div>
-        ${n.summary ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.summary)}</div>` : ''}
       </div>
     </div>
   `;
@@ -5630,7 +5643,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         <h3 style="margin:0 0 12px 0;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg> AI 生成内容平台</h3>
         <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">生成需求（可选）</label>
         <textarea id="ai-media-gen-prompt" rows="3" placeholder="例如：末世废土风、或修真界的坊市传音风" style="width:100%;padding:8px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);resize:vertical;font-size:13px;box-sizing:border-box"></textarea>
-        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">会根据世界观基调一次生成<b>信息载体、电台、阅读、视频、地图</b>五个应用的名称和描述，填进下面对应的表单。生成后可手动微调。</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">会根据世界观基调一次生成<b>信息载体、电台、阅读、视频、聊天、地图</b>六个应用的名称和描述，填进下面对应的表单。生成后可手动微调。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-media-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
           <button id="ai-media-gen-btn" onclick="Worldview._doAiGenerateMediaApps()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
@@ -5658,28 +5671,30 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
     try {
       const settingText = w?.setting || '';
 
-      const sysPrompt = `你是一个文字冒险游戏的手机应用设计师。请根据世界观设定，一次性设计五个应用：四个"内容平台" + 一个"地图"。它们是这个世界里人们获取信息、娱乐和出行的主流渠道：
+      const sysPrompt = `你是一个文字冒险游戏的手机应用设计师。请根据世界观设定，一次性设计六个应用：四个"内容平台" + 一个"聊天软件" + 一个"地图"。它们是这个世界里人们获取信息、社交、娱乐和出行的主流渠道：
 
 - forum（信息载体）：人们讨论交流、发帖爆料的平台（相当于论坛/微博/小红书/贴吧，或世界观对应形态如坊市传音阵、幸存者留言板）。
 - radio（电台）：音频广播平台（相当于电台/播客，或世界观对应形态如传音法阵、废土电波）。
 - reading（阅读）：小说/文本阅读平台（相当于起点/番茄小说，或世界观对应形态如藏书楼、灵典阁）。
 - video（视频）：影视点播平台（相当于优酷/爱奇艺，或世界观对应形态如光影阁、幻境投影）。
+- chat（聊天）：一对一/群聊的即时通讯软件（相当于微信/QQ/Line，或世界观对应形态如传音玉简、念话符、星际通讯器）。
 - map（地图）：地图导航/出行平台（相当于高德/百度地图，或世界观对应形态如山河舆图、星轨罗盘）。
 
 每个应用都要有：
 - name：应用名称（有世界观特色，别用地球现实品牌名，要贴合题材再创作）
 - desc：应用描述。
   · 四个内容平台（forum/radio/reading/video）的 desc（40-90字）：告诉运行时 AI 这个平台的内容画风、主要用户群、常见内容类型。
+  · 聊天（chat）的 desc（30-70字）：说明这是什么形态的通讯工具（技术/法术原理）、有哪些功能（文字/语音/群聊/附件等）、人们用它聊什么、聊天调性如何。
   · 地图（map）的 desc（30-70字）特殊：不要写画风，而是列出【这个世界有哪些交通方式】，供地图搜索时生成出行方案用。例如"御剑飞行、传送阵、灵兽坐骑、宗门穿梭符，长途乘飞舟"。
 
 要求：
-- 五个应用的命名风格要统一在同一个世界观基调下，但各有各的定位，不要雷同。
-- 内容平台描述要具体到"谁在用、有什么内容、什么画风"；地图描述只列交通方式。
+- 六个应用的命名风格要统一在同一个世界观基调下，但各有各的定位，不要雷同。
+- 内容平台描述要具体到"谁在用、有什么内容、什么画风"；聊天描述要具体到"什么原理、什么功能、聊天调性"；地图描述只列交通方式。
 
 输出纯 JSON 对象，不要任何其他内容。格式示例：
-{"forum":{"name":"传音坊","desc":"散修交流的阵盘社区，常见丹方交易、剑修吐槽、门派八卦，画风市井热闹。"},"radio":{"name":"灵音台","desc":"以传音法器广播的音频频道，涵盖宗门资讯、夜话情感、志怪奇谈等。"},"reading":{"name":"藏经阁","desc":"修真界小说文库，收录修仙志、异闻录、话本传奇，读者多为闲暇散修与坊市百姓。"},"video":{"name":"幻影镜","desc":"以幻境法阵投影的影像平台，播映斗法实录、秘境游记、志怪短剧等。"},"map":{"name":"山河舆图","desc":"出行靠御剑飞行、传送阵、灵兽坐骑、宗门穿梭符，长途乘坐飞舟。"}}`;
+{"forum":{"name":"传音坊","desc":"散修交流的阵盘社区，常见丹方交易、剑修吐槽、门派八卦，画风市井热闹。"},"radio":{"name":"灵音台","desc":"以传音法器广播的音频频道，涵盖宗门资讯、夜话情感、志怪奇谈等。"},"reading":{"name":"藏经阁","desc":"修真界小说文库，收录修仙志、异闻录、话本传奇，读者多为闲暇散修与坊市百姓。"},"video":{"name":"幻影镜","desc":"以幻境法阵投影的影像平台，播映斗法实录、秘境游记、志怪短剧等。"},"chat":{"name":"传音玉简","desc":"以刻录传音符文的玉简远距通讯，支持字讯、灵音留言与同门群聊，日常联络师门道友，语气随亲疏而变。"},"map":{"name":"山河舆图","desc":"出行靠御剑飞行、传送阵、灵兽坐骑、宗门穿梭符，长途乘坐飞舟。"}}`;
 
-      const userMsg = `请为以下世界观设计信息载体、电台、阅读、视频、地图五个应用。
+      const userMsg = `请为以下世界观设计信息载体、电台、阅读、视频、聊天、地图六个应用。
 ${prompt ? '\n## 用户额外需求\n' + prompt + '\n' : ''}
 ## 世界观设定
 ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
@@ -5700,8 +5715,8 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
       catch (pe) { throw new Error('AI 返回的内容格式不对，重试一次或换个说法（' + (pe.message || '解析失败') + '）'); }
       if (!c || typeof c !== 'object') throw new Error('AI 返回的不是有效对象');
 
-      const fm = c.forum || {}, rd = c.radio || {}, rg = c.reading || {}, vg = c.video || {}, mp = c.map || {};
-      if (!fm.name && !rd.name && !rg.name && !vg.name && !mp.name) throw new Error('未生成有效内容');
+      const fm = c.forum || {}, rd = c.radio || {}, rg = c.reading || {}, vg = c.video || {}, mp = c.map || {}, cht = c.chat || {};
+      if (!fm.name && !rd.name && !rg.name && !vg.name && !mp.name && !cht.name) throw new Error('未生成有效内容');
 
       const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
       setVal('pa-forum-name', String(fm.name || '').trim());
@@ -5712,6 +5727,8 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
       setVal('pa-reading-desc', String(rg.desc || '').trim());
       setVal('pa-video-name', String(vg.name || '').trim());
       setVal('pa-video-desc', String(vg.desc || '').trim());
+      setVal('pa-chat-name', String(cht.name || '').trim());
+      setVal('pa-chat-desc', String(cht.desc || '').trim());
       setVal('pa-map-name', String(mp.name || '').trim());
       setVal('pa-map-desc', String(mp.desc || '').trim());
 
@@ -5735,13 +5752,16 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         ww.phoneApps.map = ww.phoneApps.map || {};
         ww.phoneApps.map.name = gv('pa-map-name');
         ww.phoneApps.map.desc = gv('pa-map-desc');
+        ww.phoneApps.chat = ww.phoneApps.chat || {};
+        ww.phoneApps.chat.name = gv('pa-chat-name');
+        ww.phoneApps.chat.desc = gv('pa-chat-desc');
         await _saveEditingWV(ww);
         window.__wvEditingCache = ww;
         try { _updatePhoneAppsLabel(); } catch(_) {}
       } catch(_) {}
 
       overlay?.remove();
-      UI.showToast('已生成内容平台和地图，可在表单里微调', 2200);
+      UI.showToast("已生成内容平台、聊天和地图，可在表单里微调", 2200);
     } catch(e) {
       if (e.name === 'AbortError') { if (status) status.textContent = '已取消'; return; }
       if (status) status.textContent = `生成失败：${e.message}`;
@@ -6694,16 +6714,18 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
     w.icon = w.icon || 'world'; // 保留原值
     w.setting = document.getElementById('wv-setting').value.trim();
     // 货币改为多货币（currencies 数组），由 add/update/deleteCurrency 实时保存，这里不覆盖
-    w.phoneApps = w.phoneApps || { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' } };
+    w.phoneApps = w.phoneApps || { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' }, chat: { name: '', desc: '' } };
     w.phoneApps.takeout = w.phoneApps.takeout || { name: '', desc: '' };
     w.phoneApps.shop = w.phoneApps.shop || { name: '', desc: '' };
     w.phoneApps.forum = w.phoneApps.forum || { name: '', desc: '' };
+    w.phoneApps.chat = w.phoneApps.chat || { name: '', desc: '' };
     w.phoneApps.takeout.name = (document.getElementById('wv-takeout-name')?.value || '').trim();
     w.phoneApps.takeout.desc = (document.getElementById('wv-takeout-desc')?.value || '').trim();
     w.phoneApps.shop.name = (document.getElementById('wv-shop-name')?.value || '').trim();
     w.phoneApps.shop.desc = (document.getElementById('wv-shop-desc')?.value || '').trim();
     w.phoneApps.forum.name = (document.getElementById('wv-forum-name')?.value || '').trim();
     w.phoneApps.forum.desc = (document.getElementById('wv-forum-desc')?.value || '').trim();
+    // chat 不在主编辑页表单里，只由手机配置 overlay 维护（照衣橱的路子，避免主 save 用空值覆盖）
     const skinInput = document.getElementById('wv-statusbar-skin');
     if (skinInput && !_isSkinLocked(w)) w.statusBarSkin = skinInput.value || 'terminal';
     // 读取前强制从分字段同步 hidden，避免 oninput 时序遗漏导致存旧值
@@ -8595,6 +8617,10 @@ async function openPhoneAppsEditor() {
   const shUnitEl = document.getElementById('pa-shop-deliveryUnit'); if (shUnitEl) shUnitEl.value = sh.deliveryUnit || 'day';
   setVal('pa-forum-name', fm.name);
   setVal('pa-forum-desc', fm.desc);
+  // 聊天
+  const cht = pa.chat || {};
+  setVal('pa-chat-name', cht.name);
+  setVal('pa-chat-desc', cht.desc);
   // 地图
   const mp = pa.map || {};
   setVal('pa-map-name', mp.name);
@@ -8884,7 +8910,7 @@ function _buildPhoneAppsEditorHTML(w) {
 
   <button type="button" onclick="Worldview.aiGenerateShops()" style="width:100%;margin-bottom:16px;border:1px solid var(--accent);background:var(--bg-secondary);color:var(--accent);cursor:pointer;padding:9px;border-radius:8px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成两个商城配置</button>
 
-  <button type="button" onclick="Worldview.aiGenerateMediaApps()" style="width:100%;margin-bottom:8px;border:1px solid var(--accent);background:var(--bg-secondary);color:var(--accent);cursor:pointer;padding:9px;border-radius:8px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成内容平台 + 地图</button>
+  <button type="button" onclick="Worldview.aiGenerateMediaApps()" style="width:100%;margin-bottom:8px;border:1px solid var(--accent);background:var(--bg-secondary);color:var(--accent);cursor:pointer;padding:9px;border-radius:8px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成内容平台 + 聊天 + 地图</button>
   <div style="font-size:11px;color:var(--text-secondary);margin-bottom:16px;text-align:center;line-height:1.5">一次生成信息载体/电台/阅读/视频/地图的名称和描述</div>
 
   <!-- 地图 -->
@@ -8926,6 +8952,23 @@ function _buildPhoneAppsEditorHTML(w) {
       <button type="button" id="pa-forum-cat-add" style="margin-top:6px;padding:6px 12px;font-size:12px;border:1px dashed var(--border);border-radius:6px;background:none;color:var(--accent);cursor:pointer;width:100%">＋ 添加分区</button>
       <button type="button" onclick="Worldview.aiGenerateForumCats()" style="margin-top:6px;padding:8px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成分区</button>
     </div>
+  </div>
+
+  <!-- 聊天 App -->
+  <div style="font-size:14px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:4px;display:flex;align-items:center;gap:6px">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/></svg>
+    聊天 App
+    <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">（默认：聊天）</span>
+  </div>
+  <div style="background:var(--bg-tertiary);padding:12px;border-radius:8px;margin-bottom:16px">
+    <label style="display:block;margin-bottom:10px">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">APP 名称</span>
+      <input type="text" id="pa-chat-name" placeholder="例如：微信 / Line / 念话器" style="width:100%;padding:6px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px">
+    </label>
+    <label style="display:block">
+      <span style="display:block;font-size:12px;color:var(--text);margin-bottom:4px">软件描述 <span style="font-size:11px;color:var(--text-secondary)">（告诉AI这是什么聊天软件、调性如何）</span></span>
+      <textarea id="pa-chat-desc" class="auto-resize-textarea" rows="3" placeholder="例如：修真界常用的传音通讯软件，可以远距离语音/文字，联系师门/同门/道友" style="width:100%;padding:8px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:60px"></textarea>
+    </label>
   </div>
 
   <!-- 电台 -->
@@ -9110,10 +9153,11 @@ async function closePhoneAppsEditor() {
   // 保存编辑器数据回世界观
   const w = await _getEditingWV();
   if (w) {
-    w.phoneApps = w.phoneApps || { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' } };
+    w.phoneApps = w.phoneApps || { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' }, chat: { name: '', desc: '' } };
     w.phoneApps.takeout = w.phoneApps.takeout || { name: '', desc: '' };
     w.phoneApps.shop = w.phoneApps.shop || { name: '', desc: '' };
     w.phoneApps.forum = w.phoneApps.forum || { name: '', desc: '' };
+    w.phoneApps.chat = w.phoneApps.chat || { name: '', desc: '' };
     const getVal = (id) => document.getElementById(id)?.value || '';
     w.phoneApps.takeout.name = getVal('pa-takeout-name');
     w.phoneApps.takeout.desc = getVal('pa-takeout-desc');
@@ -9127,6 +9171,8 @@ async function closePhoneAppsEditor() {
     w.phoneApps.shop.deliveryUnit = getVal('pa-shop-deliveryUnit') || 'day';
     w.phoneApps.forum.name = getVal('pa-forum-name');
     w.phoneApps.forum.desc = getVal('pa-forum-desc');
+    w.phoneApps.chat.name = getVal('pa-chat-name');
+    w.phoneApps.chat.desc = getVal('pa-chat-desc');
     // 默认分区（加减字段编辑器）：从容器 _catData 收集，过滤空名字，去重，限 20 个
     {
       const listEl = document.getElementById('pa-forum-cats-list');

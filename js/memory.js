@@ -17,6 +17,12 @@ const Memory = (() => {
   let menuVisible = false;
   let _pasteMode = false; // true = 粘贴到编辑面板, false = 批量导入
 
+  // 参与者归一化：数组照旧，字符串按分隔符拆，其他一律空数组。
+  // 防止字符串被存进 DB 后调 .join() 崩溃（旧数据/AI 传参不规范都能兜住）
+  const _normalizeParts = (v) => Array.isArray(v)
+    ? v.map(s => String(s).trim()).filter(Boolean)
+    : (typeof v === 'string' ? v.split(/[,，、]/).map(s => s.trim()).filter(Boolean) : []);
+
   // ===== 数据操作 =====
 
   // 将AI提取的分字段（cause/process/result/note）合并为一段内容
@@ -119,7 +125,7 @@ const Memory = (() => {
         if (content) existing.content = content;
         if (data.time) existing.time = data.time;
         existing.location = data.location || existing.location || '';
-        existing.participants = (data.participants?.length ? data.participants : existing.participants) || [];
+        existing.participants = _normalizeParts(data.participants?.length ? data.participants : existing.participants);
         existing.keywords = Utils.tokenize((existing.title || title) + ' ' + (existing.content || content) + ' ' + (existing.location || ''));
         existing.timestamp = Utils.timestamp();
         existing.roundCreated = existing.roundCreated || data.roundCreated || 0;
@@ -138,7 +144,7 @@ const Memory = (() => {
     keywords: data.keywords || Utils.tokenize(
       title + ' ' + content + ' ' + (data.location||'')
     ),
-      participants: data.participants || [],
+      participants: _normalizeParts(data.participants),
       // 优先使用调用方传入的 scope（异步写入时锁定原面具，避免和当前激活面具串线）
       scope,
       timestamp: Utils.timestamp(),
@@ -934,7 +940,7 @@ ${dialogue}
         if (m.location) text += `地点: ${m.location}\n`;
         const content = _getContent(m);
         if (content) text += `${content}\n`;
-        if (m.participants?.length) text += `参与者: ${m.participants.join(', ')}\n`;
+        if (Array.isArray(m.participants) && m.participants.length) text += `参与者: ${m.participants.join(', ')}\n`;
       }
     });
     return text;
@@ -1094,7 +1100,7 @@ ${dialogue}
         (m.content || '').toLowerCase().includes(searchQuery) ||
         (m.detail || '').toLowerCase().includes(searchQuery) ||
         (m.tag || '').toLowerCase().includes(searchQuery) ||
-        (m.participants || []).join(' ').toLowerCase().includes(searchQuery) ||
+        _normalizeParts(m.participants).join(' ').toLowerCase().includes(searchQuery) ||
         (m.characters || []).join(' ').toLowerCase().includes(searchQuery)
       );
     }
@@ -1625,7 +1631,7 @@ ${m.type !== 'relation' && m.participants?.length ? `<p style="margin:2px 0 0 0;
       document.getElementById('mem-edit-location-input').value =
         items.map(m => m.location).find(l => l) || '';
       // 参与者合并去重
-      const allParts = [...new Set(items.flatMap(m => m.participants || []))];
+      const allParts = [...new Set(items.flatMap(m => _normalizeParts(m.participants)))];
 document.getElementById('mem-edit-participants-input').value = allParts.join('、');
         // 内容合并（用分隔线拼接各条的content）
 document.getElementById('mem-edit-content').value =
@@ -1673,7 +1679,7 @@ document.getElementById('mem-edit-content').value =
       text = `【事件】${m.title}\n`;
       if (m.time) text += `时间：${m.time}\n`;
       if (m.location) text += `地点：${m.location}\n`;
-      if (m.participants?.length) text += `参与者：${m.participants.join(', ')}\n`;
+      if (Array.isArray(m.participants) && m.participants.length) text += `参与者：${m.participants.join(', ')}\n`;
       const content = _getContent(m);
       if (content) text += `内容：${content}\n`;
     }
@@ -1850,7 +1856,7 @@ participants: document.getElementById('mem-edit-participants-input').value.split
         document.getElementById('mem-edit-title-input').value = m.title || '';
         document.getElementById('mem-edit-time-input').value = m.time || '';
         document.getElementById('mem-edit-location-input').value = m.location || '';
-        document.getElementById('mem-edit-participants-input').value = (m.participants || []).join('、');
+        document.getElementById('mem-edit-participants-input').value = _normalizeParts(m.participants).join('、');
     document.getElementById('mem-edit-content').value = _getContent(m);
     document.getElementById('mem-edit-event-fields').style.display = '';
     document.getElementById('mem-edit-relation-fields').style.display = 'none';
@@ -2130,7 +2136,7 @@ function _collectEmotionsForEdit() {
  } else {
       document.getElementById('mem-edit-time-input').value = m.time || '';
       document.getElementById('mem-edit-location-input').value = m.location || '';
-      document.getElementById('mem-edit-participants-input').value = (m.participants || []).join(', ');
+      document.getElementById('mem-edit-participants-input').value = _normalizeParts(m.participants).join(', ');
       document.getElementById('mem-edit-content').value = _getContent(m);
       // 更新事件信息卡片
       updateEventInfoCard();

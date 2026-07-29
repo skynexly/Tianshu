@@ -288,6 +288,7 @@ case 'panel-worldview-edit': return () => {
     case 'panel-gaiden': return () => showPanel('chat', 'back');
         case 'panel-memory-edit': return () => showPanel('memory', 'back');
         case 'panel-summary': return () => showPanel('chat', 'back');
+        case 'panel-archive-list': return () => showPanel('chat', 'back');
         case 'panel-conv-settings': return () => showPanel('chat', 'back');
         case 'panel-settings': return () => handleSettingsBack();
         default: return () => showPanel('chat', 'back');

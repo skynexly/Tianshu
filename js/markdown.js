@@ -27,7 +27,7 @@ const Markdown = (() => {
         const ifIdx = iframeBlocks.length;
         iframeBlocks.push(
           '<iframe class="html-sandbox" data-hid="' + fid + '" ' +
-          'sandbox="allow-scripts" scrolling="no" loading="lazy" ' +
+          'sandbox="allow-scripts" scrolling="no" ' +
           'style="width:100%;height:60px;border:0;display:block;background:transparent" ' +
           'srcdoc="' + escAttr(doc) + '"></iframe>'
         );

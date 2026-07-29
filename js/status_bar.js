@@ -248,6 +248,12 @@ async function _renderCustomAttrs(status) {
 async function editCustomAttr(attrId) {
   const def = _customAttrDefs.find(a => a.id === attrId);
   if (!def) return;
+  // v726：派生目标只读——若该属性被其它属性派生，禁止手动改（改了也会被下次派生投影覆盖，反而乱套）
+  const _srcOfThis = _customAttrDefs.find(a => a.deriveTo === attrId);
+  if (_srcOfThis) {
+    UI.showToast(`「${def.name || '该属性'}」由「${_srcOfThis.name || '其它属性'}」自动派生，不能手动修改`, 2200);
+    return;
+  }
   if (!_currentStatus) _currentStatus = { region:'',location:'',time:'',weather:'',scene:'',playerOutfit:'',playerPosture:'',npcs:[] };
   _currentStatus.customAttrs = _currentStatus.customAttrs || {};
   _currentStatus.customAttrs.global = _currentStatus.customAttrs.global || {};
@@ -259,6 +265,8 @@ async function editCustomAttr(attrId) {
   const num = Number(txt);
   if (!Number.isFinite(num)) { UI.showToast('请输入数字', 1800); return; }
   _currentStatus.customAttrs.global[attrId] = num;
+  // v726：手动改源属性后，重算派生链（a→b→c），否则派生属性不会跟着变
+  try { _applyDerivedProjection(_currentStatus.customAttrs.global, _customAttrDefs.filter(a => a && a.id && (a.name || '').trim())); } catch(_) {}
   try { await Conversations.setStatusBar(_currentStatus); } catch(e) {}
   render(_currentStatus);
 }
@@ -598,6 +606,26 @@ async function formatComponentsPrompt() {
 }
 
 
+// v726：派生投影提成模块级函数，供 AI 增量更新（applyCustomAttrsDelta）和手动编辑（editCustomAttr/editCharacterAttr）共用。
+// target = floor(source / step)，纯只读投影，源不动；支持链式（A→B→C），多轮迭代直至稳定 + 防环。
+// store 是当前作用域 {attrId: value} 映射，defs 是该作用域属性定义数组。返回是否有改动。
+function _applyDerivedProjection(store, defs) {
+  if (!store || !Array.isArray(defs)) return false;
+  let any = false, rounds = 0, loop = true;
+  while (loop && rounds < defs.length + 2) {
+    loop = false; rounds++;
+    defs.forEach(attr => {
+      if (!attr || !attr.deriveTo) return;
+      const target = defs.find(d => d && d.id === attr.deriveTo);
+      if (!target || target.id === attr.id) return;
+      const step = Number(attr.deriveStep) > 0 ? Number(attr.deriveStep) : 100;
+      const srcVal = Number(store[attr.id] ?? attr.initial ?? 0) || 0;
+      const derived = Math.floor(srcVal / step);
+      if (Number(store[target.id]) !== derived) { store[target.id] = derived; loop = true; any = true; }
+    });
+  }
+  return any;
+}
 
 async function applyCustomAttrsDelta(deltaObj) {
   if (!deltaObj || typeof deltaObj !== 'object') return false;
@@ -665,23 +693,8 @@ async function applyCustomAttrsDelta(deltaObj) {
       store[attr.id] = v;
     }
   };
-  // 派生投影：target = floor(source / step)，纯只读投影，源不动；支持链式（A→B→C），多轮迭代直至稳定+防环
-  const applyDerived = (store, defs) => {
-    let any = false, rounds = 0, loop = true;
-    while (loop && rounds < defs.length + 2) {
-      loop = false; rounds++;
-      defs.forEach(attr => {
-        if (!attr || !attr.deriveTo) return;
-        const target = defs.find(d => d && d.id === attr.deriveTo);
-        if (!target || target.id === attr.id) return;
-        const step = Number(attr.deriveStep) > 0 ? Number(attr.deriveStep) : 100;
-        const srcVal = Number(store[attr.id] ?? attr.initial ?? 0) || 0;
-        const derived = Math.floor(srcVal / step);
-        if (Number(store[target.id]) !== derived) { store[target.id] = derived; loop = true; any = true; }
-      });
-    }
-    return any;
-  };
+  // 派生投影：复用模块级 _applyDerivedProjection（见上方定义）
+  const applyDerived = (store, defs) => _applyDerivedProjection(store, defs);
   const globalDefs = (gp?.globalAttrs || []).filter(a => a && a.id && (a.name || '').trim());
   const globalDeriveTargets = new Set(globalDefs.filter(a => a.deriveTo).map(a => a.deriveTo));
   const globalDelta = deltaObj.global && typeof deltaObj.global === 'object' ? deltaObj.global : {};
@@ -729,6 +742,12 @@ async function editCharacterAttr(cardIdx, attrIdx) {
   const attrs = (card?.attrs || []).filter(a => a && a.id && (a.name || '').trim());
   const attr = attrs[attrIdx];
   if (!card || !attr) return;
+  // v726：派生目标只读——若该属性被同卡其它属性派生，禁止手动改
+  const _srcOfThis = attrs.find(a => a.deriveTo === attr.id);
+  if (_srcOfThis) {
+    UI.showToast(`「${attr.name || '该属性'}」由「${_srcOfThis.name || '其它属性'}」自动派生，不能手动修改`, 2200);
+    return;
+  }
   if (!_currentStatus) _currentStatus = { region:'',location:'',time:'',weather:'',scene:'',playerOutfit:'',playerPosture:'',npcs:[] };
   _currentStatus.customAttrs = _currentStatus.customAttrs || {};
   _currentStatus.customAttrs.characters = _currentStatus.customAttrs.characters || {};
@@ -742,6 +761,8 @@ async function editCharacterAttr(cardIdx, attrIdx) {
   const num = Number(txt);
   if (!Number.isFinite(num)) { UI.showToast('请输入数字', 1800); return; }
   _currentStatus.customAttrs.characters[key][attr.id] = num;
+  // v726：手动改源属性后，重算该角色作用域的派生链
+  try { _applyDerivedProjection(_currentStatus.customAttrs.characters[key], attrs); } catch(_) {}
   try { await Conversations.setStatusBar(_currentStatus); } catch(e) {}
   render(_currentStatus);
 }

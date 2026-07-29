@@ -206,6 +206,8 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
     document.addEventListener('contextmenu', (e) => {
       // 白名单：input/textarea 允许原生右键菜单
       if (isSelectableTarget(e.target)) return;
+      // 白名单：查看大图（lightbox）里的图片放行，让长按弹出系统「保存图片」菜单
+      if (e.target && e.target.nodeType === 1 && e.target.closest('.tsimg-allow-save')) return;
       e.preventDefault();
     }, true);
   } catch(e) { console.error('[NoSelect]', e); }
@@ -224,17 +226,22 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v726';
-    const CHANGELOG = `○归档记录改为聊天气泡样式显示，隐藏代码块
+    const APP_VERSION = 'v727';
+    const CHANGELOG = `○部分BUG修复
+○部分逻辑优化
+○提示词调整
+○新增小屋可以按层生图
+○新增聊天APP可在世界观编辑中自定义名字和描述`;
+    // 历史公告（最新在前），版本变旧后手动把上一版内容挪进来
+    const CHANGELOG_HISTORY = [
+      { version: 'v726', notes: `○归档记录改为聊天气泡样式显示，隐藏代码块
 ○论坛「我的」→全局偏好可设置条数，刷新时一次直接出完整正文＋评论区，填 0 则保持原有模式
 ○在世界观改了论坛分区后，可在论坛「我的」→全局偏好点击重置同步
 ○世界观内可单独停用某个常驻角色，无需删除
 ○新增环境音静音保活模式
 ○修复线上聊天气泡无法长按呼出菜单
 ○离线版（文件版）已上线，可在设置→关于→离线版下载获取
-○其他BUG修复`;
-    // 历史公告（最新在前），版本变旧后手动把上一版内容挪进来
-    const CHANGELOG_HISTORY = [
+○其他BUG修复` },
       { version: 'v724', notes: `○新增提示词支持拖动排序
 ○新增动态/常驻条目排序/拖动排序
 ○新增表情包批量管理

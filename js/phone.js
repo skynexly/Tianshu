@@ -1174,12 +1174,14 @@ function _addChatMessageToRoundLog(contactId, role, text, time, contactName, opt
 function _formatChatRoundLog() {
   if (Object.keys(_chatRoundLog).length === 0) return [];
   const lines = [];
+  const _chatAppName = (_shopMeta?.chat?.name || '').trim() || '聊天';
+  const _chatAppLabel = _chatAppName === '聊天' ? '手机聊天APP' : `手机聊天APP「${_chatAppName}」`;
   for (const contactId in _chatRoundLog) {
     const entry = _chatRoundLog[contactId];
     if (!entry || !entry.msgs || !entry.msgs.length) continue;
     const contactName = entry.name || contactId;
     if (entry.isGroup) {
-      lines.push(`在手机聊天APP的群聊「${contactName}」里新增以下群消息（仅供了解上下文，不要在线下剧情中以对话格式复述这些内容）：`);
+      lines.push(`在${_chatAppLabel}的群聊「${contactName}」里新增以下群消息（仅供了解上下文，不要在线下剧情中以对话格式复述这些内容）：`);
       for (const m of entry.msgs) {
         const timeStr = m.time ? `[${m.time}] ` : '';
         if (m.role === 'system') { lines.push(`  [系统] ${timeStr}${m.text}`); continue; }
@@ -1187,7 +1189,7 @@ function _formatChatRoundLog() {
         lines.push(`  ${who} ${timeStr}：${m.text}`);
       }
     } else {
-      lines.push(`在手机聊天APP与「${contactName}」新增以下对话（仅供了解上下文，不要在线下剧情中以对话格式复述这些内容）：`);
+      lines.push(`在${_chatAppLabel}与「${contactName}」新增以下对话（仅供了解上下文，不要在线下剧情中以对话格式复述这些内容）：`);
       for (const m of entry.msgs) {
         const who = m.role === 'me' ? '{{user}}' : contactName;
         const timeStr = m.time ? `[${m.time}] ` : '';
@@ -3202,7 +3204,7 @@ function _extractJsonArrayText(content) {
   async function _phoneJsonArrayWithRetry(opts) {
     const {
       label = '手机内容', url, key, model, messages,
-      temperature = 0.9, max_tokens = 2048,
+      temperature = 0.9, max_tokens,
       onAttempt
     } = opts || {};
     // 默认最多重试 3 次；若对话设置关闭了自动重试则只跑一次
@@ -3217,25 +3219,51 @@ function _extractJsonArrayText(content) {
           ...(messages || []),
           { role: 'system', content: '上一次返回无法解析。请立刻重新输出严格 JSON 数组：只能输出以 [ 开头、以 ] 结尾的 JSON；不要 Markdown；不要解释；不要代码块；字符串必须使用英文双引号。' }
         ];
+        // max_tokens 只有显式传入才带（不传则用模型/渠道默认值，规避部分中转对 max_tokens 上限的 400 校验）
+        const _body = { model, messages: strictMessages, stream: false, temperature };
+        if (Number.isFinite(max_tokens)) _body.max_tokens = max_tokens;
+        try { GameLog.log('info', `[手机生成] ${label} 请求 attempt ${attempt}/${maxRetries} model=${model} max_tokens=${Number.isFinite(max_tokens) ? max_tokens : '默认'} temp=${temperature}`); } catch(_) {}
         const resp = await _phoneFetchWithTimeout(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-          body: JSON.stringify({ model, messages: strictMessages, stream: false, temperature, max_tokens })
+          body: JSON.stringify(_body)
         });
-        if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
+        if (!resp.ok) {
+          // 站子报错（400/401/429/500…）：把响应体读出来，里面通常有具体原因（余额不足、模型不存在、超长等）
+          let errBody = '';
+          try { errBody = (await resp.text() || '').slice(0, 500); } catch(_) {}
+          try { GameLog.log('error', `[手机生成] ${label} HTTP ${resp.status} ${resp.statusText || ''}${errBody ? ` | 站子返回: ${errBody}` : ''}`); } catch(_) {}
+          throw new Error(`API错误: ${resp.status}${errBody ? ` - ${errBody.slice(0, 120)}` : ''}`);
+        }
         const json = await resp.json();
+        // 记录用量与结束原因：finish_reason=length 说明被 max_tokens 截断（JSON 不完整的头号元凶）
+        try {
+          const fr = json?.choices?.[0]?.finish_reason || json?.choices?.[0]?.finishReason || '?';
+          const us = json?.usage || {};
+          GameLog.log('info', `[手机生成] ${label} 响应 finish_reason=${fr} tokens(prompt/completion)=${us.prompt_tokens ?? '?'}/${us.completion_tokens ?? '?'}${fr === 'length' ? ' ⚠被max_tokens截断，JSON很可能不完整' : ''}`);
+        } catch(_) {}
         const content = _phoneExtractContent(json);
         lastContent = content;
-        return _parsePhoneJsonArray(content);
+        if (!content) {
+          try { GameLog.log('error', `[手机生成] ${label} 响应正文为空（可能是思考模型只输出了reasoning，或被安全策略拦截）| 原始响应: ${JSON.stringify(json).slice(0, 400)}`); } catch(_) {}
+        }
+        const parsed = _parsePhoneJsonArray(content);
+        try { GameLog.log('info', `[手机生成] ${label} 解析成功，得到 ${Array.isArray(parsed) ? parsed.length : 0} 条`); } catch(_) {}
+        return parsed;
       } catch(e) {
         lastError = e.message || String(e);
         console.error(`[Phone] ${label} attempt ${attempt} failed:`, e, lastContent ? { content: lastContent } : '');
+        try {
+          const snippet = lastContent ? ` | 返回正文前300字: ${String(lastContent).slice(0, 300)}` : '';
+          GameLog.log('error', `[手机生成] ${label} attempt ${attempt}/${maxRetries} 失败: ${lastError}${snippet}`);
+        } catch(_) {}
         if (attempt < maxRetries) {
           UI.showToast(`${label}生成失败，正在重试…（${attempt + 1}/${maxRetries}）`, 1600);
           await new Promise(r => setTimeout(r, 900));
         }
       }
     }
+    try { GameLog.log('error', `[手机生成] ${label} 全部 ${maxRetries} 次尝试均失败，最后错误: ${lastError || '未知'}`); } catch(_) {}
     throw new Error(lastError || '生成失败');
   }
 
@@ -3273,28 +3301,48 @@ function _extractJsonArrayText(content) {
           ...(messages || []),
           { role: 'system', content: '上一次返回无法解析。请立刻重新输出严格 JSON 对象：只能输出以 { 开头、以 } 结尾的 JSON；不要 Markdown；不要解释；不要代码块；字符串必须使用英文双引号。' }
         ];
+        try { GameLog.log('info', `[手机生成] ${label} 请求 attempt ${attempt}/${maxRetries} model=${model} max_tokens=${max_tokens} temp=${temperature}`); } catch(_) {}
         const resp = await _phoneFetchWithTimeout(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
           body: JSON.stringify({ model, messages: strictMessages, stream: false, temperature, max_tokens })
         });
-        if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
+        if (!resp.ok) {
+          let errBody = '';
+          try { errBody = (await resp.text() || '').slice(0, 500); } catch(_) {}
+          try { GameLog.log('error', `[手机生成] ${label} HTTP ${resp.status} ${resp.statusText || ''}${errBody ? ` | 站子返回: ${errBody}` : ''}`); } catch(_) {}
+          throw new Error(`API错误: ${resp.status}${errBody ? ` - ${errBody.slice(0, 120)}` : ''}`);
+        }
         const json = await resp.json();
+        try {
+          const fr = json?.choices?.[0]?.finish_reason || json?.choices?.[0]?.finishReason || '?';
+          const us = json?.usage || {};
+          GameLog.log('info', `[手机生成] ${label} 响应 finish_reason=${fr} tokens(prompt/completion)=${us.prompt_tokens ?? '?'}/${us.completion_tokens ?? '?'}${fr === 'length' ? ' ⚠被max_tokens截断，JSON很可能不完整' : ''}`);
+        } catch(_) {}
         const content = _phoneExtractContent(json);
         lastContent = content;
-        return _parsePhoneJsonObject(content);
+        if (!content) {
+          try { GameLog.log('error', `[手机生成] ${label} 响应正文为空（可能是思考模型只输出了reasoning，或被安全策略拦截）| 原始响应: ${JSON.stringify(json).slice(0, 400)}`); } catch(_) {}
+        }
+        const parsedObj = _parsePhoneJsonObject(content);
+        try { GameLog.log('info', `[手机生成] ${label} 解析成功（对象，字段数 ${parsedObj && typeof parsedObj === 'object' ? Object.keys(parsedObj).length : 0}）`); } catch(_) {}
+        return parsedObj;
       } catch(e) {
         lastError = e.message || String(e);
         console.error(`[Phone] ${label} attempt ${attempt} failed:`, e, lastContent ? { content: lastContent } : '');
+        try {
+          const snippet = lastContent ? ` | 返回正文前300字: ${String(lastContent).slice(0, 300)}` : '';
+          GameLog.log('error', `[手机生成] ${label} attempt ${attempt}/${maxRetries} 失败: ${lastError}${snippet}`);
+        } catch(_) {}
         if (attempt < maxRetries) {
           UI.showToast(`${label}生成失败，正在重试…（${attempt + 1}/${maxRetries}）`, 1600);
           await new Promise(r => setTimeout(r, 900));
         }
       }
     }
+    try { GameLog.log('error', `[手机生成] ${label} 全部 ${maxRetries} 次尝试均失败，最后错误: ${lastError || '未知'}`); } catch(_) {}
     throw new Error(lastError || '生成失败');
   }
-
   // 纯文本生成（章节正文等用），不做 JSON 解析，直接返回文本。失败重试，全失败抛错。
   async function _phoneTextWithRetry(opts) {
     const {
@@ -3308,25 +3356,42 @@ function _extractJsonArrayText(content) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         if (typeof onAttempt === 'function') onAttempt(attempt, maxRetries);
+        try { GameLog.log('info', `[手机生成] ${label} 请求 attempt ${attempt}/${maxRetries} model=${model} max_tokens=${max_tokens} temp=${temperature}`); } catch(_) {}
         const resp = await _phoneFetchWithTimeout(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
           body: JSON.stringify({ model, messages, stream: false, temperature, max_tokens })
         });
-        if (!resp.ok) throw new Error(`API错误: ${resp.status}`);
+        if (!resp.ok) {
+          let errBody = '';
+          try { errBody = (await resp.text() || '').slice(0, 500); } catch(_) {}
+          try { GameLog.log('error', `[手机生成] ${label} HTTP ${resp.status} ${resp.statusText || ''}${errBody ? ` | 站子返回: ${errBody}` : ''}`); } catch(_) {}
+          throw new Error(`API错误: ${resp.status}${errBody ? ` - ${errBody.slice(0, 120)}` : ''}`);
+        }
         const json = await resp.json();
+        try {
+          const fr = json?.choices?.[0]?.finish_reason || json?.choices?.[0]?.finishReason || '?';
+          const us = json?.usage || {};
+          GameLog.log('info', `[手机生成] ${label} 响应 finish_reason=${fr} tokens(prompt/completion)=${us.prompt_tokens ?? '?'}/${us.completion_tokens ?? '?'}${fr === 'length' ? ' ⚠被max_tokens截断，正文可能不完整' : ''}`);
+        } catch(_) {}
         const content = _phoneExtractContent(json);
-        if (!content) throw new Error('返回为空');
+        if (!content) {
+          try { GameLog.log('error', `[手机生成] ${label} 响应正文为空（可能是思考模型只输出了reasoning，或被安全策略拦截）| 原始响应: ${JSON.stringify(json).slice(0, 400)}`); } catch(_) {}
+          throw new Error('返回为空');
+        }
+        try { GameLog.log('info', `[手机生成] ${label} 成功，正文 ${content.length} 字`); } catch(_) {}
         return content;
       } catch(e) {
         lastError = e.message || String(e);
         console.error(`[Phone] ${label} attempt ${attempt} failed:`, e);
+        try { GameLog.log('error', `[手机生成] ${label} attempt ${attempt}/${maxRetries} 失败: ${lastError}`); } catch(_) {}
         if (attempt < maxRetries) {
           UI.showToast(`${label}生成失败，正在重试…（${attempt + 1}/${maxRetries}）`, 1600);
           await new Promise(r => setTimeout(r, 900));
         }
       }
     }
+    try { GameLog.log('error', `[手机生成] ${label} 全部 ${maxRetries} 次尝试均失败，最后错误: ${lastError || '未知'}`); } catch(_) {}
     throw new Error(lastError || '生成失败');
   }
   function _updateFab() {
@@ -3597,7 +3662,7 @@ function _renderHomeIcon(a) {
       // 底部 dock：相机、聊天、收起手机
       const dockApps = [
         { id: 'camera', icon: 'polaroid', name: '相机' },
-        { id: 'chat', icon: 'chat', name: '聊天' },
+        { id: 'chat', icon: 'chat', name: (_shopMeta?.chat?.name || '聊天') },
         { id: 'minimize', icon: 'phone-down', name: '收起手机' },
             ];
  body.innerHTML = `
@@ -13007,6 +13072,9 @@ ${shipSection}
         _lastImageId = imageId;
         const prev = mask.querySelector('#wardrobe-img-preview');
         prev.style.backgroundImage = `url('${dataUrl.replace(/'/g, "\\'")}')`;
+        prev.style.cursor = 'zoom-in';
+        prev.title = '点击查看大图 / 长按保存';
+        prev.onclick = () => { try { if (imageId && Chat?.openImageLightbox) Chat.openImageLightbox(imageId); } catch(_) {} };
         mask.querySelector('#wardrobe-img-result').style.display = '';
         UI.showToast('已生成并设为立绘', 1800);
       } catch (e) {
@@ -15303,8 +15371,14 @@ ${houseDataText}`;
 
     const mask = document.createElement('div');
     mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:20px';
-    // 目标选项：按整体风格 + 各房间
+    // 目标选项：按整体风格 + 按楼层（带该层房间细节）+ 各房间
     const roomOpts = rooms.map(r => `<div class="cottage-floor-opt" data-target="room:${Utils.escapeHtml(r.id)}" style="cursor:pointer">${Utils.escapeHtml(r.name || '未命名房间')}（${_cottageFloorLabel(house, r.floor || 1)}）</div>`).join('');
+    // 楼层去重：优先 house.floors 的 num，兜底从房间的 floor 收集
+    const floorNums = Array.from(new Set(
+      ((house.floors || []).map(f => f.num).filter(n => n != null))
+        .concat(rooms.map(r => r.floor || 1))
+    )).sort((a, b) => a - b);
+    const floorOpts = floorNums.map(n => `<div class="cottage-floor-opt" data-target="floor:${n}" style="cursor:pointer">${Utils.escapeHtml(_cottageFloorLabel(house, n))}（整层布局，含房间细节）</div>`).join('');
     mask.innerHTML = `
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:360px;width:100%;color:var(--text);max-height:84vh;overflow-y:auto">
         <div style="font-size:15px;font-weight:600;margin-bottom:16px">AI 生成小屋图片</div>
@@ -15317,6 +15391,7 @@ ${houseDataText}`;
           </div>
           <div class="cottage-img-menu hidden" style="position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:10;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,0.22);overflow:hidden;max-height:220px;overflow-y:auto">
             <div class="cottage-floor-opt" data-target="style" style="cursor:pointer">按整体风格（外观/概念图）</div>
+            ${floorOpts}
             ${roomOpts}
           </div>
         </div>
@@ -15367,6 +15442,16 @@ ${houseDataText}`;
         if (!room) { UI.showToast('房间不存在', 1500); return; }
         const itemLines = (room.items || []).map(it => `${it.name || ''}${it.desc ? ' (' + it.desc + ')' : ''}`).join('; ');
         basePrompt = `Photorealistic interior design visualization of ${room.name || 'a room'}. ${room.desc ? room.desc + '. ' : ''}${itemLines ? 'Items in the room: ' + itemLines + '. ' : ''}${house.styleDesc ? 'Overall style: ' + house.styleDesc + '. ' : ''}Realistic, natural lighting, sensible layout, no people.`;
+      } else if (target.startsWith('floor:')) {
+        const floorNum = parseInt(target.slice(6), 10);
+        const floorRooms = rooms.filter(r => (r.floor || 1) === floorNum);
+        if (!floorRooms.length) { UI.showToast('这一层还没有房间', 1500); return; }
+        const floorName = _cottageFloorLabel(house, floorNum);
+        const roomBlocks = floorRooms.map(r => {
+          const itemLines = (r.items || []).map(it => `${it.name || ''}${it.desc ? ' (' + it.desc + ')' : ''}`).join('; ');
+          return `${r.name || 'a room'}${r.desc ? ' - ' + r.desc : ''}${itemLines ? ' [items: ' + itemLines + ']' : ''}`;
+        }).join('; ');
+        basePrompt = `Photorealistic architectural visualization of one floor ("${floorName}") of a residence, showing its layout and rooms together. Rooms on this floor: ${roomBlocks}. ${house.styleDesc ? 'Overall style: ' + house.styleDesc + '. ' : ''}Realistic, natural lighting, sensible layout, cohesive design across rooms, no people.`;
       } else {
         basePrompt = `Exterior or overall atmosphere concept art of a residence. Residence name: ${house.name || 'my home'}. ${house.address ? 'Address: ' + house.address + '. ' : ''}${house.styleDesc ? 'Overall style: ' + house.styleDesc + '. ' : 'A warm, comfortable home. '}Realistic, natural lighting, lived-in atmosphere, no people.`;
       }
@@ -15404,6 +15489,9 @@ ${houseDataText}`;
         _lastImageId = imageId;
         const prev = mask.querySelector('#cottage-img-preview');
         prev.style.backgroundImage = `url('${dataUrl.replace(/'/g, "\\'")}')`;
+        prev.style.cursor = 'zoom-in';
+        prev.title = '点击查看大图 / 长按保存';
+        prev.onclick = () => { try { if (imageId && Chat?.openImageLightbox) Chat.openImageLightbox(imageId); } catch(_) {} };
         mask.querySelector('#cottage-img-result').style.display = '';
         UI.showToast('已生成并存入相册', 1800);
 
@@ -19537,6 +19625,7 @@ ${itemFields}
       _effTags = _liveEffectiveTags();
     } catch (e) {
       _liveShowLoading(false);
+      try { GameLog.log('error', `[直播] 品类配置异常，生成中止: ${e.message || e}`); } catch(_) {}
       UI.showToast('品类配置异常，请重试', 1800);
       _renderVideo(pd);
       return;
@@ -19614,14 +19703,17 @@ ${presetRules}
           { role: 'system', content: sysPrompt },
           { role: 'user', content: kw ? `请生成一批贴合「${kw}」的、此刻正在播的直播间。` : '请生成一批此刻正在播的直播间。' }
         ],
-        temperature: 0.95, max_tokens: 16000
+        temperature: 0.95
       });
     } catch (e) {
       _liveShowLoading(false);
+      try { GameLog.log('error', `[直播] 生成请求最终失败，本次刷新中止: ${e.message || e}`); } catch(_) {}
       UI.showToast('直播间生成失败：' + (e.message || '请重试'), 2000);
       _renderVideo(pd);
       return;
     }
+
+    try { GameLog.log('info', `[直播] AI 返回原始 ${Array.isArray(arr) ? arr.length : 0} 条，开始字段校验`); } catch(_) {}
 
     const validTag = (t) => _effTags.some(x => x.name === t);
     const validScale = (s) => ['personal', 'pro', 'company'].includes(s);
@@ -19654,10 +19746,16 @@ ${presetRules}
 
     if (list.length === 0) {
       _liveShowLoading(false);
+      try {
+        const raw = Array.isArray(arr) ? arr.length : 0;
+        const sample = raw > 0 ? ` | 原始首条: ${JSON.stringify(arr[0]).slice(0, 300)}` : '';
+        GameLog.log('error', `[直播] 字段校验后为空（原始 ${raw} 条 → 有效 0 条）。原因通常是缺 title 字段${sample}`);
+      } catch(_) {}
       UI.showToast('生成结果为空，请重试', 1800);
       _renderVideo(pd);
       return;
     }
+    try { GameLog.log('info', `[直播] 字段校验通过 ${list.length} 条`); } catch(_) {}
 
     // 直播是即时流，不做累积存储——每次刷新整批替换为此刻在播的间（批内按 streamerName+title 去重防重复）
     if (!pd.videoDiscover || typeof pd.videoDiscover !== 'object' || Array.isArray(pd.videoDiscover)) {
@@ -19704,6 +19802,7 @@ ${presetRules}
     await _savePhoneData();
     _liveShowLoading(false);
     _renderVideo(pd);
+    try { GameLog.log('info', `[直播] 刷新完成，写入 ${fresh.length} 个直播间（AI ${list.length} 个 + 预设混入 ${Math.max(0, fresh.length - list.length)} 个）`); } catch(_) {}
     UI.showToast('刷出 ' + fresh.length + ' 个直播间', 1500);
   }
 
@@ -41380,6 +41479,51 @@ async function _onWallpaperPicked() {
        UI.showToast('导入失败', 1500);
      }
    }
+   // 导出整套装扮（手机图标 + 悬浮球图标 + 我的头像框 + 其余 skin 字段），原样带 base64
+   async function _exportPhoneSkin() {
+     try {
+       let raw = '';
+       try { raw = localStorage.getItem(_PHONE_SKIN_KEY) || ''; } catch(_) {}
+       let skin = {};
+       if (raw) { try { skin = JSON.parse(raw) || {}; } catch(_) { skin = {}; } }
+       const pkg = { _type: 'tianshu-phone-skin-full', _version: 1, skin };
+       const json = JSON.stringify(pkg);
+       const blob = new Blob([json], { type: 'application/json' });
+       const sizeMB = (blob.size / 1048576).toFixed(1);
+       const saved = await Utils.saveFile(blob, `skynex-手机装扮_${new Date().toLocaleDateString('zh-CN').replace(/\//g,'-')}.json`);
+       if (saved) UI.showToast(`手机装扮已导出（约 ${sizeMB}MB）`, 2400);
+     } catch(e) {
+       console.warn('[PhoneSkin] 导出装扮失败', e);
+       UI.showToast('导出失败：' + (e.message || '未知错误'), 3000);
+     }
+   }
+   // 导入整套装扮：整组覆盖当前 skin，写回后 reload 生效
+   async function _importPhoneSkin() {
+     try {
+       const file = await Utils.pickFile({ accept: '.json,application/json' });
+       if (!file) return;
+       const text = await Utils.fileToText(file);
+       let pkg;
+       try { pkg = JSON.parse(text); } catch(_) { UI.showToast('文件无法解析，请确认选的是导出的装扮文件', 2600); return; }
+       // 兼容两种结构：{ _type:'tianshu-phone-skin-full', skin:{...} } 或直接就是 skin 对象
+       let skin = null;
+       if (pkg && pkg._type === 'tianshu-phone-skin-full' && pkg.skin && typeof pkg.skin === 'object') {
+         skin = pkg.skin;
+       } else if (pkg && typeof pkg === 'object' && (pkg.profile || pkg.colors || 'enabled' in pkg)) {
+         skin = pkg;
+       }
+       if (!skin || typeof skin !== 'object') { UI.showToast('无法识别的装扮文件', 2600); return; }
+       const ok = await UI.showConfirm('导入手机装扮',
+         '将用备份文件完全覆盖当前的手机图标、悬浮球图标、我的头像框等全部装扮设置。\n\n⚠️ 当前装扮会被替换，且不可撤销。导入后页面会刷新一次。\n\n确定继续吗？');
+       if (!ok) return;
+       try { localStorage.setItem(_PHONE_SKIN_KEY, JSON.stringify(skin)); } catch(e) { UI.showToast('写入失败：' + (e.message || '存储空间不足'), 3000); return; }
+       UI.showToast('装扮已导入，正在刷新…', 1500);
+       setTimeout(() => { try { location.reload(); } catch(_) {} }, 700);
+     } catch(e) {
+       console.warn('[PhoneSkin] 导入装扮失败', e);
+       UI.showToast('导入失败：' + (e.message || '未知错误'), 3000);
+     }
+   }
   function _onPhoneSkinToggle(on) {
     const skin = _getPhoneSkin();
     skin.enabled = !!on;
@@ -47275,7 +47419,7 @@ async function _chatApplyAvatar(contact, avatarDataUrl) {
 
 function _renderChatApp(pd) {
   const body = document.getElementById('phone-body');
-  document.getElementById('phone-title').textContent = '聊天';
+  document.getElementById('phone-title').textContent = (_shopMeta?.chat?.name || '聊天');
   _applyWallpaper(pd);
   _chatCurContactId = null;
   // 先用旧头像渲染，再异步刷新最新头像 map 后重绘
@@ -58942,7 +59086,7 @@ async function _cameraOpenAdjust() {
   overlay.style.cssText = 'position:fixed;inset:0;z-index:10015;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:18px';
   overlay.onclick = (e) => { if (e.target === overlay) _closeCameraAdjust(); };
   overlay.innerHTML = `
-    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;max-width:340px;width:100%;color:var(--text)">
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;max-width:340px;width:100%;color:var(--text);max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
       <div style="font-size:15px;font-weight:600;padding:18px 20px 4px">调整镜头</div>
       <div style="font-size:12px;color:var(--text-secondary);padding:0 20px 12px">让 AI 帮你重新组织一下画面</div>
       <div style="padding:0 20px">
@@ -63537,6 +63681,7 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
   takeout: { name: '', desc: '' },
   shop: { name: '', desc: '' },
   forum: { name: '', desc: '' },
+  chat: { name: '', desc: '' },
   radio: { name: '', desc: '' },
   reading: { name: '', desc: '' },
   cottage: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day', initialHouse: null },
@@ -63568,6 +63713,10 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
       name: ((pa.forum?.name) || '').trim(),
       desc: ((pa.forum?.desc) || '').trim(),
       defaultCategories: Array.isArray(pa.forum?.defaultCategories) ? pa.forum.defaultCategories : null
+    },
+    chat: {
+      name: ((pa.chat?.name) || '').trim(),
+      desc: ((pa.chat?.desc) || '').trim()
     },
     radio: {
       name: ((pa.radio?.name) || '').trim(),
@@ -63605,7 +63754,7 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
     }
   };
 } catch(_) {
-    _shopMeta = { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' }, radio: { name: '', desc: '' }, reading: { name: '', desc: '' }, video: { name: '', desc: '' }, cottage: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day', initialHouse: null }, wardrobe: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day' } };
+    _shopMeta = { takeout: { name: '', desc: '' }, shop: { name: '', desc: '' }, forum: { name: '', desc: '' }, chat: { name: '', desc: '' }, radio: { name: '', desc: '' }, reading: { name: '', desc: '' }, video: { name: '', desc: '' }, cottage: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day', initialHouse: null }, wardrobe: { name: '', deliveryMin: 2, deliveryMax: 5, deliveryUnit: 'day' } };
   }
   }
   // 信息载体（默认"论坛"，留空回落）
@@ -65207,7 +65356,7 @@ buildHeartsimAppFavorForBackstage,
     buildLicenseEventPrompt, applyLicenseMarkers, _readingLicenseSetup,
     flushActionLogForBackstage,
     getSnapshotForRollback, restoreFromSnapshot, _phoneRestoreLatestBackup, _phoneShowBackupList, _phoneShowDiag, _phoneResetAll, _phoneRestoreResetBackup,
-    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _toggleRollbackKeep, _onThemePick, _switchSettingsTab, _onPhoneSkinToggle, _onPhoneSkinPick, _resetPhoneSkinColors, _exportPhoneSkinColors, _importPhoneSkinColors, _onToggleFullscreen, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
+    _getPhoneData, _onWallpaperPicked, _resetWallpaper, _toggleWallpaperOverlay, _onWallpaperOpacityChange, _saveWallpaperOpacity, _toggleSendActionLog, _toggleInject, _toggleRollbackKeep, _onThemePick, _switchSettingsTab, _onPhoneSkinToggle, _onPhoneSkinPick, _resetPhoneSkinColors, _exportPhoneSkinColors, _importPhoneSkinColors, _exportPhoneSkin, _importPhoneSkin, _onToggleFullscreen, _phoneLorebookToggle, _phoneLorebookRemove, _phoneLorebookAdd, _onMomentsCoverPicked, _clearMomentsCover,
     // 个人资料卡
     _onProfileFocus, _onProfileBlur, _onProfileKeydown, _onProfileInput, _pickProfileAvatar,
     // 我的头像框

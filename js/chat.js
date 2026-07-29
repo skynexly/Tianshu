@@ -1808,12 +1808,8 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
       }
     }
 
-    // v687.34：AI行为约束 — 深度0注入（最后一条消息之后，最靠近AI回复）
-    if (_constraintDepth0.length > 0) {
-      for (const c of _constraintDepth0) {
-        apiMessages.push({ role: 'system', content: c });
-      }
-    }
+    // v726：AI行为约束（防回声/防八股）改为深度4注入 —— 挪到所有背景注入之后统一处理（见下方 _lastUserIdx 段），
+    // 从"push 到末尾（user 之后）"改成插在 user 之前，保证 user 始终是最后一条消息，避免模型注意力从本轮输入滑向上一轮。
     // v687.34：AI行为约束 — 深度3注入（倒数第3条消息前）
     if (_constraintDepth3.length > 0) {
       const d3Idx = apiMessages.length - 3;
@@ -2093,23 +2089,7 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
     } catch(e) { console.warn('[Chat] 扩展条目注入失败:', e); }
     } // isGameMode
 
-    // 手机操作日志：只读"最后一条 user 消息"的 phoneLogSnapshot（方案B）
-    // 这样新发送和重写最新一条都能拿到同一份快照，AI 不会反复看到历史轮的手机操作
-    try {
-      const _lastUserMsg = [...messages].reverse().find(m => m.role === 'user' && !m.hidden);
-      const _snapshot = _lastUserMsg?.phoneLogSnapshot;
-      if (_snapshot && _snapshot.length > 0) {
-        const _phoneLogContent = '【玩家手机操作记录｜OOC】\n以下是"{{user}}"本轮在自己手机里的操作，由系统旁白记录，不是角色对白，也不是任何一方的剧情发言：\n\n' +
-          _snapshot.map(a => `- {{user}} ${a}`).join('\n') +
-          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。\n⑤ 【禁止】你的回复中不要输出或模仿【玩家手机操作记录｜OOC】这个格式。它是系统自动注入的元信息，你只需阅读理解并自然融入剧情描写，绝对不要在你的输出中复制、仿写或引用此格式块。\n⑥ 【不要扩充】这些日志是用户实际做的事，不是剧情提示。用户做了什么就是什么，原样接受即可。不要扩写任何照片、论坛、好友圈等内容，只需要以旁白或角色的反应回应用户操作了手机这一事实。\n⑦ 【时间流逝】手机操作需要时间。请在下一次回复推动时间时，将手机操作所消耗的时间也计算在内（浏览、聊天、拍照等行为并非瞬间完成）。';
-        const insertIdx = apiMessages.length - 1; // 最后一条是当前 user 消息
-        if (insertIdx >= 0) {
-          apiMessages.splice(insertIdx, 0, { role: 'system', content: _phoneLogContent });
-        } else {
-          apiMessages.push({ role: 'system', content: _phoneLogContent });
-        }
-      }
-    } catch(_) {}
+    // 手机操作日志已挪到状态栏预填充之后执行（见下方），以保证"本轮玩家手机操作"紧贴本轮 user 输入。
 
     // 自制电影·上映/报奖事件提示词注入（常驻，直到 AI 输出结束标记被回写清掉 pending）
     // 临时 system 消息，只对当轮生效，不进消息历史（避免每轮重复堆积）
@@ -2270,7 +2250,9 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
     } catch(_) {}
 
     // v687.31：状态栏类信息合并注入到"最后 user 消息之前"
-    // 解决：状态栏写 14, AI 说 9 —— 系统段离用户输入太远，注意力衰减
+    // v726：从"单条 system"改成"user(权威值) + assistant(确认承诺)"预填充对——
+    //   解决 system 权威值被模型自身历史输出盖过的问题：数值放 user 嘴里说（服从度高），
+    //   承诺放 assistant 嘴里（一致性驱动让它后续真照做），且 user/assistant 交替不触发相邻同 role 报错。
     if (_recentStatusParts.length > 0) {
       const merged = '【当前状态（权威值，请优先使用此处数据，覆盖你之前对数值的任何记忆或推测）】\n\n' +
         _recentStatusParts.join('\n\n---\n\n');
@@ -2279,10 +2261,61 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
       for (let i = apiMessages.length - 1; i >= 0; i--) {
         if (apiMessages[i].role === 'user') { lastUserIdx = i; break; }
       }
+      const _statusPair = [
+        { role: 'user', content: merged },
+        { role: 'assistant', content: '好的，我已确认以上为当前的权威状态数值。本轮回复我会以这些数值为基准，据实更新 status 面板——未变化的字段原样保留，有变化的按剧情写新值。' }
+      ];
       if (lastUserIdx >= 0) {
-        apiMessages.splice(lastUserIdx, 0, { role: 'system', content: merged });
+        apiMessages.splice(lastUserIdx, 0, ..._statusPair);
       } else {
-        apiMessages.push({ role: 'system', content: merged });
+        apiMessages.push(..._statusPair);
+      }
+    }
+
+    // v726：手机操作日志挪到此处（状态栏预填充之后），以保证"本轮玩家手机操作"紧贴本轮 user 输入。
+    // 只读"最后一条 user 消息"的 phoneLogSnapshot（方案B），这样新发送和重写最新一条都能拿到同一份快照，AI 不会反复看到历史轮的手机操作。
+    try {
+      const _lastUserMsg = [...messages].reverse().find(m => m.role === 'user' && !m.hidden);
+      const _snapshot = _lastUserMsg?.phoneLogSnapshot;
+      if (_snapshot && _snapshot.length > 0) {
+        const _phoneLogContent = '【玩家手机操作记录｜OOC】\n以下是"{{user}}"本轮在自己手机里的操作，由系统旁白记录，不是角色对白，也不是任何一方的剧情发言：\n\n' +
+          _snapshot.map(a => `- {{user}} ${a}`).join('\n') +
+          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。\n⑤ 【禁止】你的回复中不要输出或模仿【玩家手机操作记录｜OOC】这个格式。它是系统自动注入的元信息，你只需阅读理解并自然融入剧情描写，绝对不要在你的输出中复制、仿写或引用此格式块。\n⑥ 【不要扩充】这些日志是用户实际做的事，不是剧情提示。用户做了什么就是什么，原样接受即可。不要扩写任何照片、论坛、好友圈等内容，只需要以旁白或角色的反应回应用户操作了手机这一事实。\n⑦ 【时间流逝】手机操作需要时间。请在下一次回复推动时间时，将手机操作所消耗的时间也计算在内（浏览、聊天、拍照等行为并非瞬间完成）。';
+        // 找最后一条 user 位置
+        let _phoneLastUserIdx = -1;
+        for (let i = apiMessages.length - 1; i >= 0; i--) {
+          if (apiMessages[i].role === 'user') { _phoneLastUserIdx = i; break; }
+        }
+        if (_phoneLastUserIdx >= 0) {
+          apiMessages.splice(_phoneLastUserIdx, 0, { role: 'system', content: _phoneLogContent });
+        } else {
+          apiMessages.push({ role: 'system', content: _phoneLogContent });
+        }
+      }
+    } catch(_) {}
+
+    // v726：AI行为约束（防回声/防八股）— 深度4注入
+    // 在所有背景注入（手机操作/事件/共读/状态栏等）之后统一处理，保证约束落在这些背景块之后、更靠近 user。
+    // 目标位置：倒数第4条（apiMessages.length - 4），让约束不顶格贴 user、不加剧 user 前一格拥堵，又离得够近能被通读到。
+    // 兜底：消息不足4条（新对话开头）时退化为"紧贴 user 之前"（倒数第一 system），保证第一条消息就有防转述定基调，绝不跳过。
+    if (_constraintDepth0.length > 0) {
+      // 找最后一条 user 的位置
+      let _cLastUserIdx = -1;
+      for (let i = apiMessages.length - 1; i >= 0; i--) {
+        if (apiMessages[i].role === 'user') { _cLastUserIdx = i; break; }
+      }
+      // 找第一条非 system 消息位置（system 大块之后），约束不能插到 system 大块里面
+      let _cFirstNonSys = 0;
+      while (_cFirstNonSys < apiMessages.length && apiMessages[_cFirstNonSys].role === 'system') _cFirstNonSys++;
+      // depth4 目标位置
+      let _cInsertIdx = apiMessages.length - 4;
+      // 越界（消息不足）→ 退化为紧贴 user 之前
+      if (_cInsertIdx < _cFirstNonSys) {
+        _cInsertIdx = (_cLastUserIdx >= 0) ? _cLastUserIdx : apiMessages.length;
+      }
+      // reverse 保证多条约束按原始顺序落位
+      for (const c of [..._constraintDepth0].reverse()) {
+        apiMessages.splice(_cInsertIdx, 0, { role: 'system', content: c });
       }
     }
 
@@ -7550,12 +7583,13 @@ async function applyLorebooksToWorldview() {
       const pad = n => String(n).padStart(2, '0');
       const tsStr = `${ts.getFullYear()}.${pad(ts.getMonth()+1)}.${pad(ts.getDate())} ${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
       modal.innerHTML = `
-        <button type="button" id="tsimg-lightbox-close" style="position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;z-index:1">×</button>
+        <button type="button" id="tsimg-lightbox-close" style="position:absolute;top:max(12px, env(safe-area-inset-top, 12px));right:max(12px, env(safe-area-inset-right, 12px));width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;z-index:1">×</button>
         <div style="flex:1;display:flex;align-items:center;justify-content:center;width:100%;overflow:auto">
-          <img src="${rec.dataUrl}" style="max-width:100%;max-height:100%;border-radius:8px">
+          <img class="tsimg-allow-save" src="${rec.dataUrl}" style="max-width:100%;max-height:100%;border-radius:8px;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;-webkit-user-drag:auto;user-drag:auto">
         </div>
         <div style="width:100%;max-width:600px;margin-top:12px;color:#ddd;font-size:12px;display:flex;flex-direction:column;gap:6px">
           <div style="opacity:0.6">${tsStr}</div>
+          <div style="opacity:0.5;font-size:11px">长按图片可保存到相册</div>
           <div style="line-height:1.6;max-height:120px;overflow-y:auto;padding:8px;background:rgba(255,255,255,0.06);border-radius:6px">${Utils.escapeHtml(rec.prompt || '(无描述)')}</div>
           <div style="display:flex;gap:8px;margin-top:6px">
             <button type="button" id="tsimg-lightbox-save" style="flex:1;padding:10px;border:none;border-radius:8px;background:var(--accent);color:#111;font-weight:600;cursor:pointer">保存到相册</button>

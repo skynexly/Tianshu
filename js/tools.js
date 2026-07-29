@@ -7,6 +7,10 @@ const Tools = (() => {
   // ===== 通用 helper =====
   const _scope = () => Character.getCurrentId();
   const _allMem = () => DB.getAll('memories');
+  // 参与者归一化：数组照旧，字符串按分隔符拆，其他一律空数组。防止字符串进 DB 后调 .join() 崩溃
+  const _normParts = (v) => Array.isArray(v)
+    ? v.map(s => String(s).trim()).filter(Boolean)
+    : (typeof v === 'string' ? v.split(/[,，、]/).map(s => s.trim()).filter(Boolean) : []);
   const NOTE_TAGS = ['喜欢','讨厌','期待','恐惧','愤怒','有趣','习惯','秘密','悲伤','迷茫','痛苦'];
   const OK = (data) => JSON.stringify(data);
   const ERR = (msg) => JSON.stringify({ error: msg });
@@ -650,6 +654,22 @@ priority:{ type:'string', enum:['important','normal'], description:'重要程度
         name:{ type:'string', description:'角色名（精确或模糊）' },
         limit:{ type:'number', description:'返回条数上限，默认5' }
       }, required:[] }
+    }},
+    // --- 手机信息查询（目前支持：小屋 App、衣橱 App） ---
+    { type:'function', function:{
+      name:'query_cottage',
+      description:'查询{{user}}手机「小屋」App 里的信息：住所（名字/地址/整体风格）、每个住所各房间里已布置的家具、家具仓库里买了还没摆的家具，以及{{user}}养的宠物。用于当剧情涉及{{user}}的家、房间陈设、家具或宠物时，据实引用而非编造。',
+      parameters:{ type:'object', properties:{
+        section:{ type:'string', enum:['all','houses','inventory','pets'], description:'要查的部分：all=全部（默认）、houses=住所与房间布置、inventory=家具仓库、pets=宠物' },
+        name:{ type:'string', description:'可选，按名字精确/模糊查某个住所或某只宠物' }
+      }, required:[] }
+    }},
+    { type:'function', function:{
+      name:'query_wardrobe',
+      description:'查询{{user}}手机「衣橱」App 里的信息：今日穿搭（当前穿在身上的各部位服装）、已保存的套装、衣橱仓库里买了存着的服装单品。用于剧情涉及{{user}}的穿着打扮时，据实引用而非编造。',
+      parameters:{ type:'object', properties:{
+        section:{ type:'string', enum:['all','outfit','suits','inventory'], description:'要查的部分：all=全部（默认）、outfit=今日穿搭、suits=已保存套装、inventory=衣橱仓库' }
+      }, required:[] }
     }}
   ];
 
@@ -698,12 +718,12 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
           (e.title||'').toLowerCase().includes(kw) ||
           (e.content||'').toLowerCase().includes(kw) ||
           (e.location||'').toLowerCase().includes(kw) ||
-          (e.participants||[]).join(' ').toLowerCase().includes(kw)
+          _normParts(e.participants).join(' ').toLowerCase().includes(kw)
         );
       }
       if (args.participant) {
         const p = args.participant.toLowerCase();
-        events = events.filter(e => (e.participants||[]).some(x => x.toLowerCase().includes(p)));
+        events = events.filter(e => _normParts(e.participants).some(x => x.toLowerCase().includes(p)));
       }
       events.sort((a,b) => b.timestamp - a.timestamp);
       events = events.slice(0, args.limit || 5);
@@ -711,7 +731,7 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       return OK({ result: events.map(e => ({
         id:e.id, title:e.title, time:e.time||'', location:e.location||'',
         cause:e.cause||'', process:e.process||'', result:e.result||'',
-        participants:e.participants||[]
+        participants:_normParts(e.participants)
       })) });
     },
     async add_event(args) {
@@ -719,7 +739,7 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       const ev = await Memory.add('event', {
         title:args.title, time:args.time||'', location:args.location||'',
         cause:args.cause||'', process:args.process||'', result:args.result||'',
-        participants:args.participants||[], scope:_scope()
+        participants:_normParts(args.participants), scope:_scope()
       });
       return ev ? OK({ success:true, id:ev.id, message:'事件已记录。' }) : ERR('记录失败');
     },
@@ -733,7 +753,7 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       if (args.cause) m.cause = args.cause;
       if (args.process) m.process = args.process;
       if (args.result) m.result = args.result;
-      if (args.participants) m.participants = args.participants;
+      if (args.participants !== undefined) m.participants = _normParts(args.participants);
       m.content = [m.cause, m.process, m.result].filter(Boolean).join('\n');
       m.timestamp = Utils.timestamp();
       await DB.put('memories', m);
@@ -774,6 +794,101 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       if (!args.id) return ERR('缺少 id');
       await DB.del('memories', args.id);
       return OK({ success:true, message:'关系已删除。' });
+    },
+
+    // --- 手机信息查询：小屋 / 衣橱（只读） ---
+    async query_cottage(args) {
+      if (typeof Phone === 'undefined' || !Phone._getPhoneData) return ERR('手机数据不可用');
+      let pd;
+      try { pd = await Phone._getPhoneData(); } catch(_) { return ERR('读取手机数据失败'); }
+      if (!pd) return ERR('读取手机数据失败');
+      const section = (args && args.section) || 'all';
+      const nameKw = args && String(args.name || '').trim().toLowerCase();
+      const out = {};
+      // 住所与房间布置
+      if (section === 'all' || section === 'houses') {
+        let houses = Array.isArray(pd.houses) ? pd.houses : [];
+        if (nameKw) houses = houses.filter(h => (h.name || '').toLowerCase().includes(nameKw) || (h.address || '').toLowerCase().includes(nameKw));
+        out.houses = houses.map(h => ({
+          name: h.name || '未命名住所',
+          address: h.address || '',
+          styleDesc: h.styleDesc || '',
+          isCurrent: !!h.isCurrent,
+          rooms: (h.rooms || []).map(r => ({
+            name: r.name || '未命名房间',
+            floor: r.floor ?? 1,
+            items: (r.items || []).map(it => ({
+              name: it.name || '',
+              desc: it.desc || '',
+              position: it.position || ''
+            }))
+          }))
+        }));
+        if (!out.houses.length) out.housesNote = nameKw ? '没有匹配到住所。' : '还没有任何住所。';
+      }
+      // 家具仓库（买了还没摆）
+      if (section === 'all' || section === 'inventory') {
+        const inv = Array.isArray(pd.furnitureInventory) ? pd.furnitureInventory : [];
+        out.furnitureInventory = inv.map(f => ({ name: f.name || '', tag: f.tag || '', desc: f.desc || '', qty: f.qty || 1 }));
+        if (!out.furnitureInventory.length) out.furnitureInventoryNote = '家具仓库是空的。';
+      }
+      // 宠物
+      if (section === 'all' || section === 'pets') {
+        let pets = Array.isArray(pd.pets) ? pd.pets : [];
+        if (nameKw) pets = pets.filter(p => (p.name || '').toLowerCase().includes(nameKw));
+        out.pets = pets.map(p => ({
+          name: p.name || '未命名',
+          species: p.species || '',
+          gender: p.gender || '',
+          age: p.age ?? '',
+          appearance: p.appearance || '',
+          setting: p.setting || '',
+          customFields: (p.customFields || []).map(c => ({ label: c.label || '', value: c.value || '' }))
+        }));
+        if (!out.pets.length) out.petsNote = nameKw ? '没有匹配到宠物。' : '还没有养宠物。';
+      }
+      return OK({ result: out });
+    },
+    async query_wardrobe(args) {
+      if (typeof Phone === 'undefined' || !Phone._getPhoneData) return ERR('手机数据不可用');
+      let pd;
+      try { pd = await Phone._getPhoneData(); } catch(_) { return ERR('读取手机数据失败'); }
+      if (!pd) return ERR('读取手机数据失败');
+      const section = (args && args.section) || 'all';
+      const out = {};
+      const _partLabels = { top:'上装', bottom:'下装', onesuit:'连体', outer:'外套', shoes:'鞋', hat:'帽子', accessory:'配饰' };
+      // 今日穿搭
+      if (section === 'all' || section === 'outfit') {
+        const of = pd.wardrobeOutfit || {};
+        const worn = {};
+        Object.keys(_partLabels).forEach(k => {
+          const arr = Array.isArray(of[k]) ? of[k] : [];
+          if (arr.length) worn[_partLabels[k]] = arr.map(x => ({ name: x.name || x || '', desc: (x && x.desc) || '' }));
+        });
+        out.todayOutfit = worn;
+        if (!Object.keys(worn).length) out.todayOutfitNote = '今天还没有穿搭记录。';
+      }
+      // 已保存套装
+      if (section === 'all' || section === 'suits') {
+        const suits = Array.isArray(pd.wardrobeSuits) ? pd.wardrobeSuits : [];
+        out.suits = suits.map(s => {
+          const parts = {};
+          const o = s.outfit || {};
+          Object.keys(_partLabels).forEach(k => {
+            const arr = Array.isArray(o[k]) ? o[k] : [];
+            if (arr.length) parts[_partLabels[k]] = arr.map(x => (x && x.name) || x || '');
+          });
+          return { name: s.name || '未命名套装', parts };
+        });
+        if (!out.suits.length) out.suitsNote = '还没有保存过套装。';
+      }
+      // 衣橱仓库
+      if (section === 'all' || section === 'inventory') {
+        const inv = Array.isArray(pd.wardrobeInventory) ? pd.wardrobeInventory : [];
+        out.wardrobeInventory = inv.map(w => ({ name: w.name || '', tag: w.tag || '', desc: w.desc || '', qty: w.qty || 1 }));
+        if (!out.wardrobeInventory.length) out.wardrobeInventoryNote = '衣橱仓库是空的。';
+      }
+      return OK({ result: out });
     },
 
     // --- 后台 CRUD ---

@@ -135,6 +135,42 @@ const injectHead = `<script data-inject="standalone-fetch-shim">
 // 插到 <head> 之后、第一个 <style>/<script> 之前，确保 shim 最早生效
 html = html.replace(/<head>/i, '<head>\n' + injectHead);
 
+// ============ 3.4 老存档兜底：DB 里存的是相对路径（img/...）时，file:// 下会裂 ============
+// 老用户存档里 iconImage 等字段存的是相对路径（如 img/worldviews/heartsim.png），
+// 内置模板改 base64 救不了他们（DB 旧值改不动）。这里注入运行时兜底：
+//   1) 把 KEEP_IMAGES 建成 { 相对路径 -> base64 } 映射表
+//   2) 全局监听 <img> 加载失败：src 命中映射表就换 base64，否则换透明占位（不裂）
+const imgMap = {};
+for (const rel of KEEP_IMAGES) {
+  if (exists(rel)) {
+    try { imgMap[rel] = fileToDataURI(rel); } catch(_) {}
+  }
+}
+const imgFallbackShim = `<script data-inject="standalone-img-fallback">
+(function(){
+  var MAP = ${JSON.stringify(imgMap)};
+  var BLANK = ${JSON.stringify(BLANK_PNG)};
+  function norm(u){ try { return String(u||'').split('?')[0].replace(/^\\.?\\//,''); } catch(e){ return ''; } }
+  function fix(img){
+    try {
+      var key = norm(img.getAttribute('src'));
+      if (!key) return;
+      // 已经是 data:/http(s) 的不管
+      var raw = img.getAttribute('src') || '';
+      if (/^(data:|https?:)/i.test(raw)) return;
+      if (MAP[key]) { img.src = MAP[key]; }
+      else if (/^img\\//i.test(key) || /^src\\//i.test(key)) { img.src = BLANK; }
+    } catch(e){}
+  }
+  // 捕获阶段监听全局 img error（error 不冒泡，必须用 capture）
+  document.addEventListener('error', function(e){
+    var t = e && e.target;
+    if (t && t.tagName === 'IMG') fix(t);
+  }, true);
+})();
+</script>`;
+html = html.replace(/<head>/i, '<head>\n' + imgFallbackShim);
+
 // ============ 3.5 内联 img/ 之外的关键图片（开屏动画 / 登录 logo） ============
 // splash.gif 在 src/ 下、logo.png 在根目录，都不匹配 rewriteImgRefs 的 img/ 规则，
 // 内联脚本前它们既没被剥离也没被转 base64，file:// 下会死链裂图。这里精确替换带引号的引用。

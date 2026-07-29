@@ -123,6 +123,13 @@ const DataMgr = (() => {
     _emit('statusBarCustomThemes', localStorage.getItem('statusBarCustomThemes') || null);
     _emit('tianshuBubbleCss', localStorage.getItem('tianshu_bubble_css') || null);
     _emit('tianshuBubbleCssSlots', localStorage.getItem('tianshu_bubble_css_slots') || null);
+    // v726：手机全局皮肤（手机图标 / 悬浮球图标 / 我的头像框，均含 base64）——
+    // 之前漏导致换设备/恢复后这三样丢失。full 原样带；lite/text 剥掉内嵌大图但保留结构。
+    let phoneSkin = localStorage.getItem('tianshu_phone_global_skin') || null;
+    if (mode !== 'full' && phoneSkin) {
+      try { phoneSkin = JSON.stringify(_stripDataUrls(JSON.parse(phoneSkin), keepAvatar)); } catch(_) {}
+    }
+    _emit('phoneSkin', phoneSkin);
     parts.push('}');
 
     return parts.join('');
@@ -252,6 +259,8 @@ const DataMgr = (() => {
     if (data.statusBarCustomThemes) localStorage.setItem('statusBarCustomThemes', data.statusBarCustomThemes);
     if (data.tianshuBubbleCss) localStorage.setItem('tianshu_bubble_css', data.tianshuBubbleCss);
     if (data.tianshuBubbleCssSlots) localStorage.setItem('tianshu_bubble_css_slots', data.tianshuBubbleCssSlots);
+    // v726：手机全局皮肤（手机图标 / 悬浮球图标 / 我的头像框）恢复
+    if (data.phoneSkin) localStorage.setItem('tianshu_phone_global_skin', data.phoneSkin);
 
     // 落盘屏障：确保上面所有写事务真正 commit 到磁盘后再返回。
     // 否则调用方 location.reload() 会打断尚未提交的事务，导致靠后写入（如功能模型
@@ -348,8 +357,24 @@ const DataMgr = (() => {
       } else {
         text = await Utils.fileToText(file);
       }
-      const data = JSON.parse(text);
-      if (!data.version) throw new Error('无效的存档文件');
+      // v726：解析前先判空/判长，parse 失败给出可读原因，而不是笼统"解析不成功"
+      if (!text || !text.trim()) {
+        throw new Error('存档文件是空的。可能在传输（QQ/微信/网盘）过程中损坏或没传完，请重新获取原始存档文件再试。');
+      }
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (pe) {
+        const size = (file && file.size != null) ? file.size : text.length;
+        const head100 = String(text).slice(0, 60).replace(/\s+/g, ' ');
+        throw new Error(
+          '存档内容无法解析（不是完整的 JSON）。最常见原因是文件在传输过程中被截断或转码——' +
+          '如果这份存档是通过聊天软件/网盘转发的，请让对方直接发原始文件，或重新导出一份再试。\n\n' +
+          '（技术信息：文件约 ' + size + ' 字节，开头为「' + head100 + '…」，解析错误：' + (pe.message || pe) + '）'
+        );
+      }
+      if (!data || typeof data !== 'object') throw new Error('存档格式不对（顶层不是对象），文件可能已损坏，请重新获取原始存档。');
+      if (!data.version) throw new Error('这不是有效的 skynex 存档文件（缺少版本标识）。请确认选的是本应用导出的存档，而不是别的文件。');
 
       const isTextOnly = !!data.textOnly;
       const isLite = !!data.lite;

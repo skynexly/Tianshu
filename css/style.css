@@ -84,6 +84,7 @@ input::-webkit-input-placeholder, textarea::-webkit-input-placeholder {
   opacity: 0.7;
 }
 img, a { -webkit-touch-callout: none; -webkit-user-drag: none; pointer-events: auto; }
+img.tsimg-allow-save { -webkit-touch-callout: default !important; -webkit-user-drag: auto !important; user-drag: auto !important; -webkit-user-select: auto !important; user-select: auto !important; }
 
 html, body {
 height: 100%;
@@ -1813,6 +1814,7 @@ input[type="range"] {
   display: flex;
   gap: 8px;
   margin-top: 8px;
+  flex-wrap: wrap;
 }
 .card .card-actions button {
   font-size: 12px;
@@ -1822,6 +1824,7 @@ input[type="range"] {
   padding: 2px 8px;
   border-radius: 4px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 /* ===== 设置卡片 ===== */
