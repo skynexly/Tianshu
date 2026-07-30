@@ -1156,13 +1156,22 @@ if (typeof Stickers !== 'undefined' && typeof Stickers.exitManageMode === 'funct
   // ===== 全局聊天搜索 =====
 
   let _gsTimer = null;
+  let _gsExpanded = new Set();   // 已展开全部命中的对话 id
+  let _gsLastQuery = '';         // 当前搜索词（展开时复用，避免重新读输入框）
+  let _gsScopeConvId = null;     // 非空=只搜这个对话（单对话搜索模式）
+  const GS_PREVIEW_LIMIT = 5;    // 默认每个对话显示几条
 
-  function openGlobalSearch() {
+  // scopeConvId 传值则进入「只搜当前对话」模式；不传为全局搜索
+  function openGlobalSearch(scopeConvId) {
     const page = document.getElementById('global-search-page');
     const input = document.getElementById('global-search-input');
     input.value = '';
+    _gsExpanded.clear();
+    _gsLastQuery = '';
+    _gsScopeConvId = scopeConvId || null;
+    input.placeholder = _gsScopeConvId ? '搜索本对话...' : '搜索所有聊天记录...';
     document.getElementById('global-search-results').innerHTML =
-      '<div class="gs-empty">输入关键词搜索所有对话</div>';
+      `<div class="gs-empty">${_gsScopeConvId ? '输入关键词搜索当前对话' : '输入关键词搜索所有对话'}</div>`;
     // 关闭侧边栏
     const sidebar = document.getElementById('sidebar');
     if (sidebar && !sidebar.classList.contains('hidden')) toggleSidebar();
@@ -1193,13 +1202,17 @@ if (typeof Stickers !== 'undefined' && typeof Stickers.exitManageMode === 'funct
   async function _globalSearch(query) {
     const container = document.getElementById('global-search-results');
     const q = query.trim().toLowerCase();
+    // 搜索词变化时重置展开状态（换了词，之前展开哪些组已无意义）
+    if (q !== _gsLastQuery) { _gsExpanded.clear(); _gsLastQuery = q; }
     if (!q) {
-      container.innerHTML = '<div class="gs-empty">输入关键词搜索所有对话</div>';
+      container.innerHTML = `<div class="gs-empty">${_gsScopeConvId ? '输入关键词搜索当前对话' : '输入关键词搜索所有对话'}</div>`;
       return;
     }
 
-    // 搜索所有消息
-    const allMsgs = await DB.getAll('messages');
+    // 搜索消息：单对话模式只取该对话，否则全库
+    const allMsgs = _gsScopeConvId
+      ? await DB.getAllByIndex('messages', 'conversationId', _gsScopeConvId)
+      : await DB.getAll('messages');
     const hits = allMsgs.filter(m =>
       m.content && m.content.toLowerCase().includes(q) && !m.hidden
     );
@@ -1228,17 +1241,22 @@ if (typeof Stickers !== 'undefined' && typeof Stickers.exitManageMode === 'funct
     for (const [cid, msgs] of Object.entries(groups)) {
       const convName = nameMap[cid] || '未命名对话';
       html += `<div class="gs-group">`;
-      html += `<div class="gs-group-title">${Utils.escapeHtml(convName)} <span class="gs-count">${msgs.length}条匹配</span></div>`;
+      // 单对话模式下不必重复对话名，直接报命中数
+      html += _gsScopeConvId
+        ? `<div class="gs-group-title"><span class="gs-count">共 ${msgs.length} 条匹配</span></div>`
+        : `<div class="gs-group-title">${Utils.escapeHtml(convName)} <span class="gs-count">${msgs.length}条匹配</span></div>`;
 
-      // 每个对话最多显示5条预览
-      const preview = msgs.sort((a, b) => a.timestamp - b.timestamp).slice(0, 5);
+      // 倒序（最近的在前）：用户找的多是刚聊过的内容
+      const sorted = msgs.slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      const isExpanded = _gsExpanded.has(cid);
+      const preview = isExpanded ? sorted : sorted.slice(0, GS_PREVIEW_LIMIT);
       preview.forEach(m => {
         const role = m.role === 'user' ? '你' : 'AI';
         const text = m.content || '';
-        // 截取关键词周围的片段
+        // 截取关键词周围的片段（窗口比原来宽，便于辨认上下文）
         const idx = text.toLowerCase().indexOf(q);
-        const start = Math.max(0, idx - 30);
-        const end = Math.min(text.length, idx + q.length + 60);
+        const start = Math.max(0, idx - 40);
+        const end = Math.min(text.length, idx + q.length + 80);
         let snippet = (start > 0 ? '...' : '') + text.slice(start, end) + (end < text.length ? '...' : '');
         // 高亮关键词
         snippet = Utils.escapeHtml(snippet).replace(
@@ -1252,21 +1270,34 @@ if (typeof Stickers !== 'undefined' && typeof Stickers.exitManageMode === 'funct
         html += `</div>`;
       });
 
-      if (msgs.length > 5) {
-        html += `<div style="font-size:11px;color:var(--text-secondary);padding:4px 12px">还有 ${msgs.length - 5} 条匹配...</div>`;
+      // 超出预览条数：给个可点击的展开/收起按钮（原来只是死文字，第6条起点不到）
+      if (msgs.length > GS_PREVIEW_LIMIT) {
+        html += isExpanded
+          ? `<button type="button" class="gs-more" onclick="UI._gsToggleExpand('${cid}')">收起</button>`
+          : `<button type="button" class="gs-more" onclick="UI._gsToggleExpand('${cid}')">展开剩余 ${msgs.length - GS_PREVIEW_LIMIT} 条匹配</button>`;
       }
       html += `</div>`;
     }
     container.innerHTML = html;
   }
 
+  // 展开/收起某个对话的全部命中，然后按当前搜索词重渲染
+  function _gsToggleExpand(cid) {
+    if (_gsExpanded.has(cid)) _gsExpanded.delete(cid);
+    else _gsExpanded.add(cid);
+    const input = document.getElementById('global-search-input');
+    _globalSearch(input ? input.value : _gsLastQuery);
+  }
+
   async function _jumpToMessage(convId, msgId) {
     // 先关闭搜索
     await closeGlobalSearch();
-    // 切换到目标对话
-    await Conversations.switchTo(convId);
-    // 等待渲染完成
-    await new Promise(r => setTimeout(r, 100));
+    // 已经在目标对话里（单对话搜索）就不用切，避免多余重载
+    if (Conversations.getCurrent() !== convId) {
+      await Conversations.switchTo(convId);
+      // 等待渲染完成
+      await new Promise(r => setTimeout(r, 100));
+    }
     // 定位到具体消息
     const msgEl = document.querySelector(`.chat-msg[data-id="${msgId}"]`);
     if (msgEl) {
@@ -1335,7 +1366,7 @@ function showToast(text, duration = 4500) {
     switchDebugTab, showDebugLog,
     showSimpleInput, closeSimpleInput, confirmSimpleInput, showNameDescInput,
     showConfirm, showAlert, showCopyText, showToast,
-    openGlobalSearch, closeGlobalSearch, _globalSearchDebounced, _jumpToMessage,
+    openGlobalSearch, closeGlobalSearch, _globalSearchDebounced, _jumpToMessage, _gsToggleExpand,
 setMaskEditFrom, toggleLockBackGesture, initLockBackGestureToggle,
       toggleFabVisible, openFabSettings
     };

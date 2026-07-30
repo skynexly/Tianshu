@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=178">
+<link rel="stylesheet" href="css/style.css?v=179">
 <link rel="stylesheet" href="css/phone.css?v1=419">
 <link rel="stylesheet" href="css/phone-fudge.css?v=65">
 <link rel="stylesheet" href="css/markdown.css">
@@ -158,6 +158,7 @@
         <button class="btn-icon" onclick="UI.toggleTopMenu()" style="font-size:20px;padding:0 8px">⋮</button>
         <!-- 下拉菜单 -->
         <div id="top-dropdown-menu" class="hidden" style="position:absolute;top:100%;right:0;margin-top:8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:4px 0;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:100;min-width:170px;white-space:nowrap;display:flex;flex-direction:column;">
+          <button onclick="UI.openGlobalSearch(Conversations.getCurrent()); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M10 21h7a2 2 0 0 0 2-2V9.4a1 1 0 0 0-.3-.7l-5.4-5.4a1 1 0 0 0-.7-.3H7a2 2 0 0 0-2 2v4"/><circle cx="6" cy="14" r="3"/><path d="m9 17 3 3"/></svg> 搜索本对话</button>
           <button onclick="Chat.showContext(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg> 上下文&日志</button>
           <button onclick="UI.toggleChatSummary(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg> 剧情总结</button>
           <button onclick="Phone.showNpcNotesPanel(); UI.toggleTopMenu()" style="display:flex;align-items:center;gap:8px;padding:12px 16px;text-align:left;background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg> 角色记事本</button>
@@ -2718,6 +2719,10 @@
             <p style="font-size:12px;color:var(--text-secondary);margin:0">总结后被移出窗口的聊天记录原文。</p>
           </div>
         </div>
+        <div style="position:relative;margin-bottom:12px">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-secondary);pointer-events:none"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+          <input type="text" id="archive-search-input" placeholder="搜索已归档的内容..." oninput="Summary._archiveSearchDebounced(this.value)" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;color:var(--text);padding:9px 16px 9px 36px;font-size:13px;box-sizing:border-box;outline:none">
+        </div>
         <div id="modal-archive-list"></div>
       </div>
     </section>
@@ -2855,10 +2860,28 @@
             </div>
           </div>
 
+          <!-- 故障急救 -->
+          <div class="settings-card">
+            <div class="settings-card-item" onclick="UI.switchSettingsTab('st-rescue');Rescue.render()">
+              <span>消息急救</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0;margin-left:auto;color:var(--text-secondary)"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+          </div>
+
           </div>
 
           <!-- Tab内容区域 -->
         <div id="settings-content-area" style="display:none;margin-top:16px">
+          <!-- Tab: 消息急救 -->
+          <div id="st-rescue" class="settings-tab-content" style="display:none">
+            <h3 style="color:var(--accent);font-size:14px;margin:0 0 8px">消息急救</h3>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:12px">
+              某条消息内容过长时，打开对话会卡死。这里按长度列出消息，只显示字数和开头片段（不渲染正文，所以本页不会卡）。<br>
+              如果打开就崩、连设置都进不来，在网址末尾加 <code style="background:var(--bg-tertiary);padding:1px 4px;border-radius:3px">?safe=1</code> 重新打开，即可跳过自动进入对话。
+            </div>
+            <div id="rescue-body"></div>
+          </div>
+
           <!-- Tab: 模型与参数 -->
           <div id="st-api" class="settings-tab-content" style="display:none">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -4554,9 +4577,10 @@ const GameLog = (() => {
 <script src="js/single_mode.js?v=8"></script>
 <script src="js/character.js?v=20"></script>
 <script src="js/prompts.js?v=16"></script>
-<script src="js/conversations.js?v=21"></script>
-<script src="js/summary.js?v=9"></script>
-<script src="js/chat.js?v=159"></script>
+<script src="js/conversations.js?v=22"></script>
+<script src="js/summary.js?v=10"></script>
+<script src="js/rescue.js?v=1"></script>
+<script src="js/chat.js?v=161"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
@@ -4575,13 +4599,13 @@ const GameLog = (() => {
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
 <script src="js/app_icons.js?v=7"></script>
-<script src="js/phone.js?v1=1365"></script>
+<script src="js/phone.js?v1=1367"></script>
     <script src="js/heartsim_intro.js?v=1"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
 <script src="js/heartsim_epilogue.js"></script>
-<script src="js/ui.js?v=21"></script>
+<script src="js/ui.js?v=23"></script>
 <script src="js/data-mgr.js?v=26"></script>
 <script src="js/supabase-backup.js?v=4"></script>
 <script src="js/github-backup.js?v=4"></script>
@@ -4596,7 +4620,7 @@ const GameLog = (() => {
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
 <script src="js/auth.js?v=26"></script>
-<script src="js/app.js?v=177"></script>
+<script src="js/app.js?v=178"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
@@ -4921,6 +4945,11 @@ document.addEventListener('click', (e) => {
     <button type="button" onclick="Settings.batchDeleteRegex()" title="删除" style="padding:8px 14px;font-size:13px;background:var(--danger);color:#fff;border:none;border-radius:6px;cursor:pointer">删除</button>
   </div>
 </div>
+
+<!-- 一键回到窗口顶部按钮 -->
+<button id="scroll-to-top-btn" onclick="Chat.scrollToTop()" class="hidden" style="position:fixed;bottom:196px;right:16px;width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.1);color:#fff;cursor:pointer;z-index:50;display:flex;align-items:center;justify-content:center;transition:opacity 0.2s;opacity:0.7" title="回到窗口最早一条">
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+</button>
 
 <!-- 一键回到底部按钮 -->
 <button id="scroll-to-bottom-btn" onclick="Chat.scrollToBottom()" class="hidden" style="position:fixed;bottom:148px;right:16px;width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.1);color:#fff;cursor:pointer;z-index:50;display:flex;align-items:center;justify-content:center;transition:opacity 0.2s;opacity:0.7">

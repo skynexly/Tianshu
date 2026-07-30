@@ -2732,6 +2732,21 @@ input[type="range"] {
   font-size: 13px;
   padding: 40px 0;
 }
+/* 展开/收起剩余匹配 */
+.gs-more {
+  display: block;
+  width: 100%;
+  margin: 4px 0 2px;
+  padding: 7px 12px;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+}
+.gs-more:active { background: var(--bg-tertiary); }
 .chat-msg.search-flash {
   animation: searchFlash 1.5s ease;
 }

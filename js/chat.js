@@ -4903,18 +4903,37 @@ if (parsed.header.region) html += `<span class="loc"><svg xmlns="http://www.w3.o
     _followBottomDuringStream = true;
   }
 
+  // 回到当前窗口最早一条消息。
+  // 注意：这里是"窗口顶部"而非整段对话开头——被总结归档的更早消息已不在 messages 里，
+  // 要回看那些内容得去归档记录（可在归档面板里搜索）。
+  function scrollToTop() {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    // 用户主动上翻：停止流式跟随，避免生成中被反复拽回底部
+    _followBottomDuringStream = false;
+    container.scrollTo({ top: 0, behavior: 'smooth' });
+    updateScrollBtn();
+  }
+
   function updateScrollBtn() {
     const container = document.getElementById('chat-messages');
     const btn = document.getElementById('scroll-to-bottom-btn');
-    if (!container || !btn) return;
+    const topBtn = document.getElementById('scroll-to-top-btn');
+    if (!container) return;
     // 只在聊天面板可见时显示
     const chatPanel = document.querySelector('#panel-chat.active');
-    if (!chatPanel) { btn.classList.add('hidden'); return; }
+    if (!chatPanel) {
+      btn?.classList.add('hidden');
+      topBtn?.classList.add('hidden');
+      return;
+    }
     const isAtBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 100;
-    if (isAtBottom) {
-      btn.classList.add('hidden');
-    } else {
-      btn.classList.remove('hidden');
+    if (btn) btn.classList.toggle('hidden', isAtBottom);
+    // 回顶部：已经在顶部附近，或内容根本没长到可滚，就不显示
+    if (topBtn) {
+      const canScroll = (container.scrollHeight - container.clientHeight) > 200;
+      const isAtTop = container.scrollTop < 100;
+      topBtn.classList.toggle('hidden', !canScroll || isAtTop);
     }
   }
 
@@ -8447,7 +8466,7 @@ async function applyLorebooksToWorldview() {
     multiExtractMemory, multiExportImage, isMultiSelectMode,
     setWorldVoiceAttach, hasPendingWorldVoice: () => !!pendingWorldVoice, collectMessage,
     searchMessages, toggleSearchBar, renderQuickSwitches, renderAll, clearRenderCache,
-    scrollToBottom, updateScrollBtn,
+    scrollToBottom, scrollToTop, updateScrollBtn,
     _toggleThink,
     generateSuggestions, _pickSuggestion, refreshSuggestions, _cancelSuggestConfirm, _okSuggestConfirm,
     openConvSettingsModal, saveConvSettings, closeConvSettingsModal, _switchCsTab,

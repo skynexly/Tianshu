@@ -615,6 +615,92 @@ ${dialogue}
    }
   }
 
+  // ===== 归档内容搜索 =====
+  // 归档消息已被移出聊天窗口，无法跳回主界面，命中后改为打开归档查看弹窗并定位。
+  // 搜的是 arch.messages 原文（含状态栏等结构化块），查看弹窗渲染时会剥离这些块，
+  // 因此个别命中词在气泡里可能不可见——首要目的是定位到那段剧情所在的消息。
+  let _asTimer = null;
+  let _asExpanded = new Set();   // 已展开全部命中的归档 id
+  let _asLastQuery = '';
+  const AS_PREVIEW_LIMIT = 5;
+
+  function _archiveSearchDebounced(query) {
+    clearTimeout(_asTimer);
+    _asTimer = setTimeout(() => _archiveSearch(query), 250);
+  }
+
+  async function _archiveSearch(query) {
+    const el = document.getElementById('modal-archive-list');
+    if (!el) return;
+    const cid = Conversations.getCurrent();
+    const q = (query || '').trim().toLowerCase();
+    if (q !== _asLastQuery) { _asExpanded.clear(); _asLastQuery = q; }
+    // 清空搜索词：回到常规归档卡片列表
+    if (!q) { await renderArchiveList(cid, 'modal-archive-list'); return; }
+
+    const archives = await getArchives(cid);
+    if (!archives.length) {
+      el.innerHTML = '<p style="color:var(--text-secondary);font-size:13px;padding:8px 0">暂无归档记录</p>';
+      return;
+    }
+
+    // 逐条归档、逐条消息匹配，记下消息在归档内的下标用于定位
+    const groups = [];
+    let totalHits = 0;
+    for (const a of archives) {
+      const hits = [];
+      (a.messages || []).forEach((m, idx) => {
+        const text = m.content || '';
+        if (text.toLowerCase().includes(q)) hits.push({ m, idx });
+      });
+      if (hits.length) { groups.push({ arch: a, hits }); totalHits += hits.length; }
+    }
+
+    if (!totalHits) {
+      el.innerHTML = '<div class="gs-empty">没有在归档记录里找到匹配的内容</div>';
+      return;
+    }
+
+    const escRe = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let html = `<div style="font-size:12px;color:var(--text-secondary);padding:0 0 10px">共 ${totalHits} 条匹配（${groups.length} 份归档）</div>`;
+    // 归档按时间倒序（最近归档的在前）
+    groups.sort((a, b) => (b.arch.archivedAt || 0) - (a.arch.archivedAt || 0));
+    for (const g of groups) {
+      const aid = g.arch.id;
+      const isExpanded = _asExpanded.has(aid);
+      const shown = isExpanded ? g.hits : g.hits.slice(0, AS_PREVIEW_LIMIT);
+      html += `<div class="gs-group">`;
+      html += `<div class="gs-group-title">${new Date(g.arch.archivedAt).toLocaleString()} <span class="gs-count">${g.hits.length}条匹配</span></div>`;
+      for (const h of shown) {
+        const role = h.m.role === 'user' ? '你' : (h.m.role === 'assistant' ? 'AI' : '系统');
+        const text = h.m.content || '';
+        const pos = text.toLowerCase().indexOf(q);
+        const start = Math.max(0, pos - 40);
+        const end = Math.min(text.length, pos + q.length + 80);
+        let snippet = (start > 0 ? '...' : '') + text.slice(start, end) + (end < text.length ? '...' : '');
+        snippet = Utils.escapeHtml(snippet).replace(new RegExp(escRe, 'gi'), s => `<mark>${s}</mark>`);
+        html += `<div class="gs-item" onclick="Summary._viewArchive('${aid}', ${h.idx})">`;
+        html += `<div class="gs-role">${role}</div>`;
+        html += `<div class="gs-preview">${snippet}</div>`;
+        html += `</div>`;
+      }
+      if (g.hits.length > AS_PREVIEW_LIMIT) {
+        html += isExpanded
+          ? `<button type="button" class="gs-more" onclick="Summary._asToggleExpand('${aid}')">收起</button>`
+          : `<button type="button" class="gs-more" onclick="Summary._asToggleExpand('${aid}')">展开剩余 ${g.hits.length - AS_PREVIEW_LIMIT} 条匹配</button>`;
+      }
+      html += `</div>`;
+    }
+    el.innerHTML = html;
+  }
+
+  function _asToggleExpand(archiveId) {
+    if (_asExpanded.has(archiveId)) _asExpanded.delete(archiveId);
+    else _asExpanded.add(archiveId);
+    const input = document.getElementById('archive-search-input');
+    _archiveSearch(input ? input.value : _asLastQuery);
+  }
+
   function _toggleSection(headerEl) {
     // headerEl 是被点击的 header 元素本身
     const content = headerEl.nextElementSibling;
@@ -665,8 +751,12 @@ ${dialogue}
     await DB.del('archives', archiveId);
     GameLog.log('info', `[Archive] 删除归档 ${archiveId}`);
     UI.showToast('已删除归档', 1800);
-    // 刷新列表
-    await renderArchiveList(conversationId, containerId);
+    // 刷新列表：搜索态下保持搜索结果，否则回常规列表
+    if (_asLastQuery && document.getElementById('archive-search-input')) {
+      await _archiveSearch(_asLastQuery);
+    } else {
+      await renderArchiveList(conversationId, containerId);
+    }
   }
 
   // ===== 编辑功能 =====
@@ -924,6 +1014,11 @@ ${dialogue}
 
   function showArchiveListModal() {
     const cid = Conversations.getCurrent();
+    // 每次进面板重置搜索状态，避免上次的关键词残留导致列表看着"少了"
+    _asExpanded.clear();
+    _asLastQuery = '';
+    const si = document.getElementById('archive-search-input');
+    if (si) si.value = '';
     renderArchiveList(cid, 'modal-archive-list');
     UI.showPanel('archive-list', 'forward');
   }
@@ -934,7 +1029,7 @@ ${dialogue}
 
   // ===== 归档查看 =====
 
-  async function _viewArchive(archiveId) {
+  async function _viewArchive(archiveId, focusIdx) {
     const all = await DB.getAll('archives');
     const arch = all.find(a => a.id === archiveId);
     if (!arch) return;
@@ -945,7 +1040,7 @@ ${dialogue}
     //   ① 用主聊天同款 .chat-msg 气泡，user 靠右 / assistant 靠左，视觉和当时聊天一致。
     //   ② AI 消息过一遍 Utils.parseAIOutput 取 body，剥掉 status/relation/task/chat 等结构化块，
     //      这些块对人回看剧情没意义，只是噪音。剥离失败则回退显示原文，不至于空白。
-    container.innerHTML = arch.messages.map(m => {
+    container.innerHTML = arch.messages.map((m, _i) => {
       const isUser = m.role === 'user';
       const isSystem = m.role !== 'user' && m.role !== 'assistant';
       let text = m.content || '';
@@ -957,9 +1052,9 @@ ${dialogue}
       }
       // 系统消息：居中灰条，不做气泡
       if (isSystem) {
-        return `<div style="text-align:center;font-size:11px;color:var(--text-secondary);margin:10px 0">${Utils.escapeHtml(text)}</div>`;
+        return `<div data-arch-idx="${_i}" style="text-align:center;font-size:11px;color:var(--text-secondary);margin:10px 0">${Utils.escapeHtml(text)}</div>`;
       }
-      return `<div style="display:flex;flex-direction:column;margin-bottom:10px;${isUser ? 'align-items:flex-end' : 'align-items:flex-start'}">
+      return `<div data-arch-idx="${_i}" style="display:flex;flex-direction:column;margin-bottom:10px;${isUser ? 'align-items:flex-end' : 'align-items:flex-start'}">
         <div class="chat-msg ${isUser ? 'user' : 'assistant'}" style="max-width:88%">
           <div class="md-content">${Markdown.render(text)}</div>
         </div>
@@ -967,6 +1062,18 @@ ${dialogue}
     }).join('');
 
     document.getElementById('archive-view-modal').classList.remove('hidden');
+
+    // 从归档搜索点进来：滚动定位到命中的那条消息并闪一下
+    if (Number.isFinite(focusIdx)) {
+      requestAnimationFrame(() => {
+        const target = container.querySelector(`[data-arch-idx="${focusIdx}"]`);
+        if (!target) return;
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const bubble = target.querySelector('.chat-msg') || target;
+        bubble.classList.add('search-flash');
+        bubble.addEventListener('animationend', () => bubble.classList.remove('search-flash'), { once: true });
+      });
+    }
   }
 
   async function _exportArchive(archiveId, convName) {
@@ -1077,6 +1184,7 @@ ${dialogue}
     get, save, generate, archive, getArchives, exportArchive,
     showSummaryPanel, renderSummaryView, renderArchiveList, formatForPrompt,
     showArchiveListModal, closeArchiveListModal, _deleteArchive,
+    _archiveSearchDebounced, _asToggleExpand,
     setConvId, saveEdit, closeEdit,
     _editField, _editTimeline, _editNPC, _addTimeline, _addNPC, _deleteTimeline, _deleteNPC,
     _toggleSection,

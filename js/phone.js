@@ -973,6 +973,11 @@ function _findContactByName(contacts, name) {
   // 先直接按归一化名匹配
   let hit = contacts.find(c => c && _normContactName(c.name) === key);
   if (hit) return hit;
+  // 再按用户设的备注名（nickname）匹配。
+  // 联系人列表显示的是 nickname || name，用户看到的"名字"可能是备注名；
+  // AI 输出该名字时若只比 name 就会漏匹配，从而额外新建一个重复联系人。
+  hit = contacts.find(c => c && c.nickname && _normContactName(c.nickname) === key);
+  if (hit) return hit;
   // 双向兼容：把传入名 resolve 成本名再比，联系人名也 resolve 成本名再比
   // 这样"望月秋"和其代号"真蛸"指向同一联系人（不管数据方向反没反，只要归到同一键）
   const realKey = _normContactName(_resolveNpcRealName(name));
@@ -47574,6 +47579,9 @@ function _renderChatApp(pd) {
   (async () => {
     try {
       await _refreshChatAvatarMap();
+      // 建身份归一表：_ingestChatFromMessages 的联系人匹配依赖 _resolveNpcRealName（同步读缓存），
+      // 表未建时它会原样返回名字，代号/网名气泡就匹配不上已有联系人而额外新建。
+      try { await _ensureNpcRealNameMap(); } catch(_) {}
       let messages = (typeof Chat !== 'undefined' && Chat.getMessages) ? (Chat.getMessages() || []) : [];
       await _ingestChatFromMessages(messages);
       if (_isAppStillActive && _isAppStillActive('chat')) {
@@ -55088,7 +55096,7 @@ async function _ingestChatFromMessages(messages) {
     return ct;
   };
 
-// 已收录 key 集合（每个 thread 内）
+  // 已收录 key 集合（每个 thread 内）
     const seenKeyByContact = {};
     for (const ct of pd.chatContacts) {
       const arr = pd.chatThreads[ct.id] || [];
@@ -55282,6 +55290,8 @@ async function _syncMainlineForContact(contactId) {
     if (typeof Chat !== 'undefined' && Chat.getMessages) {
       messages = Chat.getMessages() || [];
     }
+    // 同上：匹配依赖身份归一表，先确保建好再收录
+    try { await _ensureNpcRealNameMap(); } catch(_) {}
     const n = await _ingestChatFromMessages(messages);
     UI.showToast(n > 0 ? `收录了 ${n} 条新消息` : '没有新的线上消息', 1500);
     const pd = await _getPhoneData();
@@ -55526,6 +55536,10 @@ async function _openChatSettings(contactId) {
           主动重新添加对方
         </button>
         ` : `
+        <button onclick="Phone._openMergeContactPicker('${contactId}')"
+          style="width:100%;padding:13px;border-radius:12px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);font-size:15px;font-weight:600;cursor:pointer;margin-bottom:12px">
+          合并到其他联系人
+        </button>
         <button onclick="Phone._deleteChatContact('${contactId}')"
           style="width:100%;padding:13px;border-radius:12px;background:var(--bg-tertiary);color:var(--danger);border:1px solid var(--border);font-size:15px;font-weight:600;cursor:pointer;margin-bottom:12px">
           删除好友
@@ -55545,6 +55559,132 @@ async function _openChatSettings(contactId) {
   if (headerLeft) {
     headerLeft.innerHTML = '<button onclick="Phone._openChatThread(\'' + contactId + '\')" style="width:34px;height:34px;background:none;border:none;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg></button>';
   }
+}
+
+// ===== 合并联系人 =====
+// 用途：主线扫气泡时若因名字匹配失败误建了重复联系人，用户可手动把它并回正确的那个。
+// 合并方向：把「当前联系人」的聊天记录并入「所选目标联系人」，然后移除当前这条。
+// 不可逆，因此加确认弹窗。thread 合并逻辑与 _migrateMergeSplitNpcIdentities 保持一致。
+async function _openMergeContactPicker(contactId) {
+  const pd = await _getPhoneData();
+  if (!pd) return;
+  const contacts = pd.chatContacts || [];
+  const self = contacts.find(c => c.id === contactId);
+  if (!self) return;
+  // 候选：除自己以外的所有联系人（含已删除的，用户可能就是想并回被删的那条）
+  const others = contacts.filter(c => c && c.id !== contactId);
+  if (!others.length) {
+    UI.showToast('没有其它联系人可合并', 1800);
+    return;
+  }
+  const selfCount = (pd.chatThreads && pd.chatThreads[contactId] || []).length;
+  const rows = others.map(c => {
+    const dn = c.nickname || c.name;
+    const avaUrl = _chatContactAvatar(c);
+    const initial = Utils.escapeHtml((dn || '?')[0]);
+    const avatar = avaUrl ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : initial;
+    const cnt = (pd.chatThreads && pd.chatThreads[c.id] || []).length;
+    const tag = c.deleted ? '（已删除）' : '';
+    return `<div class="cg-member-row" onclick="Phone._doMergeContact('${contactId}','${c.id}')"
+      style="display:flex;align-items:center;gap:10px;padding:10px 4px;cursor:pointer">
+      <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatar}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(dn)}${tag}</div>
+        <div style="font-size:11px;color:var(--text-secondary)">${cnt} 条记录 · ${_chatSourceLabel(c.source)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const mask = document.createElement('div');
+  mask.id = 'merge-contact-mask';
+  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px';
+  mask.innerHTML = `
+    <div style="background:var(--bg);border-radius:18px;padding:20px;max-width:340px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,0.3)">
+      <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">合并到其他联系人</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px">把「${Utils.escapeHtml(self.nickname || self.name)}」的 ${selfCount} 条聊天记录并入你选择的联系人，并入后这条联系人会被移除。选择目标：</div>
+      <div style="flex:1;overflow-y:auto;margin:0 -4px">${rows}</div>
+      <button onclick="Phone._closeMergeContactPicker()"
+        style="margin-top:14px;width:100%;padding:12px;border-radius:12px;background:var(--bg-tertiary);color:var(--text);border:none;font-size:14px;cursor:pointer">取消</button>
+    </div>
+  `;
+  mask.addEventListener('click', (e) => { if (e.target === mask) _closeMergeContactPicker(); });
+  document.body.appendChild(mask);
+}
+
+function _closeMergeContactPicker() {
+  const mask = document.getElementById('merge-contact-mask');
+  if (mask) mask.remove();
+}
+
+// 执行合并：srcId 的记录并入 dstId，随后删除 srcId
+async function _doMergeContact(srcId, dstId) {
+  const pd = await _getPhoneData();
+  if (!pd || srcId === dstId) return;
+  const contacts = pd.chatContacts || [];
+  const src = contacts.find(c => c.id === srcId);
+  const dst = contacts.find(c => c.id === dstId);
+  if (!src || !dst) return;
+  if (!pd.chatThreads || typeof pd.chatThreads !== 'object') pd.chatThreads = {};
+  const srcArr = Array.isArray(pd.chatThreads[srcId]) ? pd.chatThreads[srcId] : [];
+  const srcName = src.nickname || src.name;
+  const dstName = dst.nickname || dst.name;
+
+  _closeMergeContactPicker();
+  const ok = await UI.showConfirm('确认合并',
+    `将「${srcName}」的 ${srcArr.length} 条聊天记录并入「${dstName}」。\n\n合并后「${srcName}」这个联系人会被移除，操作不可撤销。`);
+  if (!ok) return;
+
+  if (!Array.isArray(pd.chatThreads[dstId])) pd.chatThreads[dstId] = [];
+  const dstArr = pd.chatThreads[dstId];
+  // 去重：按 _k，其次按 role+text 组合，避免同一条气泡并进来两遍
+  const seen = new Set();
+  dstArr.forEach(m => {
+    if (!m) return;
+    if (m._k) seen.add(m._k);
+    seen.add(`${m.role || ''}||${m.text || ''}`);
+  });
+  let moved = 0;
+  srcArr.forEach(m => {
+    if (!m) return;
+    if (m._k && seen.has(m._k)) return;
+    const ck = `${m.role || ''}||${m.text || ''}`;
+    if (seen.has(ck)) return;
+    if (m._k) seen.add(m._k);
+    seen.add(ck);
+    dstArr.push(m);
+    moved++;
+  });
+  // 按 createdAt 排序（主线收录的气泡没有该字段，用 0 兜底并保持稳定顺序）
+  try {
+    dstArr.forEach((m, i) => { if (m) m.__ord = i; });
+    dstArr.sort((a, b) => {
+      const ta = (a && a.createdAt) || 0;
+      const tb = (b && b.createdAt) || 0;
+      if (ta !== tb) return ta - tb;
+      return ((a && a.__ord) || 0) - ((b && b.__ord) || 0);
+    });
+    dstArr.forEach(m => { if (m) delete m.__ord; });
+  } catch(_) {}
+  // 头像/签名兜底补全：目标缺的话用来源补
+  if (!(dst.avatar || '').trim() && (src.avatar || '').trim()) dst.avatar = src.avatar;
+  if (!(dst.sig || '').trim() && (src.sig || '').trim()) dst.sig = src.sig;
+  // 移除来源联系人及其 thread
+  delete pd.chatThreads[srcId];
+  pd.chatContacts = contacts.filter(c => c.id !== srcId);
+  // 群聊成员用 memberIds 引用联系人 id：把 srcId 重映射到 dstId，避免成员凭空消失
+  try {
+    (pd.chatGroups || []).forEach(g => {
+      if (!g || !Array.isArray(g.memberIds)) return;
+      if (!g.memberIds.includes(srcId)) return;
+      const next = g.memberIds.filter(id => id !== srcId);
+      if (!next.includes(dstId)) next.push(dstId);
+      g.memberIds = next;
+    });
+  } catch(_) {}
+
+  await _savePhoneData();
+  UI.showToast(`已合并 ${moved} 条记录到「${dstName}」`, 2000);
+  await _openChatThread(dstId);
 }
 
 // 删除好友（软删除：保留聊天记录，标记 deleted，写操作记录告诉主线）
@@ -65503,6 +65643,7 @@ _chatPickCallPortrait, _chatClearCallPortrait, _chatPickBg, _chatClearBg, _chatP
     handleMainlineCallTag, _showIncomingCall,
     // 删好友 / 好友申请
     _deleteChatContact, _restoreChatContact, _acceptFriendRequest, _rejectFriendRequest, handleMainlineFriendRequestTag,
+    _openMergeContactPicker, _closeMergeContactPicker, _doMergeContact,
   // phoneDown 接口
   getPendingPhoneDown: () => _pendingPhoneDown,
   clearPendingPhoneDown: () => { _pendingPhoneDown = null; },

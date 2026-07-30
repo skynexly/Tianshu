@@ -114,7 +114,19 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
   try { await Character.load(); } catch(e) { console.error('[Character.load]', e); }
 
   // 对话历史
-  try { await Chat.loadHistory(Conversations.getCurrent()); } catch(e) { console.error('[Chat.loadHistory]', e); }
+  // 安全模式（?safe=1）：跳过启动时自动恢复上次对话。
+  // 用途：某条消息内容过长会在渲染时卡死 WebView，而启动就自动进那个对话 →
+  // 打开即崩、进不了设置。带 safe=1 可停在空态，再去 设置 → 消息急救 处理那条消息。
+  let _safeMode = false;
+  try { _safeMode = new URLSearchParams(location.search).get('safe') === '1'; } catch(_) {}
+  // 挂到全局，供 Conversations.switchTo 等处判断（安全模式下不允许进入对话渲染）
+  try { window.__SKYNEX_SAFE_MODE__ = _safeMode; } catch(_) {}
+  if (_safeMode) {
+    try { await Chat.loadHistory(null); } catch(e) { console.error('[Chat.loadHistory:safe]', e); }
+    try { UI.showToast('安全模式：已跳过自动打开上次对话', 4000); } catch(_) {}
+  } else {
+    try { await Chat.loadHistory(Conversations.getCurrent()); } catch(e) { console.error('[Chat.loadHistory]', e); }
+  }
 
   // 总结convId初始化
   try { Summary.setConvId(Conversations.getCurrent()); } catch(e) { console.error('[Summary]', e); }

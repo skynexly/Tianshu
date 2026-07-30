@@ -740,6 +740,12 @@ async function init() {
   }
 
   async function switchTo(id) {
+    // 安全模式：不允许进入任何对话（进对话就要渲染消息，而卡死的正是渲染）。
+    // 用户此时只应去 设置 → 消息急救 处理超长消息，处理完去掉 ?safe=1 正常打开。
+    if (typeof window !== 'undefined' && window.__SKYNEX_SAFE_MODE__) {
+      UI.showToast('安全模式下不能打开对话。请到 设置 → 消息急救 处理后，去掉网址里的 ?safe=1 重新打开', 4000);
+      return;
+    }
     // 生成中禁止切换对话（避免状态栏/NPC/总结写错位置）
     if (typeof Chat !== 'undefined' && Chat.isStreamingNow && Chat.isStreamingNow() && id !== currentId) {
       UI.showToast('正在生成回复，请等待完成或先终止再切换', 2000);
