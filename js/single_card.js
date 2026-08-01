@@ -97,7 +97,7 @@ const SingleCard = (() => {
       return `
       <div class="single-card-item" data-id="${c.id}" onclick="${clickHandler}" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;align-items:center;gap:12px;cursor:pointer">
         ${manageMode ? `<span class="single-card-check-circle ${checked ? 'checked' : ''}" style="width:22px;height:22px;border-radius:50%;border:2px solid ${checked ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${checked ? 'background:var(--accent);' : ''}">
-          ${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+          ${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
         </span>` : ''}
         <div style="width:48px;height:48px;border-radius:50%;flex-shrink:0;overflow:hidden;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center">
           ${c.avatar
@@ -988,7 +988,7 @@ const SingleCard = (() => {
     if (allSelected) {
       iconEl.style.background = 'var(--accent)';
       iconEl.style.border = '2px solid var(--accent)';
-      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
     } else {
       iconEl.style.background = '';
       iconEl.style.border = '2px solid var(--text-secondary)';

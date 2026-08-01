@@ -170,7 +170,7 @@ const LorebookUI = (() => {
         ${html}
         <div class="modal-actions" style="margin-top:12px">
           <button type="button" data-act="cancel" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
-          <button type="button" data-act="ok" style="flex:1;background:var(--accent);color:#111;border:none">确定</button>
+          <button type="button" data-act="ok" style="flex:1;background:var(--accent);color: var(--on-accent);border:none">确定</button>
         </div>
       </div>
     `;

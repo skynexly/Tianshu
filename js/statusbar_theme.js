@@ -212,12 +212,27 @@ var StatusBarTheme = (() => {
   }
 
   // 作用域兜底：强制每条规则的选择器限定在状态栏内，防止裸标签/通用选择器泄漏到全局。
-  // 已带状态栏锚点（.sb- / .hs- / body[data-sb-skin] / body[data-skin] / #sb- / :root）的放行；
+  // 已带状态栏锚点（.sb- / .hs- / body[data-sb-skin] / body[data-skin] / #sb-）的放行；
   // 其余（如 button、div、*）自动加 .sb-root 前缀限定。
+  //
+  // 注意：`:root` / `html` / `body`（含 body[data-sb-skin] 这类带条件的写法）绝不能放行。
+  // 它们是全局主题变量（--accent/--bg 等）的宿主，状态栏 CSS 若写
+  // `:root { --accent: #d4af37 }` 或 `body[data-sb-skin="terminal"] { --accent: gold }`，
+  // 注入后变量会沿继承链铺满整个 App —— 表现为「导入状态栏后界面主题跟着变色」。
+  // 因此凡是「目标就是根节点自身」的选择器，都把它降级成状态栏容器的祖先限定，
+  // 让变量只在状态栏子树内生效，原有的 data-sb-skin 等条件照旧保留。
+  //
+  // 注意 2：主文档里没有 `.sb-root` 节点（那是编辑器 Shadow DOM 预览里的根），
+  // 真实页面的状态栏容器是 #topbar-row-status（折叠行）和 #sb-expanded-overlay（展开卡）。
   function _scopeSelectors(css) {
     if (!css) return css;
     // 选择器已含状态栏作用域锚点 → 视为安全，放行
-    const SAFE = /\.sb-|\.hs-|\bbody\s*\[\s*data-sb-skin|\bbody\s*\[\s*data-skin|#sb-|:root|\.topbar-row-status/;
+    const SAFE = /\.sb-|\.hs-|\bbody\s*\[\s*data-sb-skin|\bbody\s*\[\s*data-skin|#sb-|\.topbar-row-status/;
+    // 「目标是根节点自身」：以 :root / html / body 开头，后面只跟属性/类/伪类，
+    // 不含空格或 > + ~ 这类组合符（一旦有后代部分，说明真正的目标不是根节点）
+    const ROOT_SELF = /^(?::root|html|body)(?:\[[^\]]*\]|[.#:][\w-]+(?:\([^()]*\))?)*$/;
+    // 主文档中状态栏的两个根容器
+    const SB_HOSTS = ['#topbar-row-status', '#sb-expanded-overlay'];
     let result = '';
     let i = 0;
     const n = css.length;
@@ -233,16 +248,33 @@ var StatusBarTheme = (() => {
         else if (css[j] === '}') { depth--; if (depth === 0) break; }
       }
       const body = css.slice(braceOpen, j + 1);
-      // @media / @keyframes / @font-face 等 at-rule：原样保留（内部规则一般不针对全局元素）
+      // @media / @supports 等条件组：内部规则同样要过一遍作用域，否则
+      // `@media (min-width:768px) { :root { --accent: gold } }` 能绕过防护
+      // （这正是「手机正常、PC 变色」的典型形态）。
+      // @keyframes / @font-face 内部不是选择器（是 0%/100%/字体描述），原样保留。
       if (selector.startsWith('@')) {
-        result += selectorRaw + body;
+        if (/^@(?:media|supports|container|layer)\b/i.test(selector)) {
+          const inner = body.slice(1, -1);                 // 去掉外层 {}
+          result += selectorRaw + '{' + _scopeSelectors(inner) + '}';
+        } else {
+          result += selectorRaw + body;
+        }
       } else {
         // 逗号分隔的选择器组，逐个处理
         const scoped = selector.split(',').map(sel => {
           const s = sel.trim();
           if (!s) return s;
+          // 目标是根节点自身（:root / html / body / body[data-sb-skin="x"] …）：
+          // 直接放行会让 --accent 之类的变量继承给整个 App，覆盖主题色。
+          // 降级成「根节点 + 状态栏容器」的后代形式，条件部分原样保留。
+          if (ROOT_SELF.test(s)) {
+            // 保留 [data-sb-skin="x"] / .glass-on 等条件，宿主统一归到 body
+            const cond = s.replace(/^(?::root|html|body)/, '');
+            return SB_HOSTS.map(h => ('body' + cond + ' ' + h)).join(', ');
+          }
           if (SAFE.test(s)) return s;        // 已有状态栏锚点，放行
-          return '.sb-root ' + s;            // 裸选择器，强制限定到状态栏内
+          // 裸选择器（button / div / * …）：限定到状态栏容器内
+          return SB_HOSTS.map(h => h + ' ' + s).join(', ');
         }).join(', ');
         // 保留选择器前的空白（缩进/换行），把选择器主体替换为加了作用域的版本
         const lead = selectorRaw.slice(0, selectorRaw.length - selectorRaw.trimStart().length);
@@ -370,7 +402,7 @@ var StatusBarTheme = (() => {
             <div style="font-size:14px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(t.name)}</div>
             <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">基于 ${_esc(basePreset.name)}</div>
           </div>
-          <button data-theme-id="${t.id}" onclick="console.log('点击编辑按钮，ID:', this.getAttribute('data-theme-id')); StatusBarTheme.openEditor(this.getAttribute('data-theme-id'))" style="padding:6px 10px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap">编辑</button>
+          <button data-theme-id="${t.id}" onclick="console.log('点击编辑按钮，ID:', this.getAttribute('data-theme-id')); StatusBarTheme.openEditor(this.getAttribute('data-theme-id'))" style="padding:6px 10px;background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap">编辑</button>
           <button data-theme-id="${t.id}" onclick="StatusBarTheme.deleteThemeWithConfirm(this.getAttribute('data-theme-id'))" style="padding:6px 10px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap">删除</button>
         </div>`;
       });
@@ -774,7 +806,7 @@ var StatusBarTheme = (() => {
       </div>`;
       return `<div style="display:flex;gap:10px;margin-bottom:16px;${isUser ? 'flex-direction:row-reverse' : ''}">
         <div style="flex:1;max-width:100%;${isUser ? 'margin-left:auto' : ''}">
-          <div class="md-content" style="padding:10px 12px;background:${isUser ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isUser ? '#fff' : 'var(--text)'};border-radius:10px;font-size:13px;line-height:1.5">${isUser ? _esc(m.content) : (typeof Markdown !== 'undefined' ? Markdown.render(m.content) : _esc(m.content))}</div>
+          <div class="md-content" style="padding:10px 12px;background:${isUser ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isUser ? 'var(--on-accent)' : 'var(--text)'};border-radius:10px;font-size:13px;line-height:1.5">${isUser ? _esc(m.content) : (typeof Markdown !== 'undefined' ? Markdown.render(m.content) : _esc(m.content))}</div>
           ${actionBtns}
         </div>
       </div>`;

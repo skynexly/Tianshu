@@ -522,7 +522,7 @@ preview: detail?.background || detail?.detail || detail?.description || ''
         <div id="hs-mask-content"></div>
 
         <div class="modal-actions" style="margin-top:16px">
-          <button id="hs-mask-confirm-new" onclick="HeartSimIntro._submitMask()" style="flex:1;background:var(--accent);color:#111;border:none;border-radius:6px;padding:10px;font-size:14px;cursor:pointer">确认</button>
+          <button id="hs-mask-confirm-new" onclick="HeartSimIntro._submitMask()" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;padding:10px;font-size:14px;cursor:pointer">确认</button>
         </div>
       </div>
     `;
@@ -556,7 +556,7 @@ _newMaskAvatar = '';
 content.innerHTML = `
 <div style="display:flex;flex-direction:column;gap:10px">
   <div style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary)">
-    <div id="hs-mask-avatar-preview" onclick="HeartSimIntro._pickNewMaskAvatar()" style="width:54px;height:54px;border-radius:50%;background:var(--accent);color:#111;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;cursor:pointer;overflow:hidden;flex-shrink:0">+</div>
+    <div id="hs-mask-avatar-preview" onclick="HeartSimIntro._pickNewMaskAvatar()" style="width:54px;height:54px;border-radius:50%;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;cursor:pointer;overflow:hidden;flex-shrink:0">+</div>
     <div style="flex:1;min-width:0">
       <div style="font-size:13px;color:var(--text);font-weight:600">上传头像</div>
       <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">可选，点击左侧头像上传</div>
@@ -587,7 +587,7 @@ content.innerHTML = `
           : _existingMasksCache.map(m => {
               const avatarHtml = m.avatar
 ? `<img src="${Utils.escapeHtml(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0">`
-: `<div style="width:32px;height:32px;border-radius:50%;background:var(--accent);color:#111;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0">${Utils.escapeHtml((m.name||'?')[0])}</div>`;
+: `<div style="width:32px;height:32px;border-radius:50%;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0">${Utils.escapeHtml((m.name||'?')[0])}</div>`;
 const preview = String(m.preview || '').replace(/\s+/g, ' ').trim();
 const previewText = preview ? (preview.length > 52 ? preview.slice(0, 52) + '…' : preview) : '暂无面具设定';
 return `

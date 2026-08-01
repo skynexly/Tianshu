@@ -238,7 +238,7 @@ const NpcImporter = (() => {
           <button id="npc-imp-toggle-all" style="padding:6px 10px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:12px">全选/反选</button>
           <div style="flex:1"></div>
           <button id="npc-imp-cancel" style="padding:8px 14px;background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;font-size:13px">取消</button>
-          <button id="npc-imp-confirm" style="padding:8px 14px;background:var(--accent);border:none;color:#111;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">导入选中</button>
+          <button id="npc-imp-confirm" style="padding:8px 14px;background:var(--accent);border:none;color: var(--on-accent);border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">导入选中</button>
         </div>
       </div>
     `;

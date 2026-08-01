@@ -1766,6 +1766,28 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
       } catch(e) { console.warn('[Chat] 记忆工具指南注入失败', e); }
     }
 
+    // 手机聊天记录查询指南（仅在该工具启用时注入）
+    if (convSettings.toolsPhoneChat) {
+      try {
+        systemParts.push(`【手机聊天记录查询工具】
+{{user}} 手机里的聊天记录你可以用 query_phone_chat 查（只读）。
+
+用法：
+- 不传参数：返回会话目录——手机里有哪些联系人和群、各自多少条消息、最后一条的时间和预览。
+- 传 contact：返回和该联系人或群的具体聊天内容，rounds 控制轮数（默认 10，最多 30）。
+- 传 keyword：搜包含某个词的消息，每条命中带前后各 2 条上下文。配合 contact 可只搜某个会话。
+
+查询时机：
+- 剧情涉及 {{user}} 和某人在手机上聊过什么，而你手上的上下文里没有那段内容时。
+- 你隐约记得聊过但记不清细节时——查一下再说，不要凭印象编造聊天内容。
+- {{user}} 提起"我之前跟 ta 说过"而你不确定说了什么时。
+
+注意：
+- 本轮刚发生的手机操作会由系统直接告诉你，不需要用工具查。工具是用来回查更早的记录的。
+- 马甲会话默认不返回。马甲是 {{user}} 隐藏真实身份用的假身份，正常剧情里你的角色不该知道，除非剧情明确需要复盘马甲线才传 includeAlias=true。`);
+      } catch(e) { console.warn('[Chat] 手机聊天工具指南注入失败', e); }
+    }
+
     // v687.15：现实环境感知（电量/天气）拼到最近 2 条 user message 前缀
     try {
       if ((convSettings.batteryAware || convSettings.weatherAware) && window.EnvAwareness) {
@@ -2275,12 +2297,18 @@ let historyForAPI = _visibleMsgs.map((m, idx) => ({
     // v726：手机操作日志挪到此处（状态栏预填充之后），以保证"本轮玩家手机操作"紧贴本轮 user 输入。
     // 只读"最后一条 user 消息"的 phoneLogSnapshot（方案B），这样新发送和重写最新一条都能拿到同一份快照，AI 不会反复看到历史轮的手机操作。
     try {
-      const _lastUserMsg = [...messages].reverse().find(m => m.role === 'user' && !m.hidden);
+      // 注意：hidden 的 <PhoneDown/> / <Continue the Chat/> 也是有效轮次（与 1622 行可见消息口径一致）。
+      // 尤其 <PhoneDown/> 正是承载手机聊天快照的那条，早期只判 !m.hidden 会把它跳过，
+      // 导致私聊后放下手机的那一轮（首次发送与重写都）读不到手机聊天记录。
+      const _isValidUserRound = (m) => m.role === 'user' && (
+        !m.hidden || m.content === '<PhoneDown/>' || m.content === '<Continue the Chat/>'
+      );
+      const _lastUserMsg = [...messages].reverse().find(_isValidUserRound);
       const _snapshot = _lastUserMsg?.phoneLogSnapshot;
       if (_snapshot && _snapshot.length > 0) {
-        const _phoneLogContent = '【玩家手机操作记录｜OOC】\n以下是"{{user}}"本轮在自己手机里的操作，由系统旁白记录，不是角色对白，也不是任何一方的剧情发言：\n\n' +
+        const _phoneLogContent = '【玩家手机操作记录｜OOC】\n「手机」是平台提供的交互组件，模拟真实的手机带来更多的沉浸感，由{{user}}自行操作，并将其视作剧情的一部分。\n以下是"{{user}}"本轮在自己手机里的操作。\n\n' +
           _snapshot.map(a => `- {{user}} ${a}`).join('\n') +
-          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，不是任何被扮演的角色。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 如果操作与剧情无关，作为背景知晓即可，不必每条都回应。\n⑤ 【禁止】你的回复中不要输出或模仿【玩家手机操作记录｜OOC】这个格式。它是系统自动注入的元信息，你只需阅读理解并自然融入剧情描写，绝对不要在你的输出中复制、仿写或引用此格式块。\n⑥ 【不要扩充】这些日志是用户实际做的事，不是剧情提示。用户做了什么就是什么，原样接受即可。不要扩写任何照片、论坛、好友圈等内容，只需要以旁白或角色的反应回应用户操作了手机这一事实。\n⑦ 【时间流逝】手机操作需要时间。请在下一次回复推动时间时，将手机操作所消耗的时间也计算在内（浏览、聊天、拍照等行为并非瞬间完成）。';
+          '\n\n请把这些操作作为"{{user}}"本轮的背景行为融入剧情：\n① 操作主体永远是"{{user}}"，而非其他。\n② 如果世界观设有日常任务，请据此判断任务完成度——只有"新增"算完成，"删除/更新"不算。\n③ 如果操作涉及其他角色（比如点赞/评论某人动态、给某人下单），相关角色应在合适时机收到提示并自然回应；若当前情境不适合看手机，可由旁白提及"手机震了一下稍后才查看"。\n④ 【禁止】你的回复中不要输出或模仿【玩家手机操作记录｜OOC】这个格式。手机操作记录是{{user}}自发的操作的记录，你不能代替{{user}}完成。\n⑤ 【不要扩充】在你的回复中基于这些信息提起用户的行为，但不要扩充、编纂额外的手机操作。\n⑥ 【时间流逝】手机操作需要时间。请在下一次回复推动时间时，将手机操作所消耗的时间也计算在内（浏览、聊天、拍照等行为并非瞬间完成）。';
         // 找最后一条 user 位置
         let _phoneLastUserIdx = -1;
         for (let i = apiMessages.length - 1; i >= 0; i--) {
@@ -2470,6 +2498,18 @@ isStreaming = true;
         userContentForAPI = pdContext;
       }
     }
+    // 重写兜底（PhoneDown 轮）：PhoneDown 那轮的聊天记录不走 phoneLogSnapshot，
+    // 而是直接写进 contentForAPI。重写时 pending 早已被上面 clearPendingPhoneDown 清掉，
+    // 若不恢复原 contentForAPI，AI 收到的就只有裸的 <PhoneDown/>，聊天记录全丢。
+    if (_isPhoneDown && _pendingRewriteContentForAPI) {
+      // 只在本轮没能从 pending 拿到内容时才用暂存（避免覆盖刚 flush 的新内容）
+      if (userContentForAPI === text) {
+        userContentForAPI = typeof _pendingRewriteContentForAPI === 'string'
+          ? _pendingRewriteContentForAPI
+          : JSON.parse(JSON.stringify(_pendingRewriteContentForAPI));
+      }
+    }
+    _pendingRewriteContentForAPI = null; // 消费完清空（无论用没用到）
     // phoneDown 场景6：用户自己先发了消息（非 <PhoneDown/>），但 pending 还在 → 合并进本轮
     if (!_isPhoneDown && typeof Phone !== 'undefined' && Phone.getPendingPhoneDown && Phone.getPendingPhoneDown()) {
       try {
@@ -2739,6 +2779,7 @@ const msgEl = appendMessage(aiMsg, true, true);
         const name = d.function?.name || '';
         if (name.startsWith('query_worldview_')) return convSettings.toolsWorldview;
         if (name === 'search_messages') return convSettings.toolsHistory;
+        if (name === 'query_phone_chat') return convSettings.toolsPhoneChat;
         // AI 编辑设定工具（read/update/add/delete/undo + list_extension + read_card）
         if (['read_worldview_setting','update_worldview_setting','read_worldview_entry','update_worldview_entry','add_worldview_entry',
        'list_extension_entries','add_extension_entry','update_extension_entry','delete_extension_entry',
@@ -4278,11 +4319,11 @@ bar.innerHTML = `
 <span id="ms-count" style="font-size:13px;color:var(--text);flex-shrink:0">已选 ${multiSelectIds.size}</span>
 <button onclick="Chat.selectAllMulti()" style="padding:6px 10px;font-size:12px;background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;flex-shrink:0">全选</button>
 <div style="flex:1"></div>
-<button onclick="Chat.multiExtractMemory()" style="padding:6px 12px;font-size:12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;gap:4px">
+<button onclick="Chat.multiExtractMemory()" style="padding:6px 12px;font-size:12px;background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;gap:4px">
 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.32 2.577a49.255 49.255 0 0 1 11.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 0 1-1.085.67L12 18.089l-7.165 3.583A.75.75 0 0 1 3.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93Z"/></svg>
 提取记忆
 </button>
-<button onclick="Chat.multiExportImage()" style="padding:6px 12px;font-size:12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;gap:4px">
+<button onclick="Chat.multiExportImage()" style="padding:6px 12px;font-size:12px;background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;gap:4px">
 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
 导出截图
 </button>
@@ -5189,6 +5230,10 @@ renderAll();
   let _pendingRewriteMsgId = null;
   // 重写时暂存被删除的 user 消息的手机操作快照（重写不重新操作手机，需把原快照带回新建的消息，避免 AI 丢失本轮手机操作记录）
   let _pendingRewritePhoneLog = null;
+  // 重写时暂存被删除的 user 消息的 contentForAPI。
+  // PhoneDown 轮（NPC 打断看手机 / 通话挂断）的聊天记录写在 contentForAPI 里而不是 phoneLogSnapshot，
+  // 且 pending 在首次发送时已被消费，重写时无法再生成，必须靠这份暂存恢复。
+  let _pendingRewriteContentForAPI = null;
 
   function openRewriteHint(msgId) {
     const idx = messages.findIndex(m => m.id === msgId);
@@ -5240,6 +5285,11 @@ renderAll();
     if (!lastUserMsg || lastUserMsg.role !== 'user') return;
     // 暂存本轮手机操作快照：重写不会重新操作手机，需把原快照带回 send() 新建的 user 消息，避免 AI 丢失本轮手机操作记录（支持多次重写）
     _pendingRewritePhoneLog = lastUserMsg.phoneLogSnapshot || null;
+    // 暂存原 contentForAPI：仅 PhoneDown 轮需要（聊天记录在这里，且 pending 已被消费无法重建）。
+    // 普通轮的 contentForAPI 会由 send() 按当前附件/记忆重新拼装，不需要恢复。
+    _pendingRewriteContentForAPI = (lastUserMsg.content === '<PhoneDown/>')
+      ? (lastUserMsg.contentForAPI || null)
+      : null;
     document.getElementById('chat-input').value = lastUserMsg.content;
     roundCount--; // send() 会 ++，先 --
     await DB.del('messages', lastUserMsg.id);
@@ -5587,7 +5637,7 @@ menu.classList.add('hidden');
       const checked = pendingMemories.some(pm => pm.id === m.id);
       return `<div style="display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)">
         <span class="mem-check-circle ${checked ? 'checked' : ''}" data-id="${m.id}" onclick="event.stopPropagation();Chat._togglePickMem('${m.id}', !this.classList.contains('checked'))" style="width:22px;height:22px;border-radius:50%;border:2px solid ${checked ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;cursor:pointer;${checked ? 'background:var(--accent);' : ''}">
-          ${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+          ${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
         </span>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;color:var(--accent);display:flex;align-items:center;gap:6px">
@@ -6202,7 +6252,7 @@ if (!gp) return null;
     } else {
       btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>';
       btn.style.background = 'var(--accent)';
-      btn.style.color = '#111';
+      btn.style.color = 'var(--on-accent)';
       btn.onclick = send;
       btn.disabled = false;
     }
@@ -6426,6 +6476,7 @@ bgImage: conv?.convBgImage || '',
     toolsWorldview: !!conv?.convToolsWorldview,    // 默认关（世界观查询工具）
     toolsEdit: !!conv?.convToolsEdit,              // 默认关（AI 编辑设定/单人卡，高风险）
     toolsHistory: !!conv?.convToolsHistory,        // 默认关（历史搜索工具）
+    toolsPhoneChat: !!conv?.convToolsPhoneChat,    // 默认关（手机聊天记录查询，只读）
         autoExtract: conv?.convAutoExtract !== false,  // 默认开（自动记忆提取）
       replyWordCount: conv?.convReplyWordCount || 800,  // 默认800字
       timeFormat: conv?.convTimeFormat || 'delta',   // 时间输出格式：'delta'(增量,默认) | 'absolute'(绝对时间)
@@ -6918,6 +6969,8 @@ bgImage: conv?.convBgImage || '',
   if (toolsEditEl) toolsEditEl.checked = s.toolsEdit;
   const toolsHistEl = document.getElementById('cs-tools-history');
     if (toolsHistEl) toolsHistEl.checked = s.toolsHistory;
+    const toolsPcEl = document.getElementById('cs-tools-phonechat');
+    if (toolsPcEl) toolsPcEl.checked = s.toolsPhoneChat;
     // 自动记忆提取
     const aeEl = document.getElementById('cs-auto-extract');
     if (aeEl) aeEl.checked = s.autoExtract;
@@ -7008,6 +7061,8 @@ if (wcityEl && window.EnvAwareness) EnvAwareness.setCity(wcityEl.value);
   if (toolsEditSaveEl) conv.convToolsEdit = toolsEditSaveEl.checked;
   const toolsHistSaveEl = document.getElementById('cs-tools-history');
     if (toolsHistSaveEl) conv.convToolsHistory = toolsHistSaveEl.checked;
+    const toolsPcSaveEl = document.getElementById('cs-tools-phonechat');
+    if (toolsPcSaveEl) conv.convToolsPhoneChat = toolsPcSaveEl.checked;
     const aeSaveEl = document.getElementById('cs-auto-extract');
     if (aeSaveEl) conv.convAutoExtract = aeSaveEl.checked;
     const evEl = document.getElementById('cs-events-enabled');
@@ -7236,8 +7291,8 @@ if (hidden?.events?.length) events.push(...hidden.events);
     _evmTab = tab === 'chain' ? 'chain' : 'standalone';
     const sBtn = document.getElementById('evm-tab-standalone');
     const cBtn = document.getElementById('evm-tab-chain');
-    if (sBtn) { sBtn.style.background = _evmTab === 'standalone' ? 'var(--accent)' : 'transparent'; sBtn.style.color = _evmTab === 'standalone' ? '#111' : 'var(--text-secondary)'; }
-    if (cBtn) { cBtn.style.background = _evmTab === 'chain' ? 'var(--accent)' : 'transparent'; cBtn.style.color = _evmTab === 'chain' ? '#111' : 'var(--text-secondary)'; }
+    if (sBtn) { sBtn.style.background = _evmTab === 'standalone' ? 'var(--accent)' : 'transparent'; sBtn.style.color = _evmTab === 'standalone' ? 'var(--on-accent)' : 'var(--text-secondary)'; }
+    if (cBtn) { cBtn.style.background = _evmTab === 'chain' ? 'var(--accent)' : 'transparent'; cBtn.style.color = _evmTab === 'chain' ? 'var(--on-accent)' : 'var(--text-secondary)'; }
     _renderEventManager();
   }
 
@@ -7611,7 +7666,7 @@ async function applyLorebooksToWorldview() {
           <div style="opacity:0.5;font-size:11px">长按图片可保存到相册</div>
           <div style="line-height:1.6;max-height:120px;overflow-y:auto;padding:8px;background:rgba(255,255,255,0.06);border-radius:6px">${Utils.escapeHtml(rec.prompt || '(无描述)')}</div>
           <div style="display:flex;gap:8px;margin-top:6px">
-            <button type="button" id="tsimg-lightbox-save" style="flex:1;padding:10px;border:none;border-radius:8px;background:var(--accent);color:#111;font-weight:600;cursor:pointer">保存到相册</button>
+            <button type="button" id="tsimg-lightbox-save" style="flex:1;padding:10px;border:none;border-radius:8px;background:var(--accent);color: var(--on-accent);font-weight:600;cursor:pointer">保存到相册</button>
             <button type="button" id="tsimg-lightbox-delete" style="flex:1;padding:10px;border:1px solid rgba(255,100,100,0.5);border-radius:8px;background:none;color:#ff7070;cursor:pointer">删除</button>
           </div>
         </div>`;

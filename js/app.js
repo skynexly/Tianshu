@@ -238,7 +238,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
 
   // ===== 更新公告（登录成功后弹出，可拿到昵称）=====
   try {
-    const APP_VERSION = 'v727';
+    const APP_VERSION = 'v727.2';
     const CHANGELOG = `○部分BUG修复
 ○部分逻辑优化
 ○提示词调整
@@ -372,7 +372,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
               <button id="changelog-history-toggle" type="button" style="padding:6px 4px;border:none;background:none;color:var(--text-secondary);font-size:12px;cursor:pointer;line-height:1.5;display:flex;align-items:center;gap:2px">查看历史公告<span style="font-size:14px;line-height:1">›</span></button>
-              <button id="changelog-ok" style="padding:8px 24px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">${force ? '关闭' : '已阅'}</button>
+              <button id="changelog-ok" style="padding:8px 24px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">${force ? '关闭' : '已阅'}</button>
             </div>
           </div>`;
         document.body.appendChild(overlay);
@@ -491,7 +491,7 @@ try { await Gaiden.init(); } catch(e) { console.error('[Gaiden.init]', e); }
           <div id="offline-dl-text" style="white-space:pre-line;font-size:13px;line-height:1.7;color:var(--text-secondary);background:var(--bg-tertiary,#2c2c2e);border-radius:10px;padding:12px 14px;margin-bottom:16px;word-break:break-all">${SHARE_TEXT}</div>
           <div style="display:flex;gap:10px;justify-content:flex-end">
             <button id="offline-dl-close" type="button" style="padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">关闭</button>
-            <button id="offline-dl-copy" type="button" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">复制</button>
+            <button id="offline-dl-copy" type="button" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">复制</button>
           </div>
         </div>`;
       document.body.appendChild(overlay);

@@ -466,7 +466,7 @@ const Stickers = (() => {
       <div class="sticker-card" data-id="${s.id}" onclick="${onclickAttr}" title="${_manageMode ? '点击选择' : '点击操作'}" style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer">
         <div class="sticker-thumb" style="position:relative;width:100%;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--bg-tertiary);border:1px solid ${_manageMode && checked ? 'var(--accent)' : 'var(--border)'}">
           <img src="${s.dataUrl}" alt="${_esc(s.name)}" style="width:100%;height:100%;object-fit:contain;pointer-events:none${_manageMode && checked ? ';opacity:0.6' : ''}">
-          ${_manageMode ? `<span class="sticker-check" style="position:absolute;right:3px;top:3px;width:20px;height:20px;border-radius:50%;border:2px solid ${checked ? 'var(--accent)' : 'rgba(255,255,255,0.85)'};background:${checked ? 'var(--accent)' : 'rgba(0,0,0,0.35)'};display:flex;align-items:center;justify-content:center;pointer-events:none">${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>` : ''}
+          ${_manageMode ? `<span class="sticker-check" style="position:absolute;right:3px;top:3px;width:20px;height:20px;border-radius:50%;border:2px solid ${checked ? 'var(--accent)' : 'rgba(255,255,255,0.85)'};background:${checked ? 'var(--accent)' : 'rgba(0,0,0,0.35)'};display:flex;align-items:center;justify-content:center;pointer-events:none">${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>` : ''}
           ${(s.category || '').trim() ? `<div style="position:absolute;left:2px;bottom:2px;max-width:calc(100% - 8px);padding:1px 6px;border-radius:6px;background:rgba(0,0,0,0.5);color:#fff;font-size:10px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(s.category)}</div>` : ''}
         </div>
         <div style="font-size:12px;color:var(--text);text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(s.name)}</div>
@@ -506,7 +506,7 @@ const Stickers = (() => {
       if (circle) {
         circle.style.borderColor = checked ? 'var(--accent)' : 'rgba(255,255,255,0.85)';
         circle.style.background = checked ? 'var(--accent)' : 'rgba(0,0,0,0.35)';
-        circle.innerHTML = checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+        circle.innerHTML = checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
       }
     } else {
       renderList();
@@ -546,7 +546,7 @@ const Stickers = (() => {
     if (allSelected) {
       iconEl.style.background = 'var(--accent)';
       iconEl.style.border = '2px solid var(--accent)';
-      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
     } else {
       iconEl.style.background = '';
       iconEl.style.border = '2px solid var(--text-secondary)';
@@ -843,7 +843,7 @@ const Stickers = (() => {
       const label = c === '' ? '未分类' : c;
       const on = cur.has(c);
       return `<label data-i="${i}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-tertiary);border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:8px;cursor:pointer;font-size:14px;color:var(--text)">
-        <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>
+        <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(label)}</span>
       </label>`;
     };

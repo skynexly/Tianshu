@@ -339,7 +339,7 @@ container.innerHTML = Object.keys(groups).map(chainId => {
           return _eventCardHtml(ev, idx, extra);
         }).join('');
         const _shootBadge = _isShootChain
-          ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:6px;background:var(--accent);color:#fff;font-size:10px;font-weight:600;vertical-align:middle">🎬 拍摄期专属</span>`
+          ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:6px;background:var(--accent);color: var(--on-accent);font-size:10px;font-weight:600;vertical-align:middle">🎬 拍摄期专属</span>`
           : '';
         const _shootTip = _isShootChain
           ? `<div style="margin-bottom:10px;padding:9px 11px;border-radius:8px;background:color-mix(in srgb, var(--accent) 10%, transparent);border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);font-size:11px;color:var(--text-secondary);line-height:1.7">
@@ -376,11 +376,11 @@ container.innerHTML = Object.keys(groups).map(chainId => {
     const cBtn = document.getElementById('cg-event-tab-chain');
     if (sBtn) {
       sBtn.style.background = _eventTab === 'standalone' ? 'var(--accent)' : 'transparent';
-      sBtn.style.color = _eventTab === 'standalone' ? '#111' : 'var(--text-secondary)';
+      sBtn.style.color = _eventTab === 'standalone' ? 'var(--on-accent)' : 'var(--text-secondary)';
     }
     if (cBtn) {
       cBtn.style.background = _eventTab === 'chain' ? 'var(--accent)' : 'transparent';
-      cBtn.style.color = _eventTab === 'chain' ? '#111' : 'var(--text-secondary)';
+      cBtn.style.color = _eventTab === 'chain' ? 'var(--on-accent)' : 'var(--text-secondary)';
     }
     const aiBtn = document.getElementById('cg-event-ai-btn');
     const addBtn = document.getElementById('cg-event-add-btn');
@@ -657,7 +657,7 @@ function _renderAttrConditions() {
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">${genMode === 'standalone' ? '生成独立事件，不会强制串联。' : (genMode === 'appendChain' ? '会从当前事件链最后一个事件继续向后写。' : '会自动用“上一事件结束词”触发下一事件。')}</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('cg-ai-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="cg-ai-gen-btn" onclick="ConvGameplay.doAiGenerate()" style="padding:8px 14px;border:none;border-radius:8px;background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="cg-ai-gen-btn" onclick="ConvGameplay.doAiGenerate()" style="padding:8px 14px;border:none;border-radius:8px;background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="cg-ai-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -828,7 +828,7 @@ function _renderAttrConditions() {
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">修改只影响当前对话，不影响世界观原件</div>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:4px">
-          <button id="cg-event-tab-standalone" class="active" onclick="ConvGameplay.switchEventTab('standalone')" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent);color:#111;font-size:12px;font-weight:600;cursor:pointer">独立事件</button>
+          <button id="cg-event-tab-standalone" class="active" onclick="ConvGameplay.switchEventTab('standalone')" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent);color: var(--on-accent);font-size:12px;font-weight:600;cursor:pointer">独立事件</button>
           <button id="cg-event-tab-chain" onclick="ConvGameplay.switchEventTab('chain')" style="flex:1;padding:8px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:12px;font-weight:600;cursor:pointer">事件链</button>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:16px">
@@ -1126,7 +1126,7 @@ function _renderAttrConditions() {
         <button id="cg-attr-delete-btn" onclick="ConvGameplay.deleteAttrFromModal()" style="padding:9px 12px;border-radius:8px;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));background:none;color:var(--danger);font-size:13px;cursor:pointer">删除</button>
         <div style="display:flex;gap:8px">
           <button onclick="ConvGameplay.closeAttrModal()" style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button onclick="ConvGameplay.saveAttrFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+          <button onclick="ConvGameplay.saveAttrFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>
     </div>`;
@@ -1624,7 +1624,7 @@ ${recentMessages}`;
         <button id="cg-tt-delete-btn" onclick="ConvGameplay.deleteTaskTypeFromModal()" style="padding:9px 12px;border-radius:8px;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));background:none;color:var(--danger);font-size:13px;cursor:pointer">删除</button>
         <div style="display:flex;gap:8px">
           <button onclick="ConvGameplay.closeTaskTypeModal()" style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button onclick="ConvGameplay.saveTaskTypeFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+          <button onclick="ConvGameplay.saveTaskTypeFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>
     </div>`;
@@ -1853,7 +1853,7 @@ ${recentMessages}`;
           </div>
           <pre style="flex:1;overflow:auto;padding:14px;margin:0;font-size:11px;color:var(--text);white-space:pre-wrap;word-break:break-all;font-family:monospace"></pre>
           <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0">
-            <button id="cg-dbg-copy" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">复制全部</button>
+            <button id="cg-dbg-copy" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">复制全部</button>
           </div>
         </div>`;
       modal.querySelector('pre').textContent = text;

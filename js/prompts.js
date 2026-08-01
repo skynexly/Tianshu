@@ -506,11 +506,11 @@ const Prompts = (() => {
       const longPress = deletable
         ? ` oncontextmenu="event.preventDefault();Prompts._onGroupTabLongPress('${esc}')" ontouchstart="Prompts._onGroupTabTouchStart(event,'${esc}')" ontouchend="Prompts._onGroupTabTouchEnd()" ontouchmove="Prompts._onGroupTabTouchEnd()"`
         : '';
-      tabsHtml += `<button ${onclickAttr}${longPress} style="flex-shrink:0;padding:6px 14px;border-radius:var(--radius);font-size:12px;border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};background:${isActive ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isActive ? '#111' : 'var(--text-secondary)'};cursor:pointer;white-space:nowrap">${Utils.escapeHtml(g)}</button>`;
+      tabsHtml += `<button ${onclickAttr}${longPress} style="flex-shrink:0;padding:6px 14px;border-radius:var(--radius);font-size:12px;border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};background:${isActive ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isActive ? 'var(--on-accent)' : 'var(--text-secondary)'};cursor:pointer;white-space:nowrap">${Utils.escapeHtml(g)}</button>`;
       // 紧跟在「全部」后面插入「已选」
       if (g === '全部') {
         const selActive = selectedGroup === SELECTED_GROUP;
-        tabsHtml += `<button onclick="Prompts.switchGroup('${SELECTED_GROUP}')" style="flex-shrink:0;padding:6px 14px;border-radius:var(--radius);font-size:12px;border:1px solid ${selActive ? 'var(--accent)' : 'var(--border)'};background:${selActive ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${selActive ? '#111' : 'var(--text-secondary)'};cursor:pointer">✓ 已选</button>`;
+        tabsHtml += `<button onclick="Prompts.switchGroup('${SELECTED_GROUP}')" style="flex-shrink:0;padding:6px 14px;border-radius:var(--radius);font-size:12px;border:1px solid ${selActive ? 'var(--accent)' : 'var(--border)'};background:${selActive ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${selActive ? 'var(--on-accent)' : 'var(--text-secondary)'};cursor:pointer">✓ 已选</button>`;
       }
     });
     // ＋ 新建分组
@@ -563,7 +563,7 @@ const Prompts = (() => {
             <div style="display:flex;align-items:center;gap:8px">
               ${promptManageMode ? `
               <span style="width:22px;height:22px;border-radius:50%;border:2px solid ${isSelected ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);' : ''}" onclick="event.stopPropagation();Prompts.togglePromptSelect('${p.id}')">
-                ${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+                ${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
               </span>` : `
               <span style="position:relative;display:inline-flex;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();Prompts.toggle('${p.id}')">
 <input type="checkbox" class="circle-check" ${p.enabled ? 'checked' : ''}>
@@ -845,7 +845,7 @@ const Prompts = (() => {
     if (allSelected) {
       iconEl.style.background = 'var(--accent)';
       iconEl.style.border = '2px solid var(--accent)';
-      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
     } else {
       iconEl.style.background = '';
       iconEl.style.border = '2px solid var(--text-secondary)';
@@ -873,7 +873,7 @@ const Prompts = (() => {
     const list = document.getElementById('prompts-list');
     if (promptManageMode) {
       if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
-      if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> 退出'; btn.style.background = 'var(--accent)'; btn.style.color = '#111'; btn.style.borderColor = 'var(--accent)'; }
+      if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> 退出'; btn.style.background = 'var(--accent)'; btn.style.color = 'var(--on-accent)'; btn.style.borderColor = 'var(--accent)'; }
       if (list) list.style.paddingBottom = '64px';
     } else {
       if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
@@ -940,10 +940,10 @@ const Prompts = (() => {
     // 分组tabs（「全部」后插入虚拟「已选」）
     let tabsHtml = '';
     groups.forEach(g => {
-      tabsHtml += `<button onclick="Prompts._switchOverrideGroup('${g}')" style="padding:4px 12px;border-radius:14px;border:1px solid ${g === _overrideGroup ? 'var(--accent)' : 'var(--border)'};background:${g === _overrideGroup ? 'var(--accent)' : 'transparent'};color:${g === _overrideGroup ? '#111' : 'var(--text-secondary)'};font-size:12px;cursor:pointer;white-space:nowrap">${Utils.escapeHtml(g)}</button>`;
+      tabsHtml += `<button onclick="Prompts._switchOverrideGroup('${g}')" style="padding:4px 12px;border-radius:14px;border:1px solid ${g === _overrideGroup ? 'var(--accent)' : 'var(--border)'};background:${g === _overrideGroup ? 'var(--accent)' : 'transparent'};color:${g === _overrideGroup ? 'var(--on-accent)' : 'var(--text-secondary)'};font-size:12px;cursor:pointer;white-space:nowrap">${Utils.escapeHtml(g)}</button>`;
       if (g === '全部') {
         const sa = _overrideGroup === SELECTED_GROUP;
-        tabsHtml += `<button onclick="Prompts._switchOverrideGroup('${SELECTED_GROUP}')" style="padding:4px 12px;border-radius:14px;border:1px solid ${sa ? 'var(--accent)' : 'var(--border)'};background:${sa ? 'var(--accent)' : 'transparent'};color:${sa ? '#111' : 'var(--text-secondary)'};font-size:12px;cursor:pointer;white-space:nowrap">✓ 已选</button>`;
+        tabsHtml += `<button onclick="Prompts._switchOverrideGroup('${SELECTED_GROUP}')" style="padding:4px 12px;border-radius:14px;border:1px solid ${sa ? 'var(--accent)' : 'var(--border)'};background:${sa ? 'var(--accent)' : 'transparent'};color:${sa ? 'var(--on-accent)' : 'var(--text-secondary)'};font-size:12px;cursor:pointer;white-space:nowrap">✓ 已选</button>`;
       }
     });
 

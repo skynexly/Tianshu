@@ -415,7 +415,7 @@ ${dialogue}
           添加
         </button>` : ''}
         ${(data.timeline || []).length >= 2 ? (isMergingTimeline
-          ? `<button onclick="Summary._confirmMerge()" style="padding:6px 12px;font-size:13px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;display:flex;align-items:center;gap:6px;opacity:${_mergeSelected.size >= 2 ? '1' : '0.5'}" ${_mergeSelected.size < 2 ? 'disabled' : ''}>
+          ? `<button onclick="Summary._confirmMerge()" style="padding:6px 12px;font-size:13px;background:var(--accent);border:none;border-radius:6px;color: var(--on-accent);cursor:pointer;display:flex;align-items:center;gap:6px;opacity:${_mergeSelected.size >= 2 ? '1' : '0.5'}" ${_mergeSelected.size < 2 ? 'disabled' : ''}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
               确认合并 (${_mergeSelected.size})
             </button>
@@ -455,7 +455,7 @@ ${dialogue}
           添加
         </button>` : ''}
         ${(data.metNPCs || []).length >= 2 ? (isMergingNPC
-          ? `<button onclick="Summary._confirmMerge()" style="padding:6px 12px;font-size:13px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;display:flex;align-items:center;gap:6px;opacity:${_mergeSelected.size >= 2 ? '1' : '0.5'}" ${_mergeSelected.size < 2 ? 'disabled' : ''}>
+          ? `<button onclick="Summary._confirmMerge()" style="padding:6px 12px;font-size:13px;background:var(--accent);border:none;border-radius:6px;color: var(--on-accent);cursor:pointer;display:flex;align-items:center;gap:6px;opacity:${_mergeSelected.size >= 2 ? '1' : '0.5'}" ${_mergeSelected.size < 2 ? 'disabled' : ''}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
               确认合并 (${_mergeSelected.size})
             </button>

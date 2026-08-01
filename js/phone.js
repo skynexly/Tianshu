@@ -361,7 +361,7 @@ let _hasNewNotif = false;
           ${fields}
           <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
             <button onclick="Phone._npcNoteEditCancel()" style="background:none;border:1px solid var(--border);color:var(--text-secondary);font-size:11px;padding:4px 12px;border-radius:6px;cursor:pointer">取消</button>
-            <button onclick="Phone._npcNoteEditSave()" style="background:var(--accent);border:none;color:#111;font-size:11px;padding:4px 14px;border-radius:6px;cursor:pointer">保存</button>
+            <button onclick="Phone._npcNoteEditSave()" style="background:var(--accent);border:none;color: var(--on-accent);font-size:11px;padding:4px 14px;border-radius:6px;cursor:pointer">保存</button>
           </div>
         </div>
       </div>`;
@@ -1186,7 +1186,7 @@ function _formatChatRoundLog() {
     if (!entry || !entry.msgs || !entry.msgs.length) continue;
     const contactName = entry.name || contactId;
     if (entry.isGroup) {
-      lines.push(`在${_chatAppLabel}的群聊「${contactName}」里新增以下群消息（仅供了解上下文，不要在线下剧情中以对话格式复述这些内容）：`);
+      lines.push(`在${_chatAppLabel}的群聊「${contactName}」新增以下对话，请在本轮中以概括的形式提起聊天内容，将其视作本轮{{user}}已完成的行动：`);
       for (const m of entry.msgs) {
         const timeStr = m.time ? `[${m.time}] ` : '';
         if (m.role === 'system') { lines.push(`  [系统] ${timeStr}${m.text}`); continue; }
@@ -1194,7 +1194,7 @@ function _formatChatRoundLog() {
         lines.push(`  ${who} ${timeStr}：${m.text}`);
       }
     } else {
-      lines.push(`在${_chatAppLabel}与「${contactName}」新增以下对话（仅供了解上下文，不要在线下剧情中以对话格式复述这些内容）：`);
+      lines.push(`在${_chatAppLabel}与「${contactName}」新增以下对话，请在本轮中以概括的形式提起聊天内容，将其视作本轮{{user}}已完成的行动：`);
       for (const m of entry.msgs) {
         const who = m.role === 'me' ? '{{user}}' : contactName;
         const timeStr = m.time ? `[${m.time}] ` : '';
@@ -1539,7 +1539,7 @@ function _flushChatRoundLog() {
           <input id="phone-prompt-input" type="text" placeholder="${Utils.escapeHtml(placeholder || '')}" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:16px">
           <div style="display:flex;gap:10px">
             <button id="phone-prompt-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-            <button id="phone-prompt-ok" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">确定</button>
+            <button id="phone-prompt-ok" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">确定</button>
           </div>
         </div>`;
       document.body.appendChild(mask);
@@ -2351,7 +2351,7 @@ function _applyWallpaper(pd) {
       ? `<img src="${Utils.escapeHtml(meAva)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
       : Utils.escapeHtml((meName || '我')[0]);
     const frameLayer = frame ? `<img src="${Utils.escapeHtml(frame)}" alt="" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:${sc}%;height:${sc}%;object-fit:contain;pointer-events:none;z-index:2">` : '';
-    box.innerHTML = `<div style="width:56px;height:56px;border-radius:50%;position:relative;overflow:visible;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">${inner}${frameLayer}</div>`;
+    box.innerHTML = `<div style="width:56px;height:56px;border-radius:50%;position:relative;overflow:visible;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">${inner}${frameLayer}</div>`;
   }
 
   // ===== 手机 APP 图标自定义（全局，设置 → 手机图标）=====
@@ -2412,7 +2412,7 @@ function _applyWallpaper(pd) {
     document.querySelectorAll('#fab-size-seg [data-fab-size]').forEach(btn => {
       const on = btn.getAttribute('data-fab-size') === size;
       btn.style.background = on ? 'var(--accent)' : 'none';
-      btn.style.color = on ? '#fff' : 'var(--text-secondary)';
+      btn.style.color = on ? 'var(--on-accent)' : 'var(--text-secondary)';
       btn.style.fontWeight = on ? '600' : '400';
     });
     // 异形开关状态
@@ -4092,7 +4092,7 @@ async function _renderWallet(pd) {
     return `
       <div class="phone-wallet-card" style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px">
         <div style="width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#111" stroke-width="2"><rect x="2" y="6" width="20" height="14" rx="2"></rect><path d="M16 12h2v2h-2z"></path><path d="M2 10h20"></path></svg>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--on-accent)" stroke-width="2"><rect x="2" y="6" width="20" height="14" rx="2"></rect><path d="M16 12h2v2h-2z"></path><path d="M2 10h20"></path></svg>
         </div>
         <div style="flex:1;min-width:0">
           <div style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(def.name)}</div>
@@ -4514,7 +4514,7 @@ async function _ledgerEditEntry(entryId) {
         <button id="led-del" style="padding:8px 16px;border-radius:8px;border:1px solid var(--error);background:transparent;color:var(--error);font-size:13px;cursor:pointer">删除</button>
         <div style="display:flex;gap:10px">
           <button id="led-cancel" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="led-save" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+          <button id="led-save" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>
     </div>`;
@@ -4567,7 +4567,7 @@ async function _ledgerAddManual() {
       <label class="phone-ledger-field">备注<input id="led-m-note" type="text" placeholder="可选"></label>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
         <button id="led-m-cancel" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-        <button id="led-m-save" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+        <button id="led-m-save" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">保存</button>
       </div>
     </div>`;
   mask.querySelector('#led-m-cancel').onclick = () => document.body.removeChild(mask);
@@ -4613,7 +4613,7 @@ function _showOrderDetail(name, price, desc, platform) {
     ${desc ? `<div style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px;word-break:break-word">${Utils.escapeHtml(desc)}</div>` : ''}
     ${platform ? `<div style="display:inline-block;font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--border);color:var(--text-secondary)">${Utils.escapeHtml(platform)}</div>` : ''}
     <div style="margin-top:16px;text-align:right">
-      <button onclick="this.closest('[style*=fixed]').remove()" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:13px;cursor:pointer">关闭</button>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer">关闭</button>
     </div>
   </div>`;
   document.body.appendChild(mask);
@@ -4906,7 +4906,7 @@ async function _showSellDetail(contactId, msgId) {
       <button onclick="this.closest('[style*=fixed]').remove()" style="padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;cursor:pointer">关闭</button>
       ${bought
         ? `<button disabled style="padding:8px 18px;border-radius:8px;border:none;background:var(--bg-tertiary);color:var(--text-secondary);font-size:13px">已购买</button>`
-        : `<button id="sell-detail-buy" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer">确认购买</button>`}
+        : `<button id="sell-detail-buy" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">确认购买</button>`}
     </div>
   </div>`;
   const buyBtn = mask.querySelector('#sell-detail-buy');
@@ -6224,7 +6224,7 @@ async function _musicShareToChat(track, shareContent) {
       const avaUrl = _chatContactAvatar(c);
       const avatarEl = avaUrl
         ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0">`
-        : `<div style="width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${Utils.escapeHtml(displayName[0])}</div>`;
+        : `<div style="width:40px;height:40px;border-radius:50%;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${Utils.escapeHtml(displayName[0])}</div>`;
       return `<div class="share-chat-pick-item" data-cid="${Utils.escapeHtml(c.id)}" style="padding:10px 12px;border-radius:10px;margin-bottom:4px;cursor:pointer;background:var(--bg-tertiary);display:flex;align-items:center;gap:10px">
         ${avatarEl}
         <span style="font-size:14px;color:var(--text)">${Utils.escapeHtml(displayName)}</span>
@@ -6484,7 +6484,7 @@ function _renderListenTogether(track, userAvatar, userName) {
   // 用户头像
   const userAvaEl = userAvatar
     ? `<img src="${Utils.escapeHtml(userAvatar)}" style="width:56px;height:56px;border-radius:50%;object-fit:cover">`
-    : `<div style="width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">${Utils.escapeHtml((userName || '我')[0])}</div>`;
+    : `<div style="width:56px;height:56px;border-radius:50%;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">${Utils.escapeHtml((userName || '我')[0])}</div>`;
 
   // 右侧头像区（根据会话状态）
   let rightEl = '';
@@ -6502,7 +6502,7 @@ function _renderListenTogether(track, userAvatar, userName) {
       const tName = _ltGetDisplayName(tgt.name) || tgt.name || '?';
       rightEl = tgt.avatar
         ? `<img src="${Utils.escapeHtml(tgt.avatar)}" style="width:56px;height:56px;border-radius:50%;object-fit:cover">`
-        : `<div style="width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">${Utils.escapeHtml(tName[0])}</div>`;
+        : `<div style="width:56px;height:56px;border-radius:50%;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">${Utils.escapeHtml(tName[0])}</div>`;
       rightLabel = tName;
     }
   } else if (_ltSession && _ltSession.pending) {
@@ -6834,7 +6834,7 @@ function _ltPickContact(contacts) {
       const avaUrl = _chatContactAvatar(c);
       const avatarEl = avaUrl
         ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0">`
-        : `<div style="width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${Utils.escapeHtml(displayName[0])}</div>`;
+        : `<div style="width:40px;height:40px;border-radius:50%;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${Utils.escapeHtml(displayName[0])}</div>`;
       return `<div class="lt-pick-item" data-cid="${Utils.escapeHtml(c.id)}" style="padding:10px 12px;border-radius:10px;margin-bottom:4px;cursor:pointer;background:var(--bg-tertiary);display:flex;align-items:center;gap:10px">
         ${avatarEl}
         <span style="font-size:14px;color:var(--text)">${Utils.escapeHtml(displayName)}</span>
@@ -7519,7 +7519,7 @@ async function _openAnniversaryEditor() {
       </div>
 
       <div style="display:flex;gap:8px">
-        <button type="button" onclick="Phone._anniSave()" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+        <button type="button" onclick="Phone._anniSave()" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">保存</button>
         <button type="button" onclick="Phone._anniDelete()" style="padding:10px 16px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">删除</button>
       </div>
     </div>`;
@@ -9073,7 +9073,7 @@ function _refreshCalBanner() {
       return `
         <div class="cottage-pet-card" onclick="Phone._petOpenDetail('${Utils.escapeHtml(pet.id)}')" style="border:1px solid var(--border);border-radius:12px;background:var(--bg);color:var(--text);padding:8px;text-align:left;cursor:pointer;min-width:0;position:relative">
           <div style="width:100%;aspect-ratio:1;border-radius:9px;background:var(--bg-tertiary);overflow:hidden;position:relative">${thumbInner}
-            <span onclick="event.stopPropagation();Phone._petToggleCarry('${Utils.escapeHtml(pet.id)}')" title="${pet.carried ? '已携带，点击放下' : '携带此宠物'}" style="position:absolute;top:6px;right:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:${pet.carried ? 'var(--accent)' : 'rgba(0,0,0,.4)'};color:${pet.carried ? '#111' : '#fff'};cursor:pointer;backdrop-filter:blur(2px)">${_cottageRoomSvg('paw')}</span>
+            <span onclick="event.stopPropagation();Phone._petToggleCarry('${Utils.escapeHtml(pet.id)}')" title="${pet.carried ? '已携带，点击放下' : '携带此宠物'}" style="position:absolute;top:6px;right:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:${pet.carried ? 'var(--accent)' : 'rgba(0,0,0,.4)'};color:${pet.carried ? 'var(--on-accent)' : '#fff'};cursor:pointer;backdrop-filter:blur(2px)">${_cottageRoomSvg('paw')}</span>
           </div>
           <div style="padding:9px 3px 2px;font-size:14px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Utils.escapeHtml(pet.name || '未命名宠物')}${pet.carried ? ' <span style="font-size:11px;color:var(--accent);font-weight:500">· 携带中</span>' : ''}</div>
         </div>`;
@@ -9174,7 +9174,7 @@ function _refreshCalBanner() {
 
         <div style="display:flex;gap:10px">
           <button id="pet-img-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="pet-img-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+          <button id="pet-img-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">生成</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -9280,7 +9280,7 @@ function _refreshCalBanner() {
         </div>
         <div style="display:flex;gap:10px;padding:12px 16px;border-top:1px solid var(--border);background:var(--bg);flex:none">
           <button id="pet-create-cancel" type="button" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
-          <button id="pet-create-ok" type="button" style="flex:1;padding:10px;border:0;border-radius:9px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">${isEditing ? '保存修改' : '添加宠物'}</button>
+          <button id="pet-create-ok" type="button" style="flex:1;padding:10px;border:0;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:14px;cursor:pointer">${isEditing ? '保存修改' : '添加宠物'}</button>
         </div>
       </div>`;
 
@@ -9673,7 +9673,7 @@ function _petEdit(petId) {
         </div>
         <div style="display:flex;gap:10px;padding:12px 16px;border-top:1px solid var(--border);background:var(--bg);flex:none">
           <button id="pev-cancel" type="button" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
-          <button id="pev-ok" type="button" style="flex:1;padding:10px;border:0;border-radius:9px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">保存</button>
+          <button id="pev-ok" type="button" style="flex:1;padding:10px;border:0;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:14px;cursor:pointer">保存</button>
         </div>
       </div>`;
     body.querySelector('#pev-cancel').onclick = () => goBack();
@@ -9818,7 +9818,7 @@ function _petEdit(petId) {
 
         <div style="display:flex;gap:10px">
           <button id="pet-rf-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="pet-rf-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">刷新</button>
+          <button id="pet-rf-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">刷新</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -10121,7 +10121,7 @@ ${numFields ? '数值字段：\n' + numFields + '\n' : ''}${textFields ? '文本
 
         <div style="display:flex;gap:10px">
           <button id="pet-rfa-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="pet-rfa-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">刷新</button>
+          <button id="pet-rfa-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">刷新</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -10380,7 +10380,7 @@ ${feederLines ? '【喂食器里的食物】（全局共享，所有宠物这段
         </div>
         <div style="display:flex;gap:10px;padding:12px 16px;border-top:1px solid var(--border);background:var(--bg);flex:none">
           <button id="ptpl-cancel" type="button" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:9px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
-          <button id="ptpl-ok" type="button" style="flex:1;padding:10px;border:0;border-radius:9px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">保存</button>
+          <button id="ptpl-ok" type="button" style="flex:1;padding:10px;border:0;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:14px;cursor:pointer">保存</button>
         </div>
       </div>`;
 
@@ -10576,7 +10576,7 @@ ${feederLines ? '【喂食器里的食物】（全局共享，所有宠物这段
         </div>
         <div style="display:flex;gap:10px;margin-top:14px">
           <button id="pet-mall-set-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="pet-mall-set-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+          <button id="pet-mall-set-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -10751,7 +10751,7 @@ ${jsonTpl}`;
         ${blockHtml('设定', it.setting)}
         <div style="display:flex;gap:10px;margin-top:20px">
           <button id="pet-detail-close" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">关闭</button>
-          <button id="pet-detail-buy" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">购买</button>
+          <button id="pet-detail-buy" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">购买</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -10810,7 +10810,7 @@ ${curSection}
 ${shipSection}
         <div style="display:flex;gap:10px">
           <button id="pet-buy-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="pet-buy-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${showCur ? '确认支付' : '确认购买'}</button>
+          <button id="pet-buy-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">${showCur ? '确认支付' : '确认购买'}</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -11065,7 +11065,7 @@ ${shipSection}
         <textarea id="worn-m-desc" rows="2" maxlength="200" placeholder="描述（颜色、款式等，可留空）" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font:inherit;font-size:14px;resize:vertical"></textarea>
         <div style="display:flex;gap:10px">
           <button id="worn-m-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
-          <button id="worn-m-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">穿上</button>
+          <button id="worn-m-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;cursor:pointer">穿上</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -11196,7 +11196,7 @@ ${shipSection}
         <textarea id="cloth-e-desc" rows="2" maxlength="200" placeholder="描述（颜色、款式等，可留空）" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font:inherit;font-size:14px;resize:vertical"></textarea>
         <div style="display:flex;gap:10px">
           <button id="cloth-e-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
-          <button id="cloth-e-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">保存</button>
+          <button id="cloth-e-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;cursor:pointer">保存</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -11310,7 +11310,7 @@ ${shipSection}
         <input id="feeder-fill-n" type="number" min="1" max="${maxN}" value="${maxN}" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font-size:14px">
         <div style="display:flex;gap:10px">
           <button id="feeder-fill-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
-          <button id="feeder-fill-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">装填</button>
+          <button id="feeder-fill-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;cursor:pointer">装填</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -11362,7 +11362,7 @@ ${shipSection}
         <textarea id="food-e-desc" rows="2" maxlength="200" placeholder="描述（口味、成分等，可留空）" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg,var(--bg));color:var(--text);font:inherit;font-size:14px;resize:vertical"></textarea>
         <div style="display:flex;gap:10px">
           <button id="food-e-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
-          <button id="food-e-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">保存</button>
+          <button id="food-e-ok" style="flex:1;padding:10px;border:0;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;cursor:pointer">保存</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -11448,7 +11448,7 @@ ${shipSection}
 
         <div style="display:flex;gap:10px">
           <button id="pet-ai-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="pet-ai-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+          <button id="pet-ai-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">生成</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -12323,7 +12323,7 @@ ${refText}${opts.req ? '\n用户额外要求：' + opts.req + '\n' : ''}
         </div>
         <div style="display:flex;gap:10px;margin-top:14px">
           <button id="wardrobe-mall-set-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="wardrobe-mall-set-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+          <button id="wardrobe-mall-set-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -12472,7 +12472,7 @@ ${curSection}
 ${shipSection}
         <div style="display:flex;gap:10px">
           <button id="wardrobe-buy-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="wardrobe-buy-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${showCur ? '确认支付' : '确认购买'}</button>
+          <button id="wardrobe-buy-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">${showCur ? '确认支付' : '确认购买'}</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -12686,7 +12686,7 @@ ${shipSection}
         <div class="cottage-mall-chips" style="margin-bottom:16px">${chips}</div>
         <div style="display:flex;gap:10px">
           <button id="wardrobe-inv-edit-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="wardrobe-inv-edit-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+          <button id="wardrobe-inv-edit-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -12854,7 +12854,7 @@ ${shipSection}
         <textarea id="wardrobe-add-desc" rows="2" placeholder="材质、颜色、款式细节…" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:13px;line-height:1.5;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;resize:vertical;margin-bottom:16px"></textarea>
         <div style="display:flex;gap:10px">
           <button id="wardrobe-add-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="wardrobe-add-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">添加</button>
+          <button id="wardrobe-add-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">添加</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -13026,7 +13026,7 @@ ${shipSection}
 
         <div style="display:flex;gap:10px">
           <button id="wardrobe-img-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="wardrobe-img-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+          <button id="wardrobe-img-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">生成</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -13149,7 +13149,7 @@ ${shipSection}
 
         <div style="display:flex;gap:10px">
           <button id="wardrobe-ais-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="wardrobe-ais-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+          <button id="wardrobe-ais-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">生成</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -13261,7 +13261,7 @@ ${contextBlock}
         <input id="wardrobe-suit-name" type="text" maxlength="20" placeholder="例如：日常通勤" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:16px">
         <div style="display:flex;gap:10px">
           <button id="wardrobe-suit-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="wardrobe-suit-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+          <button id="wardrobe-suit-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -13640,7 +13640,7 @@ ${contextBlock}
         </div>
         <div style="display:flex;gap:10px;margin-top:14px">
           <button id="cottage-mall-set-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="cottage-mall-set-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+          <button id="cottage-mall-set-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -13790,7 +13790,7 @@ ${curSection}
 ${shipSection}
         <div style="display:flex;gap:10px">
           <button id="cottage-buy-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="cottage-buy-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${showCur ? '确认支付' : '确认购买'}</button>
+          <button id="cottage-buy-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">${showCur ? '确认支付' : '确认购买'}</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -13984,7 +13984,7 @@ ${shipSection}
         <div class="cottage-mall-chips" style="margin-bottom:16px">${chips}</div>
         <div style="display:flex;gap:10px">
           <button id="cottage-inv-edit-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="cottage-inv-edit-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+          <button id="cottage-inv-edit-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -14301,7 +14301,7 @@ ${shipSection}
 
         <div style="display:flex;gap:10px">
           <button id="cottage-ai-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="cottage-ai-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+          <button id="cottage-ai-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">生成</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -14860,7 +14860,7 @@ category 只能是 decor/furniture/deco 三者之一。`;
 
         <div style="display:flex;gap:10px">
           <button id="cottage-air-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="cottage-air-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+          <button id="cottage-air-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">生成</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -14905,7 +14905,7 @@ category 只能是 decor/furniture/deco 三者之一。`;
 
         <div style="display:flex;gap:10px">
           <button id="cottage-room-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="cottage-room-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+          <button id="cottage-room-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
         </div>
         <button id="cottage-room-delete" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:10px;background:none;color:#e0464b;font-size:13px;cursor:pointer">删除此房间</button>
       </div>`;
@@ -14979,7 +14979,7 @@ category 只能是 decor/furniture/deco 三者之一。`;
 
         <div style="display:flex;gap:10px">
           <button id="cottage-item-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="cottage-item-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${isEdit ? '保存' : '添加'}</button>
+          <button id="cottage-item-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">${isEdit ? '保存' : '添加'}</button>
         </div>
         ${isEdit ? `<button id="cottage-item-delete" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:10px;background:none;color:#e0464b;font-size:13px;cursor:pointer">移除物品</button>` : ''}
       </div>`;
@@ -15128,7 +15128,7 @@ category 只能是 decor/furniture/deco 三者之一。`;
 
           <div style="display:flex;gap:10px">
             <button id="cottage-h-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-            <button id="cottage-h-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+            <button id="cottage-h-save" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
           </div>
           <button id="cottage-h-delete" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:10px;background:none;color:#e0464b;font-size:13px;cursor:pointer">删除此住所</button>
         </div>`;
@@ -15437,7 +15437,7 @@ ${houseDataText}`;
 
         <div style="display:flex;gap:10px">
           <button id="cottage-img-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="cottage-img-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+          <button id="cottage-img-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">生成</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -16439,7 +16439,7 @@ async function _renderVideo(pd) {
       mask.dataset.stage = 'form';
       const esc = Utils.escapeHtml;
       const genreChips = GENRES.map(g =>
-        `<span class="vmk-genre" data-g="${g}" style="font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer;border:1px solid ${selGenre===g?'var(--accent)':'var(--border)'};background:${selGenre===g?'var(--accent)':'transparent'};color:${selGenre===g?'#fff':'var(--text-secondary)'}">${g}</span>`
+        `<span class="vmk-genre" data-g="${g}" style="font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer;border:1px solid ${selGenre===g?'var(--accent)':'var(--border)'};background:${selGenre===g?'var(--accent)':'transparent'};color:${selGenre===g?'var(--on-accent)':'var(--text-secondary)'}">${g}</span>`
       ).join('');
       mask.innerHTML = `
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:360px;width:100%;max-height:88%;display:flex;flex-direction:column;overflow:hidden;color:var(--text)">
@@ -16508,7 +16508,7 @@ async function _renderVideo(pd) {
           </div>
           <div style="display:flex;gap:10px;padding:14px 20px 18px">
             <button id="vmk-cancel" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">取消</button>
-            <button id="vmk-next" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">下一步</button>
+            <button id="vmk-next" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">下一步</button>
           </div>
         </div>`;
       // 主类型点选（就地改样式，不重渲染避免丢输入）
@@ -16518,7 +16518,7 @@ async function _renderVideo(pd) {
           mask.querySelectorAll('.vmk-genre').forEach(x => {
             const on = x.getAttribute('data-g') === selGenre;
             x.style.background = on ? 'var(--accent)' : 'transparent';
-            x.style.color = on ? '#fff' : 'var(--text-secondary)';
+            x.style.color = on ? 'var(--on-accent)' : 'var(--text-secondary)';
             x.style.borderColor = on ? 'var(--accent)' : 'var(--border)';
           });
         };
@@ -16678,7 +16678,7 @@ async function _renderVideo(pd) {
           <div style="display:flex;gap:8px;padding:14px 20px 18px">
             <button id="vmk-back" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">返回修改</button>
             <button id="vmk-regen" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">重新生成</button>
-            <button id="vmk-confirm" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">确认制作</button>
+            <button id="vmk-confirm" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">确认制作</button>
           </div>
         </div>`;
       mask.querySelector('#vmk-back').onclick = () => renderForm();
@@ -17037,7 +17037,7 @@ async function _renderVideo(pd) {
         body += `
           <div style="text-align:center;padding:24px 16px;border:1px dashed var(--border);border-radius:12px">
             <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:14px">填好创作方向，点下面生成剧本。生成后梗概、风格、人物、名场面都可逐条编辑。</div>
-            <button class="ves-act" data-act="gen" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成剧本</button>
+            <button class="ves-act" data-act="gen" style="border:none;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成剧本</button>
           </div>`;
       } else {
         body += `<div style="height:1px;background:var(--border);margin:6px 0 16px"></div>`;
@@ -17076,7 +17076,7 @@ async function _renderVideo(pd) {
             <div style="border:1px solid var(--border);border-radius:12px;padding:16px 14px;text-align:center">
               <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:6px">你将以 <span style="color:var(--accent);font-weight:600">${esc(shootIdentity)}</span> 的身份进组拍摄。</div>
               <div style="font-size:11px;color:var(--text-tertiary,#888);line-height:1.6;margin-bottom:14px">生成后会以这部电影为背景，在主线里展开一条拍摄期剧情线（进组、对手戏、片场日常、突发状况……）。拍摄期间将暂时无法申请上映，杀青后解锁。</div>
-              <button class="ves-act" data-act="gen-shoot" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成拍摄期剧情线</button>
+              <button class="ves-act" data-act="gen-shoot" style="border:none;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成拍摄期剧情线</button>
             </div>`;
         } else {
           body += `
@@ -17358,7 +17358,7 @@ async function _renderVideo(pd) {
         body += `
           <div style="text-align:center;padding:24px 16px;border:1px dashed var(--border);border-radius:12px">
             <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:14px">填好创作方向和集数，点下面生成蓝图。生成后总纲、明暗线、人物、分${J}大纲都可逐条编辑，再逐${J}创作剧本。</div>
-            <button class="veb-act" data-act="gen" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成蓝图</button>
+            <button class="veb-act" data-act="gen" style="border:none;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成蓝图</button>
           </div>`;
       } else {
         body += `<div style="height:1px;background:var(--border);margin:6px 0 16px"></div>`;
@@ -17410,7 +17410,7 @@ async function _renderVideo(pd) {
             <div style="border:1px solid var(--border);border-radius:12px;padding:16px 14px;text-align:center">
               <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:6px">你将以 <span style="color:var(--accent);font-weight:600">${esc(shootIdentity)}</span> 的身份进组${W.act}。</div>
               <div style="font-size:11px;color:var(--text-tertiary,#888);line-height:1.6;margin-bottom:14px">生成后会以这部作品为背景，在主线里展开一条${W.period}剧情线（进组、对手戏、片场日常、突发状况……）。${W.period}期间将暂时无法申请${W.apply}，走到${W.wrap}后解锁。</div>
-              <button class="veb-act" data-act="gen-shoot" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成${W.period}剧情线</button>
+              <button class="veb-act" data-act="gen-shoot" style="border:none;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成${W.period}剧情线</button>
             </div>`;
         } else {
           // 未参演（staff 里没有玩家面具）
@@ -17645,7 +17645,7 @@ async function _renderVideo(pd) {
           <input type="number" id="vsg-count" value="5" min="1" max="10" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border,#ccc);background:var(--bg-secondary,#f5f5f5);color:var(--text,#000);font-size:14px;box-sizing:border-box">
           <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
             <button id="vsg-cancel" style="padding:8px 14px;border:1px solid var(--border,#ccc);border-radius:8px;background:transparent;color:var(--text,#000);font-size:13px;cursor:pointer">取消</button>
-            <button id="vsg-ok" style="padding:8px 14px;border:none;border-radius:8px;background:var(--accent,#e8772e);color:#fff;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+            <button id="vsg-ok" style="padding:8px 14px;border:none;border-radius:8px;background:var(--accent,#e8772e);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
           </div>
         </div>`;
       mask.addEventListener('click', (e) => { if (e.target === mask) { document.body.removeChild(mask); resolve(null); } });
@@ -18078,7 +18078,7 @@ ${_direction ? `\n【本次生成的推进方向（用户指定，请重点围�
         body += `
           <div style="text-align:center;padding:24px 16px;border:1px dashed var(--border);border-radius:12px">
             <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:14px">点下面按蓝图本${J}大纲生成剧本，生成后简介和名场面都可逐条编辑。</div>
-            <button class="vee-act" data-act="gen" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成本${J}剧本</button>
+            <button class="vee-act" data-act="gen" style="border:none;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;padding:10px 26px;cursor:pointer">✦ 生成本${J}剧本</button>
           </div>`;
       } else {
         body += `
@@ -19103,7 +19103,7 @@ ${itemFields}
         </div>
         <div style="display:flex;gap:10px;padding:14px 18px 16px;flex-shrink:0">
           <button id="video-detail-cancel" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
-          <button id="video-detail-play" style="flex:1;padding:11px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">${(work.kind === 'tv' || work.kind === 'anime') ? '查看剧集' : '播放'}</button>
+          <button id="video-detail-play" style="flex:1;padding:11px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">${(work.kind === 'tv' || work.kind === 'anime') ? '查看剧集' : '播放'}</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -19397,7 +19397,7 @@ ${itemFields}
           <div style="font-size:34px;margin-bottom:12px">🎬</div>
           <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">还没有剧本</div>
           <div style="font-size:12px;line-height:1.7;margin-bottom:16px">这是你自制的电影。点右上角设置进入「编辑剧本」，填好创作方向就能生成剧情梗概、人物和名场面。</div>
-          <button id="video-selfmake-edit" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑剧本</button>
+          <button id="video-selfmake-edit" style="border:none;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑剧本</button>
         </div>`;
         setTimeout(() => {
           const b = overlay.querySelector('#video-selfmake-edit');
@@ -19410,7 +19410,7 @@ ${itemFields}
           <div style="font-size:34px;margin-bottom:12px">${_isAni ? '🎉' : '📺'}</div>
           <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">还没有故事蓝图</div>
           <div style="font-size:12px;line-height:1.7;margin-bottom:16px">这是你自制的${_isAni ? '动画' : '电视剧'}。先去编辑蓝图，定好总纲、明暗线、人物和分${_isAni ? '话' : '集'}大纲，再逐${_isAni ? '话' : '集'}创作剧情。</div>
-          <button id="video-selfmake-editbp" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑蓝图</button>
+          <button id="video-selfmake-editbp" style="border:none;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑蓝图</button>
         </div>`;
         setTimeout(() => {
           const b = overlay.querySelector('#video-selfmake-editbp');
@@ -19433,7 +19433,7 @@ ${itemFields}
           <div style="font-size:34px;margin-bottom:12px">🎬</div>
           <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">还没有名场面</div>
           <div style="font-size:12px;line-height:1.7;margin-bottom:16px">先去右上角「编辑剧本」生成剧本，名场面会一并产出。</div>
-          <button id="video-selfmake-edit2" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑剧本</button>
+          <button id="video-selfmake-edit2" style="border:none;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑剧本</button>
         </div>`;
         setTimeout(() => {
           const b = overlay.querySelector('#video-selfmake-edit2');
@@ -19445,7 +19445,7 @@ ${itemFields}
           <div style="font-size:34px;margin-bottom:12px">${_isAni ? '🎉' : '📺'}</div>
           <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">还没有故事蓝图</div>
           <div style="font-size:12px;line-height:1.7;margin-bottom:16px">名场面在逐${_isAni ? '话' : '集'}创作时产出。先去编辑蓝图，再逐${_isAni ? '话' : '集'}创作剧情。</div>
-          <button id="video-selfmake-editbp2" style="border:none;border-radius:9px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑蓝图</button>
+          <button id="video-selfmake-editbp2" style="border:none;border-radius:9px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;padding:9px 22px;cursor:pointer">去编辑蓝图</button>
         </div>`;
         setTimeout(() => {
           const b = overlay.querySelector('#video-selfmake-editbp2');
@@ -26077,7 +26077,7 @@ ${cats ? '题材：' + cats + '\n' : ''}${intro ? '简介：' + intro.slice(0, 3
           </div>
           <div style="display:flex;gap:8px;padding:14px 20px 18px">
             <button id="lic-cancel" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">取消</button>
-            <button id="lic-save" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+            <button id="lic-save" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">保存</button>
           </div>
         </div>`;
 
@@ -26171,7 +26171,7 @@ ${cats ? '题材：' + cats + '\n' : ''}${intro ? '简介：' + intro.slice(0, 3
         <div style="display:flex;gap:10px">
           ${cur ? `<button id="vts-clear" style="flex:1;padding:10px;font-size:14px;background:var(--bg-tertiary);color:var(--text-secondary);border:1px solid var(--border);border-radius:10px;cursor:pointer">清除</button>` : ''}
           <button id="vts-cancel" style="flex:1;padding:10px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer">取消</button>
-          <button id="vts-save" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer">保存</button>
+          <button id="vts-save" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color: var(--on-accent);border:none;border-radius:10px;cursor:pointer">保存</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -27301,7 +27301,7 @@ ${digest}
           <textarea id="vrev-text" rows="4" placeholder="说说你的看法…" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:12px;padding:11px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.6"></textarea>
           <div style="display:flex;gap:10px;margin-top:14px">
             <button id="vrev-cancel" style="flex:1;border:1px solid var(--border);background:transparent;color:var(--text-secondary);border-radius:12px;padding:11px 0;font-size:14px;cursor:pointer">取消</button>
-            <button id="vrev-send" style="flex:2;border:none;background:var(--accent);color:#fff;border-radius:12px;padding:11px 0;font-size:14px;font-weight:700;cursor:pointer">发布</button>
+            <button id="vrev-send" style="flex:2;border:none;background:var(--accent);color: var(--on-accent);border-radius:12px;padding:11px 0;font-size:14px;font-weight:700;cursor:pointer">发布</button>
           </div>
         </div>`;
       const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
@@ -27449,7 +27449,7 @@ ${digest}
     // 自制电影：上映反响 + 荣誉（评分/口碑/奖项）
     if (work && work.selfMake && (work.releaseReaction || (Array.isArray(work.awards) && work.awards.length))) {
       const RES_STYLE = {
-        '获奖': 'color:#fff;background:var(--accent)',
+        '获奖': 'color:var(--on-accent);background:var(--accent)',
         '提名': 'color:var(--accent);background:color-mix(in srgb, var(--accent) 14%, transparent);border:1px solid var(--accent)',
         '落选': 'color:var(--text-secondary);background:var(--bg-tertiary)'
       };
@@ -28969,7 +28969,7 @@ ${digest}
         const initial = Utils.escapeHtml((c.name || '?')[0]);
         const ava = avaUrl ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : initial;
         return `<div class="epr-row" data-i="${i}" style="display:flex;align-items:center;gap:10px;padding:10px 4px;cursor:pointer">
-          <div style="width:38px;height:38px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;overflow:hidden">${ava}</div>
+          <div style="width:38px;height:38px;border-radius:50%;flex-shrink:0;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;overflow:hidden">${ava}</div>
           <div style="flex:1;min-width:0">
             <div style="font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.name)}</div>
             <div style="font-size:11px;color:var(--text-secondary)">${_chatSourceLabel(c.source)}</div>
@@ -28982,7 +28982,7 @@ ${digest}
           <div style="padding:0 18px 10px;flex-shrink:0">
             <div style="display:flex;gap:8px">
               <input id="epr-custom" type="text" placeholder="或直接输入名字，如「编辑部」" maxlength="30" style="flex:1;min-width:0;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:13px;outline:none">
-              <button id="epr-custom-ok" style="flex-shrink:0;padding:9px 14px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:13px;cursor:pointer">确定</button>
+              <button id="epr-custom-ok" style="flex-shrink:0;padding:9px 14px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer">确定</button>
             </div>
           </div>
           <div style="flex:1;overflow-y:auto;padding:0 18px 8px;min-height:0">
@@ -29034,7 +29034,7 @@ ${digest}
         </div>
         <div style="padding:12px 18px 18px;display:flex;gap:10px;flex-shrink:0">
           <button id="ewf-cancel" style="flex:1;padding:12px;border:none;border-radius:999px;background:var(--bg-tertiary);color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button id="ewf-send" style="flex:1;padding:12px;border:none;border-radius:999px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">${sendTxt}</button>
+          <button id="ewf-send" style="flex:1;padding:12px;border:none;border-radius:999px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">${sendTxt}</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -29609,7 +29609,7 @@ ${isOut
           <input id="rd-w-title" type="text" maxlength="60" placeholder="给这本书起个名字" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);margin-bottom:14px">
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">作品类型</label>
           <div id="rd-w-type" style="display:flex;gap:8px;margin-bottom:14px">
-            <button type="button" data-type="long" class="rd-w-typebtn" style="flex:1;padding:9px 0;border-radius:9px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer">长篇连载</button>
+            <button type="button" data-type="long" class="rd-w-typebtn" style="flex:1;padding:9px 0;border-radius:9px;border:1px solid var(--accent);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer">长篇连载</button>
             <button type="button" data-type="short" class="rd-w-typebtn" style="flex:1;padding:9px 0;border-radius:9px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);font-size:13px;cursor:pointer">短篇小说</button>
           </div>
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">作者署名</label>
@@ -29623,7 +29623,7 @@ ${isOut
         </div>
         <div style="display:flex;gap:10px;padding:14px 20px 18px">
           <button id="rd-w-cancel" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">取消</button>
-          <button id="rd-w-ok" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">建书</button>
+          <button id="rd-w-ok" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">建书</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -29679,7 +29679,7 @@ ${isOut
         mask.querySelectorAll('.rd-w-typebtn').forEach(x => {
           const on = x.getAttribute('data-type') === selfWriteType;
           x.style.background = on ? 'var(--accent)' : 'var(--bg-secondary)';
-          x.style.color = on ? '#fff' : 'var(--text)';
+          x.style.color = on ? 'var(--on-accent)' : 'var(--text)';
           x.style.borderColor = on ? 'var(--accent)' : 'var(--border)';
         });
       };
@@ -30060,9 +30060,9 @@ const searchBar = `
     const needToc = inShelf && !isShort && !book.selfWrite && !!book.blueprint && !(Array.isArray(book.toc) && book.toc.length > 0);
     const mainLabel = needToc ? '生成章节目录' : '开始阅读';
     const btnsHtml = inShelf
-      ? `<button id="rd-book-main" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">${mainLabel}</button>`
+      ? `<button id="rd-book-main" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">${mainLabel}</button>`
       : `<button id="rd-book-add" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">加入书架</button>
-         <button id="rd-book-main" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">${mainLabel}</button>`;
+         <button id="rd-book-main" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">${mainLabel}</button>`;
 
     mask.innerHTML = `
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:340px;width:100%;max-height:80%;display:flex;flex-direction:column;overflow:hidden;color:var(--text)">
@@ -30264,7 +30264,7 @@ const searchBar = `
             const cur = picks[c.id] || '';
             const btns = ['lead', 'support', 'cameo'].map(r => {
               const on = cur === r;
-              return `<span class="rd-cast-btn" data-id="${Utils.escapeHtml(c.id)}" data-role="${r}" style="font-size:11px;padding:4px 9px;border-radius:7px;cursor:pointer;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent)' : 'transparent'};color:${on ? '#fff' : 'var(--text-secondary)'}">${ROLE_LABELS[r]}</span>`;
+              return `<span class="rd-cast-btn" data-id="${Utils.escapeHtml(c.id)}" data-role="${r}" style="font-size:11px;padding:4px 9px;border-radius:7px;cursor:pointer;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-secondary)'}">${ROLE_LABELS[r]}</span>`;
             }).join('');
             const nameTag = c.isMask ? ` <span style="font-size:10px;color:var(--accent)">(我)</span>` : '';
             return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--border) 50%, transparent)">
@@ -30296,7 +30296,7 @@ const searchBar = `
           </div>
           <div style="display:flex;gap:10px;padding:14px 20px 18px">
             <button id="rd-gen-cancel" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">取消</button>
-            <button id="rd-gen-ok" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">${saveOnly ? '保存' : (isShort ? '进入阅读' : '查看目录')}</button>
+            <button id="rd-gen-ok" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">${saveOnly ? '保存' : (isShort ? '进入阅读' : '查看目录')}</button>
           </div>
         </div>`;
       // 重建后恢复滚动位置（点定位按钮会整体重渲染，否则会弹回顶部）
@@ -31177,7 +31177,7 @@ ${progressHint}
         ${field('techniques', '叙事手法', '多线叙事/强反转/意识流/白描…', cur.techniques)}
         ${field('pacing', '节奏', '铺陈型/快节奏/张弛交替…', cur.pacing)}
         ${field('sentence', '语言句式', '长句短句、修辞密度、用词偏好…', cur.sentence)}
-        <button id="phone-style-save" style="width:100%;border:none;background:var(--accent);color:#fff;border-radius:14px;padding:13px 0;font-size:15px;font-weight:700;margin-top:8px">保存</button>
+        <button id="phone-style-save" style="width:100%;border:none;background:var(--accent);color: var(--on-accent);border-radius:14px;padding:13px 0;font-size:15px;font-weight:700;margin-top:8px">保存</button>
       </div>`;
     const shell = document.querySelector('#phone-modal .phone-shell') || document.body;
     shell.appendChild(overlay);
@@ -32727,7 +32727,7 @@ ${myNotesBlock}${oldBlock}
           <textarea id="rd-rewrite-hint" rows="3" placeholder="想怎么改？留空＝纯重抽" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:9px 11px;font-size:14px;color:var(--text);background:var(--bg-secondary);font-family:inherit;resize:none;line-height:1.5"></textarea>
           <div style="display:flex;gap:10px;margin-top:14px">
             <button id="rd-rewrite-cancel" style="flex:1;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:12px;padding:11px 0;font-size:14px">取消</button>
-            <button id="rd-rewrite-ok" style="flex:1;border:none;background:var(--accent);color:#fff;border-radius:12px;padding:11px 0;font-size:14px;font-weight:600">重写</button>
+            <button id="rd-rewrite-ok" style="flex:1;border:none;background:var(--accent);color: var(--on-accent);border-radius:12px;padding:11px 0;font-size:14px;font-weight:600">重写</button>
           </div>
         </div>`;
       document.body.appendChild(mask);
@@ -33052,7 +33052,7 @@ ${myNotesBlock}${oldBlock}
           <div style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;line-height:1.5">将生成「${esc(chapterTitle)}」中 ${_shareNoteIdxs.length} 处划线想法的长图卡片并保存到相册</div>
           <div style="display:flex;gap:10px">
             <button id="share-ch-cancel" style="flex:1;padding:11px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:10px;font-size:14px;cursor:pointer">取消</button>
-            <button id="share-ch-ok" style="flex:1;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+            <button id="share-ch-ok" style="flex:1;padding:11px;background:var(--accent);color: var(--on-accent);border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">生成</button>
           </div>
         </div>`;
       const close = val => { try { document.body.removeChild(overlay); } catch(_) {} resolve(val); };
@@ -33691,7 +33691,7 @@ ${existing}
         <textarea id="rd-an-area" rows="5" placeholder="今天更新有点晚，最近在憋一个大情节……" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:12px;padding:11px 12px;font-size:14px;color:var(--text);background:var(--bg-secondary);font-family:inherit;line-height:1.7;resize:none">${esc(cur)}</textarea>
         <div style="display:flex;gap:10px;margin-top:14px">
           <button id="rd-an-cancel" style="flex:1;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px 0;font-size:13px;cursor:pointer">取消</button>
-          <button id="rd-an-save" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+          <button id="rd-an-save" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;border-radius:9px;padding:11px 0;font-size:13px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>`;
     document.body.appendChild(mask);
@@ -35417,7 +35417,7 @@ return { start, stop, isSpeaking, startNoise: _startNoise, stopNoise: _stopNoise
 
           <div style="display:flex;gap:10px">
             <button id="radio-mail-cancel" style="flex:1;padding:10px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer">取消</button>
-            <button id="radio-mail-send" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer">发送</button>
+            <button id="radio-mail-send" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color: var(--on-accent);border:none;border-radius:10px;cursor:pointer">发送</button>
           </div>
         </div>`;
       document.body.appendChild(mask);
@@ -37073,7 +37073,7 @@ ${_RADIO_FORMAT_SPEC}${callerBlock}`;
         <div style="flex:1;overflow-y:auto">${checkRows}</div>
         <div style="padding:12px 16px;display:flex;gap:10px;border-top:1px solid var(--border)">
           <button id="radio-sync-all" style="flex:0 0 auto;padding:10px 14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:10px;font-size:13px;cursor:pointer">全选</button>
-          <button id="radio-sync-confirm" style="flex:1;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">同步到主线</button>
+          <button id="radio-sync-confirm" style="flex:1;padding:10px;background:var(--accent);color: var(--on-accent);border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">同步到主线</button>
         </div>
       </div>`;
     const shell = document.body;
@@ -37913,7 +37913,7 @@ ${_RADIO_NEXT_SPEC}`;
           
           <div style="display:flex;gap:10px">
             <button id="radio-lottery-cancel" style="flex:1;padding:10px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer">取消</button>
-            <button id="radio-lottery-ok" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer">确定</button>
+            <button id="radio-lottery-ok" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color: var(--on-accent);border:none;border-radius:10px;cursor:pointer">确定</button>
           </div>
         </div>`;
       document.body.appendChild(mask);
@@ -37956,7 +37956,7 @@ ${_RADIO_NEXT_SPEC}`;
 
           <div style="display:flex;gap:10px">
             <button id="radio-div-cancel" style="flex:1;padding:10px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer">取消</button>
-            <button id="radio-div-ok" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer">递交</button>
+            <button id="radio-div-ok" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color: var(--on-accent);border:none;border-radius:10px;cursor:pointer">递交</button>
           </div>
         </div>`;
       document.body.appendChild(mask);
@@ -38567,7 +38567,7 @@ ${taskBlock}
 
           <div style="display:flex;gap:10px">
             <button id="radio-song-cancel" style="flex:1;padding:10px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer">取消</button>
-            <button id="radio-song-send" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer">点这首</button>
+            <button id="radio-song-send" style="flex:1;padding:10px;font-size:14px;background:var(--accent);color: var(--on-accent);border:none;border-radius:10px;cursor:pointer">点这首</button>
           </div>
         </div>`;
       document.body.appendChild(mask);
@@ -38861,7 +38861,7 @@ const hostLine = `主播 ${Utils.escapeHtml(_radioDisplayName(p.dj) || '匿名')
           <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:16px"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg>
           <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">${Utils.escapeHtml((next && next.name) ? next.name : '下期节目')}</div>
           ${(next && next.desc) ? `<div style="font-size:12.5px;line-height:1.6;color:var(--text-secondary);max-width:280px;margin-bottom:22px">${Utils.escapeHtml(next.desc)}</div>` : '<div style="margin-bottom:22px"></div>'}
-          <button type="button" id="phone-radio-update-btn" style="padding:11px 28px;background:var(--accent);color:#111;border:none;border-radius:22px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px">
+          <button type="button" id="phone-radio-update-btn" style="padding:11px 28px;background:var(--accent);color: var(--on-accent);border:none;border-radius:22px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px">
             <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
             收听本期更新
           </button>
@@ -40323,7 +40323,7 @@ async function _weekOpenSlotModal(slotId) {
       </label>
 
       <div style="display:flex;gap:8px">
-        <button type="button" onclick="Phone._weekSaveSlot()" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+        <button type="button" onclick="Phone._weekSaveSlot()" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">保存</button>
         ${slot ? `<button type="button" onclick="Phone._weekDeleteSlot('${Utils.escapeHtml(slot.id)}');document.querySelector('.phone-cal-modal-mask')?.remove()" style="padding:10px 16px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">删除</button>` : ''}
       </div>
     </div>`;
@@ -40373,11 +40373,19 @@ async function _weekOpenAiGen() {
         <textarea id="week-aigen-req" rows="4" placeholder="例如：大学生的课表，周一到周五上午有课，周三下午社团，周末休息。或留空让 AI 按角色身份自由安排" style="${inputStyle};resize:vertical"></textarea>
       </label>
 
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:14px;cursor:pointer;user-select:none">
+        <span style="position:relative;display:inline-flex;flex-shrink:0">
+          <input id="week-aigen-mainline" type="checkbox" class="circle-check">
+          <span class="circle-check-ui"></span>
+        </span>
+        <span>参考主线最近10轮对话<br><span style="font-size:11px;color:var(--text-secondary)">若主线里提过课表/排班/固定安排，AI 会据此生成</span></span>
+      </label>
+
       <div id="week-aigen-hint" style="font-size:12px;color:var(--text-secondary);margin-bottom:14px"></div>
 
       <div style="display:flex;gap:8px">
         <button type="button" onclick="document.querySelector('.phone-cal-modal-mask')?.remove()" style="padding:10px 16px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text-secondary);font-size:13px;cursor:pointer">取消</button>
-        <button type="button" id="week-aigen-go" onclick="Phone._weekRunAiGen()" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">生成</button>
+        <button type="button" id="week-aigen-go" onclick="Phone._weekRunAiGen()" style="flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">生成</button>
       </div>
     </div>`;
   document.body.appendChild(mask);
@@ -40401,6 +40409,7 @@ async function _weekRunAiGen() {
   const reqEl = document.getElementById('week-aigen-req');
   const goBtn = document.getElementById('week-aigen-go');
   const requirement = (reqEl?.value || '').trim();
+  const useMainline = !!document.getElementById('week-aigen-mainline')?.checked;
 
   // 功能模型配置
   const funcConfig = Settings.getWorldvoiceConfig ? Settings.getWorldvoiceConfig() : {};
@@ -40425,6 +40434,15 @@ async function _weekRunAiGen() {
     const mask = (typeof Character !== 'undefined' && Character.get) ? await Character.get() : null;
     if (mask && typeof Character.formatForPrompt === 'function') maskBlock = Character.formatForPrompt(mask) || '';
   } catch (_) {}
+  // 主线最近10轮（可选，默认不带）：周程是客观排班，主线里的临时状况不该改变固定作息，
+  // 只在玩家明确勾选时参考——适合剧情已经交代过作息安排的情况。
+  let mlBlock = '';
+  if (useMainline) {
+    try {
+      const ml = _buildRecentPlotBlock();
+      if (ml && ml.trim()) mlBlock = ml.trim();
+    } catch (_) {}
+  }
 
   if (goBtn) { goBtn.disabled = true; goBtn.textContent = '生成中…'; }
   try {
@@ -40432,6 +40450,7 @@ async function _weekRunAiGen() {
       '你要为一个角色扮演里的"用户角色"生成一份【每周固定作息表】（每周重复，像课程表/工作排班）。',
       wvBlock ? '【世界观背景】\n请让作息贴合这个世界观的设定与生活方式：\n' + wvBlock : '世界观信息缺失，按常识生成。',
       maskBlock ? '\n【用户角色（面具）】\n请贴合这个角色的身份、年龄、职业来安排作息：\n' + maskBlock : '',
+      mlBlock ? '\n【最近主线对话】\n这是玩家最近的主线剧情，如果里面提到了课表、排班、固定安排，可以参考它来生成周程：\n' + mlBlock : '',
       '',
       `【本世界的一周】共 ${daysPerWeek} 天，天的编号与名称对应：${dayNameList.join('、')}。`,
       '一天采用 24 小时制，时间写 "HH:mm"（如 08:00、14:30）。',
@@ -40705,7 +40724,7 @@ function _calOpenAddEvent() {
         <div>
           <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">重复</div>
           <div style="display:flex;gap:0;border-radius:12px;border:1.5px solid var(--border);overflow:hidden">
-            <button id="cal-rep-once"    class="cal-rep-btn cal-rep-active" onclick="Phone._calPickRepeat('once')"    style="flex:1;padding:9px 0;border:none;font-size:13px;cursor:pointer;transition:all .15s;background:var(--accent);color:#fff;font-weight:600">不重复</button>
+            <button id="cal-rep-once"    class="cal-rep-btn cal-rep-active" onclick="Phone._calPickRepeat('once')"    style="flex:1;padding:9px 0;border:none;font-size:13px;cursor:pointer;transition:all .15s;background:var(--accent);color: var(--on-accent);font-weight:600">不重复</button>
             <button id="cal-rep-monthly" class="cal-rep-btn"               onclick="Phone._calPickRepeat('monthly')" style="flex:1;padding:9px 0;border:none;font-size:13px;cursor:pointer;transition:all .15s;background:var(--bg-secondary);color:var(--text-secondary)">每月</button>
             <button id="cal-rep-yearly"  class="cal-rep-btn"               onclick="Phone._calPickRepeat('yearly')"  style="flex:1;padding:9px 0;border:none;font-size:13px;cursor:pointer;transition:all .15s;background:var(--bg-secondary);color:var(--text-secondary)">每年</button>
           </div>
@@ -40724,7 +40743,7 @@ function _calOpenAddEvent() {
           <button onclick="this.closest('div[style*=fixed]').remove()"
             style="flex:1;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
           <button onclick="Phone._calSaveEvent(${yr},${mo},${day})"
-            style="flex:2;padding:12px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+            style="flex:2;padding:12px;border-radius:12px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
         </div>
 
       </div>
@@ -40845,7 +40864,7 @@ function _calPickRepeat(rep) {
     btn.dataset.active = isThis ? '1' : '0';
     btn.dataset.rep = btn.id.replace('cal-rep-', '');
     btn.style.background = isThis ? 'var(--accent)' : 'var(--bg-secondary)';
-    btn.style.color = isThis ? '#fff' : 'var(--text-secondary)';
+    btn.style.color = isThis ? 'var(--on-accent)' : 'var(--text-secondary)';
     btn.style.fontWeight = isThis ? '600' : '400';
   });
 }
@@ -40950,7 +40969,7 @@ async function _calOpenEditEvent(id) {
           <button onclick="this.closest('div[style*=fixed]').remove()"
             style="flex:1;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:14px;cursor:pointer">取消</button>
           <button onclick="Phone._calSaveEditEvent('${id}')"
-            style="flex:2;padding:12px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+            style="flex:2;padding:12px;border-radius:12px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>
     </div>`;
@@ -41056,7 +41075,7 @@ async function _openChatTransfer(contactId) {
       <input id="transfer-amount-input" type="number" placeholder="输入金额" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-tertiary);color:var(--text);font-size:14px;outline:none;box-sizing:border-box;margin-bottom:16px">
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button id="transfer-cancel" style="padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-        <button id="transfer-confirm" style="padding:8px 18px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">确认转账</button>
+        <button id="transfer-confirm" style="padding:8px 18px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">确认转账</button>
       </div>
     </div>`;
 
@@ -42175,7 +42194,7 @@ async function _clearMomentsCover() {
     }
     const _catTabsHtml = _cats.map(c => {
       const active = c === _activeCat;
-      return `<div class="phone-forum-cat${active ? ' active' : ''}" style="flex-shrink:0;display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:14px;font-size:12px;cursor:pointer;white-space:nowrap;background:${active ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${active ? '#111' : 'var(--text-secondary)'};border:1px solid ${active ? 'var(--accent)' : 'var(--border)'}">
+      return `<div class="phone-forum-cat${active ? ' active' : ''}" style="flex-shrink:0;display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:14px;font-size:12px;cursor:pointer;white-space:nowrap;background:${active ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${active ? 'var(--on-accent)' : 'var(--text-secondary)'};border:1px solid ${active ? 'var(--accent)' : 'var(--border)'}">
         <span onclick="Phone._switchForumCategory('${encodeURIComponent(c)}')">${Utils.escapeHtml(c)}</span>
         <span onclick="event.stopPropagation();Phone._deleteForumCategory('${encodeURIComponent(c)}')" style="opacity:.7;font-size:13px;line-height:1;margin-left:1px">×</span>
       </div>`;
@@ -42190,7 +42209,7 @@ async function _clearMomentsCover() {
           </div>
           <div style="display:flex;gap:6px;margin-bottom:10px">
             <input id="phone-forum-search" type="text" placeholder="搜索…" oninput="Phone._forumSyncActionBtn()" onkeydown="if(event.key==='Enter')Phone._forumSearchOrRefresh()" style="flex:1;min-width:0;border:1px solid var(--border);border-radius:6px;padding:6px 10px;background:var(--bg-tertiary);color:var(--text);font-size:13px">
-<button id="phone-forum-action-btn" onclick="Phone._forumSearchOrRefresh()" class="phone-forum-search-btn" style="flex-shrink:0;background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
+<button id="phone-forum-action-btn" onclick="Phone._forumSearchOrRefresh()" class="phone-forum-search-btn" style="flex-shrink:0;background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
           </div>
           <div id="phone-forum-posts" style="margin-top:4px">
             ${posts.length === 0 ? '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">点击刷新按钮获取推荐</p>' :
@@ -42200,7 +42219,7 @@ async function _clearMomentsCover() {
         <div id="phone-forum-hot-panel" style="flex:1;overflow-y:auto;padding:10px 12px;display:${_forumTab === 'hot' ? 'block' : 'none'}">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
             <span class="phone-forum-hot-header" style="font-size:13px;font-weight:600;color:var(--text)">热搜榜</span>
-            <button onclick="Phone._forumHotRefresh()" class="phone-forum-search-btn" style="flex-shrink:0;background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
+            <button onclick="Phone._forumHotRefresh()" class="phone-forum-search-btn" style="flex-shrink:0;background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
           </div>
           <div id="phone-forum-hot-list">
             ${_renderForumHotList(pd.forumHotSearch || [])}
@@ -42226,7 +42245,7 @@ async function _clearMomentsCover() {
             <div style="color:var(--text-secondary);font-size:13px;line-height:1.7">内容加载出了点问题<br>可以返回桌面重新进入，或点下方刷新</div>
           </div>
           <div style="padding:0 12px 12px;display:flex;justify-content:center">
-            <button onclick="Phone._forumSearchOrRefresh()" style="background:var(--accent);color:#111;border:none;border-radius:8px;padding:9px 20px;font-size:13px;cursor:pointer">刷新论坛</button>
+            <button onclick="Phone._forumSearchOrRefresh()" style="background:var(--accent);color: var(--on-accent);border:none;border-radius:8px;padding:9px 20px;font-size:13px;cursor:pointer">刷新论坛</button>
           </div>
           <div class="phone-tabbar">
             <div class="phone-tab active" onclick="Phone._switchForumTab('posts')">推荐</div>
@@ -43179,7 +43198,7 @@ ${wvPrompt}${_echoForHot}`;
             <div class="phone-forum-hotzone-title" style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">${Utils.escapeHtml(hot.title || '')}</div>
             ${hot.desc ? `<div class="phone-forum-hotzone-desc" style="font-size:12px;color:var(--text-secondary);line-height:1.5">${Utils.escapeHtml(hot.desc)}</div>` : ''}
           </div>
-          <button onclick="Phone._forumHotZoneRefresh(${hotIndex})" class="phone-forum-search-btn" style="flex-shrink:0;background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
+          <button onclick="Phone._forumHotZoneRefresh(${hotIndex})" class="phone-forum-search-btn" style="flex-shrink:0;background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
         </div>
         <div id="phone-forum-hotzone-posts"></div>
       </div>`;
@@ -43200,7 +43219,7 @@ ${wvPrompt}${_echoForHot}`;
           <div class="phone-forum-hotzone-title" style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">${Utils.escapeHtml(hot.title || '')}</div>
           ${hot.desc ? `<div class="phone-forum-hotzone-desc" style="font-size:12px;color:var(--text-secondary);line-height:1.5">${Utils.escapeHtml(hot.desc)}</div>` : ''}
         </div>
-        <button onclick="Phone._forumHotZoneRefresh(${hotIndex})" class="phone-forum-search-btn" style="flex-shrink:0;background:var(--accent);color:#111;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
+        <button onclick="Phone._forumHotZoneRefresh(${hotIndex})" class="phone-forum-search-btn" style="flex-shrink:0;background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 13)} 刷新</button>
       </div>
       <div id="phone-forum-hotzone-posts">${Array.from({ length: 3 }).map(() => `
         <div class="wv-skeleton-card">
@@ -43413,7 +43432,7 @@ ${wvPrompt}${_hitBlock}`;
         </div>
         <input id="phone-forum-post-tags" value="${Utils.escapeHtml((p.tags || []).join('、'))}" placeholder="标签（用顿号分隔）" style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--bg-tertiary);color:var(--text);font-size:12px">
         <div style="display:flex;gap:8px;margin-top:4px">
-          <button onclick="Phone._saveForumPost(${index})" style="flex:1;background:var(--accent);color:#111;border:none;border-radius:6px;padding:8px 0;font-size:13px;cursor:pointer;font-weight:600">发布</button>
+          <button onclick="Phone._saveForumPost(${index})" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;padding:8px 0;font-size:13px;cursor:pointer;font-weight:600">发布</button>
           <button onclick="Phone._deleteForumPost(${index})" style="background:none;border:1px solid var(--error);color:var(--error);border-radius:6px;padding:8px 12px;font-size:12px;cursor:pointer">删除</button>
         </div>
       </div>
@@ -43529,7 +43548,7 @@ ${wvPrompt}${_hitBlock}`;
     html += '<div class="phone-forum-detail-actions" style="display:flex;align-items:center;gap:6px;padding:8px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg-secondary);box-sizing:border-box;width:100%">';
     html += '<div style="flex:1;min-width:0;display:flex;align-items:center;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;padding:2px 4px 2px 12px">';
     html += '<input id="phone-myforum-comment-input" placeholder="写评论…" style="flex:1;border:none;background:transparent;color:var(--text);font-size:13px;outline:none;min-width:0">';
-    html += '<button onclick="Phone._sendMyForumComment(' + index + ')" style="background:var(--accent);color:#111;border:none;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">';
+    html += '<button onclick="Phone._sendMyForumComment(' + index + ')" style="background:var(--accent);color: var(--on-accent);border:none;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">';
     html += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>';
     html += '</button>';
     html += '</div>';
@@ -44374,7 +44393,7 @@ html += `<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secon
         html += `<div class="phone-forum-detail-actions" style="display:flex;align-items:center;gap:6px;padding:8px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg-secondary);box-sizing:border-box;width:100%">
           <div style="flex:1;min-width:0;display:flex;align-items:center;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;padding:2px 4px 2px 12px">
             <input id="phone-forum-comment-input" placeholder="写评论…" style="flex:1;border:none;background:transparent;color:var(--text);font-size:13px;outline:none;min-width:0">
-            <button onclick="Phone._sendForumComment(${index})" style="background:var(--accent);color:#111;border:none;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
+            <button onclick="Phone._sendForumComment(${index})" style="background:var(--accent);color: var(--on-accent);border:none;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
             </button>
           </div>
@@ -44550,7 +44569,7 @@ async function _likeForumPost(index) {
         const avaUrl = _chatContactAvatar(c);
         const avatarEl = avaUrl
           ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0">`
-          : `<div style="width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${Utils.escapeHtml(displayName[0])}</div>`;
+          : `<div style="width:40px;height:40px;border-radius:50%;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${Utils.escapeHtml(displayName[0])}</div>`;
         return renderItem(c.id, displayName, avatarEl);
       }).join('');
       const groupHtml = groups.map(g => {
@@ -44787,7 +44806,7 @@ async function _likeForumPost(index) {
         <div style="font-size:13px;line-height:1.7;color:var(--text-secondary)">${Utils.escapeHtml(p.desc || '暂无介绍')}</div>
         <div style="display:flex;gap:10px;margin-top:16px">
           <button data-act="edit" style="flex:1;padding:9px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;font-size:14px;cursor:pointer">编辑</button>
-          <button data-act="ok" style="flex:1;padding:9px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer">知道了</button>
+          <button data-act="ok" style="flex:1;padding:9px;background:var(--accent);color: var(--on-accent);border:none;border-radius:10px;font-size:14px;cursor:pointer">知道了</button>
         </div>
       </div>`;
     const close = () => { try { document.body.removeChild(overlay); } catch(_) {} };
@@ -44816,7 +44835,7 @@ async function _likeForumPost(index) {
                   style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-tertiary);color:var(--text);font-size:13px;line-height:1.6;font-family:inherit;resize:vertical">${Utils.escapeHtml(p.desc || '')}</textarea>
         <div style="display:flex;gap:10px;margin-top:16px">
           <button data-act="cancel" style="flex:1;padding:9px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;font-size:14px;cursor:pointer">取消</button>
-          <button data-act="save" style="flex:1;padding:9px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer">保存</button>
+          <button data-act="save" style="flex:1;padding:9px;background:var(--accent);color: var(--on-accent);border:none;border-radius:10px;font-size:14px;cursor:pointer">保存</button>
         </div>
       </div>`;
     const close = () => { try { document.body.removeChild(overlay); } catch(_) {} };
@@ -46518,7 +46537,7 @@ ${playerReplyHint}
                 </div>
         <input id="phone-moment-time" value="${Utils.escapeHtml(gameTime)}" placeholder="时间" style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--bg-tertiary);color:var(--text);font-size:12px">
         <button type="button" onclick="Phone._openMomentVisibleModal()" class="phone-visible-trigger"><span>对谁可见</span><strong id="phone-moment-visible-label">全部可见</strong></button>
-        <button onclick="event.stopPropagation();Phone._submitMoment()" style="background:var(--accent);color:#111;border:none;border-radius:6px;padding:8px;font-size:13px;cursor:pointer;margin-top:4px">发布</button>
+        <button onclick="event.stopPropagation();Phone._submitMoment()" style="background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;padding:8px;font-size:13px;cursor:pointer;margin-top:4px">发布</button>
       </div>
     `;
   }
@@ -47605,7 +47624,7 @@ async function _showCreateGroupDialog() {
     const initial = Utils.escapeHtml((dn || '?')[0]);
     const avatar = avaUrl ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : initial;
     return `<label class="cg-member-row" style="display:flex;align-items:center;gap:10px;padding:8px 4px;cursor:pointer">
-      <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatar}</div>
+      <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatar}</div>
       <span style="flex:1;min-width:0;font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(dn)}</span>
       <span style="position:relative;display:inline-flex;flex-shrink:0">
         <input type="checkbox" class="circle-check cg-member-check" value="${Utils.escapeHtml(c.id)}">
@@ -47691,7 +47710,7 @@ async function _showCreateGroupDialog() {
       <div style="flex:1;overflow-y:auto;min-height:0;margin-bottom:14px">${contactRows}</div>
       <div style="display:flex;gap:10px">
         <button id="cg-cancel" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--bg-tertiary);color:var(--text);font-size:14px;cursor:pointer">取消</button>
-        <button id="cg-ok" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">创建</button>
+        <button id="cg-ok" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">创建</button>
       </div>
     </div>`;
   document.body.appendChild(mask);
@@ -48189,7 +48208,7 @@ function _renderChatThreadList(pd) {
       ontouchstart="Phone._chatItemTouchStart('${it.kind}','${it.id}',${it.pinned ? 'true' : 'false'})"
       ontouchend="Phone._chatItemTouchEnd()" ontouchmove="Phone._chatItemTouchEnd()"
       style="display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;${it.pinned ? 'background:var(--bg-tertiary)' : ''}">
-      <div style="width:46px;height:46px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;overflow:hidden">${avatar}</div>
+      <div style="width:46px;height:46px;border-radius:50%;flex-shrink:0;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;overflow:hidden">${avatar}</div>
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:5px">
           ${pinIcon}
@@ -48310,7 +48329,7 @@ async function _hydrateChatContacts(pd) {
       const avaUrl = _chatContactAvatar(c);
       const avatar = avaUrl ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : initial;
       return `<div class="phone-chat-contact-item" onclick="Phone._openChatThread('${c.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer">
-        <div style="width:40px;height:40px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;overflow:hidden">${avatar}</div>
+        <div style="width:40px;height:40px;border-radius:50%;flex-shrink:0;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;overflow:hidden">${avatar}</div>
         <div style="flex:1;min-width:0">
           <div class="phone-chat-name" style="font-size:14px;font-weight:600;color:var(--text)">${Utils.escapeHtml(displayName)}</div>
           <div style="font-size:11px;color:var(--text-secondary)">${_chatSourceLabel(c.source)}</div>
@@ -48332,7 +48351,7 @@ async function _hydrateChatContacts(pd) {
           <div class="phone-chat-name" style="font-size:14px;font-weight:600;color:var(--text)">${Utils.escapeHtml(c.name)}</div>
           <div style="font-size:11px;color:var(--text-secondary)">${_chatSourceLabel(c.source)}</div>
         </div>
-        <button onclick="Phone._addChatContactByIdx(${i})" style="padding:5px 14px;font-size:12px;background:var(--accent);color:#fff;border:none;border-radius:14px;cursor:pointer;flex-shrink:0">添加</button>
+        <button onclick="Phone._addChatContactByIdx(${i})" style="padding:5px 14px;font-size:12px;background:var(--accent);color: var(--on-accent);border:none;border-radius:14px;cursor:pointer;flex-shrink:0">添加</button>
       </div>`;
     }).join('');
   }
@@ -48500,6 +48519,21 @@ function _isGroupId(pd, id) {
 
 // 取某会话 thread 的最近 N 轮，格式化成文本（玩家发一次＝一轮起点）
 // meName=玩家名；otherLabel=对方在文本里的称呼（单聊用联系人名，群聊用 senderName）
+// 格式化单条消息（供 _formatThreadRounds 与工具查询共用）
+function _formatOneMsg(m, meName, otherFixedName) {
+  const who = m.role === 'me' ? `玩家（${meName}）` : (otherFixedName || m.senderName || '对方');
+  const t = m.time ? `[${m.time}] ` : '';
+  if (m.type === 'location') return `${who}：${t}发送了位置：${m.location || ''}${m.address ? '（' + m.address + '）' : ''}`;
+  if (m.type === 'voice') return `${who}：${t}（语音）${m.voiceDesc || (m.text || '').replace(/^\[语音\]/, '')}`;
+  if (m.type === 'sticker') return `${who}：${t}发送了一个表情[${m.stickerName || ''}]`;
+  if (m.type === 'photo' || m.type === 'real_image') return `${who}：${t}发送了一张图片${m.photoDesc ? '：' + m.photoDesc : ''}`;
+  return `${who}：${t}${m.text || ''}`;
+}
+// 直接格式化一段连续消息（不做轮次切片），用于搜索命中的上下文
+function _formatThreadSlice(slice, meName, otherFixedName) {
+  if (!Array.isArray(slice) || !slice.length) return '';
+  return slice.map(m => _formatOneMsg(m, meName, otherFixedName)).join('\n');
+}
 function _formatThreadRounds(thread, rounds, meName, otherFixedName) {
   if (!Array.isArray(thread) || !thread.length) return '';
   let startIdx = 0, meSeen = 0;
@@ -48510,15 +48544,7 @@ function _formatThreadRounds(thread, rounds, meName, otherFixedName) {
     }
   }
   const recent = thread.slice(startIdx);
-  return recent.map(m => {
-    const who = m.role === 'me' ? `玩家（${meName}）` : (otherFixedName || m.senderName || '对方');
-    const t = m.time ? `[${m.time}] ` : '';
-    if (m.type === 'location') return `${who}：${t}发送了位置：${m.location || ''}${m.address ? '（' + m.address + '）' : ''}`;
-    if (m.type === 'voice') return `${who}：${t}（语音）${m.voiceDesc || (m.text || '').replace(/^\[语音\]/, '')}`;
-    if (m.type === 'sticker') return `${who}：${t}发送了一个表情[${m.stickerName || ''}]`;
-    if (m.type === 'photo' || m.type === 'real_image') return `${who}：${t}发送了一张图片${m.photoDesc ? '：' + m.photoDesc : ''}`;
-    return `${who}：${t}${m.text || ''}`;
-  }).join('\n');
+  return recent.map(m => _formatOneMsg(m, meName, otherFixedName)).join('\n');
 }
 // 群语音模式开关
 let _groupVoiceMode = {};
@@ -48988,7 +49014,7 @@ if (m.type === 'pet_status') {
   const quoteBlock = m.quote ? `<div style="font-size:11px;line-height:1.4;color:${mine ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)'};background:${mine ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)'};border-left:2px solid ${mine ? 'rgba(255,255,255,0.45)' : 'var(--accent)'};padding:3px 7px;border-radius:0 6px 6px 0;margin-bottom:5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word">${Utils.escapeHtml((m.quote.sender ? m.quote.sender + '：' : '') + (m.quote.preview || ''))}</div>` : '';
   if (mine) {
     return `<div class="phone-chat-msg-bubble" data-msg-id="${m.id}" data-role="${m.role}" style="align-items:flex-end;display:flex;gap:8px;margin-bottom:12px;flex-direction:row-reverse">
-      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${meAvatarInner}</div>
+      <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;position:relative;overflow:visible">${meAvatarInner}</div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;min-width:0;max-width:72%">
         <div class="phone-chat-txt-mine" style="padding:8px 12px;border-radius:18px;border-bottom-right-radius:4px;font-size:14px;line-height:1.5;word-break:break-word">${quoteBlock}${_phoneText(m.text || '')}</div>
         ${footTag}
@@ -49056,7 +49082,7 @@ function _renderGroupThread(pd, groupId) {
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:24px;height:24px"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 9a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V15a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V9Z" clip-rule="evenodd" /></svg>
         </button>
         <input id="phone-group-input" class="phone-chat-input-box" type="text" placeholder="输入消息…" onkeydown="if(event.key==='Enter'){Phone._groupDoSend('${groupId}')}" style="flex:1;min-width:0;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none">
-        <button id="phone-chat-send-btn" onclick="Phone._groupDoSend('${groupId}')" title="发送" style="flex-shrink:0;width:34px;height:34px;background:var(--accent);color:#fff;border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0">
+        <button id="phone-chat-send-btn" onclick="Phone._groupDoSend('${groupId}')" title="发送" style="flex-shrink:0;width:34px;height:34px;background:var(--accent);color: var(--on-accent);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0">
           <svg id="phone-chat-send-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
         </button>
       </div>
@@ -49295,7 +49321,7 @@ async function _openGroupRedPacketSend(groupId) {
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:340px;width:100%;color:var(--text);max-height:88vh;overflow-y:auto">
       <div style="font-size:15px;font-weight:600;margin-bottom:14px">发群红包</div>
       <div style="display:flex;gap:8px;margin-bottom:14px">
-        <button type="button" id="rp-kind-lucky" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer">拼手气红包</button>
+        <button type="button" id="rp-kind-lucky" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer">拼手气红包</button>
         <button type="button" id="rp-kind-exclusive" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;cursor:pointer">专属红包</button>
       </div>
       <div style="font-size:12px;font-weight:600;margin-bottom:8px">选择货币</div>
@@ -49324,7 +49350,7 @@ async function _openGroupRedPacketSend(groupId) {
     kind = k;
     const lucky = mask.querySelector('#rp-kind-lucky');
     const excl = mask.querySelector('#rp-kind-exclusive');
-    const on = (b) => { b.style.background = 'var(--accent)'; b.style.color = '#fff'; b.style.borderColor = 'var(--accent)'; };
+    const on = (b) => { b.style.background = 'var(--accent)'; b.style.color = 'var(--on-accent)'; b.style.borderColor = 'var(--accent)'; };
     const off = (b) => { b.style.background = 'transparent'; b.style.color = 'var(--text)'; b.style.borderColor = 'var(--border)'; };
     if (k === 'lucky') { on(lucky); off(excl); } else { off(lucky); on(excl); }
     mask.querySelector('#rp-count-row').style.display = k === 'lucky' ? 'block' : 'none';
@@ -50549,7 +50575,7 @@ function _renderFanGroupSettingsBlock(pd, group) {
           : `<span style="flex:1;font-size:11px;color:var(--text-secondary);display:flex;align-items:center">请先在钱包绑定货币</span>`}
       </div>
 
-      <button onclick="Phone._groupSaveFanSettings('${gid}')" style="width:100%;padding:9px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;margin-top:12px">保存粉丝群设置</button>
+      <button onclick="Phone._groupSaveFanSettings('${gid}')" style="width:100%;padding:9px;border:none;border-radius:12px;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer;margin-top:12px">保存粉丝群设置</button>
     </div>`;
   } catch (e) {
     console.warn('[Phone] _renderFanGroupSettingsBlock 失败', e);
@@ -50706,14 +50732,14 @@ function _renderGroupSettings(pd, groupId) {
   body.innerHTML = `
     <div style="padding:18px 16px 24px;overflow-y:auto;height:100%;box-sizing:border-box">
       <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:20px">
-        <div onclick="Phone._groupPickAvatar('${groupId}')" style="width:72px;height:72px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer">${avaHtml}</div>
+        <div onclick="Phone._groupPickAvatar('${groupId}')" style="width:72px;height:72px;border-radius:50%;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer">${avaHtml}</div>
         <span style="font-size:11px;color:var(--text-secondary)">点击头像更换</span>
       </div>
 
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">群名称</div>
       <div style="display:flex;gap:8px;margin-bottom:16px">
         <input id="group-name-input" type="text" maxlength="20" value="${Utils.escapeHtml(group.name)}" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 14px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;outline:none">
-        <button onclick="Phone._groupSaveName('${groupId}')" style="flex-shrink:0;padding:10px 16px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">保存</button>
+        <button onclick="Phone._groupSaveName('${groupId}')" style="flex-shrink:0;padding:10px 16px;border:none;border-radius:12px;background:var(--accent);color: var(--on-accent);font-size:14px;cursor:pointer">保存</button>
       </div>
 
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">群介绍 <span style="font-size:11px;color:var(--text-secondary);opacity:0.7">（说明这是个什么群，AI 会参考）</span></div>
@@ -53287,7 +53313,7 @@ async function _groupAddContacts(groupId) {
     const initial = Utils.escapeHtml((dn || '?')[0]);
     const avatar = avaUrl ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : initial;
     return `<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;cursor:pointer">
-      <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatar}</div>
+      <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatar}</div>
       <span style="flex:1;min-width:0;font-size:14px;color:var(--text)">${Utils.escapeHtml(dn)}</span>
       <span style="position:relative;display:inline-flex;flex-shrink:0">
         <input type="checkbox" class="circle-check ga-check" value="${Utils.escapeHtml(c.id)}">
@@ -53302,7 +53328,7 @@ async function _groupAddContacts(groupId) {
     <div style="flex:1;overflow-y:auto;min-height:0;margin-bottom:14px">${rows}</div>
     <div style="display:flex;gap:10px">
       <button id="ga-cancel" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--bg-tertiary);color:var(--text);font-size:14px;cursor:pointer">取消</button>
-      <button id="ga-ok" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">添加</button>
+      <button id="ga-ok" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">添加</button>
     </div></div>`;
   document.body.appendChild(mask);
   const close = () => { try { document.body.removeChild(mask); } catch(_) {} };
@@ -53329,7 +53355,7 @@ async function _groupAddExtra(groupId) {
     <textarea id="ge-persona" placeholder="简短人设（性格、身份、说话风格等，可留空）" style="width:100%;box-sizing:border-box;padding:11px 14px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;outline:none;min-height:80px;resize:none;margin-bottom:14px"></textarea>
     <div style="display:flex;gap:10px">
       <button id="ge-cancel" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--bg-tertiary);color:var(--text);font-size:14px;cursor:pointer">取消</button>
-      <button id="ge-ok" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">添加</button>
+      <button id="ge-ok" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">添加</button>
     </div></div>`;
   document.body.appendChild(mask);
   const close = () => { try { document.body.removeChild(mask); } catch(_) {} };
@@ -53368,7 +53394,7 @@ async function _groupEditExtra(groupId, encName) {
     <textarea id="gee-persona" placeholder="人设（性格、身份、说话风格等，可留空）" style="width:100%;box-sizing:border-box;padding:11px 14px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:none;border-radius:12px;outline:none;min-height:120px;resize:none;margin-bottom:14px">${Utils.escapeHtml(extra.persona || '')}</textarea>
     <div style="display:flex;gap:10px">
       <button id="gee-cancel" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--bg-tertiary);color:var(--text);font-size:14px;cursor:pointer">取消</button>
-      <button id="gee-ok" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+      <button id="gee-ok" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
     </div></div>`;
   document.body.appendChild(mask);
   const close = () => { try { document.body.removeChild(mask); } catch(_) {} };
@@ -53439,7 +53465,7 @@ async function _groupAiGenExtras(groupId) {
     </div>
     <div style="display:flex;gap:10px">
       <button id="gae-cancel" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--bg-tertiary);color:var(--text);font-size:14px;cursor:pointer">取消</button>
-      <button id="gae-ok" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer">生成</button>
+      <button id="gae-ok" style="flex:1;padding:11px;border:none;border-radius:999px;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">生成</button>
     </div></div>`;
   document.body.appendChild(mask);
   const close = () => { try { document.body.removeChild(mask); } catch(_) {} };
@@ -53687,8 +53713,8 @@ function _renderChatThread(pd, contactId) {
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
                 <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-                  <span style="font-size:13px;font-weight:600;color:#fff">${transferTitle}</span>
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--on-accent)" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  <span style="font-size:13px;font-weight:600;color:var(--on-accent)">${transferTitle}</span>
                 </div>
                 <div style="padding:14px">
                   <div style="font-size:20px;font-weight:700;color:var(--text)">¥${Utils.escapeHtml(String(m.transferAmount || 0))}</div>
@@ -54109,7 +54135,7 @@ ${contact.deleted ? `
         <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px">${Utils.escapeHtml(contact.pendingFriendRequest.reason || '（对方没有留言）')}</div>
         <div style="display:flex;gap:10px">
           <button onclick="Phone._rejectFriendRequest('${contactId}')" style="flex:1;padding:10px;border-radius:10px;background:var(--bg-secondary);color:var(--text-secondary);border:1px solid var(--border);font-size:14px;cursor:pointer">拒绝</button>
-          <button onclick="Phone._acceptFriendRequest('${contactId}')" style="flex:1;padding:10px;border-radius:10px;background:var(--accent);color:#fff;border:none;font-size:14px;font-weight:600;cursor:pointer">接受</button>
+          <button onclick="Phone._acceptFriendRequest('${contactId}')" style="flex:1;padding:10px;border-radius:10px;background:var(--accent);color: var(--on-accent);border:none;font-size:14px;font-weight:600;cursor:pointer">接受</button>
         </div>
       </div>` : `<div style="flex-shrink:0;margin:6px 12px 10px;padding:14px 16px;background:var(--bg-tertiary);border-radius:14px;text-align:center">
         <div style="font-size:13px;color:var(--text-secondary);line-height:1.7">对方不在你的联系人列表<br><span style="font-size:11px;opacity:.85">你已删除对方，无法发送消息。可在右上角设置里主动重新添加。</span></div>
@@ -54119,7 +54145,7 @@ ${contact.deleted ? `
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:24px;height:24px"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 9a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V15a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V9Z" clip-rule="evenodd" /></svg>
         </button>
         <input id="phone-chat-input" class="phone-chat-input-box" type="text" placeholder="输入消息…" onkeydown="if(event.key==='Enter'){Phone._chatDoSend('${contactId}')}" oninput="Phone._onChatInput()" style="flex:1;min-width:0;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none">
-        <button id="phone-chat-send-btn" onclick="Phone._chatDoSend('${contactId}')" title="发送" style="flex-shrink:0;width:34px;height:34px;background:var(--accent);color:#fff;border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0;box-shadow:0 2px 4px var(--accent-dim)">
+        <button id="phone-chat-send-btn" onclick="Phone._chatDoSend('${contactId}')" title="发送" style="flex-shrink:0;width:34px;height:34px;background:var(--accent);color: var(--on-accent);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:0;box-shadow:0 2px 4px var(--accent-dim)">
           <svg id="phone-chat-send-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
          </button>
        </div>
@@ -54706,8 +54732,8 @@ function _renderChatThreadWithSystem(pd, contactId) {
             <div style="display:flex;flex-direction:column;${mine ? 'align-items:flex-end' : 'align-items:flex-start'};min-width:0">
               <div style="width:240px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg-secondary)">
                 <div style="background:linear-gradient(135deg,var(--accent),#e8a040);padding:12px 14px;display:flex;align-items:center;gap:8px">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-                  <span style="font-size:13px;font-weight:600;color:#fff">${transferTitle}</span>
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--on-accent)" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  <span style="font-size:13px;font-weight:600;color:var(--on-accent)">${transferTitle}</span>
                 </div>
                 <div style="padding:14px">
                   <div style="font-size:20px;font-weight:700;color:var(--text)">¥${Utils.escapeHtml(String(m.transferAmount || 0))}</div>
@@ -55546,7 +55572,7 @@ async function _openChatSettings(contactId) {
         </button>
         `}
         <button onclick="Phone._saveChatSettings('${contactId}')"
-          style="width:100%;padding:13px;border-radius:12px;background:var(--accent);color:#fff;border:none;font-size:15px;font-weight:600;cursor:pointer">
+          style="width:100%;padding:13px;border-radius:12px;background:var(--accent);color: var(--on-accent);border:none;font-size:15px;font-weight:600;cursor:pointer">
           保存
         </button>
       </div>
@@ -55587,7 +55613,7 @@ async function _openMergeContactPicker(contactId) {
     const tag = c.deleted ? '（已删除）' : '';
     return `<div class="cg-member-row" onclick="Phone._doMergeContact('${contactId}','${c.id}')"
       style="display:flex;align-items:center;gap:10px;padding:10px 4px;cursor:pointer">
-      <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatar}</div>
+      <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatar}</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(dn)}${tag}</div>
         <div style="font-size:11px;color:var(--text-secondary)">${cnt} 条记录 · ${_chatSourceLabel(c.source)}</div>
@@ -56061,7 +56087,7 @@ async function _openChatLocationPicker(contactId) {
         <span style="font-size:12px;color:var(--text-secondary)">当前位置</span>
       </div>
       <input id="loc-picker-name" type="text" value="${Utils.escapeHtml(defaultLocation)}" placeholder="输入位置名称…" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:20px">
-      <button id="loc-picker-confirm" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer">发送位置</button>
+      <button id="loc-picker-confirm" style="width:100%;padding:12px;background:var(--accent);color: var(--on-accent);border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer">发送位置</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -56239,18 +56265,21 @@ async function _chatRequestReply(contactId) {
 
     // ② 基础世界观 + 速查表 + ③ 主线最近10轮（_buildFullContext 已含）
     // 马甲线：主播不该通过主线/面具知道这个匿名观众是谁——只给世界观基础，跳过主线剧情与玩家面具
+    // 注意：_isAliasThread 必须在此之前声明。它曾定义在下方（v713.4 起），
+    // 导致这里命中 const 的暂时性死区抛 ReferenceError，被 catch 静默吞掉，
+    // fullCtx 恒为空 —— 表现为私聊 AI 读不到世界观和主线剧情、聊久了崩人设。
+    const _isAliasThread = !!(contact && contact.viaAlias);
     let fullCtx = '';
     try {
       fullCtx = _isAliasThread
         ? await _buildFullContext({ npcBrief: true, lite: true, skipMainline: true })
         : await _buildFullContext({ npcBrief: true });
-    } catch(_) {}
+    } catch(e) { console.warn('[私聊] 世界观/主线上下文构建失败', e); }
 
     // ④ 手机内最近N条聊天记录（N 由联系人设置 chatHistoryLimit 控制，默认20）
     const _histLimit = Math.max(5, Math.min(50, parseInt(contact.chatHistoryLimit, 10) || 20));
     const recent = thread.slice(-_histLimit);
-    // 马甲线：玩家身份用马甲名，隐藏真身；真身线用面具本名
-    const _isAliasThread = !!(contact && contact.viaAlias);
+    // 马甲线：玩家身份用马甲名，隐藏真身；真身线用面具本名（_isAliasThread 已在上方声明）
     const _aliasThreadName = _isAliasThread ? (String(contact.aliasName || '').trim() || '匿名') : '';
     const myName = _isAliasThread ? _aliasThreadName : (() => { try { const mk = Character.get(); return mk?.name || '我'; } catch(_) { return '我'; } })();
     // 给玩家在本段上下文里发的真实图片编号（供 AI 用 index 精准指定，如换头像）
@@ -58337,7 +58366,7 @@ function _callSuggest() {
       <input id="phone-call-suggest-dir" type="text" placeholder="比如：温柔安慰 / 反问 / 撒娇…" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:10px;outline:none;margin-bottom:14px">
       <div style="display:flex;gap:8px">
         <button id="phone-call-suggest-cancel" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-        <button id="phone-call-suggest-ok" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:14px;cursor:pointer">生成</button>
+        <button id="phone-call-suggest-ok" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;cursor:pointer">生成</button>
       </div>
     </div>`;
   const shell = document.querySelector('#phone-modal .phone-shell');
@@ -58895,7 +58924,7 @@ function _callEditRound() {
     <textarea id="phone-call-edit-textarea" style="flex:1;min-height:0;width:100%;box-sizing:border-box;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;line-height:1.6;padding:12px;resize:none;outline:none;font-family:inherit">${Utils.escapeHtml(original)}</textarea>
     <div style="display:flex;gap:10px;margin-top:12px">
       <button onclick="document.getElementById('phone-call-edit-overlay')?.remove()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-      <button onclick="Phone._callSaveEdit()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+      <button onclick="Phone._callSaveEdit()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
     </div>`;
   const shell = document.querySelector('#phone-modal .phone-shell');
   if (shell) shell.appendChild(overlay);
@@ -58966,7 +58995,7 @@ function _callEditMeRound() {
     <textarea id="phone-call-edit-textarea" style="flex:1;min-height:0;width:100%;box-sizing:border-box;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;line-height:1.6;padding:12px;resize:none;outline:none;font-family:inherit">${Utils.escapeHtml(editable)}</textarea>
     <div style="display:flex;gap:10px;margin-top:12px">
       <button onclick="document.getElementById('phone-call-edit-overlay')?.remove()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-      <button onclick="Phone._callSaveMeEdit()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">保存</button>
+      <button onclick="Phone._callSaveMeEdit()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存</button>
     </div>`;
   const shell = document.querySelector('#phone-modal .phone-shell');
   if (shell) shell.appendChild(overlay);
@@ -60120,7 +60149,7 @@ function _renderStickerPickerBody(contactId, items) {
   if (tabBar) {
     const tab = (label, val) => {
       const active = (val === _chatStickerFilter);
-      const css = active ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : 'background:var(--bg-tertiary);color:var(--text);border-color:var(--border)';
+      const css = active ? 'background:var(--accent);color:var(--on-accent);border-color:var(--accent)' : 'background:var(--bg-tertiary);color:var(--text);border-color:var(--border)';
       const arg = (val == null) ? 'null' : `'${Utils.escapeHtml(String(val)).replace(/'/g, "\\'")}'`;
       return `<button onclick="Phone._setChatStickerFilter('${contactId}', ${arg})" style="padding:4px 11px;border:1px solid;border-radius:999px;font-size:12px;cursor:pointer;font-family:inherit;${css}">${Utils.escapeHtml(label)}</button>`;
     };
@@ -61092,7 +61121,7 @@ async function _tomatoInviteCompanion() {
   const listHtml = contacts.map(c => {
     const ava = c.avatar
       ? `<img src="${Utils.escapeHtml(c.avatar)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover">`
-      : `<div style="width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600">${Utils.escapeHtml((c.name || '?')[0])}</div>`;
+      : `<div style="width:40px;height:40px;border-radius:50%;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600">${Utils.escapeHtml((c.name || '?')[0])}</div>`;
     return `<div onclick="event.stopPropagation();Phone._tomatoSelectCompanion('${c.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;cursor:pointer;transition:background .1s" onpointerdown="this.style.background='var(--bg-tertiary)'" onpointerup="this.style.background=''" onpointerleave="this.style.background=''">
       ${ava}
       <div style="font-size:14px;color:var(--text);font-weight:500">${Utils.escapeHtml(c.name || '未知')}</div>
@@ -61237,7 +61266,7 @@ async function _tomatoEditGoal() {
       <div style="padding:12px 20px 0">
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">专注时长（分钟）</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${presets.map(p => `<button onpointerdown="event.preventDefault();document.getElementById('tomato-dur-input').value=${p};this.parentElement.querySelectorAll('button').forEach(b=>{b.style.background='transparent';b.style.color='var(--text)'});this.style.background='var(--accent)';this.style.color='#111'" style="flex:1;min-width:50px;padding:8px 0;border-radius:8px;border:1px solid var(--border);background:${p === currentMin ? 'var(--accent)' : 'transparent'};color:${p === currentMin ? '#111' : 'var(--text)'};font-size:13px;font-weight:600;cursor:pointer">${p}</button>`).join('')}
+          ${presets.map(p => `<button onpointerdown="event.preventDefault();document.getElementById('tomato-dur-input').value=${p};this.parentElement.querySelectorAll('button').forEach(b=>{b.style.background='transparent';b.style.color='var(--text)'});this.style.background='var(--accent)';this.style.color='var(--on-accent)'" style="flex:1;min-width:50px;padding:8px 0;border-radius:8px;border:1px solid var(--border);background:${p === currentMin ? 'var(--accent)' : 'transparent'};color:${p === currentMin ? 'var(--on-accent)' : 'var(--text)'};font-size:13px;font-weight:600;cursor:pointer">${p}</button>`).join('')}
         </div>
         <input id="tomato-dur-input" type="number" min="1" max="120" value="${currentMin}" placeholder="自定义" style="width:100%;box-sizing:border-box;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 10px;outline:none;margin-top:8px">
       </div>
@@ -61258,7 +61287,7 @@ async function _tomatoEditGoal() {
       </div>
       <div style="display:flex;gap:10px;padding:14px 20px 18px">
         <button onpointerdown="event.preventDefault();this.closest('div[style*=fixed]').remove()" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-        <button onpointerdown="event.preventDefault();Phone._tomatoSaveSettings()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">确定</button>
+        <button onpointerdown="event.preventDefault();Phone._tomatoSaveSettings()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">确定</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -61300,14 +61329,14 @@ function _tomatoEditDuration() {
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;max-width:300px;width:100%;color:var(--text)">
       <div style="font-size:15px;font-weight:600;padding:18px 20px 12px">专注时长（分钟）</div>
       <div style="display:flex;gap:8px;padding:0 20px;flex-wrap:wrap">
-        ${presets.map(p => `<button onpointerdown="event.preventDefault();Phone._tomatoSetDuration(${p})" style="flex:1;min-width:56px;padding:9px 0;border-radius:8px;border:1px solid var(--border);background:${p === current ? 'var(--accent)' : 'transparent'};color:${p === current ? '#111' : 'var(--text)'};font-size:13px;font-weight:600;cursor:pointer">${p}</button>`).join('')}
+        ${presets.map(p => `<button onpointerdown="event.preventDefault();Phone._tomatoSetDuration(${p})" style="flex:1;min-width:56px;padding:9px 0;border-radius:8px;border:1px solid var(--border);background:${p === current ? 'var(--accent)' : 'transparent'};color:${p === current ? 'var(--on-accent)' : 'var(--text)'};font-size:13px;font-weight:600;cursor:pointer">${p}</button>`).join('')}
       </div>
       <div style="padding:12px 20px 4px">
         <input id="tomato-dur-input" type="number" min="1" max="120" value="${current}" placeholder="自定义（1-120）" style="width:100%;box-sizing:border-box;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 10px;outline:none">
       </div>
       <div style="display:flex;gap:10px;padding:14px 20px 18px">
         <button onpointerdown="event.preventDefault();this.closest('div[style*=fixed]').remove()" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-        <button onpointerdown="event.preventDefault();Phone._tomatoSaveDuration()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">确定</button>
+        <button onpointerdown="event.preventDefault();Phone._tomatoSaveDuration()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">确定</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -61795,7 +61824,7 @@ async function _feiniaoShowOrderDetail(orderId) {
        const initial = Utils.escapeHtml((r.name || '?')[0]);
        const avaUrl = _chatAvatarMap[r.name] || '';
        const avatar = avaUrl ? `<img src="${Utils.escapeHtml(avaUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : initial;
-       return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><div style="width:26px;height:26px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;overflow:hidden">${avatar}</div><span style="font-size:13px;color:var(--text)">${Utils.escapeHtml(r.name || '')}</span></div>`;
+       return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><div style="width:26px;height:26px;border-radius:50%;flex-shrink:0;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;overflow:hidden">${avatar}</div><span style="font-size:13px;color:var(--text)">${Utils.escapeHtml(r.name || '')}</span></div>`;
      }).join('')
    : `<div style="font-size:13px;color:var(--text)">${Utils.escapeHtml(o.target || '')}</div>`;
  const mask = document.createElement('div');
@@ -61820,7 +61849,7 @@ async function _feiniaoShowOrderDetail(orderId) {
       </div>
      <div style="display:flex;gap:10px;padding:12px 20px 18px">
        <button onclick="Phone._feiniaoDeleteOrder('${o.id}')" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--error);font-size:14px;cursor:pointer">删除</button>
-       <button onclick="document.getElementById('feiniao-order-detail-overlay').remove()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">关闭</button>
+       <button onclick="document.getElementById('feiniao-order-detail-overlay').remove()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">关闭</button>
      </div>
    </div>
  `;
@@ -61951,7 +61980,7 @@ function _youyuShowOrderDetail(orderId) {
       </div>
       <div style="display:flex;gap:10px;padding:12px 20px 18px">
         <button onclick="Phone._youyuDeleteOrder('${o.id}')" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--error);font-size:14px;cursor:pointer">删除</button>
-        <button onclick="document.getElementById('youyu-order-detail-overlay').remove()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">关闭</button>
+        <button onclick="document.getElementById('youyu-order-detail-overlay').remove()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">关闭</button>
       </div>
     </div>
   `;
@@ -62131,7 +62160,7 @@ function _youyuRenderListModal() {
  const isDirect = d.deliveryMode === 'direct';
  const btn = (mode, label) => {
    const on = d.deliveryMode === mode;
-   return `<button onpointerdown="event.preventDefault();Phone._youyuSetDelivery('${mode}')" style="flex:1;padding:9px;border-radius:8px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent)' : 'transparent'};color:${on ? '#111' : 'var(--text)'};font-size:13px;font-weight:${on ? '600' : '400'};cursor:pointer">${label}</button>`;
+   return `<button onpointerdown="event.preventDefault();Phone._youyuSetDelivery('${mode}')" style="flex:1;padding:9px;border-radius:8px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text)'};font-size:13px;font-weight:${on ? '600' : '400'};cursor:pointer">${label}</button>`;
  };
  const etaBlock = isDirect ? '' : `
    <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">${isExpress ? '预期时效（天，需大于 2）' : '预期时效（分钟）'}</label>
@@ -62175,7 +62204,7 @@ const countBlock = d.fromInventory ? `
       </div>
       <div style="display:flex;gap:10px;padding:14px 20px 18px">
         <button onpointerdown="event.preventDefault();document.getElementById('youyu-list-overlay').remove()" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-        <button onpointerdown="event.preventDefault();Phone._youyuConfirmListing()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">上架</button>
+        <button onpointerdown="event.preventDefault();Phone._youyuConfirmListing()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">上架</button>
       </div>
     </div>
   `;
@@ -62364,7 +62393,7 @@ async function _youyuShareListing(listingId, target) {
       const initial = Utils.escapeHtml((c.name || '?')[0]);
       const avatarHtml = avatar
         ? `<img src="${Utils.escapeHtml(avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover">`
-        : `<div style="width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">${initial}</div>`;
+        : `<div style="width:32px;height:32px;border-radius:50%;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">${initial}</div>`;
       return `<div onclick="Phone._youyuSendToChat('${l.id}','${Utils.escapeHtml(c.id)}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-radius:10px;border:1px solid var(--border);margin-bottom:6px;background:var(--bg-secondary)">
         ${avatarHtml}
         <div style="font-size:14px;color:var(--text);font-weight:500">${Utils.escapeHtml(c.name || '?')}</div>
@@ -62374,7 +62403,7 @@ async function _youyuShareListing(listingId, target) {
       const initial = Utils.escapeHtml((g.name || '群')[0]);
       const avatarHtml = g.avatar
         ? `<img src="${Utils.escapeHtml(g.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover">`
-        : `<div style="width:32px;height:32px;border-radius:12px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">${initial}</div>`;
+        : `<div style="width:32px;height:32px;border-radius:12px;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">${initial}</div>`;
       const fanTag = g.isFanGroup ? '<span style="font-size:10px;padding:1px 5px;border-radius:5px;border:1px solid var(--border);color:var(--text-secondary);margin-left:6px">粉丝群</span>' : '';
       return `<div onclick="Phone._youyuSendToGroup('${l.id}','${Utils.escapeHtml(g.id)}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-radius:10px;border:1px solid var(--border);margin-bottom:6px;background:var(--bg-secondary)">
         ${avatarHtml}
@@ -62758,7 +62787,7 @@ async function _feiniaoPickFromInventory(src) {
       <div style="flex:1;overflow-y:auto;padding:0 2px 8px">${rows}</div>
       <div style="display:flex;gap:10px;margin-top:6px">
         <button onclick="document.getElementById('feiniao-inv-overlay').remove()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-        <button onclick="Phone._feiniaoInvConfirm()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">确定</button>
+        <button onclick="Phone._feiniaoInvConfirm()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">确定</button>
       </div>
     </div>
   `;
@@ -62836,7 +62865,7 @@ function _feiniaoCustomItem(editIdx) {
      </div>
      <div style="display:flex;gap:10px;padding:14px 20px 18px">
        <button onpointerdown="event.preventDefault();document.getElementById('feiniao-custom-overlay').remove()" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-       <button onpointerdown="event.preventDefault();Phone._feiniaoCustomConfirm()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">确定</button>
+       <button onpointerdown="event.preventDefault();Phone._feiniaoCustomConfirm()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">确定</button>
      </div>
    </div>
  `;
@@ -62897,7 +62926,7 @@ function _feiniaoOpenShipModal() {
    const avatar = r.avatar ? `<img src="${Utils.escapeHtml(r.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : initial;
    return `
      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;margin-top:6px">
-       <div style="width:28px;height:28px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;overflow:hidden">${avatar}</div>
+       <div style="width:28px;height:28px;border-radius:50%;flex-shrink:0;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;overflow:hidden">${avatar}</div>
        <span style="flex:1;min-width:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(r.name || '')}</span>
        <button onclick="Phone._feiniaoRecipRemove(${i})" style="width:24px;height:24px;flex-shrink:0;border-radius:6px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;font-size:16px;line-height:1">×</button>
      </div>`;
@@ -62919,8 +62948,8 @@ function _feiniaoOpenShipModal() {
 
        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">方式</label>
        <div style="display:flex;gap:8px;margin-bottom:14px">
-         <button onclick="Phone._feiniaoSetMode('express')" style="flex:1;padding:9px;border-radius:8px;border:1px solid ${isExpress ? 'var(--accent)' : 'var(--border)'};background:${isExpress ? 'var(--accent)' : 'transparent'};color:${isExpress ? '#111' : 'var(--text)'};font-size:13px;font-weight:${isExpress ? '600' : '400'};cursor:pointer">快递</button>
-         <button onclick="Phone._feiniaoSetMode('errand')" style="flex:1;padding:9px;border-radius:8px;border:1px solid ${!isExpress ? 'var(--accent)' : 'var(--border)'};background:${!isExpress ? 'var(--accent)' : 'transparent'};color:${!isExpress ? '#111' : 'var(--text)'};font-size:13px;font-weight:${!isExpress ? '600' : '400'};cursor:pointer">跑腿</button>
+         <button onclick="Phone._feiniaoSetMode('express')" style="flex:1;padding:9px;border-radius:8px;border:1px solid ${isExpress ? 'var(--accent)' : 'var(--border)'};background:${isExpress ? 'var(--accent)' : 'transparent'};color:${isExpress ? 'var(--on-accent)' : 'var(--text)'};font-size:13px;font-weight:${isExpress ? '600' : '400'};cursor:pointer">快递</button>
+         <button onclick="Phone._feiniaoSetMode('errand')" style="flex:1;padding:9px;border-radius:8px;border:1px solid ${!isExpress ? 'var(--accent)' : 'var(--border)'};background:${!isExpress ? 'var(--accent)' : 'transparent'};color:${!isExpress ? 'var(--on-accent)' : 'var(--text)'};font-size:13px;font-weight:${!isExpress ? '600' : '400'};cursor:pointer">跑腿</button>
        </div>
 
        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">${isExpress ? '预期时效（天，需大于 2）' : '预期时效（分钟）'}</label>
@@ -62946,7 +62975,7 @@ function _feiniaoOpenShipModal() {
      </div>
      <div style="display:flex;gap:10px;padding:12px 20px 18px">
        <button onclick="Phone._feiniaoCancelShip()" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-       <button onclick="Phone._feiniaoSubmitShip()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">寄出</button>
+       <button onclick="Phone._feiniaoSubmitShip()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">寄出</button>
      </div>
    </div>
  `;
@@ -63012,7 +63041,7 @@ async function _feiniaoAddRecipient() {
    const already = chosenNames.has(c.name);
    return `
      <div onclick="${already ? '' : `Phone._feiniaoRecipToggle(${i}, this)`}" data-idx="${i}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;margin-top:8px;cursor:${already ? 'default' : 'pointer'};opacity:${already ? '0.45' : '1'}">
-       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatar}</div>
+       <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--accent);color: var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;overflow:hidden">${avatar}</div>
        <div style="flex:1;min-width:0">
          <div style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(c.name || '')}</div>
          <div style="font-size:11px;color:var(--text-secondary)">${already ? '已添加' : _chatSourceLabel(c.source)}</div>
@@ -63027,7 +63056,7 @@ async function _feiniaoAddRecipient() {
      <div style="flex:1;overflow-y:auto;padding:0 2px 8px">${rows}</div>
      <div style="display:flex;gap:10px;margin-top:6px">
        <button onclick="document.getElementById('feiniao-recip-overlay').remove()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-       <button onclick="Phone._feiniaoRecipConfirm()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">确定</button>
+       <button onclick="Phone._feiniaoRecipConfirm()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">确定</button>
      </div>
    </div>
  `;
@@ -63201,7 +63230,7 @@ function _renderMemo(pd) {
       <div style="padding:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <span style="font-size:13px;color:var(--text-secondary)">${memos.length} 条记录</span>
-          <button onclick="Phone._addMemo()" style="background:var(--accent);color:#111;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">+ 新建</button>
+          <button onclick="Phone._addMemo()" style="background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">+ 新建</button>
         </div>
         ${memos.length === 0 ? '<p style="text-align:center;color:var(--text-secondary);font-size:12px;margin-top:24px">还没有备忘录</p>' :
 memos.map((m, i) => `
@@ -64073,7 +64102,7 @@ priceHint: '价格合理（约 10~9999，注意日用便宜、数码贵一些）
           </div>
           <div style="display:flex;gap:6px;margin-bottom:10px">
             <button onclick="Phone._shopRefresh('${kind}')" class="phone-shop-refresh-btn" style="flex:1;padding:7px;font-size:12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">${_uiIcon('refresh', 12)} 刷新推荐</button>
-            <button onclick="Phone._shopOpenCustomModal('${kind}')" class="phone-shop-custom-btn" style="flex:1;padding:7px;font-size:12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">+ ${Utils.escapeHtml(cfg.customBtnText)}</button>
+            <button onclick="Phone._shopOpenCustomModal('${kind}')" class="phone-shop-custom-btn" style="flex:1;padding:7px;font-size:12px;background:var(--accent);color: var(--on-accent);border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">+ ${Utils.escapeHtml(cfg.customBtnText)}</button>
           </div>
           <div id="phone-shop-items">${itemsHtml}</div>
         </div>
@@ -64345,7 +64374,7 @@ ${fullCtx}`;
         </div>
         <div style="display:flex;gap:10px;padding:14px 20px 18px">
           <button onpointerdown="event.preventDefault();document.getElementById('phone-shop-custom-modal').remove()" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer">取消</button>
-          <button onpointerdown="event.preventDefault();Phone._shopConfirmCustom('${kind}')" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:14px;font-weight:600;cursor:pointer">添加到列表</button>
+          <button onpointerdown="event.preventDefault();Phone._shopConfirmCustom('${kind}')" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">添加到列表</button>
         </div>
       </div>
     `;
@@ -64584,7 +64613,7 @@ ${fullCtx}`;
           <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">${currencyOptions}</div>
           <div style="display:flex;gap:10px;justify-content:flex-end">
             <button id="wallet-pay-cancel" style="padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-            <button id="wallet-pay-confirm" style="padding:8px 18px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">确认支付</button>
+            <button id="wallet-pay-confirm" style="padding:8px 18px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">确认支付</button>
           </div>
         </div>`;
 
@@ -64900,7 +64929,7 @@ function _hsRenderEditOverlay(target) {
       </div>
       <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px">
         <button onclick="Phone._hsCloseEdit()" style="flex:1;padding:10px 0;background:transparent;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;font-size:14px;cursor:pointer">取消</button>
-        <button onclick="Phone._hsSaveEdit()" style="flex:1;padding:10px 0;background:var(--accent);border:none;color:#fff;border-radius:8px;font-size:14px;cursor:pointer;font-weight:500">保存</button>
+        <button onclick="Phone._hsSaveEdit()" style="flex:1;padding:10px 0;background:var(--accent);border:none;color: var(--on-accent);border-radius:8px;font-size:14px;cursor:pointer;font-weight:500">保存</button>
       </div>
     </div>
   `;
@@ -65733,6 +65762,119 @@ _calSwitchTab, _weekSelectDay, _weekToggleEnable, _weekDeleteSlot, _weekOpenAddS
         }
       }
       await _savePhoneData();
+    },
+    // ===== 供工具调用：只读查询聊天记录 =====
+    // opts: { contact, rounds, keyword, includeAlias }
+    // 不传 contact → 返回会话目录；传 contact → 返回该会话内容；传 keyword → 搜索
+    queryChatForTool: async (opts) => {
+      const o = opts || {};
+      const pd = await _getPhoneData();
+      if (!pd) return { error: '读取手机数据失败' };
+      const threads = pd.chatThreads || {};
+      const contacts = Array.isArray(pd.chatContacts) ? pd.chatContacts : [];
+      const groups = Array.isArray(pd.chatGroups) ? pd.chatGroups : [];
+      const includeAlias = !!o.includeAlias;
+      const meName = (() => {
+        try { return _ltUserName || '玩家'; } catch(_) { return '玩家'; }
+      })();
+      // 汇总所有会话：{ id, label, kind, isAlias, thread }
+      const sessions = [];
+      for (const c of contacts) {
+        if (!c || !c.id) continue;
+        if (c.viaAlias && !includeAlias) continue;
+        const th = threads[c.id];
+        if (!Array.isArray(th) || !th.length) continue;
+        sessions.push({
+          id: c.id,
+          label: c.nickname || c.name || '未命名',
+          realName: c.name || '',
+          kind: '单聊',
+          isAlias: !!c.viaAlias,
+          aliasName: c.viaAlias ? (c.aliasName || '') : '',
+          thread: th
+        });
+      }
+      for (const g of groups) {
+        if (!g || !g.id) continue;
+        const th = threads[g.id];
+        if (!Array.isArray(th) || !th.length) continue;
+        sessions.push({ id: g.id, label: g.name || '未命名群', realName: g.name || '', kind: '群聊', isAlias: false, aliasName: '', thread: th });
+      }
+      if (!sessions.length) {
+        return { sessions: [], note: includeAlias ? '手机里还没有任何聊天记录。' : '手机里还没有任何聊天记录（不含马甲会话）。' };
+      }
+      // 按会话名筛选（精确优先，再模糊）
+      const pickSessions = (kw) => {
+        const k = _normContactName(kw);
+        if (!k) return [];
+        let hit = sessions.filter(s => _normContactName(s.label) === k || _normContactName(s.realName) === k);
+        if (hit.length) return hit;
+        hit = sessions.filter(s => _normContactName(s.label).includes(k) || _normContactName(s.realName).includes(k));
+        if (hit.length) return hit;
+        // 兜底：走联系人名归一（能处理代号/本名互指）
+        const ct = _findContactByName(contacts, kw);
+        if (ct) return sessions.filter(s => s.id === ct.id);
+        return [];
+      };
+      const kw = String(o.keyword || '').trim();
+      const target = String(o.contact || '').trim();
+      // ── 模式一：会话目录 ──
+      if (!target && !kw) {
+        return {
+          sessions: sessions.map(s => {
+            const last = s.thread[s.thread.length - 1] || {};
+            return {
+              name: s.label,
+              kind: s.kind,
+              ...(s.isAlias ? { 马甲身份: s.aliasName || '（未命名马甲）' } : {}),
+              messageCount: s.thread.length,
+              lastTime: last.time || '',
+              lastPreview: (_msgQuotePreview(last) || '').slice(0, 40)
+            };
+          }),
+          note: '这是会话目录。要看具体聊了什么，用 contact 参数传联系人名或群名再查一次。'
+            + (includeAlias ? '' : '（马甲会话未列出，需要时传 includeAlias=true）')
+        };
+      }
+      // ── 模式二：关键词搜索 ──
+      if (kw) {
+        const scope = target ? pickSessions(target) : sessions;
+        if (target && !scope.length) return { found: false, message: `没有找到和「${target}」的聊天记录。可以先不传 contact 查会话目录。` };
+        const hits = [];
+        const lowKw = kw.toLowerCase();
+        for (const s of scope) {
+          s.thread.forEach((m, i) => {
+            if (hits.length >= 12) return;
+            const body = ((m.text || '') + ' ' + (m.photoDesc || '') + ' ' + (m.voiceDesc || '') + ' ' + (m.location || '')).toLowerCase();
+            if (!body.includes(lowKw)) return;
+            const from = Math.max(0, i - 2), to = Math.min(s.thread.length, i + 3);
+            hits.push({
+              会话: s.label + (s.kind === '群聊' ? '（群）' : '') + (s.isAlias ? `（马甲：${s.aliasName || '未命名'}）` : ''),
+              时间: m.time || '',
+              上下文: _formatThreadSlice(s.thread.slice(from, to), meName, s.kind === '群聊' ? null : s.realName)
+            });
+          });
+        }
+        if (!hits.length) return { found: false, message: `聊天记录里没有搜到包含「${kw}」的消息。` };
+        return { found: true, keyword: kw, hitCount: hits.length, hits };
+      }
+      // ── 模式三：查某个会话的最近内容 ──
+      const matched = pickSessions(target);
+      if (!matched.length) {
+        const names = sessions.map(s => s.label).slice(0, 20).join('、');
+        return { found: false, message: `没有找到和「${target}」的聊天记录。现有会话：${names || '（无）'}` };
+      }
+      const rounds = Math.max(1, Math.min(30, parseInt(o.rounds, 10) || 10));
+      return {
+        found: true,
+        results: matched.map(s => ({
+          会话: s.label,
+          类型: s.kind,
+          ...(s.isAlias ? { 马甲身份: s.aliasName || '（未命名马甲）', 说明: '这是玩家用马甲身份聊的，对方不知道玩家的真实身份。' } : {}),
+          消息总数: s.thread.length,
+          最近对话: _formatThreadRounds(s.thread, rounds, meName, s.kind === '群聊' ? null : s.realName) || '（没有内容）'
+        }))
+      };
     },
   };
 })();

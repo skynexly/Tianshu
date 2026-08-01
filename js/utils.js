@@ -948,7 +948,7 @@ async function copyFromDataset(btn) {
           <div id="_img-pick-url-err" style="display:none;font-size:11px;color:var(--danger,#e55)"></div>
           <div style="display:flex;gap:8px">
             <button id="_img-pick-cancel" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border,#333);background:transparent;color:var(--text-secondary,#888);font-size:13px;cursor:pointer">取消</button>
-            <button id="_img-pick-confirm" style="flex:1;padding:8px;border-radius:8px;border:none;background:var(--accent,#f60);color:#111;font-size:13px;font-weight:600;cursor:pointer">确认URL</button>
+            <button id="_img-pick-confirm" style="flex:1;padding:8px;border-radius:8px;border:none;background:var(--accent,#f60);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">确认URL</button>
           </div>
         </div>`;
       document.body.appendChild(overlay);
@@ -1061,9 +1061,9 @@ async function copyFromDataset(btn) {
           <div id="_aiav-status" style="display:none;font-size:12px;color:var(--text-secondary,#888);text-align:center;padding:6px"></div>
           <div style="display:flex;gap:8px">
             <button id="_aiav-cancel" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--border,#333);background:transparent;color:var(--text-secondary,#888);font-size:13px;cursor:pointer">取消</button>
-            <button id="_aiav-gen" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--accent,#f60);color:#111;font-size:13px;font-weight:600;cursor:pointer">生成</button>
+            <button id="_aiav-gen" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--accent,#f60);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">生成</button>
             <button id="_aiav-download" style="display:none;flex:1;padding:9px;border-radius:8px;border:1px solid var(--accent,#f60);background:transparent;color:var(--accent,#f60);font-size:13px;font-weight:600;cursor:pointer">下载原图</button>
-            <button id="_aiav-use" style="display:none;flex:1;padding:9px;border-radius:8px;border:none;background:var(--accent,#f60);color:#111;font-size:13px;font-weight:600;cursor:pointer">用这张</button>
+            <button id="_aiav-use" style="display:none;flex:1;padding:9px;border-radius:8px;border:none;background:var(--accent,#f60);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">用这张</button>
           </div>
         </div>`;
       document.body.appendChild(overlay);
@@ -1232,7 +1232,7 @@ async function copyFromDataset(btn) {
         <div style="font-size:12px;color:var(--text-secondary,#888);margin-bottom:18px">${sizeText ? '大小约 ' + sizeText + '　·　' : ''}点「保存到文件」选择存放位置</div>
         <div style="display:flex;gap:10px">
           <button type="button" id="_sf-cancel" style="flex:1;padding:11px;border:none;border-radius:10px;background:var(--bg-input,#2c2c2e);color:var(--text-primary,#fff);font-size:14px;cursor:pointer">取消</button>
-          <button type="button" id="_sf-save" style="flex:1.4;padding:11px;border:none;border-radius:10px;background:var(--accent,#e08a2b);color:#fff;font-size:14px;font-weight:600;cursor:pointer">保存到文件</button>
+          <button type="button" id="_sf-save" style="flex:1.4;padding:11px;border:none;border-radius:10px;background:var(--accent,#e08a2b);color: var(--on-accent);font-size:14px;font-weight:600;cursor:pointer">保存到文件</button>
         </div>
       `;
       mask.appendChild(panel);

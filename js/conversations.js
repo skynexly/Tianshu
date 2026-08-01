@@ -11,7 +11,7 @@ const Conversations = (() => {
     'convAmbientEnabled', 'convAmbientVolume', 'convAmbientMode',
     'convOnlineChat', 'convImgGen', 'convCallEnabled', 'convCallFreq',
     'convGroupChatEnabled', 'convNarrPerson',
-    'convToolsMemory', 'convToolsWorldview', 'convToolsEdit', 'convToolsHistory', 'convAutoExtract',
+    'convToolsMemory', 'convToolsWorldview', 'convToolsEdit', 'convToolsHistory', 'convToolsPhoneChat', 'convAutoExtract',
     'convEventsEnabled', 'convTasksEnabled', 'convAttrsEnabled', 'convKnowledgeEnabled',
     'convReplyWordCount', 'convTimeFormat',
     'convHideTopbar',
@@ -1712,7 +1712,7 @@ const allArchives = await DB.getAll('archives');
       const isHeartsim = w.id === 'wv_heartsim';
       const iconHTML = w.iconImage
         ? `<img src="${w.iconImage}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px">`
-        : `<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;color:#111;margin-right:8px;flex-shrink:0">${Utils.escapeHtml((w.name || '?')[0])}</div>`;
+        : `<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;color: var(--on-accent);margin-right:8px;flex-shrink:0">${Utils.escapeHtml((w.name || '?')[0])}</div>`;
       if (isHeartsim) {
         // 心动模拟不可作为目标（内置机制）：标灰、不可点
         html += `<div style="padding:10px 16px;font-size:13px;display:flex;align-items:center;color:var(--text-secondary);opacity:.5;cursor:not-allowed;margin:0 8px">${iconHTML}${Utils.escapeHtml(w.name)}<span style="margin-left:auto;font-size:11px">不支持</span></div>`;
@@ -1785,7 +1785,7 @@ const allArchives = await DB.getAll('archives');
       const isHeartsim = w.id === 'wv_heartsim';
       const iconHTML = w.iconImage
         ? `<img src="${w.iconImage}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px">`
-        : `<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;color:#111;margin-right:8px;flex-shrink:0">${Utils.escapeHtml((w.name || '?')[0])}</div>`;
+        : `<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;color: var(--on-accent);margin-right:8px;flex-shrink:0">${Utils.escapeHtml((w.name || '?')[0])}</div>`;
       if (isHeartsim) {
         html += `<div style="padding:10px 16px;font-size:13px;display:flex;align-items:center;color:var(--text-secondary);opacity:.5;cursor:not-allowed;margin:0 8px">${iconHTML}${Utils.escapeHtml(w.name)}<span style="margin-left:auto;font-size:11px">不支持</span></div>`;
       } else {

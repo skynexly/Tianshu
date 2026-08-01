@@ -13,7 +13,7 @@ const Branch = (() => {
         <p>在消息上长按 → <b>创建分支</b>，会自动复制当前对话、面具与记忆库，并切换到新对话。</p>
         <p>切换/重命名/删除分支，请到<b>对话列表</b>管理。</p>
         <div style="margin-top:12px">
-          <button onclick="UI.showPanel('conversations')" style="padding:8px 16px;background:var(--accent);color:#111;border:none;border-radius:8px;cursor:pointer;font-size:13px">前往对话列表</button>
+          <button onclick="UI.showPanel('conversations')" style="padding:8px 16px;background:var(--accent);color: var(--on-accent);border:none;border-radius:8px;cursor:pointer;font-size:13px">前往对话列表</button>
         </div>
       </div>
     `;

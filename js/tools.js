@@ -512,6 +512,17 @@ characters:{ type:'array', items:{type:'string'}, description:'在场角色' }
       keyword:{ type:'string', description:'搜索关键词，不传则返回目录' }
     }, required:[] }
   }},
+  // --- 手机聊天记录查询（只读） ---
+  { type:'function', function:{
+    name:'query_phone_chat',
+    description:'查询{{user}}手机聊天 App 里的聊天记录。不传参数时返回会话目录（有哪些人/群、各自多少条消息、最后一条的时间和预览）；传 contact 返回和该联系人或群的具体聊天内容；传 keyword 可搜索包含某个词的消息。用于当剧情涉及{{user}}和某人在手机上聊过什么时，据实引用而非编造，也可用来回想已经过去的私聊细节。',
+    parameters:{ type:'object', properties:{
+      contact:{ type:'string', description:'联系人名或群名（精确或模糊）。不传则返回会话目录' },
+      rounds:{ type:'number', description:'返回最近多少轮对话（玩家发一次算一轮），默认 10，最大 30' },
+      keyword:{ type:'string', description:'可选，搜索包含该关键词的消息；配合 contact 则只搜该会话，否则搜全部会话。每条命中带前后各 2 条上下文' },
+      includeAlias:{ type:'boolean', description:'是否包含{{user}}用马甲身份聊的会话，默认 false。马甲是{{user}}隐藏真实身份用的假身份，正常剧情中不该知道，只在明确需要复盘马甲线时传 true' }
+    }, required:[] }
+  }},
   ];
 
   // ===== 后台工具定义 =====
@@ -670,6 +681,16 @@ priority:{ type:'string', enum:['important','normal'], description:'重要程度
       parameters:{ type:'object', properties:{
         section:{ type:'string', enum:['all','outfit','suits','inventory'], description:'要查的部分：all=全部（默认）、outfit=今日穿搭、suits=已保存套装、inventory=衣橱仓库' }
       }, required:[] }
+    }},
+    { type:'function', function:{
+      name:'query_phone_chat',
+      description:'查询{{user}}手机聊天 App 里的聊天记录。不传参数时返回会话目录（有哪些人/群、各自多少条消息、最后一条的时间和预览）；传 contact 返回和该联系人或群的具体聊天内容；传 keyword 可搜索包含某个词的消息。用于当剧情涉及{{user}}和某人在手机上聊过什么时，据实引用而非编造，也可用来回想已经过去的私聊细节。',
+      parameters:{ type:'object', properties:{
+        contact:{ type:'string', description:'联系人名或群名（精确或模糊）。不传则返回会话目录' },
+        rounds:{ type:'number', description:'返回最近多少轮对话（玩家发一次算一轮），默认 10，最大 30' },
+        keyword:{ type:'string', description:'可选，搜索包含该关键词的消息；配合 contact 则只搜该会话，否则搜全部会话。每条命中带前后各 2 条上下文' },
+        includeAlias:{ type:'boolean', description:'是否包含{{user}}用马甲身份聊的会话，默认 false。马甲是{{user}}隐藏真实身份用的假身份，只在明确需要复盘马甲线时传 true' }
+      }, required:[] }
     }}
   ];
 
@@ -796,7 +817,26 @@ return note ? OK({ success:true, id:note.id, message:'已记住。' }) : OK({ su
       return OK({ success:true, message:'关系已删除。' });
     },
 
-    // --- 手机信息查询：小屋 / 衣橱（只读） ---
+    // --- 手机信息查询：小屋 / 衣橱 / 聊天记录（只读） ---
+    async query_phone_chat(args) {
+      if (typeof Phone === 'undefined' || !Phone.queryChatForTool) return ERR('手机数据不可用');
+      const a = args || {};
+      let res;
+      try {
+        res = await Phone.queryChatForTool({
+          contact: a.contact,
+          rounds: a.rounds,
+          keyword: a.keyword,
+          includeAlias: a.includeAlias
+        });
+      } catch (e) {
+        console.warn('[query_phone_chat] 查询失败', e);
+        return ERR('读取聊天记录失败');
+      }
+      if (!res) return ERR('读取聊天记录失败');
+      if (res.error) return ERR(res.error);
+      return OK({ result: res });
+    },
     async query_cottage(args) {
       if (typeof Phone === 'undefined' || !Phone._getPhoneData) return ERR('手机数据不可用');
       let pd;

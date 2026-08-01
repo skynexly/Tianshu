@@ -259,7 +259,7 @@ AI 输出可能存在不准确、不完整、过时、偏见、幻觉或其他�
     const re = new RegExp('(' + escaped + ')', 'gi');
     // 只替换文本节点（不动标签属性）——简化版：跳过 <> 内部
     return html.replace(/>([^<]+)</g, (full, text) => {
-      return '>' + text.replace(re, '<mark style="background:var(--accent);color:#fff;border-radius:2px;padding:0 2px">$1</mark>') + '<';
+      return '>' + text.replace(re, '<mark style="background:var(--accent);color: var(--on-accent);border-radius:2px;padding:0 2px">$1</mark>') + '<';
     });
   }
 

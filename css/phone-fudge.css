@@ -1361,5 +1361,5 @@
 .phone-shell.phone-theme-fudge .phone-video-cat-tab.active,
 .phone-shell.phone-theme-fudge .phone-reading-type-tab.active {
   background: var(--accent) !important;
-  color: #fff !important;
+  color: var(--on-accent) !important;
 }

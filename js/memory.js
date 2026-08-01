@@ -183,6 +183,12 @@ const Memory = (() => {
         existing.title + ' ' + (existing.relationship || '') + ' ' + (existing.impression || '')
       );
       existing.timestamp = Utils.timestamp();
+      // 自愈：历史数据里 participants 可能是字符串（旧版本未归一化就写入），
+      // 留着会让 formatForPrompt 调 .join() 崩溃。顺手修正成数组。
+      if (!Array.isArray(existing.participants)) {
+        existing.participants = _normalizeParts(existing.participants);
+        if (!existing.participants.length) existing.participants = [existing.title];
+      }
       await DB.put('memories', existing);
       return existing;
     } else {
@@ -196,7 +202,7 @@ const Memory = (() => {
         // 兼容旧content字段
         content: data.content || data.relationship || '',
         keywords: data.keywords || Utils.tokenize(data.title + ' ' + (data.relationship || '') + ' ' + (data.impression || '')),
-        participants: data.participants || [data.title],
+        participants: _normalizeParts(data.participants).length ? _normalizeParts(data.participants) : [data.title],
         scope,
         timestamp: Utils.timestamp(),
         roundCreated: data.roundCreated || 0
@@ -985,7 +991,7 @@ ${dialogue}
     const activeIsCurrent = active.id === currentId;
     const activeAvatar = active.avatar
       ? `<span style="width:34px;height:34px;border-radius:50%;background:url('${active.avatar}') center/cover no-repeat;border:1px solid var(--border);flex-shrink:0"></span>`
-      : `<span style="width:34px;height:34px;border-radius:50%;background:${active.id === 'all' ? 'var(--bg-secondary)' : 'var(--accent)'};border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:${active.id === 'all' ? 'var(--accent)' : '#111'};font-size:15px">${active.id === 'all' ? '全' : '✦'}</span>`;
+      : `<span style="width:34px;height:34px;border-radius:50%;background:${active.id === 'all' ? 'var(--bg-secondary)' : 'var(--accent)'};border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:${active.id === 'all' ? 'var(--accent)' : 'var(--on-accent)'};font-size:15px">${active.id === 'all' ? '全' : '✦'}</span>`;
 
     container.innerHTML = `
       <div style="position:relative;width:100%">
@@ -1003,7 +1009,7 @@ ${dialogue}
             const isCurrent = m.id === currentId;
             const avatar = m.avatar
               ? `<span style="width:30px;height:30px;border-radius:50%;background:url('${m.avatar}') center/cover no-repeat;border:1px solid var(--border);flex-shrink:0"></span>`
-              : `<span style="width:30px;height:30px;border-radius:50%;background:${m.id === 'all' ? 'var(--bg-secondary)' : 'var(--accent)'};border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:${m.id === 'all' ? 'var(--accent)' : '#111'};font-size:13px">${m.id === 'all' ? '全' : '✦'}</span>`;
+              : `<span style="width:30px;height:30px;border-radius:50%;background:${m.id === 'all' ? 'var(--bg-secondary)' : 'var(--accent)'};border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:${m.id === 'all' ? 'var(--accent)' : 'var(--on-accent)'};font-size:13px">${m.id === 'all' ? '全' : '✦'}</span>`;
             return `<div class="custom-dropdown-item ${isActive ? 'active' : ''}" onclick="Memory.selectScope('${m.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 10px">
               ${avatar}
               <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
@@ -1135,7 +1141,7 @@ ${dialogue}
             : '';
           return `
           <div style="position:relative;display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;cursor:pointer" class="card" data-id="${m.id}" onclick="${manageMode ? `Memory.toggleSelect('${m.id}')` : `Memory.editNote('${m.id}')`}">
-            ${manageMode ? `<span class="memory-select-checkbox" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);border-color:var(--accent);' : ''}" onclick="event.stopPropagation();Memory.toggleSelect('${m.id}')">${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>` : ''}
+            ${manageMode ? `<span class="memory-select-checkbox" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);border-color:var(--accent);' : ''}" onclick="event.stopPropagation();Memory.toggleSelect('${m.id}')">${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>` : ''}
             ${pIcon}
             <div style="flex:1;overflow:hidden;${pIcon ? 'padding-right:20px' : ''}">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
@@ -1160,14 +1166,14 @@ ${dialogue}
         return `
         <div style="display:flex;align-items:center;gap:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px;cursor:${manageMode ? 'default' : 'pointer'}" class="card" data-id="${m.id}" onclick="${manageMode ? `Memory.toggleSelect('${m.id}')` : `Memory.edit('${m.id}')`}">
           ${manageMode ? `
-            <span class="memory-select-checkbox" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);border-color:var(--accent);' : ''}" onclick="event.stopPropagation();Memory.toggleSelect('${m.id}')">${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>
+            <span class="memory-select-checkbox" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);border-color:var(--accent);' : ''}" onclick="event.stopPropagation();Memory.toggleSelect('${m.id}')">${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>
           ` : ''}
           <div style="flex:1;overflow:hidden">
             <h3 style="margin:0 0 4px 0;font-size:14px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.type === 'event' ? '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="m12.296 3.464 3.02 3.956"/><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m6.18 5.276 3.1 3.899"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle"><path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"/></svg>'} ${Utils.escapeHtml(m.title)}</h3>
             <p style="margin:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(preview)}</p>
 ${m.type === 'relation' && m.impression ? `<p style="margin:2px 0 0 0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">看法: ${Utils.escapeHtml(m.impression.substring(0,60))}${m.impression.length>60?'…':''}</p>` : ''}
 ${m.type === 'relation' && m.emotions?.length ? `<p style="margin:2px 0 0 0;font-size:11px;color:var(--text-secondary)">情感记录: ${m.emotions.length}条</p>` : ''}
-${m.type !== 'relation' && m.participants?.length ? `<p style="margin:2px 0 0 0;font-size:11px;color:var(--accent-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;vertical-align:middle"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg> ${m.participants.join(', ')}</p>` : ''}
+${m.type !== 'relation' && _normalizeParts(m.participants).length ? `<p style="margin:2px 0 0 0;font-size:11px;color:var(--accent-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;vertical-align:middle"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg> ${_normalizeParts(m.participants).join(', ')}</p>` : ''}
             ${viewScope === 'all' ? `<p style="margin:2px 0 0 0;font-size:11px;color:var(--accent-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🎭 ${Utils.escapeHtml(maskName(m.scope))}</p>` : ''}
           </div>
         </div>
@@ -1526,7 +1532,7 @@ ${m.type !== 'relation' && m.participants?.length ? `<p style="margin:2px 0 0 0;
       icon.style.background = 'transparent';
       icon.style.borderColor = 'var(--text-secondary)';
     } else if (selectedIds.size === allIds.length && allIds.length > 0) {
-      icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
       icon.style.background = 'var(--accent)';
       icon.style.borderColor = 'var(--accent)';
     } else {
@@ -1899,7 +1905,7 @@ participants: document.getElementById('mem-edit-participants-input').value.split
         memory.time = m.time || '';
         memory.location = m.location || '';
         memory.content = m.content || _mergeEventContent(m);
-        memory.participants = m.participants || [];
+        memory.participants = _normalizeParts(m.participants);
         memory.keywords = Utils.tokenize(m.title + ' ' + (m.location || '') + ' ' + (m.content || _mergeEventContent(m)));
       }
       await DB.put('memories', memory);
@@ -2257,7 +2263,7 @@ function _collectEmotionsForEdit() {
       tagDropdownHtml += `<div style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px">`;
       for (const t of g.tags) {
         const isCur = t === curTag;
-        tagDropdownHtml += `<div onclick="event.stopPropagation();Memory._selectTag('${t}')" style="padding:4px 10px;cursor:pointer;font-size:13px;border-radius:20px;${isCur ? 'background:var(--accent);color:#fff;font-weight:600' : 'background:color-mix(in srgb, var(--accent) 10%, transparent);color:var(--text)'}">${t}</div>`;
+        tagDropdownHtml += `<div onclick="event.stopPropagation();Memory._selectTag('${t}')" style="padding:4px 10px;cursor:pointer;font-size:13px;border-radius:20px;${isCur ? 'background:var(--accent);color: var(--on-accent);font-weight:600' : 'background:color-mix(in srgb, var(--accent) 10%, transparent);color:var(--text)'}">${t}</div>`;
       }
       tagDropdownHtml += `</div>`;
     }
@@ -2308,7 +2314,7 @@ function _collectEmotionsForEdit() {
         </div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="Memory.closeNoteEdit()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button onclick="Memory.saveNoteEdit()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#fff;font-size:13px;cursor:pointer">保存</button>
+          <button onclick="Memory.saveNoteEdit()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer">保存</button>
         </div>
       </div>
     </div>`;
@@ -2385,14 +2391,14 @@ function _collectEmotionsForEdit() {
       tagDropdownHtml += `<div style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px">`;
       for (const t of g.tags) {
         const isCur = t === curTag;
-        tagDropdownHtml += `<div onclick="event.stopPropagation();Memory._selectTag('${t}')" style="padding:4px 10px;cursor:pointer;font-size:13px;border-radius:20px;${isCur ? 'background:var(--accent);color:#fff;font-weight:600' : 'background:color-mix(in srgb, var(--accent) 10%, transparent);color:var(--text)'}">${t}</div>`;
+        tagDropdownHtml += `<div onclick="event.stopPropagation();Memory._selectTag('${t}')" style="padding:4px 10px;cursor:pointer;font-size:13px;border-radius:20px;${isCur ? 'background:var(--accent);color: var(--on-accent);font-weight:600' : 'background:color-mix(in srgb, var(--accent) 10%, transparent);color:var(--text)'}">${t}</div>`;
       }
       tagDropdownHtml += `</div>`;
     }
     // 标签不在 NOTE_TAGS 分组里时，追加到末尾
     const allGroupedTags = tagGroups.flatMap(g => g.tags);
     if (!allGroupedTags.includes(curTag)) {
-      tagDropdownHtml += `<div style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px"><div onclick="event.stopPropagation();Memory._selectTag('${curTag}')" style="padding:4px 10px;cursor:pointer;font-size:13px;border-radius:20px;background:var(--accent);color:#fff;font-weight:600">${curTag}</div></div>`;
+      tagDropdownHtml += `<div style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px"><div onclick="event.stopPropagation();Memory._selectTag('${curTag}')" style="padding:4px 10px;cursor:pointer;font-size:13px;border-radius:20px;background:var(--accent);color: var(--on-accent);font-weight:600">${curTag}</div></div>`;
     }
 
     const curPriority = m.priority || 'normal';
@@ -2447,7 +2453,7 @@ function _collectEmotionsForEdit() {
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="Memory.deleteNoteFromEdit()" style="padding:8px 14px;border:1px solid var(--danger, #e53935);border-radius:var(--radius);background:transparent;color:var(--danger, #e53935);font-size:13px;cursor:pointer">删除</button>
           <button onclick="Memory.closeNoteEdit()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button onclick="Memory.saveNoteEdit()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#fff;font-size:13px;cursor:pointer">保存</button>
+          <button onclick="Memory.saveNoteEdit()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer">保存</button>
         </div>
       </div>
     </div>`;
@@ -2751,7 +2757,7 @@ function _collectEmotionsForEdit() {
       const wvLabel = n.worldviewName ? `《${Utils.escapeHtml(n.worldviewName)}》` : '';
       const isSelected = selectedIds.has(n.id);
       const checkbox = manageMode
-        ? `<span class="memory-select-checkbox" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);border-color:var(--accent);' : ''}" onclick="event.stopPropagation();Memory.toggleSelect('${n.id}')">${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>`
+        ? `<span class="memory-select-checkbox" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--text-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);border-color:var(--accent);' : ''}" onclick="event.stopPropagation();Memory.toggleSelect('${n.id}')">${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span>`
         : '';
       const onClick = manageMode ? `Memory.toggleSelect('${n.id}')` : `Memory.editBackstageNote('${n.id}')`;
       return `
@@ -2869,7 +2875,7 @@ function _collectEmotionsForEdit() {
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button onclick="Memory.deleteBsFromEdit()" style="padding:8px 14px;border-radius:8px;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));background:none;color:var(--danger);font-size:13px;cursor:pointer;margin-right:auto">删除</button>
           <button onclick="Memory.closeBsEdit()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button onclick="Memory.saveBsEdit()" style="padding:8px 14px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+          <button onclick="Memory.saveBsEdit()" style="padding:8px 14px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">保存</button>
         </div>
       </div>
     </div>`;

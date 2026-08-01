@@ -435,7 +435,7 @@ async function cancelEdit() {
         <div class="card" style="${p.id === currentPresetId ? 'border-color:var(--accent)' : ''};display:flex;align-items:flex-start;gap:8px;padding:12px;background:var(--bg-tertiary);cursor:pointer;" onclick="${presetManageMode ? `Settings.togglePresetSelect('${p.id}')` : `Settings.switchPreset('${p.id}')`}">
           ${presetManageMode ? `
           <span style="width:22px;height:22px;border-radius:50%;border:2px solid ${isSelected ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);' : ''}" onclick="event.stopPropagation();Settings.togglePresetSelect('${p.id}')">
-            ${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+            ${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
           </span>` : `<input type="radio" name="preset" ${p.id === currentPresetId ? 'checked' : ''} onchange="Settings.switchPreset('${p.id}')" onclick="event.stopPropagation()" style="accent-color:var(--accent);margin-top:2px">`}
           <div style="flex:1;min-width:0;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:2px">
@@ -471,7 +471,7 @@ async function cancelEdit() {
     if (presetManageMode) {
       if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
       if (container) container.style.paddingBottom = '72px';
-      if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> 退出'; btn.style.background = 'var(--accent)'; btn.style.color = '#111'; btn.style.borderColor = 'var(--accent)'; }
+      if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> 退出'; btn.style.background = 'var(--accent)'; btn.style.color = 'var(--on-accent)'; btn.style.borderColor = 'var(--accent)'; }
     } else {
       if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
       if (container) container.style.paddingBottom = '';
@@ -522,7 +522,7 @@ async function cancelEdit() {
     const el = document.getElementById('quick-api-switch');
     if (!el) return;
     el.innerHTML = presets.map(p =>
-      `<button onclick="Settings.switchPreset('${p.id}')" style="padding:2px 8px;border-radius:4px;border:1px solid ${p.id === currentPresetId ? 'var(--accent)' : 'var(--border)'};background:${p.id === currentPresetId ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${p.id === currentPresetId ? '#111' : 'var(--text-secondary)'};cursor:pointer;font-size:11px;white-space:nowrap">${Utils.escapeHtml(p.name)}</button>`
+      `<button onclick="Settings.switchPreset('${p.id}')" style="padding:2px 8px;border-radius:4px;border:1px solid ${p.id === currentPresetId ? 'var(--accent)' : 'var(--border)'};background:${p.id === currentPresetId ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${p.id === currentPresetId ? 'var(--on-accent)' : 'var(--text-secondary)'};cursor:pointer;font-size:11px;white-space:nowrap">${Utils.escapeHtml(p.name)}</button>`
     ).join('');
   }
 
@@ -607,7 +607,7 @@ async function cancelEdit() {
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           ${regexManageMode ? `
           <span style="width:22px;height:22px;border-radius:50%;border:2px solid ${isSelected ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);' : ''}" onclick="event.stopPropagation();Settings.toggleRegexSelect(${i})">
-            ${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+            ${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
           </span>` : `
           <label style="display:flex;align-items:center;cursor:pointer" onclick="event.stopPropagation()">
             <span style="position:relative;display:inline-flex;flex-shrink:0">
@@ -641,7 +641,7 @@ async function cancelEdit() {
     const btn = document.getElementById('regex-manage-btn');
     if (regexManageMode) {
       if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
-      if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> 退出'; btn.style.background = 'var(--accent)'; btn.style.color = '#111'; btn.style.borderColor = 'var(--accent)'; }
+      if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> 退出'; btn.style.background = 'var(--accent)'; btn.style.color = 'var(--on-accent)'; btn.style.borderColor = 'var(--accent)'; }
     } else {
       if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
       if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 管理'; btn.style.background = 'none'; btn.style.color = 'var(--text-secondary)'; btn.style.borderColor = 'var(--border)'; }
@@ -679,7 +679,7 @@ async function cancelEdit() {
     if (allSelected) {
       iconEl.style.background = 'var(--accent)';
       iconEl.style.border = '2px solid var(--accent)';
-      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
     } else {
       iconEl.style.background = '';
       iconEl.style.border = '2px solid var(--text-secondary)';
@@ -1091,7 +1091,7 @@ async function cancelEdit() {
         <div class="card" style="${p.id === currentId ? 'border-color:var(--accent)' : ''};display:flex;align-items:flex-start;gap:8px;padding:12px;background:var(--bg-tertiary);cursor:pointer;" onclick="${isManage ? `Settings.toggleFuncSelect('${type}','${p.id}')` : `Settings.${switchFnName}('${p.id}')`}">
           ${isManage ? `
           <span style="width:22px;height:22px;border-radius:50%;border:2px solid ${isSelected ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${isSelected ? 'background:var(--accent);' : ''}" onclick="event.stopPropagation();Settings.toggleFuncSelect('${type}','${p.id}')">
-            ${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+            ${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
           </span>` : `<input type="radio" name="func-${type}" ${p.id === currentId ? 'checked' : ''} onchange="Settings.${switchFnName}('${p.id}')" onclick="event.stopPropagation()" style="accent-color:var(--accent);margin-top:2px">`}
           <div style="flex:1;min-width:0;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:2px">
@@ -1123,7 +1123,7 @@ async function cancelEdit() {
     const btn = document.getElementById(`func-${type}-manage-btn`);
     if (funcManageMode[type]) {
       if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
-      if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> 退出'; btn.style.background = 'var(--accent)'; btn.style.color = '#111'; btn.style.borderColor = 'var(--accent)'; }
+      if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> 退出'; btn.style.background = 'var(--accent)'; btn.style.color = 'var(--on-accent)'; btn.style.borderColor = 'var(--accent)'; }
     } else {
       if (bar) { bar.classList.add('hidden'); bar.style.display = ''; }
       if (btn) { btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 管理'; btn.style.background = 'none'; btn.style.color = 'var(--text-secondary)'; btn.style.borderColor = 'var(--border)'; }

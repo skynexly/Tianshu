@@ -10,9 +10,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="skynex">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=179">
-<link rel="stylesheet" href="css/phone.css?v1=419">
-<link rel="stylesheet" href="css/phone-fudge.css?v=65">
+<link rel="stylesheet" href="css/style.css?v=182">
+<link rel="stylesheet" href="css/phone.css?v1=420">
+<link rel="stylesheet" href="css/phone-fudge.css?v=66">
 <link rel="stylesheet" href="css/markdown.css">
 <link rel="stylesheet" href="css/auth.css?v=20260707">
 </head>
@@ -398,7 +398,7 @@
 </button>
 </div>
             </div>
-            <button id="btn-send" style="width:36px;height:36px;border-radius:50%;background:var(--accent);color:#111;display:flex;align-items:center;justify-content:center;outline:none;border:none">
+            <button id="btn-send" style="width:36px;height:36px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:flex;align-items:center;justify-content:center;outline:none;border:none">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
             </button>
           </div>
@@ -519,7 +519,7 @@
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--text-secondary);pointer-events:none"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
               <input type="text" id="lorebook-search" placeholder="搜索世界书..." oninput="LorebookUI.renderList(this.value)" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px 6px 32px;font-size:13px;outline:none">
             </div>
-            <button type="button" onclick="LorebookUI.createNew()" style="padding:6px 12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:4px">
+            <button type="button" onclick="LorebookUI.createNew()" style="padding:6px 12px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:4px">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
               新建
             </button>
@@ -584,7 +584,7 @@
         <div style="display:flex;gap:8px">
           <button onclick="Character.deleteCurrent()" style="padding:6px 14px;font-size:13px;background:none;color:var(--danger);border:1px solid var(--danger);border-radius:6px;cursor:pointer">删除</button>
           <button onclick="Character.openAiGen()" style="padding:6px 14px;font-size:13px;background:none;color:var(--accent);border:1px solid var(--accent);border-radius:6px;cursor:pointer">AI生成</button>
-          <button onclick="Character.save()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+          <button onclick="Character.save()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存</button>
         </div>
       </div>
     </div>
@@ -798,7 +798,7 @@
 <button onclick="Memory.copyCurrentEdit()" title="复制" style="width:32px;height:32px;padding:0;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center">
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
 </button>
-<button onclick="Memory.saveEdit()" title="保存" style="width:32px;height:32px;padding:0;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center">
+<button onclick="Memory.saveEdit()" title="保存" style="width:32px;height:32px;padding:0;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center">
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 </button>
 </div>
@@ -1342,7 +1342,7 @@
             <div id="gaiden-lorebook-list"></div>
           </div>
           <div id="gaiden-action-area" style="margin-top:12px">
-            <button id="gaiden-send-btn" onclick="Gaiden.generate()" style="width:100%;background:var(--accent);color:#000;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:13px;touch-action:manipulation;-webkit-tap-highlight-color:transparent">发送</button>
+            <button id="gaiden-send-btn" onclick="Gaiden.generate()" style="width:100%;background:var(--accent);color:var(--on-accent);border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:13px;touch-action:manipulation;-webkit-tap-highlight-color:transparent">发送</button>
           </div>
         </div>
         <!-- 结果区域 -->
@@ -1355,7 +1355,7 @@
           <div id="gaiden-result-actions" class="modal-actions" style="flex-shrink:0;margin-top:12px;padding-top:12px">
 <button onclick="Gaiden.rewrite()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">重写</button>
 <button onclick="Gaiden.continueDraft()" style="flex:1;background:none;border:1px solid var(--accent);color:var(--accent)">续写</button>
-<button onclick="Gaiden.saveDraft()" style="flex:1;background:var(--accent);color:#000;border:none">保存番外</button>
+<button onclick="Gaiden.saveDraft()" style="flex:1;background:var(--accent);color:var(--on-accent);border:none">保存番外</button>
 </div>
         </div>
       </div>
@@ -1462,7 +1462,7 @@
             <h2 style="margin:0 0 4px;font-size:24px;color:var(--text)">对话设置</h2>
             <p style="font-size:12px;color:var(--text-secondary);margin:0">调整仅对当前对话生效。</p>
           </div>
-          <button onclick="Chat.saveConvSettings()" style="flex-shrink:0;background:var(--accent);color:#111;border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap">保存</button>
+          <button onclick="Chat.saveConvSettings()" style="flex-shrink:0;background:var(--accent);color:var(--on-accent);border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap">保存</button>
         </div>
 
         <!-- Tab 栏（4 tab） -->
@@ -1964,6 +1964,13 @@
               <span class="circle-check-ui"></span>
             </span>
           </label>
+          <label class="circle-check-label">
+            <span class="circle-check-text">手机聊天记录查询<br><span style="font-size:11px;color:var(--text-secondary)">允许 AI 查手机里和谁聊过什么（只读，不含马甲会话）</span></span>
+            <span style="position:relative;display:inline-flex">
+              <input type="checkbox" id="cs-tools-phonechat" class="circle-check">
+              <span class="circle-check-ui"></span>
+            </span>
+          </label>
 
           <!-- MCP 服务器（v687.23 引入；v687.26 因 PWA CORS 限制隐藏，等 APK 化后启用） -->
           <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;display:none" id="cs-mcp-section">
@@ -2004,7 +2011,7 @@
         </div>
         <div class="modal-actions" style="padding-top:8px;display:flex;gap:8px">
           <button type="button" onclick="Chat._closeDiceConfigModal()" style="flex:1;padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:13px">取消</button>
-          <button type="button" onclick="Chat._saveDiceConfigModal()" style="flex:1;padding:8px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;font-size:13px">确定</button>
+          <button type="button" onclick="Chat._saveDiceConfigModal()" style="flex:1;padding:8px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer;font-size:13px">确定</button>
         </div>
       </div>
     </div>
@@ -2039,7 +2046,7 @@
         <div id="mcp-modal-error" style="display:none;padding:8px 10px;background:rgba(255,80,80,0.1);border:1px solid var(--danger);border-radius:6px;color:var(--danger);font-size:12px"></div>
         <div class="modal-actions" style="padding-top:8px;display:flex;gap:8px">
           <button type="button" onclick="Chat._closeMcpAddModal()" style="flex:1;padding:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:13px">取消</button>
-          <button type="button" id="mcp-modal-save-btn" onclick="Chat._saveMcpServer()" style="flex:1;padding:8px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">连接并保存</button>
+          <button type="button" id="mcp-modal-save-btn" onclick="Chat._saveMcpServer()" style="flex:1;padding:8px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">连接并保存</button>
         </div>
       </div>
     </div>
@@ -2091,7 +2098,7 @@
         </div>
         <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px">仅管理当前对话的事件状态，不影响世界观模板或其他对话。</p>
         <div style="display:flex;gap:8px;margin-bottom:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:4px;flex-shrink:0">
-          <button id="evm-tab-standalone" onclick="Chat.switchEventManagerTab('standalone')" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent);color:#111;font-size:12px;font-weight:600;cursor:pointer">独立事件</button>
+          <button id="evm-tab-standalone" onclick="Chat.switchEventManagerTab('standalone')" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent);color:var(--on-accent);font-size:12px;font-weight:600;cursor:pointer">独立事件</button>
           <button id="evm-tab-chain" onclick="Chat.switchEventManagerTab('chain')" style="flex:1;padding:8px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:12px;font-weight:600;cursor:pointer">事件链</button>
         </div>
         <div id="event-manager-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
@@ -2208,7 +2215,7 @@
       <button id="wv-attr-delete-btn" onclick="Worldview.deleteGameplayAttrFromModal()" style="padding:9px 12px;border-radius:8px;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));background:none;color:var(--danger);font-size:13px;cursor:pointer">删除</button>
       <div style="display:flex;gap:8px">
         <button onclick="Worldview.closeGameplayAttrModal()" style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;cursor:pointer">取消</button>
-        <button onclick="Worldview.saveGameplayAttrFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+        <button onclick="Worldview.saveGameplayAttrFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">保存</button>
       </div>
     </div>
   </div>
@@ -2255,7 +2262,7 @@
       <button id="wv-tt-delete-btn" onclick="Worldview.deleteTaskTypeFromModal()" style="padding:9px 12px;border-radius:8px;border:1px solid color-mix(in srgb, var(--danger) 55%, var(--border));background:none;color:var(--danger);font-size:13px;cursor:pointer">删除</button>
       <div style="display:flex;gap:8px">
         <button onclick="Worldview.closeTaskTypeModal()" style="padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;cursor:pointer">取消</button>
-        <button onclick="Worldview.saveTaskTypeFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">保存</button>
+        <button onclick="Worldview.saveTaskTypeFromModal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">保存</button>
       </div>
     </div>
   </div>
@@ -2301,7 +2308,7 @@
 <div id="imggen-status" style="display:none;font-size:13px;color:var(--text-secondary);margin-bottom:12px;padding:8px 12px;border-radius:8px;background:var(--bg-tertiary)"></div>
 <div style="display:flex;gap:8px;justify-content:flex-end">
 <button onclick="document.getElementById('imggen-modal').classList.add('hidden')" style="padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);cursor:pointer;font-size:14px">取消</button>
-<button id="imggen-submit" onclick="Chat.submitImgGen()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:#111;cursor:pointer;font-size:14px;font-weight:600">生成</button>
+<button id="imggen-submit" onclick="Chat.submitImgGen()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--on-accent);cursor:pointer;font-size:14px;font-weight:600">生成</button>
 </div>
 </div>
 </div>
@@ -2334,7 +2341,7 @@
       <div>
         <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px">角色 *</label>
         <div style="display:flex;gap:6px;margin-bottom:8px">
-          <button type="button" id="sm-char-tab-card" onclick="SingleMode._switchCharTab('card')" style="flex:1;padding:6px 0;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;font-size:13px">角色</button>
+          <button type="button" id="sm-char-tab-card" onclick="SingleMode._switchCharTab('card')" style="flex:1;padding:6px 0;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer;font-size:13px">角色</button>
           <button type="button" id="sm-char-tab-npc" onclick="SingleMode._switchCharTab('npc')" style="flex:1;padding:6px 0;background:transparent;color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:13px">世界观角色</button>
         </div>
         <input type="text" id="sm-char-search" placeholder="搜索..." oninput="SingleMode._onCharSearch(this.value)" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;outline:none;margin-bottom:8px">
@@ -2377,7 +2384,7 @@
     </div>
     <div style="display:flex;gap:8px;margin-top:12px;flex-shrink:0">
       <button onclick="SingleMode.closeCreateModal()" style="flex:1;padding:10px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">取消</button>
-      <button id="sm-modal-confirm-btn" onclick="SingleMode.confirmCreate()" style="flex:1;padding:10px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;font-weight:600">创建</button>
+      <button id="sm-modal-confirm-btn" onclick="SingleMode.confirmCreate()" style="flex:1;padding:10px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer;font-weight:600">创建</button>
     </div>
   </div>
 </div>
@@ -2397,7 +2404,7 @@
             <button onclick="SingleCard.closeEditMoreMenu();SingleCard.exportCurrent()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">导出角色</button>
             <button id="sc-edit-delete-btn" onclick="SingleCard.closeEditMoreMenu();SingleCard.deleteCurrent()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--danger);font-size:13px;border-radius:7px;cursor:pointer">删除角色</button>
           </div>
-          <button onclick="SingleCard.savePanelForm()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+          <button onclick="SingleCard.savePanelForm()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存</button>
         </div>
       </div>
     </div>
@@ -2494,7 +2501,7 @@
       <!-- 已绑定的世界书列表 -->
       <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
         <div style="font-size:13px;color:var(--text);font-weight:500">已绑定的世界书</div>
-        <button type="button" onclick="SingleCard.openLorebookPicker()" style="padding:5px 12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px">
+        <button type="button" onclick="SingleCard.openLorebookPicker()" style="padding:5px 12px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
           添加 / 管理
         </button>
@@ -2568,7 +2575,7 @@
       <button id="sc-delete-btn" onclick="SingleCard.deleteCurrent()" style="padding:10px 16px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px">删除</button>
       <button id="sc-export-btn" onclick="SingleCard.exportCurrent()" style="padding:10px 14px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:13px">导出</button>
       <button onclick="SingleCard.closeEditModal()" style="flex:1;padding:10px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">取消</button>
-      <button onclick="SingleCard.saveFromModal()" style="flex:1;padding:10px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;font-weight:600">保存</button>
+      <button onclick="SingleCard.saveFromModal()" style="flex:1;padding:10px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer;font-weight:600">保存</button>
     </div>
   </div>
 </div>
@@ -2636,7 +2643,7 @@
           </div>
           <textarea id="gaiden-picker-requirement" rows="5" placeholder="描述你想要的番外…" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:12px;font-size:14px;resize:vertical;box-sizing:border-box"></textarea>
           <div id="gaiden-picker-action-area" style="margin-top:12px">
-<button id="gaiden-picker-send-btn" onclick="Gaiden.generateFromPicker()" style="width:100%;background:var(--accent);color:#000;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:13px;touch-action:manipulation;-webkit-tap-highlight-color:transparent">生成番外</button>
+<button id="gaiden-picker-send-btn" onclick="Gaiden.generateFromPicker()" style="width:100%;background:var(--accent);color:var(--on-accent);border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:13px;touch-action:manipulation;-webkit-tap-highlight-color:transparent">生成番外</button>
 </div>
         </div>
       </div>
@@ -2738,7 +2745,7 @@
 </div>
 <!-- 收藏分类Tab -->
 <div id="collection-tabs" style="display:flex;gap:4px;margin-bottom:12px">
-<button onclick="Gaiden.filterCollection('all')" class="collection-tab active" data-tab="all" style="flex:1;padding:6px 0;font-size:12px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#000;cursor:pointer">全部</button>
+<button onclick="Gaiden.filterCollection('all')" class="collection-tab active" data-tab="all" style="flex:1;padding:6px 0;font-size:12px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:var(--on-accent);cursor:pointer">全部</button>
 <button onclick="Gaiden.filterCollection('gaiden')" class="collection-tab" data-tab="gaiden" style="flex:1;padding:6px 0;font-size:12px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text-secondary);cursor:pointer">番外</button>
 <button onclick="Gaiden.filterCollection('phone')" class="collection-tab" data-tab="phone" style="flex:1;padding:6px 0;font-size:12px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text-secondary);cursor:pointer">手机</button>
 <button onclick="Gaiden.filterCollection('message')" class="collection-tab" data-tab="message" style="flex:1;padding:6px 0;font-size:12px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text-secondary);cursor:pointer">剧情</button>
@@ -2746,7 +2753,7 @@
 </div>
 <!-- 手机收藏子分类（仅在 phone tab 时显示）-->
 <div id="phone-subtabs" style="display:none;gap:4px;margin-bottom:8px;flex-wrap:wrap">
-<button onclick="Gaiden.filterPhoneSubtab('all')" class="phone-subtab active" data-subtab="all" class="ai-action-btn" style="padding:4px 10px;font-size:11px;border-radius:10px;border:1px solid var(--border);background:var(--accent);color:#000;cursor:pointer">全部</button>
+<button onclick="Gaiden.filterPhoneSubtab('all')" class="phone-subtab active" data-subtab="all" class="ai-action-btn" style="padding:4px 10px;font-size:11px;border-radius:10px;border:1px solid var(--border);background:var(--accent);color:var(--on-accent);cursor:pointer">全部</button>
 <button onclick="Gaiden.filterPhoneSubtab('forum')" class="phone-subtab" data-subtab="forum" class="ai-action-btn" style="padding:4px 10px;font-size:11px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text-secondary);cursor:pointer;display:inline-flex;align-items:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="12" rx="3"/><polyline points="8 17 8 21 12 17"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="13" y2="13"/></svg> 论坛</button>
 <button onclick="Gaiden.filterPhoneSubtab('map')" class="phone-subtab" data-subtab="map" class="ai-action-btn" style="padding:4px 10px;font-size:11px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text-secondary);cursor:pointer;display:inline-flex;align-items:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s6-5 6-11a6 6 0 0 0-12 0c0 6 6 11 6 11z"/><circle cx="12" cy="10" r="2"/></svg> 地图</button>
 <button onclick="Gaiden.filterPhoneSubtab('moments')" class="phone-subtab" data-subtab="moments" class="ai-action-btn" style="padding:4px 10px;font-size:11px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text-secondary);cursor:pointer;display:inline-flex;align-items:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="3"/><circle cx="12" cy="13" r="3"/><path d="M9 7l1.5-2h3L15 7"/></svg> 好友圈</button>
@@ -3221,7 +3228,7 @@
               <div class="settings-card" style="padding:12px;display:flex;flex-direction:column;gap:10px">
                 <div style="font-size:12px;color:var(--text-secondary);font-weight:600;letter-spacing:.05em">字体</div>
                 <div style="display:flex;flex-wrap:wrap;gap:6px">
-                  <button type="button" class="th-font-btn" data-font="default" onclick="Theme.setFontMode('default')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#111;font-weight:600;cursor:pointer;font-size:12px">衬线</button>
+                  <button type="button" class="th-font-btn" data-font="default" onclick="Theme.setFontMode('default')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:var(--on-accent);font-weight:600;cursor:pointer;font-size:12px">衬线</button>
                   <button type="button" class="th-font-btn" data-font="system" onclick="Theme.setFontMode('system')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">无衬线</button>
                   <button type="button" class="th-font-btn" data-font="kai" onclick="Theme.setFontMode('kai')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">楷体</button>
                   <button type="button" class="th-font-btn" data-font="song" onclick="Theme.setFontMode('song')" style="flex:1;min-width:60px;padding:7px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;font-size:12px">小薇</button>
@@ -3355,7 +3362,7 @@
         <div style="display:flex;align-items:center;gap:16px">
           <div id="my-avatar-frame-preview" style="width:64px;height:64px;flex:none;position:relative;display:flex;align-items:center;justify-content:center"></div>
           <div style="display:flex;flex-direction:column;gap:8px">
-            <button type="button" onclick="Phone._pickMyAvatarFrame()" style="padding:8px 14px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">上传头像框</button>
+            <button type="button" onclick="Phone._pickMyAvatarFrame()" style="padding:8px 14px;background:var(--accent);color:var(--on-accent);border:none;border-radius:8px;font-size:13px;cursor:pointer">上传头像框</button>
             <button type="button" onclick="Phone._resetMyAvatarFrame()" style="padding:8px 14px;background:var(--bg-tertiary);color:var(--text-secondary);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">清除</button>
           </div>
         </div>
@@ -3409,7 +3416,7 @@
       <div id="st-statusbar" class="settings-tab-content" style="display:none">
         <h3 style="color:var(--accent);font-size:14px;margin-bottom:16px">状态栏美化</h3>
         <div style="display:flex;gap:8px;margin-bottom:16px">
-          <button onclick="StatusBarTheme.openTemplatePicker()" style="flex:1;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">新建主题</button>
+          <button onclick="StatusBarTheme.openTemplatePicker()" style="flex:1;padding:10px;background:var(--accent);color:var(--on-accent);border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">新建主题</button>
           <button onclick="StatusBarTheme.importFromFile()" style="padding:10px 16px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;cursor:pointer">导入</button>
         </div>
         <div id="sb-theme-list-container" style="display:flex;flex-direction:column;gap:12px"></div>
@@ -3437,7 +3444,7 @@
               <button id="worldview-restore-builtin-btn" onclick="Worldview.closeEditMoreMenu();Worldview.restoreBuiltinWorldview()" class="hidden" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--text);font-size:13px;border-radius:7px;cursor:pointer">恢复内置</button>
               <button onclick="Worldview.closeEditMoreMenu();Worldview.deleteCurrentWorldview()" style="text-align:left;padding:9px 10px;background:none;border:none;color:var(--danger);font-size:13px;border-radius:7px;cursor:pointer">删除世界观</button>
             </div>
-            <button onclick="Worldview.save()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+            <button onclick="Worldview.save()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存</button>
           </div>
         </div>
         <h2 id="worldview-edit-title" style="margin:0;font-size:24px;color:var(--text)">编辑世界观</h2>
@@ -3589,7 +3596,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
       </button>
     </div>
-    <button type="button" onclick="Worldview.toggleExtAddMenu(event)" title="扩展设定操作" style="flex:0 0 auto;width:34px;height:34px;background:var(--accent);border:none;border-radius:6px;color:#111;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
+    <button type="button" onclick="Worldview.toggleExtAddMenu(event)" title="扩展设定操作" style="flex:0 0 auto;width:34px;height:34px;background:var(--accent);border:none;border-radius:6px;color:var(--on-accent);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
     </button>
     <!-- 添加 + 导入导出 合并菜单（右上角弹出） -->
@@ -3693,7 +3700,7 @@ NPC
   <div class="wv-ext-subtab-content hidden" data-subtab="event">
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">关键词触发后持续注入，直到 AI 回复中出现结束关键词后自动关闭，不再触发。</div>
     <div style="display:flex;gap:8px;margin-bottom:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:4px">
-      <button type="button" id="wv-event-tab-standalone" onclick="Worldview.switchEventTab('standalone')" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent);color:#111;font-size:12px;font-weight:600;cursor:pointer">独立事件</button>
+      <button type="button" id="wv-event-tab-standalone" onclick="Worldview.switchEventTab('standalone')" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent);color:var(--on-accent);font-size:12px;font-weight:600;cursor:pointer">独立事件</button>
       <button type="button" id="wv-event-tab-chain" onclick="Worldview.switchEventTab('chain')" style="flex:1;padding:8px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:12px;font-weight:600;cursor:pointer">事件链</button>
     </div>
     <div id="wv-events-container"></div>
@@ -3816,7 +3823,7 @@ NPC
               </button>
               <div style="display:flex;gap:8px;flex-shrink:0">
                 <button onclick="Worldview.deleteRegion()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">删除</button>
-                <button onclick="Worldview.saveRegion()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+                <button onclick="Worldview.saveRegion()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存</button>
               </div>
             </div>
             <h2 id="wv-region-title" style="margin:0;font-size:22px;color:var(--text)">编辑地区</h2>
@@ -3831,7 +3838,7 @@ NPC
             <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
               <div id="wv-reg-bg-preview" style="width:96px;height:56px;border-radius:8px;overflow:hidden;background:var(--bg-tertiary);border:1px solid var(--border);flex-shrink:0"><div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:12px">未设置背景图</div></div>
               <div style="display:flex;gap:6px">
-                <button type="button" onclick="Worldview.handleRegionBgUpload()" style="padding:6px 12px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">上传</button>
+                <button type="button" onclick="Worldview.handleRegionBgUpload()" style="padding:6px 12px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">上传</button>
                 <button type="button" id="wv-reg-bg-clear" onclick="Worldview.clearRegionBg()" style="display:none;padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">清除</button>
               </div>
             </div>
@@ -3840,7 +3847,7 @@ NPC
         <div style="padding-top:16px;margin-top:16px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
             <div style="font-size:15px;font-weight:bold;color:var(--text);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" x2="9" y1="14" y2="18"/><line x1="7" x2="4" y1="17" y2="20"/><line x1="3" x2="5" y1="19" y2="21"/></svg> 势力列表</div>
-            <div style="display:flex;gap:6px"><button type="button" onclick="Worldview.addFaction()" style="padding:4px 12px;font-size:12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">+ 添加</button><button type="button" onclick="WvGenerator.inlineFactions()" class="ai-action-btn" style="padding:4px 10px;font-size:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:6px;cursor:pointer"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>批量生成</button></div>
+            <div style="display:flex;gap:6px"><button type="button" onclick="Worldview.addFaction()" style="padding:4px 12px;font-size:12px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">+ 添加</button><button type="button" onclick="WvGenerator.inlineFactions()" class="ai-action-btn" style="padding:4px 10px;font-size:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:6px;cursor:pointer"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>批量生成</button></div>
           </div>
           <div id="wv-factions-list"></div>
         </div>
@@ -3858,7 +3865,7 @@ NPC
               </button>
               <div style="display:flex;gap:8px;flex-shrink:0">
                 <button onclick="Worldview.deleteFaction()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">删除</button>
-                <button onclick="Worldview.saveFaction()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+                <button onclick="Worldview.saveFaction()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存</button>
               </div>
             </div>
             <h2 id="wv-faction-title" style="margin:0;font-size:22px;color:var(--text)">编辑势力</h2>
@@ -3873,7 +3880,7 @@ NPC
         <div style="padding-top:16px;margin-top:16px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
             <div style="font-size:15px;font-weight:bold;color:var(--text);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"/></svg> 角色列表</div>
-            <div style="display:flex;gap:6px"><button type="button" onclick="Worldview.addNPC()" style="padding:4px 12px;font-size:12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">+ 添加</button><button type="button" onclick="Worldview.openNpcImporter('faction')" style="padding:4px 10px;font-size:12px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>导入</button><button type="button" onclick="WvGenerator.inlineFactionNpcs()" class="ai-action-btn" style="padding:4px 10px;font-size:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:6px;cursor:pointer"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>批量生成</button></div>
+            <div style="display:flex;gap:6px"><button type="button" onclick="Worldview.addNPC()" style="padding:4px 12px;font-size:12px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">+ 添加</button><button type="button" onclick="Worldview.openNpcImporter('faction')" style="padding:4px 10px;font-size:12px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>导入</button><button type="button" onclick="WvGenerator.inlineFactionNpcs()" class="ai-action-btn" style="padding:4px 10px;font-size:12px;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:6px;cursor:pointer"><svg class="ai-spark-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>批量生成</button></div>
           </div>
           <div id="wv-npcs-list"></div>
         </div>
@@ -3892,7 +3899,7 @@ NPC
               <div style="display:flex;gap:8px;flex-shrink:0">
                 <button onclick="Worldview.exportCurrentNpc()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">导出</button>
                 <button onclick="Worldview.deleteNPC()" style="padding:6px 12px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">删除</button>
-                <button onclick="Worldview.saveNPC()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存</button>
+                <button onclick="Worldview.saveNPC()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存</button>
               </div>
             </div>
             <h2 id="wv-npc-title" style="margin:0;font-size:22px;color:var(--text)">编辑角色</h2>
@@ -3943,7 +3950,7 @@ NPC
         </button>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <h2 id="wv-viewer-title" style="margin:0;font-size:22px;color:var(--text)">查看世界观</h2>
-          <button onclick="Worldview.openEdit(document.getElementById('panel-wv-viewer').dataset.id)" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg> 编辑</button>
+          <button onclick="Worldview.openEdit(document.getElementById('panel-wv-viewer').dataset.id)" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg> 编辑</button>
         </div>
       </div>
       
@@ -4383,7 +4390,7 @@ NPC
             <span class="form-label" style="font-size:12px;color:var(--text-secondary)">测试文本 <span style="font-size:11px">（粘贴一段模拟AI输出的内容）</span></span>
             <textarea id="regex-test-input" rows="4" placeholder="在这里粘贴要测试的文本…" oninput="Settings._runRegexTest()" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:12px;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:8px;outline:none;resize:vertical;line-height:1.6;font-family:inherit"></textarea>
           </div>
-          <button type="button" onclick="Settings._runRegexTest()" style="align-self:flex-start;padding:6px 16px;font-size:12px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">运行测试</button>
+          <button type="button" onclick="Settings._runRegexTest()" style="align-self:flex-start;padding:6px 16px;font-size:12px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">运行测试</button>
           <div id="regex-test-result" style="font-size:12px;color:var(--text-secondary)"></div>
         </div>
       </div>
@@ -4408,7 +4415,7 @@ NPC
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button onclick="Chat._cancelSuggestConfirm()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">取消</button>
-      <button onclick="Chat._okSuggestConfirm()" style="flex:1;background:var(--accent);color:#000;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">生成</button>
+      <button onclick="Chat._okSuggestConfirm()" style="flex:1;background:var(--accent);color:var(--on-accent);border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">生成</button>
     </div>
   </div>
 </div>
@@ -4420,7 +4427,7 @@ NPC
     <p id="confirm-message" style="margin:0 0 20px 0;color:var(--text-secondary);font-size:14px;line-height:1.5">确定要删除吗？</p>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button id="confirm-cancel" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">取消</button>
-      <button id="confirm-ok" style="flex:1;background:var(--accent);color:#000;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">确定</button>
+      <button id="confirm-ok" style="flex:1;background:var(--accent);color:var(--on-accent);border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">确定</button>
     </div>
   </div>
 </div>
@@ -4431,7 +4438,7 @@ NPC
     <h3 id="alert-title" style="margin:0 0 16px 0;color:var(--text);font-size:16px">提示</h3>
     <p id="alert-message" style="margin:0 0 20px 0;color:var(--text-secondary);font-size:14px;line-height:1.5"></p>
     <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button id="alert-ok" style="flex:1;background:var(--accent);color:#000;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">确定</button>
+      <button id="alert-ok" style="flex:1;background:var(--accent);color:var(--on-accent);border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">确定</button>
     </div>
   </div>
 </div>
@@ -4443,7 +4450,7 @@ NPC
     <textarea id="copy-text-value" readonly style="width:100%;min-height:110px;padding:10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;font-size:13px;line-height:1.5;margin-bottom:16px;box-sizing:border-box;color:var(--text);outline:none;resize:vertical"></textarea>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button id="copy-text-cancel" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">关闭</button>
-      <button id="copy-text-confirm" style="flex:1;background:var(--accent);color:#000;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">复制</button>
+      <button id="copy-text-confirm" style="flex:1;background:var(--accent);color:var(--on-accent);border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">复制</button>
     </div>
   </div>
 </div>
@@ -4455,7 +4462,7 @@ NPC
     <textarea id="simple-input-field" rows="1" style="width:100%;padding:10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;font-size:14px;margin-bottom:16px;box-sizing:border-box;color:var(--text);outline:none;resize:vertical;font-family:inherit" placeholder="输入名称..."></textarea>
     <div style="display:flex;gap:8px;justify-content:flex-end">
      <button id="simple-input-cancel" onclick="UI.closeSimpleInput()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">取消</button>
-    <button id="simple-input-confirm" onclick="UI.confirmSimpleInput()" style="flex:1;background:var(--accent);color:#000;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">保存</button>
+    <button id="simple-input-confirm" onclick="UI.confirmSimpleInput()" style="flex:1;background:var(--accent);color:var(--on-accent);border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">保存</button>
    </div>
   </div>
 </div>
@@ -4554,41 +4561,41 @@ const GameLog = (() => {
 })();
 </script>
 <script src="js/db.js?v=15"></script>
-<script src="js/stickers.js?v=9"></script>
-<script src="js/utils.js?v=28"></script>
+<script src="js/stickers.js?v=11"></script>
+<script src="js/utils.js?v=29"></script>
 <script src="js/markdown.js?v=13"></script>
 <script src="js/api.js?v=7"></script>
 <script src="js/time-awareness.js"></script>
 <script src="js/env-awareness.js"></script>
 <script src="js/mcp-client.js"></script>
 <script src="js/fab-drag.js?v=5"></script>
-<script src="js/memory.js?v=12"></script>
-<script src="js/tools.js?v=13"></script>
+<script src="js/memory.js?v=17"></script>
+<script src="js/tools.js?v=14"></script>
 <script src="js/npc.js"></script>
-<script src="js/statusbar_theme.js?v=67"></script>
-<script src="js/worldview.js?v=130"></script>
-<script src="js/npc_importer.js?v=2"></script>
+<script src="js/statusbar_theme.js?v=70"></script>
+<script src="js/worldview.js?v=134"></script>
+<script src="js/npc_importer.js?v=3"></script>
 <script src="js/lorebook.js"></script>
-<script src="js/lorebook_ui.js?v=1"></script>
-<script src="js/conv_gameplay.js?v=16"></script>
+<script src="js/lorebook_ui.js?v=2"></script>
+<script src="js/conv_gameplay.js?v=18"></script>
 <script src="js/wv-generator.js?v=34"></script>
-<script src="js/single_card.js?v=19"></script>
+<script src="js/single_card.js?v=21"></script>
 <script src="js/attached-chars.js?v=4"></script>
-<script src="js/single_mode.js?v=8"></script>
-<script src="js/character.js?v=20"></script>
-<script src="js/prompts.js?v=16"></script>
-<script src="js/conversations.js?v=22"></script>
-<script src="js/summary.js?v=10"></script>
+<script src="js/single_mode.js?v=9"></script>
+<script src="js/character.js?v=24"></script>
+<script src="js/prompts.js?v=19"></script>
+<script src="js/conversations.js?v=24"></script>
+<script src="js/summary.js?v=11"></script>
 <script src="js/rescue.js?v=1"></script>
-<script src="js/chat.js?v=161"></script>
+<script src="js/chat.js?v=168"></script>
 <script src="js/lib/html2canvas.min.js"></script>
 <script src="js/lib/mammoth.browser.min.js"></script>
 <script src="js/lib/pdf.min.js"></script>
 <script src="js/tts.js"></script>
 <script src="js/branch.js"></script>
-<script src="js/settings.js?v=15"></script>
-<script src="js/gaiden.js?v=9"></script>
-<script src="js/backstage.js?v=32"></script>
+<script src="js/settings.js?v=18"></script>
+<script src="js/gaiden.js?v=11"></script>
+<script src="js/backstage.js?v=34"></script>
 <script src="js/dice.js"></script>
 <script src="js/calendar.js?v=10"></script>
 <script src="js/status_bar.js?v=40"></script>
@@ -4599,8 +4606,8 @@ const GameLog = (() => {
 <script src="js/radio-covers.js?v=1"></script>
 <script src="js/ebook-import.js?v=1"></script>
 <script src="js/app_icons.js?v=7"></script>
-<script src="js/phone.js?v1=1367"></script>
-    <script src="js/heartsim_intro.js?v=1"></script>
+<script src="js/phone.js?v1=1377"></script>
+    <script src="js/heartsim_intro.js?v=2"></script>
 <script src="js/heartsim_homecoming.js"></script>
 <script src="js/heartsim_companion.js"></script>
 <script src="js/heartsim_collapse.js"></script>
@@ -4612,20 +4619,20 @@ const GameLog = (() => {
 <script src="js/colorpicker.js?v=1"></script>
 <script src="data/tianshucheng-bg.js"></script>
   <script src="data/tutorial-script.js?v=2"></script>
-  <script src="js/theme.js?v=104"></script>
+  <script src="js/theme.js?v=105"></script>
   <script src="js/tutorial.js"></script>
 <script src="data/builtin-tianshucheng.js?v=2"></script>
 <script src="data/builtin-heartsim.js?v=3"></script>
 <script src="js/tianshucheng-fx.js"></script>
 <script src="js/tianshucheng-region-fx.js"></script>
 <script src="js/agreement.js"></script>
-<script src="js/auth.js?v=26"></script>
-<script src="js/app.js?v=178"></script>
+<script src="js/auth.js?v=28"></script>
+<script src="js/app.js?v=180"></script>
 
 <!-- 全屏输入遮罩 -->
 <div id="fullscreen-input-overlay" class="fullscreen-input-overlay hidden">
   <div class="fullscreen-input-header">
-    <button onclick="Chat.toggleFullscreenInput()" style="padding:8px 16px;background:var(--accent);border:none;border-radius:6px;color:#111;cursor:pointer">完成</button>
+    <button onclick="Chat.toggleFullscreenInput()" style="padding:8px 16px;background:var(--accent);border:none;border-radius:6px;color:var(--on-accent);cursor:pointer">完成</button>
   </div>
   <textarea id="fullscreen-input-textarea" class="fullscreen-input-textarea" placeholder="输入你的行动..."></textarea>
 </div>
@@ -4707,7 +4714,7 @@ document.addEventListener('click', (e) => {
 <div id="mask-sort-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:12px">
   <span style="font-size:13px;color:var(--text-secondary)">拖动 ≡ 调整顺序</span>
   <div style="display:flex;gap:8px">
-    <button type="button" onclick="Character.saveSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存排序</button>
+    <button type="button" onclick="Character.saveSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存排序</button>
     <button type="button" onclick="Character.exitSortMode()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer">取消</button>
   </div>
 </div>
@@ -4741,7 +4748,7 @@ document.addEventListener('click', (e) => {
 <div id="worldview-sort-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:12px">
   <span style="font-size:13px;color:var(--text-secondary)">拖动 ≡ 调整顺序</span>
   <div style="display:flex;gap:8px">
-    <button type="button" onclick="Worldview.saveSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存排序</button>
+    <button type="button" onclick="Worldview.saveSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存排序</button>
     <button type="button" onclick="Worldview.exitSortMode()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer">取消</button>
   </div>
 </div>
@@ -4772,7 +4779,7 @@ document.addEventListener('click', (e) => {
 <div id="single-card-sort-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:12px">
   <span style="font-size:13px;color:var(--text-secondary)">拖动 ≡ 调整顺序</span>
   <div style="display:flex;gap:8px">
-    <button type="button" onclick="SingleCard.saveSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存排序</button>
+    <button type="button" onclick="SingleCard.saveSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存排序</button>
     <button type="button" onclick="SingleCard.exitSortMode()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer">取消</button>
   </div>
 </div>
@@ -4806,7 +4813,7 @@ document.addEventListener('click', (e) => {
 <div id="memory-sort-bar" class="hidden" style="position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border-top:1px solid var(--border);z-index:1000;gap:12px">
 <span style="font-size:13px;color:var(--text-secondary)">使用 ↑↓ 调整顺序</span>
 <div style="display:flex;gap:8px">
-<button type="button" onclick="Memory.saveSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存排序</button>
+<button type="button" onclick="Memory.saveSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存排序</button>
 <button type="button" onclick="Memory.exitSortMode()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">取消</button>
 </div>
 </div>
@@ -4928,7 +4935,7 @@ document.addEventListener('click', (e) => {
   <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">拖动 ≡ 排序（限同分组内）</span>
   <div style="display:flex;gap:8px">
     <button type="button" onclick="Prompts.exitPromptSortMode()" style="padding:6px 16px;font-size:13px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;cursor:pointer">取消</button>
-    <button type="button" onclick="Prompts.savePromptSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">保存排序</button>
+    <button type="button" onclick="Prompts.savePromptSortOrder()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存排序</button>
   </div>
 </div>
 
@@ -5113,7 +5120,7 @@ document.addEventListener('click', (e) => {
   <div style="display:flex;flex-direction:column;width:100%;height:100%;background:var(--bg-secondary);padding:16px;padding-top:max(16px, env(safe-area-inset-top, 16px));padding-bottom:max(16px, env(safe-area-inset-bottom, 16px));box-sizing:border-box">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
       <span id="fullscreen-input-title" style="font-size:16px;font-weight:bold;color:var(--text)"></span>
-      <button onclick="Utils.closeFullscreen()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:#111;border:none;border-radius:6px;cursor:pointer">完成</button>
+      <button onclick="Utils.closeFullscreen()" style="padding:6px 16px;font-size:13px;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">完成</button>
     </div>
     <textarea id="fullscreen-edit-textarea" style="flex:1;width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:12px;font-size:15px;line-height:1.7;resize:none;outline:none;box-sizing:border-box"></textarea>
   </div>
@@ -5162,7 +5169,7 @@ if ('serviceWorker' in navigator) {
 <input type="file" id="backstage-file-picker" accept=".txt,.md,.markdown,.json,.csv,.tsv,.log,.js,.mjs,.cjs,.ts,.tsx,.jsx,.py,.html,.htm,.css,.scss,.less,.xml,.yaml,.yml,.ini,.toml,.sh,.bash,.zsh,.rb,.go,.rs,.java,.c,.cpp,.h,.hpp,.sql,.env,.pdf,.docx,text/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" onchange="Backstage.onFilePicked(this)">
     <input type="file" id="backstage-history-picker" accept=".json,application/json" style="display:none" onchange="Backstage.importHistory(this)">
     <textarea id="backstage-input" rows="1" placeholder="在后台说点什么..." style="flex:1;min-width:0;resize:none;border:1px solid var(--border);border-radius:8px;padding:8px 12px;background:var(--bg-secondary);color:var(--text);font-size:14px;max-height:100px;overflow-y:auto;outline:none"></textarea>
-    <button onclick="Backstage.send()" id="backstage-send-btn" title="发送" style="width:36px;height:36px;background:var(--accent);color:#111;border:none;border-radius:50%;padding:0;cursor:pointer;flex-shrink:0;font-weight:bold;display:flex;align-items:center;justify-content:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent">
+    <button onclick="Backstage.send()" id="backstage-send-btn" title="发送" style="width:36px;height:36px;background:var(--accent);color:var(--on-accent);border:none;border-radius:50%;padding:0;cursor:pointer;flex-shrink:0;font-weight:bold;display:flex;align-items:center;justify-content:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent">
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
     </button>
     <div id="backstage-plus-menu" class="plus-menu hidden" style="bottom:100%;left:16px;right:auto;top:auto;margin-bottom:8px;min-width:160px">
@@ -5377,7 +5384,7 @@ if ('serviceWorker' in navigator) {
 <span class="circle-check-ui"></span>
 </span>
 </label>
-<span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 查询你手机里的信息（只读）。目前仅支持「小屋」App（住所/房间布置/家具仓库/宠物）和「衣橱」App（今日穿搭/套装/衣橱仓库），其它 App 暂不支持。</span>
+<span style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:block">允许后台 AI 查询你手机里的信息（只读）。目前支持「小屋」App（住所/房间布置/家具仓库/宠物）、「衣橱」App（今日穿搭/套装/衣橱仓库）和聊天 App（会话目录/聊天记录/关键词搜索，默认不含马甲会话），其它 App 暂不支持。</span>
     <div class="modal-actions" style="margin-top:16px">
       <button onclick="Backstage.closePromptEdit()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
       <button onclick="Backstage.savePrompt()" style="flex:1;touch-action:manipulation;-webkit-tap-highlight-color:transparent">保存</button>
@@ -5387,7 +5394,7 @@ if ('serviceWorker' in navigator) {
 
 <!-- 番外生成悬浮按钮 -->
 <div id="gaiden-fab" class="hidden floating-fab" onclick="Gaiden.restoreModal()" style="position:fixed;top:50%;right:12px;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);cursor:pointer;z-index:200">
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
 </div>
 <style>
 .floating-fab {
@@ -5649,7 +5656,7 @@ if ('serviceWorker' in navigator) {
           </div>
           
           <!-- 发送按钮 -->
-          <button id="sb-editor-send" class="btn-send" onclick="StatusBarTheme.onSendBtnClick()" style="width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;border:none;outline:none;cursor:pointer">
+          <button id="sb-editor-send" class="btn-send" onclick="StatusBarTheme.onSendBtnClick()" style="width:36px;height:36px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:flex;align-items:center;justify-content:center;border:none;outline:none;cursor:pointer">
             <svg id="sb-editor-send-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:18px;height:18px"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" /></svg>
           </button>
         </div>

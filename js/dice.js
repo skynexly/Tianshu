@@ -154,7 +154,7 @@ window.Dice = (() => {
         <div id="dice-result-area" style="min-height:60px"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
           <button type="button" id="dice-btn-reroll" onclick="Dice.rollOnce()" style="padding:7px 14px;background:var(--bg);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:13px;cursor:pointer">投掷</button>
-          <button type="button" id="dice-btn-confirm" onclick="Dice.confirmAndSend()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:6px;color:#111;font-size:13px;cursor:pointer;display:none">确认结果</button>
+          <button type="button" id="dice-btn-confirm" onclick="Dice.confirmAndSend()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:6px;color: var(--on-accent);font-size:13px;cursor:pointer;display:none">确认结果</button>
         </div>
       </div>`;
     document.body.appendChild(m);

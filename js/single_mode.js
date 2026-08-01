@@ -198,14 +198,14 @@ const SingleMode = (() => {
     const npcBtn = document.getElementById('sm-char-tab-npc');
     if (tab === 'card') {
       cardBtn.style.background = 'var(--accent)';
-      cardBtn.style.color = '#111';
+      cardBtn.style.color = 'var(--on-accent)';
       npcBtn.style.background = 'transparent';
       npcBtn.style.color = 'var(--text-secondary)';
     } else {
       cardBtn.style.background = 'transparent';
       cardBtn.style.color = 'var(--text-secondary)';
       npcBtn.style.background = 'var(--accent)';
-      npcBtn.style.color = '#111';
+      npcBtn.style.color = 'var(--on-accent)';
     }
     _renderCharList();
     _updateCardExtRowVisibility();

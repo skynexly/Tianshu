@@ -204,7 +204,7 @@ const container = document.getElementById('backstage-messages');
     } else {
       btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>';
       btn.style.background = 'var(--accent)';
-      btn.style.color = '#111';
+      btn.style.color = 'var(--on-accent)';
       btn.onclick = send;
     }
   }
@@ -313,7 +313,7 @@ const container = document.getElementById('backstage-messages');
       const checked = pendingMemories.some(pm => pm.id === m.id);
       return `<div style="display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)">
         <span class="mem-check-circle ${checked ? 'checked' : ''}" onclick="event.stopPropagation();Backstage._togglePickMem('${m.id}', !this.classList.contains('checked'))" style="width:22px;height:22px;border-radius:50%;border:2px solid ${checked ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;${checked ? 'background:var(--accent);' : ''}">
-          ${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+          ${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
         </span>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;color:var(--accent)">${Utils.escapeHtml(m.title || '无标题')}</div>
@@ -903,10 +903,12 @@ let imgPrompt = '[生图能力]\n你拥有生成图片的能力。当用户要�
       }
       if (bsSettings.toolsPhoneInfo) {
         guideParts.push(`【手机信息查询工具】
-当剧情涉及 {{user}} 的家、房间陈设、家具、宠物或穿着打扮时，可以查 {{user}} 手机里的真实数据，据实引用而不要编造。目前支持两个 App：
+当剧情涉及 {{user}} 的家、房间陈设、家具、宠物、穿着打扮，或 {{user}} 在手机上和谁聊过什么时，可以查 {{user}} 手机里的真实数据，据实引用而不要编造。目前支持这几个 App：
 - query_cottage：查「小屋」App——住所（名字/地址/风格）、各房间已布置的家具、家具仓库里买了还没摆的家具、养的宠物。可传 section（all/houses/inventory/pets）和 name 精确查某个住所或宠物。
 - query_wardrobe：查「衣橱」App——今日穿搭（当前穿在身上的各部位）、已保存的套装、衣橱仓库里存着的服装单品。可传 section（all/outfit/suits/inventory）。
-（目前手机信息查询只覆盖小屋和衣橱这两个 App，其它 App 暂不支持。）`);
+- query_phone_chat：查聊天 App 的聊天记录。不传参数先看会话目录（有哪些人/群、多少条消息、最后一条预览），再传 contact 查具体某个人或群聊了什么（rounds 控制轮数，默认 10）；传 keyword 可以搜包含某个词的消息。想回想已经过去的私聊细节时用它，不要凭印象编。
+  马甲会话默认不返回——那是 {{user}} 隐藏真实身份用的假身份，只在明确要复盘马甲线时才传 includeAlias=true。
+（手机信息查询目前只覆盖这几个 App，其它 App 暂不支持。）`);
       }
       if (guideParts.length > 0) {
         systemParts.push(guideParts.join('\n\n'));
@@ -1107,7 +1109,7 @@ try { stampedHistory = TimeAwareness.stampUserMessages(historyForAPI, historyMsg
       'list_event_settings','read_event_setting','add_event_setting','update_event_setting','delete_event_setting',
       'list_cards','read_card','update_card','create_card','undo_last_edit'].includes(name)) return bsSettings.toolsEdit;
       if (name === 'search_messages' || name === 'query_events' || name === 'query_relations') return bsSettings.toolsMainMemory;
-      if (name === 'query_cottage' || name === 'query_wardrobe') return bsSettings.toolsPhoneInfo;
+      if (name === 'query_cottage' || name === 'query_wardrobe' || name === 'query_phone_chat') return bsSettings.toolsPhoneInfo;
       if (name === 'query_draw_desc') {
                 // 只在对话开启了生图模式时才启用
                 const _c = Conversations.getList().find(c => c.id === Conversations.getCurrent());

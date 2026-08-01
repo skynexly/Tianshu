@@ -1468,7 +1468,7 @@ async function clearAllBubbleCss() {
     }
     bar.innerHTML = store.slots.map(s => {
       const active = s.id === store.activeId;
-      return `<div style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:14px;font-size:12px;cursor:pointer;white-space:nowrap;background:${active ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${active ? '#fff' : 'var(--text-secondary)'};border:1px solid ${active ? 'var(--accent)' : 'var(--border)'}">
+      return `<div style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:14px;font-size:12px;cursor:pointer;white-space:nowrap;background:${active ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${active ? 'var(--on-accent)' : 'var(--text-secondary)'};border:1px solid ${active ? 'var(--accent)' : 'var(--border)'}">
         <span onclick="Theme.switchBubbleSlot('${s.id}')">${Utils.escapeHtml(s.name)}</span>
         <span onclick="event.stopPropagation();Theme.deleteBubbleSlot('${s.id}')" style="opacity:.7;font-size:14px;line-height:1;margin-left:1px">×</span>
       </div>`;

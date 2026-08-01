@@ -925,7 +925,7 @@ font-size: var(--msg-font-size, 15px);
 }
 .msg-tap-actions button:active {
   background: var(--accent-dim);
-  color: #111;
+  color: var(--on-accent);
 }
 .msg-tap-actions button.danger {
   color: var(--danger);
@@ -1015,7 +1015,7 @@ font-size: var(--msg-font-size, 15px);
 .th-preset-btn.active {
   border-color: var(--accent);
   background: var(--accent);
-  color: #111;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -1501,7 +1501,7 @@ font-size: var(--msg-font-size, 15px);
   height: 24px;
   border-radius: 50%;
   background: var(--accent);
-  color: #111;
+  color: var(--on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1778,7 +1778,7 @@ form select {
 form input:focus, form textarea:focus { outline: none; }
 form button {
   background: var(--accent);
-  color: #111;
+  color: var(--on-accent);
   border: none;
   padding: 10px 20px;
   border-radius: var(--radius);
@@ -2327,7 +2327,7 @@ input[type="range"] {
 }
 .modal-actions button:first-child {
   background: var(--accent);
-  color: #111;
+  color: var(--on-accent);
   border: none;
 }
 
@@ -2445,7 +2445,7 @@ input[type="range"] {
 .wv-gen-status { margin-bottom:12px; font-size:13px; color:var(--text-secondary); display:none; padding:10px 12px; border-radius:12px; background: color-mix(in srgb, var(--accent) 7%, var(--bg-tertiary)); border:1px solid color-mix(in srgb, var(--accent) 18%, var(--border)); }
 .wv-gen-actions { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; padding-top:2px; }
 .wv-gen-btn { padding:9px 16px; border-radius:11px; cursor:pointer; font-size:14px; font-family:inherit; border:1px solid var(--border); background:transparent; color:var(--text); display:inline-flex; align-items:center; gap:6px; justify-content:center; }
-.wv-gen-btn.primary { padding:9px 20px; border:none; background:linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 74%, #fff)); color:#111; font-weight:700; }
+.wv-gen-btn.primary { padding:9px 20px; border:none; background:linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 74%, #fff)); color:var(--on-accent); font-weight:700; }
 .wv-gen-btn:disabled { cursor:not-allowed; opacity:.55; }
 .wv-gen-summary { padding:14px; border:1px solid color-mix(in srgb, var(--accent) 18%, var(--border)); border-radius:16px; background:color-mix(in srgb, var(--bg-tertiary) 72%, transparent); margin-bottom:12px; font-size:12px; color:var(--text-secondary); }
 .wv-gen-mini-svg { width:15px; height:15px; vertical-align:-2px; color:var(--accent); }
@@ -2487,7 +2487,7 @@ input[type="range"] {
 .pe-scope-tag.active {
   border-color: var(--accent);
   background: var(--accent);
-  color: #111;
+  color: var(--on-accent);
 }
 
 /* 自定义下拉菜单 */
@@ -2896,7 +2896,7 @@ input[type="range"] {
   flex: 0 0 20px;
   transition: all 0.15s ease;
   background: transparent;
-  color: #111;
+  color: var(--on-accent);
   box-sizing: border-box;
 }
 .circle-check:checked + .circle-check-ui {
@@ -2907,8 +2907,8 @@ input[type="range"] {
   content: '';
   width: 8px;
   height: 4px;
-  border-left: 2px solid #111;
-  border-bottom: 2px solid #111;
+  border-left: 2px solid var(--on-accent);
+  border-bottom: 2px solid var(--on-accent);
   transform: rotate(-45deg) translateY(-1px);
   box-sizing: border-box;
 }
@@ -6516,7 +6516,7 @@ letter-spacing: 0.15em;
 }
 .pill-toggle input:checked + .pill-track::before {
   transform: translateY(-50%) translateX(20px);
-  background: #fff;
+  background: var(--on-accent);
 }
 
 /* 状态栏编辑弹窗内的输入框跟随主题 */
@@ -6574,7 +6574,7 @@ button.dice-check-btn {
   background: linear-gradient(135deg, var(--accent), var(--accent-dim, var(--accent)));
   border: none;
   border-radius: 14px;
-  color: #111;
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;

@@ -841,7 +841,7 @@ const Auth = (() => {
           } else {
             _imgMgrSelected.add(id);
             check.style.background = 'var(--accent)';
-            check.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+            check.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
             cell.style.outline = '2px solid var(--accent)';
           }
           refreshDelBtn();
@@ -855,7 +855,7 @@ const Auth = (() => {
         _imgMgrSelected.add(id);
         const check = cell.querySelector('.img-mgr-check');
         check.style.background = 'var(--accent)';
-        check.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+        check.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
         cell.style.outline = '2px solid var(--accent)';
       });
       refreshDelBtn();
@@ -1195,7 +1195,7 @@ const Auth = (() => {
       </div>
       <div style="display:flex;gap:8px;margin-bottom:6px">
         <button type="button" id="cb-test" style="flex:1;background:none;border:1px solid var(--border);color:var(--text);padding:9px;border-radius:8px;cursor:pointer;font-size:13px">测试连接</button>
-        <button type="button" id="cb-save" style="flex:1;background:var(--accent);color:#111;border:none;padding:9px;border-radius:8px;cursor:pointer;font-size:13px">保存配置</button>
+        <button type="button" id="cb-save" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;padding:9px;border-radius:8px;cursor:pointer;font-size:13px">保存配置</button>
       </div>
       <div id="cb-conn-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
 
@@ -1244,7 +1244,7 @@ const Auth = (() => {
       </div>
       <div style="display:flex;gap:8px;margin-bottom:6px">
         <button type="button" id="cb-test" style="flex:1;background:none;border:1px solid var(--border);color:var(--text);padding:9px;border-radius:8px;cursor:pointer;font-size:13px">测试连接</button>
-        <button type="button" id="cb-save" style="flex:1;background:var(--accent);color:#111;border:none;padding:9px;border-radius:8px;cursor:pointer;font-size:13px">保存配置</button>
+        <button type="button" id="cb-save" style="flex:1;background:var(--accent);color: var(--on-accent);border:none;padding:9px;border-radius:8px;cursor:pointer;font-size:13px">保存配置</button>
       </div>
       <div id="cb-conn-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
 
@@ -1502,7 +1502,7 @@ const Auth = (() => {
             <div style="font-size:13px;color:var(--text)">${_escape(modeLabel[r.mode] || r.mode || '存档')}${_escape(sz)}${partTag} ${dev}</div>
             <div style="font-size:11px;color:var(--text-secondary)">${_escape(t)}${_escape(idTag)}</div>
           </div>
-          <button type="button" class="cb-restore" data-id="${_escape(String(r.id))}" style="background:var(--accent);color:#111;border:none;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;margin-right:6px">恢复</button>
+          <button type="button" class="cb-restore" data-id="${_escape(String(r.id))}" style="background:var(--accent);color: var(--on-accent);border:none;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;margin-right:6px">恢复</button>
           <button type="button" class="cb-del" data-id="${_escape(String(r.id))}" style="background:none;border:1px solid var(--border);color:var(--text-secondary);padding:6px 10px;border-radius:7px;cursor:pointer;font-size:12px">删除</button>
         </div>`;
     }).join('');
@@ -1889,7 +1889,7 @@ function _onChangePassword() {
 
         <div class="modal-actions" style="margin-top:12px">
           <button type="button" id="auth-pw-cancel" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">取消</button>
-          <button type="button" id="auth-pw-submit" style="flex:1;background:var(--accent);color:#111;border:none">确认</button>
+          <button type="button" id="auth-pw-submit" style="flex:1;background:var(--accent);color: var(--on-accent);border:none">确认</button>
         </div>
       </div>
     `;

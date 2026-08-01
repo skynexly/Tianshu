@@ -171,7 +171,7 @@ const Worldview = (() => {
       const onclickAttr = deletable
         ? `onclick="Worldview._onGroupTabClick(event,'${Utils.escapeHtml(String(key)).replace(/'/g,"\\'")}')"`
         : `onclick="Worldview.switchWorldviewGroup('${key}')"`;
-      return `<button type="button" ${onclickAttr}${oncontext} style="flex-shrink:0;padding:6px 14px;border-radius:var(--radius);font-size:12px;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};background:${active ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${active ? '#111' : 'var(--text-secondary)'};cursor:pointer;white-space:nowrap">${Utils.escapeHtml(label)}</button>`;
+      return `<button type="button" ${onclickAttr}${oncontext} style="flex-shrink:0;padding:6px 14px;border-radius:var(--radius);font-size:12px;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};background:${active ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${active ? 'var(--on-accent)' : 'var(--text-secondary)'};cursor:pointer;white-space:nowrap">${Utils.escapeHtml(label)}</button>`;
     };
     let html = tabDef(WV_GROUP_ALL, '全部', false) + tabDef(WV_GROUP_UNGROUPED, '未分组', false);
     groups.forEach(g => { html += tabDef(g, g, true); });
@@ -499,13 +499,13 @@ if (!isHidden && _currentExtSubtab === 'npc') {
       html += `
         <div class="card worldview-card-item" data-id="${w.id}" onclick="Worldview._onCardClick('${w.id}')" style="display:flex;gap:12px;padding:12px;align-items:center;background:var(--bg-tertiary);cursor:pointer;">
           ${manageMode ? `<span class="worldview-check-circle ${checked ? 'checked' : ''}" data-id="${w.id}" style="width:22px;height:22px;border-radius:50%;border:2px solid ${checked ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${checked ? 'background:var(--accent);' : ''}">
-            ${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+            ${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
           </span>` : ''}
           <div style="width:64px;height:64px;border-radius:50%;background:transparent;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
             ${iconHTML}
           </div>
           <div style="flex:1;min-width:0;">
-            <div style="font-size:16px;font-weight:bold;color:var(--accent);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Utils.escapeHtml(w.name)}${pendingMap[w.id] ? ' <span onclick="event.stopPropagation();Worldview.applyBuiltinUpdate(\'' + w.id + '\')" style="font-size:11px;font-weight:500;padding:1px 6px;border-radius:4px;background:var(--accent);color:#111;cursor:pointer;vertical-align:middle;margin-left:6px">可更新</span>' : ''}</div>
+            <div style="font-size:16px;font-weight:bold;color:var(--accent);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Utils.escapeHtml(w.name)}${pendingMap[w.id] ? ' <span onclick="event.stopPropagation();Worldview.applyBuiltinUpdate(\'' + w.id + '\')" style="font-size:11px;font-weight:500;padding:1px 6px;border-radius:4px;background:var(--accent);color: var(--on-accent);cursor:pointer;vertical-align:middle;margin-left:6px">可更新</span>' : ''}</div>
             <div style="font-size:12px;color:var(--text);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;">
               ${Utils.escapeHtml(w.description || '暂无描述')}
             </div>
@@ -535,7 +535,7 @@ if (!isHidden && _currentExtSubtab === 'npc') {
     const container = document.getElementById('worldview-list-container');
     
     if (manageMode) {
-      if (btn) { btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6L6 18M6 6l12 12"/></svg> 退出`; btn.style.background = 'var(--accent)'; btn.style.color = '#111'; btn.style.border = 'none'; }
+      if (btn) { btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6L6 18M6 6l12 12"/></svg> 退出`; btn.style.background = 'var(--accent)'; btn.style.color = 'var(--on-accent)'; btn.style.border = 'none'; }
       if (bar) bar.classList.remove('hidden');
       if (container) container.style.paddingBottom = '72px';
     } else {
@@ -684,7 +684,7 @@ if (!isHidden && _currentExtSubtab === 'npc') {
     if (allSelected) {
       iconEl.style.background = 'var(--accent)';
       iconEl.style.border = '2px solid var(--accent)';
-      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
     } else {
       iconEl.style.background = '';
       iconEl.style.border = '2px solid var(--text-secondary)';
@@ -3912,9 +3912,9 @@ let knowledgesData = [];
       return `
       <div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px 12px 12px 44px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editFestival(${i})">
         <button type="button" onclick="event.stopPropagation();Worldview.toggleFestivalEnabled(${i})" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;border:2px solid ${enabled ? 'var(--accent)' : 'var(--text-secondary)'};background:${enabled ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
-          ${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+          ${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
         </button>
-        <div style="position:absolute;top:8px;right:8px;font-size:11px;background:var(--accent);color:#000;padding:2px 6px;border-radius:4px">${f.yearly ? '每年' : '一次'}</div>
+        <div style="position:absolute;top:8px;right:8px;font-size:11px;background:var(--accent);color: var(--on-accent);padding:2px 6px;border-radius:4px">${f.yearly ? '每年' : '一次'}</div>
         <div style="font-size:15px;font-weight:bold;color:${enabled ? 'var(--accent)' : 'var(--text-secondary)'};margin-bottom:4px;padding-right:48px">${Utils.escapeHtml(f.name || '未命名节日')}</div>
         <div style="font-size:12px;color:var(--text-secondary)">${Utils.escapeHtml(f.date || '')}</div>
         ${f.content ? `<div style="font-size:12px;color:var(--text);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(f.content)}</div>` : ''}
@@ -3944,7 +3944,7 @@ let knowledgesData = [];
     if (!input || !ui) return;
     ui.style.background = input.checked ? 'var(--accent)' : 'transparent';
     ui.style.borderColor = input.checked ? 'var(--accent)' : 'var(--text-secondary)';
-    ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+    ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
   }
   function _syncFestEnabledUI() {
     const input = document.getElementById('wv-fest-modal-enabled');
@@ -3952,7 +3952,7 @@ let knowledgesData = [];
     if (!input || !ui) return;
     ui.style.background = input.checked ? 'var(--accent)' : 'transparent';
     ui.style.borderColor = input.checked ? 'var(--accent)' : 'var(--text-secondary)';
-    ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+    ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
   }
 
   function editFestival(i) {
@@ -4023,7 +4023,7 @@ let knowledgesData = [];
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">根据世界观设定与历法生成扎根本世界的节日，追加进列表（不覆盖已有节日）。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-fest-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-fest-gen-btn" onclick="Worldview._doAiGenFestivals()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-fest-gen-btn" onclick="Worldview._doAiGenFestivals()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-fest-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -4154,7 +4154,7 @@ let knowledgesData = [];
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">生成围绕本世界观的背景设定（成套的体系如经济/教育，或点状的细节如物产/黑话），带触发关键词，命中时自动注入。追加进列表（不覆盖已有）。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-know-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-know-gen-btn" onclick="Worldview._doAiGenKnowledges()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-know-gen-btn" onclick="Worldview._doAiGenKnowledges()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-know-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -4328,7 +4328,7 @@ let knowledgesData = [];
     const bannerHtml = `<div style="display:flex;align-items:center;gap:8px;background:var(--bg-tertiary);border:1px solid var(--accent);border-radius:8px;padding:8px 10px;margin-bottom:10px">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M11 18h2"/></svg>
       <span style="flex:1;font-size:12px;color:var(--text-secondary)">排序模式：按住 ≡ 拖动，或点箭头换位</span>
-      <button type="button" onclick="Worldview.toggleExtSortMode('${type}')" style="padding:4px 12px;background:var(--accent);border:none;color:#111;border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0">完成</button>
+      <button type="button" onclick="Worldview.toggleExtSortMode('${type}')" style="padding:4px 12px;background:var(--accent);border:none;color: var(--on-accent);border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0">完成</button>
     </div>`;
     container.innerHTML = bannerHtml + list.map((it, i) => {
       const enabled = it.enabled !== false;
@@ -4462,7 +4462,7 @@ let knowledgesData = [];
       const canUp = i > 0, canDown = i < customsData.length - 1;
       return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px 40px 12px 44px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editCustom(${i})">
         <button type="button" onclick="event.stopPropagation();Worldview.toggleCustomEnabled(${i})" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;border:2px solid ${enabled ? 'var(--accent)' : 'var(--text-secondary)'};background:${enabled ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
-          ${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+          ${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
         </button>
         <div style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2px">
           <span onclick="event.stopPropagation();${canUp ? `Worldview.moveExtItem('constant',${i},-1)` : ''}" style="cursor:${canUp ? 'pointer' : 'default'};opacity:${canUp ? '0.7' : '0.2'};line-height:1;display:flex;padding:2px" title="上移">
@@ -4510,7 +4510,7 @@ const ui = document.getElementById('wv-cust-modal-enabled-ui');
 if (!input || !ui) return;
 ui.style.background = input.checked ? 'var(--accent)' : 'transparent';
 ui.style.borderColor = input.checked ? 'var(--accent)' : 'var(--text-secondary)';
-ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
 }
 
 
@@ -4597,7 +4597,7 @@ ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="1
     if (!input || !ui) return;
     ui.style.background = input.checked ? 'var(--accent)' : 'transparent';
     ui.style.borderColor = input.checked ? 'var(--accent)' : 'var(--text-secondary)';
-    ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+    ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
     if (keysRow) keysRow.style.display = input.checked ? '' : 'none';
   }
   function toggleCustPositionDropdown() {
@@ -4676,7 +4676,7 @@ function _renderKnowledges(list) {
  const canUp = i > 0, canDown = i < knowledgesData.length - 1;
  return `<div style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px 40px 12px 44px;margin-bottom:8px;cursor:pointer" onclick="Worldview.editKnowledge(${i})">
 <button type="button" onclick="event.stopPropagation();Worldview.toggleKnowledgeEnabled(${i})" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;border:2px solid ${enabled ? 'var(--accent)' : 'var(--text-secondary)'};background:${enabled ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
-${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+${enabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
 </button>
 <div style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2px">
   <span onclick="event.stopPropagation();${canUp ? `Worldview.moveExtItem('dynamic',${i},-1)` : ''}" style="cursor:${canUp ? 'pointer' : 'default'};opacity:${canUp ? '0.7' : '0.2'};line-height:1;display:flex;padding:2px" title="上移">
@@ -4728,7 +4728,7 @@ const keysRow = document.getElementById('wv-know-modal-keys-row');
 if (!input || !ui) return;
 ui.style.background = input.checked ? 'var(--accent)' : 'transparent';
 ui.style.borderColor = input.checked ? 'var(--accent)' : 'var(--text-secondary)';
-ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+ui.innerHTML = input.checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
 if (keysRow) keysRow.style.display = input.checked ? '' : 'none';
 }
 function toggleKnowPositionDropdown() {
@@ -4916,8 +4916,8 @@ function closeKnowledgeModal() {
     _wvEventTab = tab === 'chain' ? 'chain' : 'standalone';
     const sBtn = document.getElementById('wv-event-tab-standalone');
     const cBtn = document.getElementById('wv-event-tab-chain');
-    if (sBtn) { sBtn.style.background = _wvEventTab === 'standalone' ? 'var(--accent)' : 'transparent'; sBtn.style.color = _wvEventTab === 'standalone' ? '#111' : 'var(--text-secondary)'; }
-    if (cBtn) { cBtn.style.background = _wvEventTab === 'chain' ? 'var(--accent)' : 'transparent'; cBtn.style.color = _wvEventTab === 'chain' ? '#111' : 'var(--text-secondary)'; }
+    if (sBtn) { sBtn.style.background = _wvEventTab === 'standalone' ? 'var(--accent)' : 'transparent'; sBtn.style.color = _wvEventTab === 'standalone' ? 'var(--on-accent)' : 'var(--text-secondary)'; }
+    if (cBtn) { cBtn.style.background = _wvEventTab === 'chain' ? 'var(--accent)' : 'transparent'; cBtn.style.color = _wvEventTab === 'chain' ? 'var(--on-accent)' : 'var(--text-secondary)'; }
     const aiBtn = document.getElementById('wv-event-ai-btn');
     const addBtn = document.getElementById('wv-event-add-btn');
     const _sparkSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>';
@@ -4954,7 +4954,7 @@ function closeKnowledgeModal() {
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">根据当前世界观基调生成独立属性（追加到已有属性后），进位/派生等联动请生成后手动配置。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-attr-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-attr-gen-btn" onclick="Worldview._doAiGenerateGlobalAttrs()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-attr-gen-btn" onclick="Worldview._doAiGenerateGlobalAttrs()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-attr-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -5095,7 +5095,7 @@ ${existingNames.length ? '\n## 已有属性（不要重复）\n' + existingNames
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">生成一套通用角色属性模板，套用到勾选的角色（各角色数值独立）。已有属性的角色只追加不重名的，联动请生成后手动配置。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-charattr-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-charattr-gen-btn" onclick="Worldview._doAiGenerateCharAttrs()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-charattr-gen-btn" onclick="Worldview._doAiGenerateCharAttrs()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-charattr-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -5237,7 +5237,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供，请生成通用的�
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">会生成一套完整阶段配置（阶段名、任务类型、奖励），覆盖当前阶段的内容。任务类型数量由 AI 按需生成。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-task-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-task-gen-btn" onclick="Worldview._doAiGenerateTaskPhase()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-task-gen-btn" onclick="Worldview._doAiGenerateTaskPhase()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-task-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -5383,7 +5383,7 @@ ${attrList || '（未配置属性——请用 rewardMode "free" 或 "none"）'}`
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">会根据世界观基调生成星期名、月份天数、季节、时段，<b>整体覆盖</b>当前历法（一天固定 24 小时不变）。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-cal-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-cal-gen-btn" onclick="Worldview._doAiGenerateCalendar()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-cal-gen-btn" onclick="Worldview._doAiGenerateCalendar()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-cal-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -5527,7 +5527,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">会根据世界观基调一次生成<b>短时效商城</b>（即时到手，如外卖/补给）和<b>长时效商城</b>（等几天，如网购/大件）的名称、描述、配送时间，填进上面的表单。生成后可手动微调。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-shop-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-shop-gen-btn" onclick="Worldview._doAiGenerateShops()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-shop-gen-btn" onclick="Worldview._doAiGenerateShops()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-shop-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -5653,7 +5653,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">会根据世界观基调一次生成<b>信息载体、电台、阅读、视频、聊天、地图</b>六个应用的名称和描述，填进下面对应的表单。生成后可手动微调。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-media-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-media-gen-btn" onclick="Worldview._doAiGenerateMediaApps()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-media-gen-btn" onclick="Worldview._doAiGenerateMediaApps()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-media-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -5794,7 +5794,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">按世界观基调生成电台分类（只含分类名和大方向，不含具体标签），追加到自建分类。生成后可进各分类自行添加标签。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-radiocat-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-radiocat-gen-btn" onclick="Worldview._doAiGenerateRadioCats()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-radiocat-gen-btn" onclick="Worldview._doAiGenerateRadioCats()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-radiocat-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -5919,7 +5919,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">按世界观基调生成论坛分区（含分区名和说明），追加到当前分区列表。生成后可自行增删微调。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-forumcat-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-forumcat-gen-btn" onclick="Worldview._doAiGenerateForumCats()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-forumcat-gen-btn" onclick="Worldview._doAiGenerateForumCats()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-forumcat-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -6030,7 +6030,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">按当前分类的大方向生成标签（小分类），含名称、描述、规则、玩法、续期方式，追加到本分类。生成后可进各标签微调。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-radiotag-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-radiotag-gen-btn" onclick="Worldview._doAiGenerateRadioTags()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-radiotag-gen-btn" onclick="Worldview._doAiGenerateRadioTags()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-radiotag-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -6177,7 +6177,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">按世界观基调生成直播品类（含名称、调性、可用玩法），追加到自建品类。生成后可进各品类微调。</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-livecat-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-livecat-gen-btn" onclick="Worldview._doAiGenerateLiveCats()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-livecat-gen-btn" onclick="Worldview._doAiGenerateLiveCats()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-livecat-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -6317,7 +6317,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
         <div style="font-size:11px;color:var(--text-secondary);margin-top:10px;line-height:1.5">${tipText}</div>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button onclick="document.getElementById('ai-event-gen-overlay')?.remove()" style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text);font-size:13px;cursor:pointer">取消</button>
-          <button id="ai-event-gen-btn" onclick="Worldview._doAiGenerateEvents()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color:#111;font-size:13px;cursor:pointer;font-weight:600">生成</button>
+          <button id="ai-event-gen-btn" onclick="Worldview._doAiGenerateEvents()" style="padding:8px 14px;border:none;border-radius:var(--radius);background:var(--accent);color: var(--on-accent);font-size:13px;cursor:pointer;font-weight:600">生成</button>
         </div>
         <div id="ai-event-gen-status" style="margin-top:12px;font-size:12px;color:var(--text-secondary);display:none"></div>
       </div>
@@ -6877,7 +6877,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
       const active = w.id === currentWorldviewId || (!currentWorldviewId && w.id === '__default_wv__');
       const iconHTML = w.iconImage
         ? `<img src="${w.iconImage}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:8px">`
-        : `<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;color:#111;margin-right:8px;flex-shrink:0;vertical-align:middle">${Utils.escapeHtml((w.name || '?')[0])}</div>`;
+        : `<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;color: var(--on-accent);margin-right:8px;flex-shrink:0;vertical-align:middle">${Utils.escapeHtml((w.name || '?')[0])}</div>`;
       html += `<div onclick="Worldview.selectWorldview('${w.id}')" style="padding:10px 16px;cursor:pointer;font-size:13px;color:var(--text);display:flex;align-items:center${active ? ';background:var(--bg-tertiary);font-weight:bold' : ''}">${iconHTML}${Utils.escapeHtml(w.name)}</div>`;
     });
     dropdown.innerHTML = html;
@@ -6936,7 +6936,7 @@ ${settingText ? settingText.slice(0, 1500) : '（未提供）'}`;
               </label>
               <div style="display:flex;gap:8px;justify-content:flex-end">
                 <button id="hs-warn-cancel" style="padding:8px 20px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text);font-size:13px;cursor:pointer">取消</button>
-                <button id="hs-warn-ok" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color:#111;font-size:13px;font-weight:600;cursor:pointer">继续</button>
+                <button id="hs-warn-ok" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color: var(--on-accent);font-size:13px;font-weight:600;cursor:pointer">继续</button>
               </div>
             </div>`;
           document.body.appendChild(overlay);
@@ -7384,7 +7384,7 @@ const allNPCs = [];
         html += `<div style="background:var(--bg-tertiary);padding:12px;margin-bottom:8px;border-radius:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
             <div style="font-size:14px;font-weight:600;color:var(--text)">${Utils.escapeHtml(c.name || '未命名')}</div>
-            <div style="font-size:11px;padding:2px 8px;border-radius:10px;${c.enabled ? 'background:var(--accent);color:#111' : 'background:var(--bg-secondary);color:var(--text-secondary)'}">${c.enabled ? '启用' : '未启用'}</div>
+            <div style="font-size:11px;padding:2px 8px;border-radius:10px;${c.enabled ? 'background:var(--accent);color:var(--on-accent)' : 'background:var(--bg-secondary);color:var(--text-secondary)'}">${c.enabled ? '启用' : '未启用'}</div>
           </div>
           ${c.content ? `<div class="md-content" style="font-size:12px;line-height:1.8;color:var(--text)">${Markdown.render(c.content)}</div>` : ''}
         </div>`;
@@ -8355,7 +8355,7 @@ function _buildCalendarEditorHTML(cal) {
         style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text);font-size:12px"
         oninput="Worldview._onCalWeekDayChange(${i}, this.value)">
       <button type="button" onclick="Worldview._calToggleDayType(${i})"
-        style="border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer;min-width:40px;text-align:center;background:${isRest ? 'var(--accent)' : 'var(--bg-secondary)'};color:${isRest ? '#111' : 'var(--text-secondary)'}"
+        style="border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer;min-width:40px;text-align:center;background:${isRest ? 'var(--accent)' : 'var(--bg-secondary)'};color:${isRest ? 'var(--on-accent)' : 'var(--text-secondary)'}"
         title="${isRest ? '休息日' : '工作日'}">${isRest ? '休' : '工'}</button>
       ${cal.weekDayNames.length > 1 ? `<button type="button" onclick="Worldview._calRemoveWeekDay(${i})" style="border:none;background:none;color:var(--text-secondary);cursor:pointer;font-size:14px;padding:2px 4px" title="删除">×</button>` : ''}
     </div>`;
@@ -8994,7 +8994,7 @@ function _buildPhoneAppsEditorHTML(w) {
       <textarea id="pa-radio-desc" class="auto-resize-textarea" rows="2" placeholder="例如：修真界主流电台，涵盖宗门资讯、夜话情感、灵异志怪等分类" style="width:100%;padding:8px 10px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;line-height:1.5;resize:vertical;min-height:50px"></textarea>
     </label>
 <div>
-            <button type="button" onclick="Worldview.openRadioCategoriesEditor()" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">管理分类与标签</button>
+            <button type="button" onclick="Worldview.openRadioCategoriesEditor()" style="width:100%;padding:10px;background:var(--accent);color: var(--on-accent);border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">管理分类与标签</button>
             <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">隐藏预设、新建分类、自定义标签</div>
           </div>
           <div style="margin-top:10px">
@@ -9075,7 +9075,7 @@ function _buildPhoneAppsEditorHTML(w) {
       <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">设置哪些角色可以作为主播开直播（默认空=全部虚构主播）</div>
     </div>
     <div style="margin-top:10px">
-      <button type="button" onclick="Worldview.openLiveCategoriesEditor()" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">直播分类管理</button>
+      <button type="button" onclick="Worldview.openLiveCategoriesEditor()" style="width:100%;padding:10px;background:var(--accent);color: var(--on-accent);border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">直播分类管理</button>
       <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;text-align:center">隐藏预设品类、新建自定义品类（默认：10个预设品类）</div>
     </div>
     <label style="margin-top:10px;display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 4px">
@@ -9311,7 +9311,7 @@ function _renderRadioCatsEditor(overlay, w) {
         <span style="font-size:14px;color:var(--text)">${p.name}</span>
         <span style="font-size:11px;color:var(--text-secondary)">预设</span>
       </div>
-      <button type="button" onclick="Worldview._radioTogglePreset('${p.id}')" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:${isHidden ? 'var(--accent)' : 'var(--bg-secondary)'};color:${isHidden ? '#fff' : 'var(--text)'};font-size:12px;cursor:pointer">${isHidden ? '恢复' : '隐藏'}</button>
+      <button type="button" onclick="Worldview._radioTogglePreset('${p.id}')" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:${isHidden ? 'var(--accent)' : 'var(--bg-secondary)'};color:${isHidden ? 'var(--on-accent)' : 'var(--text)'};font-size:12px;cursor:pointer">${isHidden ? '恢复' : '隐藏'}</button>
     </div>`;
   }).join('');
 
@@ -9344,7 +9344,7 @@ function _renderRadioCatsEditor(overlay, w) {
     ${presetsHtml}
     <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:8px">自建分类</div>
     ${customsHtml || '<div style="font-size:12px;color:var(--text-secondary);padding:12px;text-align:center">还没有自建分类</div>'}
-    <button type="button" onclick="Worldview._radioAddCat()" style="width:100%;margin-top:12px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">+ 新建分类</button>
+    <button type="button" onclick="Worldview._radioAddCat()" style="width:100%;margin-top:12px;padding:10px;background:var(--accent);color: var(--on-accent);border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">+ 新建分类</button>
     <button type="button" onclick="Worldview.aiGenerateRadioCats()" style="width:100%;margin-top:8px;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成分类</button>
   </div>`;
 }
@@ -9425,7 +9425,7 @@ function _renderRadioCatsEditor(overlay, w) {
           <div style="min-width:0;flex:1">
             <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.name)}${n.aliases ? `<span style="font-size:11px;color:var(--text-secondary)"> · ${Utils.escapeHtml(n.aliases)}</span>` : ''}</div>
           </div>
-          <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+          <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
         </div>`;
       };
       const groupHtml = (title, arr) => {
@@ -9439,7 +9439,7 @@ function _renderRadioCatsEditor(overlay, w) {
       // 世界书角色：整体开关复选框（不预知具体角色，运行时按来源放行）
       const loreBox = `
         <div onclick="Worldview._radioToggleCastLorebook()" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid ${incLore ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:${incLore ? 'color-mix(in srgb, var(--accent) 12%, var(--bg-tertiary))' : 'var(--bg-tertiary)'};cursor:pointer;margin-top:16px">
-          <span style="width:20px;height:20px;border-radius:5px;border:2px solid ${incLore ? 'var(--accent)' : 'var(--text-secondary)'};background:${incLore ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${incLore ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+          <span style="width:20px;height:20px;border-radius:5px;border:2px solid ${incLore ? 'var(--accent)' : 'var(--text-secondary)'};background:${incLore ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${incLore ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
           <div style="min-width:0;flex:1">
             <div style="font-size:13px;color:var(--text);font-weight:600">世界书角色</div>
             <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">勾选后，当前挂载的世界书 NPC 全部可出场（无需逐个选）</div>
@@ -9561,7 +9561,7 @@ function _radioCastSearch(query) {
         <div style="min-width:0;flex:1">
           <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.name)}${n.aliases ? `<span style="font-size:11px;color:var(--text-secondary)"> · ${Utils.escapeHtml(n.aliases)}</span>` : ''}</div>
         </div>
-        <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+        <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
       </div>`;
     };
     const groupHtml = (title, arr) => {
@@ -9574,7 +9574,7 @@ function _radioCastSearch(query) {
     const noResult = (!wvGroup && !cardGroup) ? `<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:12px">${q ? '没有匹配的角色' : '没有可选的角色'}</div>` : '';
     const loreBox = `
       <div onclick="Worldview._readingToggleCastLorebook()" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid ${incLore ? 'var(--accent)' : 'var(--border)'};border-radius:8px;background:${incLore ? 'color-mix(in srgb, var(--accent) 12%, var(--bg-tertiary))' : 'var(--bg-tertiary)'};cursor:pointer;margin-top:16px">
-        <span style="width:20px;height:20px;border-radius:5px;border:2px solid ${incLore ? 'var(--accent)' : 'var(--text-secondary)'};background:${incLore ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${incLore ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+        <span style="width:20px;height:20px;border-radius:5px;border:2px solid ${incLore ? 'var(--accent)' : 'var(--text-secondary)'};background:${incLore ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${incLore ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
         <div style="min-width:0;flex:1">
           <div style="font-size:13px;color:var(--text);font-weight:600">世界书角色</div>
           <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">勾选后，当前挂载的世界书 NPC 全部可成为作者（无需逐个选）</div>
@@ -9699,7 +9699,7 @@ function _radioCastSearch(query) {
         <div style="min-width:0;flex:1">
           <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(n.name)}${n.aliases ? `<span style="font-size:11px;color:var(--text-secondary)"> · ${Utils.escapeHtml(n.aliases)}</span>` : ''}</div>
         </div>
-        <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+        <span style="width:20px;height:20px;border-radius:50%;border:2px solid ${on ? 'var(--accent)' : 'var(--text-secondary)'};background:${on ? 'var(--accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
       </div>`;
     };
     const groupHtml = (title, arr) => {
@@ -9804,7 +9804,7 @@ function _videoCastSearch(query) {
           <span style="font-size:14px;color:var(--text)">${name}</span>
           <span style="font-size:11px;color:var(--text-secondary)">预设</span>
         </div>
-        <button type="button" onclick="Worldview._liveTogglePreset('${name.replace(/'/g, "\\'")}')" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:${isHidden ? 'var(--accent)' : 'var(--bg-secondary)'};color:${isHidden ? '#fff' : 'var(--text)'};font-size:12px;cursor:pointer">${isHidden ? '恢复' : '隐藏'}</button>
+        <button type="button" onclick="Worldview._liveTogglePreset('${name.replace(/'/g, "\\'")}')" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:${isHidden ? 'var(--accent)' : 'var(--bg-secondary)'};color:${isHidden ? 'var(--on-accent)' : 'var(--text)'};font-size:12px;cursor:pointer">${isHidden ? '恢复' : '隐藏'}</button>
       </div>`;
     }).join('');
 
@@ -9837,7 +9837,7 @@ function _videoCastSearch(query) {
       ${presetsHtml}
       <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:16px;margin-bottom:8px">自建品类</div>
       ${customsHtml || '<div style="font-size:12px;color:var(--text-secondary);padding:12px;text-align:center">还没有自建品类</div>'}
-      <button type="button" onclick="Worldview._liveAddCat()" style="width:100%;margin-top:12px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">+ 新建品类</button>
+      <button type="button" onclick="Worldview._liveAddCat()" style="width:100%;margin-top:12px;padding:10px;background:var(--accent);color: var(--on-accent);border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">+ 新建品类</button>
       <button type="button" onclick="Worldview.aiGenerateLiveCats()" style="width:100%;margin-top:8px;padding:10px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成品类</button>
     </div>`;
   }
@@ -9901,7 +9901,7 @@ function _videoCastSearch(query) {
           <div style="font-size:14px;color:var(--text)">${o.label}</div>
           <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${o.hint}</div>
         </div>
-        <button type="button" onclick="Worldview._liveToggleCatPlay(${catIdx},'${o.id}')" style="padding:6px 14px;border-radius:6px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${on ? '#fff' : 'var(--text)'};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">${on ? '已开启' : '开启'}</button>
+        <button type="button" onclick="Worldview._liveToggleCatPlay(${catIdx},'${o.id}')" style="padding:6px 14px;border-radius:6px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${on ? 'var(--on-accent)' : 'var(--text)'};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">${on ? '已开启' : '开启'}</button>
       </div>`;
     }).join('');
 
@@ -10036,7 +10036,7 @@ function _radioOpenCatEditor(w, catIdx) {
     </label>
     <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">标签列表</div>
     ${tagRows || '<div style="font-size:12px;color:var(--text-secondary);padding:8px;text-align:center">还没有标签，点下方按钮添加</div>'}
-    <button type="button" onclick="Worldview._radioAddTag(${catIdx})" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">+ 添加标签</button>
+    <button type="button" onclick="Worldview._radioAddTag(${catIdx})" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);color: var(--on-accent);border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">+ 添加标签</button>
     <button type="button" onclick="Worldview.aiGenerateRadioTags(${catIdx})" style="width:100%;margin-top:6px;padding:8px;background:var(--bg-secondary);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>AI 生成标签</button>
   </div>`;
 }

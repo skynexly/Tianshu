@@ -36,14 +36,14 @@ const Gaiden = (() => {
   function _showSendBtn(areaId, btnId, label, onclick) {
     const area = document.getElementById(areaId);
     if (!area) return;
-    area.innerHTML = `<button id="${btnId}" onclick="${onclick}" style="width:100%;background:var(--accent);color:#000;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:13px">${label}</button>`;
+    area.innerHTML = `<button id="${btnId}" onclick="${onclick}" style="width:100%;background:var(--accent);color: var(--on-accent);border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:13px">${label}</button>`;
   }
 
   function _showError(areaId, btnId, label, onclick, msg) {
     const area = document.getElementById(areaId);
     if (!area) return;
     area.innerHTML = `<div style="font-size:12px;color:var(--danger);margin-bottom:8px">${Utils.escapeHtml(msg)}</div>
-      <button id="${btnId}" onclick="${onclick}" style="width:100%;background:var(--accent);color:#000;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:13px">${label}</button>`;
+      <button id="${btnId}" onclick="${onclick}" style="width:100%;background:var(--accent);color: var(--on-accent);border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:13px">${label}</button>`;
   }
 
   // ===== 挂世界书 =====
@@ -111,7 +111,7 @@ const Gaiden = (() => {
     if (!area) return;
     area.innerHTML = `<button onclick="Gaiden.rewrite()" style="flex:1;background:none;border:1px solid var(--border);color:var(--text-secondary)">重写</button>
 <button onclick="Gaiden.continueDraft()" style="flex:1;background:none;border:1px solid var(--accent);color:var(--accent)">续写</button>
-<button onclick="Gaiden.saveDraft()" style="flex:1;background:var(--accent);color:#000;border:none">保存番外</button>`;
+<button onclick="Gaiden.saveDraft()" style="flex:1;background:var(--accent);color: var(--on-accent);border:none">保存番外</button>`;
   }
 
   function abort() {
@@ -782,7 +782,7 @@ async function closeGenerateModal() {
     container.innerHTML = wvList.map(w => {
       const iconHTML = w.iconImage
         ? `<img src="${w.iconImage}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:10px">`
-        : `<div style="width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;color:#111;margin-right:10px;flex-shrink:0">${Utils.escapeHtml((w.name || '?')[0])}</div>`;
+        : `<div style="width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;color: var(--on-accent);margin-right:10px;flex-shrink:0">${Utils.escapeHtml((w.name || '?')[0])}</div>`;
       return `<div onclick="Gaiden._pickWorldview('${w.id}')" style="padding:10px 12px;cursor:pointer;font-size:14px;display:flex;align-items:center;color:var(--text);border-radius:6px" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background=''">${iconHTML}${Utils.escapeHtml(w.name)}</div>`;
     }).join('');
   }
@@ -967,7 +967,7 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
     document.querySelectorAll('#collection-tabs .collection-tab').forEach(btn => {
       const isActive = btn.dataset.tab === tab;
       btn.style.background = isActive ? 'var(--accent)' : 'none';
-      btn.style.color = isActive ? '#000' : 'var(--text-secondary)';
+      btn.style.color = isActive ? 'var(--on-accent)' : 'var(--text-secondary)';
     });
     // 切到 phone 时显示子分类
     const sub = document.getElementById('phone-subtabs');
@@ -980,7 +980,7 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
     document.querySelectorAll('#phone-subtabs .phone-subtab').forEach(btn => {
       const isActive = btn.dataset.subtab === sub;
       btn.style.background = isActive ? 'var(--accent)' : 'none';
-      btn.style.color = isActive ? '#000' : 'var(--text-secondary)';
+      btn.style.color = isActive ? 'var(--on-accent)' : 'var(--text-secondary)';
     });
     renderList();
   }
@@ -1055,7 +1055,7 @@ const convMsgs = allMsgs.filter(m => m.branchId === 'main')
         return `<div class="card" style="padding:12px;background:var(--bg-tertiary);cursor:pointer;margin-bottom:8px" onclick="Gaiden.viewPhoneItem('${g.id}')">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0">
-          <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:var(--accent);color:#000;flex-shrink:0;display:inline-flex;align-items:center;gap:3px">${meta.icon} ${meta.label}</span>
+          <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:var(--accent);color: var(--on-accent);flex-shrink:0;display:inline-flex;align-items:center;gap:3px">${meta.icon} ${meta.label}</span>
               <h3 style="margin:0;font-size:14px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(g.title || '无标题')}</h3>
             </div>
             <span style="font-size:11px;color:var(--text-secondary);flex-shrink:0;margin-left:8px">${Utils.formatDate(savedAt)}</span>

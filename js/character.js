@@ -146,7 +146,7 @@ async function _getMasksForCurrentWv() {
       return `
         <div class="card mask-card-item" data-id="${m.id}" onclick="Character._onCardClick('${m.id}')" style="display:flex;gap:12px;padding:12px;align-items:center;background:var(--bg-tertiary);cursor:pointer;">
           ${manageMode ? `<span class="mask-check-circle ${checked ? 'checked' : ''}" data-id="${m.id}" style="width:22px;height:22px;border-radius:50%;border:2px solid ${checked ? 'var(--accent)' : 'var(--text-secondary)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;${checked ? 'background:var(--accent);' : ''}">
-            ${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+            ${checked ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
           </span>` : ''}
           <div style="width:56px;height:56px;border-radius:50%;background:${avatarSrc ? `var(--bg-secondary) url(${avatarSrc}) center/cover` : 'var(--accent)'};border:${avatarSrc ? '2px solid var(--border)' : 'none'};display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
             ${!avatarSrc ? '<span style="font-size:30px;color:rgba(255,255,255,0.8)">✦</span>' : ''}
@@ -232,7 +232,7 @@ async function _getMasksForCurrentWv() {
     const allSelected = list.length > 0 && selectedIds.size === list.length;
     icon.style.border = `2px solid ${allSelected ? 'var(--accent)' : 'var(--text-secondary)'}`;
     icon.style.background = allSelected ? 'var(--accent)' : 'transparent';
-    icon.innerHTML = allSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
+    icon.innerHTML = allSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '';
   }
 
   async function batchClone() {
@@ -913,7 +913,7 @@ if (placeholder) placeholder.style.display = '';
       const isActive = m.id === currentMaskId;
       const foreignMark = m._foreign ? '<span style="opacity:0.6;margin-right:4px" title="非当前世界观面具">✻</span>' : '';
       const noteText = m.note ? `<span style="display:block;font-size:10px;opacity:0.65;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px">${Utils.escapeHtml(m.note)}</span>` : '';
-      let btn = `<button onclick="Character.switchMask('${m.id}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};background:${isActive ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isActive ? '#111' : 'var(--text-secondary)'};cursor:pointer;font-size:12px;display:inline-flex;align-items:center;flex-direction:column">${foreignMark}<span>${Utils.escapeHtml(m.name)}</span>${noteText}`;
+      let btn = `<button onclick="Character.switchMask('${m.id}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};background:${isActive ? 'var(--accent)' : 'var(--bg-tertiary)'};color:${isActive ? 'var(--on-accent)' : 'var(--text-secondary)'};cursor:pointer;font-size:12px;display:inline-flex;align-items:center;flex-direction:column">${foreignMark}<span>${Utils.escapeHtml(m.name)}</span>${noteText}`;
       if (isActive) {
         btn += `<span onclick="event.stopPropagation();Character.openEdit('${m.id}')" style="cursor:pointer;opacity:0.7;margin-left:2px;position:absolute;top:2px;right:2px" title="编辑面具">${editSvg}</span>`;
       }
@@ -932,7 +932,7 @@ if (placeholder) placeholder.style.display = '';
     if (!container) return;
     container.innerHTML = abilitiesData.map((a, i) => `
       <div class="ability-card" data-index="${i}" style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer">
-        <div style="position:absolute;top:8px;right:8px;font-size:11px;background:var(--accent);color:#000;padding:2px 6px;border-radius:4px;flex-shrink:0">${Utils.escapeHtml(a.level || '')}</div>
+        <div style="position:absolute;top:8px;right:8px;font-size:11px;background:var(--accent);color: var(--on-accent);padding:2px 6px;border-radius:4px;flex-shrink:0">${Utils.escapeHtml(a.level || '')}</div>
         <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">
           <div style="font-size:16px;font-weight:bold;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">${Utils.escapeHtml(a.name || '')}</div>
           <div style="font-size:12px;color:var(--decoration);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.escapeHtml(a.type || '')}</div>
@@ -1034,7 +1034,7 @@ async function closeAbilityModal() {
     if (!container) return;
     container.innerHTML = inventoryData.map((item, i) => `
       <div class="inv-card" data-index="${i}" style="position:relative;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer">
-        <div style="position:absolute;top:8px;right:8px;font-size:11px;background:var(--accent);color:#000;padding:2px 6px;border-radius:4px;flex-shrink:0">${item.count || 1}</div>
+        <div style="position:absolute;top:8px;right:8px;font-size:11px;background:var(--accent);color: var(--on-accent);padding:2px 6px;border-radius:4px;flex-shrink:0">${item.count || 1}</div>
         <div style="font-size:16px;font-weight:bold;color:var(--accent);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px">${Utils.escapeHtml(item.name || '')}</div>
         <div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:calc(100% - 24px)">${Utils.escapeHtml(item.effect || '')}</div>
         ${item.gotAt ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">入手于 ${Utils.escapeHtml(item.gotAt)}</div>` : ''}
